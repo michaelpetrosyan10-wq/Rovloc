@@ -19,8 +19,6 @@ export type MoveState =
 	| "Parachuting"
 	| "Scripted"
 
-export type MoveIntent = "Stand" | "Crouch" | "SprintOn" | "SprintOff" | "Dive" | "Surface"
-
 export type CameraState =
 	"Standing"
 	| "Crouching"
@@ -217,7 +215,7 @@ export type AcousticPreset =
 	| "Basement"
 	| "Lobby"
 
-export type AudioBus = "Ambience" | "World" | "Monster" | "Player" | "UI"
+export type AudioBus = "Ambience" | "World" | "Monster" | "Player" | "Body" | "UI"
 
 export type SurfaceKind = "Concrete" | "Tile" | "Wood" | "Metal" | "Water" | "Glass" | "Grass" | "Carpet"
 
@@ -282,8 +280,6 @@ Enums.MoveState = table.freeze({
 	"Parachuting",
 	"Scripted",
 } :: { MoveState })
-
-Enums.MoveIntent = table.freeze({ "Stand", "Crouch", "SprintOn", "SprintOff", "Dive", "Surface" } :: { MoveIntent })
 
 Enums.CameraState = table.freeze({
 	"Standing",
@@ -519,7 +515,8 @@ Enums.AcousticPreset = table.freeze({
 	"Lobby",
 } :: { AcousticPreset })
 
-Enums.AudioBus = table.freeze({ "Ambience", "World", "Monster", "Player", "UI" } :: { AudioBus })
+-- Body = sounds inside the listener (heartbeat, breathing, EMF static): EQ only, never room reverb.
+Enums.AudioBus = table.freeze({ "Ambience", "World", "Monster", "Player", "Body", "UI" } :: { AudioBus })
 
 Enums.SurfaceKind = table.freeze({
 	"Concrete",

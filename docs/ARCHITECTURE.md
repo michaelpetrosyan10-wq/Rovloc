@@ -17,7 +17,7 @@ lighting, so its modern partner `LightingStyle = Realistic` is pinned next to it
 
 | Rule | How it's enforced |
 | --- | --- |
-| `--!strict` everywhere | Every `.luau` file starts with `--!strict`. `.luaurc` sets strict mode. CI runs `luau-lsp analyze` against the Rojo sourcemap. |
+| `--!strict` everywhere | Every game and test `.luau` file starts with `--!strict` (Lune tooling under `tools/lune/` is exempt, since it runs outside Roblox). `.luaurc` sets strict mode. CI runs `luau-lsp analyze` against the Rojo sourcemap, plus `tools/capscan.py`, which rejects writes to plugin-only or read-only engine properties. |
 | Works in Rojo **and** Studio | `src/` mirrors the Explorer one-to-one. Requires go by instance path (`require(ReplicatedStorage.Shared.Config.GameConfig)`), never string aliases. Runtime-created instances are only reached through `Shared/Instances.luau`, so strict typing never guesses. |
 | One ordered bootstrap per side | `ServerMain` and `ClientMain` require an explicit module list and wrap every lifecycle call in `xpcall`. They're the **only** files that grow in later phases. Every shared contract (enums, types, attributes, tags, remotes, config) is complete in Phase 1. Later phases plug in through registries owned by earlier ones: `ProceduralWorldBuilder.RegisterProp/RegisterRig`, `LevelDirector.RegisterLevel`, `MovementAuthority.RegisterValidator`, and the `MonsterAIService` hooks (`RegisterLockerInspector`, `RegisterPoolGrabber`). |
 | Downward-only dependencies | Layers: `Shared → Core → Player → World systems (Vents, Monster) → Levels & Mechanics → Match`. A module only requires layers below it. Upward traffic goes through typed `Signal`s or registered hooks (e.g. `MonsterAIService.RegisterLockerInspector`), so there are no require cycles and no `any` leaks. |
@@ -117,7 +117,7 @@ Rovloc/
     │       │       ├── LightingRig.luau    [P1] Baseline Atmosphere, ColorCorrection, Bloom, Terrain clouds
     │       │       ├── LobbyBuilder.luau   [P1] Boiler-room safe zone + wrecked bus staging area
     │       │       ├── SchoolShellBuilder.luau [P1] Levels 0–5: slabs, walls, rooms, corridors, boarded windows, Zone volumes
-    │       │       ├── StairwellBuilder.luau [P1] Stairwells + airlock vestibules + SpawnAnchor attachments
+    │       │       ├── StairwellBuilder.luau [P1] Stair towers between levels (respawn points are the entry-airlock PlayerSpawn anchors)
     │       │       ├── VentShaftBuilder.luau [P1] 3.5×3.5 ducts per level, VentNodes with explicit Links, AdjacentZones, Submerged
     │       │       ├── SkylineBuilder.luau [P1] Ruined city backdrop (cosmetic, client-built)
     │       │       ├── Layouts/
@@ -225,7 +225,7 @@ Rovloc/
     └── StarterPlayer/
         └── StarterPlayerScripts/
             ├── ClientMain.client.luau      [P1] Waits for game.Loaded; ordered bootstrap; disables Reset Character
-            ├── RbxCharacterSounds.client.luau [P3] Replaces the default: procedural material footsteps for every character
+            ├── RbxCharacterSounds.client.luau [P1] Replaces the engine default and strips legacy character sounds (P3 footsteps own audio)
             └── Controllers/
                 ├── Core/
                 │   ├── AudioController.luau        [P1] Buses, cue playback with server-time offset, zone reverb, nearby emitters
@@ -345,7 +345,8 @@ Workspace
 │   ├── Level3_Gymnasium     Model
 │   ├── Level4_FloodedPool   Model
 │   ├── Level5_Roof          Model
-│   └── Stairwells           Model  Stairwell_0_1 … Stairwell_4_5 (AirlockDoor · CheckpointVolume · SpawnAnchors)
+│   └── Stairwells           Model  Stairwell_0_1 … Stairwell_4_5 (stairs + emergency lights; checkpoint volumes are the
+│                                   layouts' Checkpoint triggers in each exit airlock; fire doors come from P2 DoorBuilder)
 ├── Cosmetic                 Folder (client-local) Skyline, trims, loose clutter, posed corpses
 ├── Creature                 Model  [tag Creature] Humanoid · HumanoidRootPart · CreatureHitbox · Motor6D rig
 └── Runtime                  Folder  Level0 … Level5: per-run traps, flasks, batteries, clouds, executed ragdolls (wiped on reset)
@@ -355,7 +356,8 @@ Workspace.Terrain            Clouds (storm deck)
 ReplicatedStorage
 ├── Shared                   (Rojo)
 └── Remotes                  Folder  RemoteEvent / UnreliableRemoteEvent / RemoteFunction, created by Net
-SoundService (client-local)  Master SoundGroup ▸ Ambience · World · Monster · Player · UI · Vent · Underwater
+SoundService (client-local)  Master SoundGroup ▸ Ambience · World · Monster · Player · Body · UI (Vent, Underwater and the
+                             other room acoustics are environment DSP presets swapped onto World / Player / Monster)
 ```
 
 ---
@@ -459,6 +461,13 @@ reaching 0 goes through the same `Down` path. Execute and `Died` are idempotent.
 the Creature's target to its last known position, re-evaluates the airlock and the run outcome, and retargets spectators.
 On rejoin, the data load waits for any `Release` still in flight for that UserId.
 
+**Floor debris.** `NoiseAndDirectorService` owns debris noise: entering a `FloorDebris` volume during a run emits the
+130-stud `FloorDebris` noise and a `GlassCrunch` cue (with a per-player cooldown). The Floor 1 `ScareStep` stays with the
+P6 Level 1 controller.
+
+**Dev runs.** Any state-changing dev command during a run sets `ReplicatedStorage.DevRun = true`. `MatchAndDataService`
+(P8) must not award credits, escapes or BestTime for a run with `DevRun`.
+
 **Self-reset.** `ClientMain` disables the Reset Character button. A Humanoid death that bypasses `LifeStateService`
 is treated as an elimination, never a respawn.
 
@@ -494,8 +503,8 @@ Creature alike.
 
 | Direction | Reliable | Unreliable |
 | --- | --- | --- |
-| Client → Server | `MoveIntent` · `FlashlightToggle` · `ItemThrow` · `BreathInput` · `StrugglePress` (≤12/s) · `UseSyringe` · `ExitHide` · `ParachutePull` · `LobbyAction` · `PlayAgain` · `ClientWorldReady` · `SettingsSave` · `DevCommand` · `PerkPurchase` (RemoteFunction) | `LookRelay` (20 Hz, quantized yaw/pitch) · `VentInput` |
-| Server → Client | `OneShot` (all) · `PrivateCue` (one player: minigame windows, victim cues) · `AudioCue` · `ProjectileEvent` · `RunSummary` · `Notify` | `LookBroadcast` (batched teammate views: flashlights, head pitch, spectator camera) |
+| Client → Server | `MoveIntent` (level-encoded {crouch, sprint, dive, seq}) · `FlashlightToggle` · `ItemThrow` · `BreathInput` · `StrugglePress` (≤12/s) · `UseSyringe` · `ExitHide` · `ParachutePull` · `LobbyAction` · `PlayAgain` · `ClientWorldReady` · `SettingsSave` · `DevCommand` · `PerkPurchase` (RemoteFunction) | `LookRelay` (20 Hz, quantized yaw/pitch). Vent crawling needs no input remote: the owning client drives the rail and the server validates positions. |
+| Server → Client | `OneShot` (all) · `PrivateCue` (one player: minigame windows, victim cues) · `AudioCue` (with a cue id) · `AudioStop` · `ProjectileEvent` · `RunSummary` · `Notify` | `LookBroadcast` (batched teammate views: flashlights, head pitch, spectator camera) |
 
 ### 6d. Data schema (v1)
 

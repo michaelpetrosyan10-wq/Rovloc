@@ -9,6 +9,7 @@
 # Generated tooling output (roblox.yml is pinned on purpose and IS committed)
 sourcemap.json
 globalTypes*.d.luau
+API-Dump.json
 /build/
 
 # OS / editor noise

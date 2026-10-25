@@ -6,6 +6,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
+local SettingsSchema = require(ReplicatedStorage.Shared.Config.SettingsSchema)
 local V = require(ReplicatedStorage.Shared.Net.Validators)
 
 export type RateLimit = { burst: number, perSecond: number }
@@ -21,6 +22,18 @@ export type RemoteSpec = {
 }
 
 local INT16 = 32767
+
+-- Only known settings keys, each checked against its own kind and range.
+local settingsFields: { [string]: V.Validator } = {}
+for _, setting in SettingsSchema.List do
+	if setting.kind == "Bool" then
+		settingsFields[setting.key] = V.optional(V.boolean())
+	else
+		local numeric = setting :: SettingsSchema.NumberSetting
+		settingsFields[setting.key] = V.optional(V.number(numeric.min, numeric.max))
+	end
+end
+local settingsValidator = V.shape(settingsFields)
 
 local RUN_PHASES: { Enums.MatchPhase } = { "InRun", "Deploying" }
 local LOBBY_PHASES: { Enums.MatchPhase } = { "Lobby", "Countdown" }
@@ -42,7 +55,12 @@ local list: { RemoteSpec } = {
 		name = "MoveIntent",
 		kind = "Event",
 		direction = "ToServer",
-		validate = V.shape({ intent = V.enum(Enums.MoveIntent) }),
+		validate = V.shape({
+			crouch = V.boolean(),
+			sprint = V.boolean(),
+			dive = V.boolean(),
+			seq = V.integer(0, 2 ^ 31),
+		}),
 		rate = { burst = 12, perSecond = 8 },
 		phases = RUN_PHASES,
 		lifeStates = PLAYING,
@@ -132,9 +150,7 @@ local list: { RemoteSpec } = {
 		name = "SettingsSave",
 		kind = "Event",
 		direction = "ToServer",
-		validate = V.shape({
-			settings = V.mapOf(V.string(32), V.oneOf({ V.number(-1000, 1000), V.boolean() }), 24),
-		}),
+		validate = V.shape({ settings = settingsValidator }),
 		rate = { burst = 4, perSecond = 0.5 },
 	},
 	{
@@ -172,6 +188,7 @@ local list: { RemoteSpec } = {
 	{ name = "OneShot", kind = "Event", direction = "ToClient" },
 	{ name = "PrivateCue", kind = "Event", direction = "ToClient" },
 	{ name = "AudioCue", kind = "Event", direction = "ToClient" },
+	{ name = "AudioStop", kind = "Event", direction = "ToClient" },
 	{ name = "ProjectileEvent", kind = "Event", direction = "ToClient" },
 	{ name = "RunSummary", kind = "Event", direction = "ToClient" },
 	{ name = "Notify", kind = "Event", direction = "ToClient" },

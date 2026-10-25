@@ -187,7 +187,9 @@ export type LevelController = {
 
 export type ClientWorldReadyPayload = { partCount: number }
 
-export type MoveIntentPayload = { intent: Enums.MoveIntent }
+-- Level-encoded: every message carries the full intended posture, so a message dropped by the rate limiter is
+-- corrected by the next one. `seq` increases per message; the server ignores anything older than the last seen.
+export type MoveIntentPayload = { crouch: boolean, sprint: boolean, dive: boolean, seq: number }
 
 export type FlashlightTogglePayload = { on: boolean }
 
@@ -242,7 +244,10 @@ export type AudioCuePayload = {
 	seed: number,
 	volume: number?,
 	duration: number?, -- looped presets: seconds from startAt until the voice fades out (one-shots ignore it)
+	id: number, -- server-assigned cue id; AudioStop { id } ends a looped cue early
 }
+
+export type AudioStopPayload = { id: number, fade: number? }
 
 export type ProjectileEventPayload = {
 	id: number,

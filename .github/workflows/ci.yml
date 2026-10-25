@@ -52,6 +52,11 @@ jobs:
           out=$(luau-lsp analyze --platform=roblox --sourcemap=sourcemap.json --definitions=globalTypes.d.luau src tests 2>&1 | grep -v '^\[INFO\]' | grep -v 'client does not allow' || true)
           if [ -n "$out" ]; then echo "$out"; exit 1; fi
 
+      - name: Restricted engine property writes
+        run: |
+          curl -sSfL -o API-Dump.json https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json
+          python3 tools/capscan.py API-Dump.json src
+
       - name: Executable checks (Lune)
         run: lune run tools/lune/check.luau all
 
