@@ -6,9 +6,9 @@
 *.rbxl.lock
 *.rbxlx.lock
 
-# Generated tooling output
+# Generated tooling output (roblox.yml is pinned on purpose and IS committed)
 sourcemap.json
-roblox.yml
+globalTypes*.d.luau
 /build/
 
 # OS / editor noise

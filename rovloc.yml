@@ -1,0 +1,34 @@
+---
+# Project standard library: Roblox globals + Rule 5 (modern task library only).
+base: roblox
+name: rovloc
+globals:
+  wait:
+    args:
+      - type: number
+        required: false
+    deprecated:
+      message: "Rule 5: use task.wait"
+      replace:
+        - "task.wait(%...)"
+  delay:
+    args:
+      - type: number
+      - type: function
+    deprecated:
+      message: "Rule 5: use task.delay"
+      replace:
+        - "task.delay(%...)"
+  spawn:
+    args:
+      - type: function
+    deprecated:
+      message: "Rule 5: use task.spawn"
+      replace:
+        - "task.spawn(%...)"
+  tick:
+    args: []
+    deprecated:
+      message: "Rule 5: use os.clock() for timing or workspace:GetServerTimeNow() for synced time"
+      replace:
+        - "os.clock()"

@@ -1,7 +1,7 @@
 {
   "name": "Rovloc",
   "servePort": 34872,
-  "globIgnorePaths": ["**/*.md", "**/.gitkeep"],
+  "globIgnorePaths": ["**/*.md", "**/.gitkeep", "**/*.spec.luau"],
   "tree": {
     "$className": "DataModel",
 
@@ -14,6 +14,9 @@
         "RejectCharacterDeletions": "Enabled",
         "ValidateEnabledProximityPrompt": "Enabled",
         "PathfindingUseImprovedSearch": "Enabled",
+        "PlayerCharacterDestroyBehavior": "Enabled",
+        "ReplicateInstanceDestroySetting": "Enabled",
+        "EnableSLIMAvatars": "Disabled",
         "FallenPartsDestroyHeight": -500,
         "Gravity": 196.2
       }
@@ -45,6 +48,7 @@
     "SoundService": {
       "$properties": {
         "AmbientReverb": "NoReverb",
+        "AcousticSimulationEnabled": false,
         "DistanceFactor": 3.33,
         "DopplerScale": 0,
         "RolloffScale": 1,
@@ -63,10 +67,13 @@
       "$properties": {
         "GameSettingsAvatar": "R15",
         "AvatarJointUpgrade": "Disabled",
-        "CameraMode": "LockFirstPerson",
+        "LuaCharacterController": "Legacy",
+        "CameraMode": "Classic",
         "CameraMinZoomDistance": 0.5,
         "CameraMaxZoomDistance": 0.5,
         "EnableMouseLockOption": false,
+        "DevComputerMovementMode": "KeyboardMouse",
+        "DevTouchMovementMode": "DynamicThumbstick",
         "AutoJumpEnabled": false,
         "CharacterBreakJointsOnDeath": false,
         "UserEmotesEnabled": false,
@@ -75,9 +82,6 @@
       },
       "StarterPlayerScripts": {
         "$path": "src/StarterPlayer/StarterPlayerScripts"
-      },
-      "StarterCharacterScripts": {
-        "$path": "src/StarterPlayer/StarterCharacterScripts"
       }
     },
 
