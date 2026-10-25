@@ -1,0 +1,16 @@
+# Built place / model files (the source of truth is src/ + default.project.json)
+/*.rbxl
+/*.rbxlx
+/*.rbxm
+/*.rbxmx
+*.rbxl.lock
+*.rbxlx.lock
+
+# Generated tooling output
+sourcemap.json
+roblox.yml
+/build/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
