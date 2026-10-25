@@ -31,7 +31,29 @@ command above). Every script, folder and engine pin is already in place.
 | Character controller | Avatar Settings → Character Controller | Legacy Humanoid | Matches `StarterPlayer.LuaCharacterController = Legacy`. Bear-trap locks, kinematic states and crouch heights assume Humanoid physics. |
 | Avatar scaling / bundles | Avatar Settings | Standard scale, no body bundles | `CharacterService` also normalizes every HumanoidDescription (scales 1, body type 0, no layered clothing or head accessories) so eye heights and the 3.5×3.5 vents stay correct. |
 
-## 3. Syncing Studio edits back
+## 3. Publishing without Studio (phone-friendly)
+
+`.github/workflows/publish.yml` builds the place with Rojo and uploads it through Roblox's Open Cloud
+[place publishing API](https://create.roblox.com/docs/cloud/guides/usage-place-publishing). Everything below works
+in a phone browser.
+
+1. **An experience to publish into.** The API updates an existing place; it cannot create a new experience. Create
+   one from the [Creator Dashboard](https://create.roblox.com/dashboard/creations) if your browser offers it;
+   otherwise one short Studio session on any computer (publish an empty Baseplate) is enough, once.
+2. **Ids.** On the Creator Dashboard, open the experience: the universe id is in the experience's URL / "Copy
+   Universe ID" menu item; the start place id is in the place's Configure URL.
+3. **API key.** Creator Dashboard → Credentials → API Keys → Create API Key. Add the `universe-places` API system,
+   select the experience, and grant **Write**. Copy the key once.
+4. **GitHub secrets.** In the repository: Settings → Secrets and variables → Actions → New repository secret:
+   `ROBLOX_API_KEY`, `ROBLOX_UNIVERSE_ID`, `ROBLOX_PLACE_ID`.
+5. **Publish.** Actions → *Publish to Roblox* → Run workflow (choose `Saved` for a private draft or `Published` for
+   live). Pushes to `main` publish automatically.
+6. **Play.** Open the experience in the Roblox app on your phone. Keep the experience private while testing.
+
+Dev tools: add your Roblox UserId to `GameConfig.DevAllowlistUserIds` to get the on-screen dev panel (start a run,
+skip levels, show noise rings) in live servers. In Studio it is always available.
+
+## 4. Syncing Studio edits back
 
 ```sh
 rojo syncback syncback.project.json --input Rovloc.rbxl

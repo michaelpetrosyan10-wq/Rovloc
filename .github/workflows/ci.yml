@@ -1,0 +1,62 @@
+# Every push: the same gates the project uses locally, plus a downloadable Rovloc.rbxl for Studio-only users.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rokit
+        run: |
+          curl -sSf https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
+          echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"
+
+      - name: Install pinned tools
+        run: rokit install --no-trust-check
+
+      - name: Every $path in the project exists
+        run: jq -r '.. | objects | ."$path"? // empty' default.project.json test.project.json | sort -u | xargs -I{} test -e {}
+
+      - name: Engine pins are intact
+        run: >
+          jq -e '.tree.Workspace."$properties".StreamingEnabled == false
+          and .tree.Workspace."$properties".SignalBehavior == "Deferred"
+          and .tree.Players."$properties".CharacterAutoLoads == false
+          and .tree.StarterPlayer."$properties".AvatarJointUpgrade == "Disabled"
+          and .tree.StarterPlayer."$properties".LuaCharacterController == "Legacy"' default.project.json
+
+      - name: Lint (selene)
+        run: selene src tests
+
+      - name: Format (StyLua)
+        run: stylua --check src tests
+
+      - name: Build place
+        run: rojo build default.project.json -o Rovloc.rbxl
+
+      - name: Type-check (luau-lsp, strict)
+        run: |
+          rojo sourcemap test.project.json -o sourcemap.json
+          curl -sSfL -o globalTypes.d.luau https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/1.70.1/scripts/globalTypes.None.d.luau
+          out=$(luau-lsp analyze --platform=roblox --sourcemap=sourcemap.json --definitions=globalTypes.d.luau src tests 2>&1 | grep -v '^\[INFO\]' | grep -v 'client does not allow' || true)
+          if [ -n "$out" ]; then echo "$out"; exit 1; fi
+
+      - name: Executable checks (Lune)
+        run: lune run tools/lune/check.luau all
+
+      - name: Upload place file
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rovloc.rbxl
+          path: Rovloc.rbxl

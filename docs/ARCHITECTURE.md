@@ -38,16 +38,22 @@ Rovloc/
 ├── default.project.json                    Rojo project + engine pins (validated with Rojo 7.7.1)
 ├── syncback.project.json                   Scripts-only project for `rojo syncback` (keeps pins out of syncback)
 ├── test.project.json                       [P1] default tree + tests/ mapped to ServerScriptService.Tests
-├── rokit.toml                              rojo 7.7.1 · selene 0.31.0 · stylua 2.6.0 · luau-lsp 1.70.1
+├── rokit.toml                              rojo 7.7.1 · selene 0.31.0 · stylua 2.6.0 · luau-lsp 1.70.1 · lune 0.11.1
 ├── selene.toml · rovloc.yml · roblox.yml   Lint config, project rules (Rule 5), pinned Roblox std (offline-safe)
 ├── stylua.toml · .luaurc · .gitignore
 ├── .vscode/                                extensions.json · settings.json (luau-lsp sourcemap)
-├── .github/workflows/ci.yml                [P1] paths, pins, selene, stylua, luau-lsp analyze, rojo build artifact
+├── .github/workflows/
+│   ├── ci.yml                              [P1] paths, pins, selene, stylua, luau-lsp analyze, Lune checks, .rbxl artifact
+│   └── publish.yml                         [P1] Open Cloud place publishing (no Studio needed)
+├── tools/
+│   ├── verify-files.sh                     [P1] Gate a subset of files (luau-lsp + selene + stylua)
+│   └── lune/                               [P1] harness.luau (engine shims) · check.luau (layouts / world / specs)
 ├── docs/
 │   ├── ARCHITECTURE.md                     This file
 │   └── PLACE_SETUP.md                      Settings Rojo cannot set + bootstrap procedure
 ├── tests/
-│   ├── Runner.server.luau                  [P1] Dependency-free spec runner (Studio play-solo or CI)
+│   ├── Runner.server.luau                  [P1] Studio entry for the specs (test.project.json places only)
+│   ├── SpecRunner.luau                     [P1] Dependency-free runner shared by Studio and Lune
 │   └── Specs/                              [P1→P8] One spec per pure module: CollisionMatrix, RunDirector (determinism +
 │                                           solvability over 500 seeds), ZoneGraph, BinaryHeap, VentPathfinder,
 │                                           Hearing, PacingDirector, DataMigration
@@ -106,6 +112,7 @@ Rovloc/
     │       │       ├── init.luau           [P1] BuildAuthoritative / BuildCosmetic / ClearRuntime + RegisterProp / RegisterRig
     │       │       ├── Palette.luau        [P1] Materials + colour grading (concrete, tile, galvanized steel, rust, ...)
     │       │       ├── Geometry.luau       [P1] Split-slab walls with door / vent openings, trims, pillars, stairs (no CSG)
+    │       │       ├── LayoutSchema.luau   [P1] Blueprint types, shared geometry helpers, validator (tiling, doors, ducts, solvability)
     │       │       ├── ZoneGraph.luau      [P1] Rooms + portals (doors, grates, duct segments): solvability, hearing, EMF adjacency
     │       │       ├── LightingRig.luau    [P1] Baseline Atmosphere, ColorCorrection, Bloom, Terrain clouds
     │       │       ├── LobbyBuilder.luau   [P1] Boiler-room safe zone + wrecked bus staging area
