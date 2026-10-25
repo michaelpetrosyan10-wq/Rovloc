@@ -5,9 +5,11 @@ Everything (geometry, the Creature rig, animation, audio and UI) is generated in
 no `.rbxm` models, no `rbxassetid://` animations and no `rbxassetid://` sounds.
 
 API surface is checked against the Roblox API dump **v0.744** (reflection DB 741 inside Rojo 7.7.1).
-Deprecated members are banned: for example `LoadCharacter` → `LoadCharacterAsync`, `GetHumanoidDescriptionFromUserId`
+Scripts never touch deprecated members: for example `LoadCharacter` → `LoadCharacterAsync`, `GetHumanoidDescriptionFromUserId`
 → `…Async`, `Sound.MaxDistance` → `RollOffMaxDistance`, and `wait`/`spawn`/`delay`/`tick` → `task.*` / `os.clock()`
-(the last four are enforced by selene, see `rovloc.yml`).
+(selene enforces the last four, see `rovloc.yml`, and `luau-lsp analyze` rejects the rest). The only deprecated property
+pinned anywhere is `Lighting.Technology = Future`, and only in the project file. No scriptable property forces Future
+lighting, so its modern partner `LightingStyle = Realistic` is pinned next to it.
 
 ---
 
@@ -17,12 +19,12 @@ Deprecated members are banned: for example `LoadCharacter` → `LoadCharacterAsy
 | --- | --- |
 | `--!strict` everywhere | Every `.luau` file starts with `--!strict`. `.luaurc` sets strict mode. CI runs `luau-lsp analyze` against the Rojo sourcemap. |
 | Works in Rojo **and** Studio | `src/` mirrors the Explorer one-to-one. Requires go by instance path (`require(ReplicatedStorage.Shared.Config.GameConfig)`), never string aliases. Runtime-created instances are only reached through `Shared/Instances.luau`, so strict typing never guesses. |
-| One ordered bootstrap per side | `ServerMain` and `ClientMain` require an explicit module list and wrap every lifecycle call in `xpcall`. They're the **only** files that grow in later phases. Every shared contract (enums, types, attributes, tags, remotes, config) is complete in Phase 1. |
+| One ordered bootstrap per side | `ServerMain` and `ClientMain` require an explicit module list and wrap every lifecycle call in `xpcall`. They're the **only** files that grow in later phases. Every shared contract (enums, types, attributes, tags, remotes, config) is complete in Phase 1. Later phases plug in through registries owned by earlier ones: `ProceduralWorldBuilder.RegisterProp/RegisterRig`, `LevelDirector.RegisterLevel`, `MovementAuthority.RegisterValidator`, and the `MonsterAIService` hooks (`RegisterLockerInspector`, `RegisterPoolGrabber`). |
 | Downward-only dependencies | Layers: `Shared → Core → Player → World systems (Vents, Monster) → Levels & Mechanics → Match`. A module only requires layers below it. Upward traffic goes through typed `Signal`s or registered hooks (e.g. `MonsterAIService.RegisterLockerInspector`), so there are no require cycles and no `any` leaks. |
 | Server authority | Clients send *intents* through validated, rate-limited remotes. The server owns noise, damage, life state, meters, interactions, items, progression and data. Noise tiers come from **observed** server-side speed as well as the claimed move state. |
-| No gameplay on `Touched` | Triggers, traps, checkpoints, water and scare volumes are polled by the server at 10 Hz (`ZoneService`, using `OverlapParams`). `Touched` may drive client-only cosmetics. |
+| No gameplay on `Touched` | The server polls triggers, traps, checkpoints, water and scare volumes at 10 Hz (`ZoneService`). It tests points against volumes with plain math (`volume.CFrame:PointToObjectSpace(root.Position)` against `Size/2`), so the test works in every collision group, `NoCollide` included. Spatial queries would skip those parts. `Touched` may drive client-only cosmetics. |
 | Events are remotes, state is attributes | Durable state replicates as Attributes. Moments (neck snap, gate slam, lightning, jumpscare) travel on one reliable `OneShot` remote: `{seq, kind, subject, startAt, args}`. `startAt = GetServerTimeNow() + lead`, so every client starts the same `Timeline` on the same frame, and late joiners fast-forward. |
-| Resettable runs | Each module has a `ServiceTrove` (process lifetime) and a `RunTrove` (one run). `MatchResetService` runs `EndRun` on every service (reverse order) → clears `Workspace.Runtime` → `BeginRun(ctx)` on every service (forward order). |
+| Resettable runs | Each module has a `ServiceTrove` (process lifetime) and a `RunTrove` (one run). `RunLifecycleService` is the only writer of `MatchPhase` and the run attributes. **Deploying** calls `BeginRun(ctx)` on every service, in forward order, once the difficulty and participants are known. **Resetting** calls `EndRun` on every service in reverse order, then clears `Workspace.Runtime`. Before Phase 8, a Studio dev-run harness in `DevToolsService` drives the lifecycle, so every phase is playable on its own. |
 | Procedural only | Geometry uses Parts, WedgeParts, built-in `Enum.Material`s, Attachments and Constraints, with no runtime CSG. Audio layers verified `rbxasset://sounds/` engine files through `SoundEffect` DSP chains, all built on clients. Animation writes `Motor6D.Transform` (or `AnimationConstraint.Transform`) in `PreSimulation` on clients. |
 
 ---
@@ -101,14 +103,14 @@ Rovloc/
     │       │   └── Timeline.luau           [P3] Server-time track runner (camera, light, sound, creature, door); fast-forward
     │       ├── World/
     │       │   └── ProceduralWorldBuilder/
-    │       │       ├── init.luau           [P1] BuildAuthoritative(plan) on server · BuildCosmetic(seed) on clients · ClearRuntime
+    │       │       ├── init.luau           [P1] BuildAuthoritative / BuildCosmetic / ClearRuntime + RegisterProp / RegisterRig
     │       │       ├── Palette.luau        [P1] Materials + colour grading (concrete, tile, galvanized steel, rust, ...)
     │       │       ├── Geometry.luau       [P1] Split-slab walls with door / vent openings, trims, pillars, stairs (no CSG)
     │       │       ├── ZoneGraph.luau      [P1] Rooms + portals (doors, grates, duct segments): solvability, hearing, EMF adjacency
     │       │       ├── LightingRig.luau    [P1] Baseline Atmosphere, ColorCorrection, Bloom, Terrain clouds
     │       │       ├── LobbyBuilder.luau   [P1] Boiler-room safe zone + wrecked bus staging area
     │       │       ├── SchoolShellBuilder.luau [P1] Levels 0–5: slabs, walls, rooms, corridors, boarded windows, Zone volumes
-    │       │       ├── StairwellBuilder.luau [P1] Stairwells + airlock vestibules + per-airlock SpawnLocations
+    │       │       ├── StairwellBuilder.luau [P1] Stairwells + airlock vestibules + SpawnAnchor attachments
     │       │       ├── VentShaftBuilder.luau [P1] 3.5×3.5 ducts per level, VentNodes with explicit Links, AdjacentZones, Submerged
     │       │       ├── SkylineBuilder.luau [P1] Ruined city backdrop (cosmetic, client-built)
     │       │       ├── Layouts/
@@ -129,7 +131,8 @@ Rovloc/
     │       │       │   ├── DoorBuilder.luau            [P2] Airlock fire doors, hallway gate, roof stairwell door
     │       │       │   ├── PickupBuilder.luau          [P2] Flashlight batteries
     │       │       │   ├── FloodlightSwitchBuilder.luau [P2] Emergency pool floodlight switch + lights
-    │       │       │   └── SetDressingBuilder.luau     [P2] Posed corpses, smashed lockers, glass/cans, drip pipes, lab counters
+    │       │       │   └── SetDressingBuilder.luau     [P2] Server: lab counters, smashed lockers, debris triggers, drip pipes ·
+    │       │       │                                        Client: posed corpses, loose clutter, trims
     │       │       └── CreatureRigBuilder.luau [P2] 8.5-stud rig, Motor6Ds, hair, claws, grin, pupils, CreatureHitbox
     │       └── Util/
     │           ├── Signal.luau             [P1] Typed, immediate-fire signal
@@ -144,14 +147,15 @@ Rovloc/
     │   ├── ServerMain.server.luau          [P1] Ordered bootstrap, xpcall isolation, place-settings audit → BootError
     │   └── Services/
     │       ├── Core/
-    │       │   ├── CollisionService.luau   [P1] RegisterCollisionGroup + matrix + live part assignment
-    │       │   ├── CharacterService.luau   [P1] Normalized R15 builds, spawning, Lock/Unlock (Anchor / ServerOwned), Died → Eliminated
-    │       │   ├── WorldService.luau       [P1] Clears edit-time Workspace, builds, WorldReady + per-client ack
+    │       │   ├── CollisionService.luau   [P1] Groups + matrix; only writer of CollisionGroup (per-character mode stack)
+    │       │   ├── CharacterService.luau   [P1] Normalized R15 builds, spawning, Lock/Unlock (Anchor / ServerOwned), Died signal
+    │       │   ├── RunLifecycleService.luau [P1] Only writer of MatchPhase + run attributes; BeginRun / EndRun fan-out
+    │       │   ├── WorldService.luau       [P1] Clears edit-time Workspace, builds, WorldReady + per-client ack, per-run spawns
     │       │   ├── LevelDirector.luau      [P1] CurrentLevel / LevelPhase, Enter/Advance, activation signals, level registry
-    │       │   ├── ZoneService.luau        [P1] 10 Hz zone enter/exit for every character (replaces Touched)
+    │       │   ├── ZoneService.luau        [P1] 10 Hz point-in-volume enter/exit for every character (replaces Touched)
     │       │   ├── AudioService.luau       [P1] Cue routing to clients (server never creates synth voices)
     │       │   ├── RunStatsService.luau    [P1] Per-player run counters (StatKey) + run timing
-    │       │   ├── DevToolsService.luau    [P1] Studio / allowlist commands: level skip, god mode, overlays
+    │       │   ├── DevToolsService.luau    [P1] Studio / allowlist: dev-run harness, level skip, god mode, overlays
     │       │   └── NoiseAndDirectorService/
     │       │       ├── init.luau           [P1] Noise bus (Emit / NoiseEmitted), splash meter, director API
     │       │       ├── LocomotionNoiseSampler.luau [P1] 10 Hz: max(tier(MoveState), tier(observed speed))
@@ -159,14 +163,14 @@ Rovloc/
     │       │       └── PacingDirector.luau [P5] BuildUp / Peak / Relax, catch cooldown, leash, out-of-sight reposition, grace
     │       ├── Player/
     │       │   ├── PlayerStateService.luau [P3] MoveState authority + override stack, meters, LookRelay broadcast
-    │       │   ├── MovementAuthority.luau  [P3] Speed / displacement / noclip / vent-rail checks → rubber-band + strikes
+    │       │   ├── MovementAuthority.luau  [P3] Speed / displacement / noclip checks + RegisterValidator → rubber-band + strikes
     │       │   ├── LifeStateService.luau   [P3] Only writer of Health + LifeState: damage, Downed, 35s bleedout, Execute, Eliminate
     │       │   ├── InteractionService.luau [P3] Server-timed prompt holds, per-player durations + audience, channel progress
     │       │   ├── FlashlightService.luau  [P3] Battery authority, pickups, FlashlightOn
-    │       │   └── LoadoutService.luau     [P3] Perk effects: screwdriver timing, lithium capacity, syringe charges + use
+    │       │   └── LoadoutService.luau     [P3] Perk effects: screwdriver timing, lithium capacity, syringe (stamina + self-revive)
     │       ├── Vents/
     │       │   └── VentNetworkService/
-    │       │       ├── init.luau           [P4] Grates (unscrew / kick / locked), enter / exit, occupancy, rail validation
+    │       │       ├── init.luau           [P4] Grates (unscrew / kick / locked), enter / exit, occupancy, rail validator
     │       │       ├── VentGraph.luau      [P4] Per-level graph from VentNode Links; passable edges respect grate state
     │       │       └── VentPathfinder.luau [P4] A* (BinaryHeap) + RetreatPath for stun retreats
     │       ├── Monster/
@@ -200,15 +204,15 @@ Rovloc/
     │       │   └── Level5_RoofController.luau [P8] Door smash, final sprint, parachute leap, lightning reveal + vanish
     │       └── Match/
     │           └── MatchAndDataService/
-    │               ├── init.luau           [P8] Phase machine + single RunOutcomeEvaluator
+    │               ├── init.luau           [P8] Match policy over RunLifecycleService + single RunOutcomeEvaluator
     │               ├── StoreBackend.luau   [P8] DataStore backend + Ephemeral Studio fallback + guest mode
     │               ├── PlayerDataStore.luau [P8] Session lock, serialized save queue, idempotent rewards, migrations
     │               ├── LobbyService.luau   [P8] Ready-up, difficulty vote, countdown, squad cap
     │               ├── PerkShopService.luau [P8] Credit spend → PerkStock, loadout equip
     │               ├── CheckpointAirlockService.luau [P8] Fire doors, 20s straggler timer, 50% HP respawn, floor credits
-    │               ├── DownedReviveService.luau [P8] 4s teammate revive prompt + syringe self-revive
+    │               ├── DownedReviveService.luau [P8] 4s teammate revive prompt (server-timed channel)
     │               ├── SpectatorService.luau [P8] Late joiners + eliminated players, target cycling
-    │               ├── MatchResetService.luau [P8] EndRun → ClearRuntime → BeginRun → lobby
+    │               ├── MatchResetService.luau [P8] Results → Resetting → Lobby; Play Again votes
     │               └── TelemetryService.luau [P8] AnalyticsService funnels, economy, death causes
     │
     └── StarterPlayer/
@@ -218,17 +222,17 @@ Rovloc/
             └── Controllers/
                 ├── Core/
                 │   ├── AudioController.luau        [P1] Buses, cue playback with server-time offset, zone reverb, nearby emitters
-                │   ├── LightingController.luau     [P1] Per-level light activation, lightning + light-burst one-shots
+                │   ├── LightingController.luau     [P1] Only writer of level lights: active level ∧ budget, Timeline overrides
                 │   ├── CosmeticWorldController.luau [P1] Skyline + non-interactive dressing from RunSeed
                 │   ├── DevToolsController.luau     [P1] Noise rings, ZoneGraph / VentGraph overlays, Creature billboard
                 │   ├── InputController.luau        [P3] ContextActionService context stack (Menu > Cutscene > … > OnFoot)
-                │   ├── CursorController.luau       [P3] Ref-counted cursor-free requests for UI
+                │   ├── CursorController.luau       [P3] Ref-counted cursor-free requests (Modal button + MouseBehavior)
                 │   ├── SettingsController.luau     [P3]
                 │   ├── RenderBudgetController.luau [P3] Light / shadow / emitter / DOF / animation LOD budgets
                 │   └── SequenceController.luau     [P3] Receives OneShot, runs Timelines in sync
                 ├── FirstPerson/
                 │   └── FirstPersonController/
-                │       ├── init.luau               [P3] Owns the Scriptable camera; one RenderStep pipeline
+                │       ├── init.luau               [P3] Owns the Scriptable camera; LockFirstPerson in match; one RenderStep
                 │       ├── CameraRig.luau          [P3] Look input (mouse / touch / gamepad), yaw / pitch, root yaw
                 │       ├── CameraStack.luau        [P3] Priority overrides: Cutscene > Jumpscare > Spectating > Struggle > Trapped > base
                 │       ├── CameraStates.luau       [P3] Standing, Crouching, VentCrawling, DownedCrawling, LockerPeeking,
@@ -295,9 +299,10 @@ game
 │   ├── ServerMain           Script
 │   └── Services             Folder: Core · Player · Vents · Monster · Mechanics · Levels · Match
 ├── SoundService             AmbientReverb=NoReverb · AcousticSimulationEnabled=false · DopplerScale=0
-├── StarterGui               (empty; every ScreenGui is built in code with ResetOnSpawn=false)
+├── StarterGui               (empty: every ScreenGui is built in code with ResetOnSpawn=false)
 └── StarterPlayer            GameSettingsAvatar=R15 · AvatarJointUpgrade=Disabled · LuaCharacterController=Legacy
-    │                        · CameraMode=Classic, zoom 0.5 (lobby fallback; the match camera is Scriptable)
+    │                        · CameraMode=Classic, zoom 0.5 (fallback only; FirstPersonController drives a Scriptable
+    │                          camera everywhere and sets Player.CameraMode=LockFirstPerson for the match)
     └── StarterPlayerScripts
         ├── ClientMain           LocalScript
         ├── RbxCharacterSounds   LocalScript (replaces the default)
@@ -308,16 +313,24 @@ Rojo file mapping, for Studio-only users: `X.server.luau` → **Script**, `X.cli
 `X.luau` → **ModuleScript**, and a folder holding `init.luau` → **ModuleScript** whose children are the other files.
 The simplest Studio-only route is to open the `Rovloc.rbxl` built by CI (or by `rojo build`). See `docs/PLACE_SETUP.md`.
 
-There is deliberately no `StarterCharacterScripts`. `CharacterService` builds each R15 rig with
-`Players:CreateHumanoidModelFromDescriptionAsync(desc, Enum.HumanoidRigType.R15)` and strips any default `Animate`
-or `Health` script before parenting, so the rig type is guaranteed whatever the universe avatar setting is, and
-there is no passive regen.
+There is deliberately no `StarterCharacterScripts`. `CharacterService` builds every character in this fixed order:
+
+1. Fetch the HumanoidDescription with `GetHumanoidDescriptionFromUserIdAsync` inside `pcall`. Studio test players
+   have negative UserIds, so they fall back to `HumanoidDescription.new()`.
+2. Normalize it: scales 1, body type and proportion 0, no layered clothing, no head accessories.
+3. Build it with `CreateHumanoidModelFromDescriptionAsync(desc, Enum.HumanoidRigType.R15)`.
+4. Strip any `Animate` / `Health` script, then set `BreakJointsOnDeath=false` and `RequiresNeck=false`.
+5. Pivot it to a `SpawnAnchor`.
+6. Set `player.Character = model`, then parent it to Workspace.
+
+The rig is therefore R15 whatever the universe avatar setting is, there is no passive regen, and `CharacterService`
+destroys the old model on every swap (deploy, airlock respawn, return to lobby).
 
 ### 3b. Run time (built by code; never saved in the place file)
 
 ```text
 Workspace
-├── Lobby                    Model  ReadyPads · DifficultyTerminal · PerkLocker · SpawnLocation
+├── Lobby                    Model  ReadyPads · DifficultyTerminal · PerkLocker · SpawnAnchors
 ├── School                   Model
 │   ├── Level0_Basement      Model  Shell · Lights · Zones · Vents · Anchors · Triggers · Waypoints
 │   ├── Level1_Hallways      Model  (same layout per level; Vents holds that level's ducts + VentNodes)
@@ -325,10 +338,10 @@ Workspace
 │   ├── Level3_Gymnasium     Model
 │   ├── Level4_FloodedPool   Model
 │   ├── Level5_Roof          Model
-│   └── Stairwells           Model  Stairwell_0_1 … Stairwell_4_5 (AirlockDoor · CheckpointVolume · SpawnLocation)
-├── Cosmetic                 Folder (client-local) Skyline, trims, debris, posed corpses
+│   └── Stairwells           Model  Stairwell_0_1 … Stairwell_4_5 (AirlockDoor · CheckpointVolume · SpawnAnchors)
+├── Cosmetic                 Folder (client-local) Skyline, trims, loose clutter, posed corpses
 ├── Creature                 Model  [tag Creature] Humanoid · HumanoidRootPart · CreatureHitbox · Motor6D rig
-└── Runtime                  Folder  Level0 … Level5 subfolders: per-run traps, flasks, batteries, clouds (wiped on reset)
+└── Runtime                  Folder  Level0 … Level5: per-run traps, flasks, batteries, clouds, executed ragdolls (wiped on reset)
 
 Lighting                     Atmosphere · ColorCorrection · Bloom (+ client-local Panic CC / DOF / lightning pulses)
 Workspace.Terrain            Clouds (storm deck)
@@ -360,7 +373,10 @@ helpers that make the vent and doorway guarantees hold.
 | **NoCollide** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
 - **Players ✗ Players, ✗ Monster, ✗ CorpseProps.** Teammates, the Creature and ragdolls can never wedge or fling a player.
-- **Vent crawl.** On entry, every character part moves to `NoCollide`, and a 2.6-stud `VentCollider` ball welded to
+- **One writer.** Only `CollisionService` sets `CollisionGroup`. Each character has a mode stack
+  (`Normal < Vent < Locked`), and the highest mode wins. So a jumpscare that ends inside a duct falls back to `Vent`,
+  never to `Players`.
+- **Vent crawl.** In `Vent` mode every character part is `NoCollide`, and a 2.6-stud `VentCollider` ball welded to
   the root is the only collider. The owning client drives the root along the VentNode rail (`AlignPosition` +
   `AlignOrientation`, Humanoid in `Physics` state). The ball can't snag inside the 3.5×3.5 bore, and the duct walls
   still contain it if the constraint ever fails. Exit teleports to the grate's `ExitAnchor` after an overlap check.
@@ -370,17 +386,23 @@ helpers that make the vent and doorway guarantees hold.
   the duct when quadruped. Door trims, lockers, desks and debris are `MonsterPassthrough` with
   `PathfindingModifier { PassThrough = true }`. Airlock doors and the hallway gate stay `Default`, so they really block.
   Doorways are at least 6×10 studs clear, and the Creature ducks procedurally.
-- **NoCollide** also covers characters under a server lock (locker, drag, jumpscare, cutscene), water and zone
-  volumes, and every cosmetic part.
+- **NoCollide** also covers characters in `Locked` mode (locker, drag, jumpscare, cutscene), water and zone volumes,
+  and every cosmetic part. Nothing ever queries those parts physically: zones and water are tested with math (§4b).
+- **Creature Humanoid.** `RequiresNeck=false`, `BreakJointsOnDeath=false`, `AutomaticScalingEnabled=false`, an
+  explicit `HipHeight`, and no `Animator`.
 
 ### 4b. Query rules
 
-1. Gameplay never relies on `Touched`. `ZoneService` polls every tagged volume at 10 Hz with `OverlapParams`
-   (`FilterType=Include`, character roots), so it works in every collision group.
+1. Gameplay never relies on `Touched`. `ZoneService` tests each character root against every tagged volume with
+   point-in-box math at 10 Hz. Clients run the same math to find their own `ZoneId`, which drives reverb and EMF
+   adjacency.
 2. Line of sight runs from the Creature's eye (root + CreatureConfig offset per PoseMode) to the target's **EyePoint**
-   (root + CameraConfig offset per MoveState). Every character is excluded from the ray. The server never sees
-   client-side poses (`Motor6D.Transform` is NotReplicated), so it never tests against limbs.
+   (root + CameraConfig offset per MoveState). It uses `RaycastParams.CollisionGroup = "Default"` with every
+   character and the Creature excluded, so lockers, desks and debris block sight. The server never sees client-side
+   poses (`Motor6D.Transform` is NotReplicated), so it never tests against limbs.
 3. Flasks are stepped server raycasts with `CollisionGroup="Projectiles"`. They hit walls, props and `CreatureHitbox`.
+   Each step also tests the `PoolWater` surface planes with math, so a flask landing in the pool shatters at the
+   surface. A shatter near a grabbed player releases the grab. Short tosses are allowed while vent crawling.
    The stun is decided by the cloud: the radius from the shatter point to the hitbox, plus a VentGraph hop distance of
    2 or fewer for in-duct shatters. The retreat direction comes from `VentPathfinder.RetreatPath`.
 
@@ -388,8 +410,8 @@ helpers that make the vent and doorway guarantees hold.
 
 | Assembly | Owner | Mechanism |
 | --- | --- | --- |
-| Player character | Client | Validated by `MovementAuthority`: speed, displacement and noclip raycasts, plus distance to the rail while in a vent |
-| Player under a lock | Server | `CharacterService.Lock(player, reason, mode)`, ref-counted. **Anchor**: trap, locker, jumpscare, cutscene. **ServerOwned**: underwater drag. The last `Unlock` restores `SetNetworkOwner(player)`. |
+| Player character | Client | Validated by `MovementAuthority`: speed, displacement and noclip raycasts. `VentNetworkService` registers a rail-distance validator for the vent. |
+| Player under a lock | Server | `CharacterService.Lock(player, reason, mode)`, ref-counted, which pushes collision mode `Locked`. **Anchor**: trap, locker, jumpscare, cutscene. **ServerOwned**: underwater drag. The last `Unlock` unanchors first, then calls `SetNetworkOwner(player)`. |
 | Creature | Server | `CreatureBody.Reassert()` after every anchor or rig change, with a Studio audit that the owner is `nil` |
 | Doors, gates, grates, locker doors, trap jaws | Server | Anchored and server-tweened. No free hinges. |
 | Executed-player ragdolls | Server | `CorpseProps` + `SetNetworkOwner(nil)`. Level corpses are posed, anchored and client-cosmetic. |
@@ -411,13 +433,24 @@ export type Service = {
 }
 ```
 
-**Match phases.** `Lobby → Countdown → Deploying → InRun → RunEnded → Results → Resetting → Lobby`. Countdown aborts
-if the ready count drops. Deploying snapshots the participants and moves them to the basement. Outcomes are per
-player (`Escaped / Dead / Disconnected`). One `RunOutcomeEvaluator` (coalesced with `task.defer`) decides wipe or
-escape. Wipe = no Alive participant and no Downed participant with a syringe charge left.
+**Match phases.** `Lobby → Countdown → Deploying → InRun → RunEnded → Results → Resetting → Lobby`.
+`RunLifecycleService` [P1] owns the transitions and the `BeginRun` / `EndRun` fan-out. `MatchAndDataService` [P8]
+owns the policy (votes, countdown, rewards). Until P8 exists, the Studio dev-run harness deploys straight into
+`InRun`.
+
+- Countdown aborts if the ready count drops.
+- Deploying snapshots the participants, calls `BeginRun(ctx)` and moves the squad to the basement.
+- Outcomes are per player (`Escaped / Dead / Disconnected`). One `RunOutcomeEvaluator` (coalesced with `task.defer`)
+  decides wipe or escape.
+- Wipe = no Alive participant and no Downed participant with a syringe charge left.
+
+**Death rules.** `LifeStateService` is the only writer of `Health` and `LifeState`. `CharacterService` just fires
+`Died`. Lethal damage goes to `Down`, which becomes `Execute` if the player has already been downed once. Oxygen
+reaching 0 goes through the same `Down` path. Execute and `Died` are idempotent.
 
 **Leaving mid-run.** `OnPlayerRemoving` releases locks, traps and channels, clears vent and locker occupancy, drops
 the Creature's target to its last known position, re-evaluates the airlock and the run outcome, and retargets spectators.
+On rejoin, the data load waits for any `Release` still in flight for that UserId.
 
 **Self-reset.** `ClientMain` disables the Reset Character button. A Humanoid death that bypasses `LifeStateService`
 is treated as an elimination, never a respawn.
@@ -446,7 +479,9 @@ is treated as an elimination, never a respawn.
 
 `RunDirector` only ever locks `Lockable` grates, never `CriticalPath` ones (the Floor 1 bypass vent, the gym
 connectors, the pool ducts). After randomizing, it runs a breadth-first search over `ZoneGraph` from each level's
-entry airlock to its exit, and re-rolls deterministically from the seed until every level is solvable.
+entry airlock to its exit. It re-rolls deterministically from the seed, up to 64 times. If a level is still
+unsolvable after that, every `Lockable` grate on that level is unlocked. A locked grate blocks players and the
+Creature alike.
 
 ### 6c. Remotes (`RemoteRegistry`, all validated and rate-limited; no `InvokeClient`)
 
@@ -493,6 +528,10 @@ in production, the player plays as a guest with saving off. Nobody is kicked and
 3. `LevelDirector` (CurrentLevel, level activation, advance) moves to **P1**, so floors 2–4 can be reached in
    P5–P7 through the dev level-skip. The P8 airlock rules call it.
 4. `Timeline` (P3) and the Creature's `Scripted` state (P5) exist before the scripted beats in P6 and P8.
+5. `RunLifecycleService` and the Studio dev-run harness land in **P1**. Every phase can be played on its own, and P8
+   swaps the harness for the real lobby.
+6. Later phases plug into registries owned by earlier ones (§1), so no earlier file is reopened. The only
+   exceptions are the two bootstrap lists.
 
 ---
 
@@ -508,5 +547,7 @@ selene src tests && stylua --check src tests
 ```
 
 `rojo serve` can't write NotScriptable properties (most Workspace and StarterPlayer pins, and `Lighting.Technology`),
-so always serve into a place made by `rojo build`, never into a Studio template. `ServerMain` audits the critical
-settings at boot and sets `BootError` if any of them is wrong.
+so always serve into a place made by `rojo build`, never into a Studio template. At boot, `ServerMain` checks what
+scripts can read: `StreamingEnabled`, `CharacterAutoLoads`, `LuaCharacterController`, and server size ≤ 4. It also
+runs a behavioural probe for deferred signals: it fires a `BindableEvent` and checks whether the handler has already
+run. If anything fails, it sets `BootError`. Settings that scripts can't read are listed in `docs/PLACE_SETUP.md`.
