@@ -268,6 +268,15 @@ export type RunSummaryPayload = {
 
 export type NotifyPayload = { key: string, args: { string } }
 
+export type DevOverlayPayload = {
+	kind: "Noise" | "Plan" | "Path" | "Clear",
+	position: Vector3?,
+	radius: number?,
+	label: string?,
+	points: { Vector3 }?,
+	duration: number?,
+}
+
 --------------------------------------------------------------------------------
 -- Persistence (v1). Owned by PlayerDataStore (P8); declared here so the shop, summary and HUD agree.
 --------------------------------------------------------------------------------

@@ -369,6 +369,24 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		end
 	end
 
+	-- School levels tile the whole footprint (no overlaps + full area = full tiling), so the facade and every
+	-- floor are continuous. Dead space is modelled as Storage or Chase rooms.
+	if isSchoolLevel(layout) then
+		local area = 0
+		for _, room in layout.rooms do
+			area += room.rect.w * room.rect.d
+		end
+		local expected = footprint.w * footprint.d
+		if math.abs(area - expected) > 0.5 then
+			pushf(
+				errors,
+				"rooms cover %.1f of the %.0f stud^2 footprint; tile it completely (gaps or overlaps)",
+				area,
+				expected
+			)
+		end
+	end
+
 	if not rooms[layout.entry] then
 		pushf(errors, "entry room %s is missing", layout.entry)
 	end

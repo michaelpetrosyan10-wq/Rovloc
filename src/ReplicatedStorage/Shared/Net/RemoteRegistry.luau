@@ -176,6 +176,7 @@ local list: { RemoteSpec } = {
 	{ name = "RunSummary", kind = "Event", direction = "ToClient" },
 	{ name = "Notify", kind = "Event", direction = "ToClient" },
 	{ name = "LookBroadcast", kind = "Unreliable", direction = "ToClient" },
+	{ name = "DevOverlay", kind = "Event", direction = "ToClient" }, -- dev-only visualizers (noise rings, plans)
 }
 
 local byName: { [string]: RemoteSpec } = {}

@@ -54,7 +54,22 @@ local function collides(a: GroupName, b: GroupName): boolean
 	return pairSet[a .. "|" .. b] == true
 end
 
-return table.freeze({
+export type CollisionGroupsModule = {
+	Default: GroupName,
+	Players: GroupName,
+	Monster: GroupName,
+	CorpseProps: GroupName,
+	Projectiles: GroupName,
+	MonsterPassthrough: GroupName,
+	VentCollider: GroupName,
+	NoCollide: GroupName,
+	Custom: { GroupName },
+	All: { GroupName },
+	CollidingPairs: { Pair },
+	collides: (a: GroupName, b: GroupName) -> boolean,
+}
+
+local CollisionGroups: CollisionGroupsModule = {
 	Default = Default,
 	Players = Players,
 	Monster = Monster,
@@ -63,8 +78,14 @@ return table.freeze({
 	MonsterPassthrough = MonsterPassthrough,
 	VentCollider = VentCollider,
 	NoCollide = NoCollide,
-	Custom = table.freeze(custom),
-	All = table.freeze(all),
-	CollidingPairs = table.freeze(collidingPairs),
+	Custom = custom,
+	All = all,
+	CollidingPairs = collidingPairs,
 	collides = collides,
-})
+}
+
+table.freeze(custom)
+table.freeze(all)
+table.freeze(collidingPairs)
+
+return table.freeze(CollisionGroups)

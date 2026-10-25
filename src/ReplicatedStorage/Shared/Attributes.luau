@@ -37,6 +37,7 @@ Attributes.Player = table.freeze({
 	ZoneId = "ZoneId",
 	LevelId = "LevelId",
 	WorldAcked = "WorldAcked",
+	DevTools = "DevTools", -- true when this player may use dev commands (Studio or allowlist)
 })
 
 -- Workspace.Creature

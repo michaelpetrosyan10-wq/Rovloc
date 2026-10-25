@@ -1,0 +1,100 @@
+{
+  "name": "Rovloc-Tests",
+  "servePort": 34872,
+  "globIgnorePaths": [
+    "**/*.md",
+    "**/.gitkeep"
+  ],
+  "tree": {
+    "$className": "DataModel",
+    "Workspace": {
+      "$properties": {
+        "StreamingEnabled": false,
+        "SignalBehavior": "Deferred",
+        "TouchesUseCollisionGroups": true,
+        "TouchEventsUseCollisionGroups": "Enabled",
+        "RejectCharacterDeletions": "Enabled",
+        "ValidateEnabledProximityPrompt": "Enabled",
+        "PathfindingUseImprovedSearch": "Enabled",
+        "PlayerCharacterDestroyBehavior": "Enabled",
+        "ReplicateInstanceDestroySetting": "Enabled",
+        "EnableSLIMAvatars": "Disabled",
+        "FallenPartsDestroyHeight": -500,
+        "Gravity": 196.2
+      }
+    },
+    "Lighting": {
+      "$properties": {
+        "Technology": "Future",
+        "LightingStyle": "Realistic",
+        "PrioritizeLightingQuality": true,
+        "ClockTime": 0.5,
+        "Brightness": 0,
+        "Ambient": [
+          0,
+          0,
+          0
+        ],
+        "OutdoorAmbient": [
+          0.02,
+          0.02,
+          0.025
+        ],
+        "EnvironmentDiffuseScale": 0,
+        "EnvironmentSpecularScale": 0.15,
+        "GlobalShadows": true,
+        "ShadowSoftness": 0.35,
+        "ExposureCompensation": -0.25
+      }
+    },
+    "Players": {
+      "$properties": {
+        "CharacterAutoLoads": false
+      }
+    },
+    "SoundService": {
+      "$properties": {
+        "AmbientReverb": "NoReverb",
+        "AcousticSimulationEnabled": false,
+        "DistanceFactor": 3.33,
+        "DopplerScale": 0,
+        "RolloffScale": 1,
+        "RespectFilteringEnabled": true,
+        "CharacterSoundsUseNewApi": "Disabled"
+      }
+    },
+    "StarterPlayer": {
+      "$properties": {
+        "GameSettingsAvatar": "R15",
+        "AvatarJointUpgrade": "Disabled",
+        "LuaCharacterController": "Legacy",
+        "CameraMode": "Classic",
+        "CameraMinZoomDistance": 0.5,
+        "CameraMaxZoomDistance": 0.5,
+        "EnableMouseLockOption": false,
+        "DevComputerMovementMode": "KeyboardMouse",
+        "DevTouchMovementMode": "DynamicThumbstick",
+        "AutoJumpEnabled": false,
+        "CharacterBreakJointsOnDeath": false,
+        "UserEmotesEnabled": false,
+        "HealthDisplayDistance": 0,
+        "NameDisplayDistance": 0
+      },
+      "StarterPlayerScripts": {
+        "$path": "src/StarterPlayer/StarterPlayerScripts"
+      }
+    },
+    "ReplicatedFirst": {
+      "$path": "src/ReplicatedFirst"
+    },
+    "ReplicatedStorage": {
+      "$path": "src/ReplicatedStorage"
+    },
+    "ServerScriptService": {
+      "$path": "src/ServerScriptService",
+      "Tests": {
+        "$path": "tests"
+      }
+    }
+  }
+}
