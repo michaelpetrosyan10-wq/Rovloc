@@ -22,7 +22,7 @@ rojo serve                        # live-sync code into that place
 
 ```sh
 selene src tests && stylua --check src tests       # lint + format
-lune run tools/lune/check.luau all                  # layouts, world build and specs, outside Roblox
+lune run tools/lune/check.luau all                  # layouts, world build, specs and a server lifecycle run, outside Roblox
 ```
 
 CI runs all of the above, plus strict `luau-lsp` type-checking, on every push. It also uploads a ready-to-open

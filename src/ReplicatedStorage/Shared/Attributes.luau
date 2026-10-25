@@ -37,7 +37,7 @@ Attributes.Player = table.freeze({
 	ZoneId = "ZoneId",
 	LevelId = "LevelId",
 	WorldAcked = "WorldAcked",
-	DevTools = "DevTools", -- true when this player may use dev commands (Studio or allowlist)
+	DevTools = "DevTools", -- true when this player may use dev commands (Studio, allowlist or experience owner)
 })
 
 -- Workspace.Creature
@@ -90,6 +90,9 @@ Attributes.World = table.freeze({
 	DoorId = "DoorId",
 	DoorKind = "DoorKind",
 	DoorState = "DoorState",
+	ScriptedId = "ScriptedId", -- Door_<id> anchors: the ScriptedDoor DoorId (HallwayGate, RoofStairDoor, ClassroomDoor)
+	DoorWidth = "DoorWidth", -- Door_<id> anchors: clear opening width
+	DoorHeight = "DoorHeight", -- Door_<id> anchors: clear opening height
 	FromLevel = "FromLevel",
 	ToLevel = "ToLevel",
 	StragglerDeadline = "StragglerDeadline",

@@ -241,6 +241,7 @@ export type AudioCuePayload = {
 	startAt: number,
 	seed: number,
 	volume: number?,
+	duration: number?, -- looped presets: seconds from startAt until the voice fades out (one-shots ignore it)
 }
 
 export type ProjectileEventPayload = {

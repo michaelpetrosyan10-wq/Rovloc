@@ -50,8 +50,11 @@ in a phone browser.
    live). Pushes to `main` publish automatically.
 6. **Play.** Open the experience in the Roblox app on your phone. Keep the experience private while testing.
 
-Dev tools: add your Roblox UserId to `GameConfig.DevAllowlistUserIds` to get the on-screen dev panel (start a run,
-skip levels, show noise rings) in live servers. In Studio it is always available.
+Dev tools: the experience's owner (the account that created it, or the owner of the group that owns it) gets the
+on-screen dev panel (start a run, skip levels, show noise rings) in live servers automatically, so you can test a
+published build from your phone. Add other testers' Roblox UserIds to `GameConfig.DevAllowlistUserIds`. Set
+`GameConfig.DevToolsForCreator = false` before a public launch if the owner should play without the panel. In Studio
+the panel is always available.
 
 ## 4. Syncing Studio edits back
 

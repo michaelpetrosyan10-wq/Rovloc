@@ -89,8 +89,12 @@ local GameConfig = table.freeze({
 	CreditsPerLevelCleared = 20,
 	CreditsEscapeBonus = 100,
 
-	-- Dev
-	DevAllowlistUserIds = table.freeze({} :: { number }), -- Studio is always allowed
+	-- Dev (Studio is always allowed)
+	DevAllowlistUserIds = table.freeze({} :: { number }),
+	-- The experience's owner (the creator user, or the owner of the creator group) gets dev tools on live servers,
+	-- so a phone-only developer can test a published build without Studio. Set false before a public launch if the
+	-- owner should play without the dev panel.
+	DevToolsForCreator = true,
 })
 
 return GameConfig

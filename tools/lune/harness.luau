@@ -251,6 +251,58 @@ local function inject()
 		return tween
 	end)
 
+	-- Remotes: server/client events are harness signals; everything sent to clients is recorded in h.fired.
+	for _, className in { "RemoteEvent", "UnreliableRemoteEvent" } do
+		roblox.implementProperty(className, "OnServerEvent", function(self)
+			local key = "server:" .. self.Name -- remote names are unique (RemoteRegistry)
+			current.signals[key] = current.signals[key] or newSignal()
+			return current.signals[key]
+		end)
+		roblox.implementProperty(className, "OnClientEvent", function(self)
+			local key = "client:" .. self.Name
+			current.signals[key] = current.signals[key] or newSignal()
+			return current.signals[key]
+		end)
+		roblox.implementMethod(className, "FireClient", function(self, player, payload)
+			table.insert(current.fired, { remote = self.Name, player = player, payload = payload })
+		end)
+		roblox.implementMethod(className, "FireAllClients", function(self, payload)
+			table.insert(current.fired, { remote = self.Name, payload = payload })
+		end)
+	end
+	roblox.implementProperty("RemoteFunction", "OnServerInvoke", function(self)
+		return current.invokeHandlers[self.Name]
+	end, function(self, handler)
+		current.invokeHandlers[self.Name] = handler
+	end)
+	-- BindableEvent with Deferred signal behaviour (handlers run after the firing thread yields), matching the
+	-- Workspace.SignalBehavior pin that ServerMain's place audit probes.
+	roblox.implementProperty("BindableEvent", "Event", function(self)
+		local key = "bindable:" .. tostring(self)
+		current.signals[key] = current.signals[key] or newSignal()
+		return current.signals[key]
+	end)
+	roblox.implementMethod("BindableEvent", "Fire", function(self, ...)
+		local key = "bindable:" .. tostring(self)
+		local signal = current.signals[key]
+		if signal then
+			local args = table.pack(...)
+			task.defer(function()
+				signal:Fire(table.unpack(args, 1, args.n))
+			end)
+		end
+	end)
+	roblox.implementMethod("DataModel", "BindToClose", function(_, callback)
+		table.insert(current.closeHandlers, callback)
+	end)
+	-- An unpublished place: no creator.
+	roblox.implementProperty("DataModel", "CreatorId", function()
+		return 0
+	end)
+	roblox.implementProperty("DataModel", "CreatorType", function()
+		return roblox.Enum.CreatorType.User
+	end)
+
 	roblox.implementMethod("Workspace", "GetServerTimeNow", function()
 		return current.clock
 	end)
@@ -298,6 +350,9 @@ function Harness.load(placePath, options)
 		clock = 1000,
 		cache = {},
 		warnings = {},
+		fired = {}, -- { remote, player?, payload } for every FireClient / FireAllClients
+		invokeHandlers = {},
+		closeHandlers = {},
 	}
 	current = h
 
@@ -395,6 +450,25 @@ function Harness.load(placePath, options)
 
 	-- The instance-based require the game code itself uses (for runners that walk folders).
 	h.requireInstance = requireModule
+
+	-- Runs a Script / LocalScript (e.g. ServerMain) with the same environment modules get.
+	function h.runScript(path)
+		local instance = h.path(path)
+		assert(instance:IsA("BaseScript"), path .. " is not a script")
+		local scriptEnv = table.clone(env)
+		scriptEnv.script = instance
+		local chunk = luau.load(instance.Source, { debugName = instance:GetFullName(), environment = scriptEnv })
+		chunk()
+	end
+
+	-- Fires the harness signal behind instance:GetAttributeChangedSignal(name) (the harness never fires signals on
+	-- its own; Roblox would run these handlers after the attribute write).
+	function h.fireAttributeChanged(instance, name)
+		local signal = h.signals["attr:" .. tostring(instance) .. ":" .. name]
+		if signal then
+			signal:Fire()
+		end
+	end
 
 	function h.advance(seconds)
 		h.clock += seconds

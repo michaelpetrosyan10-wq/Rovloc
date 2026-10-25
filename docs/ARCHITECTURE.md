@@ -47,7 +47,7 @@ Rovloc/
 │   └── publish.yml                         [P1] Open Cloud place publishing (no Studio needed)
 ├── tools/
 │   ├── verify-files.sh                     [P1] Gate a subset of files (luau-lsp + selene + stylua)
-│   └── lune/                               [P1] harness.luau (engine shims) · check.luau (layouts / world / specs)
+│   └── lune/                               [P1] harness.luau (engine shims) · check.luau (layouts / world / specs / lifecycle)
 ├── docs/
 │   ├── ARCHITECTURE.md                     This file
 │   └── PLACE_SETUP.md                      Settings Rojo cannot set + bootstrap procedure
@@ -162,7 +162,7 @@ Rovloc/
     │       │   ├── ZoneService.luau        [P1] 10 Hz point-in-volume enter/exit for every character (replaces Touched)
     │       │   ├── AudioService.luau       [P1] Cue routing to clients (server never creates synth voices)
     │       │   ├── RunStatsService.luau    [P1] Per-player run counters (StatKey) + run timing
-    │       │   ├── DevToolsService.luau    [P1] Studio / allowlist: dev-run harness, level skip, god mode, overlays
+    │       │   ├── DevToolsService.luau    [P1] Studio / allowlist / owner: dev-run harness, level skip, noise + plan overlays
     │       │   └── NoiseAndDirectorService/
     │       │       ├── init.luau           [P1] Noise bus (Emit / NoiseEmitted), splash meter, director API
     │       │       ├── LocomotionNoiseSampler.luau [P1] 10 Hz: max(tier(MoveState), tier(observed speed))
