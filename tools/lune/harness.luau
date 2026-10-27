@@ -132,6 +132,25 @@ local OverlapParamsShim = { new = makeParams }
 local injected = false
 local current -- the active harness (methods below close over it)
 
+-- Change signals per instance (identity-stable userdata keys, weak so destroyed instances drop out). Keyed by the
+-- instance itself, never by its name: same-named siblings must not share a signal.
+local function instanceSignal(instance, key, create)
+	local byInstance = current.instanceSignals[instance]
+	if byInstance == nil then
+		if not create then
+			return nil
+		end
+		byInstance = {}
+		current.instanceSignals[instance] = byInstance
+	end
+	local signal = byInstance[key]
+	if signal == nil and create then
+		signal = newSignal()
+		byInstance[key] = signal
+	end
+	return signal
+end
+
 local function inject()
 	if injected then
 		return
@@ -278,13 +297,10 @@ local function inject()
 	-- BindableEvent with Deferred signal behaviour (handlers run after the firing thread yields), matching the
 	-- Workspace.SignalBehavior pin that ServerMain's place audit probes.
 	roblox.implementProperty("BindableEvent", "Event", function(self)
-		local key = "bindable:" .. tostring(self)
-		current.signals[key] = current.signals[key] or newSignal()
-		return current.signals[key]
+		return instanceSignal(self, "bindable", true)
 	end)
 	roblox.implementMethod("BindableEvent", "Fire", function(self, ...)
-		local key = "bindable:" .. tostring(self)
-		local signal = current.signals[key]
+		local signal = instanceSignal(self, "bindable", false)
 		if signal then
 			local args = table.pack(...)
 			task.defer(function()
@@ -331,14 +347,10 @@ local function inject()
 
 	-- Instance helpers the builders rely on and Lune lacks.
 	roblox.implementMethod("Instance", "GetAttributeChangedSignal", function(self, name)
-		local key = "attr:" .. tostring(self) .. ":" .. name
-		current.signals[key] = current.signals[key] or newSignal()
-		return current.signals[key]
+		return instanceSignal(self, "attr:" .. name, true)
 	end)
 	roblox.implementMethod("Instance", "GetPropertyChangedSignal", function(self, name)
-		local key = "prop:" .. tostring(self) .. ":" .. name
-		current.signals[key] = current.signals[key] or newSignal()
-		return current.signals[key]
+		return instanceSignal(self, "prop:" .. name, true)
 	end)
 	for _, name in { "ChildAdded", "ChildRemoved", "DescendantAdded", "DescendantRemoving", "AncestryChanged", "Destroying", "AttributeChanged" } do
 		roblox.implementProperty("Instance", name, function()
@@ -358,6 +370,7 @@ function Harness.load(placePath, options)
 		game = game,
 		server = options.server ~= false,
 		signals = {},
+		instanceSignals = setmetatable({}, { __mode = "k" }),
 		groups = {},
 		collidable = {},
 		guid = 0,
@@ -478,7 +491,7 @@ function Harness.load(placePath, options)
 	-- Fires the harness signal behind instance:GetAttributeChangedSignal(name) (the harness never fires signals on
 	-- its own; Roblox would run these handlers after the attribute write).
 	function h.fireAttributeChanged(instance, name)
-		local signal = h.signals["attr:" .. tostring(instance) .. ":" .. name]
+		local signal = instanceSignal(instance, "attr:" .. name, false)
 		if signal then
 			signal:Fire()
 		end
