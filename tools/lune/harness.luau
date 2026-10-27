@@ -296,6 +296,24 @@ local function inject()
 		table.insert(current.closeHandlers, callback)
 	end)
 
+	-- Network ownership: no replication here; anchored parts refuse like the engine, the rest record the owner.
+	local networkOwners = setmetatable({}, { __mode = "k" })
+	roblox.implementMethod("BasePart", "CanSetNetworkOwnership", function(part)
+		if part.Anchored then
+			return false, "Cannot set network ownership of anchored parts"
+		end
+		return true, nil
+	end)
+	roblox.implementMethod("BasePart", "SetNetworkOwner", function(part, owner)
+		if part.Anchored then
+			error("Cannot set network ownership of anchored parts")
+		end
+		networkOwners[part] = owner or false
+	end)
+	roblox.implementMethod("BasePart", "GetNetworkOwner", function(part)
+		return networkOwners[part] or nil
+	end)
+
 	roblox.implementMethod("Workspace", "GetServerTimeNow", function()
 		return current.clock
 	end)

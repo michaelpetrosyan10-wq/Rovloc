@@ -267,9 +267,16 @@ local function claimOwnership(model: Model)
 			continue
 		end
 		claimed[root] = true
-		local allowed = root:CanSetNetworkOwnership()
-		if allowed then
-			root:SetNetworkOwner(nil)
+		local ok, err = pcall(function()
+			local allowed, reason = root:CanSetNetworkOwnership()
+			if allowed then
+				root:SetNetworkOwner(nil)
+			else
+				log.debug("cannot claim %s: %s", root:GetFullName(), tostring(reason))
+			end
+		end)
+		if not ok then
+			log.warn("claiming %s failed: %s", root:GetFullName(), tostring(err))
 		end
 	end
 end
@@ -291,9 +298,9 @@ local function spawnCreature()
 	model.Name = Instances.Names.Creature
 	model:SetAttribute(Attributes.Creature.LevelId, levelId)
 	model:AddTag(Tags.Creature)
-	claimOwnership(model)
 	creature = model
 	runTrove:Add(model)
+	claimOwnership(model)
 	log.info("Creature placed on %s", levelId)
 end
 
