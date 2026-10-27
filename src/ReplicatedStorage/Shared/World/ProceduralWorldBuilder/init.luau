@@ -2,10 +2,14 @@
 -- ProceduralWorldBuilder: builds every piece of world geometry in code.
 --
 -- Server: BuildAuthoritative() makes Workspace.Lobby (boiler room + wrecked bus) and Workspace.School (one Model
--- per level, the stair towers and the street-level exterior), then ApplyLighting() sets the storm-night baseline.
--- Client: BuildCosmetic(seed, parent) adds the ruined skyline plus whatever cosmetic-anchor dressing later phases
--- register. Later phases plug in through the registries (RegisterProp / RegisterRig / RegisterCosmeticAnchor), so
--- this file never needs to change for them.
+-- per level, the stair towers and the street-level exterior, each level's static props in <level>.Props), then
+-- ApplyLighting() sets the storm-night baseline. Per run, BuildProp() places the director's planned props and
+-- BuildFixtures() rebuilds each level's stateful set pieces (grates, fire doors, lockers, ...) into
+-- Workspace.Runtime.<level>, so every run starts fresh.
+-- Client: BuildCosmetic(seed, parent) adds the ruined skyline plus the cosmetic-anchor dressing.
+-- The registries (RegisterProp / RegisterFixture / RegisterStatic / RegisterRig / RegisterCosmeticAnchor) are filled
+-- at load by the Props catalog and CreatureRigBuilder (see Props/PropKit for the builder kinds); later phases may
+-- register more kinds or replace one.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -19,9 +23,12 @@ local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
+local CreatureRigBuilder = require(script.CreatureRigBuilder)
 local Geometry = require(script.Geometry)
 local LightingRig = require(script.LightingRig)
 local LobbyBuilder = require(script.LobbyBuilder)
+local PropKit = require(script.Props.PropKit)
+local Props = require(script.Props)
 local SchoolShellBuilder = require(script.SchoolShellBuilder)
 local SkylineBuilder = require(script.SkylineBuilder)
 local StairwellBuilder = require(script.StairwellBuilder)
@@ -45,12 +52,11 @@ export type BuildResult = {
 	partCount: number,
 }
 
-export type CosmeticAnchorBuilder = (
-	anchor: LayoutSchema.Anchor,
-	cframe: CFrame,
-	parent: Instance,
-	random: Random
-) -> ()
+export type CosmeticAnchorBuilder = PropKit.CosmeticAnchorBuilder
+export type FixtureBuilder = PropKit.FixtureBuilder
+export type FixtureContext = PropKit.FixtureContext
+export type StaticBuilder = PropKit.StaticBuilder
+export type StaticContext = PropKit.StaticContext
 
 local DEFAULT_YIELD_EVERY = 600
 local SKYLINE_FOLDER = "Skyline"
@@ -139,8 +145,20 @@ end
 --------------------------------------------------------------------------------
 
 local propBuilders: { [string]: Types.PropBuilder } = {}
+local fixtureBuilders: { [string]: FixtureBuilder } = {}
+local staticBuilders: { [string]: StaticBuilder } = {}
 local rigBuilders: { [string]: Types.RigBuilder } = {}
 local cosmeticBuilders: { [string]: CosmeticAnchorBuilder } = {}
+
+-- Registry keys in a stable order (builders run in this order, so builds are deterministic).
+local function sortedKinds(registry: { [string]: any }): { string }
+	local kinds: { string } = {}
+	for kind in registry do
+		table.insert(kinds, kind)
+	end
+	table.sort(kinds)
+	return kinds
+end
 
 function Builder.RegisterProp(kind: string, builder: Types.PropBuilder)
 	if propBuilders[kind] then
@@ -167,6 +185,52 @@ function Builder.BuildProp(plan: Types.PlannedProp, parent: Instance, random: Ra
 		instance.Parent = parent
 	end
 	return instance
+end
+
+function Builder.RegisterFixture(kind: string, builder: FixtureBuilder)
+	if fixtureBuilders[kind] then
+		log.warn("fixture builder %q replaced", kind)
+	end
+	fixtureBuilders[kind] = builder
+end
+
+function Builder.HasFixture(kind: string): boolean
+	return fixtureBuilders[kind] ~= nil
+end
+
+-- Rebuilds every registered fixture kind of `layoutId` into `parent` (Workspace.Runtime.<layoutId>) for one run.
+-- Returns the number of fixtures built. Each kind is isolated: one failing builder never stops the others.
+function Builder.BuildFixtures(layoutId: string, parent: Instance, plan: Types.SpawnPlan?, seed: number): number
+	local layout = Builder.getLayout(layoutId)
+	if not layout then
+		return 0
+	end
+	local levelRoot = Instances.layoutRoot(layoutId)
+	local total = 0
+	for _, kind in sortedKinds(fixtureBuilders) do
+		local ctx: FixtureContext = {
+			layout = layout,
+			levelRoot = levelRoot,
+			parent = parent,
+			plan = plan,
+			random = MathUtil.seededRandom(seed, layoutId .. ":fixture:" .. kind),
+		}
+		local built = 0
+		xpcall(function()
+			built = fixtureBuilders[kind](ctx)
+		end, function(err: any)
+			log.error("fixtures %s on %s failed: %s", kind, layoutId, tostring(err))
+		end)
+		total += built
+	end
+	return total
+end
+
+function Builder.RegisterStatic(kind: string, builder: StaticBuilder)
+	if staticBuilders[kind] then
+		log.warn("static builder %q replaced", kind)
+	end
+	staticBuilders[kind] = builder
 end
 
 function Builder.RegisterRig(kind: string, builder: Types.RigBuilder)
@@ -236,6 +300,26 @@ local function buildVents(layout: Layout, root: Model)
 	end)
 end
 
+-- Every registered static kind for one level, into <level>.Props (the same geometry on every server).
+local function buildStatics(layout: Layout, root: Model)
+	local kinds = sortedKinds(staticBuilders)
+	if #kinds == 0 then
+		return
+	end
+	local folder = Geometry.folder(root, Names.Props)
+	for _, kind in kinds do
+		local ctx: StaticContext = {
+			layout = layout,
+			root = root,
+			parent = folder,
+			random = MathUtil.seededRandom(1, layout.id .. ":static:" .. kind),
+		}
+		guarded("static " .. kind .. " for " .. layout.id, function()
+			staticBuilders[kind](ctx)
+		end)
+	end
+end
+
 -- Server: lobby + six levels + stair towers + exterior. Replaces any previous build under `parent`.
 function Builder.BuildAuthoritative(options: BuildOptions?): BuildResult
 	local opts: BuildOptions = options or {}
@@ -267,6 +351,7 @@ function Builder.BuildAuthoritative(options: BuildOptions?): BuildResult
 		end)
 		lobby = built or SchoolShellBuilder.createRoot(lobbyLayout, Names.Lobby)
 		buildVents(lobbyLayout, lobby)
+		buildStatics(lobbyLayout, lobby)
 	else
 		lobby = Instance.new("Model")
 		lobby.Name = Names.Lobby
@@ -295,6 +380,7 @@ function Builder.BuildAuthoritative(options: BuildOptions?): BuildResult
 			SchoolShellBuilder.buildLevel(layout, root, SchoolShellBuilder.levelOptions(levelId))
 		end)
 		buildVents(layout, root)
+		buildStatics(layout, root)
 		root:SetAttribute(Attributes.World.ExpectedParts, countParts(root))
 		root.Parent = school
 		levels[levelId] = root
@@ -395,5 +481,21 @@ function Builder.ClearRuntime()
 		child:Destroy()
 	end
 end
+
+--------------------------------------------------------------------------------
+-- Built-in kinds (Phase 2 props and the Creature)
+--------------------------------------------------------------------------------
+
+local registrar: PropKit.Registrar = {
+	prop = Builder.RegisterProp,
+	fixture = Builder.RegisterFixture,
+	static = Builder.RegisterStatic,
+	rig = Builder.RegisterRig,
+	cosmetic = Builder.RegisterCosmeticAnchor,
+}
+Props.registerAll(registrar)
+xpcall(CreatureRigBuilder.register, function(err: any)
+	log.error("CreatureRigBuilder failed to register: %s", tostring(err))
+end, registrar)
 
 return table.freeze(Builder)

@@ -15,7 +15,9 @@
 -- Player attribute WorldAcked and fires WorldAcked. CharacterService waits for it (with a timeout) before spawning.
 --
 -- Runs. BeginRun builds every prop in NoiseAndDirectorService's plan into Workspace.Runtime.<level> through
--- ProceduralWorldBuilder.BuildProp, and, when a "Creature" rig builder is registered (P2), builds the Creature at the
+-- ProceduralWorldBuilder.BuildProp, rebuilds every level's fixtures (vent grates with the plan's locks, fire doors,
+-- the hallway gate, lockers, the parachute crate, the floodlight switch) there through BuildFixtures, and, when a
+-- "Creature" rig builder is registered, builds the Creature at the
 -- CreatureSpawn anchor of LevelDirector's current level (or the next level that has one), tags it `Creature` and
 -- gives the server network ownership. ServerMain orders NoiseAndDirectorService (plans) and LevelDirector (enters
 -- Level0) before this service. EndRun destroys the Creature and clears Workspace.Runtime.
@@ -221,6 +223,20 @@ local function spawnProps(ctx: Types.RunContext)
 	log.info("run %s: %d props placed, %d without a builder", ctx.runId, placed, skipped)
 end
 
+-- Fresh fixtures for every school level (grate locks from the plan; none locked without one).
+local function spawnFixtures(ctx: Types.RunContext)
+	local plan = NoiseAndDirectorService.GetPlan()
+	local seed = if plan then plan.seed else ctx.seed
+	local total = 0
+	for _, levelId: Enums.LevelId in Enums.LevelId do
+		local parent = Instances.runtimeLevel(levelId, true)
+		if parent then
+			total += Builder.BuildFixtures(levelId, parent, plan, seed)
+		end
+	end
+	log.info("run %s: %d fixtures built", ctx.runId, total)
+end
+
 -- The first CreatureSpawn anchor at or after `levelId` in run order.
 local function creatureSpawn(levelId: Enums.LevelId): (CFrame?, Enums.LevelId?)
 	local start = Enums.levelIndex(levelId) or 1
@@ -327,6 +343,7 @@ function WorldService.BeginRun(ctx: Types.RunContext)
 	runTrove:Clean()
 	creature = nil
 	spawnProps(ctx)
+	spawnFixtures(ctx)
 	spawnCreature()
 end
 

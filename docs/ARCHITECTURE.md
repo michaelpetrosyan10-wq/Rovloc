@@ -19,7 +19,7 @@ lighting, so its modern partner `LightingStyle = Realistic` is pinned next to it
 | --- | --- |
 | `--!strict` everywhere | Every game and test `.luau` file starts with `--!strict` (Lune tooling under `tools/lune/` is exempt, since it runs outside Roblox). `.luaurc` sets strict mode. CI runs `luau-lsp analyze` against the Rojo sourcemap, plus `tools/capscan.py`, which rejects writes to plugin-only or read-only engine properties. |
 | Works in Rojo **and** Studio | `src/` mirrors the Explorer one-to-one. Requires go by instance path (`require(ReplicatedStorage.Shared.Config.GameConfig)`), never string aliases. Runtime-created instances are only reached through `Shared/Instances.luau`, so strict typing never guesses. |
-| One ordered bootstrap per side | `ServerMain` and `ClientMain` require an explicit module list and wrap every lifecycle call in `xpcall`. They're the **only** files that grow in later phases. Every shared contract (enums, types, attributes, tags, remotes, config) is complete in Phase 1. Later phases plug in through registries owned by earlier ones: `ProceduralWorldBuilder.RegisterProp/RegisterRig`, `LevelDirector.RegisterLevel`, `MovementAuthority.RegisterValidator`, and the `MonsterAIService` hooks (`RegisterLockerInspector`, `RegisterPoolGrabber`). |
+| One ordered bootstrap per side | `ServerMain` and `ClientMain` require an explicit module list and wrap every lifecycle call in `xpcall`. They're the **only** files that grow in later phases. Every shared contract (enums, types, attributes, tags, remotes, config) is complete in Phase 1. Later phases plug in through registries owned by earlier ones: `ProceduralWorldBuilder.RegisterProp/RegisterFixture/RegisterStatic/RegisterRig/RegisterCosmeticAnchor` (filled at load by the P2 `Props` catalog and `CreatureRigBuilder`), `LevelDirector.RegisterLevel`, `MovementAuthority.RegisterValidator`, and the `MonsterAIService` hooks (`RegisterLockerInspector`, `RegisterPoolGrabber`). |
 | Downward-only dependencies | Layers: `Shared → Core → Player → World systems (Vents, Monster) → Levels & Mechanics → Match`. A module only requires layers below it. Upward traffic goes through typed `Signal`s or registered hooks (e.g. `MonsterAIService.RegisterLockerInspector`), so there are no require cycles and no `any` leaks. |
 | Server authority | Clients send *intents* through validated, rate-limited remotes. The server owns noise, damage, life state, meters, interactions, items, progression and data. Noise tiers come from **observed** server-side speed as well as the claimed move state. |
 | No gameplay on `Touched` | The server polls triggers, traps, checkpoints, water and scare volumes at 10 Hz (`ZoneService`). It tests points against volumes with plain math (`volume.CFrame:PointToObjectSpace(root.Position)` against `Size/2`), so the test works in every collision group, `NoCollide` included. Spatial queries would skip those parts. `Touched` may drive client-only cosmetics. |
@@ -129,6 +129,8 @@ Rovloc/
     │       │       │   ├── Level4_FloodedPool.luau [P1]
     │       │       │   └── Level5_Roof.luau        [P1]
     │       │       ├── Props/
+    │       │       │   ├── init.luau                   [P2] Catalog: requires every prop builder and registers its kinds
+    │       │       │   ├── PropKit.luau                [P2] Builder kinds + contexts, leaf poses (hinge/slide), disabled prompts
     │       │       │   ├── BearTrapBuilder.luau        [P2] Rusted jaws, spring, chain, stake (anchored, server-tweened)
     │       │       │   ├── VentGrateBuilder.luau       [P2] Grate, 4 screws, hinge, prompts, ExitAnchor (room side)
     │       │       │   ├── ChemicalFlaskBuilder.luau   [P2] World pickup + held/projectile visual (same builder)
@@ -339,7 +341,8 @@ destroys the old model on every swap (deploy, airlock respawn, return to lobby).
 Workspace
 ├── Lobby                    Model  ReadyPads · DifficultyTerminal · PerkLocker · SpawnAnchors
 ├── School                   Model
-│   ├── Level0_Basement      Model  Shell · Lights · Zones · Vents · Anchors · Triggers · Waypoints
+│   ├── Level0_Basement      Model  Shell · Lights · Zones · Vents · Anchors · Triggers · Waypoints · Props (P2 statics:
+│   │                               open doors, lab counters, smashed lockers, drip pipes, debris, pool wreckage)
 │   ├── Level1_Hallways      Model  (same layout per level; Vents holds that level's ducts + VentNodes)
 │   ├── Level2_ScienceHall   Model
 │   ├── Level3_Gymnasium     Model
@@ -349,7 +352,9 @@ Workspace
 │                                   layouts' Checkpoint triggers in each exit airlock; fire doors come from P2 DoorBuilder)
 ├── Cosmetic                 Folder (client-local) Skyline, trims, loose clutter, posed corpses
 ├── Creature                 Model  [tag Creature] Humanoid · HumanoidRootPart · CreatureHitbox · Motor6D rig
-└── Runtime                  Folder  Level0 … Level5: per-run traps, flasks, batteries, clouds, executed ragdolls (wiped on reset)
+└── Runtime                  Folder  Level0 … Level5: per-run traps, flasks, batteries, and the P2 fixtures rebuilt every
+                                     run (vent grates with the plan's locks, fire doors, hallway gate, roof door, lockers,
+                                     parachute crate, floodlight switch), clouds, executed ragdolls (wiped on reset)
 
 Lighting                     Atmosphere · ColorCorrection · Bloom (+ client-local Panic CC / DOF / lightning pulses)
 Workspace.Terrain            Clouds (storm deck)

@@ -60,6 +60,15 @@ local STRINGS: { [string]: string } = {
 	["Prompt.Floodlight"] = "Flip Floodlights",
 	["Prompt.FloodlightSwitch"] = "Emergency Switch",
 
+	-- Printed on props (signs, stencils, labels)
+	["Prop.Floodlight.Label"] = "POOL FLOODLIGHTS",
+	["Prop.Floodlight.Warning"] = "EMERGENCY USE ONLY",
+	["Prop.Parachute.Stencil"] = "EMERGENCY CHUTES",
+	["Prop.Lab.Hazard"] = "DANGER: CORROSIVE",
+	["Prop.Airlock.Sign"] = "FIRE DOOR - KEEP CLOSED",
+	["Prop.Roof.Sign"] = "ROOF ACCESS",
+	["Prop.Locker.Number"] = "%d",
+
 	-- Input labels (touch buttons and hints)
 	["Input.Sprint"] = "RUN",
 	["Input.Crouch"] = "CROUCH",
