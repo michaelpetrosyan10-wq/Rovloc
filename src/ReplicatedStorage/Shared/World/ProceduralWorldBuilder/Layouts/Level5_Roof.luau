@@ -294,7 +294,7 @@ platform("L5_RadioMast", "L5_Roof_East", 204, 100, 4, 4, 2, 2, "MetalRust")
 
 light("L5_RoofAccess", "Bulb", 233, HEIGHT - 0.4, 80, { broken = true })
 light("L5_RoofAccess", "EmergencyRed", 232, HEIGHT - 2, 72, { flicker = "L5_StairLamp", brightness = 0.3 })
-light("L5_Roof_East", "Bulb", 224.5, 9, 80, { broken = true })
+light("L5_Roof_East", "Bulb", 224.5, 10.8, 80, { broken = true }) -- above the roof door's swing
 light("L5_Roof_East", "EmergencyRed", 206, HEIGHT - 1, 102, { flicker = "L5_Beacon", brightness = 0.5, range = 20 })
 
 --------------------------------------------------------------------------------
