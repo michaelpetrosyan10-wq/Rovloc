@@ -38,6 +38,9 @@ local EPS = 1e-3
 -- Rooms whose rect lies within this many studs of a duct's chase count as adjacent to the duct.
 local ADJACENT_RANGE = 1
 
+-- How far a duct's metal reaches past its centre line (and past a capped end node): half the bore plus the shell.
+local DUCT_HALF_OUTER = WorldConfig.VentBore / 2 + WorldConfig.VentShell
+
 -- Walked distance per stud of rise on the steepest flight the stair towers build (1 stud rise per 1.6 run).
 local STAIR_PATH_PER_RISE = math.sqrt(1 + 1.6 * 1.6)
 
@@ -118,6 +121,29 @@ local function besideRect(room: Rect, chase: Rect, range: number): boolean
 	local gapX = gap(room.x, room.x + room.w, chase.x, chase.x + chase.w)
 	local gapZ = gap(room.z, room.z + room.d, chase.z, chase.z + chase.d)
 	return (overlapZ > EPS and gapX <= range + EPS) or (overlapX > EPS and gapZ <= range + EPS)
+end
+
+-- True when `room` lies beside the stretch of `chase` the duct segment (x0..x1, z0..z1) actually occupies: along
+-- the chase's long axis (both axes for a square chase) the room's projection overlaps the segment's span widened by
+-- `reach` (the duct's outer half-width plus the adjacency range). A room beside the far end of a long chase is
+-- therefore not adjacent to a short duct at the other end, and a room at the chase's end wall is adjacent only to
+-- a duct that reaches within range of that wall.
+local function besideSpan(
+	room: Rect,
+	chase: Rect,
+	x0: number,
+	x1: number,
+	z0: number,
+	z1: number,
+	reach: number
+): boolean
+	if chase.w >= chase.d - EPS and overlap(room.x, room.x + room.w, x0 - reach, x1 + reach) <= EPS then
+		return false
+	end
+	if chase.d >= chase.w - EPS and overlap(room.z, room.z + room.d, z0 - reach, z1 + reach) <= EPS then
+		return false
+	end
+	return true
 end
 
 -- True when the duct segment (x0..x1, z0..z1, axis-aligned or a point) runs through `rect` for a positive length
@@ -503,9 +529,10 @@ function ZoneGraph.worstCaseBlocked(layout: Layout): Types.BlockedSet
 	return blocked
 end
 
--- Ids (in layout room order) of the non-Chase rooms whose rect lies within AdjacentRange studs of the chase(s)
--- the duct segment a-b runs through, i.e. the rooms whose walls the duct runs inside. A segment that runs through
--- no chase (a malformed layout) reports the non-Chase rooms within AdjacentRange of the segment itself.
+-- Ids (in layout room order) of the non-Chase rooms whose walls the duct segment a-b runs inside: rooms whose rect
+-- lies within AdjacentRange studs of a chase the segment runs through, along the stretch of that chase the
+-- segment occupies (its span plus the duct's outer half-width plus AdjacentRange). A segment that runs through no
+-- chase (a malformed layout) reports the non-Chase rooms within AdjacentRange of the segment itself.
 function ZoneGraph.adjacentZones(layout: Layout, a: VentNodeSpec, b: VentNodeSpec): { string }
 	local x0, x1 = math.min(a.x, b.x), math.max(a.x, b.x)
 	local z0, z1 = math.min(a.z, b.z), math.max(a.z, b.z)
@@ -515,6 +542,7 @@ function ZoneGraph.adjacentZones(layout: Layout, a: VentNodeSpec, b: VentNodeSpe
 			table.insert(chases, room.rect)
 		end
 	end
+	local reach = DUCT_HALF_OUTER + ADJACENT_RANGE
 	local out: { string } = {}
 	for _, room in layout.rooms do
 		if room.kind == "Chase" then
@@ -523,7 +551,10 @@ function ZoneGraph.adjacentZones(layout: Layout, a: VentNodeSpec, b: VentNodeSpe
 		local near = false
 		if #chases > 0 then
 			for _, chase in chases do
-				if besideRect(room.rect, chase, ADJACENT_RANGE) then
+				if
+					besideRect(room.rect, chase, ADJACENT_RANGE)
+					and besideSpan(room.rect, chase, x0, x1, z0, z1, reach)
+				then
 					near = true
 					break
 				end

@@ -2,9 +2,12 @@
 -- AudioController: everything the client hears that it was not explicitly asked to play by another controller.
 --
 --   * Mixer: AudioBuses + VoicePool are set up in Init (the SoundGroup tree, pools, length probes).
---   * Cues: AudioCue from AudioService plays in sync with server time. Early cues wait until startAt; late ones
---     start part-way through (startOffset = now - startAt); one-shots later than GameConfig.OneShotMaxLate are
---     dropped (looped presets always start, fast-forwarded).
+--   * Cues: AudioCue from AudioService plays in sync with server time. Early cues wait until startAt. A cue up to
+--     LATE_SNAP late plays from its start (a quarter second of network jitter is not worth losing the attack);
+--     later ones start part-way through (startOffset = now - startAt); one-shots later than
+--     GameConfig.OneShotMaxLate are dropped (looped presets always start, fast-forwarded: late joiners get the
+--     server's active loops re-sent with their original startAt). Every cue has an id; AudioStop { id, fade } fades
+--     that voice out, or cancels it if it is still waiting to start.
 --   * Acoustics: 5 Hz client point-in-box against the Zone parts finds the listener's room; its AcousticPreset
 --     drives AudioBuses.setEnvironment. A move state overrides it (in a duct -> Vent, submerged -> Underwater) and
 --     SetEnvironmentOverride (later phases: vent transitions, cutscenes) overrides both. No zone = Outdoor.
@@ -56,6 +59,9 @@ local BED_FADE = 3
 local BED_FADE_FAST = 0.6
 local STINGER_HEIGHT = 4
 local LOOP_CUE_FADE = 0.4
+local STOP_FADE = 0.4
+local MAX_STOP_FADE = 10
+local LATE_SNAP = 0.25
 local UNDERWATER_BED = "UnderwaterBed"
 local DRIP_PRESET = "Drip"
 local LOBBY_LAYOUT = "Lobby"
@@ -88,6 +94,10 @@ local ambienceByLayout: { [string]: string } = {}
 -- Emitters
 local emitters: { [Instance]: boolean } = {}
 local emitterVoices: { [Instance]: SoundSynthesizer.Voice } = {}
+
+-- Cues by id: voices playing, and cues still waiting for their startAt (true = cancelled by AudioStop).
+local cueVoices: { [number]: SoundSynthesizer.Voice } = {}
+local waitingCues: { [number]: boolean } = {}
 
 local zoneClock = 0
 local emitterClock = 0
@@ -465,9 +475,31 @@ end
 -- Cues
 --------------------------------------------------------------------------------
 
-local function playCue(cue: Types.AudioCuePayload, startOffset: number)
+-- How far into a cue to start it when it arrives `late` seconds after its startAt: small network lateness is not
+-- worth skipping the attack for; real lateness (a late joiner, a hitch) is skipped so the voice stays in sync.
+function AudioController.cueStartOffset(late: number): number
+	if late < LATE_SNAP then
+		return 0
+	end
+	return late
+end
+
+local function playCue(cue: Types.AudioCuePayload)
+	local id = cue.id
+	if waitingCues[id] ~= nil then
+		local cancelled = waitingCues[id]
+		waitingCues[id] = nil
+		if cancelled then
+			return -- AudioStop arrived before it started
+		end
+	end
+	local existing = cueVoices[id]
+	if existing and existing:IsPlaying() then
+		return -- a duplicate (re-sent) cue for a voice that is already playing
+	end
+	local late = math.max(0, Workspace:GetServerTimeNow() - cue.startAt)
 	local duration = cue.duration
-	local remaining = if duration then duration - startOffset else nil
+	local remaining = if duration then duration - late else nil
 	if remaining and remaining <= 0 then
 		return -- a timed loop that already finished before this client heard about it
 	end
@@ -475,14 +507,23 @@ local function playCue(cue: Types.AudioCuePayload, startOffset: number)
 	local options: SoundSynthesizer.PlayOptions = {
 		seed = cue.seed,
 		volume = cue.volume,
-		startOffset = startOffset,
+		startOffset = AudioController.cueStartOffset(late),
 		position = cue.position,
 	}
 	if attach and attach:IsDescendantOf(Workspace) then
 		options.attach = attach
 	end
 	local voice = SoundSynthesizer.play(cue.preset, options)
-	if voice and remaining and SoundSynthesizer.isLooped(cue.preset) then
+	if not voice then
+		return
+	end
+	cueVoices[id] = voice
+	voice.Ended:Connect(function()
+		if cueVoices[id] == voice then
+			cueVoices[id] = nil
+		end
+	end)
+	if remaining and SoundSynthesizer.isLooped(cue.preset) then
 		task.delay(remaining, function()
 			voice:Stop(LOOP_CUE_FADE)
 		end)
@@ -490,11 +531,17 @@ local function playCue(cue: Types.AudioCuePayload, startOffset: number)
 end
 
 local function onCue(payload: any)
-	if type(payload) ~= "table" or type(payload.preset) ~= "string" or type(payload.startAt) ~= "number" then
+	if
+		type(payload) ~= "table"
+		or type(payload.preset) ~= "string"
+		or type(payload.startAt) ~= "number"
+		or type(payload.id) ~= "number"
+	then
 		return
 	end
 	local raw = payload :: { [string]: any }
 	local cue: Types.AudioCuePayload = {
+		id = raw.id,
 		preset = raw.preset,
 		position = if typeof(raw.position) == "Vector3" then raw.position else nil,
 		attach = if typeof(raw.attach) == "Instance" then raw.attach else nil,
@@ -512,9 +559,31 @@ local function onCue(payload: any)
 		return
 	end
 	if late < 0 then
-		task.delay(-late, playCue, cue, 0)
+		if waitingCues[cue.id] == nil then
+			waitingCues[cue.id] = false
+			task.delay(-late, playCue, cue)
+		end
 	else
-		playCue(cue, late)
+		playCue(cue)
+	end
+end
+
+local function onStop(payload: any)
+	if type(payload) ~= "table" or type(payload.id) ~= "number" then
+		return
+	end
+	local raw = payload :: { [string]: any }
+	local id = raw.id :: number
+	local fade = if type(raw.fade) == "number" and raw.fade == raw.fade
+		then math.clamp(raw.fade, 0, MAX_STOP_FADE)
+		else STOP_FADE
+	if waitingCues[id] ~= nil then
+		waitingCues[id] = true
+	end
+	local voice = cueVoices[id]
+	if voice then
+		cueVoices[id] = nil
+		voice:Stop(fade)
 	end
 end
 
@@ -564,6 +633,10 @@ function AudioController.Start()
 	if connection then
 		serviceTrove:Add(connection)
 	end
+	local stopConnection = Net.Client.on("AudioStop", onStop)
+	if stopConnection then
+		serviceTrove:Add(stopConnection)
+	end
 
 	watchTag(Tags.Zone, addZone, removeZone)
 	watchTag(Tags.AmbientEmitter, addEmitter, removeEmitter)
@@ -590,9 +663,11 @@ function AudioController.OnRunStarted(_info: Types.RunInfo)
 end
 
 function AudioController.OnRunEnded()
-	-- Run-scoped voices (the Creature, heartbeat / breathing / static) end with the run; beds and emitters stay.
+	-- Run-scoped voices (the Creature, footsteps, heartbeat / breathing / static) end with the run; beds and
+	-- emitters stay.
 	SoundSynthesizer.stopAll("Monster", 0.5)
 	SoundSynthesizer.stopAll("Player", 0.5)
+	SoundSynthesizer.stopAll("Body", 0.5)
 	refreshBed()
 end
 

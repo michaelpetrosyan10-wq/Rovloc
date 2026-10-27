@@ -8,7 +8,10 @@
 --     the core-UI safe area opens a scrollable panel of large buttons that send DevCommand: Dev Run (with the chosen
 --     mode), End Run, Next Level, Show Plan, Noise Ring (with the chosen noise kind), Help, and one button per level.
 --     Local toggles: Overlays (server DevOverlay drawings + the Creature's state tag) and Vent Graph (the VentNode
---     links of the level the camera is in). A status block shows phase, level, zone, FPS, ping and light counts.
+--     links of the level the camera is in), and Light (a client-only lamp riding the camera, for inspecting dark
+--     rooms without touching Lighting). A sound row auditions any SynthPresets recipe through the server's `sound`
+--     command (tap the name for 3D, or Play 2D, or Stop). A status block shows phase, level, zone, FPS, ping and
+--     light counts.
 --     Nothing needs a keyboard; every target is at least 44 px.
 --   * Overlays render in a client-local Workspace folder with HandleAdornments anchored on one invisible part: noise
 --     rings are floor annuli that grow and fade (green -> red by radius), plan markers are tall pillars, paths are
@@ -28,6 +31,7 @@ local Instances = require(ReplicatedStorage.Shared.Instances)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Net = require(ReplicatedStorage.Shared.Net)
+local SynthPresets = require(ReplicatedStorage.Shared.Audio.SynthPresets)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
@@ -52,6 +56,7 @@ local PANEL_TOP = MARGIN + TOGGLE_SIZE.Y + 8
 local PANEL_BOTTOM_CLEARANCE = 96 -- keeps the touch jump button free
 local BUTTON_HEIGHT = 46
 local LEVEL_BUTTON_HEIGHT = 44
+local STEP_BUTTON_WIDTH = 52
 local GAP = 8
 
 -- Palette
@@ -79,6 +84,14 @@ local MAX_OVERLAY_ITEMS = 160
 local DEFAULT_OVERLAY_SECONDS = 2
 local RING_GROW_SECONDS = 0.3
 local FLOOR_PROBE = 14
+
+-- Dev light (client-only; follows the camera)
+local DEV_LIGHT_COLOR = Color3.fromRGB(255, 244, 226)
+local DEV_LIGHT_FILL_RANGE = 36
+local DEV_LIGHT_FILL_BRIGHTNESS = 1.4
+local DEV_LIGHT_BEAM_RANGE = 60
+local DEV_LIGHT_BEAM_BRIGHTNESS = 3
+local DEV_LIGHT_BEAM_ANGLE = 75
 
 local NOISE_KINDS: { Enums.NoiseKind } = {
 	"Walk",
@@ -119,6 +132,8 @@ local notifyHandler: NotifyHandler? = nil
 local devEnabled = false
 local overlaysEnabled = true
 local ventGraphEnabled = false
+local devLightEnabled = false
+local soundIndex = 1
 local noiseIndex = 1
 local difficultyIndex = 1
 local lastCommandAt: { [string]: number } = {}
@@ -130,6 +145,7 @@ local overlayItems: { OverlayItem } = {}
 local ventGraphFolder: Folder? = nil
 local ventGraphLayout: string? = nil
 local creatureTag: BillboardGui? = nil
+local devLight: Part? = nil
 
 -- Per-button UI state (weak keys: entries vanish with their buttons)
 local idleColors: { [GuiButton]: Color3 } = setmetatable({}, { __mode = "k" }) :: any
@@ -554,19 +570,32 @@ local function addNoiseRing(position: Vector3, radius: number, text: string?, du
 	})
 end
 
-local function addPlan(points: { Vector3 }, duration: number)
+-- Plan marker look per planned kind. Props are pillars; a grate the director locked is a flat plate at the grate.
+type PlanStyle = { color: Color3, size: Vector3, lift: number }
+
+local PLAN_STYLES: { [string]: PlanStyle } = {
+	BearTrap = { color = Color3.fromRGB(255, 108, 64), size = Vector3.new(0.9, 7, 0.9), lift = 3.5 },
+	ChemicalFlask = { color = Color3.fromRGB(120, 235, 90), size = Vector3.new(0.8, 6, 0.8), lift = 3 },
+	Battery = { color = Color3.fromRGB(255, 220, 70), size = Vector3.new(0.7, 5, 0.7), lift = 2.5 },
+	LockedGrate = { color = Color3.fromRGB(235, 80, 235), size = Vector3.new(3.6, 3.6, 0.4), lift = 0 },
+}
+local DEFAULT_PLAN_STYLE: PlanStyle = { color = ACCENT, size = Vector3.new(0.8, 7, 0.8), lift = 3.5 }
+
+local function addPlan(points: { Vector3 }, kinds: { [number]: string }, duration: number)
 	local folder, anchor = overlayRoot()
 	local instances: { Instance } = {}
 	local pillars: { BoxHandleAdornment } = {}
-	for _, point in points do
+	for index, point in points do
+		local style = PLAN_STYLES[kinds[index] or ""] or DEFAULT_PLAN_STYLE
 		local pillar = Instance.new("BoxHandleAdornment")
 		pillar.Name = "PlanMarker"
 		pillar.Adornee = anchor
-		pillar.CFrame = CFrame.new(point + Vector3.new(0, 3.5, 0))
-		pillar.Size = Vector3.new(0.8, 7, 0.8)
-		pillar.Color3 = ACCENT
+		pillar.CFrame = CFrame.new(point + Vector3.new(0, style.lift, 0))
+		pillar.Size = style.size
+		pillar.Color3 = style.color
 		pillar.Transparency = 0.35
 		pillar.AlwaysOnTop = true
+		pillar.AdornCullingMode = Enum.AdornCullingMode.Never
 		pillar.ZIndex = 2
 		pillar.Parent = folder
 		table.insert(instances, pillar)
@@ -598,6 +627,7 @@ local function addPath(points: { Vector3 }, duration: number)
 		dot.Color3 = color
 		dot.Transparency = 0.2
 		dot.AlwaysOnTop = true
+		dot.AdornCullingMode = Enum.AdornCullingMode.Never
 		dot.Parent = folder
 		table.insert(instances, dot)
 		table.insert(pieces, dot)
@@ -612,6 +642,7 @@ local function addPath(points: { Vector3 }, duration: number)
 			line.Color3 = color
 			line.Transparency = 0.2
 			line.AlwaysOnTop = true
+			line.AdornCullingMode = Enum.AdornCullingMode.Never
 			line.Parent = folder
 			table.insert(instances, line)
 			table.insert(pieces, line)
@@ -642,6 +673,27 @@ local function pointList(value: any): { Vector3 }
 	return out
 end
 
+-- Plan markers: the valid points of the payload and, aligned with them, the kind each one was sent with (a point
+-- that is not a finite Vector3 drops together with its kind; a kind that is not a string draws the default marker).
+local function planList(rawPoints: any, rawKinds: any): ({ Vector3 }, { [number]: string })
+	local points: { Vector3 } = {}
+	local kinds: { [number]: string } = {}
+	if type(rawPoints) ~= "table" then
+		return points, kinds
+	end
+	local kindTable: { any } = if type(rawKinds) == "table" then rawKinds :: { any } else {}
+	for index, point in rawPoints :: { any } do
+		if typeof(point) == "Vector3" and MathUtil.isFiniteVector(point) then
+			table.insert(points, point)
+			local kind = kindTable[index]
+			if type(kind) == "string" then
+				kinds[#points] = kind
+			end
+		end
+	end
+	return points, kinds
+end
+
 local function onDevOverlay(payload: any)
 	if not devEnabled or type(payload) ~= "table" then
 		return
@@ -666,7 +718,8 @@ local function onDevOverlay(payload: any)
 		local text = if type(payload.label) == "string" then payload.label else nil
 		addNoiseRing(position, math.clamp(radius, 0.5, 600), text, duration)
 	elseif kind == "Plan" then
-		addPlan(pointList(payload.points), duration)
+		local points, kinds = planList(payload.points, payload.kinds)
+		addPlan(points, kinds, duration)
 	elseif kind == "Path" then
 		addPath(pointList(payload.points), duration)
 	end
@@ -758,6 +811,7 @@ local function buildVentGraph(layoutId: string)
 		dot.Color3 = nodeColor
 		dot.Transparency = 0.15
 		dot.AlwaysOnTop = true
+		dot.AdornCullingMode = Enum.AdornCullingMode.Never
 		dot.Parent = folder
 		for _, other in links[id] do
 			local otherPosition = positions[other]
@@ -771,6 +825,7 @@ local function buildVentGraph(layoutId: string)
 				line.Color3 = linkColor
 				line.Transparency = 0.25
 				line.AlwaysOnTop = true
+				line.AdornCullingMode = Enum.AdornCullingMode.Never
 				line.Parent = folder
 			end
 		end
@@ -796,6 +851,7 @@ local function buildVentGraph(layoutId: string)
 				else Color3.fromRGB(200, 200, 200)
 			marker.Transparency = 0.45
 			marker.AlwaysOnTop = true
+			marker.AdornCullingMode = Enum.AdornCullingMode.Never
 			marker.Parent = folder
 		end
 	end
@@ -881,6 +937,70 @@ local function refreshCreatureTag()
 end
 
 --------------------------------------------------------------------------------
+-- Dev light: a fill PointLight and a forward SpotLight on an invisible part under the camera. It only adds light
+-- sources, so LightingController's Lighting writes and light budget are untouched (the part is not tagged).
+--------------------------------------------------------------------------------
+
+local function clearDevLight()
+	local part = devLight
+	devLight = nil
+	if part then
+		part:Destroy()
+	end
+end
+
+local function createDevLight(camera: Camera): Part
+	clearDevLight()
+	local part = Instance.new("Part")
+	part.Name = "DevLight"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Transparency = 1
+	part.Size = Vector3.new(0.2, 0.2, 0.2)
+	part.CFrame = camera.CFrame
+	part.CollisionGroup = CollisionGroups.NoCollide
+	local fill = Instance.new("PointLight")
+	fill.Name = "Fill"
+	fill.Color = DEV_LIGHT_COLOR
+	fill.Range = DEV_LIGHT_FILL_RANGE
+	fill.Brightness = DEV_LIGHT_FILL_BRIGHTNESS
+	fill.Shadows = false
+	fill.Parent = part
+	local beam = Instance.new("SpotLight")
+	beam.Name = "Beam"
+	beam.Color = DEV_LIGHT_COLOR
+	beam.Face = Enum.NormalId.Front
+	beam.Range = DEV_LIGHT_BEAM_RANGE
+	beam.Brightness = DEV_LIGHT_BEAM_BRIGHTNESS
+	beam.Angle = DEV_LIGHT_BEAM_ANGLE
+	beam.Shadows = false
+	beam.Parent = part
+	part.Parent = camera
+	devLight = part
+	return part
+end
+
+-- Runs every frame before render while dev mode is on.
+local function updateDevLight()
+	if not devEnabled or not devLightEnabled then
+		if devLight then
+			clearDevLight()
+		end
+		return
+	end
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	local existing = devLight
+	local part: Part = if existing and existing.Parent == camera then existing else createDevLight(camera)
+	part.CFrame = camera.CFrame
+end
+
+--------------------------------------------------------------------------------
 -- Dev commands
 --------------------------------------------------------------------------------
 
@@ -953,7 +1073,7 @@ local function buildPanel(trove: Trove.Trove)
 	stroke(panel, STROKE_COLOR, 1.5, 0.1)
 	padding(panel, 10)
 	local panelLimit = Instance.new("UISizeConstraint")
-	panelLimit.MinSize = Vector2.new(PANEL_WIDTH, 180)
+	panelLimit.MinSize = Vector2.new(PANEL_WIDTH, 100) -- landscape phones: stay clear of the jump button
 	panelLimit.MaxSize = Vector2.new(PANEL_WIDTH, 520)
 	panelLimit.Parent = panel
 
@@ -1056,6 +1176,14 @@ local function buildPanel(trove: Trove.Trove)
 		refreshVentGraph()
 	end)
 	setIdleColor(ventButton, if ventGraphEnabled then BUTTON_ACTIVE else BUTTON_COLOR)
+	local lightButton = action(Strings.get("Dev.Panel.Light", onOff(devLightEnabled)), function(self: TextButton)
+		devLightEnabled = not devLightEnabled
+		click()
+		self.Text = Strings.get("Dev.Panel.Light", onOff(devLightEnabled))
+		setIdleColor(self, if devLightEnabled then BUTTON_ACTIVE else BUTTON_COLOR)
+		updateDevLight()
+	end)
+	setIdleColor(lightButton, if devLightEnabled then BUTTON_ACTIVE else BUTTON_COLOR)
 	action(Strings.get("Dev.Panel.Difficulty", difficulties[difficultyIndex]), function(self: TextButton)
 		difficultyIndex = difficultyIndex % #difficulties + 1
 		click()
@@ -1083,6 +1211,66 @@ local function buildPanel(trove: Trove.Trove)
 		local levelButton = button(levels, Strings.get("Dev.Panel.Level", levelNumber), LEVEL_BUTTON_HEIGHT, index)
 		levelButton.Activated:Connect(function()
 			send("level", { tostring(levelNumber) })
+		end)
+	end
+
+	-- Sound audition: < [preset] > steps through SynthPresets.names(); tapping the name plays it 3D ahead of the
+	-- character, Play 2D plays it flat, Stop ends a looping audition.
+	local soundNames = SynthPresets.names()
+	local soundsLabel = Instance.new("TextLabel")
+	soundsLabel.Name = "SoundsLabel"
+	soundsLabel.LayoutOrder = 4
+	soundsLabel.Size = UDim2.new(1, 0, 0, 18)
+	soundsLabel.BackgroundTransparency = 1
+	soundsLabel.FontFace = BODY_FONT
+	soundsLabel.Text = Strings.get("Dev.Panel.Sounds", #soundNames)
+	soundsLabel.TextColor3 = MUTED_TEXT
+	soundsLabel.TextSize = 14
+	soundsLabel.TextXAlignment = Enum.TextXAlignment.Left
+	soundsLabel.Parent = scroll
+
+	if #soundNames > 0 then
+		soundIndex = math.clamp(soundIndex, 1, #soundNames)
+		local stepper = Instance.new("Frame")
+		stepper.Name = "SoundStepper"
+		stepper.LayoutOrder = 5
+		stepper.Size = UDim2.new(1, 0, 0, BUTTON_HEIGHT)
+		stepper.BackgroundTransparency = 1
+		stepper.Parent = scroll
+		local previous = button(stepper, Strings.get("Dev.Panel.SoundPrev"), BUTTON_HEIGHT, 1)
+		previous.Size = UDim2.new(0, STEP_BUTTON_WIDTH, 1, 0)
+		local current = button(stepper, soundNames[soundIndex], BUTTON_HEIGHT, 2)
+		current.Name = "Preset"
+		current.Position = UDim2.fromOffset(STEP_BUTTON_WIDTH + GAP, 0)
+		current.Size = UDim2.new(1, -2 * (STEP_BUTTON_WIDTH + GAP), 1, 0)
+		current.TextSize = 14
+		local nextButton = button(stepper, Strings.get("Dev.Panel.SoundNext"), BUTTON_HEIGHT, 3)
+		nextButton.AnchorPoint = Vector2.new(1, 0)
+		nextButton.Position = UDim2.fromScale(1, 0)
+		nextButton.Size = UDim2.new(0, STEP_BUTTON_WIDTH, 1, 0)
+		local function step(delta: number)
+			soundIndex = (soundIndex - 1 + delta) % #soundNames + 1
+			click()
+			current.Text = soundNames[soundIndex]
+		end
+		previous.Activated:Connect(function()
+			step(-1)
+		end)
+		nextButton.Activated:Connect(function()
+			step(1)
+		end)
+		current.Activated:Connect(function()
+			send("sound", { soundNames[soundIndex] })
+		end)
+
+		local soundActions = grid(scroll, 2, BUTTON_HEIGHT, 6)
+		local play2d = button(soundActions, Strings.get("Dev.Panel.SoundPlay2D"), BUTTON_HEIGHT, 1)
+		play2d.Activated:Connect(function()
+			send("sound", { soundNames[soundIndex], "2d" })
+		end)
+		local stop = button(soundActions, Strings.get("Dev.Panel.SoundStop"), BUTTON_HEIGHT, 2)
+		stop.Activated:Connect(function()
+			send("sound", { "stop" })
 		end)
 	end
 
@@ -1147,6 +1335,7 @@ local function disableDev()
 	clearOverlays()
 	clearVentGraph()
 	clearCreatureTag()
+	clearDevLight()
 end
 
 local function enableDev()
@@ -1173,6 +1362,7 @@ local function enableDev()
 			refreshVentGraph()
 		end
 	end)
+	trove:Connect(RunService.PreRender, updateDevLight)
 	trove:Connect(ReplicatedStorage:GetAttributeChangedSignal(M.BootError), showBootError)
 	showBootError()
 end

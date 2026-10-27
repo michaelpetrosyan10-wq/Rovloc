@@ -26,17 +26,32 @@
 -- highest-priority held reason (LockPriority). EndRun and leaving release every lock.
 --
 -- Joining. Each player (including players already present when Start runs) gets the DevTools attribute (Studio,
--- GameConfig.DevAllowlistUserIds, or the experience owner when GameConfig.DevToolsForCreator is on), then, once WorldService is ready and the client acknowledged the world (or
--- GameConfig.ClientAckTimeout passed), a character at a Lobby PlayerSpawn anchor. A character spawned before its
--- client's ack stays anchored until the ack (at most GameConfig.WorldReadyTimeout), so a slow phone never simulates
--- its body over floors it has not received. When a run ends every player is returned to the lobby.
+-- GameConfig.DevAllowlistUserIds, or the experience owner when GameConfig.DevToolsForCreator is on), then, once
+-- WorldService is ready and the client acknowledged the world (or GameConfig.ClientAckTimeout passed), a character at
+-- a Lobby PlayerSpawn anchor. A character spawned before its client's ack stays anchored until the ack (at most
+-- GameConfig.WorldReadyTimeout), so a slow phone never simulates its body over floors it has not received. When a run
+-- ends every player is returned to the lobby. For a group-owned experience the group's owner is looked up once per
+-- server (Start, in the background, retried after 1, 3 and 9 s) and cached; it gets DevTools the moment it resolves.
+--
+-- Server moves. Spawn and Teleport announce every move to NoiseAndDirectorService.ExpectTeleport before the rig
+-- jumps (the locomotion sampler never hears it, nor reports it as suspicious) and fire Moved(player, model, cframe)
+-- for later consumers (P3 MovementAuthority). Code that moves a character must go through these two.
+--
+-- Recovery. Twice a second every joined player who is not waiting for a first spawn, not being spawned and not
+-- Despawned on purpose is checked: a character that lost its HumanoidRootPart (the engine's fall cleanup, anything
+-- that destroyed it), a root below WorldConfig.GroundY - FallMargin, or no character at all is replaced. A dead
+-- Humanoid fires Died and is replaced DeathRespawnDelay (3) seconds later. Replacements land on the current level's
+-- entry spawn slots for run participants during a run, else in the Lobby, and a failing replacement is retried every
+-- RecoveryRetrySeconds. This is Phase 1's whole death policy: CharacterService never writes LifeState.
+-- P3 LifeStateService takes over with SetRecoveryHandler(handler): the handler sees every recovery first
+-- (reason "Died", "OutOfBounds" or "Lost") and returns true when it handled it (Downed, Execute, elimination,
+-- spectating, ...), so CharacterService neither respawns nor schedules anything; false keeps the built-in respawn.
 --
 -- Deploying a run is the match policy's call (DevToolsService in P1, MatchAndDataService in P8): it spawns the
 -- participants at Level0 PlayerSpawn anchors through Spawn / SpawnCFrame once the run exists, so this service has no
 -- BeginRun hook.
 --
--- Died fires once per character when its Humanoid dies. CharacterService never writes LifeState (P3
--- LifeStateService does) and never respawns on death.
+-- Died fires once per character when its Humanoid dies, before any recovery decision.
 
 local GroupService = game:GetService("GroupService")
 local Players = game:GetService("Players")
@@ -51,11 +66,14 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local CollisionService = require(ServerScriptService.Services.Core.CollisionService)
+local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
+local RunLifecycleService = require(ServerScriptService.Services.Core.RunLifecycleService)
 local WorldService = require(ServerScriptService.Services.Core.WorldService)
 
 local log = Log.new("Characters")
@@ -67,6 +85,11 @@ local JUMP_HEIGHT = 2.5
 local SPAWN_HEIGHT = 3.5 -- root height above the floor used by every PlayerSpawn anchor (root + clearance)
 local READY_RECHECK_SECONDS = 30
 local LOBBY: Enums.LayoutId = "Lobby"
+local DEATH_RESPAWN_DELAY = 3
+local FALL_MARGIN = 60 -- studs below WorldConfig.GroundY that count as out of bounds
+local RECOVERY_CHECK_SECONDS = 0.5
+local RECOVERY_RETRY_SECONDS = 5
+local GROUP_RETRY_DELAYS: { number } = { 1, 3, 9 }
 
 -- Accessory types removed by StripHeadAccessories (anything worn on or around the head, which the first-person
 -- camera sits inside).
@@ -108,19 +131,33 @@ export type LockSummary = {
 	anchored: boolean, -- some held lock is Anchor
 }
 
+-- Why a joined player's character is being replaced.
+export type RecoveryReason = "Died" | "OutOfBounds" | "Lost"
+
+-- P3 LifeStateService's hook: return true when it handled the recovery itself (no built-in respawn follows). It runs
+-- on the thread that noticed the problem and must not yield. `model` is nil for "Lost" with no character left.
+export type RecoveryHandler = (player: Player, model: Model?, reason: RecoveryReason) -> boolean
+
 local CharacterService = {}
 
 CharacterService.Name = "CharacterService"
 CharacterService.LockPriority = table.freeze(table.clone(LOCK_PRIORITY))
 CharacterService.SpawnHeight = SPAWN_HEIGHT
+CharacterService.DeathRespawnDelay = DEATH_RESPAWN_DELAY
+CharacterService.FallMargin = FALL_MARGIN
+CharacterService.RecoveryRetrySeconds = RECOVERY_RETRY_SECONDS
+CharacterService.GroupOwnerRetryDelays = table.freeze(table.clone(GROUP_RETRY_DELAYS))
 
 local characterSpawned: Signal.Signal<Player, Model> = Signal.new()
 local characterRemoving: Signal.Signal<Player, Model> = Signal.new()
 local died: Signal.Signal<Player, Model> = Signal.new()
+local moved: Signal.Signal<Player, Model, CFrame> = Signal.new()
 
 CharacterService.CharacterSpawned = characterSpawned
 CharacterService.CharacterRemoving = characterRemoving
 CharacterService.Died = died
+-- The server placed `player`'s character at `cframe` (a Spawn or a Teleport).
+CharacterService.Moved = moved
 
 local serviceTrove = Trove.new()
 
@@ -132,6 +169,12 @@ local locks: { [Player]: LockTable } = {}
 local joined: { [Player]: boolean } = {}
 local loadingHolds: { [Player]: boolean } = {} -- spawned before their client acknowledged the world
 local awaitingFirstSpawn: { [Player]: boolean } = {} -- joined, still waiting for the world / their ack
+local despawned: { [Player]: boolean } = {} -- Despawn()ed on purpose: recovery leaves them alone until a Spawn
+local pendingDeaths: { [Player]: number } = {} -- died; the generation a delayed respawn is waiting on
+local recovering: { [Player]: boolean } = {} -- a recovery respawn is in flight
+local lastRecoveryAt: { [Player]: number } = {} -- os.clock() of the last recovery attempt
+local recoveryHandler: RecoveryHandler? = nil
+local groupOwnerId: number? = nil -- the creator group's owner, once resolved
 
 --------------------------------------------------------------------------------
 -- Pure helpers (specs: tests/Specs/CoreServices.spec.luau)
@@ -211,6 +254,48 @@ function CharacterService.SpawnCFrame(layoutId: Enums.LayoutId, index: number): 
 		return CFrame.new(origin + Vector3.new(center.X + offset, SPAWN_HEIGHT, center.Y))
 	end
 	return CFrame.new(origin + Vector3.new(0, SPAWN_HEIGHT, 0))
+end
+
+-- Why a character with its root at `rootPosition` must be replaced: "Lost" without a character or root,
+-- "OutOfBounds" below WorldConfig.GroundY - FallMargin (or at a non-finite position); nil when it is fine.
+function CharacterService.recoveryReason(hasCharacter: boolean, rootPosition: Vector3?): RecoveryReason?
+	if not hasCharacter or rootPosition == nil then
+		return "Lost"
+	end
+	if not MathUtil.isFiniteVector(rootPosition) or rootPosition.Y < WorldConfig.GroundY - FALL_MARGIN then
+		return "OutOfBounds"
+	end
+	return nil
+end
+
+-- Where a recovered player respawns: the current level for a run participant while a run is live (Deploying /
+-- InRun), the Lobby otherwise (no run, a non-participant, or no valid current level).
+function CharacterService.recoveryLayout(phase: string?, participant: boolean, currentLevel: string?): Enums.LayoutId
+	if participant and (phase == "InRun" or phase == "Deploying") and type(currentLevel) == "string" then
+		if Enums.has(Enums.LevelId, currentLevel) then
+			return (currentLevel :: any) :: Enums.LayoutId
+		end
+	end
+	return LOBBY
+end
+
+-- Calls `attempt` until it returns true: once, then once more after each of `delays` (seconds, slept with
+-- `sleep`). Returns whether an attempt succeeded.
+function CharacterService.withRetries(
+	attempt: () -> boolean,
+	delays: { number },
+	sleep: (seconds: number) -> ()
+): boolean
+	if attempt() then
+		return true
+	end
+	for _, seconds in delays do
+		sleep(seconds)
+		if attempt() then
+			return true
+		end
+	end
+	return false
 end
 
 --------------------------------------------------------------------------------
@@ -597,6 +682,7 @@ local function buildAndSwap(player: Player, cframe: CFrame, generation: number):
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	assert(humanoid, "prepareRig guarantees a Humanoid")
 
+	NoiseAndDirectorService.ExpectTeleport(player)
 	model:PivotTo(cframe)
 	CollisionService.TrackCharacter(model)
 	local previous = characters[player]
@@ -615,6 +701,7 @@ local function buildAndSwap(player: Player, cframe: CFrame, generation: number):
 	if previous and previous ~= model then
 		removeCharacter(player, previous)
 	end
+	moved:Fire(player, model, cframe)
 	characterSpawned:Fire(player, model)
 	return model
 end
@@ -627,6 +714,8 @@ function CharacterService.Spawn(player: Player, cframe: CFrame): Model?
 	end
 	local generation = bump(player)
 	spawning[player] = generation
+	despawned[player] = nil
+	pendingDeaths[player] = nil
 	local model = buildAndSwap(player, cframe, generation)
 	if spawning[player] == generation then
 		spawning[player] = nil
@@ -648,6 +737,8 @@ end
 -- Removes `player`'s character (and cancels any Spawn still in flight).
 function CharacterService.Despawn(player: Player)
 	bump(player)
+	despawned[player] = true
+	pendingDeaths[player] = nil
 	local model = characters[player]
 	characters[player] = nil
 	if model then
@@ -667,11 +758,13 @@ function CharacterService.Teleport(player: Player, cframe: CFrame): boolean
 	if not root or not humanoid or humanoid.Health <= 0 then
 		return false
 	end
+	NoiseAndDirectorService.ExpectTeleport(player)
 	model:PivotTo(cframe)
 	if not root.Anchored then
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 	end
+	moved:Fire(player, model, cframe)
 	return true
 end
 
@@ -684,39 +777,179 @@ function CharacterService.GetCharacter(player: Player): Model?
 end
 
 --------------------------------------------------------------------------------
+-- Recovery (Phase 1 death / out-of-bounds policy; P3 LifeStateService hooks in)
+--------------------------------------------------------------------------------
+
+-- Hands every recovery decision to `handler` first (nil restores the built-in respawns). P3 LifeStateService calls
+-- this in its Init.
+function CharacterService.SetRecoveryHandler(handler: RecoveryHandler?)
+	recoveryHandler = handler
+end
+
+-- True when the registered handler took over this recovery.
+local function handledElsewhere(player: Player, model: Model?, reason: RecoveryReason): boolean
+	local handler = recoveryHandler
+	if not handler then
+		return false
+	end
+	local ok, handled = xpcall(handler, function(err: any)
+		log.error("recovery handler failed for %s (%s): %s", player.Name, reason, tostring(err))
+	end, player, model, reason)
+	return ok and handled == true
+end
+
+-- The layout and spawn slot a recovered `player` respawns at.
+local function recoverySpot(player: Player): (Enums.LayoutId, number)
+	local run = RunLifecycleService.GetRun()
+	local slot: number? = if run then table.find(run.participants, player) else nil
+	if slot == nil then
+		return LOBBY, table.find(Players:GetPlayers(), player) or 1
+	end
+	local current = ReplicatedStorage:GetAttribute(Attributes.Match.CurrentLevel)
+	local layoutId: Enums.LayoutId = CharacterService.recoveryLayout(
+		RunLifecycleService.GetPhase(),
+		true,
+		if type(current) == "string" then current else nil
+	)
+	return layoutId, slot
+end
+
+local function respawn(player: Player, reason: RecoveryReason)
+	if recovering[player] or player.Parent ~= Players then
+		return
+	end
+	recovering[player] = true
+	local layoutId: Enums.LayoutId, slot: number = recoverySpot(player)
+	log.info("%s: %s; respawning in %s", player.Name, reason, layoutId)
+	xpcall(function()
+		CharacterService.Spawn(player, CharacterService.SpawnCFrame(layoutId, slot))
+	end, function(err: any)
+		log.error("recovery spawn for %s failed: %s", player.Name, tostring(err))
+	end)
+	recovering[player] = nil
+end
+
+local function onDied(player: Player, model: Model)
+	if not joined[player] or characters[player] ~= model then
+		return
+	end
+	if handledElsewhere(player, model, "Died") then
+		return
+	end
+	local generation = generations[player] or 0
+	pendingDeaths[player] = generation
+	task.delay(DEATH_RESPAWN_DELAY, function()
+		if pendingDeaths[player] ~= generation then
+			return -- a Spawn / Despawn superseded the death, or the player left
+		end
+		pendingDeaths[player] = nil
+		if player.Parent == Players and joined[player] and (generations[player] or 0) == generation then
+			respawn(player, "Died")
+		end
+	end)
+end
+
+-- Why `player` needs a new character right now (nil when fine or when someone else is handling them).
+local function needsRecovery(player: Player): (RecoveryReason?, Model?)
+	if
+		not joined[player]
+		or awaitingFirstSpawn[player]
+		or spawning[player]
+		or recovering[player]
+		or despawned[player]
+		or pendingDeaths[player] ~= nil
+	then
+		return nil, nil
+	end
+	local model: Model? = characters[player]
+	local root: BasePart? = nil
+	if model then
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.Health <= 0 then
+			return nil, model -- the Died path owns dead characters
+		end
+		if model:IsDescendantOf(Workspace) then
+			root = rootOf(model)
+		end
+	end
+	local reason: RecoveryReason? = CharacterService.recoveryReason(model ~= nil, if root then root.Position else nil)
+	return reason, model
+end
+
+local function checkRecovery()
+	local now = os.clock()
+	for _, player in Players:GetPlayers() do
+		local found: RecoveryReason?, model: Model? = needsRecovery(player)
+		if found == nil then
+			continue
+		end
+		local reason: RecoveryReason = found
+		local last = lastRecoveryAt[player]
+		if last ~= nil and now - last < RECOVERY_RETRY_SECONDS then
+			continue
+		end
+		lastRecoveryAt[player] = now
+		if handledElsewhere(player, model, reason) then
+			continue
+		end
+		task.spawn(respawn, player, reason)
+	end
+end
+
+--------------------------------------------------------------------------------
 -- Joining
 --------------------------------------------------------------------------------
 
--- Dev access known without a web call: Studio, the allowlist, or the user who created this experience.
+-- Dev access known without a web call: Studio, the allowlist, the user who created this experience, or the owner
+-- of the creator group once Start has resolved it.
 local function isDevUser(player: Player): boolean
 	if RunService:IsStudio() or table.find(GameConfig.DevAllowlistUserIds, player.UserId) ~= nil then
 		return true
 	end
-	return GameConfig.DevToolsForCreator
-		and game.CreatorType == Enum.CreatorType.User
-		and game.CreatorId > 0
-		and player.UserId == game.CreatorId
+	if not GameConfig.DevToolsForCreator or game.CreatorId <= 0 then
+		return false
+	end
+	if game.CreatorType == Enum.CreatorType.User then
+		return player.UserId == game.CreatorId
+	end
+	return groupOwnerId ~= nil and player.UserId == groupOwnerId
 end
 
--- A group-owned experience: the group's owner gets dev access too. GetGroupInfoAsync is a web call (yields, may
--- fail), so this runs in its own thread after the attribute was first written.
-local function grantGroupOwner(player: Player)
-	if not GameConfig.DevToolsForCreator or game.CreatorType ~= Enum.CreatorType.Group or game.CreatorId <= 0 then
+-- A group-owned experience: the group's owner gets dev access too. GetGroupInfoAsync is a web call (yields, may fail),
+-- and the answer is the same for the whole server, so it runs once, in the background, with retries, and is cached.
+local function resolveGroupOwner()
+	if not GameConfig.DevToolsForCreator or game.CreatorId <= 0 or game.CreatorType ~= Enum.CreatorType.Group then
 		return
 	end
 	local groupId = game.CreatorId
-	local ok, ownerId = pcall(function(): number?
-		local groupInfo = GroupService:GetGroupInfoAsync(groupId)
-		local owner = if type(groupInfo) == "table" then groupInfo.Owner else nil
-		local id = if type(owner) == "table" then owner.Id else nil
-		return if type(id) == "number" then id else nil
-	end)
-	if not ok then
-		log.warn("group owner lookup for %s failed: %s", player.Name, tostring(ownerId))
+	local resolved = CharacterService.withRetries(
+		function(): boolean
+			local ok, ownerId = pcall(function(): number?
+				local groupInfo = GroupService:GetGroupInfoAsync(groupId)
+				local owner = if type(groupInfo) == "table" then groupInfo.Owner else nil
+				local id = if type(owner) == "table" then owner.Id else nil
+				return if type(id) == "number" then id else nil
+			end)
+			if not ok then
+				log.warn("group %d owner lookup failed: %s", groupId, tostring(ownerId))
+				return false
+			end
+			groupOwnerId = ownerId
+			return true
+		end,
+		GROUP_RETRY_DELAYS,
+		function(seconds: number)
+			task.wait(seconds)
+		end
+	)
+	if not resolved then
+		log.warn("group %d owner never resolved; the group owner has no dev tools on this server", groupId)
 		return
 	end
-	if ownerId ~= nil and ownerId == player.UserId and player.Parent == Players then
-		player:SetAttribute(P.DevTools, true)
+	for _, player in Players:GetPlayers() do
+		if joined[player] and isDevUser(player) then
+			player:SetAttribute(P.DevTools, true)
+		end
 	end
 end
 
@@ -755,12 +988,8 @@ local function onPlayerAdded(player: Player)
 		return
 	end
 	joined[player] = true
-	local devUser = isDevUser(player)
-	player:SetAttribute(P.DevTools, devUser)
+	player:SetAttribute(P.DevTools, isDevUser(player))
 	Attributes.set(player, P.ControlLock, "None")
-	if not devUser then
-		task.spawn(grantGroupOwner, player)
-	end
 	task.spawn(initialSpawn, player)
 end
 
@@ -771,12 +1000,25 @@ end
 function CharacterService.Init()
 	serviceTrove:Connect(Players.PlayerAdded, onPlayerAdded)
 	serviceTrove:Add(WorldService.WorldAcked:Connect(onWorldAcked))
+	serviceTrove:Add(died:Connect(onDied))
 end
 
 function CharacterService.Start()
 	for _, player in Players:GetPlayers() do
 		onPlayerAdded(player)
 	end
+	task.spawn(resolveGroupOwner)
+	local accumulated = 0
+	serviceTrove:Connect(RunService.Heartbeat, function(dt: number)
+		accumulated += dt
+		if accumulated < RECOVERY_CHECK_SECONDS then
+			return
+		end
+		accumulated = 0
+		xpcall(checkRecovery, function(err: any)
+			log.warnThrottled("recovery", 10, "recovery check failed: %s", tostring(err))
+		end)
+	end)
 end
 
 function CharacterService.EndRun()
@@ -809,6 +1051,10 @@ function CharacterService.OnPlayerRemoving(player: Player)
 	spawning[player] = nil
 	loadingHolds[player] = nil
 	awaitingFirstSpawn[player] = nil
+	despawned[player] = nil
+	pendingDeaths[player] = nil
+	recovering[player] = nil
+	lastRecoveryAt[player] = nil
 end
 
 return CharacterService

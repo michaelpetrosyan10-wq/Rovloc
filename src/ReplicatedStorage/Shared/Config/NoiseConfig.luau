@@ -51,13 +51,16 @@ NoiseConfig.WaterSpeedTiers = table.freeze({
 	{ minSpeed = 0.75, kind = "Treading" },
 } :: { { minSpeed: number, kind: Enums.NoiseKind } })
 
--- Splash meter: water noise accumulates per player and decays; crossing the threshold invites a grab.
+-- Splash meter: water noise accumulates per player and decays; crossing the threshold invites a grab. After a
+-- crossing the meter re-arms only once it has decayed below `rearmBelow` (hysteresis), so the sawtooth between the
+-- strokes of one continuous swim never reads as a second crossing; a real calm spell is needed.
 NoiseConfig.SplashMeter = table.freeze({
 	perFreestylePulse = 1,
 	perSplash = 2.5,
 	perTreadingPulse = 0.1,
 	decayPerSecond = 0.35,
 	grabThreshold = 6,
+	rearmBelow = 4,
 })
 
 -- Wall occlusion used by Hearing: each solid wall between source and listener scales the radius.

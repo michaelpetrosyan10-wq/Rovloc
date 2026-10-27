@@ -2,15 +2,28 @@
 -- Client voice budget and instance pools for SoundSynthesizer.
 --
 -- Budget. Every playing voice holds one Slot on its bus. Caps per bus (Monster 6, World 16, Ambience 8, Player 12,
--- UI 6) plus each preset's own maxVoices. When a cap is reached the newcomer may steal a slot: the lowest priority
--- loses first, then the quietest at the listener (authored gain x distance attenuation), then the oldest. A voice
--- that outranks the newcomer is never stolen; the newcomer is refused instead. One-shots placed further from the
--- listener than their rollOff.max are culled before they ever take a slot.
+-- Body 6, UI 6) plus each preset's own maxVoices. When a cap is reached the newcomer may steal a slot: the lowest
+-- priority loses first, then the quietest at the listener (authored gain x distance attenuation), then the oldest.
+-- A voice that outranks the newcomer is never stolen; the newcomer is refused instead. Within a preset's own cap a
+-- one-shot only ever replaces another one-shot: it never evicts a looping instance (a drip stinger must not silence
+-- a dripping pipe). One-shots placed further from the listener than their rollOff.max are culled before they ever
+-- take a slot.
 --
--- Pools. Sounds, SoundEffects (per kind) and Attachments are recycled instead of created and destroyed per voice.
--- 3D voices play through a pooled Attachment parented to the attach target (a BasePart, a Model's primary part)
--- or, for bare positions, to one client-local anchor part. An Attachment target hosts the Sounds directly.
--- 2D voices play from a folder in SoundService.
+-- Device budget. Phones (touch without a keyboard) get fewer live Sounds, Reverbs and grains per voice than
+-- desktops (budgetFor). When every Sound is in use, acquireSound asks the synthesizer to reclaim one from the
+-- lowest-priority voice instead of dropping the newcomer's grain.
+--
+-- Effect groups. A layer's SoundEffect chain is not put on each grain's Sound: it lives on one pooled SoundGroup
+-- (an FxGroup, parented under the bus group or a preset's space group) that every grain of that layer plays
+-- through. The group is shared by every voice of the same preset layer and outlives its last user by the chain's
+-- tail (SynthPresets.chainTail), so reverbs and echoes ring out after the dry grains have ended, and a burst of
+-- grains costs one chain instead of one per grain. Reverbs are budgeted globally: past the cap, idle tails are cut
+-- first, then a new chain is built without its Reverb.
+--
+-- Pools. Sounds, SoundEffects (per kind), SoundGroups and Attachments are recycled instead of created and destroyed
+-- per voice. 3D voices play through a pooled Attachment parented to the attach target (a BasePart, a Model's
+-- primary part) or, for bare positions, to one client-local anchor part. An Attachment target hosts the Sounds
+-- directly. 2D voices play from a folder in SoundService.
 --
 -- Measurement. setup() loads one probe Sound per SoundLibrary sample and records each file's real TimeLength, so
 -- PlaybackRegions are resolved against the true length (see SoundLibrary.resolveRegion).
@@ -19,6 +32,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
@@ -33,6 +47,7 @@ export type Slot = {
 	bus: Enums.AudioBus,
 	preset: string,
 	priority: number,
+	looped: boolean,
 	startedAt: number,
 	rollOff: SynthPresets.Range?, -- nil for 2D voices
 	position: () -> Vector3?, -- current world position (nil = 2D)
@@ -46,6 +61,7 @@ export type AdmitRequest = {
 	preset: string,
 	priority: number,
 	maxVoices: number,
+	looped: boolean,
 	rollOff: SynthPresets.Range?,
 	position: () -> Vector3?,
 	gain: () -> number,
@@ -63,30 +79,63 @@ export type Emitter = {
 	spatial: boolean,
 }
 
+-- Per-device ceilings (see budgetFor).
+export type Budget = {
+	liveSounds: number, -- Sounds in use at once across every voice
+	reverbs: number, -- Reverb effects alive at once across every effect group (tails included)
+	grainsPerVoice: number, -- grains one voice may have sounding at once
+}
+
+export type FxEffect = { kind: SynthPresets.EffectKind, effect: SoundEffect }
+
+export type FxGroup = {
+	key: string,
+	group: SoundGroup,
+	effects: { FxEffect },
+	reverbs: number, -- Reverb effects on this group (counted against the budget)
+	tail: number, -- seconds the chain keeps sounding after its last input stopped
+	users: number, -- voices currently playing through it
+	idleSince: number?, -- os.clock() when users last dropped to 0 (nil while in use)
+	parentFx: FxGroup?, -- the pooled group this one routes into (a preset's space), if any
+	degraded: boolean, -- built without its Reverb because the reverb budget was spent
+	retired: boolean,
+}
+
 local CAPS: { [Enums.AudioBus]: number } = {
 	Monster = 6,
 	World = 16,
 	Ambience = 8,
 	Player = 12,
+	Body = 6,
 	UI = 6,
 }
 
-local MAX_LIVE_SOUNDS = 160 -- hard ceiling on Sounds in use at once (grain storms degrade, never explode)
+local TOUCH_BUDGET: Budget = table.freeze({ liveSounds = 96, reverbs = 4, grainsPerVoice = 8 })
+local DESKTOP_BUDGET: Budget = table.freeze({ liveSounds = 128, reverbs = 6, grainsPerVoice = 10 })
+
+local MAX_FX_GROUPS = 64
 local MAX_FREE_SOUNDS = 64
 local MAX_FREE_EFFECTS_PER_KIND = 32
+local MAX_FREE_GROUPS = 32
 local MAX_FREE_ATTACHMENTS = 48
+local RECLAIM_ATTEMPTS = 4
+local TAIL_MARGIN = 0.15
 local PROBE_TIMEOUT = 30
 local AUDIBILITY_EPSILON = 1e-4
 
 local VoicePool = {}
 
 VoicePool.Caps = table.freeze(CAPS)
-VoicePool.MaxLiveSounds = MAX_LIVE_SOUNDS
+VoicePool.TouchBudget = TOUCH_BUDGET
+VoicePool.DesktopBudget = DESKTOP_BUDGET
+VoicePool.MaxFxGroups = MAX_FX_GROUPS
+VoicePool.TailMargin = TAIL_MARGIN
 
 local isSetUp = false
 local freeFolder: Folder? = nil
 local voices2D: Folder? = nil
 local anchorPart: BasePart? = nil
+local budget: Budget = DESKTOP_BUDGET
 
 local slots: { Slot } = {}
 local nextSlotId = 0
@@ -97,6 +146,27 @@ local freeSoundCount = 0
 local soundsInUse = 0
 local freeEffects: { [string]: { SoundEffect } } = {}
 local freeAttachments: { Attachment } = {}
+
+local fxGroups: { [string]: FxGroup } = {}
+local fxGroupCount = 0
+local reverbsInUse = 0
+local freeGroups: { SoundGroup } = {}
+
+--------------------------------------------------------------------------------
+-- Device budget
+--------------------------------------------------------------------------------
+
+-- The budget for a device class: touch-first devices (no keyboard) are phones and tablets.
+function VoicePool.budgetFor(touchEnabled: boolean, keyboardEnabled: boolean): Budget
+	if touchEnabled and not keyboardEnabled then
+		return TOUCH_BUDGET
+	end
+	return DESKTOP_BUDGET
+end
+
+function VoicePool.budget(): Budget
+	return budget
+end
 
 --------------------------------------------------------------------------------
 -- Setup
@@ -168,7 +238,8 @@ local function probeSamples(parent: Instance)
 	end)
 end
 
--- Creates the pool folders, the 3D anchor part and the length probes. Client only, idempotent, never yields.
+-- Creates the pool folders, the 3D anchor part and the length probes, and picks the device budget. Client only,
+-- idempotent, never yields.
 function VoicePool.setup()
 	if isSetUp then
 		return
@@ -178,6 +249,14 @@ function VoicePool.setup()
 		return
 	end
 	isSetUp = true
+	local touchEnabled, keyboardEnabled = false, true
+	xpcall(function()
+		touchEnabled = UserInputService.TouchEnabled
+		keyboardEnabled = UserInputService.KeyboardEnabled
+	end, function(err: any)
+		log.warnThrottled("device", 60, "input capabilities unreadable (%s); using the desktop budget", tostring(err))
+	end)
+	budget = VoicePool.budgetFor(touchEnabled, keyboardEnabled)
 
 	local root = folder("RovlocVoices", SoundService)
 	freeFolder = folder("Free", root)
@@ -246,6 +325,11 @@ local function audibility(slot: Slot, listener: Vector3): number
 		return gain
 	end
 	return gain * VoicePool.attenuation((position - listener).Magnitude, rollOff)
+end
+
+-- How loud a slot's voice is at the listener right now (authored gain x distance attenuation).
+function VoicePool.slotAudibility(slot: Slot): number
+	return audibility(slot, VoicePool.listenerPosition())
 end
 
 --------------------------------------------------------------------------------
@@ -320,14 +404,19 @@ function VoicePool.admit(request: AdmitRequest): Slot?
 	end
 	local listener = VoicePool.listenerPosition()
 
-	-- Per-preset cap: a new instance of the same sound always replaces the least audible / oldest one.
+	-- Per-preset cap: a new instance replaces the least audible / oldest one. A one-shot may only replace another
+	-- one-shot (never a looping emitter or bed of the same preset); with none to replace it is refused.
 	local samePreset: { Slot } = {}
+	local count = 0
 	for _, slot in slots do
 		if slot.preset == request.preset then
-			table.insert(samePreset, slot)
+			count += 1
+			if request.looped or not slot.looped then
+				table.insert(samePreset, slot)
+			end
 		end
 	end
-	if #samePreset >= math.max(1, request.maxVoices) then
+	if count >= math.max(1, request.maxVoices) then
 		if not stealFrom(samePreset, math.huge, listener) then
 			return nil
 		end
@@ -353,6 +442,7 @@ function VoicePool.admit(request: AdmitRequest): Slot?
 		bus = request.bus,
 		preset = request.preset,
 		priority = request.priority,
+		looped = request.looped,
 		startedAt = os.clock(),
 		rollOff = request.rollOff,
 		position = request.position,
@@ -408,7 +498,7 @@ local function resetSound(sound: Sound)
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMinDistance = 10
 	sound.RollOffMaxDistance = 100
-	-- SoundGroup is left as-is: every grain assigns its bus group before it plays.
+	-- SoundGroup is left as-is: every grain assigns its group before it plays.
 end
 
 local function takeFree(path: string): Sound?
@@ -426,12 +516,17 @@ local function takeFree(path: string): Sound?
 	return nil
 end
 
--- A clean Sound holding `path` (silent, settings reset), or nil when MaxLiveSounds are already in use.
+-- A clean Sound holding `path` (silent, settings reset). When every Sound of the budget is in use, `reclaim` (the
+-- synthesizer's priority stealer) is asked to free one; nil when it cannot (the grain is dropped).
 -- Sounds that last played the same file are preferred, so they are already loaded.
-function VoicePool.acquireSound(path: string): Sound?
-	if soundsInUse >= MAX_LIVE_SOUNDS then
-		log.warnThrottled("sounds", 10, "voice pool exhausted (%d sounds in use); dropping a grain", soundsInUse)
-		return nil
+function VoicePool.acquireSound(path: string, reclaim: (() -> boolean)?): Sound?
+	local attempts = 0
+	while soundsInUse >= budget.liveSounds do
+		attempts += 1
+		if reclaim == nil or attempts > RECLAIM_ATTEMPTS or not reclaim() then
+			log.warnThrottled("sounds", 10, "voice pool exhausted (%d sounds in use); dropping a grain", soundsInUse)
+			return nil
+		end
 	end
 	local sound = takeFree(path)
 	if sound == nil then
@@ -451,7 +546,7 @@ function VoicePool.acquireSound(path: string): Sound?
 	return sound
 end
 
--- Returns a Sound to the pool. Its effects must already have been released. Destroyed Sounds are dropped.
+-- Returns a Sound to the pool. Destroyed Sounds are dropped.
 function VoicePool.releaseSound(sound: Sound)
 	soundsInUse = math.max(0, soundsInUse - 1)
 	local target = freeFolder
@@ -514,6 +609,197 @@ function VoicePool.releaseEffect(kind: SynthPresets.EffectKind, effect: SoundEff
 		return
 	end
 	table.insert(list, effect)
+end
+
+--------------------------------------------------------------------------------
+-- Effect groups (shared layer chains with tails)
+--------------------------------------------------------------------------------
+
+local function retireFx(fx: FxGroup)
+	if fx.retired then
+		return
+	end
+	fx.retired = true
+	if fxGroups[fx.key] == fx then
+		fxGroups[fx.key] = nil
+	end
+	fxGroupCount -= 1
+	reverbsInUse -= fx.reverbs
+	-- A group routed into this one would fall through to the master output once it moves: retire those first.
+	for _, other in table.clone(fxGroups) do
+		if other.parentFx == fx then
+			retireFx(other)
+		end
+	end
+	for _, handle in fx.effects do
+		VoicePool.releaseEffect(handle.kind, handle.effect)
+	end
+	table.clear(fx.effects)
+	local group = fx.group
+	local target = freeFolder
+	if target and #freeGroups < MAX_FREE_GROUPS then
+		local ok = pcall(function()
+			group.Parent = target
+		end)
+		if ok then
+			table.insert(freeGroups, group)
+			return
+		end
+	end
+	pcall(function()
+		group:Destroy()
+	end)
+end
+
+-- Retires the idle group (no users) that has been idle the longest, optionally only among those matching `filter`.
+local function evictIdle(filter: ((FxGroup) -> boolean)?): boolean
+	local oldest: FxGroup? = nil
+	for _, fx in fxGroups do
+		local idleSince = fx.idleSince
+		if fx.users > 0 or idleSince == nil or (filter and not filter(fx)) then
+			continue
+		end
+		local best = oldest
+		if best == nil or idleSince < (best.idleSince or math.huge) then
+			oldest = fx
+		end
+	end
+	if oldest then
+		retireFx(oldest)
+		return true
+	end
+	return false
+end
+
+local function hasReverb(fx: FxGroup): boolean
+	return fx.reverbs > 0
+end
+
+-- Frees every idle group whose tail has fully rung out. Returns how many groups are still alive.
+function VoicePool.sweepFxGroups(now: number?): number
+	local clock = now or os.clock()
+	for _, fx in table.clone(fxGroups) do
+		local idleSince = fx.idleSince
+		if fx.users <= 0 and idleSince ~= nil and clock - idleSince >= fx.tail + TAIL_MARGIN then
+			retireFx(fx)
+		end
+	end
+	return fxGroupCount
+end
+
+-- The shared SoundGroup carrying `chain` for `key` (one preset layer on one bus), routed into `parent`. The first
+-- user builds it; later users share it. Every acquire must be paired with releaseFxGroup. Nil when the group budget
+-- is exhausted by groups that are all in use (the caller then plays the layer through `parent` dry).
+-- `extraTail` lengthens the hold (a space group must outlast the tails of the layer groups feeding it).
+function VoicePool.acquireFxGroup(
+	key: string,
+	parent: SoundGroup,
+	chain: { SynthPresets.Effect },
+	extraTail: number?,
+	parentFx: FxGroup?,
+	now: number?
+): FxGroup?
+	local clock = now or os.clock()
+	VoicePool.sweepFxGroups(clock)
+	local existing = fxGroups[key]
+	if existing then
+		if existing.group.Parent == parent then
+			existing.users += 1
+			existing.idleSince = nil
+			return existing
+		end
+		retireFx(existing) -- its parent moved (the mixer was rebuilt): build a fresh one
+	end
+	if fxGroupCount >= MAX_FX_GROUPS and not evictIdle(nil) then
+		log.warnThrottled("fxgroups", 10, "%d effect groups in use; %s plays without its chain", fxGroupCount, key)
+		return nil
+	end
+
+	local wanted = 0
+	for _, spec in chain do
+		if spec.kind == "Reverb" then
+			wanted += 1
+		end
+	end
+	local allowReverb = true
+	while wanted > 0 and reverbsInUse + wanted > budget.reverbs do
+		if not evictIdle(hasReverb) then
+			allowReverb = false
+			break
+		end
+	end
+
+	local group = table.remove(freeGroups) or Instance.new("SoundGroup")
+	group.Name = key
+	group.Volume = 1
+	local effects: { FxEffect } = {}
+	local used: { SynthPresets.Effect } = {}
+	local count = #chain
+	for index, spec in chain do
+		if spec.kind == "Reverb" and not allowReverb then
+			continue
+		end
+		local effect = VoicePool.acquireEffect(spec.kind)
+		if effect == nil then
+			continue
+		end
+		for prop, value in spec.props do
+			(effect :: any)[prop] = SynthPresets.clampEffectProp(spec.kind, prop, value)
+		end
+		effect.Priority = count - index + 1 -- the first effect in the recipe is applied first
+		effect.Parent = group
+		table.insert(effects, { kind = spec.kind, effect = effect })
+		table.insert(used, spec)
+	end
+	group.Parent = parent
+
+	local reverbs = if allowReverb then wanted else 0
+	local fx: FxGroup = {
+		key = key,
+		group = group,
+		effects = effects,
+		reverbs = reverbs,
+		tail = SynthPresets.chainTail(used) + math.max(extraTail or 0, 0),
+		users = 1,
+		idleSince = nil,
+		parentFx = parentFx,
+		degraded = wanted > 0 and not allowReverb,
+		retired = false,
+	}
+	fxGroups[key] = fx
+	fxGroupCount += 1
+	reverbsInUse += reverbs
+	if fx.degraded then
+		log.debug("reverb budget (%d) spent; %s plays without its reverb", budget.reverbs, key)
+	end
+	return fx
+end
+
+-- Drops one user. The group stays alive (ringing out) for its tail after the last user leaves, then sweep frees it.
+function VoicePool.releaseFxGroup(fx: FxGroup, now: number?)
+	if fx.retired or fx.users <= 0 then
+		return
+	end
+	fx.users -= 1
+	if fx.users == 0 then
+		fx.idleSince = now or os.clock()
+	end
+end
+
+-- Live effect groups (in use or ringing out), how many of those are idle tails, and the Reverbs they hold.
+function VoicePool.fxStats(): (number, number, number)
+	local idle = 0
+	for _, fx in fxGroups do
+		if fx.users <= 0 then
+			idle += 1
+		end
+	end
+	return fxGroupCount, idle, reverbsInUse
+end
+
+-- The live group for a key, if any (diagnostics and specs).
+function VoicePool.fxGroup(key: string): FxGroup?
+	return fxGroups[key]
 end
 
 --------------------------------------------------------------------------------

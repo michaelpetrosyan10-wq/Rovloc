@@ -2,7 +2,9 @@
 -- VentShaftBuilder contracts on synthetic vent networks and on the real layouts: the 3.5 x 3.5 bore is clear
 -- along every duct (of duct parts and, with the shell built, of every colliding part), the galvanized shell closes
 -- the bore everywhere except toward connected ducts and grate openings, VentNode links are symmetric, grate
--- attachments sit in the wall plane facing into their room, and VentShaft floors carry their segment attributes.
+-- attachments sit in the wall plane facing into their room, VentShaft floors carry their segment attributes, and
+-- submerged ducts hold visible, non-colliding water in the lower half of the bore. A duct sunk to a pool's
+-- waterline (through the chase floor, its grates opening over the basin) stays clear once the shell is built.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -161,8 +163,55 @@ local function manifoldSlice(): Layout
 	}
 end
 
+-- Pool slice: a flooded duct sunk to the pool's waterline (its centre 1 stud below the deck, so it runs down
+-- through the chase floor slab) along the north side of a natatorium, with two grates opening over the basin
+-- (whose coping touches the wall), two tees and two dead ends. Every edge is submerged.
+local function poolDuctSlice(): Layout
+	local y = WorldConfig.WaterSurfaceOffset
+	return {
+		id = "Level4_FloodedPool",
+		height = 20,
+		acoustic = "Hall",
+		ambience = "DronePool",
+		entry = "W_Pool",
+		exit = "W_Pool",
+		rooms = {
+			{ id = "W_Store", kind = "Storage", rect = R(0, -20, 60, 20) },
+			{ id = "W_Chase", kind = "Chase", rect = R(0, 0, 60, 5) },
+			{ id = "W_Pool", kind = "Pool", rect = R(0, 5, 60, 40) },
+		},
+		doors = {},
+		basins = {
+			{ id = "W_Basin", room = "W_Pool", rect = R(10, 5, 40, 40), depth = 8, waterLevel = y },
+		},
+		vents = {
+			nodes = {
+				{ id = "jW", x = 5, z = 2.5, y = y },
+				{ id = "j1", x = 20, z = 2.5, y = y },
+				{ id = "j2", x = 40, z = 2.5, y = y },
+				{ id = "jE", x = 55, z = 2.5, y = y },
+				{ id = "gP1", x = 20, z = 5, y = y },
+				{ id = "gP2", x = 40, z = 5, y = y },
+			},
+			edges = {
+				{ a = "jW", b = "j1", submerged = true },
+				{ a = "j1", b = "j2", submerged = true },
+				{ a = "j2", b = "jE", submerged = true },
+				{ a = "j1", b = "gP1", submerged = true },
+				{ a = "j2", b = "gP2", submerged = true },
+			},
+			grates = {
+				{ id = "GP1", node = "gP1", room = "W_Pool", lockable = false, criticalPath = true },
+				{ id = "GP2", node = "gP2", room = "W_Pool", lockable = true, criticalPath = false },
+			},
+		},
+		anchors = {},
+		triggers = {},
+	}
+end
+
 local function fixtures(): { Layout }
-	return { hallwaySlice(), manifoldSlice() }
+	return { hallwaySlice(), manifoldSlice(), poolDuctSlice() }
 end
 
 local function realLayouts(): { Layout }
@@ -216,21 +265,47 @@ local function child(parent: Instance, name: string): Instance
 	return found
 end
 
+local function childPartOf(parent: Instance, name: string): BasePart
+	local found = child(parent, name)
+	assert(found:IsA("BasePart"), name .. " is a part")
+	return found
+end
+
 local function nodeRoot(root: Model): BasePart
 	local found = child(child(root, "Vents"), VentShaftBuilder.RootName)
 	assert(found:IsA("BasePart"), "VentNodeRoot is a part")
 	return found
 end
 
+-- The galvanized metal of a level's vents (ducts and fittings; not the node root or the water in flooded ducts).
 local function ventParts(root: Model): { BasePart }
 	local out: { BasePart } = {}
 	local vents = root:FindFirstChild("Vents")
 	if not vents then
 		return out
 	end
-	for _, d in vents:GetDescendants() do
-		if d:IsA("BasePart") and d.Name ~= VentShaftBuilder.RootName then
-			table.insert(out, d)
+	for _, name in { VentShaftBuilder.DuctsFolder, VentShaftBuilder.FittingsFolder } do
+		local folder = vents:FindFirstChild(name)
+		if folder then
+			for _, d in folder:GetDescendants() do
+				if d:IsA("BasePart") then
+					table.insert(out, d)
+				end
+			end
+		end
+	end
+	return out
+end
+
+local function waterParts(root: Model): { BasePart }
+	local out: { BasePart } = {}
+	local vents = root:FindFirstChild("Vents")
+	local folder = vents and vents:FindFirstChild(VentShaftBuilder.WaterFolder)
+	if folder then
+		for _, d in folder:GetDescendants() do
+			if d:IsA("BasePart") then
+				table.insert(out, d)
+			end
 		end
 	end
 	return out
@@ -850,7 +925,8 @@ return {
 		end
 		local floors = shaftFloors((buildVents(hallwaySlice())))
 		t.eq(floors["j1-jN"][1]:GetAttribute(W.Submerged), true, "the submerged edge is flagged")
-		t.eq(floors["j1-jN"][1]:GetAttribute(W.AdjacentZones), "S_Hall,S_West,S_East", "adjacent rooms")
+		-- j1-jN runs z 45..52 of a chase spanning z 40..66: the hall beyond its south end wall is out of range
+		t.eq(floors["j1-jN"][1]:GetAttribute(W.AdjacentZones), "S_West,S_East", "adjacent rooms")
 	end,
 
 	["duct parts are anchored galvanized Default-group metal without shadows"] = function(t: Expect)
@@ -920,6 +996,128 @@ return {
 			end
 		end
 		t.eq(roots, 1, "one VentNodeRoot")
+	end,
+
+	["submerged ducts hold murky water in the lower half of the bore, and only they do"] = function(t: Expect)
+		local entry = Palette.get("Water")
+		for _, layout in fixtures() do
+			local root = buildVents(layout)
+			local origin = WorldConfig.levelOrigin(layout.id)
+			local water = waterParts(root)
+			local byName: { [string]: BasePart } = {}
+			for _, part in water do
+				byName[part.Name] = part
+				t.truthy(part.Anchored, part.Name .. " anchored")
+				t.falsy(part.CanCollide, part.Name .. " never collides")
+				t.falsy(part.CanQuery, part.Name .. " is never queried")
+				t.falsy(part.CanTouch, part.Name .. " has no touch")
+				t.falsy(part.CastShadow, part.Name .. " casts no shadow")
+				t.eq(part.CollisionGroup, CollisionGroups.NoCollide, part.Name .. " NoCollide")
+				t.near(part.Transparency, 0.25, 1e-6, part.Name .. " murky, not invisible")
+				t.eq(part.Material, entry.material, part.Name .. " material")
+			end
+			local flooded = 0
+			for _, seg in segments(layout) do
+				local part = byName[seg.id .. "_Water"]
+				if seg.edge.submerged ~= true then
+					t.falsy(part, layout.id .. ": dry duct " .. seg.id .. " holds no water")
+					continue
+				end
+				flooded += 1
+				t.truthy(part, layout.id .. ": submerged duct " .. seg.id .. " holds water")
+				if not part then
+					continue
+				end
+				local box = boxOf(part)
+				local y = LayoutSchema.ventNodeY(seg.a)
+				local c = acrossOf(seg.a, seg.axis)
+				t.near(box.y0, origin.Y + y - HALF_BORE, 1e-4, seg.id .. " water stands on the bore floor")
+				t.near(box.y1 - box.y0, VentShaftBuilder.WaterDepth, 1e-4, seg.id .. " water depth")
+				t.near(VentShaftBuilder.WaterDepth, HALF_BORE, 1e-6, "the lower half of the bore")
+				local c0 = if seg.axis == "X" then box.z0 - origin.Z else box.x0 - origin.X
+				local c1 = if seg.axis == "X" then box.z1 - origin.Z else box.x1 - origin.X
+				t.near(c0, c - HALF_BORE, 1e-4, seg.id .. " water fills the bore's width")
+				t.near(c1, c + HALF_BORE, 1e-4, seg.id .. " water fills the bore's width")
+			end
+			t.eq(#water, flooded, layout.id .. ": one water part per submerged duct")
+			-- water never overlaps itself or the metal, and fills every flooded duct end to end
+			local waterBoxes = boxes(water)
+			for i = 1, #waterBoxes do
+				for j = i + 1, #waterBoxes do
+					t.truthy(
+						overlapVolume(waterBoxes[i], waterBoxes[j]) < 1e-6,
+						string.format("%s: %s overlaps %s", layout.id, water[i].Name, water[j].Name)
+					)
+				end
+			end
+			for _, metal in boxes(ventParts(root)) do
+				for i, box in waterBoxes do
+					t.truthy(overlapVolume(metal, box) < 1e-6, layout.id .. ": metal intrudes into " .. water[i].Name)
+				end
+			end
+			local grates = grateNodes(layout)
+			for _, seg in segments(layout) do
+				if seg.edge.submerged ~= true then
+					continue
+				end
+				local ua, ub = alongOf(seg.a, seg.axis), alongOf(seg.b, seg.axis)
+				local c = acrossOf(seg.a, seg.axis)
+				local y = LayoutSchema.ventNodeY(seg.a) - HALF_BORE / 2
+				local steps = math.max(1, math.ceil(math.abs(ub - ua) / 0.25))
+				for i = 0, steps do
+					local u = ua + (ub - ua) * i / steps
+					local inWall = (grates[seg.a.id] ~= nil and math.abs(u - ua) <= WALL_HALF + 1e-3)
+						or (grates[seg.b.id] ~= nil and math.abs(u - ub) <= WALL_HALF + 1e-3)
+					if inWall then
+						continue
+					end
+					local x = origin.X + (if seg.axis == "X" then u else c)
+					local z = origin.Z + (if seg.axis == "X" then c else u)
+					t.truthy(
+						anyTouches(waterBoxes, x, origin.Y + y, z),
+						string.format("%s %s: dry at (%.2f, %.2f)", layout.id, seg.id, x - origin.X, z - origin.Z)
+					)
+				end
+			end
+		end
+	end,
+
+	["a flooded duct at the waterline runs through the slab and opens over the pool"] = function(t: Expect)
+		local layout = poolDuctSlice()
+		local root = buildWithShell(layout)
+		local origin = WorldConfig.levelOrigin(layout.id)
+		local y = WorldConfig.WaterSurfaceOffset
+		local solid: { Box } = boxes(collidingParts(root))
+		local function solidAt(x: number, yy: number, z: number): boolean
+			return anyInside(solid, origin.X + x, origin.Y + yy, origin.Z + z)
+		end
+		-- the chase floor is carved around the duct, which dips through it
+		t.falsy(solidAt(30, -1.9, 2.5), "no slab in the bore where the duct dips through the floor")
+		t.truthy(solidAt(30, y - HALF_BORE - SHELL / 2, 2.5), "the duct floor closes the bore from below")
+		t.truthy(solidAt(30, -1, 0.3), "the slab still stands beside the duct")
+		-- the coping is open under each grate down to the bore floor, and still solid either side of it
+		for _, x in { 20, 40 } do
+			t.falsy(solidAt(x, y, 5.6), string.format("coping open at the grate at x = %d", x))
+			t.falsy(solidAt(x, y - HALF_BORE + 0.1, 5.6), "coping open down to the bore floor")
+			t.truthy(solidAt(x, y - HALF_BORE - 0.2, 5.6), "coping solid under the opening")
+			t.truthy(solidAt(x + HALF_BORE + 0.2, y, 5.6), "coping solid beside the opening")
+		end
+		-- the duct's water runs through the wall and the coping, up to the pool's own surface
+		local water = boxes(waterParts(root))
+		local pool = childPartOf(child(root, "Shell"), "W_Basin_Surface")
+		local poolBox = boxOf(pool)
+		t.near(poolBox.y1 - origin.Y, y, 1e-4, "pool surface at the waterline")
+		t.truthy(anyTouches(water, origin.X + 20, origin.Y + y - 0.5, origin.Z + 5.9), "water through the coping")
+		local reach = -math.huge
+		for _, box in water do
+			if box.x0 < origin.X + 20 and box.x1 > origin.X + 20 then
+				reach = math.max(reach, box.z1 - origin.Z)
+			end
+		end
+		t.near(reach, 5 + Geometry.BasinWall, 1e-4, "duct water stops where the pool surface starts")
+		for _, box in water do
+			t.truthy(overlapVolume(box, poolBox) < 1e-6, "duct water never overlaps the pool surface")
+		end
 	end,
 
 	["a layout without vents builds nothing"] = function(t: Expect)

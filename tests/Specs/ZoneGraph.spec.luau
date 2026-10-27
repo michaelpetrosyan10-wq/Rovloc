@@ -114,6 +114,7 @@ local function adjacencyLayout(): Layout
 			{ id = "C", kind = "Chase", rect = R(10, 10, 5, 20) },
 			{ id = "R_Gap", kind = "Office", rect = R(15.8, 12, 5, 6) }, -- 0.8 studs east of the chase
 			{ id = "R_Far", kind = "Office", rect = R(16.5, 20, 5, 5) }, -- 1.5 studs east: too far
+			{ id = "R_EastLow", kind = "Office", rect = R(15, 26, 5, 4) }, -- shares the south end of C's east wall
 			{ id = "R_Corner", kind = "Storage", rect = R(15, 30, 5, 5) }, -- meets C only at a corner
 			{ id = "R_North", kind = "Corridor", rect = R(8, 5, 10, 5) }, -- shares the chase's north wall
 			{ id = "C2", kind = "Chase", rect = R(10, 30, 5, 10) }, -- a second chase continuing south
@@ -386,7 +387,9 @@ return {
 		for _, node in vents.nodes do
 			byId[node.id] = node
 		end
-		sameList(t, ZoneGraph.adjacentZones(hall, byId.j1, byId.jS), { "S_Hall", "S_West", "S_East" }, "hallway chase")
+		-- j1-jS runs z 52..55.5 in a chase spanning z 40..66: S_Hall lies beyond the chase's south end wall, 10 studs
+		-- past the duct, so only the classrooms either side of the chase hear it.
+		sameList(t, ZoneGraph.adjacentZones(hall, byId.j1, byId.jS), { "S_West", "S_East" }, "hallway chase")
 		sameList(t, ZoneGraph.adjacentZones(hall, byId.j2, byId.gH), { "S_Hall", "S_West", "S_East" }, "grate stub")
 
 		local layout = adjacencyLayout()
@@ -396,15 +399,40 @@ return {
 		sameList(
 			t,
 			ZoneGraph.adjacentZones(layout, node("a", 12.5, 12), node("b", 12.5, 28)),
-			{ "R_Touch", "R_Gap", "R_North" },
+			{ "R_Touch", "R_Gap", "R_EastLow", "R_North" },
 			"touching or within 1 stud along a wall; never corners, far rooms or chases"
 		)
 		sameList(
 			t,
 			ZoneGraph.adjacentZones(layout, node("a", 12.5, 20), node("b", 12.5, 35)),
-			{ "R_Touch", "R_Gap", "R_Corner", "R_North", "R_South" },
-			"a duct through two chases collects the rooms of both"
+			{ "R_Touch", "R_Gap", "R_EastLow", "R_Corner" },
+			"a duct through two chases collects the rooms of both, but not end rooms it stops short of"
 		)
+		sameList(
+			t,
+			ZoneGraph.adjacentZones(layout, node("a", 12.5, 12), node("b", 12.5, 38)),
+			{ "R_Touch", "R_Gap", "R_EastLow", "R_Corner", "R_North", "R_South" },
+			"a duct reaching both end walls hears the rooms beyond them"
+		)
+		-- A short stub at one end of a long chase: rooms beside the chase's far stretch are not adjacent to it.
+		sameList(
+			t,
+			ZoneGraph.adjacentZones(layout, node("a", 12.5, 12), node("b", 12.5, 16)),
+			{ "R_Touch", "R_Gap", "R_North" },
+			"a stub only hears the rooms along its own stretch of the chase"
+		)
+		sameList(
+			t,
+			ZoneGraph.adjacentZones(layout, node("a", 12.5, 36), node("b", 12.5, 38)),
+			{ "R_Corner", "R_South" },
+			"a stub in the second chase"
+		)
+		-- The span reaches the duct's outer half-width plus AdjacentRange past each node, and no further.
+		local reach = WorldConfig.VentBore / 2 + WorldConfig.VentShell + ZoneGraph.AdjacentRange
+		local justIn = ZoneGraph.adjacentZones(layout, node("a", 12.5, 10 + reach - 0.05), node("b", 12.5, 16))
+		local justOut = ZoneGraph.adjacentZones(layout, node("a", 12.5, 10 + reach + 0.05), node("b", 12.5, 16))
+		t.truthy(table.find(justIn, "R_North") ~= nil, "end room within range of the capped end")
+		t.falsy(table.find(justOut, "R_North") ~= nil, "end room out of range of the capped end")
 		sameList(
 			t,
 			ZoneGraph.adjacentZones(layout, node("a", 50, 50), node("b", 60, 50)),
@@ -414,6 +442,46 @@ return {
 		local first = ZoneGraph.adjacentZones(layout, node("a", 12.5, 20), node("b", 12.5, 35))
 		local reversed = ZoneGraph.adjacentZones(layout, node("b", 12.5, 35), node("a", 12.5, 20))
 		sameList(t, reversed, first, "direction does not matter")
+	end,
+
+	["adjacent zones on the real layouts stay near their duct segment"] = function(t: Expect)
+		local reach = WorldConfig.VentBore / 2 + WorldConfig.VentShell + ZoneGraph.AdjacentRange
+		for _, layout in realLayouts() do
+			local vents = layout.vents
+			if not vents then
+				continue
+			end
+			local rooms = LayoutSchema.indexRooms(layout)
+			local nodes: { [string]: LayoutSchema.VentNodeSpec } = {}
+			for _, n in vents.nodes do
+				nodes[n.id] = n
+			end
+			for _, edge in vents.edges do
+				local a, b = nodes[edge.a], nodes[edge.b]
+				if not a or not b then
+					continue
+				end
+				local x0, x1 = math.min(a.x, b.x), math.max(a.x, b.x)
+				local z0, z1 = math.min(a.z, b.z), math.max(a.z, b.z)
+				for _, id in ZoneGraph.adjacentZones(layout, a, b) do
+					local r = rooms[id].rect
+					local gx = math.max(0, x0 - (r.x + r.w), r.x - x1)
+					local gz = math.max(0, z0 - (r.z + r.d), r.z - z1)
+					-- across the chase a room sits at most one chase width away; along it, within reach
+					t.truthy(
+						math.min(gx, gz) <= reach + 1e-3 and math.max(gx, gz) <= 8,
+						string.format(
+							"%s duct %s-%s lists %s %.1f studs away",
+							layout.id,
+							edge.a,
+							edge.b,
+							id,
+							math.max(gx, gz)
+						)
+					)
+				end
+			end
+		end
 	end,
 
 	["build is deterministic"] = function(t: Expect)

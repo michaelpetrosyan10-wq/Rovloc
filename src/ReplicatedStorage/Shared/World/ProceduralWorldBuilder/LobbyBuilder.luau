@@ -610,7 +610,7 @@ local function buildTerminals(layout: Layout, props: Instance, origin: Vector3):
 		glow.Range = 7
 		glow.Brightness = 0.5
 		glow.Color = Color3.fromRGB(90, 255, 140)
-		glow.Shadows = false
+		glow.Shadows = true -- like every fixture: an unshadowed light shines through the walls behind it
 		glow.Parent = screen
 		count += 3
 		model.Parent = props

@@ -13,13 +13,19 @@
 --   * Water noise feeds the source player's splash meter (NoiseConfig.SplashMeter), which decays over time and fires
 --     SplashThresholdCrossed once each time it climbs past the grab threshold.
 -- Locomotion. Start() runs LocomotionNoiseSampler at GameConfig.ServerTickHz over every character during a run:
---   server-observed root speed and the server-confirmed MoveState decide each footstep pulse.
+--   server-observed root speed and the server-confirmed MoveState decide each footstep pulse. Server moves are
+--   announced with ExpectTeleport(player) (CharacterService.Spawn / Teleport do it for every caller); any other
+--   step longer than the sampler's TeleportStep is heard at the speed it implies and fires SuspiciousMovement
+--   (player, step), which P3 MovementAuthority consumes.
+-- Floor debris. Entering a FloorDebris trigger volume during a run emits the 130-stud FloorDebris noise and a
+--   GlassCrunch cue (AudioService) where the player stands, with a per-player, per-volume cooldown (DebrisNoise).
 -- Director. BeginRun(ctx) asks RunDirector for the run's SpawnPlan (bear traps, flasks, batteries, locked grates);
 --   GetPlan() hands it to WorldService, so this service's BeginRun must run before WorldService's (ServerMain order).
 --
 -- The current level is read from the ReplicatedStorage CurrentLevel attribute, which LevelDirector alone writes.
--- Reading it there (instead of requiring LevelDirector) keeps the require graph acyclic: WorldService and
--- DevToolsService require this module, and LevelDirector stays free to require them.
+-- Reading it there (instead of requiring LevelDirector) keeps the require graph acyclic: WorldService,
+-- CharacterService and DevToolsService require this module, and LevelDirector stays free to require them. This
+-- module requires only ZoneService and AudioService, which require no other service.
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -31,6 +37,7 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local Instances = require(ReplicatedStorage.Shared.Instances)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -41,12 +48,17 @@ local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
 local ZoneGraph = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph)
 
+local AudioService = require(script.Parent.AudioService)
+local ZoneService = require(script.Parent.ZoneService)
+
+local DebrisNoise = require(script.DebrisNoise)
 local LocomotionNoiseSampler = require(script.LocomotionNoiseSampler)
 local RunDirector = require(script.RunDirector)
 
 local log = Log.new("Noise")
 
 export type EmitOptions = LocomotionNoiseSampler.EmitOptions
+export type SuspiciousStep = LocomotionNoiseSampler.SuspiciousStep
 
 type VentPoint = { nodeId: string, position: Vector3 }
 
@@ -64,9 +76,13 @@ NoiseAndDirectorService.RingCapacity = RING_CAPACITY
 
 local noiseEmitted: Signal.Signal<Types.NoiseEvent> = Signal.new()
 local splashThresholdCrossed: Signal.Signal<Player> = Signal.new()
+local suspiciousMovement: Signal.Signal<Player, SuspiciousStep> = Signal.new()
 
 NoiseAndDirectorService.NoiseEmitted = noiseEmitted
 NoiseAndDirectorService.SplashThresholdCrossed = splashThresholdCrossed
+-- A character covered more than the sampler's TeleportStep in one sample with no server teleport armed. The step
+-- was already heard as movement; P3 MovementAuthority turns these into strikes / rubber-banding.
+NoiseAndDirectorService.SuspiciousMovement = suspiciousMovement
 
 local serviceTrove = Trove.new()
 
@@ -81,6 +97,9 @@ local ringCount = 0
 -- Last broadcast pulse per player per kind (pacing), and splash meters per player.
 local lastPulses: { [Player]: { [string]: Types.NoiseEvent } } = {}
 local splashMeters: { [Player]: LocomotionNoiseSampler.SplashMeter } = {}
+
+-- FloorDebris crunches (created below, once emit exists).
+local debris: DebrisNoise.Debris
 
 -- VentNode positions per level, rebuilt on demand whenever VentNodes come or go.
 local ventIndex: { [string]: { VentPoint } }? = nil
@@ -179,12 +198,14 @@ local function clearNoiseState()
 	table.clear(lastPulses)
 	table.clear(splashMeters)
 	LocomotionNoiseSampler.reset()
+	debris.reset()
 end
 
 local function forgetPlayer(player: Player)
 	lastPulses[player] = nil
 	splashMeters[player] = nil
 	LocomotionNoiseSampler.forget(player)
+	debris.forget(player)
 end
 
 local function isTracked(player: Player): boolean
@@ -333,8 +354,14 @@ function NoiseAndDirectorService.GetSplashMeter(player: Player): number
 	return LocomotionNoiseSampler.splashValue(meter, Workspace:GetServerTimeNow())
 end
 
--- Restarts the sampler's speed window for `player`. Call after moving a character on purpose (vent exit,
--- scripted teleport) so the jump is not heard as running.
+-- Announces a server move of `player`'s character: a long step in the next second is not heard (and not reported
+-- as suspicious). CharacterService.Spawn / Teleport call this for every caller; code that moves a character some
+-- other way (a P4 vent exit that pivots the rig itself) must call it too, right before the move.
+function NoiseAndDirectorService.ExpectTeleport(player: Player)
+	LocomotionNoiseSampler.expectTeleport(player)
+end
+
+-- ExpectTeleport plus a fresh speed window (the character's motion so far is forgotten).
 function NoiseAndDirectorService.ResetMotion(player: Player)
 	LocomotionNoiseSampler.restartMotion(player)
 end
@@ -356,12 +383,41 @@ local function emitFromSampler(position: Vector3, kind: Enums.NoiseKind, options
 	emit(position, kind, options)
 end
 
+local function reportFromSampler(player: Player, step: SuspiciousStep)
+	suspiciousMovement:Fire(player, step)
+end
+
+-- Where a player crunches debris: their living character's root.
+local function debrisPosition(player: Player, _volume: BasePart): Vector3?
+	local root = Instances.characterRoot(player)
+	local humanoid = Instances.characterHumanoid(player)
+	if not root or not humanoid or humanoid.Health <= 0 then
+		return nil
+	end
+	return root.Position
+end
+
+debris = DebrisNoise.new({
+	inRun = inRun,
+	now = function(): number
+		return Workspace:GetServerTimeNow()
+	end,
+	positionOf = debrisPosition,
+	emit = emitFromSampler,
+	playCue = function(preset: string, position: Vector3)
+		AudioService.PlayAt(preset, position)
+	end,
+})
+
 function NoiseAndDirectorService.Init()
 	serviceTrove:Connect(Players.PlayerRemoving, function(player: Player)
 		forgetPlayer(player)
 	end)
 	serviceTrove:Connect(CollectionService:GetInstanceAddedSignal(Tags.VentNode), invalidateVentIndex)
 	serviceTrove:Connect(CollectionService:GetInstanceRemovedSignal(Tags.VentNode), invalidateVentIndex)
+	serviceTrove:Add(ZoneService.VolumeEntered:Connect(function(player: Player, volume: BasePart, tag: string)
+		debris.onVolumeEntered(player, volume, tag)
+	end))
 end
 
 function NoiseAndDirectorService.Start()
@@ -385,7 +441,7 @@ function NoiseAndDirectorService.Start()
 		sampling = true
 		xpcall(LocomotionNoiseSampler.step, function(err: any)
 			log.warnThrottled("step", 10, "locomotion sampler step failed: %s", tostring(err))
-		end, elapsed, emitFromSampler)
+		end, elapsed, emitFromSampler, reportFromSampler)
 	end)
 end
 

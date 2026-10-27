@@ -1,7 +1,10 @@
 --!strict
 -- ProceduralWorldBuilder geometry contracts, checked on small synthetic layouts (and on the real layouts when
 -- they are present): openings stay clear, wall pieces tile every wall exactly once, gameplay volumes and anchors
--- carry the right tags and attributes, stairs are climbable, and stacked stair segments never overlap.
+-- carry the right tags and attributes, stairs are climbable, and stacked stair segments never overlap. Visual
+-- contracts too: fixtures cast shadows (so light stays in its room), the facade shows one slab-edge material
+-- between storeys and its own skin at every corner, low platforms never z-fight the pool coping, and open
+-- PoolWater volumes are visible. The exterior is walled in and the lighting rig never writes plugin-only props.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -138,6 +141,9 @@ local function hallwaySlice(): Layout
 			broken = true,
 		},
 	}
+	local storeLights: { LayoutSchema.Light } = {
+		{ id = "T_L4", kind = "Bulb", pos = Vector3.new(220, 8, 99), brightness = 0.6, range = 12, shadows = false },
+	}
 	local windows: { LayoutSchema.Window } = {
 		{ room = "T_Class", side = "W", at = 48, width = 6, height = 4, sill = 4, boarded = true },
 		{ room = "T_Store", side = "S", at = 210, width = 5, height = 3, sill = 5, boarded = false },
@@ -171,7 +177,7 @@ local function hallwaySlice(): Layout
 				rect = R(228, 66, 12, 28),
 				lights = airlockLights,
 			},
-			{ id = "T_Store", kind = "Storage", rect = R(200, 94, 40, 10) },
+			{ id = "T_Store", kind = "Storage", rect = R(200, 94, 40, 10), lights = storeLights },
 			{ id = "T_Office", kind = "Office", rect = R(228, 36, 12, 30) },
 		},
 		doors = {
@@ -215,6 +221,8 @@ local function hallwaySlice(): Layout
 		triggers = {
 			{ id = "T_Scare", kind = "ScareStep", room = "T_Hall", rect = R(204, 70, 4, 4), height = 6 },
 			{ id = "T_Check", kind = "Checkpoint", room = "L1_AirlockEast", rect = R(229, 67, 10, 26), height = 10 },
+			-- water standing in the chase is the duct's business: no surface from the shell
+			{ id = "T_Flood", kind = "PoolWater", room = "T_Chase", rect = R(200, 61, 28, 5), height = 2 },
 		},
 		windows = windows,
 	}
@@ -234,7 +242,11 @@ local function poolSlice(): Layout
 		rooms = { { id = "P_Hall", kind = "Pool", rect = R(0, 0, 40, 40) } },
 		doors = {},
 		anchors = {},
-		triggers = {},
+		triggers = {
+			-- a puddle on the deck (gets a surface) and a volume over the basin (whose own surface covers it)
+			{ id = "P_Puddle", kind = "PoolWater", room = "P_Hall", rect = R(36, 10, 3, 6), height = 0.3 },
+			{ id = "P_Deep", kind = "PoolWater", room = "P_Hall", rect = R(10, 10, 5, 5), y = -5, height = 4 },
+		},
 		basins = { { id = "P_Basin", room = "P_Hall", rect = R(5, 5, 30, 30), depth = 10, waterLevel = -1 } },
 		platforms = {
 			{
@@ -242,6 +254,24 @@ local function poolSlice(): Layout
 				room = "P_Hall",
 				rect = R(10, 18, 20, 4),
 				top = -0.5,
+				thickness = 1,
+				material = "Concrete",
+			},
+			-- a walkway fragment laid from the basin edge, its top flush with the deck
+			{
+				id = "P_Bridge",
+				room = "P_Hall",
+				rect = R(5, 24, 8, 4),
+				top = 0,
+				thickness = 1,
+				material = "Concrete",
+			},
+			-- a raised curb on the deck (above it, so it is left alone)
+			{
+				id = "P_Curb",
+				room = "P_Hall",
+				rect = R(36, 30, 2, 4),
+				top = 0.5,
 				thickness = 1,
 				material = "Concrete",
 			},
@@ -701,8 +731,180 @@ return {
 		t.near(surface.Transparency, 0.25, 1e-3)
 		local _, walkTop = aabb(childPart(shell, "Platform_P_Walk"))
 		t.near(walkTop.Y, origin.Y - 0.5, 1e-3, "platform top")
+		-- At deck level a platform only shows over open water: clipped off the coping and the deck.
+		local bridgeLo, bridgeHi = aabb(childPart(shell, "Platform_P_Bridge"))
+		t.near(bridgeLo.X, origin.X + 6, 1e-3, "flush platform starts at the coping's inner face")
+		t.near(bridgeHi.X, origin.X + 13, 1e-3, "and keeps its far end")
+		t.near(bridgeHi.Y, origin.Y, 1e-3, "top flush with the deck")
+		for _, part in parts(shell) do
+			if part.Name == "Platform_P_Bridge" or part.Transparency > 0 then
+				continue
+			end
+			local lo, hi = aabb(part)
+			if math.abs(hi.Y - bridgeHi.Y) < 1e-3 then
+				local dx = math.min(hi.X, bridgeHi.X) - math.max(lo.X, bridgeLo.X)
+				local dz = math.min(hi.Z, bridgeHi.Z) - math.max(lo.Z, bridgeLo.Z)
+				t.truthy(dx <= 1e-3 or dz <= 1e-3, "platform top z-fights " .. part.Name)
+			end
+		end
+		local curbLo, curbHi = aabb(childPart(shell, "Platform_P_Curb"))
+		t.near(curbHi.Y, origin.Y + 0.5, 1e-3, "raised curb untouched")
+		t.near(curbHi.X - curbLo.X, 2, 1e-3, "raised curb keeps its size")
 		t.eq(childPart(shell, "Pillar_1").CollisionGroup, "Default", "pillar core blocks")
 		t.eq(childPart(shell, "Pillar_1_Trim1").CollisionGroup, CollisionGroups.MonsterPassthrough)
+		root:Destroy()
+	end,
+
+	["open PoolWater volumes get a murky surface; basins and chases do not get a second one"] = function(t: Expect)
+		local pool = poolSlice()
+		local root = buildSlice(pool)
+		local shell = child(root, "Shell")
+		local origin = WorldConfig.levelOrigin(pool.id)
+		local puddle = childPart(shell, "P_Puddle_Surface")
+		local lo, hi = aabb(puddle)
+		t.near(hi.Y, origin.Y + 0.3, 1e-3, "surface at the volume's top")
+		t.near(hi.Y - lo.Y, 0.2, 1e-3, "a thin surface")
+		t.truthy(lo.X >= origin.X + 36 - 1e-3 and hi.X <= origin.X + 39 + 1e-3, "over the volume")
+		t.falsy(puddle.CanCollide, "never collides")
+		t.falsy(puddle.CanQuery, "never queried")
+		t.falsy(puddle.CastShadow, "no shadow")
+		t.eq(puddle.CollisionGroup, CollisionGroups.NoCollide)
+		t.near(puddle.Transparency, 0.25, 1e-3, "visible murky water")
+		t.eq(puddle.Material, Palette.get("Water").material)
+		t.falsy(shell:FindFirstChild("P_Deep_Surface"), "a volume inside the basin adds no second surface")
+		t.truthy(childPart(child(root, "Triggers"), "P_Puddle"):HasTag(Tags.PoolWater), "the volume itself")
+		root:Destroy()
+
+		local hall = hallwaySlice()
+		local hallRoot = buildSlice(hall)
+		t.falsy(child(hallRoot, "Shell"):FindFirstChild("T_Flood_Surface"), "water in a chase is the duct's")
+		t.truthy(childPart(child(hallRoot, "Triggers"), "T_Flood"):HasTag(Tags.PoolWater))
+		hallRoot:Destroy()
+	end,
+
+	["floors stay in their rooms; one slab-edge material closes the facade between storeys"] = function(t: Expect)
+		local layout = hallwaySlice()
+		local root = buildSlice(layout)
+		local shell = child(root, "Shell")
+		local origin = WorldConfig.levelOrigin(layout.id)
+		local options = SchoolShellBuilder.levelOptions(layout.id)
+		t.eq(options.slabEdgeKey, "SlabEdge", "above grade the band is the facade slab edge")
+		t.eq(SchoolShellBuilder.levelOptions("Level0_Basement").slabEdgeKey, "ConcreteDark", "below grade")
+		local edgeEntry = Palette.get("SlabEdge")
+		local rooms = LayoutSchema.indexRooms(layout)
+		local slabParts: { BasePart } = {}
+		for _, part in parts(shell) do
+			local name = part.Name
+			if string.sub(name, 1, 6) == "Floor_" then
+				table.insert(slabParts, part)
+				local roomId = string.match(name, "^Floor_(.+)_%d+$")
+				local room = roomId and rooms[roomId]
+				assert(room, name .. " names its room")
+				local lo, hi = aabb(part)
+				local r = room.rect
+				t.truthy(
+					lo.X >= origin.X + r.x - 1e-3
+						and hi.X <= origin.X + r.x + r.w + 1e-3
+						and lo.Z >= origin.Z + r.z - 1e-3
+						and hi.Z <= origin.Z + r.z + r.d + 1e-3,
+					name .. " stays inside its room"
+				)
+			elseif string.sub(name, 1, 9) == "SlabEdge_" then
+				table.insert(slabParts, part)
+				t.eq(part.Material, edgeEntry.material, name .. " material")
+				t.eq(part.Color, edgeEntry.color, name .. " colour")
+			end
+		end
+		-- The floors and slab edges tile the slab exactly once, out to the outer face of every footprint wall.
+		local half = WorldConfig.ExteriorWallThickness / 2
+		local x = 200 - half + 0.2
+		local checked = 0
+		while x < 240 + half - 0.1 do
+			local z = 36 - half + 0.2
+			while z < 104 + half - 0.1 do
+				local point = origin + Vector3.new(x, -1, z)
+				local hits = 0
+				for _, part in slabParts do
+					if contains(part, point) then
+						hits += 1
+					end
+				end
+				t.eq(hits, 1, string.format("slab at (%.1f, %.1f)", x, z))
+				checked += 1
+				z += 0.9
+			end
+			x += 0.9
+		end
+		t.truthy(checked > 1000, "sampled the slab")
+		-- Every point of the band on the facade is slab edge, whatever room lies behind it.
+		local samples: { Vector3 } = {}
+		for u = 200.3, 239.7, 0.7 do
+			table.insert(samples, Vector3.new(u, -1, 36 - half + 0.05))
+			table.insert(samples, Vector3.new(u, -1, 104 + half - 0.05))
+		end
+		for v = 36.3, 103.7, 0.7 do
+			table.insert(samples, Vector3.new(200 - half + 0.05, -1, v))
+			table.insert(samples, Vector3.new(240 + half - 0.05, -1, v))
+		end
+		for _, sample in samples do
+			local found = false
+			for _, part in slabParts do
+				if contains(part, origin + sample) then
+					found = true
+					t.eq(
+						part.Material,
+						edgeEntry.material,
+						string.format("facade band at %s is slab edge", tostring(sample))
+					)
+				end
+			end
+			t.truthy(found, string.format("facade band closed at %s", tostring(sample)))
+		end
+		root:Destroy()
+	end,
+
+	["building corners show the facade skin on both faces"] = function(t: Expect)
+		local layout = hallwaySlice()
+		local root = buildSlice(layout)
+		local shell = child(root, "Shell")
+		local origin = WorldConfig.levelOrigin(layout.id)
+		local facade = Palette.get(SchoolShellBuilder.levelOptions(layout.id).facadeKey or "Brick")
+		local half = WorldConfig.ExteriorWallThickness / 2
+		local skin = 0.05 -- just inside the outer face
+		-- (corner x, corner z, outward x sign, outward z sign)
+		local corners: { { number } } =
+			{ { 200, 36, -1, -1 }, { 240, 36, 1, -1 }, { 200, 104, -1, 1 }, { 240, 104, 1, 1 } }
+		local walls = parts(shell, function(part: BasePart): boolean
+			return string.sub(part.Name, 1, 4) == "Wall"
+		end)
+		for _, corner in corners do
+			local cx, cz, sx, sz = corner[1], corner[2], corner[3], corner[4]
+			for _, y in { 0.5, 5, 13 } do
+				-- offsets across the corner square that never land on a seam between two pieces
+				for _, step in { -0.68, -0.43, -0.17, 0.11, 0.37, 0.63 } do
+					-- the X facade (constant x) across the corner square, then the Z facade
+					local points = {
+						Vector3.new(cx + sx * (half - skin), y, cz + step),
+						Vector3.new(cx + step, y, cz + sz * (half - skin)),
+					}
+					for _, point in points do
+						local hit = false
+						for _, wall in walls do
+							if contains(wall, origin + point) then
+								hit = true
+								t.eq(
+									wall.Material,
+									facade.material,
+									string.format("%s at %s shows on the facade", wall.Name, tostring(point))
+								)
+								t.eq(wall.Color, facade.color, wall.Name .. " colour on the facade")
+							end
+						end
+						t.truthy(hit, string.format("corner closed at %s", tostring(point)))
+					end
+				end
+			end
+		end
 		root:Destroy()
 	end,
 
@@ -768,7 +970,7 @@ return {
 		local surface = fluorescent:FindFirstChildOfClass("SurfaceLight")
 		assert(surface, "fluorescent has a SurfaceLight")
 		t.eq(surface.Face, Enum.NormalId.Bottom)
-		t.falsy(surface.Shadows)
+		t.truthy(surface.Shadows, "fixtures cast shadows by default (walls stop their light)")
 		local origin = WorldConfig.levelOrigin(layout.id)
 		local _, fixtureTop = aabb(fluorescent)
 		t.truthy(fixtureTop.Y <= origin.Y + 14 - SchoolShellBuilder.CeilingThickness + 1e-3, "under the ceiling")
@@ -779,9 +981,19 @@ return {
 		t.truthy(glow:FindFirstChildOfClass("PointLight") ~= nil, "and a pale PointLight")
 		t.truthy(spot.Range <= 60, "range clamped to 60")
 
+		for _, light in glow:GetChildren() do
+			if light:IsA("Light") then
+				t.truthy(light.Shadows, "classroom glow " .. light.Name .. " is shadowed")
+			end
+		end
+		local optedOut = childPart(lights, "T_L4"):FindFirstChildOfClass("PointLight")
+		assert(optedOut, "bulb has a PointLight")
+		t.falsy(optedOut.Shadows, "a layout can opt a fixture out of shadows")
+
 		local broken = childPart(lights, "T_L3")
 		local point = broken:FindFirstChildOfClass("PointLight")
 		assert(point, "emergency light has a PointLight")
+		t.truthy(point.Shadows, "broken fixtures stay shadowed for when an override revives them")
 		t.falsy(point.Enabled, "broken light disabled")
 		t.eq(point.Brightness, 0)
 		t.eq(broken:GetAttribute(W.BaseBrightness), 0)
@@ -866,6 +1078,23 @@ return {
 				t.truthy(flush, string.format("%s flight %d arrives on a landing", spec.id, k))
 			end
 			t.truthy(#child(model, "Lights"):GetChildren() > 0, "emergency lighting")
+			-- No fixture on the building-side wall (only that wall and the airlock's wall would stand between it
+			-- and the airlock room); every one casts shadows.
+			local wallFace = edge + dir * (half + 1)
+			for _, fixture in child(model, "Lights"):GetChildren() do
+				if not fixture:IsA("BasePart") then
+					continue
+				end
+				t.truthy(
+					(fixture.CFrame.Position.X - wallFace) * dir >= 1.5,
+					string.format("%s %s sits off the building-side wall", spec.id, fixture.Name)
+				)
+				for _, light in fixture:GetChildren() do
+					if light:IsA("Light") then
+						t.truthy(light.Shadows, fixture.Name .. " casts shadows")
+					end
+				end
+			end
 			local zone = childPart(child(model, "Zones"), spec.id)
 			t.eq(zone:GetAttribute(W.AcousticPreset), "Stairwell")
 			t.eq(zone:GetAttribute(W.LevelId), spec.from)
@@ -1001,6 +1230,40 @@ return {
 		if field and field:IsA("BasePart") then
 			t.truthy(field.CFrame.Position.X < 0, "landing field west of the school")
 		end
+		-- Invisible walls around the slab edge keep everyone on the ground.
+		local ext = SchoolShellBuilder.Exterior
+		local lo, hi = Vector3.one * math.huge, -Vector3.one * math.huge
+		for _, side in { "N", "S", "W", "E" } do
+			local wall = childPart(exterior, "Boundary_" .. side)
+			t.eq(wall.Transparency, 1, wall.Name .. " invisible")
+			t.truthy(wall.CanCollide, wall.Name .. " collides")
+			t.falsy(wall.CanQuery, wall.Name .. " never queried (cameras, sight lines, flasks)")
+			t.falsy(wall.CanTouch, wall.Name .. " no touch")
+			t.falsy(wall.CastShadow, wall.Name .. " no shadow")
+			t.eq(wall.CollisionGroup, CollisionGroups.Default, wall.Name .. " Default group")
+			local a, b = aabb(wall)
+			t.truthy(b.Y >= WorldConfig.GroundY + 40 - 1e-3, wall.Name .. " tall enough")
+			t.truthy(a.Y <= WorldConfig.GroundY - ext.groundThickness + 1e-3, wall.Name .. " reaches the slab")
+			lo, hi = lo:Min(a), hi:Max(b)
+		end
+		t.truthy(lo.X <= ext.minX and hi.X >= ext.maxX and lo.Z <= ext.minZ and hi.Z >= ext.maxZ, "ring encloses")
+		-- every edge of the ground is closed: a point just past each edge is inside a boundary wall
+		local edges: { Vector3 } = {
+			Vector3.new(ext.minX - 0.5, WorldConfig.GroundY + 3, (ext.minZ + ext.maxZ) / 2),
+			Vector3.new(ext.maxX + 0.5, WorldConfig.GroundY + 3, (ext.minZ + ext.maxZ) / 2),
+			Vector3.new((ext.minX + ext.maxX) / 2, WorldConfig.GroundY + 3, ext.minZ - 0.5),
+			Vector3.new((ext.minX + ext.maxX) / 2, WorldConfig.GroundY + 3, ext.maxZ + 0.5),
+			Vector3.new(ext.minX - 0.5, WorldConfig.GroundY + 3, ext.minZ - 0.5),
+		}
+		for _, point in edges do
+			local closed = false
+			for _, side in { "N", "S", "W", "E" } do
+				if contains(childPart(exterior, "Boundary_" .. side), point) then
+					closed = true
+				end
+			end
+			t.truthy(closed, "boundary closed at " .. tostring(point))
+		end
 		exterior:Destroy()
 	end,
 
@@ -1017,6 +1280,25 @@ return {
 		t.truthy(Lighting:FindFirstChildOfClass("BloomEffect") ~= nil)
 		t.eq(Lighting.ClockTime, LightingRig.Baseline.ClockTime)
 		t.eq(Lighting.Brightness, 0)
+		t.truthy(Lighting:FindFirstChild(LightingRig.Names.Sky) ~= nil, "storm sky")
+	end,
+
+	["lighting rig writes only game-script-writable Lighting properties"] = function(t: Expect)
+		-- LightingStyle / PrioritizeLightingQuality / Technology are plugin-only writes (they throw on a live
+		-- server); they are pinned in the project file instead.
+		for _, gated in LightingRig.ProjectPinned do
+			t.falsy(table.find(LightingRig.PropertyNames, gated) ~= nil, "apply never writes Lighting." .. gated)
+		end
+		for _, required in { "ClockTime", "Brightness", "Ambient", "OutdoorAmbient", "GlobalShadows" } do
+			t.truthy(table.find(LightingRig.PropertyNames, required) ~= nil, "apply writes Lighting." .. required)
+		end
+		local failed = LightingRig.apply()
+		t.eq(#failed, 0, "every step succeeded: " .. table.concat(failed, ", "))
+		local Lighting = game:GetService("Lighting")
+		for _, name in { "Atmosphere", "ColorCorrection", "Bloom", "Sky" } do
+			local childName = (LightingRig.Names :: { [string]: string })[name]
+			t.truthy(Lighting:FindFirstChild(childName) ~= nil, "built " .. childName)
+		end
 	end,
 
 	["registries: unregistered props and rigs return nil"] = function(t: Expect)

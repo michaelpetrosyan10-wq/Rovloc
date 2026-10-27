@@ -12,6 +12,17 @@
 -- character there and anchors or carries it. Pulses from one character are spaced by at least the NoiseConfig
 -- interval of the kind being pulsed.
 --
+-- Teleports. Only the server decides that a jump was not movement. Server code that moves a character on purpose
+-- arms a teleport token first (expectTeleport: CharacterService.Spawn / Teleport do it for every caller), and a step
+-- longer than TeleportStep inside the token's grace window restarts the speed window silently. Any other long step
+-- is movement: its speed is the distance over the time since the root last moved (at least one tick, at most
+-- MaxStallSeconds), so a replication stall followed by a burst reads as the true average speed while hop-and-pause
+-- tricks read as the sprint they are. Such a step is also reported as a SuspiciousStep (NoiseAndDirectorService
+-- fires SuspiciousMovement; P3 MovementAuthority turns it into strikes).
+--
+-- The lobby is the safe zone: a character standing in a Lobby room right now (ZoneService: ZoneId set and
+-- LevelId "Lobby") is never heard. Outside every room (stair shafts, the street) characters are heard as usual.
+--
 -- This module also owns the splash-meter arithmetic (NoiseConfig.SplashMeter) that NoiseAndDirectorService applies
 -- to every water noise.
 --
@@ -43,15 +54,28 @@ export type Emitter = (position: Vector3, kind: Enums.NoiseKind, options: EmitOp
 export type MotionSample = { position: Vector3, time: number }
 
 -- Per-character motion state. `samples` is the recent root path (oldest first); `medium` the medium the samples
--- were taken in; `lastPulseAt` the time of the last locomotion pulse; `jumped` whether the last step was a teleport.
+-- were taken in; `lastPulseAt` the time of the last locomotion pulse; `movedAt` when the root last changed
+-- position; `teleportUntil` the end of an armed server-teleport grace window (nil when none is armed).
 export type Track = {
 	samples: { MotionSample },
 	medium: Enums.NoiseMedium?,
 	speed: number,
 	lastPulseAt: number?,
-	jumped: boolean,
+	movedAt: number?,
+	teleportUntil: number?,
 	character: Model?,
 }
+
+-- A step longer than TeleportStep that no server teleport explains (horizontal studs over `seconds`).
+export type SuspiciousStep = {
+	from: Vector3,
+	to: Vector3,
+	distance: number,
+	seconds: number,
+	speed: number,
+}
+
+export type SuspicionReporter = (player: Player, step: SuspiciousStep) -> ()
 
 -- Per-player splash meter: `value` at time `at`, decaying linearly; `crossed` while it sits above the threshold.
 export type SplashMeter = { value: number, at: number, crossed: boolean }
@@ -62,15 +86,22 @@ local Sampler = {}
 
 -- Root positions kept per character: speed is averaged over this many samples (about 0.3 s at 10 Hz).
 Sampler.WindowSamples = 4
--- A single step longer than this (horizontal studs) is a teleport (spawn, level skip, vent exit), not movement,
--- unless the previous step was one too: sustained impossible speed is real movement and is heard.
+-- A single step longer than this (horizontal studs) is either a server teleport (a token was armed) or movement at
+-- the speed it implies, reported as suspicious.
 Sampler.TeleportStep = 12
+-- An armed teleport token forgives long steps for this long (a server move can replicate as more than one step).
+Sampler.TeleportGraceSeconds = 1
+-- A long step is spread over at most this many seconds of stillness before it (replication stalls).
+Sampler.MaxStallSeconds = 1
 -- A gap between samples longer than this (seconds) restarts the speed window.
 Sampler.StaleSeconds = 1
--- Splash meters never hold more than this multiple of the grab threshold, so a calm spell re-arms them in seconds.
+-- Splash meters never hold more than this multiple of the grab threshold, so a calm spell re-arms them within
+-- (cap - rearmBelow) / decayPerSecond seconds, however long the splashing went on.
 Sampler.SplashCapFactor = 1.5
 
 local PACE_EPSILON = 1e-6
+-- Root movement below this (studs) between samples is physics jitter, not a change of position.
+local MOVE_EPSILON = 0.05
 
 local AIR: Enums.NoiseMedium = "Air"
 local VENT: Enums.NoiseMedium = "Vent"
@@ -126,6 +157,7 @@ local SPLASH_GAIN: { [string]: number } = {
 }
 
 local SILENT_LIFE_STATES: { [string]: boolean } = { Lobby = true, Dead = true, Spectating = true }
+local LOBBY_LEVEL = "Lobby"
 
 --------------------------------------------------------------------------------
 -- Tiers (pure)
@@ -201,40 +233,82 @@ end
 --------------------------------------------------------------------------------
 
 function Sampler.newTrack(): Track
-	return { samples = {}, medium = nil, speed = 0, lastPulseAt = nil, jumped = false, character = nil }
+	return {
+		samples = {},
+		medium = nil,
+		speed = 0,
+		lastPulseAt = nil,
+		movedAt = nil,
+		teleportUntil = nil,
+		character = nil,
+	}
 end
 
--- Forgets the recent path (the next sample starts a new speed window). Pacing is kept, so resets can never be
--- used to pulse sooner.
+-- Forgets the recent path (the next sample starts a new speed window). Pacing and an armed teleport token are kept,
+-- so resets can never be used to pulse sooner.
 function Sampler.restartWindow(track: Track)
 	table.clear(track.samples)
 	track.speed = 0
-	track.jumped = false
+	track.movedAt = nil
+end
+
+-- Arms a server-teleport token at `now`: long steps observed until now + TeleportGraceSeconds are not movement.
+function Sampler.armTeleport(track: Track, now: number)
+	if MathUtil.isFinite(now) then
+		track.teleportUntil = now + Sampler.TeleportGraceSeconds
+	end
+end
+
+-- Starts a new speed window at `position` (the root is there now and has just "moved").
+local function restartAt(track: Track, position: Vector3, now: number)
+	table.clear(track.samples)
+	table.insert(track.samples, { position = position, time = now })
+	track.speed = 0
+	track.movedAt = now
 end
 
 -- Adds a root position observed at `now` (seconds) and returns the horizontal speed (studs/s) averaged over the
--- window. Vertical motion (falls, jumps, stairs) never counts.
-function Sampler.observe(track: Track, position: Vector3, now: number): number
+-- window, plus the SuspiciousStep when this sample was a long step no armed teleport token explains. Vertical
+-- motion (falls, jumps, stairs) never counts.
+function Sampler.observe(track: Track, position: Vector3, now: number): (number, SuspiciousStep?)
 	if not MathUtil.isFiniteVector(position) or not MathUtil.isFinite(now) then
-		return track.speed
+		return track.speed, nil
+	end
+	local armedUntil = track.teleportUntil
+	if armedUntil ~= nil and now > armedUntil then
+		track.teleportUntil = nil
+		armedUntil = nil
 	end
 	local samples = track.samples
 	local newest = samples[#samples]
 	if newest then
 		local dt = now - newest.time
 		if dt <= 0 then
-			return track.speed
+			return track.speed, nil
+		end
+		if dt > Sampler.StaleSeconds then
+			restartAt(track, position, now)
+			return 0, nil
 		end
 		local step = MathUtil.horizontalDistance(position, newest.position)
-		local teleported = step > Sampler.TeleportStep and not track.jumped
-		if dt > Sampler.StaleSeconds or teleported then
-			table.clear(samples)
-			table.insert(samples, { position = position, time = now })
-			track.speed = 0
-			track.jumped = teleported
-			return 0
+		if step > Sampler.TeleportStep then
+			if armedUntil ~= nil then
+				-- The server moved this character: not movement.
+				restartAt(track, position, now)
+				return 0, nil
+			end
+			local still = now - (track.movedAt or newest.time)
+			local seconds = math.clamp(still, dt, math.max(dt, Sampler.MaxStallSeconds))
+			local speed = step / seconds
+			restartAt(track, position, now)
+			track.speed = speed
+			return speed, { from = newest.position, to = position, distance = step, seconds = seconds, speed = speed }
 		end
-		track.jumped = step > Sampler.TeleportStep
+		if step > MOVE_EPSILON then
+			track.movedAt = now
+		end
+	else
+		track.movedAt = now
 	end
 	table.insert(samples, { position = position, time = now })
 	while #samples > Sampler.WindowSamples do
@@ -243,7 +317,7 @@ function Sampler.observe(track: Track, position: Vector3, now: number): number
 	local oldest, latest = samples[1], samples[#samples]
 	local span = latest.time - oldest.time
 	track.speed = if span > 0 then MathUtil.horizontalDistance(latest.position, oldest.position) / span else 0
-	return track.speed
+	return track.speed, nil
 end
 
 -- True when `interval` seconds (less `slack`) have passed since `lastAt`; always true for one-shot kinds.
@@ -269,20 +343,29 @@ function Sampler.pace(track: Track, kind: Enums.NoiseKind, now: number): boolean
 	return true
 end
 
--- One observation of a character: records the root position and returns the kind to pulse now, if any.
-function Sampler.sample(track: Track, position: Vector3, moveState: Enums.MoveState, now: number): Enums.NoiseKind?
+-- One observation of a character: records the root position and returns the kind to pulse now (if any) and the
+-- SuspiciousStep this sample revealed (if any). Server-held states (no medium) are never suspicious.
+function Sampler.sample(
+	track: Track,
+	position: Vector3,
+	moveState: Enums.MoveState,
+	now: number
+): (Enums.NoiseKind?, SuspiciousStep?)
 	local medium: Enums.NoiseMedium? = Sampler.mediumFor(moveState)
 	if medium ~= track.medium then
 		-- Entering or leaving a vent, the water or a lock usually moves the root in one jump; never hear that jump.
 		Sampler.restartWindow(track)
 		track.medium = medium
 	end
-	local speed = Sampler.observe(track, position, now)
+	local speed, suspicious = Sampler.observe(track, position, now)
+	if medium == nil then
+		return nil, nil
+	end
 	local kind: Enums.NoiseKind? = Sampler.classify(moveState, speed)
 	if kind ~= nil and Sampler.pace(track, kind, now) then
-		return kind
+		return kind, suspicious
 	end
-	return nil
+	return nil, suspicious
 end
 
 --------------------------------------------------------------------------------
@@ -305,10 +388,11 @@ function Sampler.splashValue(meter: SplashMeter, now: number): number
 end
 
 -- Adds `amount` at `now`. Returns true exactly when this add carried the meter up across the grab threshold; the
--- meter re-arms once it has decayed back below the threshold.
+-- meter re-arms only once it has decayed below NoiseConfig.SplashMeter.rearmBelow (hysteresis: the dip between two
+-- strokes of one swim never re-arms it).
 function Sampler.addSplash(meter: SplashMeter, amount: number, now: number): boolean
 	local value = Sampler.splashValue(meter, now)
-	if meter.crossed and value < SPLASH.grabThreshold then
+	if meter.crossed and value < SPLASH.rearmBelow then
 		meter.crossed = false
 	end
 	if MathUtil.isFinite(amount) and amount > 0 then
@@ -359,7 +443,13 @@ local function moveStateOf(player: Player): Enums.MoveState
 	return "Standing"
 end
 
-local function samplePlayer(player: Player, emit: Emitter)
+-- True while `player`'s root stands in a Lobby room (ZoneService writes ZoneId only while a room contains it).
+local function inLobbyRoom(player: Player): boolean
+	return player:GetAttribute(Attributes.Player.ZoneId) ~= nil
+		and player:GetAttribute(Attributes.Player.LevelId) == LOBBY_LEVEL
+end
+
+local function samplePlayer(player: Player, emit: Emitter, report: SuspicionReporter?)
 	local character = player.Character
 	local root, humanoid = rootOf(character)
 	if not root or not humanoid or humanoid.Health <= 0 then
@@ -372,7 +462,7 @@ local function samplePlayer(player: Player, emit: Emitter)
 		return
 	end
 	-- The lobby is the safe zone: nothing there is ever heard.
-	if player:GetAttribute(Attributes.Player.LevelId) == "Lobby" then
+	if inLobbyRoom(player) then
 		tracks[player] = nil
 		return
 	end
@@ -389,7 +479,22 @@ local function samplePlayer(player: Player, emit: Emitter)
 
 	local moveState: Enums.MoveState = moveStateOf(player)
 	local position = root.Position
-	local kind: Enums.NoiseKind? = Sampler.sample(track, position, moveState, clock)
+	local kind: Enums.NoiseKind?, suspicious: SuspiciousStep? = Sampler.sample(track, position, moveState, clock)
+	if suspicious then
+		log.warnThrottled(
+			"suspicious:" .. player.UserId,
+			10,
+			"%s (%d) moved %.1f studs in %.2fs (%.0f studs/s) with no server teleport",
+			player.Name,
+			player.UserId,
+			suspicious.distance,
+			suspicious.seconds,
+			suspicious.speed
+		)
+		if report then
+			report(player, suspicious)
+		end
+	end
 	if kind == nil then
 		return
 	end
@@ -401,8 +506,8 @@ local function samplePlayer(player: Player, emit: Emitter)
 end
 
 -- One sampler tick over every player's character. `dt` is the time since the previous tick; `emit` receives each
--- pulse (NoiseAndDirectorService passes its Emit).
-function Sampler.step(dt: number, emit: Emitter)
+-- pulse (NoiseAndDirectorService passes its Emit); `report` receives every SuspiciousStep.
+function Sampler.step(dt: number, emit: Emitter, report: SuspicionReporter?)
 	if MathUtil.isFinite(dt) and dt > 0 then
 		clock += dt
 	end
@@ -411,7 +516,7 @@ function Sampler.step(dt: number, emit: Emitter)
 		present[player] = true
 		xpcall(samplePlayer, function(err: any)
 			log.warnThrottled("sample:" .. player.Name, 10, "sampling %s failed: %s", player.Name, tostring(err))
-		end, player, emit)
+		end, player, emit, report)
 	end
 	for player in tracks do
 		if not present[player] then
@@ -420,12 +525,21 @@ function Sampler.step(dt: number, emit: Emitter)
 	end
 end
 
--- Restarts `player`'s speed window. Server code that moves a character on purpose (vent exits, scripted
--- teleports) calls this so the jump is never heard as movement.
+-- Arms a teleport token for `player`: a long step in the next TeleportGraceSeconds is a server move, not movement.
+-- CharacterService.Spawn / Teleport call this (through NoiseAndDirectorService.ExpectTeleport) for every server move.
+function Sampler.expectTeleport(player: Player)
+	local track = tracks[player]
+	if track then
+		Sampler.armTeleport(track, clock)
+	end
+end
+
+-- Restarts `player`'s speed window and arms a teleport token (a server move that is about to happen or just did).
 function Sampler.restartMotion(player: Player)
 	local track = tracks[player]
 	if track then
 		Sampler.restartWindow(track)
+		Sampler.armTeleport(track, clock)
 	end
 end
 

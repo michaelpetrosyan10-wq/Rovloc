@@ -5,7 +5,7 @@
 -- true (Studio, GameConfig.DevAllowlistUserIds, or the experience owner when GameConfig.DevToolsForCreator is on;
 -- CharacterService sets it). Replies go back on Notify:
 -- "Dev.Ok" (args = { reply }), "Dev.Unknown" (args = { command }) or "Dev.Denied". Later phases add commands with
--- Register(command, help, handler); a handler returns the reply text (or nil for a plain "ok").
+-- Register(command, help, handler, readOnly?); a handler returns the reply text (or nil for a plain "ok").
 --
 -- Built-ins:
 --   devrun [Standard|Nightmare] [seed]   start a run with every player and spawn them at Level0 PlayerSpawn anchors
@@ -14,12 +14,21 @@
 --                                        its entry room (PlayerSpawn anchors there, else the room centre)
 --   next                                 same as `level next`
 --   noise <NoiseKind>                    emit that noise at the caller (radius from NoiseConfig)
---   plan                                 DevOverlay "Plan" markers for the planned props on the current level
+--   sound <Preset> [2d] | stop | list    audition a SynthPresets recipe: 3D six studs ahead of the caller, or 2D for
+--                                        the caller only; looped presets fade out after 6 s (one audition per player:
+--                                        a new one stops the previous loop)
+--   plan                                 DevOverlay "Plan" markers for the current level: every planned prop (kind
+--                                        per point) and every grate the director locked, plus that level's counts
 --   help                                 list commands
+--
+-- Dev taint. Every command that is not registered read-only (devrun, level, next, noise and, by default, every
+-- later-phase command) sets ReplicatedStorage DevRun = true when a run exists after it ran, whoever started that run.
+-- DevRun stays true until the match is back in the Lobby phase, so MatchAndDataService (P8) still sees it while it
+-- settles the run and must not award a DevRun run (Attributes.Match.DevRun). Read-only built-ins: plan, sound, help.
 --
 -- AutoDevRun. In Studio, unless a match policy has called SetMatchPolicyPresent(true) (P8 MatchAndDataService does),
 -- a Standard dev run starts 4 s after the first client acknowledges the world, so pressing Play drops you straight
--- into the basement. ReplicatedStorage DevRun is true while a run started from here is in progress.
+-- into the basement.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,17 +36,23 @@ local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
+local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Instances = require(ReplicatedStorage.Shared.Instances)
+local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local Net = require(ReplicatedStorage.Shared.Net)
+local SynthPresets = require(ReplicatedStorage.Shared.Audio.SynthPresets)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
+local AudioService = require(ServerScriptService.Services.Core.AudioService)
 local CharacterService = require(ServerScriptService.Services.Core.CharacterService)
 local LevelDirector = require(ServerScriptService.Services.Core.LevelDirector)
 local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
+local RunDirector = require(ServerScriptService.Services.Core.NoiseAndDirectorService.RunDirector)
 local RunLifecycleService = require(ServerScriptService.Services.Core.RunLifecycleService)
 local WorldService = require(ServerScriptService.Services.Core.WorldService)
 
@@ -49,6 +64,12 @@ local P = Attributes.Player
 local AUTO_RUN_DELAY = 4
 local PLAN_OVERLAY_SECONDS = 20
 local MAX_COMMAND_LENGTH = 32
+local AUDITION_LOOP_SECONDS = 6
+local AUDITION_DISTANCE = 6
+local AUDITION_STOP_FADE = 0.3
+local LOCKED_GRATE_KIND = "LockedGrate"
+local VENT_NODE_ROOT = "VentNodeRoot"
+local GRATE_PREFIX = "Grate_"
 
 export type Handler = (player: Player, args: { string }) -> string?
 
@@ -56,6 +77,14 @@ type Command = {
 	name: string,
 	help: string,
 	handler: Handler,
+	readOnly: boolean,
+}
+
+-- One Plan overlay: points[i] is a marker of kind kinds[i] (a prop kind, or "LockedGrate").
+export type PlanOverlay = {
+	points: { Vector3 },
+	kinds: { string },
+	label: string,
 }
 
 export type DevRunArgs = {
@@ -67,6 +96,8 @@ local DevToolsService = {}
 
 DevToolsService.Name = "DevToolsService"
 DevToolsService.AutoRunDelay = AUTO_RUN_DELAY
+DevToolsService.AuditionLoopSeconds = AUDITION_LOOP_SECONDS
+DevToolsService.LockedGrateKind = LOCKED_GRATE_KIND
 
 local serviceTrove = Trove.new()
 
@@ -74,6 +105,7 @@ local commands: { [string]: Command } = {}
 local matchPolicyPresent = false
 local autoRunScheduled = false
 local devRunId: string? = nil
+local auditions: { [Player]: AudioService.CueHandle } = {}
 
 --------------------------------------------------------------------------------
 -- Pure helpers (specs: tests/Specs/CoreServices.spec.luau)
@@ -134,6 +166,83 @@ function DevToolsService.parseNoiseKind(arg: string?): Enums.NoiseKind?
 	return nil
 end
 
+-- A preset name from input: an exact name in any case, else the only name starting with it (any case). nil when
+-- unknown or ambiguous.
+function DevToolsService.parsePreset(arg: string?, names: { string }): string?
+	if arg == nil or arg == "" then
+		return nil
+	end
+	local lowered = string.lower(arg)
+	local prefixed: string? = nil
+	local prefixCount = 0
+	for _, name in names do
+		local candidate = string.lower(name)
+		if candidate == lowered then
+			return name
+		end
+		if string.sub(candidate, 1, #lowered) == lowered then
+			prefixed = name
+			prefixCount += 1
+		end
+	end
+	return if prefixCount == 1 then prefixed else nil
+end
+
+-- The Plan overlay for `levelId` (every level when nil): one marker per planned prop (its kind) and per grate the
+-- plan locked there ("LockedGrate", at `gratePosition`), and a label with the level's prop counts and its
+-- locked / lockable grate counts.
+function DevToolsService.planOverlay(
+	plan: Types.SpawnPlan,
+	levelId: Enums.LevelId?,
+	gratePosition: (layoutId: Enums.LevelId, grate: LayoutSchema.GrateSpec) -> Vector3?
+): PlanOverlay
+	local points: { Vector3 } = {}
+	local kinds: { string } = {}
+	local counts: { [string]: number } = {}
+	for _, prop in plan.props do
+		if levelId == nil or prop.levelId == levelId then
+			table.insert(points, prop.cframe.Position)
+			table.insert(kinds, prop.kind)
+			counts[prop.kind] = (counts[prop.kind] or 0) + 1
+		end
+	end
+	local locked, lockable = 0, 0
+	for _, id: Enums.LevelId in Enums.LevelId do
+		if levelId ~= nil and id ~= levelId then
+			continue
+		end
+		local layout = Builder.getLayout(id)
+		if not layout then
+			continue
+		end
+		lockable += #RunDirector.lockableGrates(layout)
+		local vents = layout.vents
+		for _, grate in (if vents then vents.grates else {}) :: { LayoutSchema.GrateSpec } do
+			if plan.lockedGrates[grate.id] then
+				locked += 1
+				local position = gratePosition(id, grate)
+				if position then
+					table.insert(points, position)
+					table.insert(kinds, LOCKED_GRATE_KIND)
+				end
+			end
+		end
+	end
+	local parts: { string } = {}
+	for kind, count in counts do
+		table.insert(parts, string.format("%d %s", count, kind))
+	end
+	table.sort(parts)
+	local label = string.format(
+		"%s: %s | grates %d/%d locked",
+		levelId or "all levels",
+		if #parts > 0 then table.concat(parts, ", ") else "no props",
+		locked,
+		lockable
+	)
+	return { points = points, kinds = kinds, label = label }
+end
+
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
@@ -152,6 +261,45 @@ local function inRunPhase(): boolean
 	return phase == "InRun" or phase == "Deploying"
 end
 
+-- Marks the run in progress (if any) as dev-tainted.
+local function taintRun()
+	if RunLifecycleService.GetRun() then
+		ReplicatedStorage:SetAttribute(M.DevRun, true)
+	end
+end
+
+-- World position of `grate`'s opening: its Grate_<id> attachment in the built level, else its vent node.
+local function gratePosition(levelId: Enums.LevelId, grate: LayoutSchema.GrateSpec): Vector3?
+	local vents = Instances.layoutChild(levelId, Instances.Names.Vents)
+	local nodeRoot = if vents then vents:FindFirstChild(VENT_NODE_ROOT) else nil
+	if nodeRoot and nodeRoot:IsA("BasePart") then
+		local attachment = nodeRoot:FindFirstChild(GRATE_PREFIX .. grate.id)
+		if attachment and attachment:IsA("Attachment") then
+			return (nodeRoot.CFrame * attachment.CFrame).Position
+		end
+	end
+	local layout = Builder.getLayout(levelId)
+	local network = if layout then layout.vents else nil
+	if not network then
+		return nil
+	end
+	for _, node in network.nodes do
+		if node.id == grate.node then
+			local y = node.y or WorldConfig.VentCenterHeight
+			return WorldConfig.levelOrigin(levelId) + Vector3.new(node.x, y, node.z)
+		end
+	end
+	return nil
+end
+
+local function stopAudition(player: Player)
+	local handle = auditions[player]
+	auditions[player] = nil
+	if handle then
+		handle:Stop(AUDITION_STOP_FADE)
+	end
+end
+
 -- Spawns `player` at `cframe` once their client holds the world (or GameConfig.ClientAckTimeout passed): a client
 -- simulates its own character, so spawning it before the floor arrived would drop it through the level. Yields.
 local function spawnWhenReady(player: Player, cframe: CFrame)
@@ -159,9 +307,8 @@ local function spawnWhenReady(player: Player, cframe: CFrame)
 	if player.Parent ~= Players then
 		return
 	end
-	if CharacterService.Spawn(player, cframe) then
-		NoiseAndDirectorService.ResetMotion(player)
-	end
+	-- CharacterService announces the move to the noise sampler itself.
+	CharacterService.Spawn(player, cframe)
 end
 
 -- Spawns every participant at `layoutId`'s spawn slots (in parallel; each spawn yields on the avatar build).
@@ -175,7 +322,7 @@ end
 local function startDevRun(difficulty: Enums.Difficulty, seed: number?, spawnLevel: Enums.LevelId): Types.RunContext
 	local ctx = RunLifecycleService.BeginRun(Players:GetPlayers(), difficulty, seed)
 	devRunId = ctx.runId
-	ReplicatedStorage:SetAttribute(M.DevRun, true)
+	taintRun()
 	spawnAll(ctx.participants, spawnLevel)
 	return ctx
 end
@@ -185,9 +332,8 @@ end
 local function moveSquadTo(levelId: Enums.LevelId)
 	for index, player in Players:GetPlayers() do
 		local cframe = CharacterService.SpawnCFrame(levelId, index)
-		if not CharacterService.IsSpawning(player) and CharacterService.Teleport(player, cframe) then
-			NoiseAndDirectorService.ResetMotion(player)
-		else
+		-- Teleport announces the move to the noise sampler (no footstep, no suspicious-step report).
+		if CharacterService.IsSpawning(player) or not CharacterService.Teleport(player, cframe) then
 			task.spawn(spawnWhenReady, player, cframe)
 		end
 	end
@@ -231,8 +377,10 @@ end
 -- Registry
 --------------------------------------------------------------------------------
 
--- Adds (or replaces) a dev command. `command` is matched case-insensitively.
-function DevToolsService.Register(command: string, help: string, handler: Handler)
+-- Adds (or replaces) a dev command. `command` is matched case-insensitively. Unless `readOnly` is true, running it
+-- while a run exists marks that run dev-tainted (ReplicatedStorage DevRun): pass readOnly only for commands that
+-- change nothing a run's outcome could depend on (overlays, auditions, help text).
+function DevToolsService.Register(command: string, help: string, handler: Handler, readOnly: boolean?)
 	local name = string.lower(command)
 	if name == "" or #name > MAX_COMMAND_LENGTH or string.find(name, "%s") then
 		log.error("Register: invalid command name %q", command)
@@ -241,7 +389,7 @@ function DevToolsService.Register(command: string, help: string, handler: Handle
 	if commands[name] then
 		log.warn("dev command %s replaced", name)
 	end
-	commands[name] = { name = name, help = help, handler = handler }
+	commands[name] = { name = name, help = help, handler = handler, readOnly = readOnly == true }
 end
 
 -- P8's match policy calls this so the Studio auto dev-run stays out of the way of the real lobby.
@@ -270,6 +418,9 @@ function DevToolsService.Execute(player: Player, command: string, args: { string
 		failed = tostring(err)
 		log.error("dev command %s failed: %s\n%s", name, tostring(err), debug.traceback())
 	end)
+	if not entry.readOnly then
+		taintRun()
+	end
 	local text = if failed then name .. " failed: " .. failed else reply or (name .. ": ok")
 	log.info("%s ran %s %s -> %s", player.Name, name, table.concat(args, " "), text)
 	notify(player, "Dev.Ok", { text })
@@ -328,40 +479,88 @@ local function registerBuiltIns()
 		end
 	)
 
-	DevToolsService.Register("plan", "plan: show this level's planned props", function(player: Player): string?
-		local plan = NoiseAndDirectorService.GetPlan()
-		if not plan then
-			return "no spawn plan (start a run first)"
-		end
-		local levelId = LevelDirector.GetCurrentLevel()
-		local points: { Vector3 } = {}
-		local kinds: { [string]: number } = {}
-		for _, prop in plan.props do
-			if levelId == nil or prop.levelId == levelId then
-				table.insert(points, prop.cframe.Position)
-				kinds[prop.kind] = (kinds[prop.kind] or 0) + 1
+	DevToolsService.Register(
+		"sound",
+		"sound <Preset> [2d] | sound stop | sound list [filter]: audition a synth preset (loops stop after 6 s)",
+		function(player: Player, args: { string }): string?
+			local names = SynthPresets.names()
+			local first = args[1]
+			local lowered = if first then string.lower(first) else ""
+			if lowered == "" then
+				return string.format("usage: sound <Preset> [2d] | stop | list [filter] (%d presets)", #names)
 			end
-		end
-		local parts: { string } = {}
-		for kind, count in kinds do
-			table.insert(parts, string.format("%d %s", count, kind))
-		end
-		table.sort(parts)
-		local label =
-			string.format("%s: %s", levelId or "all levels", if #parts > 0 then table.concat(parts, ", ") else "none")
-		local payload: Types.DevOverlayPayload = {
-			kind = "Plan",
-			points = points,
-			label = label,
-			duration = PLAN_OVERLAY_SECONDS,
-		}
-		Net.Server.fire("DevOverlay", player, payload)
-		local locked = 0
-		for _ in plan.lockedGrates do
-			locked += 1
-		end
-		return string.format("%s (%d grates locked, %d re-rolls)", label, locked, plan.rerolls)
-	end)
+			if lowered == "stop" then
+				stopAudition(player)
+				return "audition stopped"
+			end
+			if lowered == "list" then
+				local filter = if args[2] then string.lower(args[2]) else nil
+				local listed: { string } = {}
+				for _, name in names do
+					if filter == nil or string.find(string.lower(name), filter, 1, true) then
+						table.insert(listed, name)
+					end
+				end
+				return string.format("%d presets: %s", #listed, table.concat(listed, ", "))
+			end
+			local preset = DevToolsService.parsePreset(first, names)
+			if not preset then
+				return string.format("unknown or ambiguous preset %s (try: sound list %s)", first, first)
+			end
+			local flat = args[2] ~= nil and string.lower(args[2]) == "2d"
+			local looped = SynthPresets.isLooped(preset)
+			local options: AudioService.CueOptions = { duration = if looped then AUDITION_LOOP_SECONDS else nil }
+			stopAudition(player)
+			local handle: AudioService.CueHandle? = nil
+			if flat then
+				handle = AudioService.PlayFor(player, preset, options)
+			else
+				local root = Instances.characterRoot(player)
+				if not root then
+					return "you have no character (use: sound " .. preset .. " 2d)"
+				end
+				local look = root.CFrame.LookVector
+				local ahead = Vector3.new(look.X, 0, look.Z)
+				local forward = if ahead.Magnitude > 1e-3 then ahead.Unit else Vector3.new(0, 0, -1)
+				handle = AudioService.PlayAt(preset, root.Position + forward * AUDITION_DISTANCE, options)
+			end
+			if not handle then
+				return "could not play " .. preset
+			end
+			if looped then
+				auditions[player] = handle
+			end
+			return string.format(
+				"%s: %s, %s",
+				preset,
+				if flat then "2D" else string.format("3D, %d studs ahead", AUDITION_DISTANCE),
+				if looped then string.format("loop, fades out in %d s", AUDITION_LOOP_SECONDS) else "one-shot"
+			)
+		end,
+		true
+	)
+
+	DevToolsService.Register(
+		"plan",
+		"plan: show this level's planned props and locked grates",
+		function(player: Player): string?
+			local plan = NoiseAndDirectorService.GetPlan()
+			if not plan then
+				return "no spawn plan (start a run first)"
+			end
+			local overlay = DevToolsService.planOverlay(plan, LevelDirector.GetCurrentLevel(), gratePosition)
+			local payload: Types.DevOverlayPayload = {
+				kind = "Plan",
+				points = overlay.points,
+				kinds = overlay.kinds,
+				label = overlay.label,
+				duration = PLAN_OVERLAY_SECONDS,
+			}
+			Net.Server.fire("DevOverlay", player, payload)
+			return string.format("%s (%d re-rolls this run)", overlay.label, plan.rerolls)
+		end,
+		true
+	)
 
 	DevToolsService.Register("help", "help: list dev commands", function(): string?
 		local names: { string } = {}
@@ -374,7 +573,7 @@ local function registerBuiltIns()
 			table.insert(lines, commands[name].help)
 		end
 		return table.concat(lines, "\n")
-	end)
+	end, true)
 end
 
 --------------------------------------------------------------------------------
@@ -422,7 +621,12 @@ function DevToolsService.Init()
 	end))
 	serviceTrove:Add(RunLifecycleService.RunEnded:Connect(function()
 		devRunId = nil
-		ReplicatedStorage:SetAttribute(M.DevRun, false)
+	end))
+	-- The taint outlives RunEnded / Results / Resetting (the match policy settles the run there) and clears in the Lobby.
+	serviceTrove:Add(RunLifecycleService.PhaseChanged:Connect(function(phase: Enums.MatchPhase)
+		if phase == "Lobby" then
+			ReplicatedStorage:SetAttribute(M.DevRun, false)
+		end
 	end))
 end
 
@@ -439,6 +643,10 @@ end
 -- The id of the run started from DevTools, while it is in progress.
 function DevToolsService.GetDevRunId(): string?
 	return devRunId
+end
+
+function DevToolsService.OnPlayerRemoving(player: Player)
+	auditions[player] = nil
 end
 
 return DevToolsService

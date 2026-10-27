@@ -8,9 +8,14 @@
 --   z  30..130 changing rooms + showers + lifeguard office (x 0..90) | NATATORIUM (x 90..228, 28 tall)
 --   z 130..160 plant room, spectator gallery, scoreboard room
 -- The natatorium is almost all basin: deep murky water wall to wall (x 128..214), a 38-stud west deck and a 14-stud
--- east deck. The old spectator bridge across the pool has collapsed into fragments with 10-stud gaps, so the
--- crossing is a swim, or a long crawl through the maintenance duct whose water stands at the duct's centreline
--- (every duct edge is Submerged and a PoolWater volume fills its lower half).
+-- east deck. The old spectator bridge across the pool has collapsed into fragments on their broken piers with
+-- 10-stud gaps, so every way across starts with a swim. The maintenance duct is sunk to the pool's waterline: its
+-- centre sits at the water surface, so the murky water fills the lower half of the bore (every duct edge is
+-- Submerged, VentShaftBuilder floods it, and a PoolWater volume covers the flooded half). It runs through the chase
+-- floor into the void above the Level 3 ceilings, and its grates all open low in the natatorium's north wall,
+-- straight over the water: the route is west deck -> swim to L4_Grate_M_PoolWest -> half-flooded crawl east ->
+-- out at L4_Grate_M_PoolEast beside the east deck -> climb out by the exit airlock. The two grates between them
+-- may be locked; they are the Creature's ways in and out of the duct from the deep water.
 --
 -- The 9 Floodlight fixtures over the pool start dark (broken) in FlickerGroup "L4_Floodlights"; the emergency
 -- FloodlightSwitch on the west deck (P7) brings them up through LightingController overrides.
@@ -65,6 +70,8 @@ local LOW = 14 -- ceiling of the rooms around the natatorium
 local DUCT_ROOM = 6 -- the maintenance chase is a low service tunnel
 local WATER = WorldConfig.WaterSurfaceOffset
 local POOL_DEPTH = 10
+local HALF_BORE = WorldConfig.VentBore / 2
+local DUCT_Y = WATER -- the flooded duct's centre line: the water surface halves the bore
 
 local FACE_N, FACE_E = 0, -90
 
@@ -341,8 +348,9 @@ local function platform(
 end
 
 -- One straight duct along the middle of a chase, a junction under every side grate, end grates as terminals.
--- A duct never leaves its chase, so each chase room carries exactly one run.
-local function chaseRun(chaseId: string, plans: { GratePlan }, submerged: boolean?)
+-- A duct never leaves its chase, so each chase room carries exactly one run. `y` is the duct centre above the floor
+-- (default WorldConfig.VentCenterHeight).
+local function chaseRun(chaseId: string, plans: { GratePlan }, submerged: boolean?, y: number?)
 	local rect = getRoom(chaseId).rect
 	local alongX = rect.w > rect.d
 	local cx, cz = rect.x + rect.w / 2, rect.z + rect.d / 2
@@ -356,7 +364,10 @@ local function chaseRun(chaseId: string, plans: { GratePlan }, submerged: boolea
 		end
 		local nodeId = existing or string.format("%s_J%02d", chaseId, #stops + 1)
 		if not existing then
-			table.insert(ventNodes, { id = nodeId, x = if alongX then coord else cx, z = if alongX then cz else coord })
+			table.insert(
+				ventNodes,
+				{ id = nodeId, x = if alongX then coord else cx, z = if alongX then cz else coord, y = y }
+			)
 		end
 		table.insert(stops, { coord = coord, node = nodeId })
 		return nodeId
@@ -387,7 +398,7 @@ local function chaseRun(chaseId: string, plans: { GratePlan }, submerged: boolea
 			end
 		end
 		local nodeId = plan.id .. "_Node"
-		table.insert(ventNodes, { id = nodeId, x = x, z = z })
+		table.insert(ventNodes, { id = nodeId, x = x, z = z, y = y })
 		table.insert(grates, {
 			id = plan.id,
 			node = nodeId,
@@ -507,32 +518,74 @@ table.insert(basins, {
 	waterLevel = WATER,
 })
 
--- Collapsed spectator bridge: fragments awash at the surface, 10-stud gaps that must be swum.
-platform("L4_Bridge_1", "L4_Natatorium", 128, 76, 12, 8, 0, 1, "Concrete")
-platform("L4_Bridge_2", "L4_Natatorium", 150, 77, 8, 8, -0.4, 1, "Concrete")
-platform("L4_Bridge_3", "L4_Natatorium", 168, 75, 8, 8, 0.3, 1, "Concrete")
-platform("L4_Bridge_4", "L4_Natatorium", 186, 76, 6, 8, -0.5, 1, "Concrete")
-platform("L4_Bridge_5", "L4_Natatorium", 202, 76, 12, 8, 0, 1, "Concrete")
-platform("L4_FallenSlab_A", "L4_Natatorium", 145, 40, 7, 6, -0.6, 1.2, "ConcreteStained")
-platform("L4_FallenSlab_B", "L4_Natatorium", 196, 112, 8, 8, -0.3, 1, "ConcreteStained")
-platform("L4_DivingTower", "L4_Natatorium", 208, 34, 6, 6, 10, POOL_DEPTH + 10, "Concrete")
+-- Collapsed spectator bridge: deck fragments awash at the surface, each still standing on its broken pier (Bridge_1
+-- and Bridge_5 also rest on the coping), with 10-stud gaps that must be swum. Two slabs fallen from the roof lie on
+-- rubble heaps. Every support runs from the basin floor up to the underside of what it carries.
+local function onPier(
+	id: string,
+	x: number,
+	z: number,
+	w: number,
+	d: number,
+	top: number,
+	thickness: number,
+	material: string,
+	pier: { number }
+)
+	platform(id, "L4_Natatorium", x, z, w, d, top, thickness, material)
+	local underside = top - thickness
+	platform(
+		id .. "_Pier",
+		"L4_Natatorium",
+		pier[1],
+		pier[2],
+		pier[3],
+		pier[4],
+		underside,
+		underside + POOL_DEPTH,
+		"ConcreteDark"
+	)
+end
+onPier("L4_Bridge_1", 128, 76, 12, 8, 0, 1.2, "Concrete", { 136, 78.5, 3, 3 })
+onPier("L4_Bridge_2", 150, 77, 8, 8, -0.4, 1, "Concrete", { 152.5, 79.5, 3, 3 })
+onPier("L4_Bridge_3", 168, 75, 8, 8, -0.2, 1, "Concrete", { 170.5, 77.5, 3, 3 })
+onPier("L4_Bridge_4", 186, 76, 6, 8, -0.5, 1, "Concrete", { 187.5, 78.5, 3, 3 })
+onPier("L4_Bridge_5", 202, 76, 12, 8, 0, 1.2, "Concrete", { 203, 78.5, 3, 3 })
+onPier("L4_FallenSlab_A", 145, 40, 7, 6, -0.6, 1.2, "ConcreteStained", { 146.5, 41.5, 4, 3 })
+onPier("L4_FallenSlab_B", 196, 112, 8, 8, -0.3, 1, "ConcreteStained", { 197.5, 113.5, 5, 5 })
+-- The diving tower stands in the deep end, off the duct's east grate.
+platform("L4_DivingTower", "L4_Natatorium", 207, 118, 6, 6, 10, POOL_DEPTH + 10, "Concrete")
 for i, z in { 40, 52, 64, 96, 108, 120 } do
 	platform(string.format("L4_StartBlock_%d", i), "L4_Natatorium", 124, z, 3, 3, 1.5, 1.5, "PoolTile")
 end
 
 --------------------------------------------------------------------------------
--- The flooded maintenance duct (every edge Submerged)
+-- The flooded maintenance duct (every edge Submerged), sunk to the waterline. Every grate opens over the basin: a
+-- grate this low over the dry deck or into the service rooms would open into their floor.
 --------------------------------------------------------------------------------
 
+local DUCT_WEST, DUCT_EAST = 150, 208 -- the two critical grates (centres along the north wall)
+
 chaseRun("L4_Chase_Maintenance", {
-	{ id = "L4_Grate_M_Showers", room = "L4_Showers_Boys", side = "W", lockable = false, critical = false },
-	{ id = "L4_Grate_M_DeckWest", room = "L4_Natatorium", side = "S", at = 100, lockable = false, critical = true },
-	{ id = "L4_Grate_M_Filter", room = "L4_FilterRoom", side = "N", at = 115, lockable = true, critical = false },
-	{ id = "L4_Grate_M_Pump", room = "L4_PumpRoom", side = "N", at = 165, lockable = true, critical = false },
-	{ id = "L4_Grate_M_Chlorine", room = "L4_ChlorineStore", side = "N", at = 205, lockable = true, critical = false },
-	{ id = "L4_Grate_M_DeckEast", room = "L4_Natatorium", side = "S", at = 221, lockable = false, critical = true },
-	{ id = "L4_Grate_M_StoreEast", room = "L4_Storage_E1", side = "E", lockable = false, critical = false },
-}, true)
+	{
+		id = "L4_Grate_M_PoolWest",
+		room = "L4_Natatorium",
+		side = "S",
+		at = DUCT_WEST,
+		lockable = false,
+		critical = true,
+	},
+	{ id = "L4_Grate_M_PoolMidW", room = "L4_Natatorium", side = "S", at = 166, lockable = true, critical = false },
+	{ id = "L4_Grate_M_PoolMidE", room = "L4_Natatorium", side = "S", at = 190, lockable = true, critical = false },
+	{
+		id = "L4_Grate_M_PoolEast",
+		room = "L4_Natatorium",
+		side = "S",
+		at = DUCT_EAST,
+		lockable = false,
+		critical = true,
+	},
+}, true, DUCT_Y)
 
 --------------------------------------------------------------------------------
 -- Lights
@@ -644,16 +697,20 @@ patrol("WS", 0, { { 34, 84 }, { 34, 100 }, { 73, 118 }, { 100, 118 }, { 100, 84 
 -- Triggers
 --------------------------------------------------------------------------------
 
--- Water standing in the maintenance duct up to its centreline (the duct floor sits 0.25 above the chase floor).
+-- The flooded lower half of the maintenance duct's bore: from the bore floor up to the water surface, along the run
+-- (whose capped ends reach half a bore past the end grates) and on through the branches to the chase's south wall.
+-- Everything else inside this box is duct shell or slab, so any point a crawler can reach in it is in the water.
+local chaseRect = getRoom("L4_Chase_Maintenance").rect
+local boreNorth = chaseRect.z + chaseRect.d / 2 - HALF_BORE
 trigger(
 	"L4_Water_MaintenanceDuct",
 	"PoolWater",
-	90,
-	25,
-	138,
-	5,
-	WorldConfig.VentCenterHeight,
-	0,
+	DUCT_WEST - HALF_BORE,
+	boreNorth,
+	DUCT_EAST - DUCT_WEST + 2 * HALF_BORE,
+	chaseRect.z + chaseRect.d - boreNorth,
+	HALF_BORE,
+	DUCT_Y - HALF_BORE,
 	"L4_Chase_Maintenance"
 )
 trigger("L4_Trigger_DebrisCorridor", "FloorDebris", 40, 75, 6, 10, 4)

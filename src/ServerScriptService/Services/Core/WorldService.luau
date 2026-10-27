@@ -4,6 +4,8 @@
 --
 -- Boot. Init destroys every Workspace child except Terrain, the Camera and player characters, and every Lighting
 -- child, so a place opened from `rojo serve`, `rojo build` or a Studio save always starts from the same empty state.
+-- It then creates Workspace.Runtime, before any character can exist (a character is named after its player, and a
+-- player may be called "Runtime"; Instances resolves roots by name and class either way).
 -- Start (runs in its own thread) calls ProceduralWorldBuilder.BuildAuthoritative(), which yields every few hundred
 -- parts so the server keeps ticking, then applies the lighting baseline and sets ReplicatedStorage WorldPartCount and
 -- WorldReady = true. A failed build still ends the boot (WorldReady = true, WorldPartCount = parts that exist) but
@@ -296,6 +298,7 @@ function WorldService.Init()
 	ReplicatedStorage:SetAttribute(M.WorldReady, false)
 	ReplicatedStorage:SetAttribute(M.WorldPartCount, 0)
 	clearEditTimeState()
+	Instances.ensureRuntime()
 	Net.Server.on("ClientWorldReady", onClientWorldReady)
 end
 

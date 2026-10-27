@@ -2,10 +2,10 @@
 -- LightingController: the only run-time writer of the LevelLight fixtures' lights, plus every client lighting moment.
 --
 --   * Active set. A fixture's lights only render while its level is in focus: the CurrentLevel during a run (the
---     Lobby when no run is going), plus the layout the camera is actually in (Lobby / a school level, decided from the
---     camera position against the lobby footprint and the school's floor bands). Stairwell lights (LevelId = the
---     lower level) join when either level the stairwell joins is in focus. Broken fixtures (BaseBrightness 0) and
---     burst bulbs stay dark. SetBudget caps the set to the nearest `maxActive` fixtures and gates shadows. Every
+--     Lobby when no run is going), plus the layout the camera is actually in (the LevelId of the Zone volume holding
+--     the camera; the lobby footprint and the school's floor bands only when no zone holds it, e.g. inside a duct or
+--     before the world is built). Stairwell lights (LevelId = the lower level) join when either level the stairwell
+--     joins is in focus. Broken fixtures (BaseBrightness 0) and burst bulbs stay dark. SetBudget caps the set to the nearest `maxActive` fixtures and gates shadows. Every
 --     fixture outside the set is Enabled = false, so the GPU only ever sees a few dozen lights.
 --   * Flicker. Fixtures sharing a FlickerGroup flicker together: smooth value noise, sharp dropouts, and seeded
 --     blackouts (with a stuttering recovery) scheduled in fixed time slots. Everything is a pure function of
@@ -18,9 +18,10 @@
 --   * OneShot "LightBurst" (args.lightId or the fixture as subject): the bulb surges to 4x, stutters, dies, and
 --     throws sparks (a default-texture ParticleEmitter). Burst bulbs stay dead until the run ends. Audio for both
 --     moments is the server's job (AudioCue), except the ambient storm below.
---   * Ambient storm. While the camera is outdoors (the roof or the street) a seeded, server-time-synced schedule
---     throws lightning with locally played thunder, because the roof has almost no fixtures. It stays quiet for a
---     while after any scripted Lightning, and SetStormEnabled(false) hands the sky to a later phase entirely.
+--   * Ambient storm. While the camera is outdoors (in a Roof zone, or outside every building) a seeded,
+--     server-time-synced schedule throws lightning with locally played thunder, because the roof has almost no
+--     fixtures. It stays quiet for a while after any scripted Lightning, and SetStormEnabled(false) hands the sky to a
+--     later phase entirely.
 --   * SetOverride(lightId, brightness?) pins a fixture's brightness for Timeline tracks (P3) and the pool floodlight
 --     switch (P7); an override forces the fixture into the active set and wins over flicker and burnt bulbs.
 
@@ -40,6 +41,7 @@ local LightingRig = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilde
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Net = require(ReplicatedStorage.Shared.Net)
+local SpatialQuery = require(ReplicatedStorage.Shared.Util.SpatialQuery)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -394,9 +396,9 @@ local function inside(bounds: Bounds, point: Vector3): boolean
 		and point.Z <= hi.Z
 end
 
--- The layout a world point is in: "Lobby", a LevelId (by the school's floor bands; a point counts as a level once
--- it is above the middle of the slab under that floor), or nil outside both (the street, the sky).
-function LightingController.layoutAt(point: Vector3): string?
+-- The layout a world point is in by position alone: "Lobby", a LevelId (by the school's floor bands; a point counts
+-- as a level once it is above the middle of the slab under that floor), or nil outside both (the street, the sky).
+local function bandLayout(point: Vector3): string?
 	local lobby = lobbyBounds()
 	if lobby and inside(lobby, point) then
 		return LOBBY
@@ -414,7 +416,96 @@ function LightingController.layoutAt(point: Vector3): string?
 	return found
 end
 
--- Whether the camera at a layout sees the sky (the roof, or outside every building).
+-- Zone volumes (Tags.Zone: one per room and stairwell). Cached once Start has hooked the tag signals; before that
+-- (pure use, specs) every lookup reads the tag fresh.
+local zoneCache: { BasePart }? = nil
+local zoneSignalsHooked = false
+
+local function zoneParts(): { BasePart }
+	local cached = zoneCache
+	if cached then
+		return cached
+	end
+	local list: { BasePart } = {}
+	for _, instance in CollectionService:GetTagged(Tags.Zone) do
+		if instance:IsA("BasePart") then
+			table.insert(list, instance)
+		end
+	end
+	if zoneSignalsHooked then
+		zoneCache = list
+	end
+	return list
+end
+
+-- The zone holding `point` (the smallest one where volumes meet), plus whether any zone exists at all.
+local function zoneAt(point: Vector3): (BasePart?, boolean)
+	local parts = zoneParts()
+	local best: BasePart? = nil
+	local bestVolume = math.huge
+	for _, part in parts do
+		if part.Parent ~= nil and SpatialQuery.pointInPart(part, point) then
+			local size = part.Size
+			local volume = size.X * size.Y * size.Z
+			if volume < bestVolume then
+				best = part
+				bestVolume = volume
+			end
+		end
+	end
+	return best, #parts > 0
+end
+
+export type Place = {
+	layoutId: string?, -- "Lobby", a LevelId, or nil outside every building
+	zoneId: string?, -- the room or stairwell holding the point, if any
+	roomKind: string?,
+	outdoors: boolean, -- sees the sky
+}
+
+-- Where a world point is. A Zone volume decides when one holds the point: its LevelId is the layout (a stairwell,
+-- tagged with its lower level, takes the floor band the point is in, so its top landing focuses the upper level), and
+-- only a Roof zone is outdoors. With no zone holding it (a duct, a wall, the street) the floor bands decide and the
+-- point is outdoors only outside every building, unless no zone exists yet (world not built), when the roof band
+-- counts as outdoors too.
+function LightingController.placeAt(point: Vector3): Place
+	local zone, zonesExist = zoneAt(point)
+	if zone then
+		local levelId = Attributes.getString(zone, W.LevelId, "")
+		if levelId ~= "" then
+			local roomKind = Attributes.getString(zone, W.RoomKind, "")
+			local layoutId = levelId
+			if roomKind == "Stairwell" then
+				local band = bandLayout(point)
+				local from = table.find(Enums.LevelId, levelId :: any)
+				local at = if band then table.find(Enums.LevelId, band :: any) else nil
+				if from and at and at > from then
+					layoutId = band :: string
+				end
+			end
+			return {
+				layoutId = layoutId,
+				zoneId = Attributes.getString(zone, W.ZoneId, zone.Name),
+				roomKind = if roomKind ~= "" then roomKind else nil,
+				outdoors = roomKind == "Roof",
+			}
+		end
+	end
+	local layoutId = bandLayout(point)
+	return {
+		layoutId = layoutId,
+		zoneId = nil,
+		roomKind = nil,
+		outdoors = layoutId == nil or (not zonesExist and LightingController.isOutdoors(layoutId)),
+	}
+end
+
+-- The layout a world point is in (see placeAt).
+function LightingController.layoutAt(point: Vector3): string?
+	return LightingController.placeAt(point).layoutId
+end
+
+-- The layout-only outdoors guess (the roof level, or outside every building). placeAt refines it per zone.
 function LightingController.isOutdoors(layoutId: string?): boolean
 	return layoutId == nil or layoutId == Enums.LevelId[#Enums.LevelId]
 end
@@ -571,9 +662,10 @@ end
 
 local function refreshActive()
 	local view = viewPoint()
-	local here = LightingController.layoutAt(view)
+	local place = LightingController.placeAt(view)
+	local here = place.layoutId
 	viewLayout = here
-	viewOutdoors = LightingController.isOutdoors(here)
+	viewOutdoors = place.outdoors
 
 	local focus: { [string]: boolean } = {}
 	local list: { string } = {}
@@ -929,7 +1021,7 @@ end
 
 local function startFlash(intensity: number, stages: number, elapsed: number)
 	-- Decided from the camera right now (the active-set refresh only runs at 4 Hz).
-	local outdoors = LightingController.isOutdoors(LightingController.layoutAt(viewPoint()))
+	local outdoors = LightingController.placeAt(viewPoint()).outdoors
 	local indoor = if outdoors then 1 else INDOOR_FLASH
 	local strength = math.clamp(intensity, 0, 2) * flashScale * indoor
 	if strength <= 0 then
@@ -1117,6 +1209,13 @@ function LightingController.Init()
 end
 
 function LightingController.Start()
+	local function dropZones()
+		zoneCache = nil
+		dirty = true
+	end
+	zoneSignalsHooked = true
+	serviceTrove:Connect(CollectionService:GetInstanceAddedSignal(Tags.Zone), dropZones)
+	serviceTrove:Connect(CollectionService:GetInstanceRemovedSignal(Tags.Zone), dropZones)
 	serviceTrove:Connect(CollectionService:GetInstanceAddedSignal(Tags.LevelLight), register)
 	serviceTrove:Connect(CollectionService:GetInstanceRemovedSignal(Tags.LevelLight), unregister)
 	for _, instance in CollectionService:GetTagged(Tags.LevelLight) do

@@ -15,14 +15,25 @@
 --   glide         PlaybackSpeed multiplier reached after `time` seconds (rising shrieks, sweeping whooshes)
 --   grains        re-trigger the layer `count` times, `spacing` apart, each with fresh jitter (crunch, crackle)
 --   chance        probability the layer sounds on a given trigger; volumeJitter = +/- fraction of volume
---   effects       SoundEffect chain in order (first = highest Priority); kinds and ranges in SynthPresets.Effects
+--   effects       SoundEffect chain in order (first = highest Priority); kinds and ranges in SynthPresets.Effects.
+--                 The chain lives on one pooled SoundGroup per layer that every grain of the layer plays through,
+--                 and that group outlives the grains by the chain's tail (chainTail), so reverbs and echoes ring out
 -- Preset fields: bus, layers, rollOff {min, max} (3D distances; nil = bus default when placed in 3D), priority
 -- (0..100, voice stealing), maxVoices (concurrent voices of this preset), caption (Strings key), looped (the voice
 -- runs until stopped), repeat {interval, jitter} (how a looped voice re-triggers its non-bed layers: heartbeat
--- pulses, drips, rain patter), duck (other buses dipped while this plays).
+-- pulses, drips, rain patter), duck (other buses dipped while this plays), space (an effect chain the whole preset
+-- plays through, after each layer's own chain: one shared room for an ambience bed instead of a reverb per layer).
 --
 -- Loop-region tones: a looped region a few milliseconds long repeats fast enough to become a pitched tone
 -- (period = region length / speed), e.g. a 10 ms slice of the slider tick at speed 1.2 hums at 120 Hz.
+--
+-- Rules the validator enforces (they keep recipes playable on a 30 fps phone):
+--   * grains are spaced at least MinGrainSpacing apart: grains only start on frames, so denser clusters stack
+--     into one transient. Sub-frame density comes from a short Echo on the layer (sample-accurate) instead.
+--   * at most MaxGrainCount grains per trigger and MaxPresetReverbs Reverb effects per preset.
+--   * a bed layer (looped, no duration) is either a whole-file loop of a seamless engine loop (Falling, Swim,
+--     FootstepsPlastic) or a loop-region tone no longer than MaxToneRegion. Looping a longer region of any other
+--     file (e.g. the explosion) restarts on an audible seam every pass.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -84,6 +95,7 @@ export type Preset = {
 	["repeat"]: Pulse?,
 	looped: boolean?,
 	duck: { Duck }?,
+	space: { Effect }?,
 }
 
 -- Random one-shots scattered around the listener while an ambience bed plays. distance nil = 2D.
@@ -180,6 +192,17 @@ local EFFECT_KINDS: { EffectKind } = {
 local SPEED_RANGE = r(0.05, 8)
 local VOLUME_RANGE = r(0, 4)
 
+-- Recipe rules (see the header).
+local MIN_GRAIN_SPACING = 0.03
+local MAX_GRAIN_COUNT = 10
+local MAX_PRESET_REVERBS = 2
+local MAX_TONE_REGION = 0.06
+-- Longest tail a chain is ever held open for (seconds), and the level an echo has to decay to (dB re: input).
+local MAX_TAIL = 14
+local TAIL_FLOOR_DB = -60
+-- Every Chorus / Flanger delay line is a few tens of milliseconds long.
+local MODULATION_TAIL = 0.05
+
 -- Default 3D distances per bus when a preset without rollOff is placed in the world.
 local WORLD_ROLLOFF = r(8, 120)
 local DEFAULT_ROLLOFF: { [Enums.AudioBus]: Range } = {
@@ -187,6 +210,7 @@ local DEFAULT_ROLLOFF: { [Enums.AudioBus]: Range } = {
 	World = WORLD_ROLLOFF,
 	Monster = r(10, 160),
 	Player = r(6, 80),
+	Body = r(2, 20),
 	UI = r(4, 40),
 }
 
@@ -398,6 +422,10 @@ define("Lunge", {
 })
 
 -- Metal scraping inside the walls while the Creature crawls the ducts (looped; audible to everyone nearby).
+-- Each stride is one sustained scrape: wind noise sped up into a hiss and pushed through a tight comb echo (the
+-- 10-15 ms delay rings like sheet steel), crushed, and chopped by a fast low-duty tremolo into stick-slip chatter,
+-- sagging in pitch as the limb drags. Steel squeals under the weight, claws click on the seams and the body slides.
+-- Under it the duct itself rumbles in its bore.
 define("VentScrape", {
 	bus = "Monster",
 	priority = 85,
@@ -405,54 +433,65 @@ define("VentScrape", {
 	rollOff = r(10, 180),
 	caption = "Caption.VentScrape",
 	looped = true,
-	["repeat"] = pulse(1.35, 0.45),
+	["repeat"] = pulse(1.1, 0.4),
 	layers = {
-		-- Sheet-metal drone: wind dragged slow through a flanger and a resonant mid band, pulsing with each limb.
+		-- The duct: a slow resonant rumble (the comb echo is the tube's ringing mode).
 		{
 			sample = "Falling",
-			volume = 0.9,
-			speed = 0.55,
-			region = r(0.15, 1.1),
+			volume = 0.45,
+			speed = 0.48,
 			looped = true,
-			envelope = env(0.4, nil, 0.6),
-			effects = {
-				flanger(0.35, 0.8, 0.75),
-				eq(-6, 7, -4),
-				distortion(0.25),
-				tremolo(3.2, 0.55, 0.6),
-				echo(0.12, 0.45, -4),
-			},
+			envelope = env(0.5, nil, 0.6),
+			effects = { eq(-6, 6, -14), echo(0.02, 0.6, -8) },
 		},
-		-- Claws: slowed footstep transients sliced at random, scraped in bursts every stride.
+		-- The scrape (one sustained stroke per stride).
 		{
-			sample = "FootstepsPlastic",
-			volume = 1.1,
-			speed = r(0.32, 0.45),
-			region = r(0, 0.3),
-			regionJitter = 0.05,
-			grains = grains(5, 8, 0.09, 0.22),
-			volumeJitter = 0.25,
-			effects = { chorus(1.2, 0.5, 0.5), flanger(2, 0.5, 0.6), eq(-4, 7, 2), echo(0.09, 0.5, -3) },
+			sample = "Falling",
+			volume = 0.75,
+			speed = r(1.8, 2.4),
+			region = r(0.1, 1.1),
+			regionJitter = 0.08,
+			looped = true,
+			duration = 0.75,
+			envelope = env(0.06, nil, 0.3),
+			glide = glide(0.85, 0.6),
+			effects = { echo(0.012, 0.8, -3), distortion(0.5), eq(-20, 8, 2), tremolo(9, 0.7, 0.3) },
 		},
-		-- Duct rattle: a slice of the slider tick looped into a crushed ~9 Hz flutter, the steel straining.
+		-- Steel squealing under load: an 8 ms loop tone bending upward, not on every stride.
 		{
 			sample = "VolumeSlider",
-			volume = 0.28,
-			speed = 0.35,
-			region = r(0.01, 0.05),
+			volume = 0.22,
+			speed = r(0.9, 1.4),
+			region = r(0.02, 0.028),
 			looped = true,
-			envelope = env(0.8, nil, 0.8),
-			effects = { distortion(0.7), flanger(0.6, 0.7, 0.6), tremolo(1.5, 0.6, 0.5), eq(-10, 4, -8) },
+			duration = 0.55,
+			delay = 0.08,
+			delayJitter = 0.2,
+			chance = 0.55,
+			envelope = env(0.05, nil, 0.25),
+			glide = glide(1.18, 0.45),
+			effects = { distortion(0.35), flanger(0.7, 0.4, 0.35), eq(-24, 4, -2) },
+		},
+		-- Claws: short bright clicks (footstep transients sped up), skittering on the steel.
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.9,
+			speed = r(1.6, 2.2),
+			region = r(0, 0.06),
+			regionJitter = 0.12,
+			grains = grains(3, 5, 0.05, 0.13),
+			volumeJitter = 0.3,
+			effects = { eq(-10, 6, 4), echo(0.011, 0.6, -6) },
 		},
 		-- Body drag: cloth rustle slowed into a heavy torso sliding on steel.
 		{
 			sample = "GetUp",
-			volume = 0.8,
+			volume = 0.7,
 			speed = r(0.45, 0.55),
 			delay = 0.2,
 			delayJitter = 0.15,
 			grains = grains(1, 2, 0.3, 0.6),
-			effects = { eq(4, 3, -10), echo(0.08, 0.4, -6) },
+			effects = { eq(4, 3, -10), echo(0.016, 0.5, -8) },
 		},
 	},
 })
@@ -608,7 +647,7 @@ define("JumpscareSting", {
 -- Lub-dub: the landing thump slowed into a chest thud with the low end boosted; the second beat follows by a
 -- layer delay and the voice re-triggers on the pulse interval.
 define("Heartbeat", {
-	bus = "Player",
+	bus = "Body",
 	priority = 60,
 	maxVoices = 1,
 	caption = "Caption.Heartbeat",
@@ -644,7 +683,7 @@ define("Heartbeat", {
 })
 
 define("HeartbeatFast", {
-	bus = "Player",
+	bus = "Body",
 	priority = 62,
 	maxVoices = 1,
 	caption = "Caption.Heartbeat",
@@ -680,7 +719,7 @@ define("HeartbeatFast", {
 })
 
 define("Breathing", {
-	bus = "Player",
+	bus = "Body",
 	priority = 40,
 	maxVoices = 1,
 	looped = true,
@@ -710,8 +749,10 @@ define("Breathing", {
 	},
 })
 
+-- Panicked breathing: short, shaking inhales (a fast tremolo is the shudder) and ragged exhales. Pure breath noise,
+-- no voice: the stock avatar grunt must never be recognisable in a horror moment.
 define("BreathingPanic", {
-	bus = "Player",
+	bus = "Body",
 	priority = 45,
 	maxVoices = 1,
 	looped = true,
@@ -725,7 +766,7 @@ define("BreathingPanic", {
 			looped = true,
 			duration = 0.5,
 			envelope = env(0.18, 0.12, 0.2),
-			effects = { eq(-20, 0, -4) },
+			effects = { eq(-20, 0, -4), tremolo(9, 0.35, 0.5) },
 		},
 		{
 			sample = "Falling",
@@ -738,18 +779,22 @@ define("BreathingPanic", {
 			envelope = env(0.06, 0.2, 0.36),
 			effects = { eq(-16, -2, -8), distortion(0.12) },
 		},
+		-- Now and then the breath catches in the throat.
 		{
-			sample = "Oof",
-			volume = 0.25,
-			speed = r(1.2, 1.32),
-			delay = 0.5,
-			chance = 0.35,
-			effects = { eq(-14, 2, -2) },
+			sample = "GetUp",
+			volume = 0.18,
+			speed = r(1.5, 1.8),
+			region = r(0, 0.12),
+			delay = 0.47,
+			chance = 0.3,
+			effects = { eq(-14, 3, -6) },
 		},
 	},
 })
 
--- A loud gasp (failed breath hold): the grunt sped up into a sharp intake with a burst of air.
+-- A loud gasp (failed breath hold): a sharp intake built from breath noise alone. The wind loop is narrowed to the
+-- throat band and rises in pitch as the lungs fill, a soft whoosh of air sits under it, and the throat catches at the
+-- top. No voiced sample: the stock avatar grunt would read as comedy.
 define("Gasp", {
 	bus = "Player",
 	priority = 80,
@@ -758,35 +803,30 @@ define("Gasp", {
 	caption = "Caption.Gasp",
 	layers = {
 		{
-			sample = "Oof",
-			volume = 1.3,
-			speed = r(1.15, 1.3),
-			envelope = env(0.01, nil, 0.15),
-			effects = { eq(-12, 4, 2), reverb(0.6, -12) },
-		},
-		{
 			sample = "Falling",
-			volume = 0.8,
-			speed = 1.4,
-			region = r(0.1, 0.5),
-			duration = 0.45,
-			envelope = env(0.02, 0.15, 0.25),
-			effects = { eq(-24, 2, 4) },
+			volume = 1.25,
+			speed = 1.3,
+			region = r(0.1, 0.7),
+			envelope = env(0.01, 0.15, 0.2),
+			glide = glide(1.55, 0.25),
+			effects = { eq(-30, 4, 2), reverb(0.6, -12) },
 		},
+		{ sample = "Jump", volume = 0.55, speed = 1.2, effects = { eq(-18, 2, 0) } },
 		{
-			sample = "Ouch",
-			volume = 0.4,
-			speed = r(0.95, 1.05),
-			delay = 0.18,
-			chance = 0.5,
-			effects = { eq(-10, 2, -4) },
+			sample = "GetUp",
+			volume = 0.35,
+			speed = 1.6,
+			region = r(0, 0.15),
+			delay = 0.2,
+			chance = 0.6,
+			effects = { eq(-12, 4, -2) },
 		},
 	},
 })
 
 -- EMF interference (looped, 2D): crushed and chopped wind hiss, crackle grains, a buzzing loop-region tone.
 define("EmfStatic", {
-	bus = "Player",
+	bus = "Body",
 	priority = 55,
 	maxVoices = 1,
 	caption = "Caption.Static",
@@ -797,20 +837,20 @@ define("EmfStatic", {
 			sample = "Falling",
 			volume = 0.55,
 			speed = 2.6,
-			region = r(0.1, 1),
 			looped = true,
 			envelope = env(0.08, nil, 0.25),
 			effects = { distortion(0.8), tremolo(17, 0.85, 0.3), eq(-30, 0, 4) },
 		},
+		-- Crackle: a few sped-up clicks per burst; the short echo fills them in to dense static.
 		{
 			sample = "FootstepsPlastic",
 			volume = 0.45,
 			speed = r(2.5, 3.5),
 			region = r(0, 0.3),
 			regionJitter = 0.08,
-			grains = grains(4, 9, 0.02, 0.09),
+			grains = grains(3, 6, 0.035, 0.11),
 			volumeJitter = 0.5,
-			effects = { distortion(0.9), eq(-24, 2, 6) },
+			effects = { distortion(0.9), eq(-24, 2, 6), echo(0.014, 0.35, -10) },
 		},
 		{
 			sample = "VolumeSlider",
@@ -905,7 +945,10 @@ define("Pickup", {
 
 ---------------------------------------------------------------- world events
 
--- Bear trap: a crushed strike, ringing iron, a rattling spring, the weight of the jaws, the crack of the hit.
+-- Bear trap: a crushed strike, then ringing iron. The ring is a 6 ms slice of the slider tick looped into a bright
+-- tone, struck and left to decay while the jaws settle (a slight downward glide), with a tight comb echo for the
+-- steel body and an inharmonic second partial above it (iron never rings in tune with itself). Then the spring
+-- rattling as it unloads, the weight of the jaws and the crack of the hit.
 define("TrapSnap", {
 	bus = "World",
 	priority = 90,
@@ -923,17 +966,33 @@ define("TrapSnap", {
 		},
 		{
 			sample = "VolumeSlider",
-			volume = 1.4,
-			speed = r(0.42, 0.5),
-			effects = { distortion(0.35), flanger(0.2, 0.9, 0.5), echo(0.05, 0.55, -2), reverb(1.6, -6) },
+			volume = 0.9,
+			speed = r(1.5, 1.7),
+			region = r(0.03, 0.036),
+			looped = true,
+			duration = 0.9,
+			envelope = env(0.002, nil, 0.8),
+			glide = glide(0.97, 0.8),
+			effects = { echo(0.01, 0.6, -4), distortion(0.2), eq(-18, 4, 2) },
 		},
 		{
 			sample = "VolumeSlider",
-			volume = 0.6,
+			volume = 0.45,
+			speed = r(2.6, 2.9),
+			region = r(0.03, 0.036),
+			looped = true,
+			duration = 0.6,
+			envelope = env(0.002, nil, 0.55),
+			glide = glide(0.98, 0.5),
+			effects = { eq(-30, 0, 4), reverb(1.4, -10) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.55,
 			speed = r(1.4, 1.8),
 			delay = 0.03,
-			grains = grains(4, 6, 0.025, 0.05),
-			effects = { eq(-20, 2, 4), echo(0.04, 0.4, -8) },
+			grains = grains(3, 5, 0.035, 0.06),
+			effects = { eq(-20, 2, 4), echo(0.018, 0.35, -8) },
 		},
 		{ sample = "JumpLand", volume = 1.2, speed = 0.7, effects = { eq(6, -4, -12) } },
 		{ sample = "Explosion", volume = 0.6, speed = 1.4, region = r(0, 0.35), effects = { eq(0, 2, -6) } },
@@ -946,14 +1005,15 @@ define("BoneCrunch", {
 	maxVoices = 3,
 	rollOff = r(6, 120),
 	layers = {
+		-- Splintering: a few crushed transients; the short echo packs them into a dense crackle.
 		{
 			sample = "FootstepsPlastic",
 			volume = 1.6,
 			speed = r(0.55, 0.7),
 			region = r(0, 0.3),
 			regionJitter = 0.04,
-			grains = grains(3, 5, 0.02, 0.05),
-			effects = { distortion(0.7), eq(4, 6, -6) },
+			grains = grains(2, 4, 0.035, 0.06),
+			effects = { distortion(0.7), eq(4, 6, -6), echo(0.012, 0.45, -6) },
 		},
 		{
 			sample = "FootstepsPlastic",
@@ -975,38 +1035,57 @@ define("BoneCrunch", {
 	},
 })
 
--- One drop: the splash's first transient sped up hard and cut short, pitch and level different every time.
--- Played looped (e.g. a DripPipe emitter) it re-triggers on the pulse.
+-- One drop: a "plink" - a 5 ms slice of the slider tick looped into a tone whose pitch rises over 40 ms, the way a
+-- drop's bubble rings - with the splash transient mixed in under it, an echo off the floor and a short damp room
+-- tail (the tails ring out on the layer's group after the drop itself is gone).
+local DRIP_LAYERS: { Layer } = {
+	{
+		sample = "VolumeSlider",
+		volume = 0.5,
+		speed = r(2.4, 3.2),
+		region = r(0.03, 0.035),
+		looped = true,
+		duration = 0.07,
+		volumeJitter = 0.3,
+		envelope = env(0.001, 0.01, 0.05),
+		glide = glide(1.3, 0.04),
+		effects = { eq(-30, -2, 4), echo(0.11, 0.3, -12), reverb(1.4, -9) },
+	},
+	{
+		sample = "WaterImpact",
+		volume = 0.18,
+		speed = r(2.6, 3.4),
+		region = r(0, 0.08),
+		regionJitter = 0.02,
+		volumeJitter = 0.3,
+		envelope = env(0.001, 0.03, 0.04),
+		effects = { eq(-30, -2, 4) },
+	},
+}
+
+-- DripPipe emitters play this looped (AudioController); it re-triggers on the pulse. Its own voices are reserved
+-- for emitters (maxVoices above AudioController.MaxEmitterVoices); bed stingers use DripStinger below, so a
+-- stinger can never evict a pipe.
 define("Drip", {
 	bus = "World",
 	priority = 15,
-	maxVoices = 8,
+	maxVoices = 10,
 	rollOff = r(4, 60),
 	["repeat"] = pulse(2.2, 1.3),
-	layers = {
-		{
-			sample = "WaterImpact",
-			volume = 0.6,
-			speed = r(2.6, 3.7),
-			region = r(0, 0.12),
-			regionJitter = 0.02,
-			duration = 0.12,
-			volumeJitter = 0.25,
-			envelope = env(0.002, 0.05, 0.06),
-			effects = { eq(-30, -2, 4), echo(0.11, 0.35, -10), reverb(1.4, -8) },
-		},
-		{
-			sample = "VolumeSlider",
-			volume = 0.18,
-			speed = r(1.6, 2.3),
-			delay = 0.004,
-			chance = 0.5,
-			effects = { eq(-40, -6, 2), reverb(1.2, -10) },
-		},
-	},
+	layers = DRIP_LAYERS,
 })
 
--- Broken glass and cans underfoot: sped-up transient clusters, skittering shards, crushed tin, body weight.
+-- A single drop somewhere nearby (ambience bed stinger, one-shot).
+define("DripStinger", {
+	bus = "World",
+	priority = 14,
+	maxVoices = 3,
+	rollOff = r(4, 60),
+	layers = DRIP_LAYERS,
+})
+
+-- Broken glass and cans underfoot: transient clusters (every grain lands on its own frame and a short echo packs
+-- each one into a dense crunch), skittering shards, crushed tin, body weight.
 define("GlassCrunch", {
 	bus = "World",
 	priority = 75,
@@ -1020,17 +1099,17 @@ define("GlassCrunch", {
 			speed = r(1.8, 2.3),
 			region = r(0, 0.3),
 			regionJitter = 0.06,
-			grains = grains(4, 7, 0.015, 0.04),
-			effects = { eq(-18, 2, 8), distortion(0.5) },
+			grains = grains(3, 5, 0.035, 0.06),
+			effects = { eq(-18, 2, 8), distortion(0.5), echo(0.013, 0.45, -6) },
 		},
 		{
 			sample = "VolumeSlider",
 			volume = 0.5,
 			speed = r(2.8, 4.2),
 			delay = 0.02,
-			grains = grains(5, 9, 0.02, 0.07),
+			grains = grains(4, 7, 0.035, 0.08),
 			volumeJitter = 0.4,
-			effects = { eq(-40, -4, 6), echo(0.025, 0.3, -10) },
+			effects = { eq(-40, -4, 6), echo(0.021, 0.35, -9) },
 		},
 		{
 			sample = "FootstepsPlastic",
@@ -1057,14 +1136,15 @@ define("FlaskShatter", {
 			region = r(0, 0.15),
 			effects = { distortion(0.6), eq(-12, 4, 8) },
 		},
+		-- Shards: one per frame at most; the echo multiplies each into a shower.
 		{
 			sample = "VolumeSlider",
 			volume = 0.7,
 			speed = r(3, 4.5),
 			delay = 0.01,
-			grains = grains(7, 12, 0.015, 0.05),
+			grains = grains(5, 8, 0.035, 0.07),
 			volumeJitter = 0.5,
-			effects = { eq(-40, -4, 6), echo(0.03, 0.3, -8) },
+			effects = { eq(-40, -4, 6), echo(0.017, 0.4, -7) },
 		},
 		{
 			sample = "WaterImpact",
@@ -1174,8 +1254,13 @@ define("DoorSmash", {
 			speed = r(0.45, 0.55),
 			region = r(0, 0.3),
 			regionJitter = 0.05,
-			grains = grains(4, 7, 0.01, 0.03),
-			effects = { distortion(0.75), eq(4, 6, 2), compressor(-18, 10, 0.001, 0.2, 6) },
+			grains = grains(2, 4, 0.035, 0.06),
+			effects = {
+				distortion(0.75),
+				eq(4, 6, 2),
+				compressor(-18, 10, 0.001, 0.2, 6),
+				echo(0.012, 0.5, -5),
+			},
 		},
 		{
 			sample = "Explosion",
@@ -1311,9 +1396,9 @@ define("LightBurst", {
 			volume = 0.6,
 			speed = r(3, 4.5),
 			delay = 0.04,
-			grains = grains(6, 10, 0.02, 0.06),
+			grains = grains(4, 7, 0.035, 0.08),
 			volumeJitter = 0.4,
-			effects = { eq(-40, -4, 6), echo(0.03, 0.3, -8) },
+			effects = { eq(-40, -4, 6), echo(0.017, 0.4, -7) },
 		},
 		{
 			sample = "Falling",
@@ -1372,12 +1457,14 @@ define("Splash", {
 
 ---------------------------------------------------------------- weather
 
--- Thunder (2D): a close crack some of the time, the main rolling rumble, and a far second roll.
+-- Thunder (2D): a close crack some of the time, the main rolling rumble, and a far second roll, all rolling around
+-- one huge open-air space.
 define("Thunder", {
 	bus = "Ambience",
 	priority = 70,
 	maxVoices = 2,
 	caption = "Caption.Thunder",
+	space = { reverb(9.5, -3) },
 	layers = {
 		{
 			sample = "Explosion",
@@ -1394,7 +1481,7 @@ define("Thunder", {
 			region = r(0.1, 1.8),
 			delay = 0.15,
 			delayJitter = 0.1,
-			effects = { reverb(9, -2), eq(6, -6, -24), tremolo(2.2, 0.35, 0.5) },
+			effects = { eq(6, -6, -24), tremolo(2.2, 0.35, 0.5) },
 		},
 		{
 			sample = "Explosion",
@@ -1403,7 +1490,7 @@ define("Thunder", {
 			region = r(0.4, 1.8),
 			delay = 0.9,
 			delayJitter = 0.3,
-			effects = { eq(6, -10, -40), tremolo(1.1, 0.5, 0.5), reverb(10, -4) },
+			effects = { eq(6, -10, -40), tremolo(1.1, 0.5, 0.5) },
 		},
 		{
 			sample = "Falling",
@@ -1423,13 +1510,14 @@ define("DistantThunder", {
 	bus = "Ambience",
 	priority = 30,
 	maxVoices = 2,
+	space = { reverb(11, -5) },
 	layers = {
 		{
 			sample = "Explosion",
 			volume = 0.9,
 			speed = r(0.2, 0.26),
 			region = r(0.1, 1.8),
-			effects = { reverb(10, -4), eq(6, -10, -40), tremolo(1.4, 0.5, 0.5) },
+			effects = { eq(6, -10, -40), tremolo(1.4, 0.5, 0.5) },
 		},
 		{
 			sample = "Explosion",
@@ -1438,7 +1526,7 @@ define("DistantThunder", {
 			region = r(0.3, 1.8),
 			delay = 0.6,
 			delayJitter = 0.4,
-			effects = { eq(6, -14, -50), reverb(12, -6) },
+			effects = { eq(6, -14, -50) },
 		},
 	},
 })
@@ -1480,89 +1568,92 @@ define("Rain", {
 })
 
 ---------------------------------------------------------------- ambience beds (2D, looped, Ambience bus)
+--
+-- Every bed is built from whole-file loops of the engine's own seamless loops (the falling-wind and swim files),
+-- slowed into rumbles and filtered, so nothing in a bed ever restarts on a seam. Two copies of the same file run at
+-- different speeds and start points so they beat slowly against each other and their loop points never line up.
+-- Movement comes from very slow chorus / flanger / tremolo; one shared reverb per bed (space) is the room. The
+-- explosion never loops: it is only heard as a sparse far rumble (FarRumble, a bed stinger).
 
--- Basement: the building groaning (explosion slowed to a crawl, twice, detuned so loop seams never align),
--- stale air through the boiler room, water ticking in old pipes; long concrete reverb, slow tremolo breathing.
+-- Basement: the building's weight as a subsonic rumble, a second detuned throat beating under it, stale air
+-- through the boiler room, water shifting in old pipes; a long concrete room.
 define("DroneBasement", {
 	bus = "Ambience",
 	priority = 10,
 	maxVoices = 2,
 	looped = true,
+	space = { reverb(7, -5, 0, 1, 0.9) },
 	layers = {
 		{
-			sample = "Explosion",
-			volume = 0.9,
-			speed = 0.24,
-			region = r(0.15, 1.6),
+			sample = "Falling",
+			volume = 0.95,
+			speed = 0.23,
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { eq(4, -6, -30), reverb(8, -4, -2), tremolo(0.18, 0.35, 0.5) },
-		},
-		{
-			sample = "Explosion",
-			volume = 0.6,
-			speed = 0.31,
-			region = r(0.3, 1.7),
-			timePosition = 0.4,
-			looped = true,
-			envelope = env(4, nil, 3),
-			effects = { eq(3, -8, -36), reverb(10, -6, -4), flanger(0.05, 0.5, 0.35) },
+			effects = { eq(6, -8, -34), chorus(0.07, 0.5, 0.4), tremolo(0.11, 0.35, 0.5) },
 		},
 		{
 			sample = "Falling",
-			volume = 0.5,
-			speed = 0.32,
-			region = r(0.1, 1.1),
+			volume = 0.6,
+			speed = 0.29,
+			timePosition = 0.55,
 			looped = true,
-			envelope = env(3, nil, 3),
-			effects = { flanger(0.07, 0.6, 0.4), eq(2, -4, -24), reverb(6, -8) },
+			envelope = env(4, nil, 3),
+			effects = { eq(4, -10, -40), flanger(0.05, 0.55, 0.35) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.22,
+			speed = 0.62,
+			timePosition = 0.3,
+			looped = true,
+			envelope = env(5, nil, 3),
+			effects = { eq(-12, -2, -14), tremolo(0.07, 0.6, 0.5) },
 		},
 		{
 			sample = "Swim",
-			volume = 0.15,
-			speed = 0.4,
-			region = r(0, 0.8),
+			volume = 0.14,
+			speed = 0.38,
 			looped = true,
 			envelope = env(4, nil, 3),
-			effects = { eq(4, -8, -30), chorus(0.2, 0.5, 0.5), reverb(5, -6) },
+			effects = { eq(4, -8, -30), chorus(0.2, 0.5, 0.5) },
 		},
 	},
 })
 
--- Hallways: wind moaning down long broken corridors, a thin whistle, the far groan, a dying mains hum.
+-- Hallways: wind moaning down long broken corridors, a thinner draught above it, the deep body, a dying mains hum.
 define("DroneHallways", {
 	bus = "Ambience",
 	priority = 10,
 	maxVoices = 2,
 	looped = true,
+	space = { reverb(5, -6) },
 	layers = {
 		{
 			sample = "Falling",
-			volume = 0.6,
-			speed = 0.45,
-			region = r(0.1, 1.1),
+			volume = 0.7,
+			speed = 0.42,
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { flanger(0.06, 0.7, 0.45), eq(-2, 0, -16), reverb(5, -6), tremolo(0.12, 0.4, 0.5) },
+			effects = { flanger(0.06, 0.7, 0.45), eq(-2, 0, -16), tremolo(0.12, 0.4, 0.5) },
 		},
 		{
 			sample = "Falling",
-			volume = 0.35,
-			speed = 0.62,
-			region = r(0.2, 1),
-			timePosition = 0.3,
+			volume = 0.4,
+			speed = 0.57,
+			timePosition = 0.4,
 			looped = true,
 			envelope = env(4, nil, 3),
-			effects = { eq(-10, -2, -10), chorus(0.15, 0.6, 0.5), reverb(6, -8) },
+			effects = { eq(-10, -2, -10), chorus(0.15, 0.6, 0.5) },
 		},
 		{
-			sample = "Explosion",
+			sample = "Falling",
 			volume = 0.55,
-			speed = 0.27,
-			region = r(0.2, 1.6),
+			speed = 0.24,
+			timePosition = 0.8,
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { eq(4, -8, -34), reverb(9, -6), tremolo(0.09, 0.4, 0.5) },
+			effects = { eq(5, -8, -34), tremolo(0.09, 0.4, 0.5) },
 		},
 		{
 			sample = "VolumeSlider",
@@ -1576,143 +1667,140 @@ define("DroneHallways", {
 	},
 })
 
--- Science hall: an eerie chorused air, bubbling in forgotten tanks, the low groan, a gas leak swelling.
+-- Science hall: an eerie chorused air, bubbling in forgotten tanks, the deep body, a gas leak swelling and fading.
 define("DroneScience", {
 	bus = "Ambience",
 	priority = 10,
 	maxVoices = 2,
 	looped = true,
+	space = { reverb(5, -6) },
 	layers = {
 		{
 			sample = "Falling",
 			volume = 0.45,
 			speed = 0.58,
-			region = r(0.1, 1.1),
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { chorus(0.25, 0.7, 0.6), eq(-8, 2, -12), reverb(5, -6), tremolo(0.15, 0.3, 0.5) },
+			effects = { chorus(0.25, 0.7, 0.6), eq(-8, 2, -12), tremolo(0.15, 0.3, 0.5) },
 		},
 		{
 			sample = "Swim",
 			volume = 0.22,
 			speed = 0.35,
-			region = r(0, 0.8),
 			looped = true,
 			envelope = env(4, nil, 3),
-			effects = { flanger(0.3, 0.6, 0.5), eq(2, -4, -20), reverb(4, -6) },
+			effects = { flanger(0.3, 0.6, 0.5), eq(2, -4, -20) },
 		},
 		{
-			sample = "Explosion",
-			volume = 0.55,
-			speed = 0.26,
-			region = r(0.2, 1.6),
+			sample = "Falling",
+			volume = 0.6,
+			speed = 0.25,
+			timePosition = 0.6,
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { eq(4, -8, -34), reverb(9, -6) },
+			effects = { eq(5, -8, -34), chorus(0.05, 0.4, 0.3) },
 		},
 		{
 			sample = "Falling",
 			volume = 0.12,
 			speed = 2.2,
-			region = r(0.1, 1.1),
 			looped = true,
 			envelope = env(5, nil, 3),
-			effects = { eq(-40, -10, 0), tremolo(0.6, 0.8, 0.3), reverb(3, -6) },
+			effects = { eq(-40, -10, 0), tremolo(0.06, 0.8, 0.3) },
 		},
 	},
 })
 
--- Gymnasium: a vast, slow hall; the groan stretched under a twelve-second reverb, air high in the rafters.
+-- Gymnasium: a vast, slow hall; the deep body stretched under a twelve-second room, air moving high in the rafters.
 define("DroneGym", {
 	bus = "Ambience",
 	priority = 10,
 	maxVoices = 2,
 	looped = true,
+	space = { reverb(12, -3, -2) },
 	layers = {
 		{
-			sample = "Explosion",
-			volume = 0.8,
+			sample = "Falling",
+			volume = 0.85,
 			speed = 0.2,
-			region = r(0.1, 1.7),
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { eq(5, -6, -36), reverb(12, -2, -4), tremolo(0.07, 0.4, 0.5) },
+			effects = { eq(6, -6, -36), tremolo(0.07, 0.4, 0.5) },
 		},
 		{
 			sample = "Falling",
 			volume = 0.5,
 			speed = 0.38,
-			region = r(0.1, 1.1),
+			timePosition = 0.5,
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { flanger(0.04, 0.8, 0.4), eq(0, -4, -20), reverb(10, -4) },
+			effects = { flanger(0.04, 0.8, 0.4), eq(0, -4, -20) },
 		},
 		{
 			sample = "Falling",
 			volume = 0.2,
 			speed = 0.9,
-			region = r(0.2, 1.1),
-			timePosition = 0.5,
+			timePosition = 0.2,
 			looped = true,
 			envelope = env(5, nil, 3),
-			effects = { eq(-16, -4, -6), reverb(12, -2), tremolo(0.05, 0.7, 0.5) },
+			effects = { eq(-16, -4, -6), tremolo(0.05, 0.7, 0.5) },
 		},
 	},
 })
 
--- Flooded pool: water lapping the tiles, a slower swell, the deep groan, a wet tiled-hall reverb.
+-- Flooded pool: water lapping the tiles (two staggered copies of the swim loop, so one always covers the other's
+-- seam), the deep body, damp air; a wet tiled hall.
 define("DronePool", {
 	bus = "Ambience",
 	priority = 10,
 	maxVoices = 2,
 	looped = true,
+	space = { reverb(9, -4) },
 	layers = {
 		{
 			sample = "Swim",
 			volume = 0.45,
 			speed = 0.5,
-			region = r(0, 0.8),
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { eq(2, -2, -12), reverb(9, -4), chorus(0.1, 0.5, 0.4) },
+			effects = { eq(2, -2, -12), chorus(0.1, 0.5, 0.4) },
 		},
 		{
 			sample = "Swim",
-			volume = 0.25,
+			volume = 0.3,
 			speed = 0.38,
-			region = r(0.1, 0.8),
-			timePosition = 0.3,
+			timePosition = 0.4,
 			looped = true,
 			envelope = env(4, nil, 3),
-			effects = { eq(4, -6, -20), reverb(10, -6), tremolo(0.11, 0.5, 0.5) },
+			effects = { eq(4, -6, -20), tremolo(0.11, 0.5, 0.5) },
 		},
 		{
-			sample = "Explosion",
-			volume = 0.45,
+			sample = "Falling",
+			volume = 0.55,
 			speed = 0.22,
-			region = r(0.2, 1.6),
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { eq(4, -8, -36), reverb(11, -4) },
+			effects = { eq(5, -8, -36), chorus(0.04, 0.4, 0.3) },
 		},
 		{
 			sample = "Falling",
 			volume = 0.15,
 			speed = 0.5,
-			region = r(0.1, 1.1),
+			timePosition = 0.7,
 			looped = true,
 			envelope = env(4, nil, 3),
-			effects = { eq(-6, -6, -20), reverb(8, -6) },
+			effects = { eq(-6, -6, -20) },
 		},
 	},
 })
 
--- Roof: the storm. Gusting wind, rain hiss, patter on the roof, the far rumble; dry, it is outdoors.
+-- Roof: the storm. Gusting wind, rain hiss, patter on the roof, a low rumble under the clouds; dry, it is outdoors.
 define("DroneRoof", {
 	bus = "Ambience",
 	priority = 10,
 	maxVoices = 2,
 	looped = true,
+	["repeat"] = pulse(0.4, 0.2),
 	layers = {
 		{
 			sample = "Falling",
@@ -1731,59 +1819,95 @@ define("DroneRoof", {
 			effects = { eq(-18, -2, 3), chorus(0.6, 0.5, 0.4) },
 		},
 		{
-			sample = "WaterImpact",
-			volume = 0.28,
-			speed = 2.2,
-			region = r(0, 0.5),
-			looped = true,
-			envelope = env(2, nil, 3),
-			effects = { eq(-24, -2, 4), chorus(1.1, 0.4, 0.5) },
-		},
-		{
-			sample = "Explosion",
-			volume = 0.4,
-			speed = 0.18,
-			region = r(0.3, 1.7),
+			sample = "Falling",
+			volume = 0.45,
+			speed = 0.26,
+			timePosition = 0.5,
 			looped = true,
 			envelope = env(4, nil, 3),
-			effects = { eq(6, -10, -40), reverb(6, -10), tremolo(0.06, 0.6, 0.5) },
+			effects = { eq(6, -10, -40), tremolo(0.06, 0.6, 0.5) },
+		},
+		-- Patter: a few drops on the roof every pulse.
+		{
+			sample = "WaterImpact",
+			volume = 0.22,
+			speed = r(2, 2.6),
+			region = r(0, 0.2),
+			regionJitter = 0.1,
+			grains = grains(2, 4, 0.04, 0.12),
+			volumeJitter = 0.5,
+			effects = { eq(-24, -2, 4) },
 		},
 	},
 })
 
--- Lobby (the safe zone): a warm boiler throb, soft air, water moving in the pipes. Less dissonant on purpose.
+-- Lobby (the safe zone): a warm boiler throb, soft air, water moving in the pipes, a faint motor hum. Less
+-- dissonant on purpose.
 define("DroneLobby", {
 	bus = "Ambience",
 	priority = 10,
 	maxVoices = 2,
 	looped = true,
+	space = { reverb(2.2, -10) },
 	layers = {
 		{
-			sample = "Explosion",
-			volume = 0.6,
+			sample = "Falling",
+			volume = 0.7,
 			speed = 0.3,
-			region = r(0.2, 1.4),
 			looped = true,
 			envelope = env(2, nil, 3),
-			effects = { eq(6, -6, -40), tremolo(0.75, 0.25, 0.5), reverb(2.2, -10) },
+			effects = { eq(7, -6, -40), tremolo(0.75, 0.25, 0.5) },
 		},
 		{
 			sample = "Falling",
 			volume = 0.25,
 			speed = 0.5,
-			region = r(0.1, 1.1),
+			timePosition = 0.4,
 			looped = true,
 			envelope = env(3, nil, 3),
-			effects = { eq(2, -6, -22), chorus(0.2, 0.4, 0.4), reverb(2, -10) },
+			effects = { eq(2, -6, -22), chorus(0.2, 0.4, 0.4) },
 		},
 		{
 			sample = "Swim",
 			volume = 0.08,
 			speed = 0.6,
-			region = r(0, 0.8),
 			looped = true,
 			envelope = env(4, nil, 3),
-			effects = { eq(0, -6, -18), reverb(2, -8) },
+			effects = { eq(0, -6, -18) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.035,
+			speed = 0.6,
+			region = r(0.02, 0.03),
+			looped = true,
+			envelope = env(4, nil, 3),
+			effects = { distortion(0.3), eq(-12, -2, -24) },
+		},
+	},
+})
+
+-- The building groaning somewhere far below (bed stinger, 2D): the explosion slowed to a crawl and faded in so the
+-- blast never reads as a blast, low-passed into a rumble with a slow shudder, dying away in a long reverb.
+define("FarRumble", {
+	bus = "Ambience",
+	priority = 14,
+	maxVoices = 2,
+	layers = {
+		{
+			sample = "Explosion",
+			volume = 0.75,
+			speed = r(0.2, 0.27),
+			envelope = env(1.4, nil, 0.5),
+			effects = { eq(6, -8, -36), tremolo(0.9, 0.3, 0.5), reverb(8, -5) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.3,
+			speed = 0.3,
+			duration = 4,
+			envelope = env(1.5, nil, 2.2),
+			effects = { eq(4, -10, -36) },
 		},
 	},
 })
@@ -1800,7 +1924,6 @@ define("UnderwaterBed", {
 			sample = "Swim",
 			volume = 0.5,
 			speed = 0.3,
-			region = r(0, 0.8),
 			looped = true,
 			envelope = env(0.3, nil, 0.6),
 			effects = { eq(6, -24, -60), chorus(0.4, 0.5, 0.5) },
@@ -1809,7 +1932,6 @@ define("UnderwaterBed", {
 			sample = "Falling",
 			volume = 0.3,
 			speed = 0.2,
-			region = r(0.1, 1.1),
 			looped = true,
 			envelope = env(0.3, nil, 0.6),
 			effects = { eq(6, -30, -70) },
@@ -1850,7 +1972,6 @@ define("FluorescentBuzz", {
 			sample = "Falling",
 			volume = 0.12,
 			speed = 2.2,
-			region = r(0.1, 1.1),
 			looped = true,
 			envelope = env(0.3, nil, 0.3),
 			effects = { tremolo(20, 0.7, 0.4), eq(-40, -6, 2) },
@@ -1858,7 +1979,8 @@ define("FluorescentBuzz", {
 	},
 })
 
--- Boiler (lobby / basement emitters): a throbbing low roar, air, a 60 Hz motor hum, an occasional pipe knock.
+-- Boiler (lobby / basement emitters): a throbbing low roar (the wind loop slowed and low-passed, pulsing like a
+-- burner), air through the flue, a 60 Hz motor hum, an occasional pipe knock.
 define("BoilerHum", {
 	bus = "World",
 	priority = 10,
@@ -1868,10 +1990,9 @@ define("BoilerHum", {
 	["repeat"] = pulse(1.8, 0.3),
 	layers = {
 		{
-			sample = "Explosion",
-			volume = 0.7,
+			sample = "Falling",
+			volume = 0.8,
 			speed = 0.28,
-			region = r(0.2, 1.4),
 			looped = true,
 			envelope = env(1, nil, 1),
 			effects = { eq(8, -6, -40), tremolo(0.9, 0.3, 0.5) },
@@ -1880,7 +2001,7 @@ define("BoilerHum", {
 			sample = "Falling",
 			volume = 0.3,
 			speed = 0.4,
-			region = r(0.1, 1.1),
+			timePosition = 0.5,
 			looped = true,
 			envelope = env(1, nil, 1),
 			effects = { eq(4, -4, -24) },
@@ -1904,12 +2025,14 @@ define("BoilerHum", {
 	},
 })
 
--- The building settling: a slowed loop-region tone sagging in pitch under a resonant wind drag.
+-- The building settling: a slowed loop-region tone sagging in pitch under a resonant wind drag, ringing in the
+-- concrete around it.
 define("MetalCreak", {
 	bus = "World",
 	priority = 18,
 	maxVoices = 3,
 	rollOff = r(10, 120),
+	space = { reverb(4, -5) },
 	layers = {
 		{
 			sample = "VolumeSlider",
@@ -1920,7 +2043,7 @@ define("MetalCreak", {
 			duration = 1.6,
 			glide = glide(0.6, 1.4),
 			envelope = env(0.3, nil, 0.8),
-			effects = { flanger(0.4, 0.8, 0.6), distortion(0.35), reverb(4, -4) },
+			effects = { flanger(0.4, 0.8, 0.6), distortion(0.35) },
 		},
 		{
 			sample = "Falling",
@@ -1929,7 +2052,7 @@ define("MetalCreak", {
 			region = r(0.1, 1.1),
 			duration = 1.4,
 			envelope = env(0.4, nil, 0.7),
-			effects = { flanger(0.3, 0.7, 0.6), eq(-8, 6, -14), reverb(4, -6) },
+			effects = { flanger(0.3, 0.7, 0.6), eq(-8, 6, -14) },
 		},
 	},
 })
@@ -1940,6 +2063,7 @@ define("DistantGroan", {
 	priority = 16,
 	maxVoices = 2,
 	rollOff = r(20, 160),
+	space = { reverb(8.5, -2) },
 	layers = {
 		{
 			sample = "Ouch",
@@ -1950,7 +2074,7 @@ define("DistantGroan", {
 			duration = 2.4,
 			glide = glide(0.8, 2),
 			envelope = env(0.8, nil, 1.2),
-			effects = { pitch(0.6), reverb(8, -2), eq(4, -2, -20) },
+			effects = { pitch(0.6), eq(4, -2, -20) },
 		},
 		{
 			sample = "Explosion",
@@ -1959,7 +2083,7 @@ define("DistantGroan", {
 			region = r(0.2, 1.5),
 			duration = 2.6,
 			envelope = env(1, nil, 1.2),
-			effects = { reverb(9, -4), eq(4, -8, -30) },
+			effects = { eq(4, -8, -30) },
 		},
 	},
 })
@@ -1979,9 +2103,10 @@ define("UiConfirm", {
 	bus = "UI",
 	priority = 52,
 	maxVoices = 2,
+	space = { reverb(0.8, -14) },
 	layers = {
-		{ sample = "VolumeSlider", volume = 0.55, speed = 0.9, effects = { reverb(0.8, -14) } },
-		{ sample = "VolumeSlider", volume = 0.55, speed = 1.35, delay = 0.07, effects = { reverb(0.8, -14) } },
+		{ sample = "VolumeSlider", volume = 0.55, speed = 0.9 },
+		{ sample = "VolumeSlider", volume = 0.55, speed = 1.35, delay = 0.07 },
 	},
 })
 
@@ -1989,9 +2114,10 @@ define("UiBack", {
 	bus = "UI",
 	priority = 50,
 	maxVoices = 2,
+	space = { reverb(0.8, -14) },
 	layers = {
-		{ sample = "VolumeSlider", volume = 0.5, speed = 1.2, effects = { reverb(0.8, -14) } },
-		{ sample = "VolumeSlider", volume = 0.5, speed = 0.8, delay = 0.07, effects = { reverb(0.8, -14) } },
+		{ sample = "VolumeSlider", volume = 0.5, speed = 1.2 },
+		{ sample = "VolumeSlider", volume = 0.5, speed = 0.8, delay = 0.07 },
 	},
 })
 
@@ -2117,9 +2243,9 @@ local FOOTSTEPS: { [Enums.SurfaceKind]: FootstepRecipe } = {
 				sample = "VolumeSlider",
 				volume = 0.3,
 				speed = r(2.8, 4),
-				grains = grains(2, 4, 0.02, 0.05),
+				grains = grains(2, 3, 0.035, 0.06),
 				volumeJitter = 0.4,
-				effects = { eq(-40, -4, 6) },
+				effects = { eq(-40, -4, 6), echo(0.013, 0.4, -8) },
 			},
 		},
 	},
@@ -2232,28 +2358,34 @@ end
 -- Ambience stingers per bed
 --------------------------------------------------------------------------------
 
+-- The explosion is only ever heard here, as a sparse far rumble (FarRumble), never as a loop.
 local BEDS: { [string]: { Stinger } } = {
 	DroneBasement = {
+		stinger("FarRumble", 20, 45, nil),
 		stinger("DistantGroan", 28, 60, r(40, 90)),
 		stinger("MetalCreak", 14, 32, r(25, 70)),
-		stinger("Drip", 5, 12, r(8, 26)),
+		stinger("DripStinger", 5, 12, r(8, 26)),
 	},
 	DroneHallways = {
+		stinger("FarRumble", 30, 60, nil, 0.8),
 		stinger("MetalCreak", 12, 28, r(20, 70)),
 		stinger("DistantGroan", 35, 70, r(50, 110)),
-		stinger("Drip", 9, 20, r(10, 30)),
+		stinger("DripStinger", 9, 20, r(10, 30)),
 	},
 	DroneScience = {
+		stinger("FarRumble", 30, 60, nil, 0.8),
 		stinger("MetalCreak", 14, 30, r(20, 70)),
-		stinger("Drip", 7, 16, r(8, 26)),
+		stinger("DripStinger", 7, 16, r(8, 26)),
 		stinger("DistantGroan", 40, 80, r(50, 110)),
 	},
 	DroneGym = {
+		stinger("FarRumble", 25, 55, nil),
 		stinger("MetalCreak", 10, 24, r(30, 90)),
 		stinger("DistantGroan", 30, 65, r(60, 130)),
 	},
 	DronePool = {
-		stinger("Drip", 3, 8, r(6, 30)),
+		stinger("FarRumble", 30, 60, nil, 0.8),
+		stinger("DripStinger", 3, 8, r(6, 30)),
 		stinger("MetalCreak", 16, 34, r(20, 80)),
 		stinger("DistantGroan", 40, 80, r(50, 120)),
 	},
@@ -2262,8 +2394,9 @@ local BEDS: { [string]: { Stinger } } = {
 		stinger("MetalCreak", 18, 40, r(15, 60)),
 	},
 	DroneLobby = {
+		stinger("FarRumble", 40, 90, nil, 0.5),
 		stinger("MetalCreak", 30, 70, r(10, 40), 0.6),
-		stinger("Drip", 10, 24, r(6, 20)),
+		stinger("DripStinger", 10, 24, r(6, 20)),
 	},
 }
 
@@ -2349,6 +2482,11 @@ SynthPresets.Required = REQUIRED
 SynthPresets.DefaultRollOff = DEFAULT_ROLLOFF
 SynthPresets.SpeedRange = table.freeze(SPEED_RANGE)
 SynthPresets.VolumeRange = table.freeze(VOLUME_RANGE)
+SynthPresets.MinGrainSpacing = MIN_GRAIN_SPACING
+SynthPresets.MaxGrainCount = MAX_GRAIN_COUNT
+SynthPresets.MaxPresetReverbs = MAX_PRESET_REVERBS
+SynthPresets.MaxToneRegion = MAX_TONE_REGION
+SynthPresets.MaxTail = MAX_TAIL
 
 function SynthPresets.get(name: string): Preset?
 	return presets[name]
@@ -2358,7 +2496,7 @@ function SynthPresets.has(name: string): boolean
 	return presets[name] ~= nil
 end
 
--- Every preset name, sorted.
+-- Every preset name, sorted (frozen; the dev "sound" command and the dev panel audition every recipe from it).
 function SynthPresets.names(): { string }
 	return order
 end
@@ -2400,6 +2538,52 @@ end
 
 function SynthPresets.effectSpec(kind: string): EffectSpec?
 	return EFFECTS[kind :: EffectKind]
+end
+
+-- Seconds an effect chain keeps sounding after its input stops (what its SoundGroup must outlive the grains by).
+-- Reverb rings for its DecayTime; an echo repeats until feedback has taken it TAIL_FLOOR_DB below its wet level;
+-- chorus / flanger delay lines add a few tens of ms. Effects run in series, so tails add. Capped at MaxTail.
+function SynthPresets.chainTail(chain: { Effect }?): number
+	local tail = 0
+	for _, effect in (chain or {}) :: { Effect } do
+		local props = effect.props
+		if effect.kind == "Reverb" then
+			tail += SynthPresets.clampEffectProp("Reverb", "DecayTime", props.DecayTime or 1.5)
+		elseif effect.kind == "Echo" then
+			local delay = SynthPresets.clampEffectProp("Echo", "Delay", props.Delay or 1)
+			local feedback = SynthPresets.clampEffectProp("Echo", "Feedback", props.Feedback or 0.5)
+			local wet = SynthPresets.clampEffectProp("Echo", "WetLevel", props.WetLevel or 0)
+			local repeats = 1
+			if feedback >= 0.999 then
+				repeats = math.huge
+			elseif feedback > 0.001 then
+				-- wet + n * 20 log10(feedback) <= floor
+				repeats = math.max(1, (TAIL_FLOOR_DB - math.min(wet, 0)) / (20 * math.log10(feedback)))
+			end
+			tail += delay * repeats
+		elseif effect.kind == "Chorus" or effect.kind == "Flanger" then
+			tail += MODULATION_TAIL
+		end
+	end
+	return math.min(tail, MAX_TAIL)
+end
+
+-- Number of Reverb effects a preset uses (its layers' chains plus its space).
+function SynthPresets.reverbCount(preset: Preset): number
+	local count = 0
+	for _, effect in (preset.space or {}) :: { Effect } do
+		if effect.kind == "Reverb" then
+			count += 1
+		end
+	end
+	for _, layer in preset.layers do
+		for _, effect in (layer.effects or {}) :: { Effect } do
+			if effect.kind == "Reverb" then
+				count += 1
+			end
+		end
+	end
+	return count
 end
 
 -- Clamps one effect property into its documented range (unknown props pass through unchanged).
@@ -2522,13 +2706,22 @@ local function validateLayer(problems: { string }, name: string, index: number, 
 	end
 	local grainSpec = layer.grains
 	if grainSpec then
-		checkRange(problems, where .. ".grains.count", grainSpec.count, 1, 32)
-		checkRange(problems, where .. ".grains.spacing", grainSpec.spacing, 0, 2)
+		checkRange(problems, where .. ".grains.count", grainSpec.count, 1, MAX_GRAIN_COUNT)
+		checkRange(problems, where .. ".grains.spacing", grainSpec.spacing, MIN_GRAIN_SPACING, 2)
 		if
 			grainSpec.count.min ~= math.floor(grainSpec.count.min)
 			or grainSpec.count.max ~= math.floor(grainSpec.count.max)
 		then
 			table.insert(problems, where .. ": grains.count must be whole numbers")
+		end
+	end
+	if SynthPresets.isBedLayer(layer) then
+		if region == nil then
+			if not sampleEntry.seamless then
+				table.insert(problems, where .. ": a whole-file bed loop needs a seamless sample, not " .. layer.sample)
+			end
+		elseif region.max - region.min > MAX_TONE_REGION then
+			table.insert(problems, where .. ": a bed loop region longer than MaxToneRegion restarts on a seam")
 		end
 	end
 	for effectIndex, effect in (layer.effects or {}) :: { Effect } do
@@ -2586,6 +2779,14 @@ function SynthPresets.validate(): { string }
 		end
 		for index, layer in preset.layers do
 			validateLayer(problems, name, index, layer)
+		end
+		for index, effect in (preset.space or {}) :: { Effect } do
+			for _, problem in SynthPresets.validateEffect(effect, string.format("%s.space[%d]", name, index)) do
+				table.insert(problems, problem)
+			end
+		end
+		if SynthPresets.reverbCount(preset) > MAX_PRESET_REVERBS then
+			table.insert(problems, name .. ": more than MaxPresetReverbs Reverb effects")
 		end
 	end
 	for _, name in REQUIRED do

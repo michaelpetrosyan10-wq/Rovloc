@@ -9,8 +9,13 @@
 --   z 134..160 cafeteria, kitchen, offices
 -- Everything west of x = 120 is sealed from everything east of it except through the HallwayGate and the gate
 -- bypass vent (L1_Chase_Gate). The scripted encounter runs east -> west: the pale glow spills from the ajar door of
--- L1_Classroom_108, the corridor outside it is strewn with glass (ScareStep), the Creature crouches in the room's
--- north-east corner facing the wall, and once the gate slams the only way on is the wall vent beside it.
+-- L1_Classroom_108 (a second glow fixture just inside the door lights the corridor floor through the opening), the
+-- corridor outside it is strewn with glass (ScareStep), and the Creature crouches in the room's north-west corner
+-- facing the wall, so a squad walking west sees it diagonally through the ajar door while on the glass. Once the
+-- gate slams the only way on is the wall vent beside it.
+-- Two classroom chases east of the gate (L1_Chase_North behind the nurse's office, L1_Chase_South between
+-- classrooms 134 and 136) give the Creature vents into the classrooms (108 included) and the halls; their grates
+-- may be locked, never the gate bypass.
 --
 -- Anchor heights: props rest on the floor (y = 0); DripPipe sits at pipe height under the ceiling; PlayerSpawn is at
 -- HumanoidRootPart height plus clearance (3.5) and Creature placements at the rig's root height (5). Yaw is degrees
@@ -400,7 +405,8 @@ room("L1_TeachersLounge", "Office", 82, 40, 22, 33, OFFICE)
 room("L1_Restroom_Boys", "Restroom", 104, 40, 16, 28, RESTROOM)
 room("L1_Chase_Gate", "Chase", 104, 68, 32, 5, CHASE)
 room("L1_Restroom_Girls", "Restroom", 120, 40, 16, 28, RESTROOM)
-room("L1_NurseOffice", "Office", 136, 40, 22, 33, OFFICE)
+room("L1_NurseOffice", "Office", 136, 40, 17, 33, OFFICE)
+room("L1_Chase_North", "Chase", 153, 40, 5, 33, CHASE)
 room("L1_Classroom_108", "Classroom", 158, 40, 28, 33, CLASSROOM)
 room("L1_Classroom_110", "Classroom", 200, 40, 28, 33, CLASSROOM)
 room("L1_JanitorCloset_E", "Storage", 228, 40, 12, 26, STORAGE)
@@ -420,7 +426,8 @@ room("L1_Storage_131A", "Storage", 0, 94, 12, 26, STORAGE)
 room("L1_Classroom_131", "Classroom", 12, 87, 28, 33, CLASSROOM)
 room("L1_Classroom_133", "Classroom", 54, 87, 28, 33, CLASSROOM)
 room("L1_ArtRoom", "Classroom", 82, 87, 38, 33, ART)
-room("L1_Classroom_134", "Classroom", 120, 87, 38, 33, CLASSROOM)
+room("L1_Classroom_134", "Classroom", 120, 87, 33, 33, CLASSROOM)
+room("L1_Chase_South", "Chase", 153, 87, 5, 33, CHASE)
 room("L1_Classroom_136", "Classroom", 158, 87, 28, 33, CLASSROOM)
 room("L1_Classroom_138", "Classroom", 200, 87, 28, 33, CLASSROOM)
 room("L1_Storage_140A", "Storage", 228, 94, 12, 26, STORAGE)
@@ -499,7 +506,7 @@ door("Door", "L1_Corridor_West", "L1_ArtRoom", 90)
 door("Door", "L1_Corridor_West", "L1_ArtRoom", 112)
 door("Door", "L1_SouthHall_West", "L1_ArtRoom", 101)
 door("Door", "L1_Corridor_East", "L1_Classroom_134", 128)
-door("Door", "L1_Corridor_East", "L1_Classroom_134", 150)
+door("Door", "L1_Corridor_East", "L1_Classroom_134", 146)
 door("Door", "L1_Corridor_East", "L1_Classroom_136", 164)
 door("Door", "L1_Corridor_East", "L1_Classroom_136", 180)
 door("Door", "L1_Corridor_East", "L1_Classroom_138", 206)
@@ -555,6 +562,41 @@ chaseRun("L1_Chase_Gate", {
 		lockable = false,
 		critical = false,
 	},
+})
+
+-- Classroom vents east of the gate. Classroom 108's grate (beside the Creature's corner) never locks: it is the
+-- Creature's way out of the scripted room.
+chaseRun("L1_Chase_North", {
+	{ id = "L1_Grate_N_NorthHall", room = "L1_NorthHall_East", side = "N", lockable = true, critical = false },
+	{ id = "L1_Grate_N_Nurse", room = "L1_NurseOffice", side = "W", at = 62, lockable = true, critical = false },
+	{
+		id = "L1_Grate_N_Classroom108",
+		room = "L1_Classroom_108",
+		side = "E",
+		at = 56,
+		lockable = false,
+		critical = false,
+	},
+})
+chaseRun("L1_Chase_South", {
+	{ id = "L1_Grate_S_Corridor", room = "L1_Corridor_East", side = "N", lockable = false, critical = false },
+	{
+		id = "L1_Grate_S_Classroom134",
+		room = "L1_Classroom_134",
+		side = "W",
+		at = 100,
+		lockable = true,
+		critical = false,
+	},
+	{
+		id = "L1_Grate_S_Classroom136",
+		room = "L1_Classroom_136",
+		side = "E",
+		at = 108,
+		lockable = true,
+		critical = false,
+	},
+	{ id = "L1_Grate_S_SouthHall", room = "L1_SouthHall_East", side = "S", lockable = true, critical = false },
 })
 
 --------------------------------------------------------------------------------
@@ -616,8 +658,19 @@ do
 	lightGrid(id, "Bulb", 1, 1, "x")
 end
 
--- The pale glow from the ajar classroom (P6 bursts it by id when the Creature turns).
-light("L1_Classroom_108", "ClassroomGlow", 175, HEIGHT - 1.5, 52, { id = "L1_Light_ClassroomGlow" })
+-- The pale glow from the ajar classroom (P6 bursts every ClassroomGlow in L1_Classroom_108 when the Creature turns):
+-- the room light over the Creature's corner, and a narrow spill fixture just inside the ajar door whose downward
+-- cone leaves the room under the door lintel and lays a pale pool on the corridor floor. Both cast shadows, so the
+-- glow reaches the corridor only through the doorway.
+light("L1_Classroom_108", "ClassroomGlow", 170, HEIGHT - 1.5, 52, { id = "L1_Light_ClassroomGlow" })
+light(
+	"L1_Classroom_108",
+	"ClassroomGlow",
+	172,
+	HEIGHT - 1.5,
+	70,
+	{ id = "L1_Light_ClassroomGlowSpill", brightness = 0.6, range = 18 }
+)
 
 light("L1_AirlockEast", "EmergencyRed", 234, HEIGHT - 1, 80, { flicker = "L1_AirlockEast", brightness = 0.35 })
 light("L1_AirlockWest", "EmergencyRed", 6, HEIGHT - 1, 80, { flicker = "L1_AirlockWest", brightness = 0.35 })
@@ -632,8 +685,9 @@ light("L1_Corridor_West", "EmergencyRed", 24, HEIGHT - 1.5, 74.5, { flicker = "L
 -- Arrival from Stairwell_0_1
 scatter("PlayerSpawn", 3.5, { { 232, 74, FACE_W }, { 236, 74, FACE_W }, { 232, 86, FACE_W }, { 236, 86, FACE_W } })
 
--- The scripted classroom: the Creature hunched in the far corner, facing the corner.
-anchor("CreatureScarePose", 182.5, 5, 43.5, -45, "L1_ScarePose_Classroom108")
+-- The scripted classroom: the Creature hunched in the far (north-west) corner, facing into the corner. From the
+-- glass outside the ajar door a westbound squad looks diagonally through the doorway straight at it.
+anchor("CreatureScarePose", 161.5, 5, 43.5, 45, "L1_ScarePose_Classroom108")
 anchor("CreatureSpawn", 220, 5, 12, FACE_S, "L1_CreatureSpawn")
 
 -- Ragdoll corpses
@@ -655,7 +709,7 @@ scatter("SmashedLocker", 0, {
 	{ 179, 74.2, FACE_S },
 	{ 214, 74.2, FACE_S },
 	{ 139, 85.8, FACE_N },
-	{ 157, 85.8, FACE_N },
+	{ 83, 85.8, FACE_N },
 	{ 172, 85.8, FACE_N },
 	{ 212, 85.8, FACE_N },
 	{ 26, 74.2, FACE_S },
@@ -683,7 +737,7 @@ scatter("DripPipe", HEIGHT - 1.2, {
 scatter("BatteryCandidate", 0, {
 	{ 16, 44 },
 	{ 224, 44 },
-	{ 154, 44 },
+	{ 150, 44 },
 	{ 4, 22 },
 	{ 124, 156 },
 	{ 116, 156 },
@@ -727,8 +781,9 @@ patrol("WF", { { 20, 127 }, { 20, 145 }, { 64, 145 }, { 64, 127 } })
 -- Triggers
 --------------------------------------------------------------------------------
 
--- Broken glass and cans across the full corridor width outside the ajar classroom.
-trigger("L1_Trigger_GlassStep", "ScareStep", 166, 73, 14, 14, 4)
+-- Broken glass and cans across the full corridor width outside the ajar classroom, over the band of the corridor
+-- from which the Creature's corner is in sight through the doorway (x about 169.5..181.5 at standing eye height).
+trigger("L1_Trigger_GlassStep", "ScareStep", 170, 73, 10, 14, 4)
 trigger("L1_Trigger_DebrisWest", "FloorDebris", 60, 75, 6, 10, 4)
 trigger("L1_Trigger_DebrisNorth", "FloorDebris", 150, 28, 6, 10, 4)
 trigger("L1_Trigger_DebrisSouth", "FloorDebris", 70, 122, 6, 10, 4)

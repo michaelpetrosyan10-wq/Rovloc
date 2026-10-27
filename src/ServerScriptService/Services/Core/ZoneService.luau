@@ -13,6 +13,11 @@
 -- floor triggers (debris, glass) catch walkers as well as crouchers. VolumeEntered / VolumeExited fire on changes
 -- (a destroyed volume counts as exited).
 --
+-- Pairing. Every VolumeEntered is matched by one VolumeExited, and a zone by ZoneChanged(player, nil), including for
+-- a player who leaves the server while inside: OnPlayerRemoving (and, as a backstop, the next tick for anyone no
+-- longer in Players) fires those exits before forgetting the player, without writing attributes on them. Consumers
+-- that count occupants from the events (airlock stragglers, traps, pool grabs) never keep a phantom occupant.
+--
 -- The test is pure math (`CFrame:PointToObjectSpace` against Size / 2), so it works for NoCollide parts that physical
 -- queries never see. The index rebuilds itself whenever tagged parts come or go.
 
@@ -352,6 +357,23 @@ local function feetPoint(player: Player, root: BasePart): Vector3
 	return root.Position - Vector3.new(0, hipHeight + root.Size.Y * 0.5, 0)
 end
 
+-- Forgets `player`, first firing VolumeExited for every volume they were in and ZoneChanged(player, nil) when they
+-- were in a zone. Attributes are left alone (the player is leaving).
+local function releasePlayer(player: Player)
+	local state = states[player]
+	if not state then
+		return
+	end
+	states[player] = nil
+	for volume, tag in state.volumes do
+		volumeExited:Fire(player, volume, tag)
+	end
+	if state.zone then
+		state.zone = nil
+		zoneChanged:Fire(player, nil)
+	end
+end
+
 local function updatePlayer(built: Index, player: Player)
 	local state = stateFor(player)
 	local root = Instances.characterRoot(player)
@@ -384,6 +406,11 @@ local function step()
 	local built = liveIndex()
 	for _, player in Players:GetPlayers() do
 		updatePlayer(built, player)
+	end
+	for player in table.clone(states) do
+		if player.Parent ~= Players then
+			releasePlayer(player)
+		end
 	end
 	updateCreature(built)
 end
@@ -423,6 +450,18 @@ function ZoneService.GetCreatureZone(): BasePart?
 	return creatureZone
 end
 
+-- Re-locates `player` now instead of at the next tick (after a server teleport, or in specs), firing the usual
+-- ZoneChanged / VolumeEntered / VolumeExited.
+function ZoneService.UpdatePlayer(player: Player)
+	updatePlayer(liveIndex(), player)
+end
+
+-- Rebuilds the zone / volume index on the next lookup. Tag signals do this on their own; call it after tagging or
+-- moving volumes that must count within the same frame.
+function ZoneService.Refresh()
+	markDirty()
+end
+
 --------------------------------------------------------------------------------
 -- Lifecycle
 --------------------------------------------------------------------------------
@@ -450,7 +489,7 @@ function ZoneService.Start()
 end
 
 function ZoneService.OnPlayerRemoving(player: Player)
-	states[player] = nil
+	releasePlayer(player)
 end
 
 return ZoneService

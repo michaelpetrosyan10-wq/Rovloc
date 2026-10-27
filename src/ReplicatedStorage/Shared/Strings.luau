@@ -143,6 +143,9 @@ local STRINGS: { [string]: string } = {
 	["Caption.Static"] = "[electrical static]",
 	["Caption.DoorSmash"] = "[a door is torn apart]",
 
+	-- Network (Net kicks a client that floods or sends malformed messages)
+	["Net.Kicked"] = "Disconnected: your game sent too many invalid requests. Please rejoin.",
+
 	-- Dev tools
 	["Dev.Unknown"] = "Unknown dev command: %s",
 	["Dev.Denied"] = "Dev commands are disabled here.",
@@ -158,10 +161,16 @@ local STRINGS: { [string]: string } = {
 	["Dev.Panel.ShowPlan"] = "Show Plan",
 	["Dev.Panel.Overlays"] = "Overlays: %s",
 	["Dev.Panel.VentGraph"] = "Vent Graph: %s",
+	["Dev.Panel.Light"] = "Light: %s",
 	["Dev.Panel.Difficulty"] = "Mode: %s",
 	["Dev.Panel.Help"] = "Help",
 	["Dev.Panel.Levels"] = "Jump to level",
 	["Dev.Panel.Level"] = "L%d",
+	["Dev.Panel.Sounds"] = "Audition sound (%d presets)",
+	["Dev.Panel.SoundPrev"] = "<",
+	["Dev.Panel.SoundNext"] = ">",
+	["Dev.Panel.SoundPlay2D"] = "Play 2D",
+	["Dev.Panel.SoundStop"] = "Stop Sound",
 	["Dev.Panel.On"] = "On",
 	["Dev.Panel.Off"] = "Off",
 	["Dev.Panel.None"] = "-",

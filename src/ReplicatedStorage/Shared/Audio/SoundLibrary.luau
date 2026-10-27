@@ -10,20 +10,32 @@
 -- them at setup and every pooled Sound reports it once loaded) and records it here. `resolveRegion` then keeps
 -- every region inside the real file: a region that fits is used as-is, one that would run past the real end is
 -- remapped proportionally into the measured length, so no recipe ever plays beyond the end of a file.
+--
+-- Seamless files. Three of the files are the engine's own looping character sounds (FreeFalling, Swimming and
+-- Running are created with Looped = true by the stock character sound script), so the WHOLE file loops without a
+-- seam. Ambience beds are built from these full-file loops; a looped PlaybackRegion of any other file restarts on
+-- an audible seam every pass (see SynthPresets.validate).
 
 export type Sample = {
 	id: string, -- short key; also the key in SoundLibrary.Samples
 	path: string, -- rbxasset://sounds/<file>
 	duration: number, -- seconds, approximate and conservative (see header); measured length overrides it at run time
 	character: string, -- what the raw file sounds like and what the recipes turn it into
+	seamless: boolean, -- the whole file is an engine loop (loops with no seam when played without a region)
 }
 
 local ROOT = "rbxasset://sounds/"
 -- Shortest region the synthesizer will ever play (seconds). Also the granular "oscillator" floor for loop tones.
 local MIN_REGION = 0.004
 
-local function sample(id: string, file: string, duration: number, character: string): Sample
-	return table.freeze({ id = id, path = ROOT .. file, duration = duration, character = character })
+local function sample(id: string, file: string, duration: number, character: string, seamless: boolean?): Sample
+	return table.freeze({
+		id = id,
+		path = ROOT .. file,
+		duration = duration,
+		character = character,
+		seamless = seamless == true,
+	})
 end
 
 local samples: { [string]: Sample } = {
@@ -31,13 +43,15 @@ local samples: { [string]: Sample } = {
 		"Falling",
 		"action_falling.ogg",
 		1.2,
-		"sustained broadband wind rush (the only true noise source): drones, hiss, rain air, breath, static"
+		"sustained broadband wind rush (the only true noise source): drones, hiss, rain air, breath, static",
+		true -- FreeFalling loop (Ogg Vorbis: gapless)
 	),
 	FootstepsPlastic = sample(
 		"FootstepsPlastic",
 		"action_footsteps_plastic.mp3",
 		0.35,
-		"dry, clicky footstep transients: footsteps per surface, glass crunch, claws, ticks, splinters, crackle"
+		"dry, clicky footstep transients: footsteps per surface, glass crunch, claws, ticks, splinters, crackle",
+		true -- Running / Climbing loop
 	),
 	GetUp = sample(
 		"GetUp",
@@ -56,7 +70,8 @@ local samples: { [string]: Sample } = {
 		"Swim",
 		"action_swim.mp3",
 		0.8,
-		"wet sloshing stroke (wet noise): splashes, treading, rain body, chemical fizz, pool lapping"
+		"wet sloshing stroke (wet noise): splashes, treading, rain body, chemical fizz, pool lapping",
+		true -- Swimming loop (MP3: the decoder may pad a few ms at the seam; beds stagger two copies)
 	),
 	Explosion = sample(
 		"Explosion",
@@ -103,6 +118,12 @@ end
 
 function SoundLibrary.has(key: string): boolean
 	return samples[key] ~= nil
+end
+
+-- True when the whole file is one of the engine's looping character sounds (no seam when looped without a region).
+function SoundLibrary.isSeamless(key: string): boolean
+	local entry = samples[key]
+	return entry ~= nil and entry.seamless
 end
 
 -- Sample key for a full rbxasset:// path (used when a loaded Sound reports its TimeLength).

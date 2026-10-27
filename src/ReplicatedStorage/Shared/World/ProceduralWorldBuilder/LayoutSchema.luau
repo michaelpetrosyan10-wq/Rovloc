@@ -25,7 +25,7 @@ export type Light = {
 	color: Color3?,
 	flickerGroup: string?, -- lights in a group flicker together
 	broken: boolean?, -- fixture is built but stays dark
-	shadows: boolean?, -- default false (render budget)
+	shadows: boolean?, -- default true (unshadowed lights shine through walls); false opts out
 }
 
 export type Room = {
@@ -260,7 +260,15 @@ function LayoutSchema.indexRooms(layout: LevelLayout): { [string]: Room }
 end
 
 --------------------------------------------------------------------------------
--- Validation. Returns a list of human-readable problems; an empty list means the layout is buildable.
+-- Validation. Returns a list of human-readable problems; an empty list means the layout is buildable:
+--   * ids are unique; rooms tile the footprint without overlapping (school levels);
+--   * doors join two non-chase rooms across a shared wall they fit; grates sit on a wall a chase shares with a
+--     real room, inside that shared stretch, under a lintel, and above the floor (below it only over a pool basin);
+--   * openings on one wall line (doors, grates, windows, the stair-tower opening) keep a pier between them;
+--   * ducts are level, axis-aligned, listed once, stay inside chases, and never cross or touch without a shared node;
+--   * anchors and triggers stay inside their room's volume, lights inside their room;
+--   * stairwell vestibules touch their tower; the exit stays reachable with every lockable grate locked and every
+--     gate shut.
 --------------------------------------------------------------------------------
 
 local function pushf(errors: { string }, fmt: string, ...: any)
@@ -269,6 +277,68 @@ end
 
 local function isSchoolLevel(layout: LevelLayout): boolean
 	return layout.id ~= "Lobby"
+end
+
+-- Solid wall the validator keeps between two openings on one wall (beside or above each other) and above a
+-- grate opening (its lintel under the ceiling).
+local PIER = 0.5
+local HALF_BORE = WorldConfig.VentBore / 2
+local HALF_OUTER = HALF_BORE + WorldConfig.VentShell
+
+-- One opening cut through a wall line, in wall terms: `u` runs along the wall, `y` is height above the floor.
+type WallOpening = { what: string, axis: "X" | "Z", coord: number, u0: number, u1: number, y0: number, y1: number }
+
+-- Level-local box a duct (or the junction box at a node) occupies with its shell. `nodes` are the vent nodes the
+-- duct ends at; a junction box lists its own node and the junctions it is linked to directly (VentShaftBuilder
+-- fits two linked junctions closer together than a box width into one run, bores clear).
+type DuctBox = {
+	what: string,
+	nodes: { string },
+	x0: number,
+	x1: number,
+	y0: number,
+	y1: number,
+	z0: number,
+	z1: number,
+}
+
+-- The wall line of a room side: constant X for W / E, constant Z for N / S.
+local function sideLine(r: Rect, side: Side): ("X" | "Z", number)
+	if side == "W" then
+		return "X", r.x
+	elseif side == "E" then
+		return "X", r.x + r.w
+	elseif side == "N" then
+		return "Z", r.z
+	end
+	return "Z", r.z + r.d
+end
+
+-- Unit step from a room side into the room.
+local function inwardOf(side: Side): (number, number)
+	if side == "N" then
+		return 0, 1
+	elseif side == "S" then
+		return 0, -1
+	elseif side == "W" then
+		return 1, 0
+	end
+	return -1, 0
+end
+
+local function boxesOverlap(a: DuctBox, b: DuctBox): boolean
+	return math.min(a.x1, b.x1) - math.max(a.x0, b.x0) > 0.01
+		and math.min(a.y1, b.y1) - math.max(a.y0, b.y0) > 0.01
+		and math.min(a.z1, b.z1) - math.max(a.z0, b.z0) > 0.01
+end
+
+local function sharesNode(a: DuctBox, b: DuctBox): boolean
+	for _, id in a.nodes do
+		if table.find(b.nodes, id) then
+			return true
+		end
+	end
+	return false
 end
 
 local function stairwellRooms(layoutId: string): { [string]: WorldConfig.StairwellSpec }
@@ -326,11 +396,141 @@ local function reachable(layout: LevelLayout, from: string, strict: boolean): { 
 	return seen
 end
 
+-- Duct bodies for the proximity check (validate rule "ducts never cross or touch without a shared node") and for
+-- the floor a chase gets where a duct sinks below it. Each buildable edge gives one box along its run: it stops at
+-- a grate node (the duct ends in the wall there), runs on to a straight joint, runs half a bore plus the shell past
+-- a dead end (its end cap), and stops a box half-width short of a junction or turn. Every junction or turn node
+-- gives its own box, so a duct passing through a junction it is not linked to still shows up.
+local function ductBoxes(vents: VentNetwork, nodes: { [string]: VentNodeSpec }): { DuctBox }
+	local grateNodes: { [string]: boolean } = {}
+	for _, grate in vents.grates do
+		grateNodes[grate.node] = true
+	end
+	type Arms = { x: number, z: number, count: number }
+	local arms: { [string]: Arms } = {}
+	local neighbours: { [string]: { string } } = {}
+	local valid: { VentEdgeSpec } = {}
+	for _, edge in vents.edges do
+		local a, b = nodes[edge.a], nodes[edge.b]
+		if not a or not b or edge.a == edge.b then
+			continue
+		end
+		local sameX, sameZ = math.abs(a.x - b.x) < EPS, math.abs(a.z - b.z) < EPS
+		if sameX == sameZ or math.abs(LayoutSchema.ventNodeY(a) - LayoutSchema.ventNodeY(b)) > EPS then
+			continue
+		end
+		table.insert(valid, edge)
+		neighbours[edge.a] = neighbours[edge.a] or {}
+		neighbours[edge.b] = neighbours[edge.b] or {}
+		table.insert(neighbours[edge.a], edge.b)
+		table.insert(neighbours[edge.b], edge.a)
+		for _, id in { edge.a, edge.b } do
+			local entry = arms[id] or { x = 0, z = 0, count = 0 }
+			arms[id] = entry
+			entry.count += 1
+			if sameZ then
+				entry.x += 1
+			else
+				entry.z += 1
+			end
+		end
+	end
+	local function isJunction(id: string): boolean
+		local entry = arms[id]
+		return entry ~= nil and entry.x > 0 and entry.z > 0
+	end
+	-- How far the body of a duct runs past (positive) or stops short of (negative) node `id`.
+	local function endReach(id: string): number
+		if grateNodes[id] then
+			return 0
+		end
+		local entry = arms[id]
+		if not entry or entry.count <= 1 then
+			return HALF_OUTER
+		end
+		return if isJunction(id) then -HALF_OUTER else 0
+	end
+	local out: { DuctBox } = {}
+	for _, edge in valid do
+		local a, b = nodes[edge.a], nodes[edge.b]
+		local y = LayoutSchema.ventNodeY(a)
+		local alongX = math.abs(a.z - b.z) < EPS
+		local ua, ub = if alongX then a.x else a.z, if alongX then b.x else b.z
+		local s = if ub > ua then 1 else -1
+		local from, to = ua - s * endReach(a.id), ub + s * endReach(b.id)
+		local u0, u1 = math.min(from, to), math.max(from, to)
+		if (to - from) * s <= EPS then
+			continue
+		end
+		local c = if alongX then a.z else a.x
+		table.insert(out, {
+			what = string.format("duct %s-%s", edge.a, edge.b),
+			nodes = { edge.a, edge.b },
+			x0 = if alongX then u0 else c - HALF_OUTER,
+			x1 = if alongX then u1 else c + HALF_OUTER,
+			y0 = y - HALF_OUTER,
+			y1 = y + HALF_OUTER,
+			z0 = if alongX then c - HALF_OUTER else u0,
+			z1 = if alongX then c + HALF_OUTER else u1,
+		})
+	end
+	local boxed: { [string]: boolean } = {}
+	for _, node in vents.nodes do
+		local id = node.id
+		if isJunction(id) and not grateNodes[id] and not boxed[id] and nodes[id] == node then
+			boxed[id] = true
+			local related = { id }
+			for _, other in neighbours[id] do
+				if isJunction(other) and not grateNodes[other] then
+					table.insert(related, other)
+				end
+			end
+			local y = LayoutSchema.ventNodeY(node)
+			table.insert(out, {
+				what = "junction " .. id,
+				nodes = related,
+				x0 = node.x - HALF_OUTER,
+				x1 = node.x + HALF_OUTER,
+				y0 = y - HALF_OUTER,
+				y1 = y + HALF_OUTER,
+				z0 = node.z - HALF_OUTER,
+				z1 = node.z + HALF_OUTER,
+			})
+		end
+	end
+	return out
+end
+
+-- The lowest walkable or swimmable level under the level-local area `area` of `room`: a pool basin's floor where
+-- the area overlaps the basin, the bore floor of a duct sunk below a chase's floor, otherwise the floor (0).
+local function floorUnder(layout: LevelLayout, room: Room, area: Rect, ducts: { DuctBox }): number
+	local floor = 0
+	for _, basin in (layout.basins or {}) :: { Basin } do
+		if basin.room == room.id and LayoutSchema.rectOverlapArea(basin.rect, area) > 0 then
+			floor = math.min(floor, -basin.depth)
+		end
+	end
+	if room.kind == "Chase" then
+		for _, duct in ducts do
+			local footprint = LayoutSchema.rect(duct.x0, duct.z0, duct.x1 - duct.x0, duct.z1 - duct.z0)
+			if
+				LayoutSchema.rectOverlapArea(footprint, area) > 0
+				and LayoutSchema.rectOverlapArea(footprint, room.rect) > 0
+			then
+				floor = math.min(floor, duct.y0 + WorldConfig.VentShell)
+			end
+		end
+	end
+	return floor
+end
+
 function LayoutSchema.validate(layout: LevelLayout): { string }
 	local errors: { string } = {}
 	local rooms = LayoutSchema.indexRooms(layout)
 	local footprint = LayoutSchema.rect(0, 0, WorldConfig.FootprintSize.X, WorldConfig.FootprintSize.Y)
 	local seenIds: { [string]: string } = {}
+	local openings: { WallOpening } = {}
+	local ducts: { DuctBox } = {}
 
 	local function claimId(id: string, what: string)
 		if seenIds[id] then
@@ -430,6 +630,15 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		if LayoutSchema.doorHeight(door) > minHeight - 0.5 + EPS then
 			pushf(errors, "door %s is taller than the lower of its rooms", door.id)
 		end
+		table.insert(openings, {
+			what = "door " .. door.id,
+			axis = edge.axis,
+			coord = edge.coord,
+			u0 = door.at - half,
+			u1 = door.at + half,
+			y0 = 0,
+			y1 = LayoutSchema.doorHeight(door),
+		})
 	end
 
 	-- Vents
@@ -461,12 +670,19 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 			end
 			return false
 		end
+		local seenEdges: { [string]: boolean } = {}
 		for _, edge in vents.edges do
 			local a, b = nodes[edge.a], nodes[edge.b]
 			if not a or not b then
 				pushf(errors, "vent edge %s-%s references a missing node", edge.a, edge.b)
 				continue
 			end
+			local key = if edge.a < edge.b then edge.a .. "|" .. edge.b else edge.b .. "|" .. edge.a
+			if seenEdges[key] then
+				pushf(errors, "vent edge %s-%s is listed twice", edge.a, edge.b)
+				continue
+			end
+			seenEdges[key] = true
 			degree[edge.a] += 1
 			degree[edge.b] += 1
 			local sameX, sameZ = math.abs(a.x - b.x) < EPS, math.abs(a.z - b.z) < EPS
@@ -498,6 +714,26 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 				pushf(errors, "vent node %s has no ducts", id)
 			end
 		end
+
+		-- Ducts that share no node must not cross or touch: the A* graph only knows linked nodes, so two bores
+		-- meeting anywhere else would be a crawlable junction the graph cannot see (or a duct walled into another).
+		ducts = ductBoxes(vents, nodes)
+		for i = 1, #ducts do
+			for j = i + 1, #ducts do
+				local a, b = ducts[i], ducts[j]
+				if not sharesNode(a, b) and boxesOverlap(a, b) then
+					pushf(
+						errors,
+						"%s and %s cross or touch without a shared vent node (near %.1f, %.1f)",
+						a.what,
+						b.what,
+						(math.max(a.x0, b.x0) + math.min(a.x1, b.x1)) / 2,
+						(math.max(a.z0, b.z0) + math.min(a.z1, b.z1)) / 2
+					)
+				end
+			end
+		end
+
 		for _, grate in vents.grates do
 			claimId(grate.id, "grate")
 			local node, room = nodes[grate.node], rooms[grate.room]
@@ -508,19 +744,24 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 			if room.kind == "Chase" then
 				pushf(errors, "grate %s must open into a real room, not a chase", grate.id)
 			end
-			if not LayoutSchema.sideOfPoint(room.rect, node.x, node.z) then
+			local side = LayoutSchema.sideOfPoint(room.rect, node.x, node.z)
+			if not side then
 				pushf(errors, "grate %s node %s is not on a wall of room %s", grate.id, node.id, room.id)
 			end
-			local onChase = false
-			for _, chase in chases do
+			local chase: Room? = nil
+			local edge: SharedEdge? = nil
+			for _, candidate in chases do
+				local shared = LayoutSchema.sharedEdge(candidate.rect, room.rect)
 				if
-					LayoutSchema.sideOfPoint(chase.rect, node.x, node.z)
-					and LayoutSchema.sharedEdge(chase.rect, room.rect)
+					shared
+					and LayoutSchema.sideOfPoint(candidate.rect, node.x, node.z)
+					and math.abs((if shared.axis == "X" then node.x else node.z) - shared.coord) < EPS
 				then
-					onChase = true
+					chase, edge = candidate, shared
+					break
 				end
 			end
-			if not onChase then
+			if not chase or not edge or not side then
 				pushf(
 					errors,
 					"grate %s node %s is not on a wall shared by a chase and room %s",
@@ -528,6 +769,73 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 					node.id,
 					room.id
 				)
+			else
+				local y = LayoutSchema.ventNodeY(node)
+				local u = if edge.axis == "X" then node.z else node.x
+				local u0, u1 = u - HALF_BORE, u + HALF_BORE
+				-- the opening stays clear of the walls that meet the shared stretch at either end
+				local margin = WorldConfig.WallThickness / 2
+				if u0 < edge.from + margin - EPS or u1 > edge.to - margin + EPS then
+					pushf(
+						errors,
+						"grate %s opening %.2f..%.2f runs past the wall %s shares with %s (%.1f..%.1f)",
+						grate.id,
+						u0,
+						u1,
+						room.id,
+						chase.id,
+						edge.from,
+						edge.to
+					)
+				end
+				-- a lintel under the lower ceiling of the two rooms
+				local ceiling = math.min(LayoutSchema.roomHeight(layout, room), LayoutSchema.roomHeight(layout, chase))
+				if y + HALF_BORE > ceiling - PIER + EPS then
+					pushf(
+						errors,
+						"grate %s opening top %.2f leaves no %.1f-stud lintel under the %.1f ceiling of %s / %s",
+						grate.id,
+						y + HALF_BORE,
+						PIER,
+						ceiling,
+						room.id,
+						chase.id
+					)
+				end
+				-- on the room side the opening must not dip into the floor: a grate may sink below the floor only
+				-- where its whole width opens over a pool basin
+				local dx, dz = inwardOf(side :: Side)
+				local probe = WorldConfig.WallThickness / 2 + PIER
+				local px, pz = node.x + dx * probe, node.z + dz * probe
+				local strip = if edge.axis == "X"
+					then LayoutSchema.rect(px - EPS, u0, 2 * EPS, u1 - u0)
+					else LayoutSchema.rect(u0, pz - EPS, u1 - u0, 2 * EPS)
+				local floor = 0
+				for _, basin in (layout.basins or {}) :: { Basin } do
+					if basin.room == room.id and LayoutSchema.rectInside(strip, basin.rect) then
+						floor = math.min(floor, -basin.depth)
+					end
+				end
+				if y - HALF_BORE < floor - EPS then
+					pushf(
+						errors,
+						"grate %s opening bottom %.2f sinks below the floor of %s (%.1f)%s",
+						grate.id,
+						y - HALF_BORE,
+						room.id,
+						floor,
+						if floor == 0 then "; only a grate wholly over a pool basin may sit that low" else ""
+					)
+				end
+				table.insert(openings, {
+					what = "grate " .. grate.id,
+					axis = edge.axis,
+					coord = edge.coord,
+					u0 = u0,
+					u1 = u1,
+					y0 = y - HALF_BORE,
+					y1 = y + HALF_BORE,
+				})
 			end
 			if grate.lockable and grate.criticalPath then
 				pushf(errors, "grate %s cannot be both lockable and on the critical path", grate.id)
@@ -535,14 +843,32 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		end
 	end
 
-	-- Anchors, triggers, basins, platforms, pillars, windows
+	-- Anchors, triggers, basins, platforms, pillars, windows. Anchors and triggers stay inside their room's volume:
+	-- from the floor under them (a basin's floor over a pool, a sunken duct's bore floor in a chase) up to its
+	-- ceiling height.
 	for _, anchor in layout.anchors do
 		claimId(anchor.id, "anchor")
 		local room = rooms[anchor.room]
 		if not room then
 			pushf(errors, "anchor %s references missing room %s", anchor.id, anchor.room)
-		elseif not LayoutSchema.rectContains(room.rect, anchor.pos.X, anchor.pos.Z) then
+			continue
+		end
+		local x, y, z = anchor.pos.X, anchor.pos.Y, anchor.pos.Z
+		if not LayoutSchema.rectContains(room.rect, x, z) then
 			pushf(errors, "anchor %s lies outside room %s", anchor.id, anchor.room)
+		end
+		local floor = floorUnder(layout, room, LayoutSchema.rect(x - EPS, z - EPS, 2 * EPS, 2 * EPS), ducts)
+		local top = LayoutSchema.roomHeight(layout, room)
+		if y < floor - EPS or y > top + EPS then
+			pushf(
+				errors,
+				"anchor %s at height %.2f is outside room %s vertically (%.1f..%.1f)",
+				anchor.id,
+				y,
+				anchor.room,
+				floor,
+				top
+			)
 		end
 	end
 	for _, trigger in layout.triggers do
@@ -550,8 +876,27 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		local room = rooms[trigger.room]
 		if not room then
 			pushf(errors, "trigger %s references missing room %s", trigger.id, trigger.room)
-		elseif not LayoutSchema.rectInside(trigger.rect, room.rect) then
+			continue
+		end
+		if not LayoutSchema.rectInside(trigger.rect, room.rect) then
 			pushf(errors, "trigger %s leaves room %s", trigger.id, trigger.room)
+		end
+		local bottom = trigger.y or 0
+		local floor = floorUnder(layout, room, trigger.rect, ducts)
+		local top = LayoutSchema.roomHeight(layout, room)
+		if trigger.height <= 0 then
+			pushf(errors, "trigger %s has no height", trigger.id)
+		elseif bottom < floor - EPS or bottom + trigger.height > top + EPS then
+			pushf(
+				errors,
+				"trigger %s (%.2f..%.2f) is outside room %s vertically (%.1f..%.1f)",
+				trigger.id,
+				bottom,
+				bottom + trigger.height,
+				trigger.room,
+				floor,
+				top
+			)
 		end
 	end
 	for _, basin in (layout.basins or {}) :: { Basin } do
@@ -585,7 +930,36 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		local room = rooms[window.room]
 		if not room then
 			pushf(errors, "window references missing room %s", window.room)
+			continue
 		end
+		local axis: "X" | "Z", coord: number = sideLine(room.rect, window.side)
+		local from = if axis == "X" then room.rect.z else room.rect.x
+		local span = if axis == "X" then room.rect.d else room.rect.w
+		local half = window.width / 2
+		local wallTop = room.wallHeight or LayoutSchema.roomHeight(layout, room)
+		if
+			window.at - half < from + PIER - EPS
+			or window.at + half > from + span - PIER + EPS
+			or window.sill < -EPS
+			or window.sill + window.height > wallTop + EPS
+		then
+			pushf(
+				errors,
+				"window of %s on its %s side (at %.1f) does not fit the wall",
+				window.room,
+				window.side,
+				window.at
+			)
+		end
+		table.insert(openings, {
+			what = string.format("window of %s at %.1f", window.room, window.at),
+			axis = axis,
+			coord = coord,
+			u0 = window.at - half,
+			u1 = window.at + half,
+			y0 = window.sill,
+			y1 = window.sill + window.height,
+		})
 	end
 
 	-- Stairwell vestibules must sit against their tower and exist
@@ -614,6 +988,45 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 					opening.centerZ,
 					opening.width / 2
 				)
+			else
+				table.insert(openings, {
+					what = string.format("%s tower opening", spec.tower),
+					axis = edge.axis,
+					coord = edge.coord,
+					u0 = opening.centerZ - opening.width / 2,
+					u1 = opening.centerZ + opening.width / 2,
+					y0 = 0,
+					y1 = opening.height,
+				})
+			end
+		end
+	end
+
+	-- Openings on one wall line (doors, grates, windows, tower openings) keep a pier of solid wall between them,
+	-- beside or above each other, so no two openings merge and every split-wall piece has a real size.
+	local byLine: { [string]: { WallOpening } } = {}
+	for _, opening in openings do
+		local key = string.format("%s:%.3f", opening.axis, opening.coord)
+		byLine[key] = byLine[key] or {}
+		table.insert(byLine[key], opening)
+	end
+	for _, list in byLine do
+		for i = 1, #list do
+			for j = i + 1, #list do
+				local a, b = list[i], list[j]
+				local gapAlong = math.max(a.u0, b.u0) - math.min(a.u1, b.u1)
+				local gapUp = math.max(a.y0, b.y0) - math.min(a.y1, b.y1)
+				if gapAlong < PIER - EPS and gapUp < PIER - EPS then
+					pushf(
+						errors,
+						"%s and %s overlap on the wall at %s = %.1f (keep a %.1f-stud pier between openings)",
+						a.what,
+						b.what,
+						a.axis,
+						a.coord,
+						PIER
+					)
+				end
 			end
 		end
 	end

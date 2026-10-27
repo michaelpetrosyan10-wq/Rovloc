@@ -41,6 +41,8 @@ local MIN_RUN = 1.6
 local LANDING_THICKNESS = 1
 local STEP_UNDERSIDE = 0.6
 local DEFAULT_TOP_ROOM_HEIGHT = 12
+local WALL_MOUNT = 0.3 -- centre of a wall-mounted fixture off the wall face (its depth is 0.5)
+local NEAR_LIGHT_CLEARANCE = 1.5 -- minimum gap between a near-landing fixture and the landing above it
 
 export type SegmentPlan = {
 	spec: WorldConfig.StairwellSpec,
@@ -282,12 +284,17 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 		)
 	end
 
-	-- Emergency lighting: above each building-side opening / landing, and on the outer wall at each far landing
+	-- Emergency lighting: over each near landing (and the floor below the first flight), mounted on the north tower
+	-- wall half a landing out from the building, and on the outer wall at each far landing. No fixture sits on the
+	-- building-side wall: only that wall and the airlock's footprint wall stand between it and the airlock room. The
+	-- fixtures cast shadows (SchoolShellBuilder.buildLight), so the walls keep their glow inside the shaft except
+	-- through the openings.
 	local random = MathUtil.seededRandom(1, spec.id)
 	local centre = Vector3.new(worldX((dims.uInner0 + dims.uInner1) / 2), bottom, opening.centerZ)
+	local nearU = dims.uInner0 + LANDING / 2
 	local index = 0
 	local working = 0
-	local function addLight(position: Vector3)
+	local function addLight(position: Vector3, facing: Vector3)
 		index += 1
 		local broken = random:NextNumber() < 0.35 and working > 0
 		if not broken then
@@ -303,16 +310,24 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 			broken = broken,
 			levelId = spec.from,
 			zoneId = spec.id,
-			facing = Vector3.new(centre.X, position.Y, centre.Z),
+			facing = facing,
 		})
 	end
-	addLight(Vector3.new(worldX(dims.uInner0 + 0.4), bottom + opening.height + 1, opening.centerZ))
+	-- A near-landing fixture hangs above the opening's head, but always well under the next near landing up.
+	local function addNearLight(floorY: number, nextLandingUnderside: number)
+		local y = math.min(floorY + opening.height + 1, nextLandingUnderside - NEAR_LIGHT_CLEARANCE)
+		local position = Vector3.new(worldX(nearU), y, dims.vInner0 + WALL_MOUNT)
+		addLight(position, Vector3.new(position.X, y, opening.centerZ))
+	end
+	local nearLandingRise = 2 * flightRise
+	addNearLight(bottom, bottom + nearLandingRise - LANDING_THICKNESS)
 	for k = 1, plan.flights do
 		local arrive = bottom + k * flightRise
 		if k % 2 == 1 then
-			addLight(Vector3.new(worldX(dims.uInner1 - 0.4), arrive + 7, opening.centerZ))
+			local position = Vector3.new(worldX(dims.uInner1 - WALL_MOUNT), arrive + 7, opening.centerZ)
+			addLight(position, Vector3.new(centre.X, position.Y, centre.Z))
 		else
-			addLight(Vector3.new(worldX(dims.uInner0 + 0.4), arrive + opening.height + 1, opening.centerZ))
+			addNearLight(arrive, math.min(arrive + nearLandingRise - LANDING_THICKNESS, top))
 		end
 	end
 

@@ -1,21 +1,25 @@
 --!strict
 -- Noise bus + locomotion sampler. Emit fills every pulse from NoiseConfig (radius, priority, medium per kind) and
 -- honours overrides; the ring buffer keeps the newest pulses in order; one player's continuous noise is paced by
--- its interval; the splash meter crosses once per climb. The sampler's tier logic is fed fake samples: the louder of
--- the MoveState tier and the observed-speed tier wins, standing still is silent, teleports are not footsteps, and
--- pulses respect each kind's interval.
+-- its interval; the splash meter crosses once per climb (with hysteresis: one continuous swim never crosses twice).
+-- The sampler's tier logic is fed fake samples: the louder of the MoveState tier and the observed-speed tier wins,
+-- standing still is silent, only server-announced teleports are not footsteps (any other long step is heard at the
+-- speed it implies, stall-aware, and reported as suspicious), and pulses respect each kind's interval. Floor debris
+-- crunches once per player per volume per cooldown, only during a run.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
+local DebrisNoise = require(ServerScriptService.Services.Core.NoiseAndDirectorService.DebrisNoise)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local NoiseConfig = require(ReplicatedStorage.Shared.Config.NoiseConfig)
 local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
 local Sampler = require(ServerScriptService.Services.Core.NoiseAndDirectorService.LocomotionNoiseSampler)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
+local Tags = require(ReplicatedStorage.Shared.Tags)
 
 type Expect = SpecRunner.Expect
 
@@ -344,7 +348,10 @@ return {
 		local teleported = Sampler.newTrack()
 		Sampler.observe(teleported, Vector3.new(0, 3, 0), 0)
 		Sampler.observe(teleported, Vector3.new(1, 3, 0), 0.1)
-		t.eq(Sampler.observe(teleported, Vector3.new(400, 3, 0), 0.2), 0, "a teleport is not a sprint")
+		Sampler.armTeleport(teleported, 0.15)
+		local jumpSpeed, jumpReport = Sampler.observe(teleported, Vector3.new(400, 3, 0), 0.2)
+		t.eq(jumpSpeed, 0, "an announced teleport is not a sprint")
+		t.eq(jumpReport, nil, "and is not suspicious")
 		t.near(Sampler.observe(teleported, Vector3.new(401.1, 3, 0), 0.3), 11, 1e-3, "walking after the teleport")
 
 		local stale = Sampler.newTrack()
@@ -353,9 +360,68 @@ return {
 
 		local speeder = Sampler.newTrack()
 		Sampler.observe(speeder, Vector3.new(0, 3, 0), 0)
-		Sampler.observe(speeder, Vector3.new(20, 3, 0), 0.1)
+		local first, report = Sampler.observe(speeder, Vector3.new(20, 3, 0), 0.1)
+		t.near(first, 200, 1e-6, "an unannounced 20-stud step in one tick reads as 200 studs/s")
+		t.truthy(report ~= nil and math.abs((report :: Sampler.SuspiciousStep).distance - 20) < 1e-6, "and is reported")
 		t.truthy(Sampler.observe(speeder, Vector3.new(40, 3, 0), 0.2) >= 150, "sustained impossible speed is heard")
 		t.eq(Sampler.classify("Crouching", speeder.speed), "Sprint", "and is as loud as a sprint")
+	end,
+
+	["teleports: only a server-announced move is silent"] = function(t: Expect)
+		-- Hop 13 studs, hold one tick, repeat: 65 studs/s average that used to read as a string of teleports.
+		local hopper = Sampler.newTrack()
+		local x, pulses, reports = 0, 0, 0
+		for tick = 0, 60 do
+			if tick % 2 == 1 then
+				x += 13
+			end
+			local kind, suspicious = Sampler.sample(hopper, Vector3.new(x, 3, 0), "Standing", tick * TICK)
+			if kind then
+				pulses += 1
+				t.eq(kind, "Sprint", "every hop is as loud as a sprint")
+			end
+			if suspicious then
+				reports += 1
+				t.truthy(suspicious.speed >= 13 / (2 * TICK) - 1e-6, "hop speed spans the pause before it")
+			end
+		end
+		t.truthy(pulses >= 10, string.format("hop-and-pause is heard (%d pulses)", pulses))
+		t.eq(reports, 30, "every unannounced hop is reported")
+
+		-- A token forgives long steps only inside its grace window.
+		local late = Sampler.newTrack()
+		Sampler.observe(late, Vector3.new(0, 3, 0), 0)
+		Sampler.armTeleport(late, 0)
+		Sampler.observe(late, Vector3.new(0, 3, 0), 0.5)
+		Sampler.observe(late, Vector3.new(0, 3, 0), 1)
+		local lateSpeed, lateReport = Sampler.observe(late, Vector3.new(50, 3, 0), Sampler.TeleportGraceSeconds + 0.1)
+		t.truthy(lateSpeed > 0 and lateReport ~= nil, "an expired token forgives nothing")
+
+		-- A replication stall followed by a burst reads as the true average speed, not a sprint.
+		local stalled = Sampler.newTrack()
+		local time = 0
+		local position = 0
+		for _ = 1, 10 do
+			Sampler.observe(stalled, Vector3.new(position, 3, 0), time)
+			position += GameConfig.WalkSpeed * TICK
+			time += TICK
+		end
+		local held = position - GameConfig.WalkSpeed * TICK
+		for _ = 1, 12 do
+			Sampler.observe(stalled, Vector3.new(held, 3, 0), time)
+			time += TICK
+		end
+		local burst = held + GameConfig.WalkSpeed * 1.3
+		local burstSpeed = Sampler.observe(stalled, Vector3.new(burst, 3, 0), time)
+		t.truthy(burst - held > Sampler.TeleportStep, "the burst is a long step")
+		t.eq(Sampler.classify("Standing", burstSpeed), "Walk", "a stalled walk is still a walk")
+
+		-- Server-held states (Hiding, Grabbed, ...) are carried by the server: never suspicious, never heard.
+		local carried = Sampler.newTrack()
+		Sampler.sample(carried, Vector3.new(0, 3, 0), "Grabbed", 0)
+		local carriedKind, carriedReport = Sampler.sample(carried, Vector3.new(30, 3, 0), "Grabbed", TICK)
+		t.eq(carriedKind, nil)
+		t.eq(carriedReport, nil)
 	end,
 
 	["sampled pulses respect each kind's interval"] = function(t: Expect)
@@ -468,5 +534,113 @@ return {
 			end
 		end
 		t.falsy(fired, "quiet treading never invites a grab")
+	end,
+
+	["splash meter: one continuous swim crosses once (hysteresis)"] = function(t: Expect)
+		t.truthy(SPLASH.rearmBelow < SPLASH.grabThreshold, "re-arm level sits below the threshold")
+		-- Freestyle pulses at the 10 Hz sampler's real cadence (every 0.4 s), from every starting level.
+		local cadence = math.ceil(NoiseConfig.Kinds.Freestyle.interval / TICK - 1e-9) * TICK
+		for i = 0, 199 do
+			local meter = Sampler.newSplashMeter(0)
+			meter.value = i / 100
+			local crossings = 0
+			local now = 0
+			for _ = 1, 40 do
+				if Sampler.addSplash(meter, SPLASH.perFreestylePulse, now) then
+					crossings += 1
+				end
+				now += cadence
+			end
+			t.eq(crossings, 1, string.format("one swim from %.2f crosses once", i / 100))
+		end
+		-- Splash one-shots 1.5 s apart: one crossing, not one per dip below the threshold.
+		local splashes = Sampler.newSplashMeter(0)
+		local crossings = 0
+		for i = 0, 5 do
+			if Sampler.addSplash(splashes, SPLASH.perSplash, i * 1.5) then
+				crossings += 1
+			end
+		end
+		t.eq(crossings, 1, "spaced splashes cross once")
+		-- A real calm spell re-arms it.
+		local calmAt = 7.5 + (Sampler.splashValue(splashes, 7.5) - SPLASH.rearmBelow) / SPLASH.decayPerSecond + 0.5
+		local again = false
+		for i = 0, 10 do
+			if Sampler.addSplash(splashes, SPLASH.perSplash, calmAt + i * 0.1) then
+				again = true
+				break
+			end
+		end
+		t.truthy(again, "after decaying below rearmBelow it crosses again")
+	end,
+
+	--------------------------------------------------------------------------------
+	-- Floor debris (injected dependencies)
+	--------------------------------------------------------------------------------
+
+	["floor debris crunches once per player and volume per cooldown, only in a run"] = function(t: Expect)
+		local now = 100
+		local running = true
+		local emitted: { { position: Vector3, kind: Enums.NoiseKind, options: Sampler.EmitOptions } } = {}
+		local cues: { string } = {}
+		local roots: { [Player]: Vector3 } = {}
+		local debris = DebrisNoise.new({
+			inRun = function(): boolean
+				return running
+			end,
+			now = function(): number
+				return now
+			end,
+			positionOf = function(player: Player, _volume: BasePart): Vector3?
+				return roots[player]
+			end,
+			emit = function(position: Vector3, kind: Enums.NoiseKind, options: Sampler.EmitOptions)
+				table.insert(emitted, { position = position, kind = kind, options = options })
+			end,
+			playCue = function(preset: string, _position: Vector3)
+				table.insert(cues, preset)
+			end,
+		})
+		local alice, bob = fakePlayer(9101), fakePlayer(9102)
+		roots[alice] = Vector3.new(1, 2, 3)
+		roots[bob] = Vector3.new(4, 5, 6)
+		local glass = Instance.new("Part")
+		glass:SetAttribute("LevelId", "Level2_ScienceHall")
+		local cans = Instance.new("Part")
+
+		t.truthy(debris.onVolumeEntered(alice, glass, Tags.FloorDebris), "first entry crunches")
+		t.eq(#emitted, 1)
+		t.eq(emitted[1].kind, "FloorDebris")
+		t.eq(NoiseConfig.Kinds.FloorDebris.radius, 130, "the spec's 130-stud debris noise")
+		t.eq(emitted[1].position, roots[alice], "where the player stands")
+		t.eq(emitted[1].options.sourcePlayer, alice)
+		t.eq(emitted[1].options.levelId, "Level2_ScienceHall", "the volume's level")
+		t.eq(cues[1], "GlassCrunch")
+
+		now += DebrisNoise.Cooldown / 2
+		t.falsy(debris.onVolumeEntered(alice, glass, Tags.FloorDebris), "same volume inside the cooldown")
+		t.truthy(debris.onVolumeEntered(alice, cans, Tags.FloorDebris), "another volume crunches at once")
+		t.eq(emitted[2].options.levelId, nil, "a volume without a level leaves it to Emit")
+		t.truthy(debris.onVolumeEntered(bob, glass, Tags.FloorDebris), "cooldowns are per player")
+		t.falsy(debris.onVolumeEntered(alice, glass, Tags.ScareTrigger), "other trigger tags are not debris")
+
+		now += DebrisNoise.Cooldown
+		t.truthy(debris.onVolumeEntered(alice, glass, Tags.FloorDebris), "crunches again after the cooldown")
+
+		roots[alice] = nil
+		now += DebrisNoise.Cooldown * 2
+		t.falsy(debris.onVolumeEntered(alice, glass, Tags.FloorDebris), "no living character, no crunch")
+
+		running = false
+		roots[alice] = Vector3.zero
+		t.falsy(debris.onVolumeEntered(alice, cans, Tags.FloorDebris), "outside a run nothing is heard")
+		running = true
+		debris.reset()
+		t.truthy(debris.onVolumeEntered(bob, glass, Tags.FloorDebris), "reset clears every cooldown")
+		debris.forget(bob)
+		t.truthy(debris.onVolumeEntered(bob, glass, Tags.FloorDebris), "forget clears a player's cooldowns")
+		t.eq(#emitted, #cues, "every crunch is heard and played")
+		glass:Destroy()
+		cans:Destroy()
 	end,
 }

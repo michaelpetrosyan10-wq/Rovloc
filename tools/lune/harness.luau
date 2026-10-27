@@ -295,13 +295,6 @@ local function inject()
 	roblox.implementMethod("DataModel", "BindToClose", function(_, callback)
 		table.insert(current.closeHandlers, callback)
 	end)
-	-- An unpublished place: no creator.
-	roblox.implementProperty("DataModel", "CreatorId", function()
-		return 0
-	end)
-	roblox.implementProperty("DataModel", "CreatorType", function()
-		return roblox.Enum.CreatorType.User
-	end)
 
 	roblox.implementMethod("Workspace", "GetServerTimeNow", function()
 		return current.clock
@@ -340,6 +333,9 @@ function Harness.load(placePath, options)
 	inject()
 	options = options or {}
 	local game = roblox.deserializePlace(fs.readFile(placePath))
+	-- An unpublished place: no creator. Set as real values (implementProperty cannot override reflected members).
+	game.CreatorId = 0
+	game.CreatorType = roblox.Enum.CreatorType.User
 	local h = {
 		game = game,
 		server = options.server ~= false,

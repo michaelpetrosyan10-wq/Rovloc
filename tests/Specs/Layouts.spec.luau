@@ -5,8 +5,11 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CameraConfig = require(ReplicatedStorage.Shared.Config.CameraConfig)
+local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
+local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
@@ -62,6 +65,19 @@ local AMBIENCE: { [string]: string } = {
 }
 
 local EPS = 1e-3
+local HALF_BORE = WorldConfig.VentBore / 2
+local HALF_OUTER = HALF_BORE + WorldConfig.VentShell
+-- Standing eye height over the floor: a normalized R15 root centre (HipHeight 2 + half the 2-stud root) plus the
+-- standing eye offset the server uses for line of sight.
+local STANDING_EYE = 3 + CameraConfig.EyeHeightAboveRoot.Standing
+local SCHOOL_ORDER: { string } = {
+	"Level0_Basement",
+	"Level1_Hallways",
+	"Level2_ScienceHall",
+	"Level3_Gymnasium",
+	"Level4_FloodedPool",
+	"Level5_Roof",
+}
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -199,6 +215,40 @@ local function nodeById(layout: Layout, id: string): LayoutSchema.VentNodeSpec?
 		end
 	end
 	return nil
+end
+
+-- The chase room a vent node lies in or on (its boundary counts).
+local function chaseOf(layout: Layout, node: LayoutSchema.VentNodeSpec): Room?
+	for _, r in layout.rooms do
+		if r.kind == "Chase" and LayoutSchema.rectContains(r.rect, node.x, node.z) then
+			return r
+		end
+	end
+	return nil
+end
+
+-- Whether the straight line from `eye` to `target` passes through `door`'s opening at both faces of its wall:
+-- inside the door's width and under its lintel (the wall around it is what blocks the view).
+local function throughDoor(eye: Vector3, target: Vector3, door: Door, edge: LayoutSchema.SharedEdge): boolean
+	local half = LayoutSchema.doorWidth(door) / 2
+	local wall = WorldConfig.WallThickness / 2
+	local e = if edge.axis == "Z" then eye.Z else eye.X
+	local g = if edge.axis == "Z" then target.Z else target.X
+	if math.abs(g - e) < EPS then
+		return false
+	end
+	for _, face in { edge.coord - wall, edge.coord + wall } do
+		local k = (face - e) / (g - e)
+		if k < 0 or k > 1 then
+			return false
+		end
+		local p = eye:Lerp(target, k)
+		local u = if edge.axis == "Z" then p.X else p.Z
+		if u < door.at - half or u > door.at + half or p.Y > LayoutSchema.doorHeight(door) then
+			return false
+		end
+	end
+	return true
 end
 
 --------------------------------------------------------------------------------
@@ -550,25 +600,69 @@ return {
 		if not (classroom and corridor) then
 			return
 		end
-		local glow = 0
-		for _, l in (classroom.lights or {}) :: { Light } do
-			if l.kind == "ClassroomGlow" and not l.broken then
-				glow += 1
+		-- the pale glow: only this classroom on the level glows, and one glow fixture sits just inside the ajar door
+		-- so its (shadowed, downward) cone leaves the room under the door lintel and lights the corridor floor
+		local doorEdge = LayoutSchema.sharedEdge(classroom.rect, corridor.rect)
+		t.truthy(doorEdge, "the ajar door's wall")
+		if not doorEdge then
+			return
+		end
+		local glow, spill = 0, 0
+		for _, r in layout.rooms do
+			for _, l in (r.lights or {}) :: { Light } do
+				if l.kind == "ClassroomGlow" and not l.broken then
+					t.eq(r.id, classroom.id, l.id .. ": only the scripted classroom glows")
+					glow += 1
+					local along = if doorEdge.axis == "Z" then l.pos.X else l.pos.Z
+					local inside = math.abs((if doorEdge.axis == "Z" then l.pos.Z else l.pos.X) - doorEdge.coord)
+					if
+						math.abs(along - classroomDoor.at) <= LayoutSchema.doorWidth(classroomDoor) / 2
+						and inside <= 4
+					then
+						spill += 1
+					end
+				end
 			end
 		end
-		t.eq(glow, 1, "the classroom glows")
+		t.truthy(glow >= 1, "the classroom glows")
+		t.truthy(spill >= 1, "a glow fixture just inside the ajar door spills into the corridor")
 		local poses = anchorsOf(layout, "CreatureScarePose")
 		t.eq(#poses, 1, "one scare pose")
 		t.eq(poses[1].room, classroom.id, "the Creature crouches in the glowing classroom")
 		local glass = triggersOf(layout, "ScareStep")
 		t.eq(#glass, 1, "one ScareStep")
 		t.eq(glass[1].room, corridor.id, "the glass lies in the corridor")
-		local doorEdge = LayoutSchema.sharedEdge(classroom.rect, corridor.rect)
 		local glassRect = glass[1].rect
-		local spansDoor = if doorEdge and doorEdge.axis == "Z"
+		local spansDoor = if doorEdge.axis == "Z"
 			then glassRect.x <= classroomDoor.at and glassRect.x + glassRect.w >= classroomDoor.at
 			else glassRect.z <= classroomDoor.at and glassRect.z + glassRect.d >= classroomDoor.at
 		t.truthy(spansDoor, "the glass spans the classroom doorway")
+		-- whoever steps on the glass sees the Creature: from standing eye height over the glass, the line to its
+		-- hunched head or its chest runs through the ajar doorway from most of the trigger and from every stretch of
+		-- it along the corridor (the snap the P6 controller plays on entry happens in view)
+		local pose = poses[1].pos
+		local head = pose + Vector3.new(0, CreatureConfig.EyeHeightAboveRoot.Hunched, 0)
+		local seen, samples = 0, 0
+		local columns: { [number]: boolean } = {}
+		for i = 0, math.floor(glassRect.w) - 1 do
+			for j = 0, math.floor(glassRect.d) - 1 do
+				local eye = Vector3.new(glassRect.x + i + 0.5, STANDING_EYE, glassRect.z + j + 0.5)
+				samples += 1
+				if
+					throughDoor(eye, head, classroomDoor, doorEdge) or throughDoor(eye, pose, classroomDoor, doorEdge)
+				then
+					seen += 1
+					columns[if doorEdge.axis == "Z" then i else j] = true
+				end
+			end
+		end
+		t.truthy(
+			seen >= 0.6 * samples,
+			string.format("the Creature is in sight from %d of %d glass cells", seen, samples)
+		)
+		for i = 0, math.floor(if doorEdge.axis == "Z" then glassRect.w else glassRect.d) - 1 do
+			t.truthy(columns[i], string.format("the Creature is in sight from the glass %d studs along", i))
+		end
 
 		local gates = doorsWhere(layout, function(d: Door): boolean
 			return d.kind == "Gate"
@@ -594,11 +688,27 @@ return {
 			reachable(layout, layout.entry, { shut = { Gate = true }, noVents = true })["room:" .. classroom.id],
 			"the classroom lies before the gate"
 		)
-		local total, lockable, critical = grateCounts(layout)
+		local total, _, critical = grateCounts(layout)
 		t.truthy(total >= 2 and critical >= 2, "the bypass vent has critical grates")
-		t.eq(lockable, 0, "the first wall vent never locks")
 		local vents = layout.vents
 		if vents then
+			-- the first wall vent (the chase holding the critical grates) never locks, not one of its grates
+			local bypass: { [string]: boolean } = {}
+			for _, g in vents.grates do
+				local node = nodeById(layout, g.node)
+				local chase = node and chaseOf(layout, node)
+				if g.criticalPath and chase then
+					bypass[chase.id] = true
+				end
+			end
+			t.truthy(next(bypass) ~= nil, "the bypass chase")
+			for _, g in vents.grates do
+				local node = nodeById(layout, g.node)
+				local chase = node and chaseOf(layout, node)
+				if chase and bypass[chase.id] then
+					t.falsy(g.lockable, g.id .. ": the first wall vent never locks")
+				end
+			end
 			local sides: { [string]: boolean } = {}
 			for _, g in vents.grates do
 				if g.criticalPath then
@@ -615,6 +725,59 @@ return {
 		t.truthy(#anchorsOf(layout, "DripPipe") >= 4, "dripping pipes")
 		t.truthy(#anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
 		t.truthy(#triggersOf(layout, "Checkpoint") == 1, "exit checkpoint")
+	end,
+
+	["the vents connect classrooms on the hallway and science floors"] = function(t: Expect)
+		for _, case in
+			{
+				{ id = "Level1_Hallways", classrooms = 2, lockable = 2 },
+				{ id = "Level2_ScienceHall", classrooms = 3, lockable = 3 },
+			} :: { { id: string, classrooms: number, lockable: number } }
+		do
+			local layout = LAYOUTS[case.id]
+			local rooms = LayoutSchema.indexRooms(layout)
+			local vents = layout.vents
+			t.truthy(vents, case.id .. " vents")
+			if not vents then
+				continue
+			end
+			local served: { [string]: boolean } = {}
+			local count, lockable = 0, 0
+			for _, g in vents.grates do
+				if rooms[g.room].kind == "Classroom" then
+					if not served[g.room] then
+						count += 1
+					end
+					served[g.room] = true
+					if g.lockable then
+						lockable += 1
+					end
+				end
+			end
+			t.truthy(count >= case.classrooms, string.format("%s: grates into %d classrooms", case.id, count))
+			t.truthy(lockable >= case.lockable, string.format("%s: %d lockable classroom grates", case.id, lockable))
+		end
+		-- the scripted classroom has a way out for the Creature; the science floor's lecture hall has a vent
+		local function opensInto(layout: Layout, roomId: string): boolean
+			for _, g in (if layout.vents then layout.vents.grates else {}) :: { LayoutSchema.GrateSpec } do
+				if g.room == roomId then
+					return true
+				end
+			end
+			return false
+		end
+		local l1 = LAYOUTS.Level1_Hallways
+		local rooms1 = LayoutSchema.indexRooms(l1)
+		for _, d in l1.doors do
+			if d.kind == "Ajar" then
+				for _, roomId in d.rooms do
+					if rooms1[roomId].kind == "Classroom" then
+						t.truthy(opensInto(l1, roomId), "a grate into the scripted classroom " .. roomId)
+					end
+				end
+			end
+		end
+		t.truthy(opensInto(LAYOUTS.Level2_ScienceHall, "L2_LectureHall"), "a grate into the lecture hall")
 	end,
 
 	["science hall: labs, flasks on counters and an extensive vent network"] = function(t: Expect)
@@ -764,6 +927,62 @@ return {
 				end
 			end
 			t.truthy(criticalIntoPool >= 2, "the flooded duct is part of the route across the pool")
+			-- half-flooded: the duct's centre line is the water surface, so the water fills the lower half of the bore
+			for _, n in vents.nodes do
+				t.near(LayoutSchema.ventNodeY(n), basin.waterLevel, EPS, n.id .. " sits at the waterline")
+			end
+			-- the swim is mandatory: every grate of the duct opens low in the pool wall, wholly over the water
+			-- (inside the basin's coping), never onto the dry deck
+			local wall = Geometry.BasinWall
+			for _, g in vents.grates do
+				local node = nodeById(layout, g.node)
+				t.eq(g.room, pool.id, g.id .. " opens into the pool hall")
+				t.truthy(node, g.id .. " node")
+				if node then
+					local side = LayoutSchema.sideOfPoint(pool.rect, node.x, node.z)
+					local alongX = side == "N" or side == "S"
+					local u = if alongX then node.x else node.z
+					local lo = if alongX then basin.rect.x else basin.rect.z
+					local span = if alongX then basin.rect.w else basin.rect.d
+					local onEdge = if side == "N"
+						then math.abs(node.z - basin.rect.z) < EPS
+						elseif side == "S" then math.abs(node.z - (basin.rect.z + basin.rect.d)) < EPS
+						elseif side == "W" then math.abs(node.x - basin.rect.x) < EPS
+						else math.abs(node.x - (basin.rect.x + basin.rect.w)) < EPS
+					t.truthy(onEdge, g.id .. " opens straight onto the basin")
+					t.truthy(
+						u - HALF_BORE >= lo + wall - EPS and u + HALF_BORE <= lo + span - wall + EPS,
+						g.id .. " opens over the water, inside the coping"
+					)
+				end
+			end
+			-- the duct's PoolWater volume is the flooded half of the bore: bore floor to the water surface, over every
+			-- flooded duct inside its chase
+			local ductWater: { LayoutSchema.Trigger } = {}
+			for _, tr in triggersOf(layout, "PoolWater") do
+				local r = roomOf(layout, tr.room)
+				if r and r.kind == "Chase" then
+					table.insert(ductWater, tr)
+					t.near(tr.y or 0, basin.waterLevel - HALF_BORE, EPS, tr.id .. " starts at the bore floor")
+					t.near((tr.y or 0) + tr.height, basin.waterLevel, EPS, tr.id .. " ends at the water surface")
+				end
+			end
+			t.truthy(#ductWater >= 1, "the flooded duct has a PoolWater volume")
+			for _, e in vents.edges do
+				local a, b = nodeById(layout, e.a), nodeById(layout, e.b)
+				local chase = a and chaseOf(layout, a)
+				if e.submerged and a and b and chase then
+					for _, p in { a, b } :: { LayoutSchema.VentNodeSpec } do
+						local x = math.clamp(p.x, chase.rect.x, chase.rect.x + chase.rect.w)
+						local z = math.clamp(p.z, chase.rect.z, chase.rect.z + chase.rect.d)
+						local covered = false
+						for _, tr in ductWater do
+							covered = covered or LayoutSchema.rectContains(tr.rect, x, z)
+						end
+						t.truthy(covered, string.format("%s-%s: water covers the bore at %.1f, %.1f", e.a, e.b, x, z))
+					end
+				end
+			end
 		end
 		t.eq(#anchorsOf(layout, "FloodlightSwitch"), 1, "the emergency floodlight switch")
 		local deckFlasks = 0
@@ -781,6 +1000,33 @@ return {
 			end
 		end
 		t.truthy(floodlights >= 4, "pool floodlights for the switch")
+	end,
+
+	["pool fragments stand on piers or rubble, none hovers over the water"] = function(t: Expect)
+		local layout = LAYOUTS.Level4_FloodedPool
+		local platforms: { LayoutSchema.Platform } = layout.platforms or {}
+		for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
+			local interior = Geometry.insetRect(basin.rect, Geometry.BasinWall)
+			for _, p in platforms do
+				if p.top > EPS or LayoutSchema.rectOverlapArea(p.rect, interior) <= 0 then
+					continue
+				end
+				local underside = p.top - p.thickness
+				t.truthy(underside < basin.waterLevel - EPS, p.id .. " sits in the water, not above it")
+				local supported = math.abs(underside + basin.depth) < EPS
+				for _, q in platforms do
+					if
+						q ~= p
+						and math.abs(q.top - underside) < EPS
+						and math.abs(q.top - q.thickness + basin.depth) < EPS
+						and LayoutSchema.rectInside(q.rect, p.rect)
+					then
+						supported = true
+					end
+				end
+				t.truthy(supported, p.id .. " rests on the basin floor or on a support standing on it")
+			end
+		end
 	end,
 
 	["roof: parapets, the roof stair door, HVAC, crate and the jump"] = function(t: Expect)
@@ -863,6 +1109,50 @@ return {
 							basinUnderside
 						)
 					)
+				end
+			end
+		end
+	end,
+
+	["ducts sunk below a floor clear the ceilings of the level below"] = function(t: Expect)
+		for i = 2, #SCHOOL_ORDER do
+			local upperId, lowerId = SCHOOL_ORDER[i], SCHOOL_ORDER[i - 1]
+			local upper, lower = LAYOUTS[upperId], LAYOUTS[lowerId]
+			local vents = upper.vents
+			if not vents then
+				continue
+			end
+			for _, e in vents.edges do
+				local a, b = nodeById(upper, e.a), nodeById(upper, e.b)
+				if not (a and b) then
+					continue
+				end
+				local bottom = LayoutSchema.ventNodeY(a) - HALF_OUTER
+				if bottom >= -WorldConfig.SlabThickness then
+					continue
+				end
+				local footprint = LayoutSchema.rect(
+					math.min(a.x, b.x) - HALF_OUTER,
+					math.min(a.z, b.z) - HALF_OUTER,
+					math.abs(a.x - b.x) + 2 * HALF_OUTER,
+					math.abs(a.z - b.z) + 2 * HALF_OUTER
+				)
+				local worldBottom = WorldConfig.levelElevation(upperId) + bottom
+				for _, r in lower.rooms do
+					if LayoutSchema.rectOverlapArea(r.rect, footprint) > 0 then
+						local ceilingTop = WorldConfig.levelElevation(lowerId) + LayoutSchema.roomHeight(lower, r) + 1
+						t.truthy(
+							ceilingTop <= worldBottom,
+							string.format(
+								"%s (top %.1f) clears duct %s-%s (%.2f)",
+								r.id,
+								ceilingTop,
+								e.a,
+								e.b,
+								worldBottom
+							)
+						)
+					end
 				end
 			end
 		end

@@ -2,6 +2,12 @@
 -- The only place that knows where runtime-created instances live. Everything built at run time (the school,
 -- the Creature, remotes, per-run props) is reached through these resolvers, so strict typing never guesses at
 -- a dot path that the Rojo sourcemap cannot see.
+--
+-- Workspace also holds every player character, and CharacterService names each one after its player. A username
+-- is free text ("Runtime", "School", "Lobby" and "Cosmetic" are all valid), so a plain FindFirstChild(name) could
+-- hand back someone's character. Workspace roots are therefore resolved by name AND class: the first child with the
+-- name that is the expected class and is not a character (a Model holding a Humanoid). WorldService creates
+-- Workspace.Runtime during Init, before any character exists.
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -31,6 +37,28 @@ Instances.Names = table.freeze({
 
 local Names = Instances.Names
 
+-- A character-shaped Model (player characters and the Creature): never a world root.
+local function isCharacterModel(instance: Instance): boolean
+	return instance:IsA("Model") and instance:FindFirstChildOfClass("Humanoid") ~= nil
+end
+
+-- The first child of `parent` named `name` that IsA(`className`) and is not a character model.
+local function findRoot(parent: Instance, name: string, className: string): Instance?
+	local first = parent:FindFirstChild(name)
+	if first == nil then
+		return nil
+	end
+	if first:IsA(className) and not isCharacterModel(first) then
+		return first
+	end
+	for _, child in parent:GetChildren() do
+		if child.Name == name and child:IsA(className) and not isCharacterModel(child) then
+			return child
+		end
+	end
+	return nil
+end
+
 local function waitFor(parent: Instance, name: string, timeout: number?): Instance?
 	local found = parent:FindFirstChild(name)
 	if found then
@@ -51,12 +79,12 @@ function Instances.findRemotesFolder(): Folder?
 end
 
 function Instances.school(): Model?
-	local school = Workspace:FindFirstChild(Names.School)
+	local school = findRoot(Workspace, Names.School, "Model")
 	return if school and school:IsA("Model") then school else nil
 end
 
 function Instances.lobby(): Model?
-	local lobby = Workspace:FindFirstChild(Names.Lobby)
+	local lobby = findRoot(Workspace, Names.Lobby, "Model")
 	return if lobby and lobby:IsA("Model") then lobby else nil
 end
 
@@ -88,24 +116,29 @@ function Instances.stairwells(): Model?
 end
 
 function Instances.runtime(): Folder?
-	local runtime = Workspace:FindFirstChild(Names.Runtime)
+	local runtime = findRoot(Workspace, Names.Runtime, "Folder")
 	return if runtime and runtime:IsA("Folder") then runtime else nil
+end
+
+-- Workspace.Runtime, created when missing (server: WorldService.Init calls this before any character exists).
+function Instances.ensureRuntime(): Folder
+	local existing = Instances.runtime()
+	if existing then
+		return existing
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = Names.Runtime
+	folder.Parent = Workspace
+	return folder
 end
 
 -- Workspace.Runtime.<layoutId>, created on demand (server) or awaited (client).
 function Instances.runtimeLevel(layoutId: string, create: boolean): Folder?
-	local runtime = Instances.runtime()
+	local runtime = if create then Instances.ensureRuntime() else Instances.runtime()
 	if not runtime then
-		if not create then
-			return nil
-		end
-		local folder = Instance.new("Folder")
-		folder.Name = Names.Runtime
-		folder.Parent = Workspace
-		runtime = folder
+		return nil
 	end
-	assert(runtime, "unreachable")
-	local level = runtime:FindFirstChild(layoutId)
+	local level = findRoot(runtime, layoutId, "Folder")
 	if level and level:IsA("Folder") then
 		return level
 	end
@@ -120,7 +153,7 @@ end
 
 -- Client-local folder for cosmetic geometry (never replicated).
 function Instances.cosmetic(): Folder
-	local existing = Workspace:FindFirstChild(Names.Cosmetic)
+	local existing = findRoot(Workspace, Names.Cosmetic, "Folder")
 	if existing and existing:IsA("Folder") then
 		return existing
 	end

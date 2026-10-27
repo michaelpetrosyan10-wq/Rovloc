@@ -214,6 +214,7 @@ local function runLifecycle(h)
 	-- Remotes from a dev player.
 	local player = roblox.Instance.new("Player")
 	player.Name = "LifecycleProbe"
+	player.UserId = 101
 	player:SetAttribute("DevTools", true)
 	local remotes = RS:FindFirstChild("Remotes")
 	local function clientFires(remoteName, payload)

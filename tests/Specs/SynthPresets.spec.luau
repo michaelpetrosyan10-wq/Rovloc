@@ -3,10 +3,16 @@
 -- every layer references a known sample with a region inside its (conservative) length; every effect kind is a
 -- real SoundEffect class whose properties instantiate here (the Lune harness checks property names against the
 -- reflection database) with values inside the documented ranges; every surface has walk + sprint footsteps; every
--- layout's ambience is a looped 2D bed; regions are resolved safely against measured lengths.
+-- layout's ambience is a looped 2D bed; regions are resolved safely against measured lengths. Rules that keep the
+-- recipes honest on a phone: grain clusters are spaced for 30 fps (sub-frame density comes from echoes), beds loop
+-- seamlessly and never loop the explosion, reverbs per preset are capped, chain tails are computed for the effect
+-- groups that hold them. The body's own sounds sit on the Body bus; the stock avatar voice is never recognisable;
+-- drip emitters and drip stingers are separate presets; the scrape, the trap and the drip are built to ring.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
 
+local AudioController = require(StarterPlayer.StarterPlayerScripts.Controllers.Core.AudioController)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local SoundLibrary = require(ReplicatedStorage.Shared.Audio.SoundLibrary)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
@@ -50,6 +56,24 @@ local function instantiate(effect: SynthPresets.Effect): Instance
 	(instance :: any).Priority = 1
 	(instance :: any).Enabled = true
 	return instance
+end
+
+local BODY = { "Heartbeat", "HeartbeatFast", "Breathing", "BreathingPanic", "EmfStatic" }
+
+local function speedBounds(speed: number | SynthPresets.Range): (number, number)
+	if type(speed) == "number" then
+		return speed, speed
+	end
+	return speed.min, speed.max
+end
+
+local function hasEffect(layer: SynthPresets.Layer, kind: SynthPresets.EffectKind): SynthPresets.Effect?
+	for _, effect in (layer.effects or {}) :: { SynthPresets.Effect } do
+		if effect.kind == kind then
+			return effect
+		end
+	end
+	return nil
 end
 
 local function eachLayer(fn: (name: string, index: number, layer: SynthPresets.Layer) -> ())
@@ -249,6 +273,193 @@ return {
 		end
 		t.eq(preset.bus, "Monster")
 		t.eq(preset.priority, 100, "nothing outranks the screech")
+	end,
+
+	["names() lists every preset once, sorted"] = function(t: Expect)
+		local names = SynthPresets.names()
+		local count = 0
+		for _ in SynthPresets.Presets do
+			count += 1
+		end
+		t.eq(#names, count, "every preset is listed")
+		for index = 2, #names do
+			t.truthy(names[index - 1] < names[index], "sorted and unique at " .. names[index])
+		end
+		for _, name in SynthPresets.Required do
+			t.truthy(table.find(names, name) ~= nil, name .. " can be auditioned")
+		end
+	end,
+
+	["chain tails cover reverbs, echoes and modulation"] = function(t: Expect)
+		t.eq(SynthPresets.chainTail(nil), 0)
+		t.eq(SynthPresets.chainTail({}), 0)
+		local reverb: SynthPresets.Effect =
+			{ kind = "Reverb", props = { DecayTime = 3.5, WetLevel = -2, DryLevel = 0, Density = 1, Diffusion = 1 } }
+		t.near(SynthPresets.chainTail({ reverb }), 3.5, 1e-6, "a reverb rings for its decay time")
+		local dryEcho: SynthPresets.Effect =
+			{ kind = "Echo", props = { Delay = 0.2, Feedback = 0, WetLevel = 0, DryLevel = 0 } }
+		t.near(SynthPresets.chainTail({ dryEcho }), 0.2, 1e-6, "one repeat without feedback")
+		local ringing: SynthPresets.Effect =
+			{ kind = "Echo", props = { Delay = 0.1, Feedback = 0.5, WetLevel = 0, DryLevel = 0 } }
+		local tail = SynthPresets.chainTail({ ringing })
+		t.truthy(tail > 0.9 and tail < 1.1, "feedback 0.5 repeats ~10 times to -60 dB, got " .. tail)
+		local chorus: SynthPresets.Effect = { kind = "Chorus", props = { Rate = 1, Depth = 0.5, Mix = 0.5 } }
+		t.truthy(SynthPresets.chainTail({ chorus }) > 0, "modulation has a short tail")
+		t.near(SynthPresets.chainTail({ reverb, dryEcho }), 3.7, 1e-6, "tails in series add")
+		local endless: SynthPresets.Effect =
+			{ kind = "Echo", props = { Delay = 2, Feedback = 1, WetLevel = 0, DryLevel = 0 } }
+		t.eq(SynthPresets.chainTail({ endless }), SynthPresets.MaxTail, "capped")
+	end,
+
+	["grain clusters are spaced for 30 fps and fit the budget"] = function(t: Expect)
+		eachLayer(function(name: string, index: number, layer: SynthPresets.Layer)
+			local grainSpec = layer.grains
+			if grainSpec then
+				local where = name .. "[" .. index .. "]"
+				t.truthy(grainSpec.spacing.min >= SynthPresets.MinGrainSpacing, where .. " grains closer than a frame")
+				t.truthy(grainSpec.count.max <= SynthPresets.MaxGrainCount, where .. " too many grains per trigger")
+			end
+		end)
+		for _, name in SynthPresets.names() do
+			local preset = SynthPresets.get(name)
+			assert(preset, name)
+			t.truthy(
+				SynthPresets.reverbCount(preset) <= SynthPresets.MaxPresetReverbs,
+				name .. " uses too many reverbs"
+			)
+		end
+		t.truthy(SynthPresets.MinGrainSpacing >= 1 / 40, "a 30 fps frame fits about one grain")
+	end,
+
+	["beds loop seamlessly and never loop the explosion"] = function(t: Expect)
+		local beds = 0
+		eachLayer(function(name: string, index: number, layer: SynthPresets.Layer)
+			if not SynthPresets.isBedLayer(layer) then
+				return
+			end
+			beds += 1
+			local where = name .. "[" .. index .. "]"
+			t.truthy(layer.sample ~= "Explosion", where .. " loops the explosion")
+			local region = layer.region
+			if region == nil then
+				t.truthy(SoundLibrary.isSeamless(layer.sample), where .. " loops a file that has a seam")
+			else
+				t.truthy(region.max - region.min <= SynthPresets.MaxToneRegion, where .. " loops a long region")
+			end
+		end)
+		t.truthy(beds > 30, "the beds were checked")
+		for _, key in { "Falling", "Swim", "FootstepsPlastic" } do
+			t.truthy(SoundLibrary.isSeamless(key), key .. " is an engine loop")
+		end
+		t.falsy(SoundLibrary.isSeamless("Explosion"), "the explosion is a one-shot file")
+		for _, name in DRONES do
+			local preset = SynthPresets.get(name)
+			assert(preset, name)
+			for index, layer in preset.layers do
+				t.truthy(layer.sample ~= "Explosion", name .. "[" .. index .. "] uses the explosion in the bed")
+			end
+			t.truthy(SynthPresets.reverbCount(preset) <= 1, name .. " has one room, not a reverb per layer")
+		end
+		local rumble = 0
+		for _, stingers in SynthPresets.Beds do
+			for _, entry in stingers do
+				if entry.preset == "FarRumble" then
+					rumble += 1
+					t.truthy(entry.interval.min >= 20, "the far rumble is sparse")
+				end
+			end
+		end
+		t.truthy(rumble >= 5, "the explosion survives as a far rumble stinger")
+		t.falsy(SynthPresets.isLooped("FarRumble"), "and only as a one-shot")
+	end,
+
+	["the body's own sounds play on the Body bus"] = function(t: Expect)
+		for _, name in BODY do
+			local preset = SynthPresets.get(name)
+			t.truthy(preset ~= nil and preset.bus == "Body", name .. " is on the Body bus")
+			t.truthy(preset ~= nil and preset.rollOff == nil, name .. " is 2D")
+		end
+		local gasp = SynthPresets.get("Gasp")
+		t.truthy(gasp ~= nil and gasp.bus == "Player", "a gasp is heard by others in the room")
+		local bodyBus: Enums.AudioBus = "Body"
+		t.truthy(SynthPresets.DefaultRollOff[bodyBus] ~= nil, "Body has a default roll-off")
+	end,
+
+	["the stock avatar voice is never recognisable"] = function(t: Expect)
+		for _, name in { "Gasp", "BreathingPanic", "Breathing" } do
+			local preset = SynthPresets.get(name)
+			assert(preset, name)
+			for index, layer in preset.layers do
+				t.truthy(
+					layer.sample ~= "Oof" and layer.sample ~= "Ouch",
+					name .. "[" .. index .. "] uses a stock voice"
+				)
+			end
+		end
+		eachLayer(function(name: string, index: number, layer: SynthPresets.Layer)
+			if layer.sample ~= "Oof" and layer.sample ~= "Ouch" then
+				return
+			end
+			local where = name .. "[" .. index .. "]"
+			local low, high = speedBounds(layer.speed)
+			t.truthy(high <= 0.7 or low >= 1.8, where .. " plays a stock voice near its natural pitch")
+			t.truthy(
+				hasEffect(layer, "PitchShift") ~= nil or hasEffect(layer, "Distortion") ~= nil,
+				where .. " leaves a stock voice undisguised"
+			)
+		end)
+	end,
+
+	["drip emitters and drip stingers are separate presets"] = function(t: Expect)
+		for bed, stingers in SynthPresets.Beds do
+			for _, entry in stingers do
+				t.truthy(entry.preset ~= "Drip", bed .. " stingers must use DripStinger, not the emitter preset")
+			end
+		end
+		local drip = SynthPresets.get("Drip")
+		local stinger = SynthPresets.get("DripStinger")
+		assert(drip and stinger, "drip presets")
+		t.truthy(drip.maxVoices > AudioController.MaxEmitterVoices, "every pipe emitter fits under Drip's own cap")
+		t.falsy(SynthPresets.isLooped("DripStinger"), "a stinger is a one-shot")
+	end,
+
+	["the scrape, the trap and the drip are built to ring"] = function(t: Expect)
+		local scrape = SynthPresets.get("VentScrape")
+		assert(scrape, "VentScrape")
+		local comb = false
+		for _, layer in scrape.layers do
+			local echo = hasEffect(layer, "Echo")
+			if echo and layer.looped and layer.duration ~= nil then
+				if echo.props.Delay <= 0.016 and echo.props.Feedback >= 0.7 then
+					comb = true
+				end
+			end
+			if layer.sample == "FootstepsPlastic" then
+				local low = speedBounds(layer.speed)
+				t.truthy(low >= 1.5, "claws are bright clicks, not slowed knocks")
+			end
+		end
+		t.truthy(comb, "the scrape runs through a tight resonant comb")
+
+		local trap = SynthPresets.get("TrapSnap")
+		assert(trap, "TrapSnap")
+		local ring = false
+		for _, layer in trap.layers do
+			local region = layer.region
+			if layer.looped and layer.duration and region and region.max - region.min <= SynthPresets.MaxToneRegion then
+				ring = layer.duration >= 0.5
+			end
+		end
+		t.truthy(ring, "the jaws ring as a sustained loop tone")
+
+		local drip = SynthPresets.get("Drip")
+		assert(drip, "Drip")
+		local plink = drip.layers[1]
+		local region = plink.region
+		t.truthy(plink.looped and region ~= nil and region.max - region.min <= 0.01, "the drop is a pitched plink")
+		local glideSpec = plink.glide
+		t.truthy(glideSpec ~= nil and glideSpec.to > 1, "its pitch rises")
+		t.truthy(SynthPresets.chainTail(plink.effects) > 0.5, "and it rings on after the drop")
 	end,
 
 	["regions resolve inside the real file"] = function(t: Expect)

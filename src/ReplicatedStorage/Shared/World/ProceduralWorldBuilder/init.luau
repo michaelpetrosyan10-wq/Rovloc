@@ -25,6 +25,8 @@ local LobbyBuilder = require(script.LobbyBuilder)
 local SchoolShellBuilder = require(script.SchoolShellBuilder)
 local SkylineBuilder = require(script.SkylineBuilder)
 local StairwellBuilder = require(script.StairwellBuilder)
+-- Sub-builders never require this module (SchoolShellBuilder itself requires VentShaftBuilder for duct envelopes).
+local VentShaftBuilder = require(script.VentShaftBuilder)
 
 local log = Log.new("WorldBuilder")
 
@@ -224,14 +226,12 @@ local function guarded(what: string, fn: () -> ())
 	end)
 end
 
--- Ducts + VentNode graph for one level. VentShaftBuilder is required on first use rather than at load time, so
--- it may require this module (for yieldPoint) without creating a load-order cycle.
+-- Ducts + VentNode graph for one level.
 local function buildVents(layout: Layout, root: Model)
 	if not layout.vents then
 		return
 	end
 	guarded("vents for " .. layout.id, function()
-		local VentShaftBuilder = require(script.VentShaftBuilder)
 		VentShaftBuilder.build(layout, root)
 	end)
 end

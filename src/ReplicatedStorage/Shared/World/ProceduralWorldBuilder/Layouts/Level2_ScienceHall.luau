@@ -9,7 +9,8 @@
 -- The main corridor collapsed at x = 120 (a boarded barricade), so the squad detours through the cross halls and
 -- the outer halls, or takes the vents. Every pair of labs is separated by a 5-stud fume-extract chase whose duct
 -- opens into both labs and both halls; L2_Chase_B behind the prep rooms is the guaranteed (critical) crawl past the
--- barricade, the rest are fair game for the RunDirector to lock.
+-- barricade, the rest are fair game for the RunDirector to lock. In the outer rows, service chases also open into
+-- the classrooms and the lecture hall (L2_Chase_J, L2_Chase_I, L2_Chase_K) as well as the staff rooms and stores.
 --
 -- Lab islands: each LabCounter anchor is the floor centre of a 10 x 3.5 worktop whose long axis runs along X (the
 -- anchor's RightVector), top at WORKTOP; FlaskCandidate anchors stand on those worktops.
@@ -450,16 +451,19 @@ room("L2_ScienceLibrary", "Classroom", 46, 0, 60, 26, LIBRARY)
 room("L2_StaffRoom", "Office", 106, 0, 28, 26, OFFICE)
 room("L2_Chase_G", "Chase", 134, 0, 5, 26, CHASE)
 room("L2_ChemStore_243", "Storage", 139, 0, 36, 26, CHEM_STORE)
-room("L2_Classroom_245", "Classroom", 175, 0, 35, 26, CLASSROOM)
+room("L2_Classroom_245", "Classroom", 175, 0, 30, 26, CLASSROOM)
+room("L2_Chase_J", "Chase", 205, 0, 5, 26, CHASE)
 room("L2_HeadOfScience", "Office", 210, 0, 30, 26, OFFICE)
 
 -- South exterior row
-room("L2_LectureHall", "Classroom", 0, 134, 64, 26, LECTURE)
+room("L2_LectureHall", "Classroom", 0, 134, 59, 26, LECTURE)
+room("L2_Chase_K", "Chase", 59, 134, 5, 26, CHASE)
 room("L2_Restroom_South", "Restroom", 64, 134, 16, 26, RESTROOM)
 room("L2_Chase_H", "Chase", 80, 134, 5, 26, CHASE)
 room("L2_BotanyRoom_247", "Lab", 85, 134, 55, 26, BOTANY)
 room("L2_Classroom_249", "Classroom", 140, 134, 36, 26, CLASSROOM)
-room("L2_Classroom_251", "Classroom", 176, 134, 30, 26, CLASSROOM)
+room("L2_Chase_I", "Chase", 176, 134, 5, 26, CHASE)
+room("L2_Classroom_251", "Classroom", 181, 134, 25, 26, CLASSROOM)
 room("L2_EquipmentStore", "Storage", 206, 134, 34, 26, STORAGE)
 
 --------------------------------------------------------------------------------
@@ -583,6 +587,50 @@ chaseRun("L2_Chase_H", {
 	{ id = "L2_Grate_H_SouthHall", room = "L2_SouthHall", side = "N", lockable = false, critical = false },
 	{ id = "L2_Grate_H_Restroom", room = "L2_Restroom_South", side = "W", at = 147, lockable = true, critical = false },
 	{ id = "L2_Grate_H_Botany", room = "L2_BotanyRoom_247", side = "E", at = 150, lockable = true, critical = false },
+})
+-- Classroom vents in the outer rows
+chaseRun("L2_Chase_J", {
+	{ id = "L2_Grate_J_NorthHall", room = "L2_NorthHall", side = "S", lockable = false, critical = false },
+	{
+		id = "L2_Grate_J_Classroom245",
+		room = "L2_Classroom_245",
+		side = "W",
+		at = 14,
+		lockable = true,
+		critical = false,
+	},
+	{
+		id = "L2_Grate_J_HeadOfScience",
+		room = "L2_HeadOfScience",
+		side = "E",
+		at = 9,
+		lockable = true,
+		critical = false,
+	},
+})
+chaseRun("L2_Chase_I", {
+	{ id = "L2_Grate_I_SouthHall", room = "L2_SouthHall", side = "N", lockable = false, critical = false },
+	{
+		id = "L2_Grate_I_Classroom249",
+		room = "L2_Classroom_249",
+		side = "W",
+		at = 146,
+		lockable = true,
+		critical = false,
+	},
+	{
+		id = "L2_Grate_I_Classroom251",
+		room = "L2_Classroom_251",
+		side = "E",
+		at = 152,
+		lockable = true,
+		critical = false,
+	},
+})
+chaseRun("L2_Chase_K", {
+	{ id = "L2_Grate_K_SouthHall", room = "L2_SouthHall", side = "N", lockable = false, critical = false },
+	{ id = "L2_Grate_K_LectureHall", room = "L2_LectureHall", side = "W", at = 148, lockable = true, critical = false },
+	{ id = "L2_Grate_K_Restroom", room = "L2_Restroom_South", side = "E", at = 141, lockable = true, critical = false },
 })
 
 --------------------------------------------------------------------------------

@@ -113,6 +113,9 @@ end
 --   CharacterService         Spawning + locks; it pushes collision modes through CollisionService.
 --   LevelDirector            BeginRun enters Level0, so CurrentLevel is set before anything reads it below.
 --   NoiseAndDirectorService  BeginRun builds the run's SpawnPlan (bear traps, flasks, batteries, locked grates).
+--                            Init subscribes to ZoneService.VolumeEntered for FloorDebris crunches (noise + an
+--                            AudioService GlassCrunch cue), so ZoneService and AudioService need no run hooks of
+--                            their own for it; CharacterService announces every server move to its sampler.
 --   WorldService             Init clears the edit-time Workspace before any Start parents instances; Start builds
 --                            the world. BeginRun spawns the planned props (needs the plan above) and the Creature at
 --                            the current level's CreatureSpawn (needs LevelDirector above). Level controllers are
@@ -167,7 +170,12 @@ local SERVICES: { Types.Service } = {
 	{ Name = AudioService.Name, Init = AudioService.Init },
 	{ Name = RunStatsService.Name, BeginRun = RunStatsService.BeginRun, EndRun = RunStatsService.EndRun },
 	{ Name = RunLifecycleService.Name, Init = RunLifecycleService.Init, Start = RunLifecycleService.Start },
-	{ Name = DevToolsService.Name, Init = DevToolsService.Init, Start = DevToolsService.Start },
+	{
+		Name = DevToolsService.Name,
+		Init = DevToolsService.Init,
+		Start = DevToolsService.Start,
+		OnPlayerRemoving = DevToolsService.OnPlayerRemoving,
+	},
 }
 
 for _, service in SERVICES do

@@ -53,6 +53,7 @@ local entries: { [string]: Entry } = {
 	Mud = entry(Enum.Material.Mud, 52, 44, 34, "Grass"),
 	DeadGrass = entry(Enum.Material.Grass, 70, 66, 44, "Grass"),
 	Sidewalk = entry(Enum.Material.Pavement, 84, 84, 80, "Concrete"),
+	SlabEdge = entry(Enum.Material.Concrete, 98, 96, 90, "Concrete"), -- floor-slab band on the brick facade
 	Rubble = entry(Enum.Material.Slate, 70, 68, 64, "Concrete"),
 	Iron = entry(Enum.Material.CorrodedMetal, 54, 44, 38, "Metal"),
 	BusPaint = entry(Enum.Material.CorrodedMetal, 150, 112, 34, "Metal"),

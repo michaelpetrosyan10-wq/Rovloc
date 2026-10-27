@@ -280,6 +280,9 @@ export type DevOverlayPayload = {
 	radius: number?,
 	label: string?,
 	points: { Vector3 }?,
+	-- Plan: kinds[i] is the kind of marker points[i] (a planned prop kind such as "BearTrap", "ChemicalFlask",
+	-- "Battery", or "LockedGrate" for a grate the director locked); nil or missing entries draw the default marker.
+	kinds: { string }?,
 	duration: number?,
 }
 

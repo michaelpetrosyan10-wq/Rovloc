@@ -102,12 +102,14 @@ function MathUtil.vectorFromYawPitch(yaw: number, pitch: number): Vector3
 	return Vector3.new(-math.sin(yaw) * cosPitch, math.sin(pitch), -math.cos(yaw) * cosPitch)
 end
 
--- Deterministic 32-bit FNV-1a hash of a string, for seeding per-entity Random streams.
+-- Exact 32-bit FNV-1a hash of a string (offset basis 2166136261, prime 16777619), for seeding per-entity Random
+-- streams. A plain `hash * 16777619` reaches 2^56 and the double rounds its low bits away, so the multiply is split
+-- along the prime's bits (2^24 + 2^8 + 0x93): every partial product stays below 2^53 and the result is exact.
 function MathUtil.hash(text: string): number
 	local hash = 2166136261
 	for i = 1, #text do
 		hash = bit32.bxor(hash, string.byte(text, i))
-		hash = (hash * 16777619) % 4294967296
+		hash = (bit32.lshift(hash, 24) + bit32.lshift(hash, 8) + hash * 0x93) % 4294967296
 	end
 	return hash
 end

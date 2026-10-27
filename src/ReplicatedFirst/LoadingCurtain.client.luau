@@ -22,8 +22,6 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
-ReplicatedFirst:RemoveDefaultLoadingScreen()
-
 local RECEIVE_FRACTION = 0.97
 local POLL_SECONDS = 0.1
 local CHARACTER_WAIT = 10
@@ -175,6 +173,8 @@ detail.TextYAlignment = Enum.TextYAlignment.Top
 detail.Parent = backdrop
 
 gui.Parent = localPlayer:WaitForChild("PlayerGui")
+-- Only now that the curtain is on screen: removing the default screen earlier would flash the bare world.
+ReplicatedFirst:RemoveDefaultLoadingScreen()
 
 --------------------------------------------------------------------------------
 -- Animation (title pulse + progress easing), one Heartbeat connection

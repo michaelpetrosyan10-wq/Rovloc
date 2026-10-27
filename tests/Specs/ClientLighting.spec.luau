@@ -5,14 +5,38 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterPlayer = game:GetService("StarterPlayer")
+local Workspace = game:GetService("Workspace")
 
+local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local LightingController = require(StarterPlayer.StarterPlayerScripts.Controllers.Core.LightingController)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
+local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 type Expect = SpecRunner.Expect
+
+local W = Attributes.World
+
+-- A Zone volume like SchoolShellBuilder's, spanning `low`..`high` in world space.
+local function zone(parent: Instance, id: string, levelId: string, roomKind: string, low: Vector3, high: Vector3): Part
+	local part = Instance.new("Part")
+	part.Name = id
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Transparency = 1
+	part.Size = high - low
+	part.CFrame = CFrame.new((low + high) / 2)
+	part:SetAttribute(W.ZoneId, id)
+	part:SetAttribute(W.LevelId, levelId)
+	part:SetAttribute(W.RoomKind, roomKind)
+	part:AddTag(Tags.Zone)
+	part.Parent = parent
+	return part
+end
 
 local GROUPS = { "L0_Boilers", "L1_NorthHall", "Stairwell_0_1", "L4_Floodlights", "LobbyBoiler" }
 local T0 = 1_700_000_000 -- a realistic server time
@@ -153,5 +177,66 @@ return {
 		t.truthy(LightingController.isOutdoors("Level5_Roof"), "roof is outdoors")
 		t.falsy(LightingController.isOutdoors("Lobby"), "lobby is indoors")
 		t.falsy(LightingController.isOutdoors("Level1_Hallways"), "hallways are indoors")
+	end,
+
+	["a zone volume decides the layout and only roof zones see the sky"] = function(t: Expect)
+		local folder = Instance.new("Folder")
+		folder.Name = "SpecZones"
+		folder.Parent = Workspace
+		local ok, problem = pcall(function()
+			local origin = WorldConfig.SchoolOrigin
+			local roofY = origin.Y + WorldConfig.levelElevation("Level5_Roof")
+			local poolY = origin.Y + WorldConfig.levelElevation("Level4_FloodedPool")
+			-- The open roof, a stair house standing on it, and a pool hall drawn taller than its floor band.
+			zone(
+				folder,
+				"SpecRoof",
+				"Level5_Roof",
+				"Roof",
+				origin + Vector3.new(0, roofY - origin.Y, 0),
+				origin + Vector3.new(60, roofY - origin.Y + 40, 60)
+			)
+			zone(
+				folder,
+				"SpecStairHouse",
+				"Level5_Roof",
+				"Corridor",
+				origin + Vector3.new(10, roofY - origin.Y, 10),
+				origin + Vector3.new(20, roofY - origin.Y + 12, 20)
+			)
+			zone(
+				folder,
+				"SpecPool",
+				"Level4_FloodedPool",
+				"Pool",
+				origin + Vector3.new(100, poolY - origin.Y - 8, 0),
+				origin + Vector3.new(140, roofY - origin.Y + 6, 40)
+			)
+
+			local open = LightingController.placeAt(origin + Vector3.new(40, roofY - origin.Y + 4, 40))
+			t.eq(open.layoutId, "Level5_Roof", "open roof layout")
+			t.eq(open.zoneId, "SpecRoof", "open roof zone")
+			t.truthy(open.outdoors, "the open roof sees the sky")
+
+			local house = LightingController.placeAt(origin + Vector3.new(15, roofY - origin.Y + 4, 15))
+			t.eq(house.zoneId, "SpecStairHouse", "the smaller zone wins where volumes meet")
+			t.falsy(house.outdoors, "the stair house is indoors")
+
+			-- Above the roof's floor band but inside the pool hall's volume: the zone outranks the band.
+			local tall = origin + Vector3.new(120, roofY - origin.Y + 2, 20)
+			t.eq(LightingController.layoutAt(tall), "Level4_FloodedPool", "pool hall above its band")
+			t.falsy(LightingController.placeAt(tall).outdoors, "pool hall is indoors")
+
+			-- No zone holds a point inside the school (a duct, a wall): bands decide and, with zones built, the roof
+			-- band is not outdoors.
+			local duct = LightingController.placeAt(origin + Vector3.new(200, roofY - origin.Y + 2, 150))
+			t.eq(duct.layoutId, "Level5_Roof", "band fallback")
+			t.eq(duct.zoneId, nil, "no zone")
+			t.falsy(duct.outdoors, "a zoneless point inside the school is indoors once zones exist")
+		end)
+		folder:Destroy()
+		if not ok then
+			error(problem, 0)
+		end
 	end,
 }
