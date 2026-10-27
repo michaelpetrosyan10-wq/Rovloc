@@ -38,6 +38,7 @@ Attributes.Player = table.freeze({
 	LevelId = "LevelId",
 	WorldAcked = "WorldAcked",
 	DevTools = "DevTools", -- true when this player may use dev commands (Studio, allowlist or experience owner)
+	Settings = "Settings", -- JSON SettingsBlob written by the data layer (P8) after loading; clients read it once
 })
 
 -- Workspace.Creature
