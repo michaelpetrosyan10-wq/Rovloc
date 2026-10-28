@@ -133,6 +133,17 @@ local STRINGS: { [string]: string } = {
 	["Hud.FlaskThrow.Touch"] = "Hold THROW to aim the flask, release to throw.",
 	["Hud.FlaskHandsFull"] = "Your hands are full. Throw the flask you're carrying first.",
 	["Hud.FlaskStun"] = "Throw a flask to stun it.",
+	["Hud.StruggleMash"] = "MASH",
+	["Hud.StruggleFree"] = "You tore free. Get to the surface!",
+	["Hud.TeammateGrabbed"] = "%s is being dragged under! Throw a flask near them or hit the floodlights!",
+	["Hud.FloodlightsOn"] = "The floodlights blaze on. It shrinks from the light.",
+	["Hud.OxygenLow"] = "Your lungs are burning. Surface!",
+	["Hud.SwimHint.KeyboardMouse"] = "Hold CTRL to dive. SHIFT swims fast, but it splashes.",
+	["Hud.SwimHint.Gamepad"] = "Hold B to dive. Click L3 to swim fast, but it splashes.",
+	["Hud.SwimHint.Touch"] = "Hold DIVE to go under. RUN swims fast, but it splashes.",
+	["Hud.ClimbOut.KeyboardMouse"] = "Swim into the edge or press SPACE to climb out.",
+	["Hud.ClimbOut.Gamepad"] = "Swim into the edge or press A to climb out.",
+	["Hud.ClimbOut.Touch"] = "Swim into the edge or tap JUMP to climb out.",
 
 	-- Checkpoints
 	["Checkpoint.Reached"] = "Checkpoint reached. +%d credits",
@@ -202,6 +213,12 @@ local STRINGS: { [string]: string } = {
 	["Caption.LockerRip"] = "[a locker door is torn off]",
 	["Caption.LockerSlam"] = "[a locker door bangs somewhere]",
 	["Caption.BallBounce"] = "[a ball bouncing in the empty gym]",
+	["Caption.PoolDrip"] = "[water drips into the pool]",
+	["Caption.WaterSlosh"] = "[something stirs the water]",
+	["Caption.TileFall"] = "[a tile drops into the water]",
+	["Caption.FloodlightBreaker"] = "[a heavy breaker clanks]",
+	["Caption.Floodlights"] = "[floodlights hum to life]",
+	["Caption.Thrash"] = "[violent thrashing in the water]",
 
 	-- Network (Net kicks a client that floods or sends malformed messages)
 	["Net.Kicked"] = "Disconnected: your game sent too many invalid requests. Please rejoin.",

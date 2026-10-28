@@ -30,12 +30,13 @@
 --
 -- Crawling (no remote: the owning client drives its root along the rail; the server only moves it in and out). At
 -- GameConfig.ServerTickHz, while the run is live:
---   Entry: a participant whose CrawlRules.canEnter holds (Alive, on foot, Crouching, no control lock) with their
---     root in an open grate's mouth box, looking into the wall (CrawlRules), is put in the duct: CollisionService
---     mode "Vent" (the VentCollider ball becomes their only collider), PlayerStateService mode "Vent" (MoveState
+--   Entry: a participant whose CrawlRules.canEnter holds (Alive, on foot and Crouching, or swimming at a pool grate's
+--     mouth in the water; no control lock) with their root in an open grate's mouth box (inMouthBox, or
+--     inSwimMouthBox at the water surface for swimmers), looking into the wall (CrawlRules), is put in the duct:
+--     CollisionService mode "Vent" (the VentCollider ball becomes their only collider), PlayerStateService mode "Vent" (MoveState
 --     VentCrawling / VentScurrying), then CharacterService.Teleport to the grate's EntryAnchor with the root on the
 --     duct centreline. Entered(player, grateId) fires; RunStats VentsCrawled counts each grate once per player per
---     run. A teleport that fails undoes the modes.
+--     run. A teleport that fails undoes the modes (a swimmer stays in Swim).
 --   Exit: a crawler (Alive or Downed) whose root crossed the room face of an open grate's mouth stub stands up at
 --     its ExitAnchor (or 0.75 studs to either side), the first spot whose standing box GetPartBoundsInBox finds clear
 --     in the Players group (the player and the grate itself excluded: a kicked panel lies there to be stood on):
@@ -789,11 +790,12 @@ local function enter(player: Player, grate: Grate, info: VentGraph.Grate, graph:
 		return false
 	end
 	local target = CrawlRules.entryCFrame(entryAnchor, node.position.Y)
+	local previousMode: PlayerStateService.Mode = PlayerStateService.GetMode(player)
 	CollisionService.PushMode(character, VENT_TOKEN, VENT_COLLISION)
 	PlayerStateService.SetMode(player, "Vent")
 	if not move(player, target) then
 		CollisionService.PopMode(character, VENT_TOKEN)
-		PlayerStateService.SetMode(player, "OnFoot")
+		PlayerStateService.SetMode(player, previousMode)
 		return false
 	end
 	local rail = VentGraph.nearest(graph, target.Position)
@@ -958,12 +960,15 @@ end
 
 local function pollEntry(player: Player)
 	local root, humanoid = livingBody(player)
+	local mode = PlayerStateService.GetMode(player)
+	local swimming = mode == "Swim"
 	local allowed = CrawlRules.canEnter({
 		live = live,
 		participant = participants[player] == true,
 		lifeState = LifeStateService.GetState(player),
 		inVent = occupants[player] ~= nil,
-		onFoot = PlayerStateService.GetMode(player) == "OnFoot",
+		onFoot = mode == "OnFoot",
+		swimming = swimming,
 		moveState = PlayerStateService.GetMoveState(player),
 		controlLock = CharacterService.GetLock(player),
 		hasBody = root ~= nil,
@@ -988,10 +993,10 @@ local function pollEntry(player: Player)
 		if not (graph and info) then
 			continue
 		end
-		if
-			CrawlRules.inMouthBox(info.wall, position, exitAnchor.Position.Y, rootHeight)
-			and CrawlRules.facesWall(info.wall, yaw, pitch)
-		then
+		local inMouth = if swimming
+			then CrawlRules.inSwimMouthBox(info.wall, position, exitAnchor.Position.Y)
+			else CrawlRules.inMouthBox(info.wall, position, exitAnchor.Position.Y, rootHeight)
+		if inMouth and CrawlRules.facesWall(info.wall, yaw, pitch) then
 			enter(player, grate, info, graph)
 			return
 		end

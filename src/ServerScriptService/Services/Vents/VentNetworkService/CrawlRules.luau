@@ -10,6 +10,10 @@
 -- centre, and at a crouched root height over the floor in front of it (the root's standing height above the floor,
 -- give or take CrouchBelow / CrouchAbove), while their look faces into the wall (look . -LookVector >= FacingDot).
 -- They are moved to the grate's EntryAnchor with the root lifted onto the duct centreline (entryCFrame).
+-- Swimmers (P7, the pool's half-submerged ducts) enter from the water instead: PlayerStateService mode Swim and a swim
+-- MoveState (Treading, Freestyle or Underwater) take the place of on foot and Crouching, and the root must float in
+-- the same mouth box at the water surface in front of the grate (inSwimMouthBox: from SwimBelow under the surface, a
+-- diver at the opening, to SwimAbove over it; a pool grate's ExitAnchor sits on the water surface), looking in.
 --
 -- Exit (canExit + crossedFace). A crawler (Alive or Downed: a downed crawler can drag themselves out) whose root has
 -- crossed the room face of an open grate's mouth stub: z >= WallThickness / 2 - 0.1 (and no farther out than
@@ -34,6 +38,7 @@ export type EntryCheck = {
 	lifeState: Enums.LifeState,
 	inVent: boolean, -- already crawling
 	onFoot: boolean, -- PlayerStateService mode OnFoot
+	swimming: boolean?, -- PlayerStateService mode Swim (entering a flooded duct from the water)
 	moveState: Enums.MoveState,
 	controlLock: Enums.ControlLock,
 	hasBody: boolean, -- a living character with a root
@@ -59,6 +64,9 @@ local EXIT_REACH = WALL_HALF + 3
 local EXIT_SIDE_STEP = 0.75
 local STAND_SIZE = Vector3.new(2, 4.6, 2) -- a standing R15 body, shoulders to heels
 local STAND_LIFT = 0.3 -- the box starts this far above the floor, so the floor itself never fills it
+local SWIM_BELOW = 2.2 -- a swimmer's root may be this far under the water surface at the mouth (diving in)
+local SWIM_ABOVE = 1.2 -- or this far over it
+local SWIM_ENTRY: { [string]: boolean } = { Treading = true, Freestyle = true, Underwater = true }
 local RAIL_TOLERANCE = 1.25
 local RAIL_CORRECT_REACH = 4
 
@@ -74,6 +82,8 @@ CrawlRules.ExitReach = EXIT_REACH
 CrawlRules.ExitSideStep = EXIT_SIDE_STEP
 CrawlRules.StandSize = STAND_SIZE
 CrawlRules.StandLift = STAND_LIFT
+CrawlRules.SwimBelow = SWIM_BELOW
+CrawlRules.SwimAbove = SWIM_ABOVE
 CrawlRules.RailTolerance = RAIL_TOLERANCE
 CrawlRules.RailCorrectReach = RAIL_CORRECT_REACH
 
@@ -109,12 +119,33 @@ function CrawlRules.canEnter(check: EntryCheck): (boolean, string?)
 		return false, "Locked"
 	end
 	if not check.onFoot then
-		return false, "Mode"
+		if check.swimming ~= true then
+			return false, "Mode"
+		end
+		if SWIM_ENTRY[check.moveState] ~= true then
+			return false, "MoveState"
+		end
+		return true, nil
 	end
 	if check.moveState ~= "Crouching" then
 		return false, "MoveState"
 	end
 	return true, nil
+end
+
+-- Whether a swimmer's root at `rootPosition` floats in the mouth box of the grate whose wall frame is `wall`, over
+-- water whose surface is at world height `surfaceY` (the pool grate's ExitAnchor height).
+function CrawlRules.inSwimMouthBox(wall: CFrame, rootPosition: Vector3, surfaceY: number): boolean
+	if not MathUtil.isFiniteVector(rootPosition) then
+		return false
+	end
+	local p = CrawlRules.wallSpace(wall, rootPosition)
+	local out = p.Z - WALL_HALF
+	if out < 0 or out > MOUTH_DEPTH or math.abs(p.X) > MOUTH_HALF_WIDTH then
+		return false
+	end
+	local above = rootPosition.Y - surfaceY
+	return above >= -SWIM_BELOW and above <= SWIM_ABOVE
 end
 
 -- Whether a root at `rootPosition` stands in the mouth box of the grate whose wall frame is `wall`, over a floor at

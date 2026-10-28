@@ -52,6 +52,7 @@ local BearTrapService = require(ServerScriptService.Services.Mechanics.BearTrapS
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
 local ChemicalProjectileService = require(ServerScriptService.Services.Mechanics.ChemicalProjectileService)
 local LockerHidingService = require(ServerScriptService.Services.Mechanics.LockerHidingService)
+local FloodedPoolService = require(ServerScriptService.Services.Mechanics.FloodedPoolService)
 
 local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
 
@@ -165,10 +166,14 @@ end
 --   LockerHidingService      Level 3 lockers: BeginRun tracks the lockers WorldService rebuilt above; Hide prompt,
 --                            Anchor-locked hiding, server-stepped doors, the hold-breath check (MonsterAIService's
 --                            locker inspector), the LockerRip hand-over to JumpscareHandler; EndRun lets everyone out.
---   Levels                   The Level 0-3 controllers (registered with LevelDirector in Init): basement beats,
+--   FloodedPoolService       Level 4 water: who swims (Swim mode), oxygen rates, the Swim validator, the Creature's
+--                            grab (MonsterAIService's PoolGrabber), drag, struggle, flask / floodlight release, drowning.
+--   Levels                   The Level 0-4 controllers (registered with LevelDirector in Init): basement beats,
 --                            the Floor 1 classroom scare (MonsterAIService.AcquireScripted, DoorService's gate), Level 2
 --                            flask restock (ChemicalProjectileService), the Level 3 gym (MonsterAIService.SetSpeedScale /
---                            Alert, LockerHidingService's checks); EndRun (early, in reverse) lets the Creature go.
+--                            Alert, LockerHidingService's checks), the Level 4 pool (the Creature called to the water,
+--                            the floodlight switch, FloodedPoolService.ReleaseGrab); EndRun (early, in reverse) lets the
+--                            Creature go.
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
 --   DevToolsService          Dev commands and the Studio auto dev-run; it calls everything above.
 --
@@ -313,6 +318,14 @@ local SERVICES: { Types.Service } = {
 		BeginRun = LockerHidingService.BeginRun,
 		EndRun = LockerHidingService.EndRun,
 		OnPlayerRemoving = LockerHidingService.OnPlayerRemoving,
+	},
+	{
+		Name = FloodedPoolService.Name,
+		Init = FloodedPoolService.Init,
+		Start = FloodedPoolService.Start,
+		BeginRun = FloodedPoolService.BeginRun,
+		EndRun = FloodedPoolService.EndRun,
+		OnPlayerRemoving = FloodedPoolService.OnPlayerRemoving,
 	},
 	{
 		Name = Levels.Name,

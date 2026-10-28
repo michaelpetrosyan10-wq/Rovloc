@@ -23,6 +23,11 @@
 -- onto tile, a locker door banging (or rattling) somewhere in the changing rooms, a basketball bouncing to rest far off
 -- in the dark gym.
 --
+-- Floor 4, the emergency floodlights ("L4_Floodlights", seconds from the OneShot's startAt): the Level 4 controller
+-- lights the nine fixtures for the run at startAt (their BaseBrightness), and every client strikes them up: one after
+-- another (FloodlightStagger apart, in the order of the flood1..flood9 args) each lamp sputters, catches, sags while
+-- the arc warms and settles at full brightness FloodlightStrike later; the last is up by FloodlightSeconds.
+--
 -- Track kinds beyond SequenceController's built-ins ("sound", "light", "callback") and CreatureController's
 -- "creature" are LevelScenesController's: Tracks.* below. Pure camera maths (Flinch, PullWeight, Pulled) are specced
 -- in tests/Specs/Levels.spec.luau.
@@ -173,6 +178,15 @@ Scenes.BallBounces = table.freeze({
 	{ t = 2.59, volume = 0.2 },
 } :: { { t: number, volume: number } })
 
+-- The pool floodlights' strike-up (Floor 4).
+local FLOODLIGHT_ARGS: { string } =
+	{ "flood1", "flood2", "flood3", "flood4", "flood5", "flood6", "flood7", "flood8", "flood9" }
+Scenes.FloodlightsId = "L4_Floodlights"
+Scenes.FloodlightArgs = table.freeze(table.clone(FLOODLIGHT_ARGS))
+Scenes.FloodlightStagger = 0.11
+Scenes.FloodlightStrike = 1.7 -- one lamp, from dark to full
+Scenes.FloodlightSeconds = Scenes.FloodlightStrike + (#FLOODLIGHT_ARGS - 1) * Scenes.FloodlightStagger
+
 --------------------------------------------------------------------------------
 -- Pure camera maths (the subject's stumble and the drag onto the Creature's face)
 --------------------------------------------------------------------------------
@@ -299,6 +313,39 @@ local function surgeTrack(arg: string, offset: number): Track
 	}
 end
 
+-- One pool floodlight striking up, `offset` seconds after the first: dark, two sputters, the arc catching and sagging,
+-- then full.
+local function floodlightTrack(arg: string, offset: number): Track
+	local o = offset
+	local keys: { Key } = { key(0, 0) }
+	if o > 0 then
+		table.insert(keys, key(o, 0, "Step"))
+	end
+	for _, entry in
+		{
+			key(0.06 + o, 0.55, "Step"),
+			key(0.11 + o, 0.02, "Step"),
+			key(0.24 + o, 0.9, "Step"),
+			key(0.3 + o, 0.08, "Step"),
+			key(0.42 + o, 0.3, "OutQuad"),
+			key(0.9 + o, 0.62, "InOutSine"),
+			key(1.15 + o, 1.25, "OutQuad"),
+			key(Scenes.FloodlightStrike + o, 1, "InOutSine"),
+		} :: { Key }
+	do
+		table.insert(keys, entry)
+	end
+	return { kind = TRACKS.LightScale, arg = arg, keys = keys }
+end
+
+local function floodlights(): Spec
+	local tracks: { Track } = {}
+	for index, arg in FLOODLIGHT_ARGS do
+		table.insert(tracks, floodlightTrack(arg, (index - 1) * Scenes.FloodlightStagger))
+	end
+	return { duration = Scenes.FloodlightSeconds + 0.1, tracks = tracks }
+end
+
 local function beats(): { [string]: Spec }
 	return {
 		L0_PipeBang = { duration = 3, tracks = { sound(ARGS.At, "PipeBang", 0, 1.2) } },
@@ -390,6 +437,7 @@ function Scenes.timelines(): { [string]: Spec }
 	end
 	out[CLASSROOM.Id] = classroomScare()
 	out[CLASSROOM.SkippedId] = glassStep()
+	out[Scenes.FloodlightsId] = floodlights()
 	return out
 end
 

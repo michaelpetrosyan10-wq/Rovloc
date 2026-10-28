@@ -932,6 +932,131 @@ define("WaterTread", {
 	},
 })
 
+-- Bursting up through the surface out of breath (P7, local): a ragged intake through the throat band, rising as the
+-- lungs fill, with the water streaming off the head and shoulders.
+define("SurfaceGasp", {
+	bus = "Player",
+	priority = 50,
+	maxVoices = 2,
+	rollOff = r(4, 45),
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.9,
+			speed = 1.25,
+			region = r(0.1, 0.55),
+			envelope = env(0.02, 0.12, 0.25),
+			glide = glide(1.4, 0.3),
+			effects = { eq(-30, 4, 0), reverb(0.5, -14) },
+		},
+		{
+			sample = "Swim",
+			volume = 0.45,
+			speed = r(1.2, 1.4),
+			region = r(0.2, 0.6),
+			delay = 0.05,
+			effects = { eq(-6, 0, -4) },
+		},
+	},
+})
+
+-- Hauling yourself out over the coping (P7): the body breaking the surface, water pouring off and pattering on the
+-- tiles, a knee landing on the deck.
+define("ClimbOut", {
+	bus = "Player",
+	priority = 30,
+	maxVoices = 3,
+	rollOff = r(5, 70),
+	layers = {
+		{ sample = "Swim", volume = 0.8, speed = r(0.9, 1.05), region = r(0, 0.7), effects = { eq(2, 0, -2) } },
+		{
+			sample = "WaterImpact",
+			volume = 0.35,
+			speed = r(2.2, 2.8),
+			region = r(0.05, 0.25),
+			regionJitter = 0.04,
+			delay = 0.25,
+			grains = grains(4, 7, 0.05, 0.12),
+			volumeJitter = 0.5,
+			effects = { eq(-12, 0, 2) },
+		},
+		{ sample = "JumpLand", volume = 0.6, speed = 0.9, delay = 0.45, effects = { eq(2, 0, -6) } },
+	},
+})
+
+-- Breath escaping underwater (P7): a burst of small bubbles, each a sped-up droplet slice smeared by a chorus, with a
+-- glassy pop or two on top, the highs drowned.
+define("Bubbles", {
+	bus = "Player",
+	priority = 30,
+	maxVoices = 4,
+	rollOff = r(2, 30),
+	layers = {
+		{
+			sample = "WaterImpact",
+			volume = 0.35,
+			speed = r(2.6, 3.4),
+			region = r(0.05, 0.15),
+			regionJitter = 0.05,
+			grains = grains(4, 8, 0.04, 0.11),
+			volumeJitter = 0.5,
+			effects = { eq(-10, 4, -24), chorus(2.5, 0.5, 0.5) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.18,
+			speed = r(1.6, 2.4),
+			region = r(0.02, 0.026),
+			looped = true,
+			duration = 0.05,
+			grains = grains(3, 6, 0.05, 0.12),
+			envelope = env(0.001, 0.01, 0.03),
+			glide = glide(1.6, 0.05),
+			effects = { eq(-20, 2, -18) },
+		},
+	},
+})
+
+-- A swimmer fighting the Creature's grip under the surface (P7, looped on the victim): churning water under it, the
+-- slaps of arms and legs on every pulse, and spray some of the time.
+define("StruggleThrash", {
+	bus = "Player",
+	priority = 70,
+	maxVoices = 2,
+	rollOff = r(6, 110),
+	caption = "Caption.Thrash",
+	looped = true,
+	["repeat"] = pulse(0.3, 0.15),
+	layers = {
+		{
+			sample = "Swim",
+			volume = 0.7,
+			speed = r(1.1, 1.4),
+			looped = true,
+			envelope = env(0.15, nil, 0.4),
+			effects = { eq(2, 0, -4), chorus(1.2, 0.4, 0.4) },
+		},
+		{
+			sample = "WaterImpact",
+			volume = 0.7,
+			speed = r(0.8, 1.3),
+			region = r(0, 0.4),
+			regionJitter = 0.1,
+			volumeJitter = 0.35,
+			effects = { eq(2, 0, -3) },
+		},
+		{
+			sample = "Swim",
+			volume = 0.5,
+			speed = r(1.4, 1.9),
+			region = r(0.1, 0.5),
+			regionJitter = 0.1,
+			chance = 0.6,
+			effects = { eq(0, 2, -2) },
+		},
+	},
+})
+
 define("Pickup", {
 	bus = "Player",
 	priority = 45,
@@ -1840,6 +1965,162 @@ define("Splash", {
 			effects = { eq(-20, 0, 3) },
 		},
 		{ sample = "JumpLand", volume = 0.6, speed = 0.6, effects = { eq(6, -6, -20) } },
+	},
+})
+
+-- A heavy drop from the natatorium's roof into the water (P7 pool beat): the drop's ping, the plunk, the hall.
+define("PoolDrip", {
+	bus = "World",
+	priority = 16,
+	maxVoices = 3,
+	rollOff = r(6, 90),
+	caption = "Caption.PoolDrip",
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.6,
+			speed = r(1.6, 2.1),
+			region = r(0.03, 0.035),
+			looped = true,
+			duration = 0.09,
+			envelope = env(0.001, 0.015, 0.07),
+			glide = glide(1.4, 0.05),
+			effects = { eq(-24, 0, 2), echo(0.24, 0.35, -10) },
+		},
+		{
+			sample = "WaterImpact",
+			volume = 0.35,
+			speed = r(1.7, 2.2),
+			region = r(0, 0.12),
+			regionJitter = 0.02,
+			envelope = env(0.001, 0.05, 0.08),
+			effects = { eq(-12, 0, -2), reverb(2.6, -6) },
+		},
+	},
+})
+
+-- Something stirring the water far off (P7 pool beat): a slow, heavy slosh against the tiles and its swell after.
+define("WaterSlosh", {
+	bus = "World",
+	priority = 20,
+	maxVoices = 2,
+	rollOff = r(8, 110),
+	caption = "Caption.WaterSlosh",
+	layers = {
+		{
+			sample = "Swim",
+			volume = 0.8,
+			speed = r(0.45, 0.6),
+			region = r(0.05, 0.75),
+			regionJitter = 0.04,
+			envelope = env(0.15, 0.4, 0.5),
+			effects = { eq(4, -4, -16), reverb(2.4, -5) },
+		},
+		{
+			sample = "WaterImpact",
+			volume = 0.3,
+			speed = r(0.5, 0.65),
+			region = r(0.1, 0.6),
+			delay = 0.35,
+			envelope = env(0.1, 0.2, 0.4),
+			effects = { eq(6, -6, -20) },
+		},
+	},
+})
+
+-- A loose tile dropping into the pool (P7 pool beat): the clack off the coping, its ceramic ring, the plop.
+define("TileFall", {
+	bus = "World",
+	priority = 30,
+	maxVoices = 2,
+	rollOff = r(8, 120),
+	caption = "Caption.TileFall",
+	layers = {
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.9,
+			speed = r(1.4, 1.7),
+			region = r(0, 0.2),
+			effects = { eq(-10, 2, 4), echo(0.18, 0.3, -8) },
+		},
+		{ sample = "VolumeSlider", volume = 0.25, speed = r(0.7, 0.9), delay = 0.02, effects = { reverb(1.6, -10) } },
+		{
+			sample = "WaterImpact",
+			volume = 0.6,
+			speed = r(1.2, 1.5),
+			region = r(0, 0.3),
+			delay = 0.38,
+			delayJitter = 0.08,
+			effects = { eq(-4, 0, -4), reverb(2.2, -7) },
+		},
+	},
+})
+
+-- The emergency floodlight breaker thrown (P7): the heavy clank of the lever, its steel ringing, contacts arcing.
+define("FloodlightBreaker", {
+	bus = "World",
+	priority = 70,
+	maxVoices = 2,
+	rollOff = r(8, 140),
+	caption = "Caption.FloodlightBreaker",
+	layers = {
+		{ sample = "JumpLand", volume = 1.4, speed = r(0.55, 0.65), effects = { eq(6, 0, -6), distortion(0.2) } },
+		{
+			sample = "VolumeSlider",
+			volume = 0.6,
+			speed = r(0.42, 0.48),
+			delay = 0.01,
+			effects = { distortion(0.3), reverb(1.2, -8) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.7,
+			speed = 2.6,
+			region = r(0, 0.25),
+			delay = 0.06,
+			grains = grains(3, 5, 0.03, 0.06),
+			effects = { distortion(0.6), eq(-20, 2, 6), echo(0.012, 0.4, -8) },
+		},
+	},
+})
+
+-- The pool floodlights striking up under the roof (P7): the ballasts' hum swelling, arcs catching, relays clunking
+-- down the line, all in the natatorium's hall.
+define("FloodlightStrike", {
+	bus = "World",
+	priority = 60,
+	maxVoices = 2,
+	rollOff = r(20, 220),
+	caption = "Caption.Floodlights",
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = 1,
+			region = r(0.02, 0.0283),
+			looped = true,
+			duration = 2.4,
+			envelope = env(0.6, 1.2, 0.6),
+			glide = glide(1.08, 1.5),
+			effects = { distortion(0.7), tremolo(14, 0.6, 0.5), eq(-12, 4, -6) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.55,
+			speed = r(2.6, 3.2),
+			region = r(0, 0.25),
+			regionJitter = 0.05,
+			grains = grains(4, 8, 0.05, 0.16),
+			effects = { distortion(0.8), eq(-24, 2, 6), echo(0.012, 0.35, -8) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 0.7,
+			speed = r(0.6, 0.7),
+			delay = 0.15,
+			grains = grains(3, 5, 0.09, 0.14),
+			effects = { eq(4, -2, -8), reverb(3, -6) },
+		},
 	},
 })
 

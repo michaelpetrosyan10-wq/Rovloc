@@ -6,6 +6,7 @@
 --                                 180-degree snap, the burst, the vanish, the gate slam, the hunt
 --   Level2_ScienceHallController  chemical flask restock (always two in play, never in sight) + the throw hint
 --   Level3_GymnasiumController    the gym's fast stalk, locker-room sweeps and court prowls, the locker-room beats
+--   Level4_FloodedPoolController  the pool: the Creature called to the water, the emergency floodlights, water beats
 --
 -- LevelDirector activates a level's controller when the squad is on it (after every service's BeginRun at a run's
 -- start) and deactivates it when they leave or the run ends. This service gives the controllers their run (seed,
@@ -28,6 +29,7 @@ local Level0 = require(script.Level0_BasementController)
 local Level1 = require(script.Level1_HallwaysController)
 local Level2 = require(script.Level2_ScienceHallController)
 local Level3 = require(script.Level3_GymnasiumController)
+local Level4 = require(script.Level4_FloodedPoolController)
 
 local log = Log.new("Levels")
 
@@ -38,6 +40,7 @@ Levels.Level0 = Level0
 Levels.Level1 = Level1
 Levels.Level2 = Level2
 Levels.Level3 = Level3
+Levels.Level4 = Level4
 
 local serviceTrove = Trove.new()
 local initialized = false
@@ -59,6 +62,7 @@ function Levels.Step(now: number?)
 	protected("Level1", Level1.Step, t)
 	protected("Level2", Level2.Step, t)
 	protected("Level3", Level3.Step, t)
+	protected("Level4", Level4.Step, t)
 end
 
 function Levels.Init()
@@ -69,10 +73,12 @@ function Levels.Init()
 	Level0.Init(serviceTrove)
 	Level1.Init()
 	Level3.Init()
+	Level4.Init(serviceTrove)
 	LevelDirector.RegisterLevel(Level0.Controller)
 	LevelDirector.RegisterLevel(Level1.Controller)
 	LevelDirector.RegisterLevel(Level2.Controller)
 	LevelDirector.RegisterLevel(Level3.Controller)
+	LevelDirector.RegisterLevel(Level4.Controller)
 end
 
 function Levels.Start()
@@ -86,11 +92,13 @@ function Levels.BeginRun(ctx: Types.RunContext)
 	Level1.BeginRun(ctx)
 	Level2.BeginRun(ctx)
 	Level3.BeginRun(ctx)
+	Level4.BeginRun(ctx)
 	running = true
 end
 
 function Levels.EndRun()
 	running = false
+	Level4.EndRun()
 	Level3.EndRun()
 	Level2.EndRun()
 	Level1.EndRun()

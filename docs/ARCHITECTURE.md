@@ -58,7 +58,9 @@ Rovloc/
 │                                           solvability over 500 seeds), ZoneGraph, BinaryHeap, VentPathfinder,
 │                                           Hearing, PacingDirector, Doors, Airlock, Levels (scenes + the Level 0-2
 │                                           controllers on a fake clock), Lockers (hiding, the breath check, the rip
-│                                           hand-over), Level3 (gym stalk, sweeps, beats), DataMigration
+│                                           hand-over), Level3 (gym stalk, sweeps, beats), Pool (water rules,
+│                                           swimming, oxygen, the grab, struggle and every release, the swim
+│                                           client's maths), Level4 (pool alert, floodlights, beats), DataMigration
 └── src/
     ├── ReplicatedFirst/
     │   └── LoadingCurtain.client.luau      [P1] Engine-only black curtain until WorldReady + local ack; 30s BootError fallback
@@ -98,7 +100,9 @@ Rovloc/
     │       │   │                                drone, EMF static, chem hiss, gate slam, light burst, thunder, rain, splash,
     │       │   │                                gasp, breathing, footsteps per material, fire door swing / latch and door
     │       │   │                                creak [P6], the Creature sniffing at locker slits, a locker torn open, a
-    │       │   │                                held breath let out, locker slams, ball bounces, shower drips [P7]
+    │       │   │                                held breath let out, locker slams, ball bounces, shower drips, a gasp at
+    │       │   │                                the surface, climbing out, bubbles, the underwater thrash, pool drips,
+    │       │   │                                sloshes and falling tiles, the floodlight breaker and strike-up [P7]
     │       │   │                                (+ caption text)
     │       │   ├── VoicePool.luau          [P1] Pooled voices, per-bus caps, priority stealing, distance pre-cull
     │       │   └── AudioBuses.luau         [P1] SoundGroup tree + environment DSP (Vent, Underwater, Outdoor, Lobby)
@@ -121,7 +125,7 @@ Rovloc/
     │       │   └── Scenes.luau             [P6] The level scenes as data: the Floor 1 classroom scare's beat times (the
     │       │                                    server schedules from them) and every scene Timeline (the clients play
     │       │                                    them), the basement beats, the subject camera maths (stumble, face drag),
-    │       │                                    the Floor 3 locker-room beats [P7]
+    │       │                                    the Floor 3 locker-room beats, the Floor 4 floodlight strike-up [P7]
     │       ├── World/
     │       │   └── ProceduralWorldBuilder/
     │       │       ├── init.luau           [P1] BuildAuthoritative / BuildCosmetic / ClearRuntime + RegisterProp / RegisterRig
@@ -174,8 +178,11 @@ Rovloc/
     │           ├── SpatialQuery.luau       [P1] RaycastParams / OverlapParams factories, EyePoint helpers
     │           ├── Log.luau                [P1] Levels, tags, rate limiting
     │           ├── BinaryHeap.luau         [P4]
-    │           └── Ballistics.luau         [P6] Flask flight shared by server + clients: parabola, release point +
-    │                                            pull-back, stepped casts, aim-arc trace, pool surface crossings
+    │           ├── Ballistics.luau         [P6] Flask flight shared by server + clients: parabola, release point +
+    │           │                                pull-back, stepped casts, aim-arc trace, pool surface crossings
+    │           └── WaterRules.luau         [P7] The pool's rules shared by FloodedPoolService and the swimming client:
+    │                                            water volumes + in / out hysteresis, float height, heads under, the
+    │                                            oxygen rate, struggle presses (sequence, 12/s cap, decay, break-free)
     │
     ├── ServerScriptService/
     │   ├── ServerMain.server.luau          [P1] Ordered bootstrap, xpcall isolation, place-settings audit → BootError
@@ -206,13 +213,15 @@ Rovloc/
     │       │   └── VentNetworkService/
     │       │       ├── init.luau           [P4] Grates (unscrew / kick / locked), enter / exit, occupancy, rail validator
     │       │       ├── GrateRules.luau     [P4] Pure grate state / prompt acceptance rules
-    │       │       └── CrawlRules.luau     [P4] Pure entry / exit geometry predicates
+    │       │       └── CrawlRules.luau     [P4] Pure entry / exit geometry predicates (+ the swimmers' entry from
+    │       │                                        the water at the pool's grates [P7])
     │       │           (VentGraph + VentPathfinder are shared: ReplicatedStorage/Shared/Vents, used by the
     │       │            server, the crawling client and the Creature)
     │       ├── Monster/
     │       │   └── MonsterAIService/
     │       │       ├── init.luau           [P5] State machine host, 10 Hz brain, AcquireScripted(), hook registry,
-    │       │       │                            SetSpeedScale [P7] (level tuning: the Level 3 gym)
+    │       │       │                            SetSpeedScale [P7] (level tuning: the Level 3 gym), CatchGrabbed [P7]
+    │       │       │                            (a held swimmer out of air: the Underwater jumpscare)
     │       │       ├── Brain.luau          [P5] Shared state types, pure transition table, catch rules, level knowledge
     │       │       ├── CreatureBody.luau   [P5] Ownership reassert, hitbox sizing per PoseMode, Hidden, collision modes
     │       │       ├── Perception.luau     [P5] Eye-to-EyePoint LOS (never limbs), view cones
@@ -238,7 +247,10 @@ Rovloc/
     │       │   │                                prompt, Anchor lock + Hiding override, stepped doors, exit to a clear
     │       │   │                                spot; the locker inspector: server-judged hold-breath check, gasp (cue +
     │       │   │                                noise), the LockerRip hand-over to JumpscareHandler
-    │       │   └── FloodedPoolService.luau [P7] Swim physics validation, oxygen, grab + drag, struggle meter, floodlight
+    │       │   └── FloodedPoolService.luau [P7] Who swims (10 Hz, Swim mode), oxygen rates, the Swim validator, the
+    │       │                                    climb exemption, splashes; the PoolGrabber: ServerOwned drag, Grabbed,
+    │       │                                    the struggle (StrugglePress), flask / floodlight / let-go releases, the
+    │       │                                    drowning catch
     │       ├── Levels/
     │       │   ├── init.luau                [P6] The Levels service: registers the controllers with LevelDirector, runs
     │       │   │                                their run resets and one Heartbeat driver
@@ -252,7 +264,9 @@ Rovloc/
     │       │   ├── Level2_ScienceHallController.luau [P6] Flask restock (two in play, out of sight, one per 45 s), hint
     │       │   ├── Level3_GymnasiumController.luau [P7] The fast stalk on the court (SetSpeedScale), locker-room
     │       │   │                                sweeps and court prowls (Alert), seeded locker-room beats out of sight
-    │       │   ├── Level4_FloodedPoolController.luau [P7] Pool activation, AquaticStalk handoff, floodlight wiring
+    │       │   ├── Level4_FloodedPoolController.luau [P7] Pool sessions call the Creature to the water (Alert), the
+    │       │   │                                emergency floodlight switch (prompt, On, lever, lamps lit for the run,
+    │       │   │                                release / blind), seeded water beats out of sight
     │       │   └── Level5_RoofController.luau [P8] Door smash, final sprint, parachute leap, lightning reveal + vanish
     │       └── Match/
     │           ├── CheckpointAirlockService.luau [P6] Stairwell airlocks: 10 Hz checkpoint volume, 20s straggler timer,
@@ -323,8 +337,11 @@ Rovloc/
                 │   ├── LockerController.luau       [P7] Locker doors for everyone; the hider's camera in / out and behind
                 │   │                                   the slits ("Trapped" override), Locker context, lungs meter, the
                 │   │                                   hold-breath prompt (device-aware), heartbeat via the panic floor
-                │   ├── SwimController.luau         [P7] Tread / freestyle input, underwater FX
-                │   └── StruggleController.luau     [P7] Mash UI (server-judged)
+                │   ├── SwimController.luau         [P7] Part-water swimming: buoyancy + drag + stroke (VectorForce +
+                │   │                                   LinearVelocity), dive / surface, climbing out, the underwater view
+                │   │                                   (tint, blur, murk, waterline), bubbles, strokes, muffled audio
+                │   └── StruggleController.luau     [P7] The grab on the victim's client: Struggle context, presses under
+                │                                       the server's rule, mash UI, the pulled-down shaking camera, darkness
                 └── Match/
                     ├── AirlockController.luau      [P6] Straggler countdown banner (inside / outside / sealing)
                     ├── LobbyController.luau        [P8] Ready-up, difficulty vote, perk shop UI
@@ -581,6 +598,26 @@ inside the window for more than 0.5 s is a loud gasp (`Gasp` cue + noise) and `C
 `Caught`, `InvestigateNoise` tries the Locker catch; once `JumpscareHandler` holds the victim, the door is torn off
 (`LockerRip` OneShot), the locker's own lock and override are released and the locker stays smashed for the run; the
 victim is put down outside when the catch ends. A catch that does not take leaves them hidden (the gasp brings it back).
+
+**The flooded pool (P7).** Water is part volumes, never Terrain. `FloodedPoolService` decides at 10 Hz who is in the
+water with `WaterRules` (a root inside a `PoolWater` volume's footprint, up to 0.5 studs over the surface to get in and
+1.8 to stay in; the half-flooded duct's water belongs to the crawl) and sets the `Swim` mode (`Treading` / `Freestyle`
+/ `Underwater` from the intent). Leaving upward needs something to stand on under the root (a climb out, exempted from
+the fly check); rising out over nothing is put back by the `Swim` validator. Oxygen drains at 7/s while the head is
+under (the dive held, or the eye below the surface), 9/s while grabbed, holds during a jumpscare, and recovers at 30/s
+otherwise; 0 is a Down ("Drowned"). The client (`SwimController`) swims its own body (gravity cancelled, a
+force-limited LinearVelocity toward the stroke) at the server's WalkSpeeds and climbs out at the coping, ladders and
+bridge fragments. The Creature's `AquaticStalk` calls the PoolGrabber (`FloodedPoolService.TryGrab`) once a swimmer's
+splashing crossed the threshold: `Lock(victim, "Drag", "ServerOwned")`, the `Grabbed` override, a server drag rig
+pulling them down and back in front of it over 1.2 s, oxygen topped up to 4.5 s of air, `PrivateCue Struggle`, the
+squad warned. 22 `StrugglePress`es (sequence-numbered, 12/s at most, slipping back after 0.6 s idle) break free and the
+Creature recoils; a flask shattering within the cloud radius of the victim, the Level 4 emergency floodlights or the
+Creature letting go free them too, always with 2.5 s of air to reach the surface. At the drowning floor the drain stops
+and `MonsterAIService.CatchGrabbed` runs the Underwater jumpscare (Down / Execute by its outcome rule); if it cannot,
+the air runs out (Down). Swimmers enter the pool's grates from the water (`CrawlRules`). The Level 4 controller calls
+the Creature to the water a few seconds into each pool session (`Alert`, once, 40 s cooldown), owns the emergency
+floodlight switch (one use per run: the nine lamps lit for the run, a held swimmer released, otherwise a Creature in the
+natatorium stunned) and plays water beats out of sight.
 
 **Dev runs.** Any state-changing dev command during a run sets `ReplicatedStorage.DevRun = true`. `MatchAndDataService`
 (P8) must not award credits, escapes or BestTime for a run with `DevRun`.

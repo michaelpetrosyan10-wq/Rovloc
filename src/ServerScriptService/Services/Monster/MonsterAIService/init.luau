@@ -24,9 +24,10 @@
 -- (hidden) to that level's CreatureSpawn if it is elsewhere, it reappears once nobody can see it, and it wakes into
 -- Patrol WakeDelay seconds later. A level controller that acquired it (AcquireScripted) in its Activate keeps it.
 --
--- Hooks: RegisterLockerInspector (P7 lockers), RegisterPoolGrabber (P7 pool), AcquireScripted (P6 / P8 cutscenes),
--- Stun (P6 chemicals; a catch in progress is called off), Alert (scripted noises, heard like any other),
--- SetSpeedScale (P7 level tuning: Level 3's gym).
+-- Hooks: RegisterLockerInspector (P7 lockers), RegisterPoolGrabber (P7 pool; CatchGrabbed finishes a held swimmer who
+-- ran out of air with the Underwater jumpscare), AcquireScripted (P6 / P8 cutscenes), Stun (P6 chemicals; a catch in
+-- progress is called off), Alert (scripted noises, heard like any other), SetSpeedScale (P7 level tuning: Level 3's
+-- gym).
 --
 -- Dev commands (DevToolsService): ai [state|pause|resume|tp], hunt, ignoreme.
 
@@ -1537,6 +1538,30 @@ end
 
 function MonsterAIService.RegisterPoolGrabber(fn: Types.PoolGrabber)
 	poolGrabber = fn
+end
+
+-- P7 pool: the swimmer the Creature is holding (the PoolGrabber's grab) ran out of air. Catches them with the
+-- Underwater jumpscare (JumpscareHandler's outcome rule decides Down or Execute) instead of letting them drown. The
+-- grab is already under way, so the pacing is not asked again. False, with nothing changed, when `player` is not the
+-- one held, a catch is running, or the Creature is stunned, hidden or out of reach (JumpscareHandler.Catch refuses).
+function MonsterAIService.CatchGrabbed(player: Player): boolean
+	local model, m, c = creature, mover, ctx
+	if not (running and model and m and c) or grabbed ~= player then
+		return false
+	end
+	if catching ~= nil or JumpscareHandler.IsBusy() or now() < stunUntil then
+		return false
+	end
+	if not JumpscareHandler.Catch(model, player, "Underwater") then
+		return false
+	end
+	grabbed = nil
+	AquaticStalk.released(c)
+	catching = { player = player, kind = "Underwater", at = now() }
+	m:Stop()
+	publish()
+	caught:Fire(player, "Underwater")
+	return true
 end
 
 -- Replaces the server-time source (specs pass a fake clock; nil restores GetServerTimeNow).
