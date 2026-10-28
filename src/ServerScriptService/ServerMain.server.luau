@@ -41,6 +41,13 @@ local RunStatsService = require(ServerScriptService.Services.Core.RunStatsServic
 local WorldService = require(ServerScriptService.Services.Core.WorldService)
 local ZoneService = require(ServerScriptService.Services.Core.ZoneService)
 
+local FlashlightService = require(ServerScriptService.Services.Player.FlashlightService)
+local InteractionService = require(ServerScriptService.Services.Player.InteractionService)
+local LifeStateService = require(ServerScriptService.Services.Player.LifeStateService)
+local LoadoutService = require(ServerScriptService.Services.Player.LoadoutService)
+local MovementAuthority = require(ServerScriptService.Services.Player.MovementAuthority)
+local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
+
 --------------------------------------------------------------------------------
 -- Place-settings audit
 --------------------------------------------------------------------------------
@@ -125,6 +132,12 @@ end
 --   ZoneService              10 Hz zone / volume tracking (no run hooks).
 --   AudioService             Cue routing to clients.
 --   RunStatsService          BeginRun resets the counters; EndRun freezes them for the summary.
+--   LoadoutService           Perks from Player.Loadout; BeginRun sets syringe charges before anything reads them.
+--   PlayerStateService       MoveState / stamina / oxygen authority, MoveIntent + LookRelay.
+--   LifeStateService         Health + LifeState; BeginRun makes participants Alive. Owns the recovery hook.
+--   MovementAuthority        10 Hz movement validation (registered validators first).
+--   InteractionService       Server-timed prompt channels for every registered PromptKind handler.
+--   FlashlightService        Battery + FlashlightOn; BeginRun sizes the battery from LoadoutService.
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
 --   DevToolsService          Dev commands and the Studio auto dev-run; it calls everything above.
 --
@@ -169,6 +182,51 @@ local SERVICES: { Types.Service } = {
 	},
 	{ Name = AudioService.Name, Init = AudioService.Init },
 	{ Name = RunStatsService.Name, BeginRun = RunStatsService.BeginRun, EndRun = RunStatsService.EndRun },
+	{
+		Name = LoadoutService.Name,
+		Init = LoadoutService.Init,
+		BeginRun = LoadoutService.BeginRun,
+		EndRun = LoadoutService.EndRun,
+		OnPlayerRemoving = LoadoutService.OnPlayerRemoving,
+	},
+	{
+		Name = PlayerStateService.Name,
+		Init = PlayerStateService.Init,
+		Start = PlayerStateService.Start,
+		BeginRun = PlayerStateService.BeginRun,
+		EndRun = PlayerStateService.EndRun,
+		OnPlayerRemoving = PlayerStateService.OnPlayerRemoving,
+	},
+	{
+		Name = LifeStateService.Name,
+		Init = LifeStateService.Init,
+		Start = LifeStateService.Start,
+		BeginRun = LifeStateService.BeginRun,
+		EndRun = LifeStateService.EndRun,
+		OnPlayerRemoving = LifeStateService.OnPlayerRemoving,
+	},
+	{
+		Name = MovementAuthority.Name,
+		Init = MovementAuthority.Init,
+		Start = MovementAuthority.Start,
+		BeginRun = MovementAuthority.BeginRun,
+		EndRun = MovementAuthority.EndRun,
+		OnPlayerRemoving = MovementAuthority.OnPlayerRemoving,
+	},
+	{
+		Name = InteractionService.Name,
+		Init = InteractionService.Init,
+		Start = InteractionService.Start,
+		EndRun = InteractionService.EndRun,
+		OnPlayerRemoving = InteractionService.OnPlayerRemoving,
+	},
+	{
+		Name = FlashlightService.Name,
+		Init = FlashlightService.Init,
+		BeginRun = FlashlightService.BeginRun,
+		EndRun = FlashlightService.EndRun,
+		OnPlayerRemoving = FlashlightService.OnPlayerRemoving,
+	},
 	{ Name = RunLifecycleService.Name, Init = RunLifecycleService.Init, Start = RunLifecycleService.Start },
 	{
 		Name = DevToolsService.Name,
