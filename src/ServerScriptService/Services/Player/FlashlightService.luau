@@ -439,7 +439,8 @@ function FlashlightService.BeginRun(ctx: Types.RunContext)
 	table.clear(saved)
 	for _, player in ctx.participants do
 		local max = LoadoutService.BatteryCapacity(player)
-		write(player, max, max, false)
+		-- Every run starts with the torch on: the squad deploys into the dark already lit.
+		write(player, max, max, true)
 	end
 end
 

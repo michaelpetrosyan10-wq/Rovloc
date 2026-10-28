@@ -192,7 +192,7 @@ return {
 		p:Destroy()
 	end,
 
-	["service: BeginRun gives every participant a full, unlit battery at their capacity"] = function(t: Expect)
+	["service: BeginRun gives every participant a full battery at their capacity, torch on"] = function(t: Expect)
 		local plain = player()
 		local lithium = player("LithiumCell")
 		FlashlightService.AddBattery(plain, -60)
@@ -201,8 +201,9 @@ return {
 		t.eq(FlashlightService.GetBattery(plain), GameConfig.BatteryMax)
 		t.eq(FlashlightService.GetMax(lithium), GameConfig.BatteryMax * 1.5)
 		t.eq(FlashlightService.GetBattery(lithium), GameConfig.BatteryMax * 1.5)
-		t.falsy(FlashlightService.IsOn(lithium), "every run starts dark")
-		t.eq(lithium:GetAttribute(P.BatteryRate), 0)
+		t.truthy(FlashlightService.IsOn(lithium), "every run deploys with the torch on")
+		t.truthy(FlashlightService.IsOn(plain), "every participant")
+		t.eq(lithium:GetAttribute(P.BatteryRate), 0, "no drain while Deploying (it starts InRun)")
 		for _, p in { plain, lithium } do
 			FlashlightService.OnPlayerRemoving(p)
 			p:Destroy()

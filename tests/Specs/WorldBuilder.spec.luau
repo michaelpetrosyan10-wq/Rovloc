@@ -17,6 +17,7 @@ local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
+local LightingMood = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingMood)
 local LightingRig = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingRig)
 local LobbyBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LobbyBuilder)
 local Palette = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Palette)
@@ -966,7 +967,16 @@ return {
 		t.eq(fluorescent:GetAttribute(W.LevelId), "Level1_Hallways")
 		t.eq(fluorescent:GetAttribute(W.ZoneId), "T_Hall")
 		t.eq(fluorescent:GetAttribute(W.FlickerGroup), "HallA")
-		t.near(fluorescent:GetAttribute(W.BaseBrightness) :: number, 1.2, 1e-6)
+		-- Built brightness is the layout's after the level's LightingMood.
+		local hallMood = LightingMood.resolve(layout.id, "T_Hall", {
+			id = "T_L1",
+			kind = "Fluorescent",
+			pos = Vector3.new(214, 14, 80),
+			brightness = 1.2,
+			range = 40,
+			flickerGroup = "HallA",
+		})
+		t.near(fluorescent:GetAttribute(W.BaseBrightness) :: number, hallMood.brightness, 1e-6)
 		local surface = fluorescent:FindFirstChildOfClass("SurfaceLight")
 		assert(surface, "fluorescent has a SurfaceLight")
 		t.eq(surface.Face, Enum.NormalId.Bottom)
@@ -990,15 +1000,34 @@ return {
 		assert(optedOut, "bulb has a PointLight")
 		t.falsy(optedOut.Shadows, "a layout can opt a fixture out of shadows")
 
-		local broken = childPart(lights, "T_L3")
-		local point = broken:FindFirstChildOfClass("PointLight")
-		assert(point, "emergency light has a PointLight")
+		-- An emergency red marked broken in the layout still burns: wayfinding lights always do (LightingMood).
+		local red = childPart(lights, "T_L3")
+		local redLight = red:FindFirstChildOfClass("PointLight")
+		assert(redLight, "emergency light has a PointLight")
+		t.truthy(redLight.Enabled, "emergency reds always burn")
+		t.truthy((red:GetAttribute(W.BaseBrightness) :: number) > 0, "with a base brightness")
+		root:Destroy()
+
+		-- A fixture that is broken after the mood stays dark (but shadowed, for when an override revives it).
+		local holder = Instance.new("Folder")
+		local dead = SchoolShellBuilder.buildLight(holder, {
+			id = "T_Dead",
+			kind = "Bulb",
+			position = Vector3.new(0, 10, 0),
+			brightness = 1,
+			range = 16,
+			broken = true,
+			levelId = "Level1_Hallways",
+			zoneId = "T_Hall",
+		})
+		local point = dead:FindFirstChildOfClass("PointLight")
+		assert(point, "bulb has a PointLight")
 		t.truthy(point.Shadows, "broken fixtures stay shadowed for when an override revives them")
 		t.falsy(point.Enabled, "broken light disabled")
 		t.eq(point.Brightness, 0)
-		t.eq(broken:GetAttribute(W.BaseBrightness), 0)
-		t.near(broken.Transparency, 0, 1e-6, "fixture still visible")
-		root:Destroy()
+		t.eq(dead:GetAttribute(W.BaseBrightness), 0)
+		t.near(dead.Transparency, 0.2, 1e-6, "fixture still visible")
+		holder:Destroy()
 	end,
 
 	["stair plan: climbable steps, even switchbacks, segments stack contiguously"] = function(t: Expect)
@@ -1279,7 +1308,8 @@ return {
 		t.truthy(grade and grade:IsA("ColorCorrectionEffect"), "base colour grade")
 		t.truthy(Lighting:FindFirstChildOfClass("BloomEffect") ~= nil)
 		t.eq(Lighting.ClockTime, LightingRig.Baseline.ClockTime)
-		t.eq(Lighting.Brightness, 0)
+		t.eq(Lighting.Brightness, LightingRig.Baseline.Brightness)
+		t.truthy(Lighting.Ambient == LightingRig.Baseline.Ambient, "ambient fill")
 		t.truthy(Lighting:FindFirstChild(LightingRig.Names.Sky) ~= nil, "storm sky")
 	end,
 

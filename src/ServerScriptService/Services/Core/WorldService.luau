@@ -286,7 +286,10 @@ local function spawnCreature()
 		log.debug("no %s rig registered; the run has no Creature", CREATURE_RIG)
 		return
 	end
-	local cframe, levelId = creatureSpawn(LevelDirector.GetCurrentLevel() or Enums.LevelId[1])
+	-- The basement has no monster (the squad meets it on Floor 1), so a run that starts there places it a floor up.
+	local current: Enums.LevelId = LevelDirector.GetCurrentLevel() or Enums.LevelId[1]
+	local first: Enums.LevelId = if current == Enums.LevelId[1] then Enums.LevelId[2] else current
+	local cframe, levelId = creatureSpawn(first)
 	if not cframe or not levelId then
 		log.warn("no CreatureSpawn anchor on or after the current level; the Creature was not placed")
 		return
@@ -297,6 +300,7 @@ local function spawnCreature()
 	end
 	model.Name = Instances.Names.Creature
 	model:SetAttribute(Attributes.Creature.LevelId, levelId)
+	model:SetAttribute(Attributes.Creature.MonsterState, "Dormant") -- MonsterAIService (P5) takes it from here
 	model:AddTag(Tags.Creature)
 	creature = model
 	runTrove:Add(model)

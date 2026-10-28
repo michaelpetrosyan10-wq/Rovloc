@@ -29,22 +29,22 @@
         "LightingStyle": "Realistic",
         "PrioritizeLightingQuality": true,
         "ClockTime": 0.5,
-        "Brightness": 0,
+        "Brightness": 0.5,
         "Ambient": [
-          0,
-          0,
-          0
+          0.1098,
+          0.1176,
+          0.149
         ],
         "OutdoorAmbient": [
-          0.02,
-          0.02,
-          0.025
+          0.1804,
+          0.1961,
+          0.2353
         ],
-        "EnvironmentDiffuseScale": 0,
-        "EnvironmentSpecularScale": 0.15,
+        "EnvironmentDiffuseScale": 0.3,
+        "EnvironmentSpecularScale": 0.55,
         "GlobalShadows": true,
-        "ShadowSoftness": 0.35,
-        "ExposureCompensation": -0.25
+        "ShadowSoftness": 0.25,
+        "ExposureCompensation": 0.25
       }
     },
     "Players": {

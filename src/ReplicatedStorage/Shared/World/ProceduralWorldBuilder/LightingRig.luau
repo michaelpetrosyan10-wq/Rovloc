@@ -1,5 +1,5 @@
 --!strict
--- Server lighting baseline: a dense dark haze, a desaturated green-blue grade, subtle bloom and a storm deck of
+-- Server lighting baseline: a cold ambient fill, a light haze, a cool desaturated grade, bloom and a storm deck of
 -- clouds. Lighting properties mirror the pins in default.project.json so a `rojo serve` session and a built
 -- place look identical. Clients layer their own effects (panic grade, depth of field, lightning pulses) on top.
 --
@@ -31,27 +31,31 @@ LightingRig.Names = table.freeze({
 })
 
 -- Baseline values, also read by clients as the rest state their pulses decay back to.
+-- Dark but readable: a cold blue-grey ambient fill lets shapes read at the edge of every lit pool (the player is
+-- never staring into a void), haze gives long corridors depth, bloom makes the fixtures glow and the grade drains
+-- some colour without turning the school grey. The darkness comes from contrast with the level lights
+-- (LightingMood) and the flashlight, not from switching everything off.
 LightingRig.Baseline = table.freeze({
 	ClockTime = 0.5,
-	Brightness = 0,
-	Ambient = Color3.new(0, 0, 0),
-	OutdoorAmbient = Color3.new(0.02, 0.02, 0.025),
-	EnvironmentDiffuseScale = 0,
-	EnvironmentSpecularScale = 0.15,
-	ExposureCompensation = -0.25,
-	ShadowSoftness = 0.35,
-	AtmosphereDensity = 0.42,
-	AtmosphereOffset = 0.12,
-	AtmosphereHaze = 2.6,
-	AtmosphereColor = Color3.fromRGB(30, 33, 36),
-	AtmosphereDecay = Color3.fromRGB(14, 17, 18),
-	GradeBrightness = -0.03,
-	GradeContrast = 0.12,
-	GradeSaturation = -0.45,
-	GradeTint = Color3.fromRGB(226, 246, 244),
-	BloomIntensity = 0.35,
-	BloomSize = 28,
-	BloomThreshold = 1.6,
+	Brightness = 0.5,
+	Ambient = Color3.fromRGB(28, 30, 38),
+	OutdoorAmbient = Color3.fromRGB(46, 50, 60),
+	EnvironmentDiffuseScale = 0.3,
+	EnvironmentSpecularScale = 0.55,
+	ExposureCompensation = 0.25,
+	ShadowSoftness = 0.25,
+	AtmosphereDensity = 0.34,
+	AtmosphereOffset = 0.08,
+	AtmosphereHaze = 1.8,
+	AtmosphereColor = Color3.fromRGB(44, 48, 56),
+	AtmosphereDecay = Color3.fromRGB(22, 26, 30),
+	GradeBrightness = 0,
+	GradeContrast = 0.16,
+	GradeSaturation = -0.22,
+	GradeTint = Color3.fromRGB(232, 240, 255),
+	BloomIntensity = 0.7,
+	BloomSize = 30,
+	BloomThreshold = 1.25,
 	CloudCover = 0.93,
 	CloudDensity = 0.78,
 	CloudColor = Color3.fromRGB(38, 40, 46),

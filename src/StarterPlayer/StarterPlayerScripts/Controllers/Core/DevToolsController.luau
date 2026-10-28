@@ -130,7 +130,7 @@ local notifyHandler: NotifyHandler? = nil
 
 -- Dev state
 local devEnabled = false
-local overlaysEnabled = true
+local overlaysEnabled = false -- the Overlays toggle turns them on (noise rings, plans, the Creature tag)
 local ventGraphEnabled = false
 local devLightEnabled = false
 local soundIndex = 1

@@ -2,7 +2,7 @@
 -- PanicVFX: the local player's panic level (0..1) and everything it drives.
 --
 -- Target panic = clamp01(max(proximity, chase floor, external floors) + downed bonus):
---   * proximity: the Creature (Instances.creature(), not Hidden) between CameraConfig.Panic.CreatureNearDistance
+--   * proximity: the Creature (Instances.creature(), not Hidden, not Dormant) between CameraConfig.Panic.CreatureNearDistance
 --     (1) and CreatureFarDistance (0) on a smoothstep; full weight with line of sight (eye to the Creature's eye,
 --     a Default-group ray that ignores every character and the Creature itself, so lockers and desks block it),
 --     OCCLUDED_SHARE of it through walls (it is right there, you can hear it). Sensed at SENSE_HZ.
@@ -320,7 +320,8 @@ function PanicVFX.new(player: Player): PanicFx
 		local target = creature:GetAttribute(C.TargetUserId)
 		local state = Attributes.getString(creature, C.MonsterState, "Dormant")
 		chased = target == player.UserId and CHASE_STATES[state] == true
-		if eye == nil or Attributes.getBool(creature, C.Hidden, false) then
+		-- A Dormant Creature (before it wakes, and while no AI drives it) is set dressing, not a threat.
+		if eye == nil or state == "Dormant" or Attributes.getBool(creature, C.Hidden, false) then
 			return
 		end
 		local creatureEye = SpatialQuery.creatureEye(root, Attributes.getString(creature, C.PoseMode, "Biped"))

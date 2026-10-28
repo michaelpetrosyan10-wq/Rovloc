@@ -89,12 +89,17 @@ local SPUTTER_BELOW = 0.05
 local STATIC_THRESHOLD = 0.04
 local STATIC_VOLUME_EPSILON = 0.04
 
-local INNER_ANGLE = 28
+local INNER_ANGLE = 34
 local INNER_RANGE = 60
-local INNER_BRIGHTNESS = 2.6
-local OUTER_ANGLE = 75
-local OUTER_RANGE = 32
-local OUTER_BRIGHTNESS = 0.55
+local INNER_BRIGHTNESS = 5.5
+local OUTER_ANGLE = 72
+local OUTER_RANGE = 42
+local OUTER_BRIGHTNESS = 1.5
+-- Presence glow: a dim, short, unshadowed light around the player (on whether or not the torch is), so whatever is
+-- within arm's reach always reads in the dark without lighting up the room.
+local GLOW_RANGE = 10
+local GLOW_BRIGHTNESS = 0.45
+local GLOW_COLOR = Color3.fromRGB(176, 190, 214)
 local BEAM_COLOR = Color3.fromRGB(255, 238, 212)
 local DYING_COLOR = Color3.fromRGB(255, 176, 112)
 local LAG_SPEED = 16 -- 1/s damped slerp of the beam toward the look
@@ -320,6 +325,14 @@ function Flashlight.new(player: Player): Light
 	part.Size = Vector3.new(0.2, 0.2, 0.2)
 	local inner = newSpot(part, "Inner", INNER_ANGLE, INNER_RANGE, true)
 	local outer = newSpot(part, "Outer", OUTER_ANGLE, OUTER_RANGE, false)
+	local glow = Instance.new("PointLight")
+	glow.Name = "Glow"
+	glow.Range = GLOW_RANGE
+	glow.Brightness = GLOW_BRIGHTNESS
+	glow.Color = GLOW_COLOR
+	glow.Shadows = false
+	glow.Enabled = false
+	glow.Parent = part
 
 	local predicted: boolean? = nil
 	local predictedAt: number? = nil
@@ -395,20 +408,19 @@ function Flashlight.new(player: Player): Light
 			driveStatic(emf)
 
 			local camera = context.camera
-			local lit = on and context.allowed and batteryFraction > 0 and camera ~= nil
-			if not lit or not camera then
+			if camera == nil or not context.allowed then
 				output = 0
-				if inner.Enabled then
-					inner.Enabled = false
-				end
-				if outer.Enabled then
-					outer.Enabled = false
-				end
+				inner.Enabled = false
+				outer.Enabled = false
+				glow.Enabled = false
 				rotation = nil
 				return
 			end
 			if part.Parent ~= camera then
 				part.Parent = camera
+			end
+			if not glow.Enabled then
+				glow.Enabled = true
 			end
 
 			local target = context.look.Rotation
@@ -423,6 +435,17 @@ function Flashlight.new(player: Player): Light
 				then origin + current.LookVector * LENS_LEAD
 				else context.look:PointToWorldSpace(CHEST_OFFSET)
 			part.CFrame = CFrame.new(position) * current
+
+			if not (on and batteryFraction > 0) then
+				output = 0
+				if inner.Enabled then
+					inner.Enabled = false
+				end
+				if outer.Enabled then
+					outer.Enabled = false
+				end
+				return
+			end
 
 			local seed = player.UserId
 			local flicker = Flashlight.flickerFactor(emf, context.serverNow, seed)

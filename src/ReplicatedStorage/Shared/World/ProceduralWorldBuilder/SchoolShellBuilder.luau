@@ -29,6 +29,7 @@ local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Geometry = require(script.Parent.Geometry)
+local LightingMood = require(script.Parent.LightingMood)
 local Palette = require(script.Parent.Palette)
 local VentShaftBuilder = require(script.Parent.VentShaftBuilder)
 
@@ -1563,15 +1564,16 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		local cx, cz = roomCenter(room)
 		local ceilingY = origin.Y + SchoolShellBuilder.ceilingBottom(layout, room)
 		for _, light in (room.lights or {}) :: { LayoutSchema.Light } do
+			local mood = LightingMood.resolve(layout.id, room.id, light)
 			SchoolShellBuilder.buildLight(folders.Lights, {
 				id = light.id,
 				kind = light.kind,
 				position = origin + light.pos,
-				brightness = light.brightness,
-				range = light.range,
+				brightness = mood.brightness,
+				range = mood.range,
 				color = light.color,
-				flickerGroup = light.flickerGroup,
-				broken = light.broken,
+				flickerGroup = mood.flickerGroup,
+				broken = mood.broken,
 				shadows = light.shadows,
 				levelId = levelId,
 				zoneId = room.id,

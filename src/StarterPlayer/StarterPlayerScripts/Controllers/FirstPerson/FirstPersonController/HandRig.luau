@@ -60,9 +60,10 @@ HandRig.Poses = table.freeze({ "Flashlight", "Free", "Pry", "Ripcord", "SlitGrip
 
 -- Right shoulder (R15 RightShoulder joint) from the eye, in yaw space.
 local SHOULDER = Vector3.new(1, -0.84, 0.34)
--- Held torch from the shoulder, in the pitched frame: the fist sits low on the right of the view (about 0.42 right,
--- 0.55 down and 0.95 ahead of the eye when looking level), so the torch head and lens show in the corner of the view.
-local HOLD_REACH = Vector3.new(-0.58, 0.29, -1.29)
+-- Held torch from the shoulder, in the pitched frame: the fist sits low in the right corner of the view (about 0.55
+-- right, 0.75 down and 1.25 ahead of the eye when looking level), far enough out that the R15 hand and forearm read as
+-- a hand holding a torch at the edge of the screen instead of filling it.
+local HOLD_REACH = Vector3.new(-0.45, 0.09, -1.59)
 local LOWERED_REACH = Vector3.new(-0.45, -0.76, -0.84) -- torch at the hip while sprinting, in yaw space
 local LOWERED_TILT = math.rad(-38)
 local PITCH_SHARE = 0.8 -- the arm follows this share of the look pitch
