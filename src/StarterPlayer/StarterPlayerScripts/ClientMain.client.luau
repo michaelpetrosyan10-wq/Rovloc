@@ -57,6 +57,36 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "SettingsController",
+		load = function(): any
+			return require(Core.SettingsController)
+		end,
+	},
+	{
+		name = "InputController",
+		load = function(): any
+			return require(Core.InputController)
+		end,
+	},
+	{
+		name = "CursorController",
+		load = function(): any
+			return require(Core.CursorController)
+		end,
+	},
+	{
+		name = "RenderBudgetController",
+		load = function(): any
+			return require(Core.RenderBudgetController)
+		end,
+	},
+	{
+		name = "HUD",
+		load = function(): any
+			return require(script.Parent.Controllers.HUD)
+		end,
+	},
+	{
 		name = "DevToolsController",
 		load = function(): any
 			return require(Core.DevToolsController)
