@@ -180,8 +180,10 @@ Rovloc/
     │       ├── Vents/
     │       │   └── VentNetworkService/
     │       │       ├── init.luau           [P4] Grates (unscrew / kick / locked), enter / exit, occupancy, rail validator
-    │       │       ├── VentGraph.luau      [P4] Per-level graph from VentNode Links; passable edges respect grate state
-    │       │       └── VentPathfinder.luau [P4] A* (BinaryHeap) + RetreatPath for stun retreats
+    │       │       ├── GrateRules.luau     [P4] Pure grate state / prompt acceptance rules
+    │       │       └── CrawlRules.luau     [P4] Pure entry / exit geometry predicates
+    │       │           (VentGraph + VentPathfinder are shared: ReplicatedStorage/Shared/Vents, used by the
+    │       │            server, the crawling client and the Creature)
     │       ├── Monster/
     │       │   └── MonsterAIService/
     │       │       ├── init.luau           [P5] State machine host, 10 Hz brain, AcquireScripted(), hook registry

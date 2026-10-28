@@ -50,6 +50,8 @@ local PlayerStateService = require(ServerScriptService.Services.Player.PlayerSta
 
 local BearTrapService = require(ServerScriptService.Services.Mechanics.BearTrapService)
 
+local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
+
 --------------------------------------------------------------------------------
 -- Place-settings audit
 --------------------------------------------------------------------------------
@@ -142,6 +144,8 @@ end
 --   FlashlightService        Battery + FlashlightOn; BeginRun sizes the battery from LoadoutService.
 --   BearTrapService          Level 0 traps: BeginRun tracks the traps WorldService built above; 10 Hz springing,
 --                            snap / solo pry / co-op rescue; EndRun (early, in reverse) frees every victim.
+--   VentNetworkService       Vent grates (BeginRun tracks the grates WorldService rebuilt above), crawl entry / exit,
+--                            the VentRail validator (MovementAuthority above), level VentGraphs for later systems.
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
 --   DevToolsService          Dev commands and the Studio auto dev-run; it calls everything above.
 --
@@ -238,6 +242,14 @@ local SERVICES: { Types.Service } = {
 		BeginRun = BearTrapService.BeginRun,
 		EndRun = BearTrapService.EndRun,
 		OnPlayerRemoving = BearTrapService.OnPlayerRemoving,
+	},
+	{
+		Name = VentNetworkService.Name,
+		Init = VentNetworkService.Init,
+		Start = VentNetworkService.Start,
+		BeginRun = VentNetworkService.BeginRun,
+		EndRun = VentNetworkService.EndRun,
+		OnPlayerRemoving = VentNetworkService.OnPlayerRemoving,
 	},
 	{ Name = RunLifecycleService.Name, Init = RunLifecycleService.Init, Start = RunLifecycleService.Start },
 	{
