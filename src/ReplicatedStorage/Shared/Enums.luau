@@ -89,6 +89,7 @@ export type NoiseKind =
 	| "FlaskShatter"
 	| "DoorSlam"
 	| "Splash"
+	| "FallingObject"
 	| "Scripted"
 
 export type NoiseMedium = "Air" | "Vent" | "Water"
@@ -375,6 +376,7 @@ Enums.NoiseKind = table.freeze({
 	"FlaskShatter",
 	"DoorSlam",
 	"Splash",
+	"FallingObject",
 	"Scripted",
 } :: { NoiseKind })
 

@@ -33,7 +33,8 @@
 --                buckling knees.
 --   Swim         AquaticStalk: level in the water, an eel's wave running head to toe (chest, pelvis and the legs
 --                together as a tail), the arms trailing along the flanks, the hair streaming back.
---   Scripted     neutral: upright and still, staring at its target; scripted beats drive it with actions.
+--   Scripted     neutral: upright and still, staring at its target; scripted beats drive it with actions. A scripted
+--                hold in PoseMode Hunched poses Dormant instead (the corner crouch a cutscene stages it in).
 --
 -- Actions (one-shot layers over whatever state is posing; started with `playAction` on the rig's JointMap at an
 -- animator clock time, which CreatureController feeds with server time so every client plays them together):
@@ -2085,7 +2086,7 @@ function Creature.isAction(name: unknown): boolean
 end
 
 -- The profile state for the Creature's replicated attributes: its body shape (PoseMode, InVent) first, then the AI
--- state. Missing or unknown states pose Dormant.
+-- state (Scripted + Hunched is the staged corner crouch, Dormant). Missing or unknown states pose Dormant.
 function Creature.resolveState(monsterState: unknown, poseMode: unknown, inVent: unknown): StateName
 	if poseMode == "Quadruped" or inVent == true then
 		return if monsterState == "Stunned" then "VentRetreat" else "VentCrawl"
@@ -2102,7 +2103,8 @@ function Creature.resolveState(monsterState: unknown, poseMode: unknown, inVent:
 	elseif monsterState == "Stunned" then
 		return "Stunned"
 	elseif monsterState == "Scripted" then
-		return "Scripted"
+		-- A cutscene that sets PoseMode Hunched stages the corner crouch (the Floor 1 classroom scare).
+		return if poseMode == "Hunched" then "Dormant" else "Scripted"
 	end
 	return "Dormant"
 end

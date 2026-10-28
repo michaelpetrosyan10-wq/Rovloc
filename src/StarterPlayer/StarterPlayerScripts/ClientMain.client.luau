@@ -157,6 +157,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "LevelScenesController",
+		load = function(): any
+			return require(Gameplay.LevelScenesController)
+		end,
+	},
+	{
 		name = "DevToolsController",
 		load = function(): any
 			return require(Core.DevToolsController)

@@ -5,7 +5,8 @@
 --     Lobby when no run is going), plus the layout the camera is actually in (the LevelId of the Zone volume holding
 --     the camera; the lobby footprint and the school's floor bands only when no zone holds it, e.g. inside a duct or
 --     before the world is built). Stairwell lights (LevelId = the lower level) join when either level the stairwell
---     joins is in focus. Broken fixtures (BaseBrightness 0) and burst bulbs stay dark. SetBudget caps the set to the nearest `maxActive` fixtures and gates shadows. Every
+--     joins is in focus. Broken fixtures (BaseBrightness 0, re-read whenever the server changes it) and burst bulbs
+--     stay dark. SetBudget caps the set to the nearest `maxActive` fixtures and gates shadows. Every
 --     fixture outside the set is Enabled = false, so the GPU only ever sees a few dozen lights.
 --   * Flicker. Fixtures sharing a FlickerGroup flicker together: smooth value noise, sharp dropouts, and seeded
 --     blackouts (with a stuttering recovery) scheduled in fixed time slots. Everything is a pure function of
@@ -131,6 +132,7 @@ type Entry = {
 	burstStart: number?,
 	color: Color3,
 	childConnection: RBXScriptConnection?,
+	baseConnection: RBXScriptConnection?,
 	glows: { BasePart }, -- FixtureGlow surfaces
 	guis: { SurfaceGui }, -- FixtureGlow self-lit faces
 	lit: Color3?, -- the glow's full colour (from the primary light)
@@ -903,6 +905,7 @@ local function register(instance: Instance)
 		burstStart = nil,
 		color = instance.Color,
 		childConnection = nil,
+		baseConnection = nil,
 		glows = {},
 		guis = {},
 		lit = nil,
@@ -919,6 +922,15 @@ local function register(instance: Instance)
 	end
 	entry.childConnection = instance.ChildAdded:Connect(function(child: Instance)
 		addChild(entry, child)
+	end)
+	-- The server re-rates a fixture for the rest of a run (a scripted burst keeps the bulb dead for late joiners,
+	-- who never saw the LightBurst OneShot) and restores it when the run ends.
+	entry.baseConnection = instance:GetAttributeChangedSignal(W.BaseBrightness):Connect(function()
+		entry.base = math.max(0, Attributes.getNumber(instance, W.BaseBrightness, 0))
+		if not entry.active then
+			writeSteadyGlow(entry)
+		end
+		dirty = true
 	end)
 	dirty = true
 end
@@ -943,6 +955,10 @@ local function unregister(instance: Instance)
 	local connection = entry.childConnection
 	if connection then
 		connection:Disconnect()
+	end
+	local baseConnection = entry.baseConnection
+	if baseConnection then
+		baseConnection:Disconnect()
 	end
 	local activeIndex = table.find(activeList, entry)
 	if activeIndex then

@@ -57,6 +57,8 @@ local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetwor
 local CheckpointAirlockService = require(ServerScriptService.Services.Match.CheckpointAirlockService)
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 
+local Levels = require(ServerScriptService.Services.Levels)
+
 --------------------------------------------------------------------------------
 -- Place-settings audit
 --------------------------------------------------------------------------------
@@ -159,6 +161,9 @@ end
 --                            VentNetworkService's graphs and grates; EndRun (early, in reverse) lets it go.
 --   ChemicalProjectileService Level 2 flasks: BeginRun tracks the flasks WorldService built above; pickups, throws,
 --                            stepped server flights, stun clouds (VentNetworkService's graphs, MonsterAIService.Stun).
+--   Levels                   The Level 0 / 1 / 2 controllers (registered with LevelDirector in Init): basement beats,
+--                            the Floor 1 classroom scare (MonsterAIService.AcquireScripted, DoorService's gate), Level 2
+--                            flask restock (ChemicalProjectileService); EndRun (early, in reverse) lets the Creature go.
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
 --   DevToolsService          Dev commands and the Studio auto dev-run; it calls everything above.
 --
@@ -295,6 +300,13 @@ local SERVICES: { Types.Service } = {
 		BeginRun = ChemicalProjectileService.BeginRun,
 		EndRun = ChemicalProjectileService.EndRun,
 		OnPlayerRemoving = ChemicalProjectileService.OnPlayerRemoving,
+	},
+	{
+		Name = Levels.Name,
+		Init = Levels.Init,
+		Start = Levels.Start,
+		BeginRun = Levels.BeginRun,
+		EndRun = Levels.EndRun,
 	},
 	{ Name = RunLifecycleService.Name, Init = RunLifecycleService.Init, Start = RunLifecycleService.Start },
 	{

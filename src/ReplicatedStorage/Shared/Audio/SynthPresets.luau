@@ -2229,6 +2229,370 @@ define("DistantGroan", {
 	},
 })
 
+---------------------------------------------------------------- scripted level moments (Scenes)
+
+-- A bang somewhere in the overhead pipes: a hard knock, the pipe ringing down its length (a slowed slider tick through
+-- a tight comb echo, the tube's mode), the knock's weight, a softer knock answering, the clang travelling away.
+define("PipeBang", {
+	bus = "World",
+	priority = 40,
+	maxVoices = 2,
+	rollOff = r(10, 140),
+	caption = "Caption.PipeBang",
+	space = { reverb(2.8, -4) },
+	layers = {
+		{
+			sample = "FootstepsPlastic",
+			volume = 1.6,
+			speed = r(0.42, 0.5),
+			region = r(0, 0.12),
+			effects = { distortion(0.6), eq(6, 4, -8), compressor(-18, 10, 0.001, 0.2, 6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 1.1,
+			speed = r(0.26, 0.32),
+			effects = { echo(0.017, 0.78, -3), flanger(0.25, 0.5, 0.35), eq(-8, 6, -10) },
+		},
+		{ sample = "JumpLand", volume = 0.9, speed = 0.55, effects = { eq(8, -4, -24) } },
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.8,
+			speed = r(0.5, 0.58),
+			region = r(0, 0.12),
+			delay = 0.42,
+			delayJitter = 0.12,
+			chance = 0.7,
+			effects = { distortion(0.5), eq(4, 2, -10), echo(0.017, 0.6, -6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.45,
+			speed = r(0.36, 0.44),
+			delay = 0.16,
+			grains = grains(2, 4, 0.16, 0.3),
+			volumeJitter = 0.4,
+			effects = { echo(0.032, 0.5, -8), eq(-14, 2, -12) },
+		},
+	},
+})
+
+-- A boiler surging: the burner coughs and roars up (the wind loop slowed, throbbing and rising), a deep whump in the
+-- firebox, steam hissing from a valve, the pipework groaning under the pressure, a knock as it settles.
+define("BoilerSurge", {
+	bus = "World",
+	priority = 44,
+	maxVoices = 1,
+	rollOff = r(12, 160),
+	caption = "Caption.BoilerSurge",
+	duck = { duck("Ambience", 0.55, 0.2, 1.2, 1.4) },
+	layers = {
+		{
+			sample = "Falling",
+			volume = 1.1,
+			speed = 0.3,
+			region = r(0.1, 1.1),
+			looped = true,
+			duration = 2.3,
+			envelope = env(0.35, nil, 1.1),
+			glide = glide(1.3, 1.1),
+			effects = { eq(10, -2, -32), distortion(0.3), tremolo(7.5, 0.5, 0.5) },
+		},
+		{ sample = "Explosion", volume = 0.9, speed = 0.42, region = r(0, 1.4), effects = { eq(8, -6, -26) } },
+		{
+			sample = "Falling",
+			volume = 0.45,
+			speed = r(2.4, 2.8),
+			region = r(0.2, 1),
+			looped = true,
+			duration = 1.4,
+			delay = 0.4,
+			envelope = env(0.3, 0.4, 0.7),
+			effects = { eq(-32, -6, 6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.2,
+			speed = r(0.22, 0.28),
+			region = r(0.02, 0.05),
+			looped = true,
+			duration = 1.7,
+			delay = 0.25,
+			glide = glide(0.7, 1.5),
+			envelope = env(0.4, nil, 0.8),
+			effects = { flanger(0.4, 0.8, 0.6), distortion(0.4) },
+		},
+		{ sample = "JumpLand", volume = 0.6, speed = 0.45, delay = 1.6, effects = { eq(6, -4, -24) } },
+	},
+})
+
+-- Something heavy dragged across the ceiling void, a stroke at a time (looped until the scene stops it): a body
+-- sliding on board (the cloth rustle slowed and boxed in), grit scraping under it, a dull knock now and then, a joist
+-- creaking.
+define("CeilingDrag", {
+	bus = "World",
+	priority = 38,
+	maxVoices = 1,
+	rollOff = r(10, 120),
+	caption = "Caption.CeilingDrag",
+	looped = true,
+	["repeat"] = pulse(0.9, 0.35),
+	layers = {
+		{
+			sample = "GetUp",
+			volume = 1.2,
+			speed = r(0.42, 0.55),
+			duration = 0.75,
+			envelope = env(0.12, nil, 0.4),
+			effects = { eq(6, 0, -16), echo(0.015, 0.5, -8) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.5,
+			speed = r(1.1, 1.5),
+			region = r(0.1, 1.1),
+			regionJitter = 0.1,
+			looped = true,
+			duration = 0.6,
+			envelope = env(0.1, nil, 0.3),
+			effects = { echo(0.013, 0.65, -6), distortion(0.35), eq(-24, 4, -8), tremolo(6, 0.6, 0.35) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 0.6,
+			speed = r(0.5, 0.62),
+			delay = 0.2,
+			delayJitter = 0.3,
+			chance = 0.45,
+			effects = { eq(6, -6, -24) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.14,
+			speed = r(0.3, 0.42),
+			region = r(0.02, 0.03),
+			looped = true,
+			duration = 0.5,
+			delay = 0.3,
+			delayJitter = 0.3,
+			chance = 0.35,
+			glide = glide(0.75, 0.45),
+			envelope = env(0.12, nil, 0.25),
+			effects = { flanger(0.5, 0.7, 0.5), distortion(0.3) },
+		},
+	},
+})
+
+-- A child whispering somewhere in the dark: breath noise shaped into syllables (the wind sped up into a hiss, the
+-- lows cut away, chopped by a low-duty tremolo at a speaking rate) in two short phrases, a faint voiced edge under the
+-- first, far down a reverberant room.
+define("ChildWhisper", {
+	bus = "World",
+	priority = 34,
+	maxVoices = 1,
+	rollOff = r(10, 110),
+	caption = "Caption.ChildWhisper",
+	space = { reverb(4.5, -3) },
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.7,
+			speed = r(2.2, 2.5),
+			region = r(0.1, 1.1),
+			looped = true,
+			duration = 1.5,
+			envelope = env(0.15, nil, 0.4),
+			effects = { eq(-40, 0, 6), tremolo(6.5, 0.9, 0.4), chorus(0.6, 0.3, 0.4) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.55,
+			speed = r(2.4, 2.7),
+			region = r(0.1, 1.1),
+			looped = true,
+			duration = 1,
+			delay = 1.9,
+			delayJitter = 0.2,
+			envelope = env(0.12, nil, 0.45),
+			effects = { eq(-40, 0, 6), tremolo(7.5, 0.9, 0.35) },
+		},
+		{
+			sample = "Ouch",
+			volume = 0.12,
+			speed = r(1.8, 2),
+			region = r(0.06, 0.24),
+			looped = true,
+			duration = 0.9,
+			delay = 0.25,
+			envelope = env(0.2, nil, 0.4),
+			effects = { pitch(1.2), eq(-40, -8, 0), tremolo(6.5, 0.9, 0.4) },
+		},
+	},
+})
+
+-- A child giggling far off in the dark: the voiced grunt pitched up into a small voice and cut into a run of short
+-- grains at a giggle's rate, a quick intake of breath, one last giggle sagging away.
+define("ChildLaugh", {
+	bus = "World",
+	priority = 36,
+	maxVoices = 1,
+	rollOff = r(10, 120),
+	caption = "Caption.ChildLaugh",
+	space = { reverb(5.5, -2) },
+	layers = {
+		{
+			sample = "Oof",
+			volume = 0.7,
+			speed = r(2.1, 2.35),
+			region = r(0.04, 0.16),
+			duration = 0.08,
+			envelope = env(0.005, 0.03, 0.04),
+			grains = grains(4, 6, 0.13, 0.17),
+			volumeJitter = 0.25,
+			effects = { pitch(1.12), eq(-30, 2, -2), echo(0.09, 0.2, -12) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.25,
+			speed = 3,
+			region = r(0.2, 0.6),
+			duration = 0.22,
+			delay = 0.85,
+			envelope = env(0.05, nil, 0.12),
+			effects = { eq(-40, -2, 4) },
+		},
+		{
+			sample = "Oof",
+			volume = 0.5,
+			speed = r(2, 2.2),
+			region = r(0.04, 0.16),
+			duration = 0.1,
+			delay = 1.15,
+			envelope = env(0.005, 0.04, 0.05),
+			grains = grains(2, 3, 0.14, 0.18),
+			glide = glide(0.82, 0.4),
+			effects = { pitch(1.12), eq(-30, 2, -2), echo(0.09, 0.2, -12) },
+		},
+	},
+})
+
+-- Something knocked loose clattering down: the hit, a tin ring, two bounces, a rattle as it rolls to a stop.
+define("ObjectFall", {
+	bus = "World",
+	priority = 40,
+	maxVoices = 2,
+	rollOff = r(8, 110),
+	caption = "Caption.ObjectFall",
+	space = { reverb(1.6, -8) },
+	layers = {
+		{ sample = "JumpLand", volume = 1.1, speed = r(0.85, 0.95), effects = { eq(4, -2, -8) } },
+		{
+			sample = "VolumeSlider",
+			volume = 0.8,
+			speed = r(0.5, 0.6),
+			effects = { echo(0.021, 0.5, -6), distortion(0.3), eq(-12, 4, -4) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.8,
+			speed = r(0.75, 0.85),
+			region = r(0, 0.15),
+			delay = 0.3,
+			effects = { eq(-4, 4, -2), echo(0.021, 0.35, -10) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.5,
+			speed = r(0.85, 0.95),
+			region = r(0, 0.15),
+			delay = 0.5,
+			effects = { eq(-4, 4, -2) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = r(0.9, 1.3),
+			delay = 0.62,
+			grains = grains(4, 7, 0.04, 0.08),
+			volumeJitter = 0.5,
+			effects = { eq(-14, 2, -2), echo(0.03, 0.3, -10) },
+		},
+	},
+})
+
+-- The Creature glitching out of the world: air sucked backwards into nothing (the wind swelling and rising, then cut
+-- dead), a static crackle through it, a sub-bass pop as it goes.
+define("CreatureVanish", {
+	bus = "Monster",
+	priority = 86,
+	maxVoices = 1,
+	rollOff = r(8, 120),
+	caption = "Caption.CreatureVanish",
+	layers = {
+		{
+			sample = "Falling",
+			volume = 1,
+			speed = 1.3,
+			region = r(0.1, 1.1),
+			duration = 0.4,
+			envelope = env(0.34, 0, 0.03),
+			glide = glide(2.2, 0.36),
+			effects = { eq(-20, 2, 4), flanger(6, 0.8, 0.7) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.6,
+			speed = r(2.4, 2.8),
+			region = r(0, 0.3),
+			delay = 0.12,
+			grains = grains(3, 5, 0.035, 0.06),
+			volumeJitter = 0.4,
+			effects = { distortion(0.85), eq(-20, 2, 6) },
+		},
+		{ sample = "JumpLand", volume = 1, speed = 0.38, delay = 0.36, effects = { eq(10, -12, -40) } },
+	},
+})
+
+-- The beat of silence after the snap (2D, for everyone near): the ambience and the world drop away under one slow,
+-- heavy heartbeat and the pressure of a held breath in the ears.
+define("ScareHush", {
+	bus = "Body",
+	priority = 70,
+	maxVoices = 1,
+	caption = "Caption.Heartbeat",
+	duck = { duck("Ambience", 0.1, 0.06, 1, 1.8), duck("World", 0.45, 0.06, 0.7, 0.4) },
+	layers = {
+		{
+			sample = "JumpLand",
+			volume = 1.9,
+			speed = r(0.38, 0.41),
+			region = r(0, 0.2),
+			delay = 0.3,
+			envelope = env(0.004, 0.11, 0.2),
+			effects = { eq(9, -14, -40), compressor(-24, 8, 0.002, 0.15, 6) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 1.3,
+			speed = r(0.45, 0.48),
+			region = r(0, 0.2),
+			delay = 0.6,
+			envelope = env(0.004, 0.08, 0.2),
+			effects = { eq(9, -16, -40), compressor(-24, 8, 0.002, 0.15, 6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.05,
+			speed = 0.2,
+			region = r(0.02, 0.026),
+			looped = true,
+			duration = 1.5,
+			envelope = env(0.4, nil, 0.8),
+			effects = { eq(-10, -20, -40) },
+		},
+	},
+})
+
 ---------------------------------------------------------------- interface (2D)
 
 define("UiClick", {

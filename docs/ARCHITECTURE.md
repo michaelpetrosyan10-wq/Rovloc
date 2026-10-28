@@ -56,7 +56,8 @@ Rovloc/
 │   ├── SpecRunner.luau                     [P1] Dependency-free runner shared by Studio and Lune
 │   └── Specs/                              [P1→P8] One spec per pure module: CollisionMatrix, RunDirector (determinism +
 │                                           solvability over 500 seeds), ZoneGraph, BinaryHeap, VentPathfinder,
-│                                           Hearing, PacingDirector, Doors, Airlock, DataMigration
+│                                           Hearing, PacingDirector, Doors, Airlock, Levels (scenes + the Level 0-2
+│                                           controllers on a fake clock), DataMigration
 └── src/
     ├── ReplicatedFirst/
     │   └── LoadingCurtain.client.luau      [P1] Engine-only black curtain until WorldReady + local ack; 30s BootError fallback
@@ -68,7 +69,8 @@ Rovloc/
     │       │   │                                trap dmg 35, respawn 50%, stun 6, packs 4, OneShot lead/maxLate
     │       │   ├── DifficultyConfig.luau   [P1] Standard / Nightmare: speeds, trap count, battery count, pacing knobs
     │       │   ├── NoiseConfig.luau        [P1] 8 crouch/slow-vent · 10 unscrew · 30 walk · 65 sprint · 75 freestyle ·
-    │       │   │                                90 vent scurry · 130 kick/debris/trap + treading, gasp, splash meter
+    │       │   │                                90 vent scurry · 130 kick/debris/trap + treading, gasp, falling object (24,
+    │       │   │                                Low), splash meter
     │       │   ├── CameraConfig.luau       [P1] State offsets, eye points per MoveState, FOV, bob/sway/shake, panic curve
     │       │   ├── CreatureConfig.luau     [P1] Per-state speeds, senses, EMF 45, PathAgent, hitbox per PoseMode, eye offsets
     │       │   ├── PerkConfig.luau         [P1] Rusty Screwdriver 1.2s · Lithium Cell +50% · Adrenaline Syringe (2 modes)
@@ -108,8 +110,11 @@ Rovloc/
     │       │                                    vent stun flail, lunge, swim, locker rip, door smash
     │       ├── Sequence/
     │       │   ├── Timeline.luau           [P3] Server-time track runner (camera, light, sound, creature, door); fast-forward
-    │       │   └── DoorMotion.luau         [P6] A fixture door's motion on server time (swing / slide / smash, eases),
-    │       │                                    shared by DoorService and DoorController; the door OneShot's args
+    │       │   ├── DoorMotion.luau         [P6] A fixture door's motion on server time (swing / slide / smash, eases),
+    │       │   │                                shared by DoorService and DoorController; the door OneShot's args
+    │       │   └── Scenes.luau             [P6] The level scenes as data: the Floor 1 classroom scare's beat times (the
+    │       │                                    server schedules from them) and every scene Timeline (the clients play
+    │       │                                    them), the basement beats, the subject camera maths (stumble, face drag)
     │       ├── World/
     │       │   └── ProceduralWorldBuilder/
     │       │       ├── init.luau           [P1] BuildAuthoritative / BuildCosmetic / ClearRuntime + RegisterProp / RegisterRig
@@ -223,10 +228,17 @@ Rovloc/
     │       │   │                                (radius + clear line, or VentGraph hops in ducts), Shattered signal
     │       │   ├── LockerHidingService.luau [P7] Enter / exit, Inspect() hook, server-run hold-breath meter, gasp
     │       │   └── FloodedPoolService.luau [P7] Swim physics validation, oxygen, grab + drag, struggle meter, floodlight
-    │       ├── Levels/                      Per-level controllers registered with LevelDirector
-    │       │   ├── Level0_BasementController.luau [P6] Trap gauntlet activation, basement ambience beats
-    │       │   ├── Level1_HallwaysController.luau [P6] Classroom scare timeline, light burst, gate slam, Creature release
-    │       │   ├── Level2_ScienceHallController.luau [P6] Lab flask seeding, patrol set
+    │       ├── Levels/
+    │       │   ├── init.luau                [P6] The Levels service: registers the controllers with LevelDirector, runs
+    │       │   │                                their run resets and one Heartbeat driver
+    │       │   ├── LevelKit.luau            [P6] Shared: server eyes / feet, LOS, "can anyone see it", OneShots, a
+    │       │   │                                server-time beat schedule
+    │       │   ├── Level0_BasementController.luau [P6] Seeded ambience beats 25-50 s apart, 25-45 studs out of sight:
+    │       │   │                                pipe bang, boiler surge (bulbs stutter), ceiling drag, child, falling object
+    │       │   ├── Level1_HallwaysController.luau [P6] The classroom scare: staged Creature, glass / room / near / bypass
+    │       │   │                                triggers, NeckSnap, light burst (bulbs dead for the run), vanish, gate slam,
+    │       │   │                                hidden relocation, release + alert; once per run
+    │       │   ├── Level2_ScienceHallController.luau [P6] Flask restock (two in play, out of sight, one per 45 s), hint
     │       │   ├── Level3_GymnasiumController.luau [P7] Locker-room / gym patrols, stalk tuning
     │       │   ├── Level4_FloodedPoolController.luau [P7] Pool activation, AquaticStalk handoff, floodlight wiring
     │       │   └── Level5_RoofController.luau [P8] Door smash, final sprint, parachute leap, lightning reveal + vanish
@@ -252,7 +264,8 @@ Rovloc/
                 ├── Core/
                 │   ├── AudioController.luau        [P1] Buses, cue playback with server-time offset, zone reverb, nearby emitters
                 │   ├── LightingController.luau     [P1] Only writer of level lights: active level ∧ budget, Timeline overrides,
-                │   │                                    fixture glow (tubes dim, flicker and die with their light), area grade
+                │   │                                    fixture glow (tubes dim, flicker and die with their light), area grade;
+                │   │                                    BaseBrightness re-read live (the server kills burst bulbs for the run)
                 │   ├── CosmeticWorldController.luau [P1] Skyline + non-interactive dressing from RunSeed
                 │   ├── DevToolsController.luau     [P1] Noise rings, ZoneGraph / VentGraph overlays, Creature billboard
                 │   ├── InputController.luau        [P3] ContextActionService context stack (Menu > Cutscene > … > OnFoot)
@@ -292,6 +305,9 @@ Rovloc/
                 │   ├── DoorController.luau         [P6] Renders every door motion each PreRender from its OneShot, impacts
                 │   ├── ChemicalThrowController.luau [P6] Held flasks (own + teammates'), HandRig "Flask" pose, wind-up,
                 │   │                                   aim arc, predicted throw reconciled to Launch, shatter VFX + cloud
+                │   ├── LevelScenesController.luau  [P6] Registers the Scenes timelines + their tracks: the subject's stumble
+                │   │                                   and face drag (Cutscene override), panic, the hush, moving sounds,
+                │   │                                   bulb surges
                 │   ├── LockerController.luau       [P7] Locker enter / peek + hold-breath UI (server-judged)
                 │   ├── SwimController.luau         [P7] Tread / freestyle input, underwater FX
                 │   └── StruggleController.luau     [P7] Mash UI (server-judged)
@@ -510,6 +526,26 @@ credits from these signals.
 **Floor debris.** `NoiseAndDirectorService` owns debris noise: entering a `FloorDebris` volume during a run emits the
 130-stud `FloorDebris` noise and a `GlassCrunch` cue (with a per-player cooldown). The Floor 1 `ScareStep` stays with the
 P6 Level 1 controller.
+
+**Level scenes (P6).** The `Levels` service registers the Level 0 / 1 / 2 controllers with `LevelDirector`. Scenes are
+data (`Shared/Sequence/Scenes`): the server times its authoritative beats from the same constants the clients' timelines
+use, and announces each scene with one `OneShot` `Timeline` (`LevelScenesController` registers them and their tracks).
+- *Floor 1 classroom scare, once per run.* On activation the Creature is taken with
+  `MonsterAIService.AcquireScripted("L1_ClassroomScare")` and, on the next step and only while nobody can see the spot
+  it leaves or the corner, staged at `L1_ScarePose_Classroom108` in `PoseMode Hunched` (a scripted hold in Hunched poses
+  the Dormant corner crouch). The first playing participant on the glass (`L1_Trigger_GlassStep`), in Classroom 108,
+  within 14 studs with a clear line, in the corridor past the glass, past the gate or in its bypass vent sets it off:
+  the `FloorDebris` noise at their feet, the scene timeline (crunch, the subject's stumble and their view dragged onto
+  the Creature, NeckSnap with the body turned so the stare lands on them, a hush, the burst sounds), `LightBurst` on
+  both glow fixtures (their `BaseBrightness` set to 0 for the rest of the run, restored at `EndRun`, so late joiners see
+  them dead), `CreatureVanish` + `SetHidden(true)` as the bulbs die, the `HallwayGate` locked shut through `DoorService`
+  (`GateSlam`; `Locked` refuses every gameplay open, so the bypass vent is the only way on), the hidden Creature moved
+  east of the gate out of everyone's sight, then `Release("Patrol")` + `Alert(glass, "High")` 6-9 s after the slam.
+  A Creature that could not be taken still leaves the crunch, the stumble and the gate.
+- *Level 0 beats.* A seeded director plays a positional scare every 25-50 s (never the same twice in a row, never within
+  8 s of a `TrapSnap`) 25-45 studs from a random player, at a point nobody can see.
+- *Level 2 flasks.* At least two untaken flasks stay in play: a new one appears at a free `FlaskCandidate` more than
+  30 studs from everyone and out of sight, at most one every 45 s; the first approach to a flask shows a one-time hint.
 
 **Dev runs.** Any state-changing dev command during a run sets `ReplicatedStorage.DevRun = true`. `MatchAndDataService`
 (P8) must not award credits, escapes or BestTime for a run with `DevRun`.

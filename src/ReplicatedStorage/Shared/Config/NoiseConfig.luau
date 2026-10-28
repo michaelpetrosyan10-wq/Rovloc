@@ -30,6 +30,8 @@ NoiseConfig.Kinds = table.freeze({
 	FloorDebris = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
 	TrapSnap = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
 	DoorSlam = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
+	-- Something knocked loose (a scripted Level 0 ambience beat): a quiet clatter, heard like any other noise.
+	FallingObject = { radius = 24, priority = "Low", medium = "Air", interval = 0 },
 	Scripted = { radius = 0, priority = "Low", medium = "Air", interval = 0 },
 } :: { [string]: NoiseSpec })
 

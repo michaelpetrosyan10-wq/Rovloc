@@ -121,6 +121,7 @@ local STRINGS: { [string]: string } = {
 	["Hud.FlaskThrow.Gamepad"] = "Hold R2 to aim the flask, release to throw.",
 	["Hud.FlaskThrow.Touch"] = "Hold THROW to aim the flask, release to throw.",
 	["Hud.FlaskHandsFull"] = "Your hands are full. Throw the flask you're carrying first.",
+	["Hud.FlaskStun"] = "Throw a flask to stun it.",
 
 	-- Checkpoints
 	["Checkpoint.Reached"] = "Checkpoint reached. +%d credits",
@@ -179,6 +180,13 @@ local STRINGS: { [string]: string } = {
 	["Caption.DoorSmash"] = "[a door is torn apart]",
 	["Caption.FireDoor"] = "[a fire door slams shut]",
 	["Caption.DoorCreak"] = "[a door creaks on its hinges]",
+	["Caption.PipeBang"] = "[a pipe bangs somewhere in the dark]",
+	["Caption.BoilerSurge"] = "[a boiler roars]",
+	["Caption.CeilingDrag"] = "[something drags across the ceiling]",
+	["Caption.ChildWhisper"] = "[a child whispers]",
+	["Caption.ChildLaugh"] = "[a child giggles in the dark]",
+	["Caption.ObjectFall"] = "[something clatters to the floor]",
+	["Caption.CreatureVanish"] = "[a rush of air, then nothing]",
 
 	-- Network (Net kicks a client that floods or sends malformed messages)
 	["Net.Kicked"] = "Disconnected: your game sent too many invalid requests. Please rejoin.",
