@@ -151,6 +151,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "LockerController",
+		load = function(): any
+			return require(Gameplay.LockerController)
+		end,
+	},
+	{
 		name = "AirlockController",
 		load = function(): any
 			return require(Match.AirlockController)

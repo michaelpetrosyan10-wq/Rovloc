@@ -57,7 +57,8 @@ Rovloc/
 │   └── Specs/                              [P1→P8] One spec per pure module: CollisionMatrix, RunDirector (determinism +
 │                                           solvability over 500 seeds), ZoneGraph, BinaryHeap, VentPathfinder,
 │                                           Hearing, PacingDirector, Doors, Airlock, Levels (scenes + the Level 0-2
-│                                           controllers on a fake clock), DataMigration
+│                                           controllers on a fake clock), Lockers (hiding, the breath check, the rip
+│                                           hand-over), Level3 (gym stalk, sweeps, beats), DataMigration
 └── src/
     ├── ReplicatedFirst/
     │   └── LoadingCurtain.client.luau      [P1] Engine-only black curtain until WorldReady + local ack; 30s BootError fallback
@@ -96,7 +97,9 @@ Rovloc/
     │       │   ├── SynthPresets.luau       [P1] Screech, heartbeat, vent scrape, trap snap, bone crunch, drip, glass crunch,
     │       │   │                                drone, EMF static, chem hiss, gate slam, light burst, thunder, rain, splash,
     │       │   │                                gasp, breathing, footsteps per material, fire door swing / latch and door
-    │       │   │                                creak [P6] (+ caption text)
+    │       │   │                                creak [P6], the Creature sniffing at locker slits, a locker torn open, a
+    │       │   │                                held breath let out, locker slams, ball bounces, shower drips [P7]
+    │       │   │                                (+ caption text)
     │       │   ├── VoicePool.luau          [P1] Pooled voices, per-bus caps, priority stealing, distance pre-cull
     │       │   └── AudioBuses.luau         [P1] SoundGroup tree + environment DSP (Vent, Underwater, Outdoor, Lobby)
     │       ├── Animation/
@@ -112,9 +115,13 @@ Rovloc/
     │       │   ├── Timeline.luau           [P3] Server-time track runner (camera, light, sound, creature, door); fast-forward
     │       │   ├── DoorMotion.luau         [P6] A fixture door's motion on server time (swing / slide / smash, eases),
     │       │   │                                shared by DoorService and DoorController; the door OneShot's args
+    │       │   ├── LockerMotion.luau       [P7] A locker's moments on server time, shared by LockerHidingService and
+    │       │   │                                LockerController: enter / exit schedules, door poses (DoorMotion
+    │       │   │                                messages), the lungs meter, the check's warning / peek / grace numbers
     │       │   └── Scenes.luau             [P6] The level scenes as data: the Floor 1 classroom scare's beat times (the
     │       │                                    server schedules from them) and every scene Timeline (the clients play
-    │       │                                    them), the basement beats, the subject camera maths (stumble, face drag)
+    │       │                                    them), the basement beats, the subject camera maths (stumble, face drag),
+    │       │                                    the Floor 3 locker-room beats [P7]
     │       ├── World/
     │       │   └── ProceduralWorldBuilder/
     │       │       ├── init.luau           [P1] BuildAuthoritative / BuildCosmetic / ClearRuntime + RegisterProp / RegisterRig
@@ -204,7 +211,8 @@ Rovloc/
     │       │            server, the crawling client and the Creature)
     │       ├── Monster/
     │       │   └── MonsterAIService/
-    │       │       ├── init.luau           [P5] State machine host, 10 Hz brain, AcquireScripted(), hook registry
+    │       │       ├── init.luau           [P5] State machine host, 10 Hz brain, AcquireScripted(), hook registry,
+    │       │       │                            SetSpeedScale [P7] (level tuning: the Level 3 gym)
     │       │       ├── Brain.luau          [P5] Shared state types, pure transition table, catch rules, level knowledge
     │       │       ├── CreatureBody.luau   [P5] Ownership reassert, hitbox sizing per PoseMode, Hidden, collision modes
     │       │       ├── Perception.luau     [P5] Eye-to-EyePoint LOS (never limbs), view cones
@@ -226,7 +234,10 @@ Rovloc/
     │       │   │                                classroom + roof doors; Heartbeat-stepped leaves, never crushing, cues
     │       │   ├── ChemicalProjectileService.luau [P6] Flask pickup / hold / throw, stepped server raycasts, stun cloud
     │       │   │                                (radius + clear line, or VentGraph hops in ducts), Shattered signal
-    │       │   ├── LockerHidingService.luau [P7] Enter / exit, Inspect() hook, server-run hold-breath meter, gasp
+    │       │   ├── LockerHidingService.luau [P7] Only writer of OccupantUserId / DoorOpen + locker door poses: Hide
+    │       │   │                                prompt, Anchor lock + Hiding override, stepped doors, exit to a clear
+    │       │   │                                spot; the locker inspector: server-judged hold-breath check, gasp (cue +
+    │       │   │                                noise), the LockerRip hand-over to JumpscareHandler
     │       │   └── FloodedPoolService.luau [P7] Swim physics validation, oxygen, grab + drag, struggle meter, floodlight
     │       ├── Levels/
     │       │   ├── init.luau                [P6] The Levels service: registers the controllers with LevelDirector, runs
@@ -239,7 +250,8 @@ Rovloc/
     │       │   │                                triggers, NeckSnap, light burst (bulbs dead for the run), vanish, gate slam,
     │       │   │                                hidden relocation, release + alert; once per run
     │       │   ├── Level2_ScienceHallController.luau [P6] Flask restock (two in play, out of sight, one per 45 s), hint
-    │       │   ├── Level3_GymnasiumController.luau [P7] Locker-room / gym patrols, stalk tuning
+    │       │   ├── Level3_GymnasiumController.luau [P7] The fast stalk on the court (SetSpeedScale), locker-room
+    │       │   │                                sweeps and court prowls (Alert), seeded locker-room beats out of sight
     │       │   ├── Level4_FloodedPoolController.luau [P7] Pool activation, AquaticStalk handoff, floodlight wiring
     │       │   └── Level5_RoofController.luau [P8] Door smash, final sprint, parachute leap, lightning reveal + vanish
     │       └── Match/
@@ -308,7 +320,9 @@ Rovloc/
                 │   ├── LevelScenesController.luau  [P6] Registers the Scenes timelines + their tracks: the subject's stumble
                 │   │                                   and face drag (Cutscene override), panic, the hush, moving sounds,
                 │   │                                   bulb surges
-                │   ├── LockerController.luau       [P7] Locker enter / peek + hold-breath UI (server-judged)
+                │   ├── LockerController.luau       [P7] Locker doors for everyone; the hider's camera in / out and behind
+                │   │                                   the slits ("Trapped" override), Locker context, lungs meter, the
+                │   │                                   hold-breath prompt (device-aware), heartbeat via the panic floor
                 │   ├── SwimController.luau         [P7] Tread / freestyle input, underwater FX
                 │   └── StruggleController.luau     [P7] Mash UI (server-judged)
                 └── Match/
@@ -546,6 +560,27 @@ use, and announces each scene with one `OneShot` `Timeline` (`LevelScenesControl
   8 s of a `TrapSnap`) 25-45 studs from a random player, at a point nobody can see.
 - *Level 2 flasks.* At least two untaken flasks stay in play: a new one appears at a free `FlaskCandidate` more than
   30 studs from everyone and out of sight, at most one every 45 s; the first approach to a flask shows a one-time hint.
+- *Level 3 gym (P7).* While the Creature hunts on the court (Patrol, InvestigateNoise, WallChase inside `L3_Gymnasium`)
+  its pace is scaled by 1.3 through `MonsterAIService.SetSpeedScale` (1 elsewhere and once the level is left). Low
+  `Alert`s steer it, never at a player: a *sweep* to a seeded locker in a room a participant has spent 12 s in (it
+  peeks into the nearest lockers), a *prowl* back to the court after 30 s patrolling elsewhere with nobody on it.
+  Locker-room beats (a dripping shower, a locker banging with a quiet `FallingObject` noise, a ball bouncing to rest
+  far off) play every 22-44 s out of sight. Neither steering nor beats happen during a breath check or 6 s after one.
+
+**Lockers and the hold-breath check (P7).** `LockerHidingService` owns every `HideableLocker`. Hiding (the 0.25 s Hide
+prompt; Alive, on foot, no lock, the locker free, not being chased) takes `CharacterService.Lock(player, "Locker",
+"Anchor")`, the `Hiding` override (the Creature never sees a Hiding player) and switches the torch off; the door swings
+open, the body is moved to the `HideAnchor`, the door shuts (`LockerMotion` schedules; doors are server-stepped and
+announced as DoorMotion OneShots so clients render them smoothly). Leaving (`ExitHide` or the prompt key) goes to the
+first clear spot in front. The Creature's `InvestigateNoise` calls the registered inspector in its own thread at each
+door: an empty locker is `Empty` after a short look; an occupied one runs the check on the server's clock. The occupant
+is warned (`PrivateCue BreathCheck`) 0.9 s before a seeded 3.5-6 s peek; `BreathInput` holds drain the 7 s lungs and
+releases recover them at 0.6/s. Running out while it is at the door, letting go with under 30% left, or not holding
+inside the window for more than 0.5 s is a loud gasp (`Gasp` cue + noise) and `Caught`; holding through is
+`HiddenSafe` (warning + longest peek < the longest hold, so a player who holds when warned always makes it). On
+`Caught`, `InvestigateNoise` tries the Locker catch; once `JumpscareHandler` holds the victim, the door is torn off
+(`LockerRip` OneShot), the locker's own lock and override are released and the locker stays smashed for the run; the
+victim is put down outside when the catch ends. A catch that does not take leaves them hidden (the gasp brings it back).
 
 **Dev runs.** Any state-changing dev command during a run sets `ReplicatedStorage.DevRun = true`. `MatchAndDataService`
 (P8) must not award credits, escapes or BestTime for a run with `DevRun`.

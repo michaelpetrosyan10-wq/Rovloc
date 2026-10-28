@@ -779,6 +779,14 @@ function FirstPersonController.SetPanicFloor(token: string, value: number?)
 	end
 end
 
+-- Silences the panic breathing loop while any token holds it (a held breath: the locker check); the heart stays.
+function FirstPersonController.SuppressBreathing(token: string, suppressed: boolean)
+	local fx = panic
+	if fx then
+		fx:SetBreathSuppressed(token, suppressed)
+	end
+end
+
 function FirstPersonController.GetPanic(): number
 	local fx = panic
 	return if fx then fx:GetPanic() else 0

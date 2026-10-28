@@ -655,11 +655,28 @@ end
 -- Public API
 --------------------------------------------------------------------------------
 
+local promptHolds: { [string]: boolean } = {}
+
+local function applyPrompts()
+	-- Prompts go with the HUD: nothing can be started on this client while it is hidden or a hold is on them.
+	ProximityPromptService.Enabled = visibleTarget and next(promptHolds) == nil
+end
+
 -- Shows or hides the whole HUD (cutscenes). Fades; prompts and touch buttons go with it.
 function HUD.SetVisible(visible: boolean)
 	visibleTarget = visible
-	-- Prompts go with the HUD: nothing can be started on this client while it is hidden.
-	ProximityPromptService.Enabled = visible
+	applyPrompts()
+end
+
+-- Turns every ProximityPrompt off on this client while any token holds it (hidden in a locker: the neighbours' Hide
+-- prompts must not show through the door), without hiding the rest of the HUD.
+function HUD.SetPromptsSuppressed(token: string, suppressed: boolean)
+	if suppressed then
+		promptHolds[token] = true
+	else
+		promptHolds[token] = nil
+	end
+	applyPrompts()
 end
 
 function HUD.IsVisible(): boolean

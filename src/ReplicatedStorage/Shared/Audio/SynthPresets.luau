@@ -1572,6 +1572,253 @@ define("LockerDoor", {
 	},
 })
 
+---------------------------------------------------------------- lockers and the gym (P7)
+
+-- The Creature breathing in at the locker slits: a long, wet, snuffling draw through the vents (the wind loop slowed
+-- into the nasal band, chopped by a slow tremolo into sniffs), a held beat, then a rattling exhale through bared teeth
+-- (slowed further, torn by distortion) and now and then a wet click of the jaw. Close and dry: it is inches away.
+define("CreatureSniff", {
+	bus = "Monster",
+	priority = 82,
+	maxVoices = 2,
+	rollOff = r(4, 46),
+	caption = "Caption.CreatureSniff",
+	looped = true,
+	["repeat"] = pulse(2.25, 0.35),
+	layers = {
+		{
+			sample = "Falling",
+			volume = 1,
+			speed = r(0.62, 0.7),
+			region = r(0.2, 1),
+			looped = true,
+			duration = 0.95,
+			envelope = env(0.3, 0.35, 0.3),
+			effects = { eq(-14, 6, -4), tremolo(7.5, 0.7, 0.45), echo(0.03, 0.2, -10) },
+		},
+		{
+			sample = "Falling",
+			volume = 1.1,
+			speed = r(0.46, 0.52),
+			region = r(0.1, 1.1),
+			delay = 1.2,
+			looped = true,
+			duration = 0.85,
+			envelope = env(0.08, 0.25, 0.5),
+			effects = { eq(-6, 3, -14), distortion(0.35), tremolo(16, 0.35, 0.5) },
+		},
+		{
+			sample = "Oof",
+			volume = 0.4,
+			speed = r(0.3, 0.36),
+			delay = 1.18,
+			chance = 0.45,
+			envelope = env(0.06, nil, 0.4),
+			effects = { pitch(0.6), distortion(0.5), eq(4, -2, -18) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.25,
+			speed = r(2.2, 2.8),
+			region = r(0, 0.03),
+			delay = 2,
+			chance = 0.35,
+			effects = { eq(-20, 4, -4) },
+		},
+	},
+})
+
+-- Letting a held breath go, quietly: a slow, shaking exhale through the nose (the wind loop low and narrow, a 7 Hz
+-- tremble in it), right inside your head.
+define("BreathExhale", {
+	bus = "Body",
+	priority = 50,
+	maxVoices = 1,
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.45,
+			speed = r(0.82, 0.9),
+			region = r(0.2, 1),
+			looped = true,
+			duration = 1.3,
+			envelope = env(0.12, 0.45, 0.7),
+			effects = { eq(-24, 0, -10), tremolo(7, 0.4, 0.5) },
+		},
+		{
+			sample = "GetUp",
+			volume = 0.12,
+			speed = r(1.2, 1.4),
+			region = r(0, 0.1),
+			delay = 0.9,
+			chance = 0.5,
+			effects = { eq(-16, 2, -8) },
+		},
+	},
+})
+
+-- A locker door torn off its hinge: the sheet buckling with a long shriek of steel (the slider ring slowed, gliding
+-- down, flanged and torn), the hinge pins snapping, then the door crashing flat onto the tiles a beat later.
+define("LockerRip", {
+	bus = "World",
+	priority = 92,
+	maxVoices = 2,
+	rollOff = r(14, 220),
+	caption = "Caption.LockerRip",
+	duck = { duck("Ambience", 0.35, 0.01, 0.8, 1.2) },
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 1.2,
+			speed = 0.5,
+			region = r(0.01, 0.05),
+			looped = true,
+			duration = 0.5,
+			glide = glide(0.55, 0.45),
+			envelope = env(0.01, nil, 0.25),
+			effects = { flanger(1.1, 0.8, 0.6), distortion(0.7), eq(-6, 6, 0) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 1.6,
+			speed = r(0.7, 0.8),
+			region = r(0, 0.12),
+			delay = 0.16,
+			grains = grains(2, 3, 0.04, 0.07),
+			effects = { distortion(0.6), eq(2, 6, 4), compressor(-18, 10, 0.001, 0.15, 6) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 1.4,
+			speed = 0.62,
+			delay = 0.52,
+			effects = { eq(8, -2, -16) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 1.3,
+			speed = r(0.48, 0.55),
+			region = r(0, 0.18),
+			delay = 0.52,
+			effects = { distortion(0.5), echo(0.017, 0.7, -4), reverb(1.6, -6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.6,
+			speed = r(0.34, 0.4),
+			delay = 0.55,
+			effects = { echo(0.021, 0.75, -4), eq(-8, 6, -8) },
+		},
+	},
+})
+
+-- A locker door banging shut somewhere in the changing rooms: the slam of thin steel on its frame, the sheet ringing
+-- through a tight comb echo, the latch rattling after it, all thrown off bare tile.
+define("LockerSlam", {
+	bus = "World",
+	priority = 42,
+	maxVoices = 2,
+	rollOff = r(10, 150),
+	caption = "Caption.LockerSlam",
+	space = { reverb(1.9, -5) },
+	layers = {
+		{
+			sample = "FootstepsPlastic",
+			volume = 1.5,
+			speed = r(0.52, 0.6),
+			region = r(0, 0.14),
+			effects = { distortion(0.45), eq(4, 6, -6), compressor(-18, 10, 0.001, 0.15, 6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.9,
+			speed = r(0.36, 0.42),
+			effects = { echo(0.013, 0.72, -4), flanger(0.4, 0.5, 0.35), eq(-8, 6, -6) },
+		},
+		{ sample = "JumpLand", volume = 0.8, speed = 0.7, effects = { eq(6, -4, -18) } },
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.4,
+			speed = r(1.3, 1.7),
+			region = r(0, 0.2),
+			regionJitter = 0.05,
+			delay = 0.09,
+			grains = grains(3, 5, 0.035, 0.07),
+			volumeJitter = 0.35,
+			effects = { flanger(1.5, 0.5, 0.4), eq(-10, 4, 0) },
+		},
+	},
+})
+
+-- One bounce of a basketball on the gym's wooden floor, far off: the hollow rubber thump (the landing thump at a
+-- higher pitch, its body boosted), the faint ping of the inflated ball, and the hall's long tail under it.
+define("BallBounce", {
+	bus = "World",
+	priority = 30,
+	maxVoices = 3,
+	rollOff = r(12, 200),
+	caption = "Caption.BallBounce",
+	space = { reverb(5.5, -2, -4) },
+	layers = {
+		{
+			sample = "JumpLand",
+			volume = 1.3,
+			speed = r(0.95, 1.05),
+			effects = { eq(6, 4, -14), compressor(-20, 6, 0.002, 0.12, 4) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.22,
+			speed = r(0.62, 0.7),
+			region = r(0.02, 0.026),
+			looped = true,
+			duration = 0.09,
+			envelope = env(0.002, 0.02, 0.06),
+			effects = { eq(-20, 6, -10) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.35,
+			speed = r(0.72, 0.8),
+			region = r(0, 0.08),
+			effects = { eq(2, 2, -12) },
+		},
+	},
+})
+
+-- A showerhead dripping onto tile: a heavy drop's plink and splat with the tiled room ringing after it.
+define("ShowerDrip", {
+	bus = "World",
+	priority = 16,
+	maxVoices = 3,
+	rollOff = r(4, 70),
+	space = { reverb(2.4, -4) },
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.55,
+			speed = r(2, 2.7),
+			region = r(0.03, 0.035),
+			looped = true,
+			duration = 0.08,
+			volumeJitter = 0.3,
+			envelope = env(0.001, 0.012, 0.055),
+			glide = glide(1.35, 0.05),
+			effects = { eq(-30, -2, 4), echo(0.09, 0.35, -10) },
+		},
+		{
+			sample = "WaterImpact",
+			volume = 0.3,
+			speed = r(2.2, 2.9),
+			region = r(0, 0.1),
+			regionJitter = 0.02,
+			volumeJitter = 0.3,
+			envelope = env(0.001, 0.04, 0.05),
+			effects = { eq(-24, 0, 4) },
+		},
+	},
+})
+
 define("Splash", {
 	bus = "World",
 	priority = 60,

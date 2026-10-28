@@ -19,6 +19,10 @@
 -- boiler surge that makes the nearby bulbs stutter, something dragging away across the ceiling, a child's whisper or
 -- giggle, an object clattering to the floor.
 --
+-- Floor 3, the locker-room beats (positional, out of sight, from Level3_GymnasiumController): a showerhead dripping
+-- onto tile, a locker door banging (or rattling) somewhere in the changing rooms, a basketball bouncing to rest far off
+-- in the dark gym.
+--
 -- Track kinds beyond SequenceController's built-ins ("sound", "light", "callback") and CreatureController's
 -- "creature" are LevelScenesController's: Tracks.* below. Pure camera maths (Flinch, PullWeight, Pulled) are specced
 -- in tests/Specs/Levels.spec.luau.
@@ -33,6 +37,8 @@ type Track = Timeline.Track
 type Key = Timeline.Key
 
 export type BeatKind = "PipeBang" | "BoilerSurge" | "CeilingDrag" | "ChildVoice" | "FallingObject"
+
+export type GymBeatKind = "ShowerDrip" | "LockerBang" | "BallBounce"
 
 export type ClassroomScare = {
 	Id: string,
@@ -138,6 +144,34 @@ Scenes.CeilingDragDistance = 16
 Scenes.CeilingDragSeconds = 3.6
 -- How many bulbs a boiler surge can stutter.
 Scenes.SurgeLights = 4
+
+-- Every Floor 3 beat kind, in a fixed order (the director's seeded picks index into it).
+local GYM_BEAT_KINDS: { GymBeatKind } = { "ShowerDrip", "LockerBang", "BallBounce" }
+Scenes.GymBeatKinds = table.freeze(table.clone(GYM_BEAT_KINDS))
+
+function Scenes.gymBeatKinds(): { GymBeatKind }
+	return table.clone(GYM_BEAT_KINDS)
+end
+
+-- Timeline id per Floor 3 beat (a locker bang is a slam or a rattle).
+Scenes.GymBeatIds = table.freeze({
+	ShowerDrip = { "L3_ShowerDrip" },
+	LockerBang = { "L3_LockerBang", "L3_LockerRattle" },
+	BallBounce = { "L3_BallBounce" },
+} :: { [string]: { string } })
+
+-- The ball's bounces (seconds from the beat's start, volume): each one lower and sooner, coming to rest.
+Scenes.BallBounces = table.freeze({
+	{ t = 0, volume = 1.2 },
+	{ t = 0.62, volume = 1.05 },
+	{ t = 1.13, volume = 0.9 },
+	{ t = 1.54, volume = 0.76 },
+	{ t = 1.87, volume = 0.62 },
+	{ t = 2.13, volume = 0.5 },
+	{ t = 2.33, volume = 0.38 },
+	{ t = 2.48, volume = 0.28 },
+	{ t = 2.59, volume = 0.2 },
+} :: { { t: number, volume: number } })
 
 --------------------------------------------------------------------------------
 -- Pure camera maths (the subject's stumble and the drag onto the Creature's face)
@@ -295,9 +329,65 @@ local function beats(): { [string]: Spec }
 	}
 end
 
+-- A showerhead's sputter of drops, the gaps uneven.
+local SHOWER_DROPS: { { t: number, volume: number } } = {
+	{ t = 0, volume = 1 },
+	{ t = 0.58, volume = 0.75 },
+	{ t = 1.02, volume = 0.9 },
+	{ t = 1.66, volume = 0.65 },
+	{ t = 2.08, volume = 0.85 },
+	{ t = 2.86, volume = 0.6 },
+	{ t = 3.3, volume = 0.8 },
+	{ t = 4.15, volume = 0.55 },
+}
+
+-- Something worrying at a locker door: short shakes of the latch.
+local RATTLES: { { t: number, volume: number } } = {
+	{ t = 0, volume = 0.9 },
+	{ t = 0.17, volume = 0.7 },
+	{ t = 0.31, volume = 0.85 },
+	{ t = 0.5, volume = 0.6 },
+	{ t = 1.35, volume = 0.75 },
+	{ t = 1.5, volume = 0.55 },
+}
+
+-- One "sound" track per hit, so every hit keeps its own volume.
+local function hits(preset: string, list: { { t: number, volume: number } }): { Track }
+	local tracks: { Track } = {}
+	for _, hit in list do
+		table.insert(tracks, sound(ARGS.At, preset, hit.t, hit.volume))
+	end
+	return tracks
+end
+
+local function gymBeats(): { [string]: Spec }
+	local bounces = Scenes.BallBounces :: { { t: number, volume: number } }
+	return {
+		L3_ShowerDrip = { duration = 4.8, tracks = hits("ShowerDrip", SHOWER_DROPS) },
+		L3_LockerBang = {
+			duration = 2.4,
+			tracks = {
+				sound(ARGS.At, "LockerSlam", 0, 1.2),
+				sound(ARGS.At, "LockerSlam", 0.52, 0.55),
+				sound(ARGS.At, "LockerDoor", 0.86, 0.6),
+			},
+		},
+		L3_LockerRattle = { duration = 2.2, tracks = hits("LockerDoor", RATTLES) },
+		L3_BallBounce = { duration = 3.4, tracks = hits("BallBounce", bounces) },
+	}
+end
+
+-- The timeline ids a Floor 3 beat of `kind` can play.
+function Scenes.gymBeatIds(kind: GymBeatKind): { string }
+	return Scenes.GymBeatIds[kind] or {}
+end
+
 -- Every scene timeline by id (fresh tables; callers register them).
 function Scenes.timelines(): { [string]: Spec }
 	local out = beats()
+	for id, spec in gymBeats() do
+		out[id] = spec
+	end
 	out[CLASSROOM.Id] = classroomScare()
 	out[CLASSROOM.SkippedId] = glassStep()
 	return out

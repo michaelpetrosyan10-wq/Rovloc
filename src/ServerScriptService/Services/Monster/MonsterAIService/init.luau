@@ -25,7 +25,8 @@
 -- Patrol WakeDelay seconds later. A level controller that acquired it (AcquireScripted) in its Activate keeps it.
 --
 -- Hooks: RegisterLockerInspector (P7 lockers), RegisterPoolGrabber (P7 pool), AcquireScripted (P6 / P8 cutscenes),
--- Stun (P6 chemicals; a catch in progress is called off), Alert (scripted noises, heard like any other).
+-- Stun (P6 chemicals; a catch in progress is called off), Alert (scripted noises, heard like any other),
+-- SetSpeedScale (P7 level tuning: Level 3's gym).
 --
 -- Dev commands (DevToolsService): ai [state|pause|resume|tp], hunt, ignoreme.
 
@@ -153,6 +154,8 @@ local TP_MAX = 60
 local SPOT_PRESET = "Screech"
 local SPOT_VOLUME = 0.75
 local STUN_PRESET = "Screech"
+local MIN_SPEED_SCALE = 0.5
+local MAX_SPEED_SCALE = 2
 local SWIM_STATES: { [string]: boolean } = { Treading = true, Freestyle = true, Underwater = true, Grabbed = true }
 local EXIT_ANCHOR = "ExitAnchor"
 
@@ -181,6 +184,7 @@ local engine: Locomotion.Engine = Locomotion.defaultEngine()
 -- the run
 local running = false
 local difficulty: Enums.Difficulty = "Standard"
+local speedScale = 1 -- SetSpeedScale (level tuning); every pace but a scripted one
 local participants: { Player } = {}
 local pacing: PacingDirector.Pacing? = nil
 
@@ -1124,7 +1128,7 @@ local function newContext(model: Model, b: CreatureBody.Body, m: Locomotion.Move
 		ventBlocked = false,
 		stunFrom = nil,
 		speedOf = function(name: Enums.MonsterState): number
-			return Brain.speedFor(name, difficulty)
+			return Brain.speedFor(name, difficulty) * (if name == "Scripted" then 1 else speedScale)
 		end,
 		setTarget = setTarget,
 		catchKind = catchKindFor,
@@ -1501,6 +1505,30 @@ function MonsterAIService.AcquireScripted(token: string): ScriptedHandle?
 	lastReason = "acquired by " .. token
 	enterState("Scripted", now())
 	return handle
+end
+
+-- Level tuning (P7: Level 3's gym, where it stalks at high speed): every state's pace times `scale` (clamped
+-- MIN_SPEED_SCALE..MAX_SPEED_SCALE; 1, the default, is as configured; EndRun restores it). A pace already set follows at
+-- once, in proportion, so a state's own choice of pace (a withdraw, a lunge) keeps its ratio; scripted moves keep their
+-- own speed.
+function MonsterAIService.SetSpeedScale(scale: number)
+	local value = if MathUtil.isFinite(scale) then math.clamp(scale, MIN_SPEED_SCALE, MAX_SPEED_SCALE) else 1
+	local previous = speedScale
+	if math.abs(value - previous) < 1e-6 then
+		return
+	end
+	speedScale = value
+	local m, b = mover, body
+	local walker = if b then b.humanoid else nil
+	if m and b and walker and scripted == nil and catching == nil and state ~= "Scripted" then
+		local pace = walker.WalkSpeed * value / previous
+		m:SetSpeed(pace)
+		b:SetWalkSpeed(pace)
+	end
+end
+
+function MonsterAIService.GetSpeedScale(): number
+	return speedScale
 end
 
 function MonsterAIService.RegisterLockerInspector(fn: Types.LockerInspector)
@@ -1905,6 +1933,7 @@ function MonsterAIService.EndRun()
 	wakeAt = nil
 	revealPending = false
 	paused = false
+	speedScale = 1
 	table.clear(exitGrates)
 	table.clear(splashArmed)
 	table.clear(lastSeen)

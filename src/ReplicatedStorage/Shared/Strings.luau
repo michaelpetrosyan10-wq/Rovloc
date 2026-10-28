@@ -100,6 +100,7 @@ local STRINGS: { [string]: string } = {
 	["Input.SpectatePrev"] = "<",
 	["Input.SpectateNext"] = ">",
 	["Input.Menu"] = "MENU",
+	["Input.LeaveLocker"] = "LEAVE",
 
 	-- HUD
 	["Hud.Battery"] = "BATTERY",
@@ -110,6 +111,16 @@ local STRINGS: { [string]: string } = {
 	["Hud.SelfRevive"] = "Use your syringe to get back up.",
 	["Hud.Trapped"] = "Your leg is caught. Look down and pry the jaws open.",
 	["Hud.HoldBreath"] = "It's right outside. Hold your breath.",
+	["Hud.HoldBreathNow"] = "HOLD YOUR BREATH",
+	["Hud.KeepHolding"] = "Don't breathe.",
+	["Hud.Breath"] = "BREATH",
+	["Hud.BreathSafe"] = "It moves on.",
+	["Hud.LockerLeave.KeyboardMouse"] = "Press E to step out.",
+	["Hud.LockerLeave.Gamepad"] = "Press X to step out.",
+	["Hud.LockerLeave.Touch"] = "Tap LEAVE to step out.",
+	["Hud.LockerOccupied"] = "Someone is already hiding in there.",
+	["Hud.LockerSeen"] = "It's watching you. Lose it first.",
+	["Hud.LockerBlocked"] = "Something is blocking the door.",
 	["Hud.Struggle"] = "It has your legs. STRUGGLE.",
 	["Hud.Ripcord"] = "Pull the cord!",
 	["Hud.BatteryEmpty"] = "Your flashlight is dead.",
@@ -187,6 +198,10 @@ local STRINGS: { [string]: string } = {
 	["Caption.ChildLaugh"] = "[a child giggles in the dark]",
 	["Caption.ObjectFall"] = "[something clatters to the floor]",
 	["Caption.CreatureVanish"] = "[a rush of air, then nothing]",
+	["Caption.CreatureSniff"] = "[something sniffing at the slits]",
+	["Caption.LockerRip"] = "[a locker door is torn off]",
+	["Caption.LockerSlam"] = "[a locker door bangs somewhere]",
+	["Caption.BallBounce"] = "[a ball bouncing in the empty gym]",
 
 	-- Network (Net kicks a client that floods or sends malformed messages)
 	["Net.Kicked"] = "Disconnected: your game sent too many invalid requests. Please rejoin.",

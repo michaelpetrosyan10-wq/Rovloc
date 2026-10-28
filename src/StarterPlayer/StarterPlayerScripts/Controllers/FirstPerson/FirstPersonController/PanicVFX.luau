@@ -22,7 +22,8 @@
 --   * Body-bus loops through AudioController.PlayLocal: Heartbeat above HEART_SLOW, HeartbeatFast above HEART_FAST;
 --     Breathing above BREATH_SLOW, BreathingPanic above BREATH_FAST, where the breathing level is the higher of panic
 --     and exertion (low stamina). Thresholds have hysteresis; volume follows the level; loops that something else
---     stopped (AudioController ends Body voices with the run) are restarted when still wanted.
+--     stopped (AudioController ends Body voices with the run) are restarted when still wanted. While any token holds
+--     SetBreathSuppressed (a held breath in a locker) the breathing loop is silent; the heart keeps pounding.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -58,6 +59,7 @@ export type ApplyContext = {
 export type PanicFx = {
 	SetFloor: (self: PanicFx, token: string, value: number?) -> (),
 	ClearFloors: (self: PanicFx) -> (),
+	SetBreathSuppressed: (self: PanicFx, token: string, suppressed: boolean) -> (),
 	Sense: (self: PanicFx, dt: number, eye: Vector3?) -> (),
 	Step: (self: PanicFx, dt: number, downed: boolean) -> number,
 	Apply: (self: PanicFx, dt: number, context: ApplyContext) -> (),
@@ -234,6 +236,7 @@ end
 function PanicVFX.new(player: Player): PanicFx
 	local panic = 0
 	local floors: { [string]: number } = {}
+	local breathHeld: { [string]: boolean } = {}
 	local proximity = 0
 	local chased = false
 	local senseClock = math.huge
@@ -355,6 +358,13 @@ function PanicVFX.new(player: Player): PanicFx
 		ClearFloors = function(_self: PanicFx)
 			table.clear(floors)
 		end,
+		SetBreathSuppressed = function(_self: PanicFx, token: string, suppressed: boolean)
+			if suppressed then
+				breathHeld[token] = true
+			else
+				breathHeld[token] = nil
+			end
+		end,
 		Sense = function(_self: PanicFx, dt: number, eye: Vector3?)
 			senseClock += dt
 			if senseClock < 1 / SENSE_HZ then
@@ -436,7 +446,9 @@ function PanicVFX.new(player: Player): PanicFx
 			local breathless = math.max(p, if visible then MathUtil.clamp01(context.exertion) else 0)
 			local wantHeart = if visible then PanicVFX.heartbeatPreset(p, heart.preset) else nil
 			driveLoop(heart, wantHeart, 0.35 + 0.65 * p)
-			local wantBreath = if visible then PanicVFX.breathingPreset(breathless, breath.preset) else nil
+			local wantBreath = if visible and next(breathHeld) == nil
+				then PanicVFX.breathingPreset(breathless, breath.preset)
+				else nil
 			driveLoop(breath, wantBreath, 0.3 + 0.7 * breathless)
 		end,
 		GetPanic = function(_self: PanicFx): number
