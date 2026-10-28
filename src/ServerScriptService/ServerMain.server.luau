@@ -48,6 +48,8 @@ local LoadoutService = require(ServerScriptService.Services.Player.LoadoutServic
 local MovementAuthority = require(ServerScriptService.Services.Player.MovementAuthority)
 local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
 
+local BearTrapService = require(ServerScriptService.Services.Mechanics.BearTrapService)
+
 --------------------------------------------------------------------------------
 -- Place-settings audit
 --------------------------------------------------------------------------------
@@ -138,6 +140,8 @@ end
 --   MovementAuthority        10 Hz movement validation (registered validators first).
 --   InteractionService       Server-timed prompt channels for every registered PromptKind handler.
 --   FlashlightService        Battery + FlashlightOn; BeginRun sizes the battery from LoadoutService.
+--   BearTrapService          Level 0 traps: BeginRun tracks the traps WorldService built above; 10 Hz springing,
+--                            snap / solo pry / co-op rescue; EndRun (early, in reverse) frees every victim.
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
 --   DevToolsService          Dev commands and the Studio auto dev-run; it calls everything above.
 --
@@ -226,6 +230,14 @@ local SERVICES: { Types.Service } = {
 		BeginRun = FlashlightService.BeginRun,
 		EndRun = FlashlightService.EndRun,
 		OnPlayerRemoving = FlashlightService.OnPlayerRemoving,
+	},
+	{
+		Name = BearTrapService.Name,
+		Init = BearTrapService.Init,
+		Start = BearTrapService.Start,
+		BeginRun = BearTrapService.BeginRun,
+		EndRun = BearTrapService.EndRun,
+		OnPlayerRemoving = BearTrapService.OnPlayerRemoving,
 	},
 	{ Name = RunLifecycleService.Name, Init = RunLifecycleService.Init, Start = RunLifecycleService.Start },
 	{

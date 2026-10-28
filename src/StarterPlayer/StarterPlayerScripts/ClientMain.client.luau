@@ -35,6 +35,7 @@ local RESET_RETRY_INTERVAL = 0.25
 local Core = script.Parent.Controllers.Core
 local Characters = script.Parent.Controllers.Characters
 local FirstPerson = script.Parent.Controllers.FirstPerson
+local Gameplay = script.Parent.Controllers.Gameplay
 
 type Loader = { name: string, load: () -> any }
 
@@ -110,6 +111,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		name = "HUD",
 		load = function(): any
 			return require(script.Parent.Controllers.HUD)
+		end,
+	},
+	{
+		name = "BearTrapController",
+		load = function(): any
+			return require(Gameplay.BearTrapController)
 		end,
 	},
 	{
