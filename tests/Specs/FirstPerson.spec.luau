@@ -867,7 +867,12 @@ return {
 		t.eq(free.right, nil)
 		local missing = HandRig.placements("Pry", nil, any)
 		t.eq(missing.right, nil, "a target pose without a target falls back to free hands")
-		t.eq(#HandRig.Poses, 5)
+		local flask = HandRig.placements("Flask", target, any)
+		t.eq(flask.right, target, "the flask hand goes exactly where its owner puts it")
+		t.eq(flask.left, nil, "left hand free")
+		t.falsy(flask.torchInHand, "the torch rides on the chest while a flask is held")
+		t.eq(HandRig.placements("Flask", nil, any).right, nil, "no flask target: free hands")
+		t.eq(#HandRig.Poses, 6)
 	end,
 
 	----------------------------------------------------------------------------------------------- BodyRenderer

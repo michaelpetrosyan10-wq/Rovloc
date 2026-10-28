@@ -50,6 +50,7 @@ local PlayerStateService = require(ServerScriptService.Services.Player.PlayerSta
 
 local BearTrapService = require(ServerScriptService.Services.Mechanics.BearTrapService)
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
+local ChemicalProjectileService = require(ServerScriptService.Services.Mechanics.ChemicalProjectileService)
 
 local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
 
@@ -156,6 +157,8 @@ end
 --                            DoorService, left-behind spectators, LevelDirector.Advance, 50% respawns at the next floor.
 --   MonsterAIService         The Creature's brain: BeginRun takes over the Creature WorldService built above, reads
 --                            VentNetworkService's graphs and grates; EndRun (early, in reverse) lets it go.
+--   ChemicalProjectileService Level 2 flasks: BeginRun tracks the flasks WorldService built above; pickups, throws,
+--                            stepped server flights, stun clouds (VentNetworkService's graphs, MonsterAIService.Stun).
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
 --   DevToolsService          Dev commands and the Studio auto dev-run; it calls everything above.
 --
@@ -284,6 +287,14 @@ local SERVICES: { Types.Service } = {
 		BeginRun = MonsterAIService.BeginRun,
 		EndRun = MonsterAIService.EndRun,
 		OnPlayerRemoving = MonsterAIService.OnPlayerRemoving,
+	},
+	{
+		Name = ChemicalProjectileService.Name,
+		Init = ChemicalProjectileService.Init,
+		Start = ChemicalProjectileService.Start,
+		BeginRun = ChemicalProjectileService.BeginRun,
+		EndRun = ChemicalProjectileService.EndRun,
+		OnPlayerRemoving = ChemicalProjectileService.OnPlayerRemoving,
 	},
 	{ Name = RunLifecycleService.Name, Init = RunLifecycleService.Init, Start = RunLifecycleService.Start },
 	{

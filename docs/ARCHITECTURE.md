@@ -161,7 +161,9 @@ Rovloc/
     │           ├── MathUtil.luau           [P1]
     │           ├── SpatialQuery.luau       [P1] RaycastParams / OverlapParams factories, EyePoint helpers
     │           ├── Log.luau                [P1] Levels, tags, rate limiting
-    │           └── BinaryHeap.luau         [P4]
+    │           ├── BinaryHeap.luau         [P4]
+    │           └── Ballistics.luau         [P6] Flask flight shared by server + clients: parabola, release point +
+    │                                            pull-back, stepped casts, aim-arc trace, pool surface crossings
     │
     ├── ServerScriptService/
     │   ├── ServerMain.server.luau          [P1] Ordered bootstrap, xpcall isolation, place-settings audit → BootError
@@ -218,6 +220,7 @@ Rovloc/
     │       │   ├── DoorService.luau        [P6] Only writer of DoorState + fixture leaf poses: fire doors, hallway gate,
     │       │   │                                classroom + roof doors; Heartbeat-stepped leaves, never crushing, cues
     │       │   ├── ChemicalProjectileService.luau [P6] Flask pickup / hold / throw, stepped server raycasts, stun cloud
+    │       │   │                                (radius + clear line, or VentGraph hops in ducts), Shattered signal
     │       │   ├── LockerHidingService.luau [P7] Enter / exit, Inspect() hook, server-run hold-breath meter, gasp
     │       │   └── FloodedPoolService.luau [P7] Swim physics validation, oxygen, grab + drag, struggle meter, floodlight
     │       ├── Levels/                      Per-level controllers registered with LevelDirector
@@ -287,7 +290,8 @@ Rovloc/
                 │   ├── JumpscareController.luau    [P5] Face lock, lunge, screech, flash
                 │   ├── BearTrapController.luau     [P6] Leg-lock camera tilt, shaking-hands pry
                 │   ├── DoorController.luau         [P6] Renders every door motion each PreRender from its OneShot, impacts
-                │   ├── ChemicalThrowController.luau [P6] Held flask, aim arc, throw intent, local projectile visual
+                │   ├── ChemicalThrowController.luau [P6] Held flasks (own + teammates'), HandRig "Flask" pose, wind-up,
+                │   │                                   aim arc, predicted throw reconciled to Launch, shatter VFX + cloud
                 │   ├── LockerController.luau       [P7] Locker enter / peek + hold-breath UI (server-judged)
                 │   ├── SwimController.luau         [P7] Tread / freestyle input, underwater FX
                 │   └── StruggleController.luau     [P7] Mash UI (server-judged)
@@ -435,11 +439,17 @@ helpers that make the vent and doorway guarantees hold.
    (root + CameraConfig offset per MoveState). It uses `RaycastParams.CollisionGroup = "Default"` with every
    character and the Creature excluded, so lockers, desks and debris block sight. The server never sees client-side
    poses (`Motor6D.Transform` is NotReplicated), so it never tests against limbs.
-3. Flasks are stepped server raycasts with `CollisionGroup="Projectiles"`. They hit walls, props and `CreatureHitbox`.
-   Each step also tests the `PoolWater` surface planes with math, so a flask landing in the pool shatters at the
-   surface. A shatter near a grabbed player releases the grab. Short tosses are allowed while vent crawling.
-   The stun is decided by the cloud: the radius from the shatter point to the hitbox, plus a VentGraph hop distance of
-   2 or fewer for in-duct shatters. The retreat direction comes from `VentPathfinder.RetreatPath`.
+3. Flasks are stepped server raycasts with `CollisionGroup="Projectiles"` (every character excluded), in segments of
+   at most 1/60 s of flight along the shared `Ballistics` parabola. They hit walls, props and `CreatureHitbox`.
+   Each step also tests the `PoolWater` surface planes with math, so a flask landing in the pool shatters at the surface.
+   A shatter near a grabbed player releases the grab (P7, through `ChemicalProjectileService.Shattered`). Short tosses
+   (×0.45 speed) are allowed while vent crawling. A shatter is in a duct when its point lies inside the square bore of
+   the level's VentGraph (a grate's opening counts up to its wall's room face).
+   The stun is decided by the cloud (`FlaskCloudRadius`, `FlaskCloudSeconds`, at most once per cloud, checked at the
+   shatter and at 10 Hz so a Creature walking in is stunned too): its hitbox within the radius **with a clear
+   Default-group line** from the cloud centre (no stunning through walls), or, for an in-duct shatter with the Creature in
+   a vent, a VentGraph hop distance of `FlaskVentHopRadius` (2) or fewer. `MonsterAIService.Stun(StunSeconds, point)`
+   makes it retreat away from the point (in ducts along `VentPathfinder.retreatPath`).
 
 ### 4c. Ownership and control locks
 
@@ -522,7 +532,7 @@ is treated as an elimination, never a respawn.
 
 | Owner | Attributes |
 | --- | --- |
-| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `SpectateReason` |
+| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `SpectateReason` |
 | `Creature` | `MonsterState` · `StateSince` · `PoseMode` · `TargetUserId` · `InVent` · `VentSegmentId` · `Hidden` · `GrabbedUserId` |
 | `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` |
 | `VentGrate` | `GrateId` · `GrateState` (Closed / Unscrewing / Open / Kicked / Locked) · `Lockable` · `CriticalPath` · `NodeId` |

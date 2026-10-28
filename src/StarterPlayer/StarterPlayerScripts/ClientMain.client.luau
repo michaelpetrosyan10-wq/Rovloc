@@ -145,6 +145,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "ChemicalThrowController",
+		load = function(): any
+			return require(Gameplay.ChemicalThrowController)
+		end,
+	},
+	{
 		name = "AirlockController",
 		load = function(): any
 			return require(Match.AirlockController)

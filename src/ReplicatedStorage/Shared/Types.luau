@@ -249,14 +249,24 @@ export type AudioCuePayload = {
 
 export type AudioStopPayload = { id: number, fade: number? }
 
+-- One thrown flask (ChemicalProjectileService -> every client). "Spawn" is the Launch: the parabola every client flies
+-- (Ballistics: `origin` and `velocity` at server time `t0` under `gravity`), the flask's look (`variant`) and who threw
+-- it. "Resolve" repeats those and says how it ended: hitKind World / Creature / Water (it shattered at hitPosition,
+-- against a surface facing hitNormal; inVent when that was inside a duct) or Expired (no contact before
+-- FlaskMaxFlightSeconds; nothing happens).
 export type ProjectileEventPayload = {
 	id: number,
 	phase: Enums.ProjectilePhase,
 	origin: Vector3,
 	velocity: Vector3,
 	t0: number,
+	gravity: number,
+	variant: number,
+	throwerUserId: number?,
 	hitPosition: Vector3?,
+	hitNormal: Vector3?,
 	hitKind: Enums.ProjectileHitKind?,
+	inVent: boolean?,
 }
 
 export type LookSample = { userId: number, yaw: number, pitch: number }

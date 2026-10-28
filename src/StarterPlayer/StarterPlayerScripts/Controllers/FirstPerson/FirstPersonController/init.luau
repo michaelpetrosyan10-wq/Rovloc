@@ -852,7 +852,8 @@ function FirstPersonController.ForceCameraState(token: string, state: Enums.Came
 	forcedStates[token] = { state = state, order = forceOrder }
 end
 
--- Hand poses for later phases: "Flashlight" (default), "Free", "Pry", "Ripcord", "SlitGrip" (relative to target).
+-- Hand poses for later phases: "Flashlight" (default), "Free", "Pry", "Ripcord", "SlitGrip" (relative to target),
+-- "Flask" (the right hand at target).
 function FirstPersonController.SetHandPose(pose: HandPose, target: CFrame?)
 	HandRig.SetPose(pose, target)
 end

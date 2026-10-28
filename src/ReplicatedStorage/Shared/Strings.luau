@@ -117,6 +117,10 @@ local STRINGS: { [string]: string } = {
 	["Hud.Spectating"] = "Spectating %s",
 	["Hud.NoOneToSpectate"] = "No survivors to watch.",
 	["Hud.Straggler"] = "The door seals in %d...",
+	["Hud.FlaskThrow.KeyboardMouse"] = "Hold LMB to aim the flask, release to throw.",
+	["Hud.FlaskThrow.Gamepad"] = "Hold R2 to aim the flask, release to throw.",
+	["Hud.FlaskThrow.Touch"] = "Hold THROW to aim the flask, release to throw.",
+	["Hud.FlaskHandsFull"] = "Your hands are full. Throw the flask you're carrying first.",
 
 	-- Checkpoints
 	["Checkpoint.Reached"] = "Checkpoint reached. +%d credits",

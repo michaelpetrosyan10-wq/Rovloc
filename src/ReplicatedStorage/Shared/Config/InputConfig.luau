@@ -76,7 +76,7 @@ InputConfig.Bindings = table.freeze({
 	},
 	Throw = {
 		action = "Throw",
-		kind = "Tap",
+		kind = "Hold", -- press: wind up and aim; release: throw (ChemicalThrowController)
 		keyboard = { Enum.UserInputType.MouseButton1 },
 		gamepad = { Enum.KeyCode.ButtonR2 },
 		touch = { label = "Input.Throw", position = UDim2.new(1, -250, 1, -150), size = 76 },

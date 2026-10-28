@@ -16,9 +16,11 @@
 --                 down, gripping hard.
 --   * Ripcord     right hand on the ripcord handle at `target`, left hand on the opposite riser strap.
 --   * SlitGrip    fingertips of both hands hooked into the locker slits at `target`.
+--   * Flask       the right hand at `target` itself (a held chemical flask: ChemicalThrowController moves it through
+--                 the carry, the wind-up and the throw), left hand free; the torch rides on the chest strap.
 -- Placements for Pry / Ripcord / SlitGrip are fixed offsets in the target's frame; a pose that needs a target and
 -- has none falls back to Free. While the body itself needs the hands (crawling a duct or downed, swimming, grabbed),
--- the Flashlight pose stows the torch on the chest and releases the hands. Goals go to
+-- the Flashlight and Flask poses stow the torch on the chest and release the hands. Goals go to
 -- CharacterAnimationController.SetHandTarget / SetHandGrip (bound with Bind); blending between poses is the
 -- animator's IK.
 
@@ -30,7 +32,7 @@ local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 
 local log = Log.new("HandRig")
 
-export type Pose = "Flashlight" | "Free" | "Pry" | "Ripcord" | "SlitGrip"
+export type Pose = "Flashlight" | "Free" | "Pry" | "Ripcord" | "SlitGrip" | "Flask"
 export type Hand = "Left" | "Right"
 
 export type AnimationApi = {
@@ -56,7 +58,7 @@ export type UpdateContext = {
 
 local HandRig = {}
 
-HandRig.Poses = table.freeze({ "Flashlight", "Free", "Pry", "Ripcord", "SlitGrip" } :: { Pose })
+HandRig.Poses = table.freeze({ "Flashlight", "Free", "Pry", "Ripcord", "SlitGrip", "Flask" } :: { Pose })
 
 -- Right shoulder (R15 RightShoulder joint) from the eye, in yaw space.
 local SHOULDER = Vector3.new(1, -0.84, 0.34)
@@ -136,6 +138,8 @@ function HandRig.placements(pose: Pose, target: CFrame?, flashlight: CFrame): Pl
 			rightGrip = 1,
 			torchInHand = false,
 		}
+	elseif pose == "Flask" then
+		return { left = nil, right = target, leftGrip = 0, rightGrip = 0.9, torchInHand = false }
 	elseif pose == "Ripcord" then
 		return {
 			left = target * CFrame.new(-0.9, 0.55, 0.2) * CFrame.Angles(0, 0, math.rad(15)),
@@ -372,7 +376,7 @@ function HandRig.Update(context: UpdateContext)
 
 	local busy = HandRig.handsBusy(context.moveState)
 	local effective: Pose = pose
-	if effective == "Flashlight" and busy then
+	if (effective == "Flashlight" or effective == "Flask") and busy then
 		effective = "Free"
 	end
 	if not context.active then
