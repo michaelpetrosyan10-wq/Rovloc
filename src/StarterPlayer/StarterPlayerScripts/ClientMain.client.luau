@@ -120,6 +120,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "VentController",
+		load = function(): any
+			return require(Gameplay.VentController)
+		end,
+	},
+	{
 		name = "DevToolsController",
 		load = function(): any
 			return require(Core.DevToolsController)
