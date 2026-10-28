@@ -49,9 +49,11 @@ local MovementAuthority = require(ServerScriptService.Services.Player.MovementAu
 local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
 
 local BearTrapService = require(ServerScriptService.Services.Mechanics.BearTrapService)
+local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
 
 local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
 
+local CheckpointAirlockService = require(ServerScriptService.Services.Match.CheckpointAirlockService)
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 
 --------------------------------------------------------------------------------
@@ -146,8 +148,12 @@ end
 --   FlashlightService        Battery + FlashlightOn; BeginRun sizes the battery from LoadoutService.
 --   BearTrapService          Level 0 traps: BeginRun tracks the traps WorldService built above; 10 Hz springing,
 --                            snap / solo pry / co-op rescue; EndRun (early, in reverse) frees every victim.
+--   DoorService              Fixture doors (BeginRun indexes the fire doors, gate and scripted doors WorldService
+--                            rebuilt above and sets their initial states); Heartbeat-stepped leaves, never crushing.
 --   VentNetworkService       Vent grates (BeginRun tracks the grates WorldService rebuilt above), crawl entry / exit,
 --                            the VentRail validator (MovementAuthority above), level VentGraphs for later systems.
+--   CheckpointAirlockService Stairwell airlocks: 10 Hz checkpoint volume watch, straggler timer, sealing through
+--                            DoorService, left-behind spectators, LevelDirector.Advance, 50% respawns at the next floor.
 --   MonsterAIService         The Creature's brain: BeginRun takes over the Creature WorldService built above, reads
 --                            VentNetworkService's graphs and grates; EndRun (early, in reverse) lets it go.
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
@@ -248,12 +254,28 @@ local SERVICES: { Types.Service } = {
 		OnPlayerRemoving = BearTrapService.OnPlayerRemoving,
 	},
 	{
+		Name = DoorService.Name,
+		Init = DoorService.Init,
+		Start = DoorService.Start,
+		BeginRun = DoorService.BeginRun,
+		EndRun = DoorService.EndRun,
+		OnPlayerRemoving = DoorService.OnPlayerRemoving,
+	},
+	{
 		Name = VentNetworkService.Name,
 		Init = VentNetworkService.Init,
 		Start = VentNetworkService.Start,
 		BeginRun = VentNetworkService.BeginRun,
 		EndRun = VentNetworkService.EndRun,
 		OnPlayerRemoving = VentNetworkService.OnPlayerRemoving,
+	},
+	{
+		Name = CheckpointAirlockService.Name,
+		Init = CheckpointAirlockService.Init,
+		Start = CheckpointAirlockService.Start,
+		BeginRun = CheckpointAirlockService.BeginRun,
+		EndRun = CheckpointAirlockService.EndRun,
+		OnPlayerRemoving = CheckpointAirlockService.OnPlayerRemoving,
 	},
 	{
 		Name = MonsterAIService.Name,

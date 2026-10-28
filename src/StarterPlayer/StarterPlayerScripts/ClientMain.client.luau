@@ -36,6 +36,7 @@ local Core = script.Parent.Controllers.Core
 local Characters = script.Parent.Controllers.Characters
 local FirstPerson = script.Parent.Controllers.FirstPerson
 local Gameplay = script.Parent.Controllers.Gameplay
+local Match = script.Parent.Controllers.Match
 
 type Loader = { name: string, load: () -> any }
 
@@ -126,6 +127,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "DoorController",
+		load = function(): any
+			return require(Gameplay.DoorController)
+		end,
+	},
+	{
 		name = "VentController",
 		load = function(): any
 			return require(Gameplay.VentController)
@@ -135,6 +142,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		name = "JumpscareController",
 		load = function(): any
 			return require(Gameplay.JumpscareController)
+		end,
+	},
+	{
+		name = "AirlockController",
+		load = function(): any
+			return require(Match.AirlockController)
 		end,
 	},
 	{

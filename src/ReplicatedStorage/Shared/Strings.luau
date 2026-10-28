@@ -122,6 +122,10 @@ local STRINGS: { [string]: string } = {
 	["Checkpoint.Reached"] = "Checkpoint reached. +%d credits",
 	["Checkpoint.Respawned"] = "You stagger back to your feet.",
 	["Checkpoint.Sealed"] = "The fire door seals behind you.",
+	["Airlock.Waiting"] = "Waiting for the squad — %s",
+	["Airlock.GetIn"] = "Get to the stairwell! %s",
+	["Airlock.Sealing"] = "Sealing…",
+	["Airlock.LeftBehind"] = "The fire doors sealed without you.",
 
 	-- Results
 	["Results.Escaped"] = "ESCAPED",
@@ -169,6 +173,8 @@ local STRINGS: { [string]: string } = {
 	["Caption.ChemHiss"] = "[chemicals hissing]",
 	["Caption.Static"] = "[electrical static]",
 	["Caption.DoorSmash"] = "[a door is torn apart]",
+	["Caption.FireDoor"] = "[a fire door slams shut]",
+	["Caption.DoorCreak"] = "[a door creaks on its hinges]",
 
 	-- Network (Net kicks a client that floods or sends malformed messages)
 	["Net.Kicked"] = "Disconnected: your game sent too many invalid requests. Please rejoin.",

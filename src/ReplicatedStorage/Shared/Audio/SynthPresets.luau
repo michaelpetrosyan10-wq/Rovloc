@@ -1295,6 +1295,147 @@ define("DoorSmash", {
 	},
 })
 
+-- A heavy steel fire door swinging on its closer: a slow hinge groan sagging in pitch, the closer's hydraulic hiss,
+-- the weight of air it pushes, and the push bar rattling as it sets off, in a concrete vestibule.
+define("FireDoorSwing", {
+	bus = "World",
+	priority = 55,
+	maxVoices = 3,
+	rollOff = r(8, 110),
+	space = { reverb(1.8, -8) },
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.32,
+			speed = r(0.18, 0.24),
+			region = r(0.01, 0.05),
+			looped = true,
+			duration = 1.3,
+			glide = glide(0.75, 1.2),
+			envelope = env(0.25, nil, 0.5),
+			effects = { flanger(0.25, 0.85, 0.55), distortion(0.4), eq(2, 4, -12) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.22,
+			speed = r(0.5, 0.6),
+			region = r(0.1, 1.1),
+			duration = 1.4,
+			envelope = env(0.4, nil, 0.6),
+			effects = { eq(-14, 2, -6) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.18,
+			speed = r(0.22, 0.28),
+			region = r(0.1, 1.1),
+			duration = 1.5,
+			envelope = env(0.5, nil, 0.6),
+			effects = { eq(6, -8, -30) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.35,
+			speed = r(1.2, 1.5),
+			region = r(0, 0.2),
+			regionJitter = 0.04,
+			grains = grains(2, 3, 0.05, 0.09),
+			volumeJitter = 0.3,
+			effects = { flanger(1, 0.5, 0.5), eq(-10, 4, 0) },
+		},
+	},
+})
+
+-- A fire door slamming into its frame and latching: the body thump, a short steel boom, the leaf ringing, the latch
+-- bolt snapping home a beat later and the frame rattling around it.
+define("FireDoorLatch", {
+	bus = "World",
+	priority = 80,
+	maxVoices = 2,
+	rollOff = r(12, 200),
+	caption = "Caption.FireDoor",
+	duck = { duck("Ambience", 0.55, 0.01, 0.5, 1) },
+	space = { reverb(2.6, -6) },
+	layers = {
+		{
+			sample = "JumpLand",
+			volume = 1.5,
+			speed = 0.42,
+			effects = { eq(9, -4, -18), compressor(-18, 8, 0.002, 0.2, 5) },
+		},
+		{
+			sample = "Explosion",
+			volume = 0.9,
+			speed = r(1.05, 1.2),
+			region = r(0, 0.35),
+			effects = { distortion(0.25), eq(5, -2, -10) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.6,
+			speed = r(0.32, 0.38),
+			effects = { flanger(0.2, 0.8, 0.5), distortion(0.3), reverb(2.2, -4) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.8,
+			speed = r(1.5, 1.8),
+			region = r(0, 0.12),
+			delay = 0.04,
+			effects = { eq(-12, 6, 4), echo(0.02, 0.3, -8) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.3,
+			speed = r(1, 1.4),
+			delay = 0.06,
+			grains = grains(3, 6, 0.03, 0.07),
+			volumeJitter = 0.35,
+			effects = { echo(0.04, 0.35, -8), eq(-14, 2, 0) },
+		},
+	},
+})
+
+-- A lighter door (the classroom's wood, the roof's dented steel) swinging: a hinge creak rising under a shiver, the
+-- leaf flexing, a breath of air.
+define("DoorCreak", {
+	bus = "World",
+	priority = 35,
+	maxVoices = 3,
+	rollOff = r(6, 70),
+	caption = "Caption.DoorCreak",
+	space = { reverb(1.2, -12) },
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.3,
+			speed = r(0.36, 0.46),
+			region = r(0.01, 0.04),
+			looped = true,
+			duration = 0.8,
+			glide = glide(1.35, 0.7),
+			envelope = env(0.08, nil, 0.3),
+			effects = { tremolo(9, 0.6), flanger(0.6, 0.6, 0.4), eq(-6, 6, -8) },
+		},
+		{
+			sample = "GetUp",
+			volume = 0.3,
+			speed = r(0.5, 0.6),
+			region = r(0, 0.35),
+			effects = { eq(2, 0, -12) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.12,
+			speed = r(0.7, 0.8),
+			region = r(0.2, 1),
+			duration = 0.7,
+			envelope = env(0.2, nil, 0.3),
+			effects = { eq(-10, -2, -12) },
+		},
+	},
+})
+
 -- A vent grate kicked off its frame: the kick, a steel bang, the grate clattering across the floor.
 define("MetalCrash", {
 	bus = "World",
@@ -2434,6 +2575,9 @@ local REQUIRED: { string } = {
 	"MetalCrash",
 	"Unscrew",
 	"DoorSmash",
+	"FireDoorSwing",
+	"FireDoorLatch",
+	"DoorCreak",
 	"FluorescentBuzz",
 	"BoilerHum",
 	"UiClick",

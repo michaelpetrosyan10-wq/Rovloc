@@ -44,6 +44,9 @@
 --   setSmashed(model, t)       0 shut .. 1 smashed: a single leaf is torn off its hinges and thrown down flat into the
 --                              room it swings into; both fire doors buckle half off their hinges; the grille's sections
 --                              are torn out of their rails and dropped in a heap in front.
+--   openTransform / smashedTransform(model, leaf, value) are the same poses for one leaf as a transform from its rest
+--   pivot, and leafNames(model) lists the leaves: DoorService (server) and DoorController (clients) step a door's
+--   motion through them, so both sides compute identical poses (Shared/Sequence/DoorMotion).
 -- Budgets: static door <= 8 parts, Ajar / RoofDoor <= 12, Airlock <= 30, Gate <= 45.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -965,22 +968,60 @@ local function leavesOf(model: Model): { Model }
 	return out
 end
 
+-- The names of a fixture door's leaves, in a stable order (DoorService and the client DoorController pose them).
+function DoorBuilder.leafNames(model: Model): { string }
+	local out: { string } = {}
+	for _, leaf in leavesOf(model) do
+		table.insert(out, leaf.Name)
+	end
+	return out
+end
+
+-- Leaf `name`'s transform from its rest pivot at `openness` (0 shut .. 1 fully open): a swing about the hinge, or for
+-- the grille's sections a vertical slide into the housing. Pure; nil when the leaf or its poses are missing.
+function DoorBuilder.openTransform(model: Model, name: string, openness: number): CFrame?
+	local rest = PropKit.leafRest(model, name)
+	local open = posePoint(model, name .. "Open")
+	if not (rest and open) then
+		return nil
+	end
+	local t = math.clamp(openness, 0, 1)
+	local full = rest:ToObjectSpace(open)
+	if model:GetAttribute(W.DoorKind) == "Gate" then
+		return CFrame.new(full.Position * t)
+	end
+	return partialRotation(full, t)
+end
+
+-- Leaf `name`'s transform from its rest pivot at smash progress `t` (0 shut .. 1 smashed): about the leaf's centre,
+-- out first, then tipping over and dropping, with a short hop. Pure; nil when the leaf or its poses are missing.
+function DoorBuilder.smashedTransform(model: Model, name: string, t: number): CFrame?
+	local rest = PropKit.leafRest(model, name)
+	local smashed = posePoint(model, name .. "Smashed")
+	local centre = posePoint(model, name .. "Centre")
+	if not (rest and smashed and centre) then
+		return nil
+	end
+	local k = math.clamp(t, 0, 1)
+	local hop = if model:GetAttribute(W.DoorKind) == "Airlock" then BUCKLE_HOP else THROW_HOP
+	local offset = centre:ToObjectSpace(rest)
+	local landed = smashed * offset:Inverse()
+	local delta = landed.Position - centre.Position
+	local flat = Vector3.new(delta.X, 0, delta.Z)
+	local out = 1 - (1 - k) * (1 - k)
+	local tip = smoothstep(k)
+	local position = centre.Position + flat * out + Vector3.yAxis * (delta.Y * tip + hop * math.sin(math.pi * k))
+	local rotation = centre.Rotation * partialRotation(centre.Rotation:Inverse() * landed.Rotation, tip)
+	return rest:ToObjectSpace(CFrame.new(position) * rotation * offset)
+end
+
 -- Opens (1) or shuts (0) every leaf of a fixture door: leaves swing about their hinge, the grille's sections slide
 -- up into the housing.
 function DoorBuilder.setOpen(model: Model, openness: number): boolean
-	local t = math.clamp(openness, 0, 1)
-	local slide = model:GetAttribute(W.DoorKind) == "Gate"
 	local ok = true
-	for _, leaf in leavesOf(model) do
-		local rest = PropKit.leafRest(model, leaf.Name)
-		local open = posePoint(model, leaf.Name .. "Open")
-		if not (rest and open) then
-			ok = false
-			continue
-		end
-		local full = rest:ToObjectSpace(open)
-		local transform = if slide then CFrame.new(full.Position * t) else partialRotation(full, t)
-		if not PropKit.poseLeaf(model, leaf.Name, transform) then
+	for _, name in DoorBuilder.leafNames(model) do
+		local transform = DoorBuilder.openTransform(model, name, openness)
+		if not (transform and PropKit.poseLeaf(model, name, transform)) then
 			ok = false
 		end
 	end
@@ -990,27 +1031,10 @@ end
 -- Smashes a fixture door (0 shut .. 1 smashed): single leaves are torn off and thrown flat into the room they swing
 -- into, fire doors buckle half off their hinges, grille sections are torn out and dropped in a heap.
 function DoorBuilder.setSmashed(model: Model, t: number): boolean
-	local k = math.clamp(t, 0, 1)
-	local hop = if model:GetAttribute(W.DoorKind) == "Airlock" then BUCKLE_HOP else THROW_HOP
 	local ok = true
-	for _, leaf in leavesOf(model) do
-		local rest = PropKit.leafRest(model, leaf.Name)
-		local smashed = posePoint(model, leaf.Name .. "Smashed")
-		local centre = posePoint(model, leaf.Name .. "Centre")
-		if not (rest and smashed and centre) then
-			ok = false
-			continue
-		end
-		-- about the leaf's centre: out first, then tipping over and dropping, with a short hop
-		local offset = centre:ToObjectSpace(rest)
-		local landed = smashed * offset:Inverse()
-		local delta = landed.Position - centre.Position
-		local flat = Vector3.new(delta.X, 0, delta.Z)
-		local out = 1 - (1 - k) * (1 - k)
-		local tip = smoothstep(k)
-		local position = centre.Position + flat * out + Vector3.yAxis * (delta.Y * tip + hop * math.sin(math.pi * k))
-		local rotation = centre.Rotation * partialRotation(centre.Rotation:Inverse() * landed.Rotation, tip)
-		if not PropKit.poseLeaf(model, leaf.Name, rest:ToObjectSpace(CFrame.new(position) * rotation * offset)) then
+	for _, name in DoorBuilder.leafNames(model) do
+		local transform = DoorBuilder.smashedTransform(model, name, t)
+		if not (transform and PropKit.poseLeaf(model, name, transform)) then
 			ok = false
 		end
 	end

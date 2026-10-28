@@ -101,6 +101,7 @@ export type OneShotKind =
 	| "LightBurst"
 	| "GateSlam"
 	| "DoorSmash"
+	| "Door"
 	| "Jumpscare"
 	| "TrapSnap"
 	| "GrateKick"
@@ -387,6 +388,7 @@ Enums.OneShotKind = table.freeze({
 	"LightBurst",
 	"GateSlam",
 	"DoorSmash",
+	"Door",
 	"Jumpscare",
 	"TrapSnap",
 	"GrateKick",

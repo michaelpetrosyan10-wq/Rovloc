@@ -23,7 +23,7 @@ lighting, so its modern partner `LightingStyle = Realistic` is pinned next to it
 | Downward-only dependencies | Layers: `Shared → Core → Player → World systems (Vents, Monster) → Levels & Mechanics → Match`. A module only requires layers below it. Upward traffic goes through typed `Signal`s or registered hooks (e.g. `MonsterAIService.RegisterLockerInspector`), so there are no require cycles and no `any` leaks. |
 | Server authority | Clients send *intents* through validated, rate-limited remotes. The server owns noise, damage, life state, meters, interactions, items, progression and data. Noise tiers come from **observed** server-side speed as well as the claimed move state. |
 | No gameplay on `Touched` | The server polls triggers, traps, checkpoints, water and scare volumes at 10 Hz (`ZoneService`). It tests points against volumes with plain math (`volume.CFrame:PointToObjectSpace(root.Position)` against `Size/2`), so the test works in every collision group, `NoCollide` included. Spatial queries would skip those parts. `Touched` may drive client-only cosmetics. |
-| Events are remotes, state is attributes | Durable state replicates as Attributes. Moments (neck snap, gate slam, lightning, jumpscare) travel on one reliable `OneShot` remote: `{seq, kind, subject, startAt, args}`. `startAt = GetServerTimeNow() + lead`, so every client starts the same `Timeline` on the same frame, and late joiners fast-forward. |
+| Events are remotes, state is attributes | Durable state replicates as Attributes. Moments (neck snap, gate slam, door motions, lightning, jumpscare) travel on one reliable `OneShot` remote: `{seq, kind, subject, startAt, args}`. `startAt = GetServerTimeNow() + lead`, so every client starts the same `Timeline` on the same frame, and late joiners fast-forward. |
 | Resettable runs | Each module has a `ServiceTrove` (process lifetime) and a `RunTrove` (one run). `RunLifecycleService` is the only writer of `MatchPhase` and the run attributes. **Deploying** calls `BeginRun(ctx)` on every service, in forward order, once the difficulty and participants are known. **Resetting** calls `EndRun` on every service in reverse order, then clears `Workspace.Runtime`. Before Phase 8, a Studio dev-run harness in `DevToolsService` drives the lifecycle, so every phase is playable on its own. |
 | Procedural only | Geometry uses Parts, WedgeParts, built-in `Enum.Material`s, Attachments and Constraints, with no runtime CSG. Audio layers verified `rbxasset://sounds/` engine files through `SoundEffect` DSP chains, all built on clients. Animation writes `Motor6D.Transform` (or `AnimationConstraint.Transform`) in `PreSimulation` on clients. |
 
@@ -56,7 +56,7 @@ Rovloc/
 │   ├── SpecRunner.luau                     [P1] Dependency-free runner shared by Studio and Lune
 │   └── Specs/                              [P1→P8] One spec per pure module: CollisionMatrix, RunDirector (determinism +
 │                                           solvability over 500 seeds), ZoneGraph, BinaryHeap, VentPathfinder,
-│                                           Hearing, PacingDirector, DataMigration
+│                                           Hearing, PacingDirector, Doors, Airlock, DataMigration
 └── src/
     ├── ReplicatedFirst/
     │   └── LoadingCurtain.client.luau      [P1] Engine-only black curtain until WorldReady + local ack; 30s BootError fallback
@@ -93,7 +93,8 @@ Rovloc/
     │       │   ├── SoundLibrary.luau       [P1] Verified rbxasset://sounds/ engine-file catalog
     │       │   ├── SynthPresets.luau       [P1] Screech, heartbeat, vent scrape, trap snap, bone crunch, drip, glass crunch,
     │       │   │                                drone, EMF static, chem hiss, gate slam, light burst, thunder, rain, splash,
-    │       │   │                                gasp, breathing, footsteps per material (+ caption text)
+    │       │   │                                gasp, breathing, footsteps per material, fire door swing / latch and door
+    │       │   │                                creak [P6] (+ caption text)
     │       │   ├── VoicePool.luau          [P1] Pooled voices, per-bus caps, priority stealing, distance pre-cull
     │       │   └── AudioBuses.luau         [P1] SoundGroup tree + environment DSP (Vent, Underwater, Outdoor, Lobby)
     │       ├── Animation/
@@ -106,7 +107,9 @@ Rovloc/
     │       │           └── Creature.luau   [P4] Stalk, sprint, stun flail, 180° neck snap, spider crawl, vent retreat,
     │       │                                    vent stun flail, lunge, swim, locker rip, door smash
     │       ├── Sequence/
-    │       │   └── Timeline.luau           [P3] Server-time track runner (camera, light, sound, creature, door); fast-forward
+    │       │   ├── Timeline.luau           [P3] Server-time track runner (camera, light, sound, creature, door); fast-forward
+    │       │   └── DoorMotion.luau         [P6] A fixture door's motion on server time (swing / slide / smash, eases),
+    │       │                                    shared by DoorService and DoorController; the door OneShot's args
     │       ├── World/
     │       │   └── ProceduralWorldBuilder/
     │       │       ├── init.luau           [P1] BuildAuthoritative / BuildCosmetic / ClearRuntime + RegisterProp / RegisterRig
@@ -212,6 +215,8 @@ Rovloc/
     │       │           └── Scripted.luau           [P5] Exclusive control for cutscenes (Floor 1, roof)
     │       ├── Mechanics/
     │       │   ├── BearTrapService.luau    [P6] Snap, 35 damage, Anchor lock, solo pry 5s (look-down), co-op rescue 1.5s
+    │       │   ├── DoorService.luau        [P6] Only writer of DoorState + fixture leaf poses: fire doors, hallway gate,
+    │       │   │                                classroom + roof doors; Heartbeat-stepped leaves, never crushing, cues
     │       │   ├── ChemicalProjectileService.luau [P6] Flask pickup / hold / throw, stepped server raycasts, stun cloud
     │       │   ├── LockerHidingService.luau [P7] Enter / exit, Inspect() hook, server-run hold-breath meter, gasp
     │       │   └── FloodedPoolService.luau [P7] Swim physics validation, oxygen, grab + drag, struggle meter, floodlight
@@ -223,13 +228,14 @@ Rovloc/
     │       │   ├── Level4_FloodedPoolController.luau [P7] Pool activation, AquaticStalk handoff, floodlight wiring
     │       │   └── Level5_RoofController.luau [P8] Door smash, final sprint, parachute leap, lightning reveal + vanish
     │       └── Match/
+    │           ├── CheckpointAirlockService.luau [P6] Stairwell airlocks: 10 Hz checkpoint volume, 20s straggler timer,
+    │           │                                 seal via DoorService, left-behind spectators, Advance, 50% HP respawn
     │           └── MatchAndDataService/
     │               ├── init.luau           [P8] Match policy over RunLifecycleService + single RunOutcomeEvaluator
     │               ├── StoreBackend.luau   [P8] DataStore backend + Ephemeral Studio fallback + guest mode
     │               ├── PlayerDataStore.luau [P8] Session lock, serialized save queue, idempotent rewards, migrations
     │               ├── LobbyService.luau   [P8] Ready-up, difficulty vote, countdown, squad cap
     │               ├── PerkShopService.luau [P8] Credit spend → PerkStock, loadout equip
-    │               ├── CheckpointAirlockService.luau [P8] Fire doors, 20s straggler timer, 50% HP respawn, floor credits
     │               ├── DownedReviveService.luau [P8] 4s teammate revive prompt (server-timed channel)
     │               ├── SpectatorService.luau [P8] Late joiners + eliminated players, target cycling
     │               ├── MatchResetService.luau [P8] Results → Resetting → Lobby; Play Again votes
@@ -280,11 +286,13 @@ Rovloc/
                 │   ├── VentController.luau         [P4] Entry / exit transitions, rail crawl input, duct audio bus
                 │   ├── JumpscareController.luau    [P5] Face lock, lunge, screech, flash
                 │   ├── BearTrapController.luau     [P6] Leg-lock camera tilt, shaking-hands pry
+                │   ├── DoorController.luau         [P6] Renders every door motion each PreRender from its OneShot, impacts
                 │   ├── ChemicalThrowController.luau [P6] Held flask, aim arc, throw intent, local projectile visual
                 │   ├── LockerController.luau       [P7] Locker enter / peek + hold-breath UI (server-judged)
                 │   ├── SwimController.luau         [P7] Tread / freestyle input, underwater FX
                 │   └── StruggleController.luau     [P7] Mash UI (server-judged)
                 └── Match/
+                    ├── AirlockController.luau      [P6] Straggler countdown banner (inside / outside / sealing)
                     ├── LobbyController.luau        [P8] Ready-up, difficulty vote, perk shop UI
                     ├── DownedController.luau       [P8] Downed crawl HUD + self-revive
                     ├── SpectatorController.luau    [P8] Q / E teammate cycling through their first-person view
@@ -440,7 +448,7 @@ helpers that make the vent and doorway guarantees hold.
 | Player character | Client | Validated by `MovementAuthority`: speed, displacement and noclip raycasts. `VentNetworkService` registers a rail-distance validator for the vent. |
 | Player under a lock | Server | `CharacterService.Lock(player, reason, mode)`, ref-counted, which pushes collision mode `Locked`. **Anchor**: trap, locker, jumpscare, cutscene. **ServerOwned**: underwater drag. The last `Unlock` unanchors first, then calls `SetNetworkOwner(player)`. |
 | Creature | Server | `CreatureBody.Reassert()` after every anchor or rig change, with a Studio audit that the owner is `nil` |
-| Doors, gates, grates, locker doors, trap jaws | Server | Anchored and server-tweened. No free hinges. |
+| Doors, gates, grates, locker doors, trap jaws | Server | Anchored and stepped by the server on Heartbeat (collision follows them). No free hinges. Fixture doors announce each motion on `OneShot` and `DoorController` renders the same server-time motion every frame; a swinging or sliding leaf stops short of any player in its path and finishes once the way is clear (`DoorService`). |
 | Executed-player ragdolls | Server | `CorpseProps` + `SetNetworkOwner(nil)`. Level corpses are posed, anchored and client-cosmetic. |
 | Flasks | Nobody | No physical server part. `ProjectileEvent` → clients simulate the same parabola visually. |
 
@@ -478,6 +486,16 @@ reaching 0 goes through the same `Down` path. Execute and `Died` are idempotent.
 **Leaving mid-run.** `OnPlayerRemoving` releases locks, traps and channels, clears vent and locker occupancy, drops
 the Creature's target to its last known position, re-evaluates the airlock and the run outcome, and retargets spectators.
 On rejoin, the data load waits for any `Release` still in flight for that UserId.
+
+**Stairwell airlocks (P6).** `CheckpointAirlockService` watches the current level's exit vestibule (the stairwell's
+`fromRoom`, holding the level's `Checkpoint` volume) at 10 Hz. The first playing participant inside starts the 20 s
+straggler timer (`StragglerDeadline` on the exit fire door, which `AirlockController` counts down). It seals when every
+Alive participant is inside (a Downed one counts only while inside) or at the deadline (an empty vestibule resets to
+Idle instead). The fire door locks shut through `DoorService`, and once it is shut the floor changes: participants still
+outside are left behind as spectators, `LevelDirector.MarkCleared` + `Advance`, `FloorsCleared` for the survivors,
+`FloorCleared(level, survivors)`, then every Dead / Spectating participant respawns at 50% health at the next floor's
+entry, and `Sealed(from, to)`. Sealed doors stay locked for the run. The roof has no exit airlock. P8 awards the floor
+credits from these signals.
 
 **Floor debris.** `NoiseAndDirectorService` owns debris noise: entering a `FloorDebris` volume during a run emits the
 130-stud `FloorDebris` noise and a `GlassCrunch` cue (with a per-player cooldown). The Floor 1 `ScareStep` stays with the
@@ -549,9 +567,9 @@ in production, the player plays as a guest with saving off. Nobody is kicked and
 | **3** | `FirstPersonController` (Scriptable camera, CameraStack, body + IK hands, states, view-bob, panic VFX, dual-cone flashlight + EMF) · HUD · input / cursor / settings · `ProceduralAnimator` core + player profile · Timeline + SequenceController · PlayerState / MovementAuthority / LifeState / Interaction / Flashlight / Loadout services |
 | **4** | `VentNetworkService` (unscrew vs kick, locked grates, crawl transitions, A* + retreat) · `ProceduralAnimator` Creature profile · CreatureController |
 | **5** | `MonsterAIService`: all 7 states + Scripted, Perception, Hearing, Locomotion, PacingDirector, jumpscare handler |
-| **6** | Bear traps (solo pry + co-op rescue) · Floor 1 classroom encounter · Floor 2 chemical stun physics · Level 0–2 controllers |
+| **6** | Bear traps (solo pry + co-op rescue) · fixture doors (`DoorService`) + stairwell airlock checkpoints · Floor 1 classroom encounter · Floor 2 chemical stun physics · Level 0–2 controllers |
 | **7** | Floor 3 lockers + hold breath · Floor 4 swimming, oxygen, drag struggle, floodlight · Level 3–4 controllers |
-| **8** | `MatchAndDataService`: lobby, difficulty, perk shop, DataStore, airlocks, revive, spectator, roof finale (Level 5), reset loop, telemetry |
+| **8** | `MatchAndDataService`: lobby, difficulty, perk shop, DataStore, floor credits (from the airlock signals), revive, spectator, roof finale (Level 5), reset loop, telemetry |
 
 **Dependency adjustments to the roadmap** (so no phase needs a stub from a later one):
 
@@ -560,12 +578,14 @@ in production, the player plays as a guest with saving off. Nobody is kicked and
 2. `LifeStateService` (damage, Downed, 35 s bleedout, execute) moves to **P3**, so the P5 jumpscare and P6 traps
    are complete. P8 adds the teammate revive, the syringe self-revive and spectating on top of it.
 3. `LevelDirector` (CurrentLevel, level activation, advance) moves to **P1**, so floors 2–4 can be reached in
-   P5–P7 through the dev level-skip. The P8 airlock rules call it.
+   P5–P7 through the dev level-skip. The airlocks (P6) call it.
 4. `Timeline` (P3) and the Creature's `Scripted` state (P5) exist before the scripted beats in P6 and P8.
 5. `RunLifecycleService` and the Studio dev-run harness land in **P1**. Every phase can be played on its own, and P8
    swaps the harness for the real lobby.
 6. Later phases plug into registries owned by earlier ones (§1), so no earlier file is reopened. The only
    exceptions are the two bootstrap lists.
+7. The stairwell airlock checkpoints (`CheckpointAirlockService`, with `DoorService` driving the fire doors) move from
+   P8 to **P6**, so the demo can be played floor to floor. P8 listens to `FloorCleared` / `Sealed` for credits.
 
 ---
 
