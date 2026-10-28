@@ -1,7 +1,8 @@
 --!strict
 -- Client lighting maths (LightingController's pure helpers): seeded, server-time flicker that every client agrees on,
--- blackouts that fit their slots, the two-stage lightning envelope, the light-burst surge, and the camera-position
--- -> layout mapping that decides which level's fixtures are lit.
+-- blackouts that fit their slots, the two-stage lightning envelope, the light-burst surge, the camera-position
+-- -> layout mapping that decides which level's fixtures are lit, the glow curve every fixture's tubes follow
+-- (FixtureGlow) and the area grade's easing.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterPlayer = game:GetService("StarterPlayer")
@@ -10,6 +11,7 @@ local Workspace = game:GetService("Workspace")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Enums = require(ReplicatedStorage.Shared.Enums)
+local FixtureGlow = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.FixtureGlow)
 local LightingController = require(StarterPlayer.StarterPlayerScripts.Controllers.Core.LightingController)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 local Tags = require(ReplicatedStorage.Shared.Tags)
@@ -42,6 +44,46 @@ local GROUPS = { "L0_Boilers", "L1_NorthHall", "Stairwell_0_1", "L4_Floodlights"
 local T0 = 1_700_000_000 -- a realistic server time
 
 return {
+	["a fixture's glow follows its light: dims, flickers dark and dies to glass"] = function(t: Expect)
+		t.eq(FixtureGlow.level(0, 1.2), 0, "off")
+		t.near(FixtureGlow.level(0.6, 1.2), 0.5, 1e-9, "half its working brightness")
+		t.eq(FixtureGlow.level(4.8, 1.2), 1, "a burst surge clamps at full")
+		t.eq(FixtureGlow.level(2, 0), 1, "an override lighting a dark fixture glows")
+		t.eq(FixtureGlow.level(0 / 0, 1), 0, "NaN is off")
+
+		local lit = FixtureGlow.litColor("Fluorescent", Color3.fromRGB(168, 236, 196))
+		t.truthy(lit.R > 168 / 255 and lit.G >= 236 / 255 - 1e-6, "tubes burn whiter than the light they cast")
+		local material, color = FixtureGlow.look(lit, 1)
+		t.eq(material, FixtureGlow.OnMaterial, "lit tubes are Neon")
+		t.near(color.R, lit.R, 1e-6, "at full level in their lit colour")
+		t.near(color.G, lit.G, 1e-6)
+		t.near(color.B, lit.B, 1e-6)
+		material, color = FixtureGlow.look(lit, 0)
+		t.eq(material, FixtureGlow.OffMaterial, "dead tubes are glass")
+		t.truthy(color == FixtureGlow.OffColor, "grey")
+		local _, half = FixtureGlow.look(lit, 0.5)
+		local _, dip = FixtureGlow.look(lit, 0.12)
+		t.truthy(half.G < lit.G and half.G > dip.G, "a dimmer light, a darker tube")
+		t.truthy(dip.G > FixtureGlow.DimColor.G - 1e-6, "a flicker dip stays Neon, just dark")
+		t.eq(FixtureGlow.guiBrightness(0), 0, "an exit sign's letters go black")
+		t.near(FixtureGlow.guiBrightness(1), FixtureGlow.GuiBrightness, 1e-9, "and bloom at full")
+	end,
+
+	["the area grade eases toward the camera's level and settles"] = function(t: Expect)
+		local white = Color3.new(1, 1, 1)
+		local cold = Color3.fromRGB(226, 244, 255)
+		local step = LightingController.gradeStep(white, cold, 1 / 60)
+		t.truthy(step.R < 1 and step.R > cold.R, "a frame moves part of the way")
+		local current = white
+		for _ = 1, 600 do
+			current = LightingController.gradeStep(current, cold, 1 / 60)
+		end
+		t.near(current.R, cold.R, 1e-3, "ten seconds later it has arrived")
+		local settled = LightingController.gradeStep(cold, cold, 0.5)
+		t.near(settled.R, cold.R, 1e-6, "a settled grade stays put")
+		t.near(settled.B, cold.B, 1e-6)
+	end,
+
 	["flicker is a pure function of seed, group and server time"] = function(t: Expect)
 		for _, group in GROUPS do
 			for step = 0, 200 do

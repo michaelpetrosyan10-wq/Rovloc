@@ -1920,31 +1920,43 @@ type PipeRun = {
 	hangers: { number }, -- along `axis`, clear of the ceiling fixtures
 }
 
--- Approximate fixture boxes of a room's lights (as SchoolShellBuilder.buildLight places them under the ceiling).
+-- Fixture boxes of a room's lights: strip fixtures and bulbs exactly as SchoolShellBuilder.buildLight builds them
+-- (a strip hugs the ceiling, so a pipe passes under it; a bulb hangs on its flex), the wall-mounted kinds a generous
+-- cube.
 local function lightBoxes(room: Room, ceiling: number): { Box }
 	local out: { Box } = {}
+	local fixtureAxis = SchoolShellBuilder.fixtureAlong(room)
 	for _, light in (room.lights or {}) :: { LayoutSchema.Light } do
 		local p = light.pos
-		local hx, hy, hz, drop = 1.4, 1.4, 1.4, 0.8
-		if light.kind == "Fluorescent" or light.kind == "ClassroomGlow" then
-			hx, hy, hz, drop = 2, 0.125, 0.45, 0.125
-		elseif light.kind == "Bulb" then
-			hx, hy, hz, drop = 0.35, 0.35, 0.35, 0.6
+		local strip = light.kind == "Fluorescent" or light.kind == "ClassroomGlow"
+		if strip or light.kind == "Bulb" then
+			local lo, hi = SchoolShellBuilder.fixtureBox(light.kind, p, ceiling, fixtureAxis)
+			local vertical = if strip then 0.05 else 0.1
+			table.insert(out, {
+				x0 = lo.X - 0.3,
+				x1 = hi.X + 0.3,
+				z0 = lo.Z - 0.3,
+				z1 = hi.Z + 0.3,
+				y0 = lo.Y - vertical,
+				y1 = hi.Y + vertical,
+			})
+			continue
 		end
-		local y = math.min(p.Y, ceiling - drop)
+		local y = math.min(p.Y, ceiling - 0.8)
 		table.insert(out, {
-			x0 = p.X - hx - 0.3,
-			x1 = p.X + hx + 0.3,
-			z0 = p.Z - hz - 0.3,
-			z1 = p.Z + hz + 0.3,
-			y0 = y - hy - 0.1,
-			y1 = y + hy + 0.1,
+			x0 = p.X - 1.7,
+			x1 = p.X + 1.7,
+			z0 = p.Z - 1.7,
+			z1 = p.Z + 1.7,
+			y0 = y - 1.5,
+			y1 = y + 1.5,
 		})
 	end
 	return out
 end
 
-local function planRun(info: LevelInfo, anchor: Anchor, random: Random?): PipeRun?
+-- The run of the drip pipe at `anchor`: its half-length is drawn from `random` (nil: `half`, else the shortest).
+local function planRun(info: LevelInfo, anchor: Anchor, random: Random?, half: number?): PipeRun?
 	local room = info.rooms[anchor.room]
 	local inner = info.inner[anchor.room]
 	if not (room and inner) then
@@ -1962,7 +1974,7 @@ local function planRun(info: LevelInfo, anchor: Anchor, random: Random?): PipeRu
 	for _, platform in info.platforms do
 		table.insert(obstacles, platform)
 	end
-	local wantHalf = if random then between(random, PIPE_HALF_SPAN[1], PIPE_HALF_SPAN[2]) else PIPE_HALF_SPAN[1]
+	local wantHalf = if random then between(random, PIPE_HALF_SPAN[1], PIPE_HALF_SPAN[2]) else half or PIPE_HALF_SPAN[1]
 	local axes: { Vector3 } = if inner.w >= inner.d
 		then { Vector3.xAxis, Vector3.zAxis }
 		else { Vector3.zAxis, Vector3.xAxis }
@@ -2114,6 +2126,33 @@ function SetDressingBuilder.dripPoint(layoutId: string, anchor: Anchor): Vector3
 		return WorldConfig.levelOrigin(layoutId) + anchor.pos
 	end
 	return dripPointIn(Kit.info(layout), anchor)
+end
+
+-- Level-local boxes every possible drip pipe run at a DripPipe anchor of `layout` stays inside: the runs its shortest
+-- and longest seeded spans would take (the room fixes its height; the span can only change which way it runs where
+-- something above the ceiling line cuts one way short), so other ceiling runs can keep clear.
+function SetDressingBuilder.dripEnvelopes(layout: Layout, anchor: Anchor): { Box }
+	local info = Kit.info(layout)
+	local out: { Box } = {}
+	for _, half in PIPE_HALF_SPAN do
+		local run = planRun(info, anchor, nil, half)
+		if not run then
+			continue
+		end
+		local alongX = run.axis.X > 0.5
+		local reach = FLANGE_DIAMETER / 2 + 0.15
+		local from, to = math.min(run.from, run.at - half) - 0.5, math.max(run.to, run.at + half) + 0.5
+		local c0, c1 = run.cross - reach, run.cross + reach
+		table.insert(out, {
+			x0 = if alongX then from else c0,
+			x1 = if alongX then to else c1,
+			z0 = if alongX then c0 else from,
+			z1 = if alongX then c1 else to,
+			y0 = run.y - reach,
+			y1 = run.ceiling + 0.3,
+		})
+	end
+	return out
 end
 
 local function planPipe(info: LevelInfo, anchor: Anchor, random: Random): { Piece }?

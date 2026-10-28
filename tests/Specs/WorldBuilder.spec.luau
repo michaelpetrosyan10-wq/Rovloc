@@ -5,6 +5,10 @@
 -- contracts too: fixtures cast shadows (so light stays in its room), the facade shows one slab-edge material
 -- between storeys and its own skin at every corner, low platforms never z-fight the pool coping, and open
 -- PoolWater volumes are visible. The exterior is walled in and the lighting rig never writes plugin-only props.
+-- Finishes too: fixtures glow with their light (Neon tubes, dead grey glass, self-lit exit letters) and broken ones
+-- only come apart within their own footprint; wainscots clear every opening and its frame and meet cleanly at corners;
+-- corridors get glossy checker floors, classrooms vinyl tile, plaster ceilings a drop-ceiling grid whose missing tiles
+-- never hang over a fixture; striped hazard plates flank the fire doors and the gate.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -15,7 +19,11 @@ local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuild
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
+local Strings = require(ReplicatedStorage.Shared.Strings)
+
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
+local Finishes = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Finishes)
+local FixtureGlow = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.FixtureGlow)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local LightingMood = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingMood)
 local LightingRig = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingRig)
@@ -1027,6 +1035,335 @@ return {
 		t.eq(point.Brightness, 0)
 		t.eq(dead:GetAttribute(W.BaseBrightness), 0)
 		t.near(dead.Transparency, 0.2, 1e-6, "fixture still visible")
+		holder:Destroy()
+	end,
+
+	["fixtures glow: lit tubes Neon in their light's colour, dead ones grey glass, exit letters self-lit"] = function(
+		t: Expect
+	)
+		local layout = hallwaySlice()
+		local root = buildSlice(layout)
+		local origin = WorldConfig.levelOrigin(layout.id)
+		local lights = child(root, "Lights")
+		local fluorescent = childPart(lights, "T_L1")
+		local surface = fluorescent:FindFirstChildOfClass("SurfaceLight")
+		assert(surface, "fluorescent has a SurfaceLight")
+		t.truthy(surface.Color.G > surface.Color.R, "the hallway floor's tubes cast its green")
+		local lit = FixtureGlow.litColor("Fluorescent", surface.Color)
+		local tubes: { BasePart } = {}
+		for _, item in fluorescent:GetChildren() do
+			if FixtureGlow.isGlowPart(item) then
+				table.insert(tubes, item :: BasePart)
+			end
+		end
+		t.eq(#tubes, 2, "a working troffer has both tubes")
+		local hall = LayoutSchema.indexRooms(layout).T_Hall
+		local ceilingY = origin.Y + SchoolShellBuilder.ceilingBottom(layout, hall)
+		local lo, hi = SchoolShellBuilder.fixtureBox(
+			"Fluorescent",
+			origin + Vector3.new(214, 14, 80),
+			ceilingY,
+			SchoolShellBuilder.fixtureAlong(hall)
+		)
+		for _, part in { fluorescent :: BasePart, tubes[1], tubes[2] } do
+			local a, b = aabb(part)
+			t.truthy(
+				a.X >= lo.X - 1e-3 and a.Y >= lo.Y - 1e-3 and a.Z >= lo.Z - 1e-3,
+				part.Name .. " inside fixtureBox"
+			)
+			t.truthy(
+				b.X <= hi.X + 1e-3 and b.Y <= hi.Y + 1e-3 and b.Z <= hi.Z + 1e-3,
+				part.Name .. " inside fixtureBox"
+			)
+			t.truthy(b.Y <= ceilingY + 1e-3, part.Name .. " under the ceiling")
+		end
+		for _, tube in tubes do
+			t.eq(tube.Material, FixtureGlow.OnMaterial, "lit tubes are Neon")
+			t.near(tube.Color.G, lit.G, 1e-3, "in the light's own colour, whitened")
+			t.falsy(tube.CanCollide, "tubes never collide")
+			t.falsy(tube.CanQuery, "tubes are never queried")
+			t.falsy(tube.CastShadow, "tubes never shadow their own light")
+			t.eq(tube.CollisionGroup, CollisionGroups.NoCollide)
+		end
+		root:Destroy()
+
+		local holder = Instance.new("Folder")
+		local function build(spec: SchoolShellBuilder.LightSpec): BasePart
+			return SchoolShellBuilder.buildLight(holder, spec)
+		end
+		local deadBulb = build({
+			id = "T_DeadBulb",
+			kind = "Bulb",
+			position = Vector3.new(0, 10, 0),
+			brightness = 1,
+			range = 16,
+			broken = true,
+			levelId = "Level1_Hallways",
+			zoneId = "T_Hall",
+			ceilingY = 12,
+		})
+		local filament = deadBulb:FindFirstChild("Glow")
+		assert(filament and filament:IsA("BasePart"), "a bulb has a filament glow")
+		t.eq(filament.Material, FixtureGlow.OffMaterial, "a dead bulb's filament is glass")
+		t.eq(filament.Color, FixtureGlow.OffColor, "grey")
+		local cord = deadBulb:FindFirstChild("Cord")
+		assert(cord and cord:IsA("BasePart"), "a bulb hangs on its flex")
+		local _, cordTop = aabb(cord)
+		t.near(cordTop.Y, 12, 0.06, "the flex reaches the ceiling")
+
+		local exit = build({
+			id = "T_Exit",
+			kind = "ExitSign",
+			position = Vector3.new(0, 11, 0),
+			brightness = 0.3,
+			range = 8,
+			color = Color3.fromRGB(70, 255, 120),
+			levelId = "Level1_Hallways",
+			zoneId = "T_Hall",
+			facing = Vector3.new(0, 11, 10),
+		})
+		local letters = exit:FindFirstChild(FixtureGlow.GuiName)
+		assert(letters and letters:IsA("SurfaceGui"), "exit signs carry self-lit letters")
+		t.eq(letters.LightInfluence, 0, "the letters are a light source")
+		t.near(letters.Brightness, FixtureGlow.GuiBrightness, 1e-6, "burning")
+		t.eq(letters.Face, Enum.NormalId.Front, "on the face toward the room")
+		local text = letters:FindFirstChildWhichIsA("TextLabel", true)
+		assert(text, "exit letters")
+		t.eq(text.Text, Strings.get("Prop.Sign.Exit"))
+
+		-- Broken strips come apart (a tube pulled or hanging, the housing sagging), but only within their own footprint
+		-- and under the ceiling; where a drip pipe runs (hang = false) they keep to their rest box.
+		local variants: { [string]: boolean } = {}
+		for i = 1, 60 do
+			local hang = i % 3 ~= 0
+			local strip = build({
+				id = "T_Strip" .. i,
+				kind = "Fluorescent",
+				position = Vector3.new(0, 20, 0),
+				brightness = 1,
+				range = 20,
+				broken = true,
+				levelId = "Level1_Hallways",
+				zoneId = "T_Hall",
+				ceilingY = 20,
+				along = Vector3.zAxis,
+				hang = hang,
+			})
+			local boxLo, boxHi = SchoolShellBuilder.fixtureBox("Fluorescent", Vector3.new(0, 20, 0), 20, Vector3.zAxis)
+			local glows = 0
+			local low = math.huge
+			local pieces: { Instance } = strip:GetChildren()
+			table.insert(pieces, strip)
+			for _, item in pieces do
+				if not item:IsA("BasePart") then
+					continue
+				end
+				local part = item :: BasePart
+				if FixtureGlow.isGlowPart(part) then
+					glows += 1
+					t.eq(part.Material, FixtureGlow.OffMaterial, "dead tubes are glass")
+				end
+				local a, b = aabb(part)
+				low = math.min(low, a.Y)
+				t.truthy(b.Y <= 20 + 1e-3, part.Name .. " stays under the ceiling")
+				t.truthy(
+					a.X >= boxLo.X - 0.05 and b.X <= boxHi.X + 0.05 and a.Z >= boxLo.Z - 0.3 and b.Z <= boxHi.Z + 0.3,
+					part.Name .. " stays within its footprint"
+				)
+				if not hang then
+					t.truthy(a.Y >= boxLo.Y - 1e-3, part.Name .. " keeps to its rest box over a pipe")
+				end
+			end
+			variants[if low < boxLo.Y - 0.2 then "Sagging" elseif glows < 2 then "Pulled" else "Whole"] = true
+		end
+		t.truthy(variants.Sagging and variants.Pulled and variants.Whole, "dead strips fail in several ways")
+		holder:Destroy()
+	end,
+
+	["finishes: wainscots clear every opening and its frame, never collide, and meet cleanly at corners"] = function(
+		t: Expect
+	)
+		local layout = hallwaySlice()
+		local root = buildSlice(layout)
+		local shell = child(root, "Shell")
+		local origin = WorldConfig.levelOrigin(layout.id)
+		local pieces = parts(shell, function(part: BasePart): boolean
+			return string.sub(part.Name, 1, 9) == "Wainscot_"
+		end)
+		t.truthy(#pieces >= 12, "the corridor and the classroom are wainscoted")
+		local rooms: { [string]: boolean } = {}
+		for _, part in pieces do
+			t.falsy(part.CanCollide, part.Name .. " never collides")
+			t.falsy(part.CanQuery, part.Name .. " is never queried")
+			t.falsy(part.CastShadow, part.Name .. " casts no shadow")
+			local lo, hi = aabb(part)
+			t.truthy(lo.Y >= origin.Y - 1e-3 and hi.Y <= origin.Y + Finishes.RailTop + 1e-3, part.Name .. " height")
+			t.truthy(
+				math.min(hi.X - lo.X, hi.Z - lo.Z) <= Finishes.RailDepth + 1e-3,
+				part.Name .. " is a thin overlay on its wall"
+			)
+			for _, id in { "T_Hall", "T_Class", "T_Store", "T_Office", "L1_AirlockEast", "T_Chase" } do
+				if string.sub(part.Name, 1, 10 + #id) == "Wainscot_" .. id .. "_" then
+					rooms[id] = true
+				end
+			end
+			if string.sub(part.Name, -5) == "_Band" then
+				local expected = if string.find(part.Name, "T_Hall", 1, true) then "CeramicTiles" else "Plaster"
+				t.eq(part.Material.Name, expected, part.Name .. " material")
+			end
+		end
+		t.truthy(rooms.T_Hall and rooms.T_Class, "corridor tile and classroom paint")
+		t.falsy(rooms.T_Store or rooms.T_Office or rooms.L1_AirlockEast or rooms.T_Chase, "bare service rooms")
+		-- Openings, and the casings, steel frames, rails, boards and grate frames around them, stay clear.
+		local framePad: { [string]: number } = { Airlock = 0.7, Gate = 0.5, Boarded = 0.55 }
+		for _, item in SchoolShellBuilder.openings(layout) do
+			local o = item.opening
+			local door = item.door
+			local pad = if door then framePad[door.kind] or 0.35 elseif item.kind == "Grate" then 0.34 else 0
+			local lo, hi = openingBox(layout.id, item.axis, item.coord, 1.6, o.u0 - pad, o.u1 + pad, o.y0, o.y1)
+			for _, part in pieces do
+				local a, b = aabb(part)
+				t.eq(overlapVolume(a, b, lo, hi), 0, string.format("%s covers %s opening", part.Name, item.kind))
+			end
+		end
+		-- No two pieces overlap, the corners included (faces may touch: float32 positions blur a shared face by ~1e-5).
+		for i = 1, #pieces do
+			local a0, a1 = aabb(pieces[i])
+			for j = i + 1, #pieces do
+				local b0, b1 = aabb(pieces[j])
+				local solid = math.min(a1.X, b1.X) - math.max(a0.X, b0.X) > 1e-3
+					and math.min(a1.Y, b1.Y) - math.max(a0.Y, b0.Y) > 1e-3
+					and math.min(a1.Z, b1.Z) - math.max(a0.Z, b0.Z) > 1e-3
+				t.falsy(solid, pieces[i].Name .. " overlaps " .. pieces[j].Name)
+			end
+		end
+		root:Destroy()
+	end,
+
+	["finishes: glossy checker corridor, vinyl classroom, drop ceilings, hazard plates at the fire door and gate"] = function(
+		t: Expect
+	)
+		local layout = hallwaySlice()
+		local root = buildSlice(layout)
+		local shell = child(root, "Shell")
+		local origin = WorldConfig.levelOrigin(layout.id)
+		local function frames(gui: Instance, name: string?): number
+			local n = 0
+			for _, item in gui:GetDescendants() do
+				if item:IsA("Frame") and (name == nil or item.Name == name) then
+					n += 1
+				end
+			end
+			return n
+		end
+		local function finish(part: BasePart, face: Enum.NormalId): SurfaceGui
+			local gui = part:FindFirstChild("Finish")
+			assert(gui and gui:IsA("SurfaceGui"), part.Name .. " is painted")
+			t.eq(gui.Face, face, part.Name .. " painted face")
+			t.eq(gui.LightInfluence, 1, part.Name .. " paint is lit by the scene")
+			t.truthy(gui.PixelsPerStud >= 4 and gui.PixelsPerStud <= 20, part.Name .. " low resolution")
+			local studs = math.max(part.Size.X, part.Size.Z)
+			t.truthy(studs * gui.PixelsPerStud <= 1024, part.Name .. " canvas fits")
+			return gui
+		end
+
+		local hall = childPart(shell, "Floor_T_Hall_1")
+		local checker = Palette.get("CheckerLight")
+		t.eq(hall.Material, checker.material, "the corridor floor is the pale squares")
+		t.eq(hall.Color, checker.color)
+		t.truthy(hall.Reflectance >= 0.05 and hall.Reflectance <= 0.15, "waxed and glossy")
+		local cols, rows = Finishes.checkerCounts(hall.Size.X, hall.Size.Z, 3)
+		t.eq(cols % 2, 1, "odd columns")
+		t.eq(rows % 2, 1, "odd rows")
+		local squares = frames(finish(hall, Enum.NormalId.Top), "Square")
+		t.eq(squares, math.ceil(cols * rows / 2), "every other square is dark")
+		t.truthy(squares <= Finishes.MaxSquares, "within the frame budget")
+		for _, item in (hall:FindFirstChild("Finish") :: Instance):GetChildren() do
+			if item:IsA("Frame") then
+				t.truthy(item.BackgroundTransparency > 0, "the gloss shows through the dark squares")
+				break
+			end
+		end
+		local wide, deep = Finishes.checkerCounts(240, 14, 3)
+		t.truthy(math.ceil(wide * deep / 2) <= Finishes.MaxSquares, "even the longest hall fits the budget")
+
+		local class = childPart(shell, "Floor_T_Class_1")
+		t.eq(class.Color, Palette.get("ClassroomVCT").color, "classroom vinyl tile")
+		t.truthy(class.Reflectance > 0, "polished")
+		t.truthy(frames(finish(class, Enum.NormalId.Top), "Square") > 0, "two-tone tiles")
+		local store = childPart(shell, "Floor_T_Store_1")
+		t.eq(store.Reflectance, 0, "a dry storeroom floor is matte")
+		t.falsy(store:FindFirstChild("Finish"), "and bare")
+
+		local ceiling = childPart(shell, "Ceiling_T_Hall")
+		local grid = finish(ceiling, Enum.NormalId.Bottom)
+		local gc, gr = Finishes.ceilingGrid(ceiling.Size.X, ceiling.Size.Z)
+		t.eq(frames(grid, "SeamU"), gc - 1, "drop-ceiling seams across")
+		t.eq(frames(grid, "SeamV"), gr - 1, "and along")
+		t.falsy(childPart(shell, "Ceiling_T_Store"):FindFirstChild("Finish"), "a concrete ceiling is no drop ceiling")
+
+		for _, name in
+			{
+				"Hazard_T_HallAirlock_Low",
+				"Hazard_T_HallAirlock_High",
+				"Hazard_T_OfficeAirlock_Low",
+				"Hazard_T_OfficeAirlock_High",
+			}
+		do
+			local plate = childPart(shell, name)
+			t.falsy(plate.CanCollide, name .. " never collides")
+			t.falsy(plate.CanQuery, name .. " is never queried (footsteps read the floor)")
+			local lo, hi = aabb(plate)
+			t.near(lo.Y, origin.Y, 1e-3, name .. " lies on the floor")
+			t.truthy(hi.Y - lo.Y <= 0.02, name .. " is paper thin")
+			local stripes = plate:FindFirstChild("Stripes")
+			assert(stripes and stripes:IsA("SurfaceGui"), name .. " is striped")
+			t.truthy(frames(stripes, "Stripe") >= 4, name .. " has black bars")
+		end
+		root:Destroy()
+	end,
+
+	["drop ceilings lose tiles in ruined rooms, never where a fixture hangs"] = function(t: Expect)
+		local roomId: string? = nil
+		for i = 1, 400 do
+			if Finishes.ruin("Level1_Hallways", "R" .. i) > 0.9 then
+				roomId = "R" .. i
+				break
+			end
+		end
+		assert(roomId, "some room is ruined")
+		t.eq(Finishes.ruin("Lobby", roomId), 0, "the lobby is kept up")
+		local room: LayoutSchema.Room = { id = roomId, kind = "Classroom", rect = R(0, 0, 28, 30) }
+		local holder = Instance.new("Folder")
+		local part = Geometry.box(holder, "Ceiling", Vector3.new(0, 10, 0), Vector3.new(28, 10.4, 30), "PlasterSchool")
+		assert(part, "ceiling")
+		-- a fixture band across the middle of the room
+		Finishes.decorateCeiling(
+			part,
+			"Level1_Hallways",
+			room,
+			"PlasterSchool",
+			{ { x0 = 0, x1 = 28, z0 = 13, z1 = 17 } }
+		)
+		local gui = part:FindFirstChild("Finish")
+		assert(gui, "painted")
+		local cols, rows = Finishes.ceilingGrid(28, 30)
+		local depth = 30 / rows
+		local holes = 0
+		for _, item in gui:GetChildren() do
+			if item:IsA("Frame") and item.Name == "MissingTile" then
+				holes += 1
+				t.eq(item.BackgroundTransparency, 0, "a hole is black")
+				local j = math.floor(item.Position.Y.Scale * rows + 0.5)
+				-- under either flip of the canvas, the tile is clear of the fixture band
+				for _, row in { j, rows - 1 - j } do
+					local z0, z1 = row * depth, (row + 1) * depth
+					t.truthy(z1 <= 13 + 1e-6 or z0 >= 17 - 1e-6, string.format("tile row %d under a fixture", row))
+				end
+			end
+		end
+		t.truthy(holes >= 5, "a ruined room has holes in its ceiling")
+		t.truthy(cols >= 6, "a real grid")
 		holder:Destroy()
 	end,
 

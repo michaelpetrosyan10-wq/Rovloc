@@ -1,6 +1,7 @@
 --!strict
 -- LightingMood: the built lighting is dark but readable — a real share of each level's fixtures burn, the story's
--- dark rooms and scripted lights keep their layout marks, wayfinding lights always burn, and it's deterministic.
+-- dark rooms and scripted lights keep their layout marks, wayfinding lights always burn, every wing casts its own
+-- colour (green-teal school floors, amber basement, cyan pool) with a gentle grade to match, and it's deterministic.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -79,6 +80,39 @@ return {
 				local cap = LightingMood.MaxBrightness[kind] or 2
 				t.truthy(resolved.brightness <= math.max(cap, entry.light.brightness) + 1e-6, entry.light.id .. " cap")
 			end
+		end
+	end,
+
+	["each wing casts its own colour; wayfinding, scripted and kept-dark lights keep theirs"] = function(t: Expect)
+		local white = Color3.new(1, 1, 1)
+		local hallways = LightingMood.cast("Level1_Hallways", "L1_NorthHall_West", "Fluorescent", white)
+		t.truthy(hallways.G > hallways.R and hallways.G > hallways.B, "the classroom floors burn a sickly green")
+		local science = LightingMood.cast("Level2_ScienceHall", "L2_NorthHall", "Fluorescent", white)
+		t.truthy(science.G > science.R and science.B > science.R, "the science wing a green-teal")
+		local basement = LightingMood.cast("Level0_Basement", "L0_BoilerHall", "Fluorescent", white)
+		t.truthy(basement.R > basement.G and basement.G > basement.B, "the basement tubes an amber")
+		local bulb = LightingMood.cast("Level0_Basement", "L0_BoilerHall", "Bulb", white)
+		t.truthy(bulb.R > bulb.B + 0.2, "the basement bulbs a warm sodium")
+		local pool = LightingMood.cast("Level4_FloodedPool", "L4_Corridor_West", "Fluorescent", white)
+		t.truthy(pool.B > pool.R and pool.B >= pool.G, "the pool a cold cyan")
+		-- the pull is partial: the layout's own colour still shows through
+		t.truthy(hallways.R > 0.5, "a cast, not a recolour")
+
+		local red = Color3.fromRGB(255, 34, 22)
+		t.eq(LightingMood.cast("Level1_Hallways", "L1_AirlockEast", "EmergencyRed", red), red, "emergency reds")
+		t.eq(LightingMood.cast("Level1_Hallways", "L1_Corridor_West", "ExitSign", red), red, "exit signs")
+		t.eq(LightingMood.cast("Level4_FloodedPool", "L4_Natatorium", "Floodlight", white), white, "floodlights")
+		t.eq(LightingMood.cast("Level1_Hallways", "L1_Classroom_108", "ClassroomGlow", white), white, "the glow")
+		t.eq(LightingMood.cast("Level1_Hallways", "L1_Corridor_East", "Fluorescent", white), white, "kept dark")
+
+		t.eq(LightingMood.grade(nil), white, "no grade outside every building")
+		local poolGrade = LightingMood.grade("Level4_FloodedPool")
+		t.truthy(poolGrade.B > poolGrade.R, "the pool grade is cold")
+		local basementGrade = LightingMood.grade("Level0_Basement")
+		t.truthy(basementGrade.R > basementGrade.B, "the basement grade is warm")
+		for _, layout in Builder.layouts() do
+			local grade = LightingMood.grade(layout.id)
+			t.truthy(math.min(grade.R, grade.G, grade.B) > 0.8, layout.id .. " grade stays gentle")
 		end
 	end,
 

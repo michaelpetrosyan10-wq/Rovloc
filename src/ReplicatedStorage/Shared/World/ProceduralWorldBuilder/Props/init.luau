@@ -17,7 +17,9 @@ local LockerBuilder = require(script.LockerBuilder)
 local ParachuteBuilder = require(script.ParachuteBuilder)
 local PickupBuilder = require(script.PickupBuilder)
 local PoolWaterBuilder = require(script.PoolWaterBuilder)
+local ServicePipeBuilder = require(script.ServicePipeBuilder)
 local SetDressingBuilder = require(script.SetDressingBuilder)
+local SignageBuilder = require(script.SignageBuilder)
 local VentGrateBuilder = require(script.VentGrateBuilder)
 
 local log = Log.new("Props")
@@ -33,7 +35,9 @@ local MODULES: { { name: string, module: Module } } = {
 	{ name = "ParachuteBuilder", module = ParachuteBuilder },
 	{ name = "PickupBuilder", module = PickupBuilder },
 	{ name = "PoolWaterBuilder", module = PoolWaterBuilder },
+	{ name = "ServicePipeBuilder", module = ServicePipeBuilder },
 	{ name = "SetDressingBuilder", module = SetDressingBuilder },
+	{ name = "SignageBuilder", module = SignageBuilder },
 	{ name = "VentGrateBuilder", module = VentGrateBuilder },
 }
 

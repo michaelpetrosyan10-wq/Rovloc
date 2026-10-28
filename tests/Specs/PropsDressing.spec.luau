@@ -4,6 +4,8 @@
 -- worktops and the pool's starting-block tops stay clear for theirs; Drip parts carry the DripPipe tag at dripPoint(); debris lies inside its trigger and never collides;
 -- nothing intrudes on a doorway, a grate front, a stair landing or a spawn point; the pool dressing never makes a
 -- route across the water that skips the swim; client dressing is non-colliding, unqueried and seed-deterministic.
+-- Signs and posters are lit, non-colliding prints on their walls above the chair rail, clear of every opening, with
+-- every word from Strings; the plant rooms' pipework runs above the door heads and clear of every light fixture and drip pipe.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -11,10 +13,12 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
+local Finishes = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Finishes)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local PoolWaterBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PoolWaterBuilder)
 local SchoolShellBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.SchoolShellBuilder)
@@ -28,7 +32,8 @@ type Anchor = LayoutSchema.Anchor
 local W = Attributes.World
 local BUDGET = SetDressingBuilder.Budget
 
-local STATIC_PREFIXES: { string } = { "LabCounter_", "SmashedLocker_", "DripPipe_", "FloorDebris_", "PoolDressing_" }
+local STATIC_PREFIXES: { string } =
+	{ "LabCounter_", "SmashedLocker_", "DripPipe_", "FloorDebris_", "PoolDressing_", "Signs_", "Pipes_" }
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -707,6 +712,144 @@ return {
 			end
 		end
 		t.truthy(differs, "another seed poses and scatters differently")
+	end,
+
+	["signage: lit, non-colliding prints above the chair rail, clear of every opening, words from Strings"] = function(
+		t: Expect
+	)
+		local allowed: { [string]: boolean } = {}
+		for _, key in
+			{
+				"NoRunning",
+				"Exit",
+				"Stairs",
+				"Science",
+				"Gym",
+				"Lockers",
+				"Pool",
+				"Office",
+				"Boiler",
+				"Missing",
+				"Assembly",
+				"Quarantine",
+				"Help",
+				"Hide",
+				"Caution",
+				"WetFloor",
+			}
+		do
+			allowed[Strings.get("Prop.Sign." .. key)] = true
+		end
+		local plates = 0
+		for _, id: Enums.LayoutId in Enums.LayoutId do
+			local layout = layoutOf(id)
+			local origin = WorldConfig.levelOrigin(id)
+			local signs = props(id):FindFirstChild("Signs_" .. id)
+			if not signs then
+				t.truthy(id == "Level5_Roof", id .. " has signs")
+				continue
+			end
+			local count = 0
+			for _, part in parts(signs) do
+				count += 1
+				t.falsy(part.CanCollide, part.Name .. " never collides")
+				t.falsy(part.CanQuery, part.Name .. " is never queried")
+				t.falsy(part.CastShadow, part.Name .. " casts no shadow")
+				local lo, hi = aabb(part)
+				local standing = string.sub(part.Name, 1, 9) == "WetFloor_"
+				if standing then
+					t.truthy(lo.Y >= origin.Y - 0.01 and hi.Y < origin.Y + 2.4, part.Name .. " stands on the floor")
+				else
+					t.truthy(lo.Y >= origin.Y + Finishes.RailTop, part.Name .. " hangs above the chair rail")
+					t.truthy(math.min(hi.X - lo.X, hi.Z - lo.Z) <= 0.35, part.Name .. " is flat on its wall")
+				end
+				for _, gui in part:GetChildren() do
+					if gui:IsA("SurfaceGui") then
+						t.eq(gui.LightInfluence, 1, part.Name .. " is lit by the scene")
+						t.truthy(gui.PixelsPerStud <= 20, part.Name .. " low resolution")
+						for _, label in gui:GetDescendants() do
+							if label:IsA("TextLabel") then
+								local number = string.match(part.Name, "^Plate_.-_(%d+)$")
+								if number then
+									plates += 1
+									local n = tonumber(number) :: number
+									t.truthy(
+										label.Text == Strings.get("Prop.Sign.Room", n)
+											or label.Text == Strings.get("Prop.Sign.Lab", n),
+										part.Name .. " names its room"
+									)
+								else
+									t.truthy(
+										allowed[label.Text],
+										part.Name .. " text comes from Strings: " .. label.Text
+									)
+								end
+							end
+						end
+					end
+				end
+				-- clear of every opening the shell cuts, a stud either side of the wall
+				for _, item in SchoolShellBuilder.openings(layout) do
+					local o = item.opening
+					local a0 = item.coord - 1.2
+					local a1 = item.coord + 1.2
+					local boxLo = origin
+						+ (if item.axis == "X" then Vector3.new(a0, o.y0, o.u0) else Vector3.new(o.u0, o.y0, a0))
+					local boxHi = origin
+						+ (if item.axis == "X" then Vector3.new(a1, o.y1, o.u1) else Vector3.new(o.u1, o.y1, a1))
+					t.falsy(overlaps(lo, hi, boxLo, boxHi), part.Name .. " covers a " .. item.kind .. " opening")
+				end
+			end
+			if id ~= "Lobby" then
+				t.truthy(count >= 10, string.format("%s has %d signs", id, count))
+			end
+			-- STAIRS by every fire door, on the corridor side
+			for _, door in layout.doors do
+				if door.kind == "Airlock" then
+					t.truthy(signs:FindFirstChild("Stairs_" .. door.id) ~= nil, door.id .. " has a STAIRS sign")
+				end
+			end
+		end
+		t.truthy(plates >= 25, string.format("%d room plates", plates))
+	end,
+
+	["service pipes: plant rooms only, above the door heads, clear of every light fixture and drip pipe"] = function(
+		t: Expect
+	)
+		for _, id in { "Level0_Basement", "Level4_FloodedPool" } do
+			local origin = WorldConfig.levelOrigin(id)
+			local pipes = props(id):FindFirstChild("Pipes_" .. id)
+			assert(pipes, id .. " has pipework")
+			local list = parts(pipes)
+			t.truthy(#list >= 30, string.format("%s has %d pipe parts", id, #list))
+			local fixtures: { { lo: Vector3, hi: Vector3, name: string } } = {}
+			for _, part in parts(model(world()[id], "Lights")) do
+				local lo, hi = aabb(part)
+				table.insert(fixtures, { lo = lo, hi = hi, name = part.Name })
+			end
+			-- the drip pipes hung under the same ceilings
+			for _, item in props(id):GetChildren() do
+				if string.sub(item.Name, 1, 9) == "DripPipe_" then
+					for _, part in parts(item) do
+						local lo, hi = aabb(part)
+						table.insert(fixtures, { lo = lo, hi = hi, name = item.Name .. "." .. part.Name })
+					end
+				end
+			end
+			for _, part in list do
+				t.falsy(part.CanCollide, part.Name .. " never collides")
+				t.falsy(part.CanQuery, part.Name .. " is never queried")
+				local lo, hi = aabb(part)
+				t.truthy(lo.Y >= origin.Y + 10.5, part.Name .. " runs above the door heads")
+				for _, fixture in fixtures do
+					t.falsy(overlaps(lo, hi, fixture.lo, fixture.hi), part.Name .. " runs through " .. fixture.name)
+				end
+			end
+		end
+		t.falsy(
+			props("Level1_Hallways"):FindFirstChild("Pipes_Level1_Hallways"),
+			"the classroom floors keep theirs hidden"
+		)
 	end,
 
 	["static dressing is the same on every build"] = function(t: Expect)

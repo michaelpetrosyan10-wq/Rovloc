@@ -65,6 +65,28 @@ local entries: { [string]: Entry } = {
 	SkylineSoot = entry(Enum.Material.Slate, 22, 22, 24, "Concrete"),
 	SkylineWindow = entry(Enum.Material.Glass, 10, 11, 13, "Glass"),
 	SkylineLit = entry(Enum.Material.Neon, 110, 74, 36, "Glass"),
+
+	-- Interior finishes (Finishes): wainscots, chair rails, baseboards, checker floors
+	Baseboard = entry(Enum.Material.Rubber, 30, 29, 27, "Concrete"), -- rubber cove base
+	TileCap = entry(Enum.Material.CeramicTiles, 44, 54, 48, "Tile"), -- glazed bullnose cap over a tile wainscot
+	WainscotOxblood = entry(Enum.Material.CeramicTiles, 92, 44, 40, "Tile"), -- glazed corridor tile (Level 1)
+	WainscotTeal = entry(Enum.Material.CeramicTiles, 46, 84, 82, "Tile"), -- science wing (Level 2)
+	WainscotTan = entry(Enum.Material.CeramicTiles, 132, 112, 80, "Tile"), -- gym wing, under the brick (Level 3)
+	WainscotBlue = entry(Enum.Material.CeramicTiles, 46, 72, 98, "Tile"), -- pool wing (Level 4)
+	WainscotGreen = entry(Enum.Material.CeramicTiles, 54, 86, 68, "Tile"), -- restrooms, locker rooms
+	WainscotPaint = entry(Enum.Material.Plaster, 70, 80, 62, "Concrete"), -- classroom dado: dark olive gloss paint
+	WainscotWood = entry(Enum.Material.Wood, 70, 50, 34, "Wood"), -- office panelling
+	CheckerLight = entry(Enum.Material.Plastic, 166, 164, 148, "Tile"), -- the pale squares of a checker floor
+	ClassroomVCT = entry(Enum.Material.Plastic, 132, 126, 106, "Tile"), -- speckled vinyl tile
+
+	-- Signage and service runs
+	SignPaper = entry(Enum.Material.SmoothPlastic, 196, 188, 162, "Metal"),
+	SignPlate = entry(Enum.Material.SmoothPlastic, 34, 52, 74, "Metal"), -- enamelled room plate
+	SignMetal = entry(Enum.Material.Metal, 132, 136, 132, "Metal"),
+	HazardYellow = entry(Enum.Material.SmoothPlastic, 206, 162, 26, "Metal"),
+	PipeIron = entry(Enum.Material.CorrodedMetal, 72, 58, 48, "Metal"),
+	PipeCopper = entry(Enum.Material.CorrodedMetal, 112, 82, 58, "Metal"),
+	Conduit = entry(Enum.Material.Metal, 128, 132, 130, "Metal"),
 }
 
 -- Keys every layout may reference; the spec asserts they all exist.

@@ -24,6 +24,13 @@
 --     later phase entirely.
 --   * SetOverride(lightId, brightness?) pins a fixture's brightness for Timeline tracks (P3) and the pool floodlight
 --     switch (P7); an override forces the fixture into the active set and wins over flicker and burnt bulbs.
+--   * Glow. A fixture's glow surfaces (FixtureGlow: Neon tubes, filaments and lenses, an exit sign's self-lit letters)
+--     follow its light: every frame an active fixture's light is written, its glow is set to the same level (only when
+--     it changed), so a flickering tube stutters, a blackout leaves dead glass, a burst bulb surges and dies with its
+--     light. A fixture leaving the active set gets its steady look back (lit if it works, dead if not), so tubes out of
+--     the light budget still glow in the distance.
+--   * Area grade. A client-local ColorCorrectionEffect eases toward the tint of the level the camera is on
+--     (LightingMood.grade: green-teal on the school floors, amber in the basement, cyan at the pool).
 
 local CollectionService = game:GetService("CollectionService")
 local Lighting = game:GetService("Lighting")
@@ -36,7 +43,9 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local FixtureGlow = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.FixtureGlow)
 local Instances = require(ReplicatedStorage.Shared.Instances)
+local LightingMood = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingMood)
 local LightingRig = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingRig)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
@@ -58,6 +67,8 @@ local SECONDARY_RATIO = 0.35 -- a fill's share of the primary when the fixture h
 local MIN_ON = 0.004 -- below this brightness a light is switched off instead of dimmed
 local WRITE_EPSILON = 0.004
 local REFRESH_INTERVAL = 0.25
+local GLOW_EPSILON = 0.02 -- glow level changes smaller than this are not written
+local WHITE = Color3.new(1, 1, 1)
 local DEFAULT_BUDGET = 48
 local NOISE_PERIOD = 4096 -- noise is sampled on server time modulo this (keeps math.noise inputs precise)
 
@@ -86,6 +97,10 @@ local INDOOR_FLASH = 0.18
 local MAX_SCHEDULE_AHEAD = 10
 local FLASH_GRADE_NAME = "LightningFlash"
 
+-- Area grade
+local AREA_GRADE_NAME = "AreaGrade"
+local AREA_GRADE_RATE = 1.2 -- per second: the grade settles within a couple of seconds of changing floors
+
 -- Ambient storm
 local STORM_SLOT = 11
 local STORM_CHANCE = 0.8
@@ -103,6 +118,7 @@ type LightRec = {
 type Entry = {
 	fixture: BasePart,
 	id: string,
+	kind: string,
 	position: Vector3,
 	layoutId: string,
 	fromLevel: string?,
@@ -115,6 +131,10 @@ type Entry = {
 	burstStart: number?,
 	color: Color3,
 	childConnection: RBXScriptConnection?,
+	glows: { BasePart }, -- FixtureGlow surfaces
+	guis: { SurfaceGui }, -- FixtureGlow self-lit faces
+	lit: Color3?, -- the glow's full colour (from the primary light)
+	glowLevel: number, -- last level written to the glow (-1: never)
 }
 
 export type FlickerProfile = {
@@ -209,6 +229,11 @@ local rest: RestState? = nil
 local lastWrite: RestState? = nil
 local flashGrade: ColorCorrectionEffect? = nil
 local lastScripted = -math.huge
+
+-- Area grade
+local areaGrade: ColorCorrectionEffect? = nil
+local gradeNow = WHITE
+local gradeWritten: Color3? = nil
 
 -- Storm
 local stormEnabled = true
@@ -333,6 +358,11 @@ function LightingController.burstMultiplier(t: number): number?
 		return 0
 	end
 	return nil
+end
+
+-- One step of the area grade easing from `current` toward `target` over `dt` seconds.
+function LightingController.gradeStep(current: Color3, target: Color3, dt: number): Color3
+	return current:Lerp(target, 1 - math.exp(-AREA_GRADE_RATE * math.max(0, dt)))
 end
 
 local lobbyBoundsCache: Bounds? = nil
@@ -559,6 +589,44 @@ local function switchOff(entry: Entry)
 	end
 end
 
+-- Writes the glow surfaces of `entry` at `level` (skipped when it barely moved and stays on the same side of off).
+local function writeGlow(entry: Entry, level: number)
+	if #entry.glows == 0 and #entry.guis == 0 then
+		return
+	end
+	local last = entry.glowLevel
+	local wasOn = last > FixtureGlow.OffLevel
+	local isOn = level > FixtureGlow.OffLevel
+	if last >= 0 and wasOn == isOn and math.abs(level - last) < GLOW_EPSILON then
+		return
+	end
+	entry.glowLevel = level
+	local lit = entry.lit or WHITE
+	for _, part in entry.glows do
+		FixtureGlow.apply(part, lit, level)
+	end
+	local brightness = FixtureGlow.guiBrightness(level)
+	for _, gui in entry.guis do
+		gui.Brightness = brightness
+	end
+end
+
+-- The brightness a fixture rests at outside the active set: its override, else its base unless it is dead.
+local function steadyBrightness(entry: Entry): number
+	local override = overrides[entry.id]
+	if override ~= nil then
+		return override
+	end
+	if entry.dead or entry.base <= 0 then
+		return 0
+	end
+	return entry.base
+end
+
+local function writeSteadyGlow(entry: Entry)
+	writeGlow(entry, FixtureGlow.level(steadyBrightness(entry), entry.base))
+end
+
 local function applyShadows(entry: Entry)
 	for _, rec in entry.lights do
 		local wanted = rec.shadows and budgetShadows
@@ -601,6 +669,7 @@ end
 -- A dead bulb's fixture goes dark and sooty (client-local; restored when the run ends).
 local function burnFixture(entry: Entry)
 	entry.fixture.Color = entry.color:Lerp(BURNT_TINT, 0.75)
+	writeGlow(entry, 0)
 end
 
 -- The primary light's brightness for this frame.
@@ -636,6 +705,7 @@ local function updateEntry(entry: Entry, t: number, now: number)
 	for _, rec in entry.lights do
 		writeRec(rec, brightness * rec.ratio)
 	end
+	writeGlow(entry, FixtureGlow.level(brightness, entry.base))
 end
 
 --------------------------------------------------------------------------------
@@ -705,6 +775,7 @@ local function refreshActive()
 		if not keep[entry] and entry.active then
 			entry.active = false
 			switchOff(entry)
+			writeSteadyGlow(entry)
 		end
 	end
 	for _, entry in nextActive do
@@ -728,6 +799,9 @@ local function addLight(entry: Entry, light: Light)
 		if rec.light == light then
 			return
 		end
+	end
+	if entry.lit == nil or light.Name == PRIMARY_LIGHT then
+		entry.lit = FixtureGlow.litColor(entry.kind, light.Color)
 	end
 	local ratio = originalRatio[light]
 	if ratio == nil then
@@ -758,6 +832,30 @@ local function addLight(entry: Entry, light: Light)
 	elseif rec.enabled then
 		light.Enabled = false
 		rec.enabled = false
+	end
+end
+
+local function addGlow(entry: Entry, child: Instance)
+	if FixtureGlow.isGlowPart(child) then
+		local part = child :: BasePart
+		if not table.find(entry.glows, part) then
+			table.insert(entry.glows, part)
+			entry.glowLevel = -1
+		end
+	elseif FixtureGlow.isGlowGui(child) then
+		local gui = child :: SurfaceGui
+		if not table.find(entry.guis, gui) then
+			table.insert(entry.guis, gui)
+			entry.glowLevel = -1
+		end
+	end
+end
+
+local function addChild(entry: Entry, child: Instance)
+	if child:IsA("Light") then
+		addLight(entry, child)
+	else
+		addGlow(entry, child)
 	end
 end
 
@@ -792,6 +890,7 @@ local function register(instance: Instance)
 	local entry: Entry = {
 		fixture = instance,
 		id = instance.Name,
+		kind = Attributes.getString(instance, W.LightKind, ""),
 		position = instance.CFrame.Position,
 		layoutId = Attributes.getString(instance, W.LevelId, ""),
 		fromLevel = fromLevel,
@@ -804,6 +903,10 @@ local function register(instance: Instance)
 		burstStart = nil,
 		color = instance.Color,
 		childConnection = nil,
+		glows = {},
+		guis = {},
+		lit = nil,
+		glowLevel = -1,
 	}
 	entries[instance] = entry
 	table.insert(entryList, entry)
@@ -812,14 +915,10 @@ local function register(instance: Instance)
 	end
 	byId[entry.id] = entry
 	for _, child in instance:GetChildren() do
-		if child:IsA("Light") then
-			addLight(entry, child)
-		end
+		addChild(entry, child)
 	end
 	entry.childConnection = instance.ChildAdded:Connect(function(child: Instance)
-		if child:IsA("Light") then
-			addLight(entry, child)
-		end
+		addChild(entry, child)
 	end)
 	dirty = true
 end
@@ -1174,6 +1273,40 @@ end
 -- Frame
 --------------------------------------------------------------------------------
 
+local function areaGradeEffect(): ColorCorrectionEffect
+	local existing = areaGrade
+	if existing and existing.Parent == Lighting then
+		return existing
+	end
+	local effect = Instance.new("ColorCorrectionEffect")
+	effect.Name = AREA_GRADE_NAME
+	effect.Brightness = 0
+	effect.Contrast = 0
+	effect.Saturation = 0
+	effect.TintColor = gradeNow
+	effect.Enabled = true
+	effect.Parent = Lighting
+	areaGrade = effect
+	gradeWritten = gradeNow
+	serviceTrove:Add(effect)
+	return effect
+end
+
+-- Eases the area grade toward the camera's level; writes stop once it has settled.
+local function updateAreaGrade(dt: number)
+	local target = LightingMood.grade(viewLayout)
+	local written = gradeWritten
+	if written and written == target then
+		return
+	end
+	local nextGrade = LightingController.gradeStep(gradeNow, target, dt)
+	gradeNow = if sameColor(nextGrade, target) then target else nextGrade
+	if written == nil or gradeNow == target or not sameColor(gradeNow, written) then
+		areaGradeEffect().TintColor = gradeNow
+		gradeWritten = gradeNow
+	end
+end
+
 local function onHeartbeat(dt: number)
 	frameId += 1
 	refreshClock += dt
@@ -1189,6 +1322,7 @@ local function onHeartbeat(dt: number)
 	end
 	updateFlashes(now)
 	updateStorm(t)
+	updateAreaGrade(dt)
 end
 
 local function resetSeed(seed: number)
@@ -1228,6 +1362,7 @@ function LightingController.Start()
 	if connection then
 		serviceTrove:Add(connection)
 	end
+	areaGradeEffect()
 	serviceTrove:Connect(RunService.Heartbeat, onHeartbeat)
 end
 
@@ -1247,6 +1382,7 @@ function LightingController.OnRunEnded()
 			entry.dead = false
 			entry.fixture.Color = entry.color
 		end
+		writeSteadyGlow(entry)
 	end
 	resetSeed(1)
 	dirty = true

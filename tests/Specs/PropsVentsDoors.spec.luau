@@ -690,6 +690,60 @@ return {
 		t.eq(seen.Ajar, 1, "ajar classroom door")
 	end,
 
+	["doors: fire door frames and the gate's housing and rails wear hazard stripes"] = function(t: Expect)
+		local built = world()
+		local painted: { [string]: number } = {}
+		local function expectStripes(model: Instance, name: string, faces: { Enum.NormalId })
+			local part = child(model, name)
+			assert(part:IsA("BasePart"), name .. " is a part")
+			local seen: { [Enum.NormalId]: boolean } = {}
+			for _, gui in part:GetChildren() do
+				if gui:IsA("SurfaceGui") and gui.Name == "Hazard" then
+					seen[gui.Face] = true
+					t.eq(gui.LightInfluence, 1, name .. " stripes are lit by the scene")
+					t.truthy(gui.PixelsPerStud >= 4 and gui.PixelsPerStud <= 20, name .. " low resolution")
+					t.truthy(gui:FindFirstChildWhichIsA("TextLabel", true) == nil, name .. " stripes carry no text")
+					local ground = gui:FindFirstChild("Hazard")
+					assert(ground and ground:IsA("Frame"), name .. " has a striped ground")
+					t.truthy(ground.ClipsDescendants, name .. " stripes are clipped to the face")
+					local stripes = 0
+					for _, stripe in ground:GetChildren() do
+						if stripe:IsA("Frame") and stripe.Name == "Stripe" then
+							stripes += 1
+						end
+					end
+					t.truthy(stripes >= 2, name .. " has black bars")
+				end
+			end
+			for _, face in faces do
+				t.truthy(seen[face], string.format("%s %s face is striped", name, face.Name))
+			end
+			painted[name] = (painted[name] or 0) + 1
+		end
+		for _, id in LEVELS do
+			local layout = layoutOf(id)
+			for _, door in layout.doors do
+				if door.kind ~= "Airlock" and door.kind ~= "Gate" then
+					continue
+				end
+				local model = child(built.runtime[id], "Door_" .. door.id)
+				assert(model:IsA("Model"), door.id .. " is a model")
+				if door.kind == "Airlock" then
+					for _, name in { "Base", "JambLeft", "JambRight" } do
+						expectStripes(model, name, { Enum.NormalId.Front, Enum.NormalId.Back })
+					end
+					t.eq(signText(model), Strings.get("Prop.Airlock.Sign"), door.id .. " sign still reads")
+				else
+					for _, name in { "Base", "RailLeft", "RailRight" } do
+						expectStripes(model, name, { Enum.NormalId.Front })
+					end
+				end
+			end
+		end
+		t.eq(painted.JambLeft, 4, "every fire door frame")
+		t.eq(painted.RailLeft, 1, "the hallway gate")
+	end,
+
 	["doors: swinging leaves turn about their hinges, clear of the wall, and smash onto the floor"] = function(
 		t: Expect
 	)

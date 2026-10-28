@@ -1,9 +1,10 @@
 --!strict
 -- Builds one layout's shell (school levels and the lobby share this path): room floors (the structural slab),
 -- ceilings, split-slab walls with every opening cut (doors, grates, stair-tower openings, windows), door trims,
--- boarded planks, pillars, platforms, pool basins, then the invisible gameplay layer: Zone volumes, trigger
--- volumes, light fixtures, anchor attachments, door anchors and patrol waypoints. Also builds the street-level
--- exterior around the school.
+-- boarded planks, pillars, platforms, pool basins, the interior finishes (Finishes: glossy, checkered and vinyl
+-- floors, drop ceilings, wainscots kept clear of every opening, hazard plates at the fire doors and the gate), then
+-- the invisible gameplay layer: Zone volumes, trigger volumes, light fixtures (with their FixtureGlow surfaces),
+-- anchor attachments, door anchors and patrol waypoints. Also builds the street-level exterior around the school.
 --
 -- Vertical layout of a level (level-local Y): every room floor occupies [-SlabThickness, 0], so the floors of a
 -- level are the structural slab under it (rooms tile the footprint, so the slab has no holes except basins and
@@ -25,12 +26,16 @@ local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
+local Finishes = require(script.Parent.Finishes)
+local FixtureGlow = require(script.Parent.FixtureGlow)
 local Geometry = require(script.Parent.Geometry)
 local LightingMood = require(script.Parent.LightingMood)
 local Palette = require(script.Parent.Palette)
+local SurfaceArt = require(script.Parent.SurfaceArt)
 local VentShaftBuilder = require(script.Parent.VentShaftBuilder)
 
 local log = Log.new("SchoolShell")
@@ -75,6 +80,8 @@ export type LightSpec = {
 	ceilingY: number?, -- world Y of the ceiling underside; fixtures never poke through it
 	facing: Vector3?, -- world point wall-mounted fixtures face (room centre)
 	aimAt: Vector3?, -- world point floodlights aim at
+	along: Vector3?, -- horizontal axis a ceiling strip fixture runs along (the room's long axis; default X)
+	hang: boolean?, -- false: a broken fixture never sags out of its mounts (a pipe runs under it); default true
 }
 
 type Run = {
@@ -93,7 +100,7 @@ type Run = {
 	clip1: number,
 }
 
-type LineOpening = {
+export type LineOpening = {
 	u0: number,
 	u1: number,
 	y0: number,
@@ -106,6 +113,16 @@ type Line = {
 	entries: { { from: number, to: number, room: Room, low: boolean } },
 	openings: { LineOpening },
 	runs: { Run },
+}
+
+-- One opening cut into a wall line (`opening` in wall-local u / y).
+export type PlacedOpening = {
+	kind: "Door" | "Grate" | "Tower" | "Window",
+	axis: Axis,
+	coord: number,
+	opening: LineOpening,
+	door: LayoutSchema.Door?,
+	window: LayoutSchema.Window?,
 }
 
 local EPS = 1e-3
@@ -414,11 +431,119 @@ local function newLight(
 	return light
 end
 
--- One fixture part + its light(s). The fixture carries the LevelLight tag and the attributes the client
--- LightingController drives (it is the only run-time writer of these lights).
+-- Strip fixtures (fluorescent troffers and the classroom glow): a shallow housing under the ceiling and two bare
+-- tubes under it, the long axis along the room's long axis. The whole fixture stays within 0.33 studs of the ceiling,
+-- so the drip pipes hung under the ceilings (SetDressingBuilder) pass beneath it.
+type StripDims = { length: number, height: number, width: number, tube: number, spacing: number }
+
+local STRIP: { [string]: StripDims } = {
+	Fluorescent = { length = 5.5, height = 0.18, width = 1.0, tube = 0.14, spacing = 0.22 },
+	ClassroomGlow = { length = 4.6, height = 0.18, width = 1.0, tube = 0.14, spacing = 0.22 },
+}
+local TUBE_INSET = 0.2 -- each tube stops this short of the housing's ends (the sockets)
+local BULB_SIZE = 0.7
+local BULB_FILAMENT = 0.42
+local BULB_DROP = 1.1 -- bulb centre below the ceiling: it hangs on its flex
+local CORD_DIAMETER = 0.07
+
+-- Broken strip fixtures fall apart in a few ways (seeded per fixture): both tubes dead, one pulled, one hanging out
+-- of a socket, or the whole housing sagging off one mount.
+type StripVariant = "Whole" | "MissingTube" | "HangingTube" | "SaggingHousing"
+
+local function stripVariant(random: Random, broken: boolean, mayHang: boolean): StripVariant
+	if not broken then
+		return "Whole"
+	end
+	local roll = random:NextNumber()
+	if mayHang and roll < 0.12 then
+		return "SaggingHousing"
+	elseif mayHang and roll < 0.32 then
+		return "HangingTube"
+	elseif roll < 0.56 then
+		return "MissingTube"
+	end
+	return "Whole"
+end
+
+local function flatAxis(along: Vector3?): Vector3
+	if along then
+		local flat = Vector3.new(along.X, 0, along.Z)
+		if flat.Magnitude > 1e-3 then
+			return flat.Unit
+		end
+	end
+	return Vector3.xAxis
+end
+
+-- Long axis a strip fixture takes in `room` (its long horizontal axis).
+function SchoolShellBuilder.fixtureAlong(room: Room): Vector3
+	return if room.rect.d > room.rect.w then Vector3.zAxis else Vector3.xAxis
+end
+
+-- The rest-pose bounding box of a fixture of `kind` built at `position` under a ceiling at `ceilingY` (both in one
+-- space, level-local or world), strip fixtures along `along`. Planners that must miss the fixtures (pipe runs, sign
+-- spots) use this rather than guessing its size. Broken strip fixtures may sag below it, but only within its
+-- footprint, and never where the layout runs a drip pipe (see LightSpec.hang).
+function SchoolShellBuilder.fixtureBox(
+	kind: string,
+	position: Vector3,
+	ceilingY: number?,
+	along: Vector3?
+): (Vector3, Vector3)
+	local function under(halfHeight: number): Vector3
+		if ceilingY then
+			return Vector3.new(position.X, math.min(position.Y, ceilingY - halfHeight), position.Z)
+		end
+		return position
+	end
+	local strip = STRIP[kind]
+	if strip then
+		local at = under(strip.height / 2)
+		local axis = flatAxis(along)
+		local half = Vector3.new(
+			math.abs(axis.X) * strip.length / 2 + math.abs(axis.Z) * strip.width / 2,
+			0,
+			math.abs(axis.Z) * strip.length / 2 + math.abs(axis.X) * strip.width / 2
+		)
+		local top = at.Y + strip.height / 2
+		local bottom = at.Y - strip.height / 2 - strip.tube - 0.01
+		return Vector3.new(at.X - half.X, bottom, at.Z - half.Z), Vector3.new(at.X + half.X, top, at.Z + half.Z)
+	elseif kind == "Bulb" then
+		local at = if ceilingY
+			then Vector3.new(position.X, math.min(position.Y, ceilingY - BULB_DROP), position.Z)
+			else position
+		local r = BULB_SIZE / 2
+		local top = if ceilingY then math.max(ceilingY, at.Y + r) else at.Y + r
+		return Vector3.new(at.X - r, at.Y - r, at.Z - r), Vector3.new(at.X + r, top, at.Z + r)
+	end
+	local half: Vector3
+	if kind == "Floodlight" then
+		local at = under(0.8)
+		half = Vector3.one * 1.6
+		return at - half, at + half
+	elseif kind == "ExitSign" then
+		half = Vector3.new(1.15, 0.4, 1.15)
+		local at = under(0.4)
+		return at - half, at + half
+	elseif kind == "BoilerGlow" then
+		half = Vector3.new(0.85, 0.5, 0.85)
+		local at = under(0.5)
+		return at - half, at + half
+	end
+	half = Vector3.new(0.65, 0.25, 0.65)
+	local at = under(0.25)
+	return at - half, at + half
+end
+
+-- One fixture part + its light(s) + its glow surfaces (FixtureGlow). The fixture carries the LevelLight tag and the
+-- attributes the client LightingController drives (it is the only run-time writer of these lights, and of the glow
+-- surfaces, which it dims, flickers and kills together with the light).
 function SchoolShellBuilder.buildLight(parent: Instance, spec: LightSpec): BasePart
 	local kind = spec.kind
 	local position = spec.position
+	local lightColor = spec.color or LIGHT_COLORS[kind] or Color3.new(1, 1, 1)
+	local litColor = FixtureGlow.litColor(kind, lightColor)
+	local level = if spec.broken then 0 else 1
 	local function underCeiling(halfHeight: number): Vector3
 		if spec.ceilingY then
 			return Vector3.new(position.X, math.min(position.Y, spec.ceilingY - halfHeight), position.Z)
@@ -435,20 +560,82 @@ function SchoolShellBuilder.buildLight(parent: Instance, spec: LightSpec): BaseP
 		end
 		return CFrame.new(at)
 	end
+	local function glow(part: BasePart?)
+		if part then
+			Geometry.makeFixture(part)
+			FixtureGlow.apply(part, litColor, level)
+		end
+	end
+	-- A flat lens on the front face (local -Z) of a box fixture.
+	local function lens(fixture: BasePart, size: Vector2)
+		local depth = 0.05
+		glow(
+			Geometry.part(
+				fixture,
+				FixtureGlow.PartPrefix,
+				fixture.CFrame * CFrame.new(0, 0, -(fixture.Size.Z + depth) / 2),
+				Vector3.new(size.X, size.Y, depth),
+				"Fixture",
+				{ castShadow = false, canCollide = false }
+			)
+		)
+	end
 
 	local fixture: Part
 	local primary: Light
 	local secondary: Light? = nil
 	local fixtureOptions: Geometry.PartOptions = { castShadow = false, canCollide = false }
-	if kind == "Fluorescent" or kind == "ClassroomGlow" then
+	local strip = STRIP[kind]
+	if strip then
+		local random = MathUtil.seededRandom(1, "fixture:" .. spec.id)
+		local variant = stripVariant(random, spec.broken == true, spec.hang ~= false)
+		local axis = flatAxis(spec.along)
+		local frame = CFrame.fromMatrix(underCeiling(strip.height / 2), axis, Vector3.yAxis)
+		if variant == "SaggingHousing" then
+			-- one mount let go: the housing swings down about the top edge of its other end
+			local side = if random:NextNumber() < 0.5 then 1 else -1
+			local pivot = frame * CFrame.new(side * strip.length / 2, strip.height / 2, 0)
+			frame = pivot * CFrame.Angles(0, 0, side * math.rad(random:NextNumber(7, 12))) * pivot:Inverse() * frame
+		end
 		fixture = Geometry.part(
 			parent,
 			spec.id,
-			CFrame.new(underCeiling(0.125)),
-			Vector3.new(4, 0.25, 0.9),
+			frame,
+			Vector3.new(strip.length, strip.height, strip.width),
 			"Fixture",
 			fixtureOptions
 		)
+		local tubeY = -strip.height / 2 - strip.tube / 2 - 0.005
+		local tubeHalf = strip.length / 2 - TUBE_INSET
+		local odd = random:NextInteger(1, 2)
+		for index, z in { -strip.spacing, strip.spacing } do
+			if variant == "MissingTube" and index == odd then
+				continue
+			end
+			local a = frame * Vector3.new(-tubeHalf, tubeY, z)
+			local b = frame * Vector3.new(tubeHalf, tubeY, z)
+			if variant == "HangingTube" and index == odd then
+				-- out of one socket: the tube hangs from the other at a steep angle
+				if random:NextNumber() < 0.5 then
+					a, b = b, a
+				end
+				local run = b - a
+				local length = run.Magnitude
+				local drop = math.rad(random:NextNumber(22, 38))
+				b = a + (run.Unit * math.cos(drop) - Vector3.yAxis * math.sin(drop)) * length
+			end
+			glow(
+				Geometry.cylinder(
+					fixture,
+					FixtureGlow.PartPrefix .. index,
+					a,
+					b,
+					strip.tube,
+					"Fixture",
+					{ castShadow = false, canCollide = false }
+				)
+			)
+		end
 		if kind == "Fluorescent" then
 			local surface = newLight("SurfaceLight", spec, "Light", spec.range) :: SurfaceLight
 			surface.Face = Enum.NormalId.Bottom
@@ -464,20 +651,44 @@ function SchoolShellBuilder.buildLight(parent: Instance, spec: LightSpec): BaseP
 			secondary = fill
 		end
 	elseif kind == "Bulb" then
+		local ceilingY = spec.ceilingY
+		local at = if ceilingY
+			then Vector3.new(position.X, math.min(position.Y, ceilingY - BULB_DROP), position.Z)
+			else position
 		fixture = Geometry.part(
 			parent,
 			spec.id,
-			CFrame.new(underCeiling(0.6)),
-			Vector3.new(0.7, 0.7, 0.7),
+			CFrame.new(at),
+			Vector3.one * BULB_SIZE,
 			"Glass",
 			{ shape = Enum.PartType.Ball, castShadow = false, canCollide = false, transparency = 0.2 }
 		)
+		glow(Geometry.part(fixture, FixtureGlow.PartPrefix, CFrame.new(at), Vector3.one * BULB_FILAMENT, "Fixture", {
+			shape = Enum.PartType.Ball,
+			castShadow = false,
+			canCollide = false,
+		}))
+		if ceilingY and ceilingY - at.Y > BULB_SIZE then
+			local cord = Geometry.cylinder(
+				fixture,
+				"Cord",
+				at + Vector3.new(0, BULB_SIZE / 2 - 0.05, 0),
+				Vector3.new(at.X, ceilingY, at.Z),
+				CORD_DIAMETER,
+				"Rubber",
+				{ castShadow = false, canCollide = false }
+			)
+			if cord then
+				Geometry.makeFixture(cord)
+			end
+		end
 		primary = newLight("PointLight", spec, "Light", spec.range)
 	elseif kind == "Floodlight" then
 		local at = underCeiling(0.8)
 		local aim = spec.aimAt or (at - Vector3.new(0, 10, 0))
 		local cframe = if (aim - at).Magnitude > 0.1 then CFrame.lookAt(at, aim) else CFrame.new(at)
 		fixture = Geometry.part(parent, spec.id, cframe, Vector3.new(2.2, 1.4, 1.2), "TrimMetal", fixtureOptions)
+		lens(fixture, Vector2.new(1.9, 1.1))
 		local spot = newLight("SpotLight", spec, "Light", spec.range) :: SpotLight
 		spot.Face = Enum.NormalId.Front
 		spot.Angle = 70
@@ -486,6 +697,16 @@ function SchoolShellBuilder.buildLight(parent: Instance, spec: LightSpec): BaseP
 		local at = underCeiling(0.4)
 		fixture =
 			Geometry.part(parent, spec.id, facingCFrame(at), Vector3.new(2.2, 0.8, 0.3), "Fixture", fixtureOptions)
+		-- the letters are the light: a self-lit face that the controller dims with the light
+		local gui = SurfaceArt.gui(fixture, Enum.NormalId.Front, {
+			name = FixtureGlow.GuiName,
+			pixelsPerStud = 20,
+			maxDistance = 140,
+			lightInfluence = 0,
+			brightness = FixtureGlow.guiBrightness(level),
+		})
+		SurfaceArt.frame(gui, "Panel", 0.03, 0.07, 0.94, 0.86, Color3.fromRGB(12, 14, 12), 0, 1)
+		SurfaceArt.text(gui, "Text", Strings.get("Prop.Sign.Exit"), 0.12, 0.1, 0.76, 0.8, litColor, Enum.Font.Oswald, 2)
 		local surface = newLight("SurfaceLight", spec, "Light", spec.range) :: SurfaceLight
 		surface.Face = Enum.NormalId.Front
 		surface.Angle = 100
@@ -493,12 +714,14 @@ function SchoolShellBuilder.buildLight(parent: Instance, spec: LightSpec): BaseP
 	elseif kind == "BoilerGlow" then
 		local at = underCeiling(0.5)
 		fixture = Geometry.part(parent, spec.id, facingCFrame(at), Vector3.new(1.6, 1, 0.25), "Ember", fixtureOptions)
+		lens(fixture, Vector2.new(1.3, 0.7))
 		primary = newLight("PointLight", spec, "Light", spec.range)
 	else
 		-- EmergencyRed
 		local at = underCeiling(0.25)
 		fixture =
 			Geometry.part(parent, spec.id, facingCFrame(at), Vector3.new(1.2, 0.5, 0.5), "Fixture", fixtureOptions)
+		lens(fixture, Vector2.new(0.9, 0.28))
 		primary = newLight("PointLight", spec, "Light", spec.range)
 	end
 	Geometry.makeFixture(fixture)
@@ -947,45 +1170,26 @@ end
 -- Level build
 --------------------------------------------------------------------------------
 
-local function collectOpenings(
-	layout: Layout,
-	rooms: { [string]: Room },
-	lines: { [string]: Line }
-): {
-	{
-		kind: string,
-		axis: Axis,
-		coord: number,
-		opening: LineOpening,
-		door: LayoutSchema.Door?,
-		window: LayoutSchema.Window?,
-	}
-}
-	local placed: {
-		{
-			kind: string,
-			axis: Axis,
-			coord: number,
-			opening: LineOpening,
-			door: LayoutSchema.Door?,
-			window: LayoutSchema.Window?,
-		}
-	} =
-		{}
+-- Every opening cut into a wall line: doors, grates, stair-tower openings and windows (pure layout maths). With
+-- `lines`, each is also registered on its wall line (and one without a line is dropped with a warning).
+local function planOpenings(layout: Layout, rooms: { [string]: Room }, lines: { [string]: Line }?): { PlacedOpening }
+	local placed: { PlacedOpening } = {}
 	local function add(
-		kind: string,
+		kind: "Door" | "Grate" | "Tower" | "Window",
 		axis: Axis,
 		coord: number,
 		opening: LineOpening,
 		door: LayoutSchema.Door?,
 		window: LayoutSchema.Window?
 	)
-		local line = lines[lineKey(axis, coord)]
-		if not line then
-			log.warn("%s: %s opening at %s=%.1f has no wall line", layout.id, kind, axis, coord)
-			return
+		if lines then
+			local line = lines[lineKey(axis, coord)]
+			if not line then
+				log.warn("%s: %s opening at %s=%.1f has no wall line", layout.id, kind, axis, coord)
+				return
+			end
+			table.insert(line.openings, opening)
 		end
-		table.insert(line.openings, opening)
 		table.insert(
 			placed,
 			{ kind = kind, axis = axis, coord = coord, opening = opening, door = door, window = window }
@@ -1143,6 +1347,193 @@ local function grateTunnels(layout: Layout, rooms: { [string]: Room }): { Box3 }
 	return out
 end
 
+-- Every opening the shell cuts into `layout`'s walls (pure; the sign and pipe planners keep clear of them).
+function SchoolShellBuilder.openings(layout: Layout): { PlacedOpening }
+	return planOpenings(layout, LayoutSchema.indexRooms(layout), nil)
+end
+
+--------------------------------------------------------------------------------
+-- Finishes: wainscots and hazard plates (floors and ceilings are finished as they are built)
+--------------------------------------------------------------------------------
+
+local SIDES: { LayoutSchema.Side } = { "N", "S", "W", "E" }
+
+-- How far a wainscot stops short of each kind of opening: the casing, steel frame, rails or boards around it.
+local DOOR_FRAME_PAD: { [string]: number } = {
+	Doorway = 0.4,
+	Door = 0.4,
+	Ajar = 0.4,
+	RoofDoor = 0.45,
+	Gate = 0.6,
+	Boarded = 0.6,
+	Airlock = 0.8,
+}
+local OPENING_PAD: { [string]: number } = { Grate = 0.5, Window = 0.5, Tower = 0.2 }
+
+-- Props that stand against a wall (half their width along it): the wainscot leaves their wall bare.
+local WALL_PROPS: { [string]: number } = { Locker = 1.65, FloodlightSwitch = 1.3, Terminal = 2.4 }
+local WALL_PROP_REACH = 3.5
+
+-- Along-wall cuts per wall line: every opening that reaches below the chair rail, padded by what frames it.
+local function wainscotCuts(placed: { PlacedOpening }): { [string]: { Finishes.Interval } }
+	local cuts: { [string]: { Finishes.Interval } } = {}
+	for _, item in placed do
+		local opening = item.opening
+		if opening.y0 >= Finishes.RailTop + 0.05 then
+			continue
+		end
+		local door = item.door
+		local pad = if door then DOOR_FRAME_PAD[door.kind] or 0.4 else OPENING_PAD[item.kind] or 0.4
+		local key = lineKey(item.axis, item.coord)
+		local list = cuts[key]
+		if not list then
+			list = {}
+			cuts[key] = list
+		end
+		table.insert(list, { u0 = opening.u0 - pad, u1 = opening.u1 + pad })
+	end
+	return cuts
+end
+
+type FaceSpan = { u0: number, u1: number, face: number, dir: number }
+
+-- The wall faces of `room`'s side on `line`: the runs that look into the room, clipped to the room's inner faces
+-- [lo, hi] and merged where neighbouring runs share a face.
+local function sideFaces(room: Room, line: Line, lo: number, hi: number): { FaceSpan }
+	local spans: { FaceSpan } = {}
+	for _, run in line.runs do
+		if run.low ~= room and run.high ~= room then
+			continue
+		end
+		if run.height < Finishes.RailTop + 0.1 then
+			continue
+		end
+		local isLow = run.low == room
+		local a, b = math.max(run.from, lo), math.min(run.to, hi)
+		if b - a <= EPS then
+			continue
+		end
+		local face = if isLow then -run.thickness / 2 else run.thickness / 2
+		local last = spans[#spans]
+		if last and math.abs(last.u1 - a) < EPS and math.abs(last.face - face) < EPS then
+			last.u1 = b
+		else
+			table.insert(spans, { u0 = a, u1 = b, face = face, dir = if isLow then -1 else 1 })
+		end
+	end
+	table.sort(spans, function(x: FaceSpan, y: FaceSpan): boolean
+		return x.u0 < y.u0
+	end)
+	return spans
+end
+
+local function buildWainscots(
+	layout: Layout,
+	origin: Vector3,
+	shell: Folder,
+	lines: { [string]: Line },
+	placed: { PlacedOpening },
+	exteriorSides: { [string]: { [string]: boolean } }
+): number
+	local cuts = wainscotCuts(placed)
+	local count = 0
+	for _, room in layout.rooms do
+		local style = Finishes.wainscotStyle(layout.id, room, SchoolShellBuilder.wallKey(room))
+		if not style then
+			continue
+		end
+		local inner = innerRect(room, exteriorSides)
+		for _, side: LayoutSchema.Side in SIDES do
+			local axis: Axis, coord: number = sideLine(room.rect, side)
+			local key = lineKey(axis, coord)
+			local line = lines[key]
+			if not line then
+				continue
+			end
+			local lo = if axis == "Z" then inner.x else inner.z
+			local hi = if axis == "Z" then inner.x + inner.w else inner.z + inner.d
+			local faceAt = if side == "N"
+				then inner.z
+				elseif side == "S" then inner.z + inner.d
+				elseif side == "W" then inner.x
+				else inner.x + inner.w
+			local sideCuts: { Finishes.Interval } = table.clone(cuts[key] or {})
+			for _, anchor in layout.anchors do
+				local half = WALL_PROPS[anchor.kind]
+				if not half or anchor.room ~= room.id then
+					continue
+				end
+				local acrossAt = if axis == "Z" then anchor.pos.Z else anchor.pos.X
+				if math.abs(acrossAt - faceAt) <= WALL_PROP_REACH then
+					local u = if axis == "Z" then anchor.pos.X else anchor.pos.Z
+					table.insert(sideCuts, { u0 = u - half, u1 = u + half })
+				end
+			end
+			for f, faceSpan in sideFaces(room, line, lo, hi) do
+				for i, span in Finishes.subtract(faceSpan.u0, faceSpan.u1, sideCuts) do
+					-- walls of constant Z stop short of the corners; walls of constant X own them
+					local insetLo = axis == "Z" and math.abs(span.u0 - lo) < EPS
+					local insetHi = axis == "Z" and math.abs(span.u1 - hi) < EPS
+					count += Finishes.wainscot(
+						shell,
+						string.format("Wainscot_%s_%s%d_%d", room.id, side, f, i),
+						origin,
+						axis,
+						coord,
+						faceSpan.face,
+						faceSpan.dir,
+						span.u0,
+						span.u1,
+						style,
+						insetLo,
+						insetHi
+					)
+				end
+			end
+		end
+	end
+	return count
+end
+
+-- Striped floor plates either side of every airlock fire door and the hallway gate.
+local HAZARD_DEPTH: { [string]: number } = { Airlock = 1.3, Gate = 1.1 }
+local HAZARD_REACH: { [string]: number } = { Airlock = 0.9, Gate = 0.7 }
+
+local function buildHazardPlates(layout: Layout, rooms: { [string]: Room }, origin: Vector3, shell: Folder): number
+	local count = 0
+	for _, door in layout.doors do
+		local depth = HAZARD_DEPTH[door.kind]
+		if not depth then
+			continue
+		end
+		local a, b = rooms[door.rooms[1]], rooms[door.rooms[2]]
+		local edge = if a and b then LayoutSchema.sharedEdge(a.rect, b.rect) else nil
+		if not edge then
+			continue
+		end
+		local half = LayoutSchema.doorWidth(door) / 2 + HAZARD_REACH[door.kind]
+		for _, s in { -1, 1 } do
+			local face = s * WorldConfig.WallThickness / 2
+			if
+				Finishes.hazardPlate(
+					shell,
+					string.format("Hazard_%s_%s", door.id, if s < 0 then "Low" else "High"),
+					origin,
+					edge.axis,
+					edge.coord,
+					door.at - half,
+					door.at + half,
+					face,
+					face + s * depth
+				)
+			then
+				count += 1
+			end
+		end
+	end
+	return count
+end
+
 -- Builds every piece of `layout` into `root` (see SchoolShellBuilder.createRoot). Returns parts created.
 function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: LevelOptions): number
 	local before = Geometry.partsCreated()
@@ -1185,14 +1576,18 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 				table.insert(holes, hole)
 			end
 		end
+		local floorKey = SchoolShellBuilder.floorKey(room)
 		for i, piece in Geometry.subtractRects(room.rect, holes) do
-			Geometry.box(
+			local floor = Geometry.box(
 				shell,
 				string.format("Floor_%s_%d", room.id, i),
 				origin + Vector3.new(piece.x, -slab, piece.z),
 				origin + Vector3.new(piece.x + piece.w, 0, piece.z + piece.d),
-				SchoolShellBuilder.floorKey(room)
+				floorKey
 			)
+			if floor then
+				Finishes.decorateFloor(floor, levelId, room, floorKey)
+			end
 		end
 		local edgeHoles = table.clone(holes)
 		table.insert(edgeHoles, room.rect)
@@ -1208,14 +1603,29 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		if hasCeiling(room) then
 			local h = LayoutSchema.roomHeight(layout, room)
 			local r = innerRect(room, exteriorSides)
-			Geometry.box(
+			local ceilingKey = SchoolShellBuilder.ceilingKey(room)
+			local ceiling = Geometry.box(
 				shell,
 				"Ceiling_" .. room.id,
 				origin + Vector3.new(r.x, h - CEILING, r.z),
 				origin + Vector3.new(r.x + r.w, h, r.z + r.d),
-				SchoolShellBuilder.ceilingKey(room),
+				ceilingKey,
 				{ castShadow = true }
 			)
+			if ceiling then
+				local keepouts: { Finishes.Keepout } = {}
+				local along = SchoolShellBuilder.fixtureAlong(room)
+				for _, light in (room.lights or {}) :: { LayoutSchema.Light } do
+					local lo, hi = SchoolShellBuilder.fixtureBox(light.kind, light.pos, h - CEILING, along)
+					table.insert(keepouts, {
+						x0 = origin.X + lo.X - 0.3,
+						x1 = origin.X + hi.X + 0.3,
+						z0 = origin.Z + lo.Z - 0.3,
+						z1 = origin.Z + hi.Z + 0.3,
+					})
+				end
+				Finishes.decorateCeiling(ceiling, levelId, room, ceilingKey, keepouts)
+			end
 			if not options.hasLevelAbove then
 				local r0 = room.rect
 				Geometry.box(
@@ -1243,8 +1653,10 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 	for _, key in order do
 		buildRuns(layout, lines[key], options)
 	end
-	local placed = collectOpenings(layout, rooms, lines)
+	local placed = planOpenings(layout, rooms, lines)
 	buildWalls(origin, shell, lines, order)
+	buildWainscots(layout, origin, shell, lines, placed, exteriorSides)
+	buildHazardPlates(layout, rooms, origin, shell)
 
 	-- Opening dressing
 	for index, item in placed do
@@ -1571,19 +1983,30 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		end
 	end
 
-	-- Lights
+	-- Lights. Each level's mood decides which burn and casts its colour over them; a broken fixture only sags out of
+	-- its mounts in a room without a drip pipe (whose run passes just under the fixtures).
+	local dripRooms: { [string]: boolean } = {}
+	for _, anchor in layout.anchors do
+		if anchor.kind == "DripPipe" then
+			dripRooms[anchor.room] = true
+		end
+	end
 	for _, room in layout.rooms do
 		local cx, cz = roomCenter(room)
 		local ceilingY = origin.Y + SchoolShellBuilder.ceilingBottom(layout, room)
+		local along = SchoolShellBuilder.fixtureAlong(room)
 		for _, light in (room.lights or {}) :: { LayoutSchema.Light } do
 			local mood = LightingMood.resolve(layout.id, room.id, light)
+			local base = light.color or LIGHT_COLORS[light.kind] or Color3.new(1, 1, 1)
 			SchoolShellBuilder.buildLight(folders.Lights, {
 				id = light.id,
 				kind = light.kind,
 				position = origin + light.pos,
 				brightness = mood.brightness,
 				range = mood.range,
-				color = light.color,
+				color = LightingMood.cast(layout.id, room.id, light.kind, base),
+				along = along,
+				hang = not dripRooms[room.id],
 				flickerGroup = mood.flickerGroup,
 				broken = mood.broken,
 				shadows = light.shadows,

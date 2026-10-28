@@ -23,12 +23,14 @@
 --     opening ("Base"), side guide rails, and the grille as telescoping sections, leaf "Grille" (the bottom section
 --     with the bottom bar, pull handle and padlock hasp) and "Grille2", "Grille3" above it: vertical bars and
 --     horizontal slats, each section with an invisible collision plate between its bars (CanQuery off, so sight and
---     thrown flasks still pass through the gaps). Rest pose = fully down; built rolled up inside the housing.
+--     thrown flasks still pass through the gaps). Rest pose = fully down; built rolled up inside the housing. The
+--     housing face and both rails are painted in yellow-and-black hazard stripes (SurfaceArt).
 --   * Airlock: heavy red-painted steel double fire doors, leaves "LeftLeaf" / "RightLeaf" (as seen looking along their
 --     swing), push bars, small wired windows, an astragal on the right leaf, in a wide steel frame (their hinge pins
 --     sit far enough out that the push bars stay clear of the opening at 90 degrees), with a "FIRE DOOR -
 --     KEEP CLOSED" sign above on the vestibule side. Rest = shut in the AirlockDoorWidth opening; built open 90 degrees
---     into the vestibule (into the corridor when the vestibule has no room for them).
+--     into the vestibule (into the corridor when the vestibule has no room for them). Both faces of the frame's jambs
+--     and head are painted in yellow-and-black hazard stripes (SurfaceArt).
 --   * RoofDoor (the Level 5 RoofStairDoor): a dented steel door, leaf "Leaf", in a steel frame, with a "ROOF ACCESS"
 --     sign on the stairwell side. Rest = shut; built open onto the roof.
 -- Every leaf is surface-mounted on its swing-side face in front of the casing, hung from hinge knuckles whose pin runs
@@ -57,6 +59,7 @@ local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Geometry = require(script.Parent.Parent.Geometry)
 local PropKit = require(script.Parent.PropKit)
+local SurfaceArt = require(script.Parent.Parent.SurfaceArt)
 local VentGrateBuilder = require(script.Parent.VentGrateBuilder)
 
 local log = Log.new("Doors")
@@ -1087,6 +1090,14 @@ local function steelFrame(
 	return head
 end
 
+-- Paints yellow-and-black hazard stripes over `faces` of `part` (frames and rails of the fire doors and the gate).
+local function hazardStripes(part: BasePart, faces: { Enum.NormalId })
+	for _, face in faces do
+		local gui, pps = SurfaceArt.gui(part, face, { name = "Hazard", pixelsPerStud = 16, maxDistance = 90 })
+		SurfaceArt.hazard(gui, SurfaceArt.faceStuds(part.Size, face), pps, 0.32, 0.45)
+	end
+end
+
 -- A printed sign plate on the wall face of `frame` (LookVector out of that face), centred above the opening.
 local function sign(model: Model, frame: CFrame, site: Site, key: string, plate: Color3): Part
 	local y0 = signBottom(site)
@@ -1414,6 +1425,14 @@ local function buildSwingDoor(model: Model, ctx: Ctx, plan: FixturePlan, layout:
 		PropKit.detail(base)
 	else
 		base = steelFrame(model, frame, site.width, site.height, site.ceiling, frameMember(site))
+		if kind == "Airlock" then
+			for _, name in { "Base", "JambLeft", "JambRight" } do
+				local member = model:FindFirstChild(name)
+				if member and member:IsA("BasePart") then
+					hazardStripes(member, { Enum.NormalId.Front, Enum.NormalId.Back })
+				end
+			end
+		end
 	end
 	model.PrimaryPart = base
 
@@ -1523,7 +1542,9 @@ local function buildGate(model: Model, ctx: Ctx, plan: FixturePlan, random: Rand
 	}
 	for _, rail in rails do
 		Geometry.makePassthrough(rail)
+		hazardStripes(rail, { Enum.NormalId.Front })
 	end
+	hazardStripes(housing, { Enum.NormalId.Front })
 	local motor = wallBox(
 		model,
 		"Motor",

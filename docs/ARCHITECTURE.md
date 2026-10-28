@@ -115,6 +115,12 @@ Rovloc/
     │       │       ├── LayoutSchema.luau   [P1] Blueprint types, shared geometry helpers, validator (tiling, doors, ducts, solvability)
     │       │       ├── ZoneGraph.luau      [P1] Rooms + portals (doors, grates, duct segments): solvability, hearing, EMF adjacency
     │       │       ├── LightingRig.luau    [P1] Baseline Atmosphere, ColorCorrection, Bloom, Terrain clouds
+    │       │       ├── LightingMood.luau   Which fixtures burn, how bright, flicker groups; each wing's colour cast + grade
+    │       │       ├── FixtureGlow.luau    Glow surfaces of a fixture (Neon tubes, lenses, self-lit exit letters) and the
+    │       │       │                       curve the client dims them along with their light
+    │       │       ├── SurfaceArt.luau     SurfaceGui paint kit: checkers, seams, hazard stripes, stains, grime, print
+    │       │       ├── Finishes.luau       Interior finishes: glossy / checker / vinyl floors, drop ceilings with missing
+    │       │       │                       tiles, two-tone wainscots (band, chair rail, baseboard), floor hazard plates
     │       │       ├── LobbyBuilder.luau   [P1] Boiler-room safe zone + wrecked bus staging area
     │       │       ├── SchoolShellBuilder.luau [P1] Levels 0–5: slabs, walls, rooms, corridors, boarded windows, Zone volumes
     │       │       ├── StairwellBuilder.luau [P1] Stair towers between levels (respawn points are the entry-airlock PlayerSpawn anchors)
@@ -140,8 +146,10 @@ Rovloc/
     │       │       │   ├── DoorBuilder.luau            [P2] Airlock fire doors, hallway gate, roof stairwell door
     │       │       │   ├── PickupBuilder.luau          [P2] Flashlight batteries
     │       │       │   ├── FloodlightSwitchBuilder.luau [P2] Emergency pool floodlight switch + lights
-    │       │       │   └── SetDressingBuilder.luau     [P2] Server: lab counters, smashed lockers, debris triggers, drip pipes ·
-    │       │       │                                        Client: posed corpses, loose clutter, trims
+    │       │       │   ├── SetDressingBuilder.luau     [P2] Server: lab counters, smashed lockers, debris triggers, drip pipes ·
+    │       │       │   │                                    Client: posed corpses, loose clutter, trims
+    │       │       │   ├── SignageBuilder.luau         Room plates, wayfinding, posters, notes, scrawls, WET FLOOR A-frames
+    │       │       │   └── ServicePipeBuilder.luau     Pipework and conduit along the plant rooms' ceilings
     │       │       └── CreatureRigBuilder.luau [P2] 8.5-stud rig, Motor6Ds, hair, claws, grin, pupils, CreatureHitbox
     │       └── Util/
     │           ├── Signal.luau             [P1] Typed, immediate-fire signal
@@ -233,7 +241,8 @@ Rovloc/
             └── Controllers/
                 ├── Core/
                 │   ├── AudioController.luau        [P1] Buses, cue playback with server-time offset, zone reverb, nearby emitters
-                │   ├── LightingController.luau     [P1] Only writer of level lights: active level ∧ budget, Timeline overrides
+                │   ├── LightingController.luau     [P1] Only writer of level lights: active level ∧ budget, Timeline overrides,
+                │   │                                    fixture glow (tubes dim, flicker and die with their light), area grade
                 │   ├── CosmeticWorldController.luau [P1] Skyline + non-interactive dressing from RunSeed
                 │   ├── DevToolsController.luau     [P1] Noise rings, ZoneGraph / VentGraph overlays, Creature billboard
                 │   ├── InputController.luau        [P3] ContextActionService context stack (Menu > Cutscene > … > OnFoot)
@@ -344,7 +353,8 @@ Workspace
 ├── Lobby                    Model  ReadyPads · DifficultyTerminal · PerkLocker · SpawnAnchors
 ├── School                   Model
 │   ├── Level0_Basement      Model  Shell · Lights · Zones · Vents · Anchors · Triggers · Waypoints · Props (P2 statics:
-│   │                               open doors, lab counters, smashed lockers, drip pipes, debris, pool wreckage)
+│   │                               open doors, lab counters, smashed lockers, drip pipes, debris, pool wreckage,
+│   │                               signs and posters, plant-room pipework)
 │   ├── Level1_Hallways      Model  (same layout per level; Vents holds that level's ducts + VentNodes)
 │   ├── Level2_ScienceHall   Model
 │   ├── Level3_Gymnasium     Model

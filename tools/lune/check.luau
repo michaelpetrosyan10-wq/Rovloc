@@ -251,8 +251,13 @@ local function runLifecycle(h)
 	if player:GetAttribute("WorldAcked") ~= true then
 		fail("ClientWorldReady did not set WorldAcked")
 	end
-	-- Studio AutoDevRun: the first ack schedules a Standard dev run AutoRunDelay seconds later.
-	task.wait(DevTools.AutoRunDelay + 0.3)
+	-- Studio AutoDevRun: the first ack schedules a Standard dev run AutoRunDelay seconds later. Deploying builds every
+	-- level's fixtures, so poll for InRun (up to 5 s past the delay) instead of betting on a fixed margin.
+	task.wait(DevTools.AutoRunDelay)
+	local deployDeadline = os.clock() + 5
+	while Lifecycle.GetPhase() ~= "InRun" and os.clock() < deployDeadline do
+		task.wait(0.05)
+	end
 	if Lifecycle.GetPhase() ~= "InRun" or RS:GetAttribute("DevRun") ~= true then
 		fail("the Studio auto dev run did not start (phase %s)", tostring(Lifecycle.GetPhase()))
 	end
