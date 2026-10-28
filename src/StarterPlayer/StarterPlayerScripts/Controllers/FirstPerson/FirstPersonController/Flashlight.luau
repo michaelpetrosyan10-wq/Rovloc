@@ -50,7 +50,6 @@ export type UpdateContext = {
 	now: number, -- os.clock()
 	serverNow: number,
 	look: CFrame, -- the player's look at the eye (no bob or shake)
-	origin: Vector3?, -- torch lens, world space (nil: derived from the look)
 	lowered: number, -- 0..1, torch lowered for sprinting
 	allowed: boolean, -- false hides the beam (dead, spectating, camera handed back)
 	camera: Camera?,
@@ -89,12 +88,12 @@ local SPUTTER_BELOW = 0.05
 local STATIC_THRESHOLD = 0.04
 local STATIC_VOLUME_EPSILON = 0.04
 
-local INNER_ANGLE = 34
-local INNER_RANGE = 60
-local INNER_BRIGHTNESS = 5.5
-local OUTER_ANGLE = 72
-local OUTER_RANGE = 42
-local OUTER_BRIGHTNESS = 1.5
+local INNER_ANGLE = 40
+local INNER_RANGE = 60 -- SpotLight.Range maximum
+local INNER_BRIGHTNESS = 8
+local OUTER_ANGLE = 80
+local OUTER_RANGE = 48
+local OUTER_BRIGHTNESS = 2.2
 -- Presence glow: a dim, short, unshadowed light around the player (on whether or not the torch is), so whatever is
 -- within arm's reach always reads in the dark without lighting up the room.
 local GLOW_RANGE = 10
@@ -104,8 +103,10 @@ local BEAM_COLOR = Color3.fromRGB(255, 238, 212)
 local DYING_COLOR = Color3.fromRGB(255, 176, 112)
 local LAG_SPEED = 16 -- 1/s damped slerp of the beam toward the look
 local LOWERED_PITCH = math.rad(7)
-local LENS_LEAD = 0.15 -- studs ahead of the lens (the torch never shadows its own beam)
-local CHEST_OFFSET = Vector3.new(0.38, -0.42, -0.35) -- fallback origin in look space
+-- The beam fires from just in front of the eyes, slightly right and low (look space): nothing of the player's own
+-- body, hand or torch model can sit between the light and the world, so the shadowed inner cone is never blocked by
+-- the player. The hand-held torch model (HandRig) stays the visual source.
+local BEAM_OFFSET = Vector3.new(0.3, -0.25, -0.6)
 local TOGGLE_COOLDOWN = 0.22
 local SAMPLE_TTL = 0.008
 
@@ -408,6 +409,7 @@ function Flashlight.new(player: Player): Light
 			driveStatic(emf)
 
 			local camera = context.camera
+			local holder = Instances.cosmetic()
 			if camera == nil or not context.allowed then
 				output = 0
 				inner.Enabled = false
@@ -416,8 +418,9 @@ function Flashlight.new(player: Player): Light
 				rotation = nil
 				return
 			end
-			if part.Parent ~= camera then
-				part.Parent = camera
+			-- A client-local folder in Workspace, never the camera: lights under the camera are not reliably rendered.
+			if part.Parent ~= holder then
+				part.Parent = holder
 			end
 			if not glow.Enabled then
 				glow.Enabled = true
@@ -430,10 +433,7 @@ function Flashlight.new(player: Player): Light
 				then previous:Lerp(target, MathUtil.damp(LAG_SPEED, context.dt))
 				else target
 			rotation = current
-			local origin = context.origin
-			local position = if origin
-				then origin + current.LookVector * LENS_LEAD
-				else context.look:PointToWorldSpace(CHEST_OFFSET)
+			local position = context.look:PointToWorldSpace(BEAM_OFFSET)
 			part.CFrame = CFrame.new(position) * current
 
 			if not (on and batteryFraction > 0) then

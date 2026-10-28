@@ -95,7 +95,6 @@ local CAMERA_RADIUS = 0.2
 local CAMERA_SKIN = 0.05
 local COLLISION_RELEASE = 6 -- studs/s the eye returns after a wall stops pushing it in
 local COLLISION_REFRESH = 0.5 -- seconds between exclusion-list rebuilds
-local LENS_MAX_DISTANCE = 3 -- a torch lens further than this from the eye is not the beam origin
 local LOOK_SETTLE = 0.2 -- seconds of stillness before the last small look change is sent
 local RESEND_SECONDS = 1
 local EXERTION_BELOW = 0.45 -- stamina share under which breathing gets heavy
@@ -488,14 +487,11 @@ local function renderFrame(deltaTime: number)
 		lit = light:GetOutput() > 0.05,
 		active = enabled and alive,
 	})
-	local lens = HandRig.GetLens()
-	local origin = if lens and (lens.Position - eye).Magnitude <= LENS_MAX_DISTANCE then lens.Position else nil
 	light:Update({
 		dt = dt,
 		now = now,
 		serverNow = serverNow,
 		look = eyeCFrame,
-		origin = origin,
 		lowered = HandRig.GetLowered(),
 		allowed = enabled and alive,
 		camera = camera,
