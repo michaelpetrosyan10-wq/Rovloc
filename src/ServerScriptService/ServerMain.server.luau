@@ -52,6 +52,8 @@ local BearTrapService = require(ServerScriptService.Services.Mechanics.BearTrapS
 
 local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
 
+local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
+
 --------------------------------------------------------------------------------
 -- Place-settings audit
 --------------------------------------------------------------------------------
@@ -146,6 +148,8 @@ end
 --                            snap / solo pry / co-op rescue; EndRun (early, in reverse) frees every victim.
 --   VentNetworkService       Vent grates (BeginRun tracks the grates WorldService rebuilt above), crawl entry / exit,
 --                            the VentRail validator (MovementAuthority above), level VentGraphs for later systems.
+--   MonsterAIService         The Creature's brain: BeginRun takes over the Creature WorldService built above, reads
+--                            VentNetworkService's graphs and grates; EndRun (early, in reverse) lets it go.
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
 --   DevToolsService          Dev commands and the Studio auto dev-run; it calls everything above.
 --
@@ -250,6 +254,14 @@ local SERVICES: { Types.Service } = {
 		BeginRun = VentNetworkService.BeginRun,
 		EndRun = VentNetworkService.EndRun,
 		OnPlayerRemoving = VentNetworkService.OnPlayerRemoving,
+	},
+	{
+		Name = MonsterAIService.Name,
+		Init = MonsterAIService.Init,
+		Start = MonsterAIService.Start,
+		BeginRun = MonsterAIService.BeginRun,
+		EndRun = MonsterAIService.EndRun,
+		OnPlayerRemoving = MonsterAIService.OnPlayerRemoving,
 	},
 	{ Name = RunLifecycleService.Name, Init = RunLifecycleService.Init, Start = RunLifecycleService.Start },
 	{

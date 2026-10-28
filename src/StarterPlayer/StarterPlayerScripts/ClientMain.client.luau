@@ -132,6 +132,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "JumpscareController",
+		load = function(): any
+			return require(Gameplay.JumpscareController)
+		end,
+	},
+	{
 		name = "DevToolsController",
 		load = function(): any
 			return require(Core.DevToolsController)

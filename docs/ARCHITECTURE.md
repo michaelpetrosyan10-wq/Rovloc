@@ -195,6 +195,7 @@ Rovloc/
     │       ├── Monster/
     │       │   └── MonsterAIService/
     │       │       ├── init.luau           [P5] State machine host, 10 Hz brain, AcquireScripted(), hook registry
+    │       │       ├── Brain.luau          [P5] Shared state types, pure transition table, catch rules, level knowledge
     │       │       ├── CreatureBody.luau   [P5] Ownership reassert, hitbox sizing per PoseMode, Hidden, collision modes
     │       │       ├── Perception.luau     [P5] Eye-to-EyePoint LOS (never limbs), view cones
     │       │       ├── Hearing.luau        [P5] Same-level filter, wall occlusion, vent path distance over VentGraph

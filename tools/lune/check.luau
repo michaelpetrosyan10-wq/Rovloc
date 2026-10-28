@@ -317,6 +317,19 @@ local function runLifecycle(h)
 			if not sawPlan then
 				fail("plan on %s sent no DevOverlay", levelId)
 			end
+			-- MonsterAIService: from Level 1 on, the Creature waits Dormant on the squad's level (ai reports it).
+			if index >= 2 then
+				local creature = CollectionService:GetTagged("Creature")[1]
+				local _, mind = dev("ai")
+				if
+					not creature
+					or creature:GetAttribute("LevelId") ~= levelId
+					or creature:GetAttribute("MonsterState") ~= "Dormant"
+					or not (mind and string.find(mind, levelId, 1, true))
+				then
+					fail("the Creature did not follow the squad to %s (ai: %s)", levelId, tostring(mind))
+				end
+			end
 		end
 		local _, last = dev("next")
 		if last ~= "already on the last level" then
