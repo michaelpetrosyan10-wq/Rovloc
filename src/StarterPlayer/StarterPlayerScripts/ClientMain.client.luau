@@ -33,6 +33,8 @@ local RESET_RETRY_SECONDS = 10
 local RESET_RETRY_INTERVAL = 0.25
 
 local Core = script.Parent.Controllers.Core
+local Characters = script.Parent.Controllers.Characters
+local FirstPerson = script.Parent.Controllers.FirstPerson
 
 type Loader = { name: string, load: () -> any }
 
@@ -78,6 +80,30 @@ local CONTROLLER_ORDER: { Loader } = {
 		name = "RenderBudgetController",
 		load = function(): any
 			return require(Core.RenderBudgetController)
+		end,
+	},
+	{
+		name = "SequenceController",
+		load = function(): any
+			return require(Core.SequenceController)
+		end,
+	},
+	{
+		name = "CharacterAnimationController",
+		load = function(): any
+			return require(Characters.CharacterAnimationController)
+		end,
+	},
+	{
+		name = "FirstPersonController",
+		load = function(): any
+			return require(FirstPerson.FirstPersonController)
+		end,
+	},
+	{
+		name = "RemoteFlashlightRenderer",
+		load = function(): any
+			return require(Characters.RemoteFlashlightRenderer)
 		end,
 	},
 	{
