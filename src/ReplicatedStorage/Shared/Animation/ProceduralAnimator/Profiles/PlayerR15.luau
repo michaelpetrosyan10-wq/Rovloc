@@ -660,7 +660,8 @@ local function vent(ctx: Ctx, pose: Pose, style: CrawlStyle)
 	local phase = ctx.phase
 	local stance = style.duty * ctx.cycleLength * move
 	-- Travel along the duct only (forward or backward); the body never yaws inside the bore.
-	local direction = if ctx.heading.Z > 0.3 then 1 else -1
+	-- +1 travelling forward (rig -Z): planted hands and knees then slide back (+Z) under the body, fixed on the floor.
+	local direction = if ctx.heading.Z > 0.3 then -1 else 1
 	local oscillation = math.sin(TAU * phase)
 
 	-- Body: pelvis face down, the hips over the knees, the chest over the elbows.
@@ -752,7 +753,8 @@ local function downed(ctx: Ctx, pose: Pose)
 	local move = ctx.moveAmount
 	local phase = ctx.phase
 	local stance = DOWNED_DUTY * ctx.cycleLength * move
-	local direction = if ctx.heading.Z > 0.3 then 1 else -1
+	-- +1 travelling forward (rig -Z): planted hands and knees then slide back (+Z) under the body, fixed on the floor.
+	local direction = if ctx.heading.Z > 0.3 then -1 else 1
 	local pull = math.sin(TAU * phase)
 	local effort = 1 + ctx.exertion
 	local laboured = ctx.breath * rad(2.2) * effort

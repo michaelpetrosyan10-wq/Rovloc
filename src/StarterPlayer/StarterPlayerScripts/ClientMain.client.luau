@@ -108,6 +108,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "CreatureController",
+		load = function(): any
+			return require(Characters.CreatureController)
+		end,
+	},
+	{
 		name = "HUD",
 		load = function(): any
 			return require(script.Parent.Controllers.HUD)
