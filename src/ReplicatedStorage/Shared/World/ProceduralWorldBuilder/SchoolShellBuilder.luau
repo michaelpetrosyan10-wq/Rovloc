@@ -376,6 +376,12 @@ end
 -- Lights (shared with the stairwell and lobby builders)
 --------------------------------------------------------------------------------
 
+-- SynthPresets loop each working fixture kind emits (none for the rest).
+local FIXTURE_HUM: { [string]: string } = {
+	Fluorescent = "FluorescentBuzz",
+	BoilerGlow = "BoilerHum",
+}
+
 local function newLight(
 	className: "PointLight" | "SpotLight" | "SurfaceLight",
 	spec: LightSpec,
@@ -507,6 +513,12 @@ function SchoolShellBuilder.buildLight(parent: Instance, spec: LightSpec): BaseP
 	fixture:SetAttribute(W.BaseBrightness, if spec.broken then 0 else spec.brightness)
 	if spec.flickerGroup then
 		fixture:SetAttribute(W.FlickerGroup, spec.flickerGroup)
+	end
+	-- Working tubes buzz and boilers hum: AudioController plays the nearest tagged emitters as looping 3D voices.
+	local hum = if spec.broken then nil else FIXTURE_HUM[kind]
+	if hum then
+		fixture:SetAttribute(W.Preset, hum)
+		fixture:AddTag(Tags.AmbientEmitter)
 	end
 	return fixture
 end
