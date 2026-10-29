@@ -1,4 +1,188 @@
 {
   "className": "Folder",
-  "children": []
+  "children": [
+    {
+      "name": "RovlocPaintedPlaster_Plaster",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Plaster",
+        "ColorMapContent": "rbxassetid://126082069743033",
+        "NormalMapContent": "rbxassetid://93843703070705",
+        "RoughnessMapContent": "rbxassetid://74948079617763",
+        "StudsPerTile": 10,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocCheckerTile_Plastic",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Plastic",
+        "ColorMapContent": "rbxassetid://85905120131606",
+        "NormalMapContent": "rbxassetid://87329493184169",
+        "RoughnessMapContent": "rbxassetid://88188615129340",
+        "StudsPerTile": 12,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocStainedConcrete_Concrete",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Concrete",
+        "ColorMapContent": "rbxassetid://76879222787798",
+        "NormalMapContent": "rbxassetid://118540998902068",
+        "RoughnessMapContent": "rbxassetid://72568129877949",
+        "StudsPerTile": 14,
+        "MaterialPattern": "Organic"
+      }
+    },
+    {
+      "name": "RovlocCeilingTile_Plaster",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Plaster",
+        "ColorMapContent": "rbxassetid://137061013654239",
+        "NormalMapContent": "rbxassetid://124271514544002",
+        "RoughnessMapContent": "rbxassetid://98035866671596",
+        "StudsPerTile": 8,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocRustedMetal_CorrodedMetal",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "CorrodedMetal",
+        "ColorMapContent": "rbxassetid://79236445148718",
+        "NormalMapContent": "rbxassetid://139454628304783",
+        "RoughnessMapContent": "rbxassetid://124630490206911",
+        "MetalnessMapContent": "rbxassetid://113816368558427",
+        "StudsPerTile": 6,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocRustedMetal_Metal",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Metal",
+        "ColorMapContent": "rbxassetid://79236445148718",
+        "NormalMapContent": "rbxassetid://139454628304783",
+        "RoughnessMapContent": "rbxassetid://124630490206911",
+        "MetalnessMapContent": "rbxassetid://113816368558427",
+        "StudsPerTile": 6,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocGalvanizedMetal_Metal",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Metal",
+        "ColorMapContent": "rbxassetid://138689032290312",
+        "NormalMapContent": "rbxassetid://105720398043517",
+        "RoughnessMapContent": "rbxassetid://134470180477075",
+        "MetalnessMapContent": "rbxassetid://114555577236675",
+        "StudsPerTile": 8,
+        "MaterialPattern": "Organic"
+      }
+    },
+    {
+      "name": "RovlocWornWood_WoodPlanks",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "WoodPlanks",
+        "ColorMapContent": "rbxassetid://127992793011467",
+        "NormalMapContent": "rbxassetid://83934414796072",
+        "RoughnessMapContent": "rbxassetid://103640488555866",
+        "StudsPerTile": 8,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocWornWood_Wood",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Wood",
+        "ColorMapContent": "rbxassetid://127992793011467",
+        "NormalMapContent": "rbxassetid://83934414796072",
+        "RoughnessMapContent": "rbxassetid://103640488555866",
+        "StudsPerTile": 8,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocPoolMosaic_CeramicTiles",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "CeramicTiles",
+        "ColorMapContent": "rbxassetid://74300305635213",
+        "NormalMapContent": "rbxassetid://91072150894207",
+        "RoughnessMapContent": "rbxassetid://93370477622198",
+        "StudsPerTile": 8,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocStainedBrick_Brick",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Brick",
+        "ColorMapContent": "rbxassetid://96597084369959",
+        "NormalMapContent": "rbxassetid://119959747993716",
+        "RoughnessMapContent": "rbxassetid://106243511049385",
+        "StudsPerTile": 6,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocVinylTile_Plastic",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Plastic",
+        "ColorMapContent": "rbxassetid://122808454554819",
+        "NormalMapContent": "rbxassetid://129011234955484",
+        "RoughnessMapContent": "rbxassetid://127866577540414",
+        "StudsPerTile": 8,
+        "MaterialPattern": "Regular"
+      }
+    },
+    {
+      "name": "RovlocRubberMat_Rubber",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Rubber",
+        "ColorMapContent": "rbxassetid://100677561096866",
+        "NormalMapContent": "rbxassetid://96373093991181",
+        "RoughnessMapContent": "rbxassetid://77981668917995",
+        "StudsPerTile": 6,
+        "MaterialPattern": "Organic"
+      }
+    },
+    {
+      "name": "RovlocRoofGravel_Pebble",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "Pebble",
+        "ColorMapContent": "rbxassetid://135869557784453",
+        "NormalMapContent": "rbxassetid://131756658613055",
+        "RoughnessMapContent": "rbxassetid://130486682911339",
+        "StudsPerTile": 10,
+        "MaterialPattern": "Organic"
+      }
+    },
+    {
+      "name": "RovlocLabWorktop_SmoothPlastic",
+      "className": "MaterialVariant",
+      "properties": {
+        "BaseMaterial": "SmoothPlastic",
+        "ColorMapContent": "rbxassetid://72021638222698",
+        "NormalMapContent": "rbxassetid://76590152015067",
+        "RoughnessMapContent": "rbxassetid://116404228296578",
+        "StudsPerTile": 6,
+        "MaterialPattern": "Organic"
+      }
+    }
+  ]
 }
