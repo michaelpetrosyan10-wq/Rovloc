@@ -133,10 +133,20 @@ InputConfig.Bindings = table.freeze({
 	Menu = {
 		action = "Menu",
 		kind = "Tap",
-		keyboard = { Enum.KeyCode.M, Enum.KeyCode.Tab },
+		keyboard = { Enum.KeyCode.M },
 		gamepad = { Enum.KeyCode.ButtonSelect },
 		touch = { label = "Input.Menu", position = UDim2.new(0, 60, 0, 60), size = 56 },
 		contexts = { "Menu", "OnFoot", "Vent", "Swim", "Downed", "Trapped", "Locker", "Spectator" },
+	},
+	-- The current objective and a brief nudge toward it (ObjectiveTracker; short cooldown). Tab on the keyboard,
+	-- d-pad right on a gamepad (Select stays the menu: Start belongs to the Roblox menu), a small button under MENU.
+	Objective = {
+		action = "Objective",
+		kind = "Tap",
+		keyboard = { Enum.KeyCode.Tab },
+		gamepad = { Enum.KeyCode.DPadRight },
+		touch = { label = "Input.Objective", position = UDim2.new(0, 60, 0, 124), size = 56 },
+		contexts = { "OnFoot", "Vent", "Swim" },
 	},
 } :: { [string]: Binding })
 

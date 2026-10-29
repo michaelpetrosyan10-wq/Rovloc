@@ -33,6 +33,7 @@ Attributes.Player = table.freeze({
 	DifficultyVote = "DifficultyVote", -- LobbyService: Enums.Difficulty, nil until the player votes
 	DataLoaded = "DataLoaded",
 	Credits = "Credits",
+	Escapes = "Escapes", -- MatchAndDataService: PlayerData.Escapes (the title screen shows it)
 	RunOutcome = "RunOutcome",
 	SpectateReason = "SpectateReason",
 	SpectateTargetUserId = "SpectateTargetUserId",

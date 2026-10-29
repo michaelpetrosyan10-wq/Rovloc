@@ -1,7 +1,8 @@
 --!strict
--- SettingsMenu: every SettingsSchema entry on one quiet panel, applied live.
+-- SettingsMenu: every visible SettingsSchema entry on one quiet panel, applied live (hidden entries, the onboarding's
+-- saved progress, are never drawn).
 --
---   * Opened and closed by the Menu action (keyboard M / Tab, gamepad Select, the touch MENU button). Open pushes
+--   * Opened and closed by the Menu action (keyboard M, gamepad Select, the touch MENU button). Open pushes
 --     the "Menu" input context (gameplay actions unbind) and frees the cursor; close restores both.
 --   * One row per schema entry, labelled through Strings: numbers are sliders that snap to the schema step (drag with
 --     mouse or touch; the d-pad / arrow keys step left and right on the selected row, held keys repeat), booleans are
@@ -331,7 +332,7 @@ function SettingsMenu.mount(ctx: Context): SettingsMenu
 		return row
 	end
 
-	for index, setting in SettingsSchema.List do
+	for index, setting in SettingsSchema.visible() do
 		local row = buildRow(setting, index)
 		table.insert(rows, row)
 		rowsByKey[setting.key] = row

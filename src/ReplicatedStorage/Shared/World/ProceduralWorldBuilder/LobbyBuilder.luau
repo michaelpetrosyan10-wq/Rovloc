@@ -14,6 +14,11 @@
 -- Set pieces place themselves from the layout: the boiler goes against the wall of the Boiler room that keeps the
 -- most clearance from doors and anchors; the bus is centred on the ReadyPads (so the pads end up inside it) and
 -- oriented along their spread.
+--
+-- Wayfinding (LobbySignage): hanging signs (BUS — READY UP over the doorway and the bus's rear door, DIFFICULTY over
+-- its console, SUPPLY / PERKS over the supply room door and its console) and glowing floor arrows from the spawn
+-- through the doorway to the bus. LobbyBuilder.bus(layout) is where the bus stands (the signage and the clients'
+-- lobby objective marker use it).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -25,6 +30,7 @@ local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Geometry = require(script.Parent.Geometry)
+local LobbySignage = require(script.Parent.LobbySignage)
 local PropKit = require(script.Parent.Props.PropKit)
 local SchoolShellBuilder = require(script.Parent.SchoolShellBuilder)
 
@@ -351,6 +357,12 @@ end
 --------------------------------------------------------------------------------
 
 type BusPlacement = { cframe: CFrame, length: number } -- level-local, at the floor under the bus centre
+
+-- Where the bus stands, level-local: `cframe` at the floor under its centre (X toward the hood, Y up), its shell's
+-- length and width, and `entrance`, a floor point just outside the sprung rear emergency door (the way in).
+export type BusInfo = { cframe: CFrame, length: number, width: number, entrance: Vector3 }
+
+local REAR_APPROACH = 2.5 -- studs outside the rear door for the entrance point
 
 local function placeBus(room: Room, pads: { LayoutSchema.Anchor }): BusPlacement?
 	local r = room.rect
@@ -692,6 +704,54 @@ local function buildTerminals(layout: Layout, props: Instance, origin: Vector3):
 	return count
 end
 
+-- The room holding the most ReadyPads (ties: the lower room id) and the pads in it; nil when there are no pads.
+local function padRoom(layout: Layout): (Room?, { LayoutSchema.Anchor })
+	local padRooms: { [string]: number } = {}
+	for _, anchor in layout.anchors do
+		if anchor.kind == "ReadyPad" then
+			padRooms[anchor.room] = (padRooms[anchor.room] or 0) + 1
+		end
+	end
+	local rooms = LayoutSchema.indexRooms(layout)
+	local busRoom: Room? = nil
+	local bestPads = 0
+	for roomId, count in padRooms do
+		if count > bestPads or (count == bestPads and busRoom and roomId < busRoom.id) then
+			bestPads = count
+			busRoom = rooms[roomId]
+		end
+	end
+	local inRoom: { LayoutSchema.Anchor } = {}
+	if busRoom then
+		for _, anchor in layout.anchors do
+			if anchor.kind == "ReadyPad" and anchor.room == busRoom.id then
+				table.insert(inRoom, anchor)
+			end
+		end
+	end
+	return busRoom, inRoom
+end
+
+-- Where the bus stands in this layout (level-local), or nil when it has no ReadyPads or no room for the bus.
+function LobbyBuilder.bus(layout: Layout): BusInfo?
+	local room, pads = padRoom(layout)
+	if not room then
+		return nil
+	end
+	local placement = placeBus(room, pads)
+	if not placement then
+		return nil
+	end
+	local entrance = placement.cframe:PointToWorldSpace(Vector3.new(-placement.length / 2 - REAR_APPROACH, 0, 0))
+	return { cframe = placement.cframe, length = placement.length, width = BUS_WIDTH, entrance = entrance }
+end
+
+-- Whether a level-local point stands inside the bus's shell (horizontally).
+function LobbyBuilder.inBus(bus: BusInfo, point: Vector3): boolean
+	local localPoint = bus.cframe:PointToObjectSpace(point)
+	return math.abs(localPoint.X) <= bus.length / 2 and math.abs(localPoint.Z) <= bus.width / 2
+end
+
 --------------------------------------------------------------------------------
 -- Entry point
 --------------------------------------------------------------------------------
@@ -710,23 +770,7 @@ function LobbyBuilder.build(layout: Layout): Model
 		return room.kind ~= "Chase"
 	end)
 
-	local pads: { LayoutSchema.Anchor } = {}
-	local padRooms: { [string]: number } = {}
-	for _, anchor in layout.anchors do
-		if anchor.kind == "ReadyPad" then
-			table.insert(pads, anchor)
-			padRooms[anchor.room] = (padRooms[anchor.room] or 0) + 1
-		end
-	end
-	local rooms = LayoutSchema.indexRooms(layout)
-	local busRoom: Room? = nil
-	local bestPads = 0
-	for roomId, count in padRooms do
-		if count > bestPads or (count == bestPads and busRoom and roomId < busRoom.id) then
-			bestPads = count
-			busRoom = rooms[roomId]
-		end
-	end
+	local busRoom, inRoom = padRoom(layout)
 	if not busRoom then
 		busRoom = largest(layout, function(room: Room): boolean
 			return room.kind == "LobbyHall" and room ~= boilerRoom
@@ -737,16 +781,11 @@ function LobbyBuilder.build(layout: Layout): Model
 		buildBoiler(layout, boilerRoom, folders.Shell, folders.Lights, origin)
 	end
 	if busRoom then
-		local inRoom: { LayoutSchema.Anchor } = {}
-		for _, pad in pads do
-			if pad.room == busRoom.id then
-				table.insert(inRoom, pad)
-			end
-		end
 		buildBus(busRoom, inRoom, folders.Shell, folders.Lights, origin)
 	end
 	buildPads(layout, props, origin)
 	buildTerminals(layout, props, origin)
+	LobbySignage.build(layout, props, origin, LobbyBuilder.bus(layout), LobbyBuilder.Terminals)
 	return root
 end
 

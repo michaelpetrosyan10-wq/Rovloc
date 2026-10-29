@@ -1,8 +1,8 @@
 --!strict
 -- MatchAndDataService: saved progress and the match policy (spec §1, ARCHITECTURE §5 and §6d).
 --
--- The only writer of every PlayerData field and of the Player attributes DataLoaded, Credits, RunOutcome and Settings
--- (the saved blob, written once per load), and of ReplicatedStorage DataMode. LobbyService, PerkShopService,
+-- The only writer of every PlayerData field and of the Player attributes DataLoaded, Credits, Escapes, RunOutcome and
+-- Settings (the saved blob, written once per load), and of ReplicatedStorage DataMode. LobbyService, PerkShopService,
 -- MatchResetService and TelemetryService require it; it requires none of them. Levels signal upward: Level 5's
 -- `Escaped` is subscribed through `Levels.Level5` when that controller exists.
 --
@@ -14,7 +14,7 @@
 --     data: defaults, read-only, no rewards, Notify "Boot.DataGuest"; the load is retried every GUEST_RETRY_SECONDS and
 --     a recovered player gets their real data (DataLoaded fires again). Records from a newer build or corrupt values
 --     are read-only for the whole session (never written back). DataMode turns "Guest" while the store is failing.
---   * Ready: Credits mirrors SurvivalCredits, Settings carries the saved blob as JSON (SettingsController reads it
+--   * Ready: Credits mirrors SurvivalCredits and Escapes mirrors Escapes (the title screen shows both), Settings carries the saved blob as JSON (SettingsController reads it
 --     once), DataLoaded = true, then the DataLoaded signal.
 --   * GetData returns a deep-frozen snapshot. Update(player, reason, mutate) hands `mutate` a draft copy; true commits
 --     it (validated by DataMigration.validate, so a bad mutation is refused rather than repaired), mirrors Credits,
@@ -455,6 +455,7 @@ end
 -- Mirrors `data` onto the player's attributes (the saved settings blob only on a load).
 local function publish(player: Player, data: Types.PlayerData, withSettings: boolean)
 	Attributes.set(player, P.Credits, data.SurvivalCredits)
+	Attributes.set(player, P.Escapes, data.Escapes)
 	if withSettings then
 		local ok, encoded = pcall(function(): string
 			return HttpService:JSONEncode(data.Settings)

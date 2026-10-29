@@ -211,6 +211,24 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "OnboardingController",
+		load = function(): any
+			return require(Match.OnboardingController)
+		end,
+	},
+	{
+		name = "ObjectiveTracker",
+		load = function(): any
+			return require(script.Parent.Controllers.HUD.ObjectiveTracker)
+		end,
+	},
+	{
+		name = "FirstTimeHints",
+		load = function(): any
+			return require(script.Parent.Controllers.HUD.FirstTimeHints)
+		end,
+	},
+	{
 		name = "DevToolsController",
 		load = function(): any
 			return require(Core.DevToolsController)

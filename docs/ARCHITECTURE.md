@@ -766,7 +766,7 @@ is treated as an elimination, never a respawn.
 
 | Owner | Attributes |
 | --- | --- |
-| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `Settings` (saved blob, JSON) · `SpectateReason` + `SpectateTargetUserId` · `PerkStock` · `DifficultyVote` · `SpectateReason` · `Parachute` + `ParachuteAt` + `ParachuteAuto` (the roof jump) |
+| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `Escapes` · `RunOutcome` · `Settings` (saved blob, JSON) · `SpectateReason` + `SpectateTargetUserId` · `PerkStock` · `DifficultyVote` · `SpectateReason` · `Parachute` + `ParachuteAt` + `ParachuteAuto` (the roof jump) |
 | `Creature` | `MonsterState` · `StateSince` · `PoseMode` · `TargetUserId` · `InVent` · `VentSegmentId` · `Hidden` · `GrabbedUserId` |
 | `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` · `DevRun` · `ResultsEndsAt` (MatchResetService) · `CountdownEndsAt` · `LobbySquad` · `LobbyDifficulty` |
 | `VentGrate` | `GrateId` · `GrateState` (Closed / Unscrewing / Open / Kicked / Locked) · `Lockable` · `CriticalPath` · `NodeId` |

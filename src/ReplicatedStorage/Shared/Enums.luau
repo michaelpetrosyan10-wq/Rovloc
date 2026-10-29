@@ -236,6 +236,7 @@ export type InputAction =
 	| "SpectateNext"
 	| "Dive"
 	| "Menu"
+	| "Objective"
 
 export type InputContext =
 	"Menu"
@@ -553,6 +554,7 @@ Enums.InputAction = table.freeze({
 	"SpectateNext",
 	"Dive",
 	"Menu",
+	"Objective",
 } :: { InputAction })
 
 -- Highest priority first: the first context on the stack that binds an action wins it.
