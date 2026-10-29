@@ -1,9 +1,12 @@
 // level5.js: the roof and the ending (Level5_RoofController). The packs, the jump and the canopy are parachute.js;
 // this runs the level around them and owns the finale.
 //
-// Arrival. On activation the Creature is taken (acquireScripted; asked for again at the tick rate while busy, only
-// taken while the player cannot see it) and kept hidden in the stair housing. The RoofStairDoor (Closed) swings open
-// OPEN_DELAY after the player reaches the housing.
+// Arrival. The run arrives in one of three stair housings: the route's Stairwell_4_5 candidate (L5_RoofAccess,
+// L5_RoofAccessNorth or L5_RoofAccessSouth, each with its own roof door RoofStairDoor / RoofStairDoorNorth /
+// RoofStairDoorSouth, the tower below it and the Creature's spot behind it, L5_CreatureSpawn / _North / _South); the
+// finale plays at that one (geometry, per run). On activation the Creature is taken (acquireScripted; asked for again
+// at the tick rate while busy, only taken while the player cannot see it) and kept hidden in that housing at its
+// CreatureSpawn. Its roof door (Closed) swings open OPEN_DELAY after the player reaches the housing.
 //
 // The door smash (Scenes.RoofDoor, from startAt S): the Creature waits behind the door for its grace once the player
 // has stepped out of the housing (SpawnTuning.Grace: 20 s Standard, 12 s Nightmare), ended early by a High / Critical
@@ -63,15 +66,20 @@ const PACE = { Standard: { near: 0.96, far: 1.3 }, Nightmare: { near: 1.02, far:
 
 const inRect = (r, p) => p.x >= r.minX && p.x <= r.maxX && p.z >= r.minZ && p.z <= r.maxZ;
 
-/** The roof's door geometry from the export's Level 5 layout (Level5.geometry). */
-export function geometry(meta) {
+/**
+ * The roof's door geometry from the export's Level 5 layout for a run arriving by `arrival` (Level5.geometry: a
+ * Stairwell_4_5 route candidate, {toRoom, tower, creatureSpawn}; null: the middle one).
+ */
+export function geometry(meta, arrival) {
   const layout = meta.layouts[LEVEL];
   const origin = new THREE.Vector3(...meta.levels[LEVEL].origin);
   const rooms = new Map(layout.rooms.map((r) => [r.id, r]));
-  const housing = rooms.get(HOUSING_ROOM);
+  const housingId = (arrival && (arrival.entryRoomOfNextLevel || arrival.toRoom)) || HOUSING_ROOM;
+  const housing = rooms.get(housingId);
   const side = rooms.get(ROOF_SIDE_ROOM);
-  const door = layout.doors.find((d) => d.scriptedId === DOOR_ID);
-  if (!housing || !side || !door) throw new Error('Level 5 has no roof door geometry');
+  const door = layout.doors.find((d) => d.kind === 'RoofDoor' && d.scriptedId && (d.rooms || []).includes(housingId)) ||
+    layout.doors.find((d) => d.scriptedId === DOOR_ID);
+  if (!housing || !side || !door) throw new Error(`Level 5 has no roof door geometry for ${housingId}`);
   const a = housing.rect;
   const b = side.rect;
   let doorway;
@@ -87,11 +95,21 @@ export function geometry(meta) {
   const from = doorway.clone().sub(centre);
   const out = axis === 'X' ? new THREE.Vector3(from.x < 0 ? -1 : 1, 0, 0) : new THREE.Vector3(0, 0, from.z < 0 ? -1 : 1);
   const spot = doorway.clone().addScaledVector(out, -BEHIND_DOOR).add(new THREE.Vector3(0, CreatureMetrics.rootHeight, 0));
-  const stair = meta.stairwells.find((s) => s.to === LEVEL);
-  const tower = meta.worldConfig.Towers[stair ? stair.tower : 'East'];
+  const stair = arrival || meta.stairwells.find((s) => s.to === LEVEL && s.toRoom === housingId) ||
+    meta.stairwells.find((s) => s.to === LEVEL);
+  const tower = meta.worldConfig.Towers[stair && stair.tower ? stair.tower : 'East'];
   const school = meta.worldConfig.SchoolOrigin || [0, 0, 0];
+  const spawnId = (arrival && arrival.creatureSpawn) ||
+    ((meta.routes && meta.routes.Level4_FloodedPool) || []).find((c) => c.toRoom === housingId)?.creatureSpawn;
+  const spawn = spawnId ? meta.anchors.find((a) => a.id === spawnId) : null;
+  const wait = spawn ? new THREE.Vector3(spawn.cframe[0], spawn.cframe[1], spawn.cframe[2])
+    : spot.clone();
   return {
     origin,
+    housingId,
+    doorId: door.scriptedId,
+    // the Creature's hidden wait in the housing (its CreatureSpawn), facing the door
+    wait: lookAtMatrix(wait, new THREE.Vector3(doorway.x, wait.y, doorway.z)),
     housing: { minX: origin.x + a.x, maxX: origin.x + a.x + a.w, minZ: origin.z + a.z, maxZ: origin.z + a.z + a.d },
     tower: { minX: school[0] + tower.minX, maxX: school[0] + tower.maxX, minZ: school[2] + tower.minZ, maxZ: school[2] + tower.maxZ },
     doorway,
@@ -127,7 +145,7 @@ export class Level5 {
     this.name = 'Level5';
     this.game = game;
     this.env = game.env;
-    this.geo = geometry(game.world.meta);
+    this.geo = geometry(game.world.meta, game.world.route('Level4_FloodedPool'));
     this.schedule = new Schedule();
     this.handle = null;
     this._resetState();
@@ -185,7 +203,27 @@ export class Level5 {
   }
 
   _door() {
-    return this.game.doors.find(LEVEL, DOOR_ID);
+    return this.game.doors.find(LEVEL, this.geo.doorId);
+  }
+
+  /** The run's roof door (the arrival housing's RoofStairDoor*). */
+  roofDoor() {
+    return this._door();
+  }
+
+  /** The run's arrival housing (room id). */
+  housingRoom() {
+    return this.geo.housingId;
+  }
+
+  /** Takes the Creature and keeps it hidden at its spot in the arrival housing. */
+  _takeHidden() {
+    const h = this._take();
+    if (!h) return null;
+    h.setHidden(true);
+    h.setPose('Biped');
+    h.teleport(this.geo.wait);
+    return h;
   }
 
   _inside(p) {
@@ -234,7 +272,7 @@ export class Level5 {
 
   _stepArrival(now) {
     const g = this.game;
-    if (!this.handle && !this._seenCreature() && this._take()) this.handle.setHidden(true);
+    if (!this.handle && !this._seenCreature()) this._takeHidden();
     const root = this.env.rootPosition(new THREE.Vector3());
     const playing = g.playing();
     if (playing && inRect(this.geo.housing, root) && this.arrivedAt === null) this.arrivedAt = now;
@@ -402,7 +440,7 @@ export class Level5 {
     this.active = true;
     this.phase = 'Arrival';
     this.activatedAt = this.env.now();
-    if (this._take()) this.handle.setHidden(true);
+    this._takeHidden();
   }
 
   levelDeactivated(level) {
@@ -414,10 +452,11 @@ export class Level5 {
     this._setScale(1);
   }
 
-  beginRun() {
+  beginRun(run) {
     this.schedule.clear();
     this._letGo(null);
     this._resetState();
+    this.geo = geometry(this.game.world.meta, run && run.routes ? run.routes.Level4_FloodedPool : null);
   }
 
   endRun() {

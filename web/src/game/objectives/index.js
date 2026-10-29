@@ -90,8 +90,9 @@ export class FloorObjectives {
   // ---------------------------------------------------------------------------------------------------- for the UI
 
   /**
-   * The tracker's view of a floor: {title, steps [{text, done, active}], unlocked, exit} where `exit` is the
-   * "Get to the <compass> stairwell" line once the floor is unlocked; null for a level without an objective.
+   * The tracker's view of a floor: {title, steps [{text, done, active}], unlocked, exit, exitLabel} where `exit` is the
+   * "Get to the <compass> stairwell" line once the floor is unlocked (the run route's stairwell) and `exitLabel` the
+   * marker's name for it; null for a level without an objective.
    */
   tracker(level) {
     const f = this.floor(level);
@@ -103,6 +104,7 @@ export class FloorObjectives {
       steps: f.stepLines(this.game.env.now()),
       unlocked: f.unlocked,
       exit: f.spec.lockVariant ? (compass ? S('Obj.Exit.Named', compass) : S('Objective.Step.Exit')) : null,
+      exitLabel: compass ? S('Obj.Exit.Marker', compass) : null,
     };
   }
 

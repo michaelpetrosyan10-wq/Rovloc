@@ -16,9 +16,15 @@
 // roof), MetalCreak rising and GateSlam landing (the gate), DoorSmash. The gate and the fire doors slamming shut
 // emit the DoorSlam noise when they land. Impacts shake the camera with quadratic falloff (DoorController.Impacts):
 // the gate slamming down, a fire door latching shut, a door being smashed (just after the smash starts).
+// Jammed stairwells (DoorBuilder.setJammed + DoorService): every stairwell door (StairwellId: the airlock fire doors
+// on both floors, the roof housings' doors) whose stairwell is not on the run's route is snapped shut and Locked at the
+// run start and refuses every change for the run (nothing opens it, at either end), its Jam node (the fallen slab and
+// rubble) shows and its JamPrompt answers (hold 0, a dull thud, no noise). The route's doors hide Jam and start as their
+// kind does (airlocks open, the roof door Closed), whatever pose the export built them in.
 
 import * as THREE from 'three';
 import { cfMatrix, smoothstep, Signal } from '../util.js';
+import { entityPrompt } from '../objectives/kit.js';
 
 const LEAD = 0.2; // GameConfig.OneShotLead
 const SMASH_SECONDS = 0.7;
@@ -39,6 +45,8 @@ const EPS = 1e-4;
 const THROW_HOP = 0.8;
 const BUCKLE_HOP = 0.15;
 const LIGHT_LATCH_VOLUME = 0.55;
+const JAM_NODE = 'Jam';
+const JAM_THUD_VOLUME = 0.45;
 
 const IMPACTS = { Slam: { radius: 30, amplitude: 2.4, seconds: 0.7 }, Smash: { radius: 34, amplitude: 3.2, seconds: 0.8 },
   Latch: { radius: 12, amplitude: 0.8, seconds: 0.35 } };
@@ -120,6 +128,8 @@ export class Doors {
     this.byId = new Map();
     /** @type {Signal<[any, string, string]>} (door, previous, next) */
     this.stateChanged = new Signal();
+    /** the jammed doors' prompts this run */
+    this.jamPrompts = [];
     for (const info of game.world.meta.entities) if (FIXTURE_TYPES.includes(info.type)) this._index(info);
   }
 
@@ -161,6 +171,8 @@ export class Doors {
       type: info.type,
       scriptedId: info.attributes.ScriptedId || null,
       level: info.level,
+      stairwellId: info.attributes.StairwellId || null,
+      jammed: false,
       fromLevel: info.attributes.FromLevel || null,
       toLevel: info.attributes.ToLevel || null,
       leaves,
@@ -317,7 +329,7 @@ export class Doors {
 
   /** DoorService.SetState. `seconds` = motion time (default per kind; 0 snaps). */
   setState(door, state, seconds) {
-    if (!door) return false;
+    if (!door || (door.jammed && state !== 'Locked')) return false;
     const [plan, target] = planFor(door.state, state);
     if (plan === 'Refuse') return false;
     const previous = door.state;
@@ -460,31 +472,62 @@ export class Doors {
 
   // ---------------------------------------------------------------------------------------------------- run
 
-  beginRun() {
+  beginRun(run) {
+    this._clearJams();
+    const route = new Set(Object.values((run && run.routes) || {}).map((r) => r.stairwellId));
     for (const door of this.byId.values()) {
       this._cancel(door);
-      door.state = door.initial;
+      door.jammed = !!door.stairwellId && !route.has(door.stairwellId);
+      door.state = door.jammed ? 'Locked' : door.initial;
       door.smash = 0;
       door.smashFrom = 0;
       door.stragglerDeadline = null;
-      door.openness = door.builtOpenness;
+      // a route door the export built jammed (shut) starts as its kind does: an airlock fully open
+      door.openness = door.stairwellId && !door.jammed && door.state === 'Open' ? 1 : door.builtOpenness;
       if (door.state !== 'Open' && door.openness > EPS) this._pose(door, 'Swing', 0);
       else this._pose(door, 'Swing', door.openness);
       door.target = door.openness;
       this.env.setEntityAttribute(door.id, 'DoorState', door.state);
+      if (!door.stairwellId) continue;
+      this.env.setEntityAttribute(door.id, 'Jammed', door.jammed);
+      this.env.setEntityVisible(door.id, door.jammed, JAM_NODE);
+      if (door.jammed) this._jamPrompt(door);
     }
   }
 
   endRun() {
+    this._clearJams();
     for (const door of this.byId.values()) {
       this._cancel(door);
+      door.jammed = false;
       door.state = door.initial;
       door.smash = 0;
       door.smashFrom = 0;
       door.stragglerDeadline = null;
       door.openness = door.builtOpenness;
       this._pose(door, 'Swing', door.openness);
+      if (door.stairwellId) this.env.setEntityVisible(door.id, true, JAM_NODE);
     }
+  }
+
+  /** The jammed door's "this stairwell has collapsed" prompt (hold 0): a dull thud against the slab, no noise. */
+  _jamPrompt(door) {
+    const prompt = entityPrompt(this.game, door.id, 'Locked', {
+      holdSeconds: 0,
+      enabled: true,
+      onTriggered: () => this.game.playAt('FireDoorLatch', door.centre, { volume: JAM_THUD_VOLUME }),
+    });
+    this.jamPrompts.push(prompt);
+  }
+
+  _clearJams() {
+    for (const p of this.jamPrompts) p.remove();
+    this.jamPrompts = [];
+  }
+
+  /** Whether a door is jammed this run (a stairwell off the run's route). */
+  isJammed(door) {
+    return !!door && door.jammed;
   }
 
   tick(dt, now) {

@@ -469,6 +469,7 @@ const STRINGS = {
   "Objective.Step.Exit": "Get to the stairwell",
   // Floor objectives, the web's lines (the Roblox port mirrors them)
   "Obj.Exit.Named": "Get to the %s stairwell",
+  "Obj.Exit.Marker": "The %s stairwell",
   "Obj.Compass.North": "north",
   "Obj.Compass.South": "south",
   "Obj.Compass.East": "east",

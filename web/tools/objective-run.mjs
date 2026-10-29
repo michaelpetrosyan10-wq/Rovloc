@@ -22,6 +22,11 @@
 //                keeps it; fitted, turned half way (kept) and done: the hatch open, the grate usable.
 //   Level 5      the packs chained; the cutters; the cut (the door smash brought forward while the Creature waits);
 //                a pack, the jump, the cord, the landing, ESCAPED.
+//   Routes       each seed's random exits are logged (North / Middle / South per floor); every stairwell off the
+//                route is jammed (its doors shut and Locked at both ends, the debris shown, the "collapsed" prompt,
+//                walking at it does not get you through) and stays so all run (checked on every floor); the route's
+//                doors show no debris; every arrival spawns in the route's entry vestibule; the roof's finale plays at
+//                the arrival housing (its own roof door smashed, the Creature behind it), corner housings included.
 // Screenshots (the first seed only): the tracker on each floor, the breaker panel before and after power, the fume
 // hood, the chain burning, the generator, the valve seated, the crate's chain cut. Exit code 1 on any failure.
 
@@ -68,6 +73,7 @@ const { chromium } = loadPlaywright();
 const failures = [];
 const IGNORED_CONSOLE = /useProgram|Shader Error|WebGL|GPU stall|AudioContext/;
 const shotsTaken = [];
+const routeLog = [];
 let seedTag = '';
 
 function check(name, ok, detail) {
@@ -214,6 +220,8 @@ for (const [si, seed] of SEEDS.entries()) {
   const tracker = () => G((g) => ({ title: g.objectives.scan.title, steps: (g.objectives.scan.steps || []).map((s) => s.text) }));
   /** Walks into the floor's exit vestibule from the floor side and waits for the next level. */
   const leave = async (next) => {
+    await jamCheck(`leaving ${await G((g) => g.level)}`);
+    const entryRoom = await G((g) => g.route(g.level).entryRoomOfNextLevel);
     await G((g) => {
       const T = g.env.THREE;
       const route = g.route(g.level);
@@ -236,6 +244,11 @@ for (const [si, seed] of SEEDS.entries()) {
     const s = await G((g) => ({ level: g.level, phase: g.phase, root: g.env.rootPosition().toArray().map(Math.round),
       airlock: g.airlock.phase, inside: g.airlock.isInside(), creature: (g.creature.position() || { toArray: () => [] }).toArray().map(Math.round) }));
     check(`left by the airlock into ${next}`, s.level === next && s.phase === 'InRun', s);
+    const arrived = await G((g, dev, room) => ({ room, inRoom: g.world.inRoom(room, g.env.rootPosition()),
+      zone: (g.world.roomAt(g.env.rootPosition(), g.level) || {}).id || null,
+      spawn: g.world.spawns(g.level, g.run.routes).map((a) => a.room) }), entryRoom);
+    check(`${next}: the arrival spawn is in the route's entry vestibule ${entryRoom}`, arrived.inRoom &&
+      arrived.spawn.every((r) => r === entryRoom), arrived);
   };
   const noiseLog = () => G((g) => {
     if (!window.__objNoise) {
@@ -245,6 +258,32 @@ for (const [si, seed] of SEEDS.entries()) {
     window.__objNoise.length = 0;
   });
   const noises = () => tab.evaluate(() => (window.__objNoise || []).map((n) => n.kind));
+  /** Every jammed stairwell door shut and Locked (both ends), its debris shown; the route's doors without debris. */
+  const jamCheck = async (where) => {
+    const j = await G((g) => {
+      const route = new Set(Object.values(g.run.routes).map((r) => r.stairwellId));
+      const bad = [];
+      let jammed = 0;
+      let open = 0;
+      for (const d of g.doors.byId.values()) {
+        if (!d.stairwellId) continue;
+        const node = g.env.entity(d.id).nodes.get('Jam');
+        const jam = !!node && !node.hidden;
+        if (route.has(d.stairwellId)) {
+          open++;
+          if (d.jammed || jam) bad.push(`${d.id} on the route: jammed ${d.jammed}, debris ${jam}`);
+        } else {
+          jammed++;
+          if (!d.jammed || d.state !== 'Locked' || d.openness > 1e-3 || g.doors.isMoving(d) || !jam) {
+            bad.push(`${d.id}: ${d.state} ${d.openness.toFixed(2)} jammed ${d.jammed} debris ${jam}`);
+          }
+        }
+      }
+      return { jammed, open, bad };
+    });
+    check(`${where}: every off-route stairwell door stays shut and Locked with its debris (${j.jammed}); the route's ${j.open} show none`,
+      j.bad.length === 0 && j.jammed === 20 && j.open === 10, j);
+  };
   const spawnCheck = async (level, wantReason) => {
     const s = await G((g, dev, lv) => {
       const e = g.floors.spawns.log.filter((x) => x.level === lv).pop();
@@ -320,6 +359,63 @@ for (const [si, seed] of SEEDS.entries()) {
     await noiseLog();
     const picks = await G((g) => Object.fromEntries(Object.entries(g.run.plan.objectives).map(([k, v]) => [k, v.anchors])));
     console.log(`  picks: ${JSON.stringify(picks)}`);
+    const route = await G((g) => Object.values(g.run.routes).map((r) => ({ level: r.level, id: r.stairwellId, slot: r.slot,
+      compass: r.compass, entry: r.entryRoomOfNextLevel })));
+    console.log(`  route: ${route.map((r) => `${r.level.slice(0, 6)} ${r.slot} (${r.id})`).join(', ')}`);
+    routeLog.push({ seed, slots: route.map((r) => r.slot).join('/') });
+    const expected = await G((g, dev, sd) => Object.values(g.world.routes(sd)).map((r) => r.stairwellId), seed);
+    check('the run route is the world rule\'s for the seed (one per floor pair, chained)', route.length === 5 &&
+      route.every((r, i) => r.id === expected[i]), route.map((r) => r.id));
+    await jamCheck('run start');
+    // a jammed door off the basement: its "collapsed" prompt, a thud, and walking at it does not get you through
+    const jam = await G((g) => {
+      const d = [...g.doors.byId.values()].find((x) => x.jammed && x.level === g.level && x.kind === 'Airlock');
+      return d ? { id: d.id } : null;
+    });
+    check('L0: a jammed stairwell door exists', !!jam, jam);
+    if (jam) {
+      await standAt(await at(jam.id, 'JamPrompt'), { reach: [2.4, 3, 2], expect: /Jammed/ });
+      p = await active();
+      await noiseLog();
+      await hold(0.3);
+      await ff(0.5);
+      const after = await G((g, dev, id) => {
+        const d = g.doors.get(id);
+        const forced = g.doors.setState(d, 'Open', 0);
+        return { state: d.state, forced, openness: d.openness };
+      }, jam.id);
+      check('L0: the jammed door\'s prompt: "Jammed — this stairwell has collapsed", hold 0, no noise; it never opens',
+        !!p && /Jammed — this stairwell has collapsed/.test(p.text) && p.hold === 0 && (await noises()).length === 0 &&
+        after.state === 'Locked' && !after.forced && after.openness < 1e-3, { p, after });
+      await shot('route-jammed-door.png');
+      await G((g, dev, id) => {
+        const T = g.env.THREE;
+        const d = g.doors.get(id);
+        const room = g.world.roomAt(d.centre, g.level);
+        const lay = g.world.meta.layoutDoors.find((x) => x.id === id);
+        const floorSide = lay ? lay.rooms.find((r) => !/Airlock/.test(r)) : null;
+        const c = floorSide ? g.world.roomCentre(floorSide) : null;
+        const dir = d.centre.clone().sub(c || d.centre.clone().add(new T.Vector3(-1, 0, 0))).setY(0).normalize();
+        const start = d.centre.clone().addScaledVector(dir, -5);
+        start.y = (room ? room.floorY : d.centre.y - 5) + 3;
+        g.env.teleport({ position: start, yaw: Math.atan2(-dir.x, -dir.z) });
+        g.env.setLook(Math.atan2(-dir.x, -dir.z), 0);
+        g.traps.noteTeleport();
+        window.__jamDir = dir.toArray();
+        window.__jamAt = d.centre.toArray();
+      }, jam.id);
+      await tab.keyboard.down('KeyW');
+      await ff(2.5);
+      await tab.keyboard.up('KeyW');
+      await ff(0.5);
+      s = await G((g) => {
+        const root = g.env.rootPosition();
+        const d = window.__jamDir;
+        const c = window.__jamAt;
+        return { past: (root.x - c[0]) * d[0] + (root.z - c[2]) * d[2], level: g.level };
+      });
+      check('L0: walking into a jammed stairwell door does not get you through', s.past < 0, s);
+    }
 
     // ================================================================== Level 0: restore power
     await ff(1);
@@ -394,7 +490,10 @@ for (const [si, seed] of SEEDS.entries()) {
       f.unlocked && f.door === 'Open' && (await noises()).includes('ObjectiveClunk'), { p, f });
     await shot('L0-breaker-after.png');
     t = await tracker();
-    check('L0: the tracker says get to the stairwell', /Get to the east stairwell/.test(t.title), t);
+    const compass0 = await G((g) => g.route(g.level).compass);
+    const named = { East: 'east', NorthEast: 'north-east', SouthEast: 'south-east' }[compass0];
+    check(`L0: the tracker names the route's stairwell (the ${named} one)`, !!named && t.title === `Get to the ${named} stairwell`, t);
+    if (route[0].slot !== 'Middle') await shot('route-corner-vestibule-L0.png');
     await leave('Level1_Hallways');
 
     // ================================================================== Level 1: master keys
@@ -647,6 +746,34 @@ for (const [si, seed] of SEEDS.entries()) {
 
     // ================================================================== Level 5: cut the crate open
     await ff(1);
+    const arrival = await G((g) => {
+      const r = g.run.routes.Level4_FloodedPool;
+      const door = g.level5.roofDoor();
+      const geo = g.level5.geo;
+      const root = g.env.rootPosition();
+      const inRect = (b, p) => p.x >= b.minX && p.x <= b.maxX && p.z >= b.minZ && p.z <= b.maxZ;
+      return { housing: geo.housingId, want: r.entryRoomOfNextLevel, door: door && door.id, wantDoor: r.entryDoorIds[0],
+        doorState: door && door.state, inHousing: g.world.inRoom(geo.housingId, root),
+        behindIn: inRect(geo.housing, geo.behindPosition), slot: r.slot };
+    });
+    check(`L5: the finale follows the arrival housing (${arrival.slot}): its roof door opens behind the squad`,
+      arrival.housing === arrival.want && arrival.door === arrival.wantDoor && arrival.inHousing && arrival.behindIn &&
+      arrival.doorState === 'Open', arrival);
+    if (arrival.slot !== 'Middle') {
+      await G((g) => {
+        const geo = g.level5.geo;
+        const T = g.env.THREE;
+        const p = geo.doorway.clone().addScaledVector(geo.out, 14);
+        p.y = geo.doorway.y + 3;
+        const yaw = Math.atan2(geo.out.x, geo.out.z);
+        g.env.teleport({ position: p, yaw });
+        g.env.setLook(yaw, 0.05);
+        g.traps.noteTeleport();
+        return new T.Vector3();
+      });
+      await ff(0.4);
+      await shot('route-roof-corner-housing.png');
+    }
     await shot('L5-tracker.png');
     s = await G((g) => ({ packs: g.parachute.packs.map((x) => x.handle && x.handle.isHolding !== undefined), open: g.parachute.crateOpen,
       phase: g.level5.phase }));
@@ -691,6 +818,9 @@ for (const [si, seed] of SEEDS.entries()) {
     await ff(14);
     s = await G((g) => ({ chute: g.parachute.state, outcome: g.match.outcome, phase: g.phase }));
     check('L5: off the gap, the cord, landed: ESCAPED', s.chute === 'Landed' && s.outcome === 'Escaped', s);
+    s = await G((g, dev, id) => ({ door: g.doors.get(id).state, smashed: !!g.level5.smash && g.level5.smash.released }), arrival.wantDoor);
+    check(`L5: the arrival housing's roof door (${arrival.wantDoor}) was smashed and the Creature let go from behind it`,
+      s.door === 'Smashed' && s.smashed, s);
   } catch (err) {
     check('objective run completed', false, String(err && err.stack ? err.stack : err));
     try {
@@ -704,5 +834,6 @@ for (const [si, seed] of SEEDS.entries()) {
 
 await browser.close();
 console.log(`screenshots in ${shots}:\n${shotsTaken.map((x) => `  ${path.basename(x)}`).join('\n')}`);
+console.log(`routes (L0/L1/L2/L3/L4 exits): ${routeLog.map((r) => `seed ${r.seed} ${r.slots}`).join('; ')}`);
 console.log(failures.length ? `\n${failures.length} FAILED:\n  ${failures.join('\n  ')}` : '\nall checks passed');
 process.exit(failures.length ? 1 : 0);

@@ -7,8 +7,9 @@
 //
 // Routes. A run leaves each floor by one exit stairwell: routes(seed) gives every school level its Route (the exit
 // vestibule, its fire doors, Checkpoint volumes, ExitLock, the stair tower, the next level's entry room and spawn slots).
-// chooseRoute is the one seam where a floor's route is picked among candidates (stream "Route|<level>"); today every
-// floor has a single stairwell (meta.stairwells), so it is that one.
+// Every floor pair has three candidates (meta.routes: slots North, Middle, South); chooseRoute is the one seam where a
+// floor's route is picked among them (RunDirector.pickRoute: stream "Route|<level>", unfair draws redrawn by
+// meta.routeRule.checks for the entry the previous pick leads to). The other two are jammed for the run (doors.js).
 //
 // The plan (RunDirector.plan, ported rule for rule over the export's candidate anchors): the objective picks
 // (pickObjective: one seeded shuffle per level, "Objective|<level>"), bear traps (the guard traps of the first fuses
@@ -28,9 +29,10 @@ import { cfMatrix, cfPos, horizontalDistance, inVolume, list, seededRandom, shuf
  * @typedef {{index: number, id: string, type: string, level: string, attributes: Record<string, any>, tags: string[],
  *   pivot: number[], nodes: {path: string, pivot: number[]}[], attachments: Record<string, number[]>,
  *   prompts: any[], colliders: {node: string, cf: number[], size: number[]}[]}} EntityInfo
- * @typedef {{level: string, stairwellId: string, tower: string|null, exitRoom: string, nextLevel: string|null,
- *   entryRoomOfNextLevel: string|null, exitDoorIds: string[], checkpointVolumes: Trigger[], spawnAnchors: Anchor[],
- *   lockEntity: string|null, compass: string|null, exitPoint: THREE.Vector3}} Route
+ * @typedef {{level: string, stairwellId: string, slot: string|null, tower: string|null, exitRoom: string,
+ *   nextLevel: string|null, entryRoomOfNextLevel: string|null, exitDoorIds: string[], entryDoorIds: string[],
+ *   checkpointVolumes: Trigger[], spawnAnchors: Anchor[], lockEntity: string|null, creatureSpawn: string|null,
+ *   compass: string|null, exitPoint: THREE.Vector3}} Route
  * @typedef {{levelId: string, anchors: string[], guards: string[], slots: Record<string, number>}} ObjectivePicks
  * @typedef {{difficulty: string, seed: number, props: Set<string>, placements: Map<string, THREE.Matrix4>,
  *   lockedGrates: Set<string>, objectives: Record<string, ObjectivePicks>, short: Record<string, number>}} Plan
@@ -69,8 +71,13 @@ export class WorldData {
     this._restInv = new Map();
     /** @type {Map<string, any>} the walking graph per level */
     this._walk = new Map();
-    /** @type {Record<string, Route>} the default routes (the first candidate of every floor) */
-    this.defaultRoutes = this.routes(0);
+    /** @type {Record<string, Route>} the routes outside a run (every floor's middle stairwell: WorldConfig.routeExit) */
+    this.defaultRoutes = {};
+    for (const level of LevelOrder) {
+      const candidates = this.routeCandidates(level);
+      const middle = candidates.find((c) => c.slot === 'Middle') || candidates[0];
+      if (middle) this.defaultRoutes[level] = middle;
+    }
   }
 
   // ---------------------------------------------------------------------------------------------------- anchors
@@ -159,36 +166,53 @@ export class WorldData {
 
   // ---------------------------------------------------------------------------------------------------- routes
 
-  /** Every school level's route for a run seed ({levelId: Route}; the roof has none). */
+  /**
+   * Every school level's route for a run seed ({levelId: Route}; the roof has none), RunDirector.pickRoute: floors in
+   * climbing order, each floor's entry the previous pick's upper vestibule (the basement's layout entry).
+   */
   routes(seed) {
     /** @type {Record<string, Route>} */
     const out = {};
+    let entry = null;
     for (const level of LevelOrder) {
-      const route = this.chooseRoute(level, seed);
+      const layout = this.meta.layouts && this.meta.layouts[level];
+      const route = this.chooseRoute(level, seed, entry || (layout ? layout.entry : null));
       if (route) out[level] = route;
+      entry = route ? route.entryRoomOfNextLevel : null;
     }
     return out;
   }
 
   /**
-   * THE seam where a floor's exit is chosen: one of the floor's route candidates by the run seed (stream
-   * "Route|<level>"). Today a floor has the one stairwell meta.stairwells lists; when the world data carries several
-   * (meta.routes[level]: candidates with a stairwellId), this picks among them and only this function and the data
-   * change.
+   * THE seam where a floor's exit is chosen (RunDirector.pickRoute): a draw over the floor's candidates in slot order
+   * (North, Middle, South) from the run seed's stream "Route|<level>", kept when it is fair for `entryRoom` (the room the
+   * floor is entered by: meta.routeRule.checks[level][entryRoom]), else drawn again from the same stream, up to
+   * routeRule.attempts draws; then the first fair candidate in slot order, else the middle one. The web stream is not
+   * Roblox's, so the picks differ from a live server's for the same seed; the rule is the same.
    * @returns {Route|null}
    */
-  chooseRoute(level, seed) {
+  chooseRoute(level, seed, entryRoom) {
     const candidates = this.routeCandidates(level);
     if (!candidates.length) return null;
-    const pick = candidates.length > 1 ? seededRandom(seed, `Route|${level}`).integer(0, candidates.length - 1) : 0;
-    return candidates[pick];
+    if (candidates.length === 1) return candidates[0];
+    const rule = this.meta.routeRule || {};
+    const checks = rule.checks && rule.checks[level] ? rule.checks[level][entryRoom] : null;
+    // a way in without precomputed verdicts (none today) counts every candidate fair
+    const fair = (c) => !checks || checks.some((k) => k.stairwellId === c.stairwellId && k.fair);
+    const attempts = Number.isFinite(rule.attempts) && rule.attempts > 0 ? rule.attempts : 8;
+    const random = seededRandom(seed, `Route|${level}`);
+    for (let i = 0; i < attempts; i++) {
+      const candidate = candidates[random.integer(0, candidates.length - 1)];
+      if (fair(candidate)) return candidate;
+    }
+    return candidates.find(fair) || candidates.find((c) => c.slot === 'Middle') || candidates[0];
   }
 
-  /** The exits a floor may be left by, as Routes (stairwells leaving it, in data order). */
+  /** The exits a floor may be left by, as Routes (meta.routes[level] in slot order; else the stairwells leaving it). */
   routeCandidates(level) {
     const declared = this.meta.routes && this.meta.routes[level];
     const stairs = Array.isArray(declared) && declared.length
-      ? declared.map((r) => this.stairwells.find((s) => s.id === (r.stairwellId || r.id)) || r)
+      ? declared.map((r) => ({ ...(this.stairwells.find((s) => s.id === (r.stairwellId || r.id)) || {}), ...r }))
       : this.stairwells.filter((s) => s.from === level);
     return stairs.map((s) => this._route(level, s)).filter(Boolean);
   }
@@ -196,30 +220,36 @@ export class WorldData {
   _route(level, stair) {
     const exitRoom = stair.fromRoom || stair.exitRoom;
     if (!exitRoom) return null;
-    const doors = (this.meta.layoutDoors || []).filter((d) => d.level === level && d.kind === 'Airlock' &&
-      list(d.rooms).includes(exitRoom)).map((d) => d.id);
+    const doors = Array.isArray(stair.exitDoorIds) && stair.exitDoorIds.length ? stair.exitDoorIds
+      : (this.meta.layoutDoors || []).filter((d) => d.level === level && d.kind === 'Airlock' &&
+        list(d.rooms).includes(exitRoom)).map((d) => d.id);
     const exitDoorIds = doors.length ? doors : this.meta.entities.filter((e) => e.type === 'AirlockDoor' &&
       e.level === level && e.attributes.FromLevel === level).map((e) => e.id);
     const triggers = this.triggers('Checkpoint', level);
-    const inRoom = triggers.filter((t) => t.room === exitRoom);
+    const declared = stair.checkpoint ? triggers.filter((t) => t.id === stair.checkpoint) : [];
+    const inRoom = declared.length ? declared : triggers.filter((t) => t.room === exitRoom);
     const next = stair.to || nextLevel(level);
     const entry = stair.toRoom || stair.entryRoomOfNextLevel || null;
-    const spawns = next ? this.anchors('PlayerSpawn', next).filter((a) => !entry || a.room === entry)
+    const listed = Array.isArray(stair.spawns) ? stair.spawns.map((id) => this.anchor(id)).filter(Boolean) : [];
+    const spawns = listed.length ? listed : next ? this.anchors('PlayerSpawn', next).filter((a) => !entry || a.room === entry)
       .sort((a, b) => (a.id < b.id ? -1 : 1)) : [];
-    const lock = this.meta.entities.find((e) => e.type === 'ExitLock' && e.level === level &&
-      exitDoorIds.includes(e.attributes.DoorId));
+    const lock = stair.exitLock ? this.entityById.get(stair.exitLock) : this.meta.entities.find((e) => e.type === 'ExitLock' &&
+      e.level === level && exitDoorIds.includes(e.attributes.DoorId));
     const exitPoint = this.roomCentre(exitRoom) || new THREE.Vector3();
     return {
       level,
-      stairwellId: stair.id,
+      stairwellId: stair.stairwellId || stair.id,
+      slot: stair.slot || null,
       tower: stair.tower || null,
       exitRoom,
       nextLevel: next || null,
       entryRoomOfNextLevel: entry,
       exitDoorIds,
+      entryDoorIds: Array.isArray(stair.entryDoorIds) ? stair.entryDoorIds.slice() : [],
       checkpointVolumes: inRoom.length ? inRoom : triggers,
       spawnAnchors: spawns,
       lockEntity: lock ? lock.id : null,
+      creatureSpawn: stair.creatureSpawn || null,
       compass: compassOf(this.meta.levels[level], exitPoint),
       exitPoint,
     };

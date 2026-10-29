@@ -253,7 +253,8 @@ export class Objectives {
     const exitPoint = nearest(exits, root);
     const gate = level === 'Level1_Hallways' ? g.doors.find(level, 'HallwayGate') : null;
     const gatePoint = gate ? gate.centre : null;
-    const roofDoor = level === 'Level5_Roof' ? g.doors.find(level, 'RoofStairDoor') : null;
+    const roof = level === 'Level5_Roof' ? g.level5 : null;
+    const roofDoor = roof ? roof.roofDoor() : null;
     const zone = g.world.roomAt(root, level);
     const airlock = g.airlock;
     const airlockState = airlock.level === level && airlock.deadline !== null ? (airlock.phase === 'Sealing' ? 'Sealing' : 'Waiting') : 'None';
@@ -266,7 +267,8 @@ export class Objectives {
       beyondGate: !!(gatePoint && exitPoint && beyond(gatePoint, exitPoint, root, BEYOND_MARGIN)),
       inVent: VENT_STATES.has(this.env.moveState()),
       roofDoor: roofDoor ? roofDoor.state : null,
-      onRoof: !!zone && zone.id !== 'L5_RoofAccess' && !(g.parachute && g.parachute.inTower(root)),
+      onRoof: !!zone && zone.kind !== 'Stairwell' && (!roof || zone.id !== roof.housingRoom()) &&
+        !(g.parachute && g.parachute.inTower(root)),
       parachute,
     });
     this.scan.lobby = null;
@@ -291,6 +293,7 @@ export class Objectives {
       } else if (floor.exit) {
         this.scan.title = floor.exit;
         objective.target = 'Exit';
+        this.scan.label = floor.exitLabel;
       }
     }
     this.scan.objective = objective;
