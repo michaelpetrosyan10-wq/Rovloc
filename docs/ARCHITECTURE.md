@@ -325,9 +325,13 @@ Rovloc/
             └── Controllers/
                 ├── Core/
                 │   ├── AudioController.luau        [P1] Buses, cue playback with server-time offset, zone reverb, nearby emitters
-                │   ├── LightingController.luau     [P1] Only writer of level lights: active level ∧ budget, Timeline overrides,
-                │   │                                    fixture glow (tubes dim, flicker and die with their light), area grade;
-                │   │                                    BaseBrightness re-read live (the server kills burst bulbs for the run)
+                │   ├── LightingController/
+                │   │   ├── init.luau               [P1] Only writer of level lights: active level ∧ budget, Timeline overrides,
+                │   │   │                                fixture glow (tubes dim, flicker and die with their light), area grade;
+                │   │   │                                BaseBrightness re-read live (the server kills burst bulbs for the run);
+                │   │   │                                nearest-N shadow budget, effects budget
+                │   │   ├── Film.luau               Per-level film grade: Atmosphere, grade, Bloom, SunRays, exposure easing
+                │   │   └── Volumetrics.luau        Client-local moonlight through windows, light shafts (Beams), dust motes
                 │   ├── CosmeticWorldController.luau [P1] Skyline + non-interactive dressing from RunSeed
                 │   ├── DevToolsController.luau     [P1] Noise rings, ZoneGraph / VentGraph overlays, Creature billboard
                 │   ├── InputController.luau        [P3] ContextActionService context stack (Menu > Cutscene > … > OnFoot)

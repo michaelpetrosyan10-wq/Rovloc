@@ -13,11 +13,12 @@
 --
 -- Outputs (Apply):
 --   * a ColorCorrectionEffect and a DepthOfFieldEffect parented under the current camera (LightingController owns
---     Lighting; these are ours): saturation, contrast and a red tint scale with panic; far blur only when the render
---     budget allows depth of field;
+--     Lighting; these are ours): saturation, contrast and a red tint scale with panic. The depth of field (only
+--     when the render budget allows it) rests at the level's film focus (LightingController.GetFilm: a subtle far
+--     blur that only softens the end of a long corridor) and pulls in close and hard with panic;
 --   * a vignette: a full-screen ScreenGui of four edge frames whose UIGradients fade from the screen edge inward
---     (no images). It is faint at rest, closes in and darkens with panic, and throbs with the heartbeat at high
---     panic (the throb scales with FlashScale);
+--     (no images). It rests at the level's film vignette, closes in and darkens with panic, and throbs with the
+--     heartbeat at high panic (the throb scales with FlashScale);
 --   * the FOV bonus (fovBonus, scaled by MotionScale; FirstPersonController adds it) and a heartbeat-synced FOV warp;
 --   * Body-bus loops through AudioController.PlayLocal: Heartbeat above HEART_SLOW, HeartbeatFast above HEART_FAST;
 --     Breathing above BREATH_SLOW, BreathingPanic above BREATH_FAST, where the breathing level is the higher of panic
@@ -37,6 +38,7 @@ local SoundSynthesizer = require(ReplicatedStorage.Shared.Audio.SoundSynthesizer
 local SpatialQuery = require(ReplicatedStorage.Shared.Util.SpatialQuery)
 
 local AudioController = require(script.Parent.Parent.Parent.Core.AudioController)
+local LightingController = require(script.Parent.Parent.Parent.Core.LightingController)
 
 local C = Attributes.Creature
 local Panic = CameraConfig.Panic
@@ -95,7 +97,6 @@ local SIDE_SHARE = 0.55 -- side bands are a share of the width, so they read as 
 local PULSE_OPACITY = 0.12
 local WARP_DEGREES = 1.4
 local DOF_FOCUS = 9
-local DOF_RADIUS_REST = 26
 local DOF_RADIUS_FULL = 12
 local EFFECT_MIN = 0.004
 
@@ -136,12 +137,22 @@ function PanicVFX.grade(panic: number): (number, number, Color3)
 	return Panic.Saturation * p, Panic.Contrast * p, Color3.new(1, 1, 1):Lerp(Panic.TintRed, p)
 end
 
--- Vignette edge opacity (0..1) for a panic level and a heartbeat pulse 0..1.
-function PanicVFX.vignetteOpacity(panic: number, pulse: number, flashScale: number): number
+-- Vignette edge opacity (0..1) for a panic level and a heartbeat pulse 0..1, resting at `rest` (the level's film
+-- vignette; REST_VIGNETTE without one).
+function PanicVFX.vignetteOpacity(panic: number, pulse: number, flashScale: number, rest: number?): number
 	local p = MathUtil.clamp01(panic)
 	local full = 1 - Panic.VignetteTransparencyAtFull
-	local base = MathUtil.lerp(REST_VIGNETTE, full, p)
+	local base = MathUtil.lerp(MathUtil.clamp01(rest or REST_VIGNETTE), full, p)
 	return MathUtil.clamp01(base + PULSE_OPACITY * p * MathUtil.clamp01(pulse) * MathUtil.clamp01(flashScale))
+end
+
+-- Depth of field at a panic level, from the film's resting far focus (`far` intensity, `focus` distance, in-focus
+-- `radius`) toward the panic pull: FarIntensity, FocusDistance, InFocusRadius.
+function PanicVFX.focus(panic: number, far: number, focus: number, radius: number): (number, number, number)
+	local p = MathUtil.clamp01(panic)
+	return MathUtil.lerp(math.max(0, far), Panic.DofFarIntensity, p),
+		MathUtil.lerp(math.max(0, focus), DOF_FOCUS, p),
+		MathUtil.lerp(math.max(0, radius), DOF_RADIUS_FULL, p)
 end
 
 -- Which heartbeat loop a panic level wants, given the one playing (hysteresis on both thresholds).
@@ -407,15 +418,18 @@ function PanicVFX.new(player: Player): PanicFx
 					cc.TintColor = tint
 				end
 			end
+			local film = LightingController.GetFilm()
 			local dof = focus
 			if dof then
-				local on = context.dof and p > EFFECT_MIN * 5
+				local far, distance, radius = PanicVFX.focus(p, film.dofFar, film.dofFocus, film.dofRadius)
+				local on = context.dof and visible and far > EFFECT_MIN
 				if dof.Enabled ~= on then
 					dof.Enabled = on
 				end
 				if on then
-					dof.FarIntensity = Panic.DofFarIntensity * p
-					dof.InFocusRadius = MathUtil.lerp(DOF_RADIUS_REST, DOF_RADIUS_FULL, p)
+					dof.FarIntensity = far
+					dof.FocusDistance = distance
+					dof.InFocusRadius = radius
 				end
 			end
 
@@ -425,7 +439,8 @@ function PanicVFX.new(player: Player): PanicFx
 					screen.Enabled = visible
 				end
 				if visible then
-					local opacity = PanicVFX.vignetteOpacity(p, PanicVFX.pulse(heartPhase), context.flashScale)
+					local opacity =
+						PanicVFX.vignetteOpacity(p, PanicVFX.pulse(heartPhase), context.flashScale, film.vignette)
 					local depth = MathUtil.lerp(VIGNETTE_REST_DEPTH, VIGNETTE_FULL_DEPTH, p)
 					if math.abs(opacity - lastOpacity) > 0.004 then
 						lastOpacity = opacity

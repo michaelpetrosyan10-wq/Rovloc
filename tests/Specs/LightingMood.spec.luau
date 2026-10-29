@@ -126,4 +126,39 @@ return {
 			end
 		end
 	end,
+
+	["every level's film stays dark but readable"] = function(t: Expect)
+		local films: { [string]: LightingMood.Film } = { outdoors = LightingMood.film(nil) }
+		for _, layout in Builder.layouts() do
+			films[layout.id] = LightingMood.film(layout.id)
+		end
+		for id, film in films do
+			t.truthy(film.exposure >= 0 and film.exposure <= 0.3, id .. ": exposure trims up, never down")
+			t.truthy(film.lift >= 0 and film.lift <= 0.05, id .. ": the blacks are lifted a touch, never washed")
+			t.truthy(film.contrast > 0 and film.contrast <= 0.25, id .. ": contrast without crushing the shadows")
+			t.truthy(film.saturation < 0 and film.saturation > -0.4, id .. ": drained, not grey")
+			t.truthy(film.bloomThreshold >= 1, id .. ": only what really burns blooms")
+			t.truthy(film.density > 0 and film.density <= 0.5, id .. ": haze, not fog")
+			t.truthy(film.vignette > 0 and film.vignette <= 0.4, id .. ": a vignette that frames, not blinds")
+			t.truthy(film.dofFar <= 0.2 and film.dofFocus >= 30, id .. ": the resting blur is subtle and far")
+			t.truthy(film.shafts >= 0 and film.dust >= 0 and film.moon >= 0, id)
+		end
+		t.eq(LightingMood.film(nil), LightingMood.OutdoorFilm, "outdoors is the storm")
+		t.eq(LightingMood.film("NoSuchLevel"), LightingMood.BaseFilm, "an unknown layout takes the base film")
+		local lobby, basement, pool = films.Lobby, films.Level0_Basement, films.Level4_FloodedPool
+		if lobby and basement and pool then
+			t.truthy(basement.density > lobby.density and pool.density > lobby.density, "the depths are hazier")
+			t.truthy(basement.dust > lobby.dust, "the basement is the dustiest")
+			t.eq(basement.moon, 0, "no moonlight in the basement")
+		end
+	end,
+
+	["key lights burn hard in tight pools"] = function(t: Expect)
+		for _, layout in Builder.layouts() do
+			local mood = LightingMood.levelMood(layout.id)
+			t.truthy(mood.brightness >= 2.2, layout.id .. ": strong keys under the working fixtures")
+			t.truthy(mood.range <= 1.3, layout.id .. ": pools that fall off before the next one")
+		end
+		t.truthy(LightingMood.Moonlight.unshadowedShare < 1, "an unshadowed spill burns dimmer than a striped one")
+	end,
 }

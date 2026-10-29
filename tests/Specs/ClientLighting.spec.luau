@@ -2,7 +2,9 @@
 -- Client lighting maths (LightingController's pure helpers): seeded, server-time flicker that every client agrees on,
 -- blackouts that fit their slots, the two-stage lightning envelope, the light-burst surge, the camera-position
 -- -> layout mapping that decides which level's fixtures are lit, the glow curve every fixture's tubes follow
--- (FixtureGlow) and the area grade's easing.
+-- (FixtureGlow) and the area grade's easing; the nearest fixtures keep their shadows; each level's film grade eases
+-- in and settles; the volumetrics' pure maths (moonlight through every window above grade, plank gaps, shaft and
+-- dust strength) and the haze cones every burning kind throws.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterPlayer = game:GetService("StarterPlayer")
@@ -13,6 +15,9 @@ local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local FixtureGlow = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.FixtureGlow)
 local LightingController = require(StarterPlayer.StarterPlayerScripts.Controllers.Core.LightingController)
+local LightingFilm = require(StarterPlayer.StarterPlayerScripts.Controllers.Core.LightingController.Film)
+local LightingMood = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingMood)
+local Volumetrics = require(StarterPlayer.StarterPlayerScripts.Controllers.Core.LightingController.Volumetrics)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
@@ -280,5 +285,120 @@ return {
 		if not ok then
 			error(problem, 0)
 		end
+	end,
+
+	["the nearest fixtures keep their shadows, ties stay stable"] = function(t: Expect)
+		local slots = LightingController.shadowSlots({ 30, 5, 18, 5, 60 }, 3)
+		t.eq(slots[1], false, "30 studs: fourth nearest")
+		t.eq(slots[2], true, "5 studs")
+		t.eq(slots[3], true, "18 studs")
+		t.eq(slots[4], true, "the tie at 5 studs keeps list order")
+		t.eq(slots[5], false, "60 studs")
+		local none = LightingController.shadowSlots({ 1, 2 }, 0)
+		t.falsy(none[1] or none[2], "a budget of none casts none")
+		local all = LightingController.shadowSlots({ 1, 2 }, 10)
+		t.truthy(all[1] and all[2], "a bigger budget than fixtures casts all")
+		t.eq(#LightingController.shadowSlots({}, 4), 0)
+	end,
+
+	["each level's film eases in from the last one and settles on it"] = function(t: Expect)
+		local from = LightingMood.film("Lobby")
+		local to = LightingMood.film("Level4_FloodedPool")
+		t.truthy(LightingFilm.distance(from, to) > 0.05, "the lobby and the pool are graded apart")
+		t.eq(LightingFilm.distance(to, to), 0)
+		local step = LightingFilm.step(from, to, 1 / 60)
+		t.truthy(step.density > from.density and step.density < to.density, "a frame moves part of the way")
+		t.truthy(LightingFilm.distance(step, to) < LightingFilm.distance(from, to))
+		local current = from
+		for _ = 1, 60 * 12 do
+			current = LightingFilm.step(current, to, 1 / 60)
+		end
+		t.truthy(LightingFilm.distance(current, to) < 0.0015, "twelve seconds later it has settled")
+		local held = LightingFilm.step(to, to, 0.5)
+		t.truthy(LightingFilm.distance(held, to) < 1e-6, "a settled grade stays put")
+		local frozen = LightingFilm.step(from, to, 0)
+		t.truthy(LightingFilm.distance(frozen, from) < 1e-6, "no time, no change")
+	end,
+
+	["moonlight falls in and down through every window above grade"] = function(t: Expect)
+		for _, inward in { Vector3.new(0, 0, 1), Vector3.new(0, 0, -1), Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0) } do
+			local direction = Volumetrics.moonDirection(inward)
+			t.near(direction.Magnitude, 1, 1e-6)
+			t.truthy(direction.Y < -0.4 and direction.Y > -0.9, "down at the moon's pitch")
+			t.truthy(direction:Dot(inward) > 0.5, "into the room")
+		end
+		local total = 0
+		for _, layout in Builder.layouts() do
+			local specs = Volumetrics.windowSpecs(layout)
+			total += #specs
+			local origin = WorldConfig.levelOrigin(layout.id)
+			for _, spec in specs do
+				t.eq(spec.layoutId, layout.id)
+				t.truthy(spec.center.Y > origin.Y and spec.width > 0 and spec.height > 0, spec.id)
+				t.truthy(spec.direction:Dot(spec.inward) > 0 and spec.direction.Y < 0, spec.id .. " shines in")
+				t.near(spec.inward:Dot(spec.tangent), 0, 1e-6, spec.id .. " tangent runs along the wall")
+				local top = spec.center.Y + spec.height / 2 - origin.Y
+				if layout.id ~= "Lobby" then
+					local grade = WorldConfig.GroundY - WorldConfig.levelElevation(layout.id)
+					t.truthy(top > grade, spec.id .. " sits above street grade")
+				end
+			end
+		end
+		t.truthy(total > 0, "the school's facades have windows the moon reaches")
+		local basement = Builder.getLayout("Level0_Basement")
+		if basement then
+			t.eq(#Volumetrics.windowSpecs(basement), 0, "the basement's windows look into soil-filled light wells")
+		end
+	end,
+
+	["a probed opening yields its tallest plank gaps, bottom first"] = function(t: Expect)
+		local open = { false, true, true, false, false, true, false, true, true, true, true, false, true }
+		local bands, share = Volumetrics.gapBands(open, 0.1, 2, 0.15)
+		t.eq(#bands, 2, "the two tallest runs that are tall enough")
+		t.near(bands[1].y0, 0.1, 1e-9, "bottom first")
+		t.near(bands[1].y1, 0.3, 1e-9)
+		t.near(bands[2].y0, 0.7, 1e-9)
+		t.near(bands[2].y1, 1.1, 1e-9)
+		t.near(share, 8 / 13, 1e-9, "the open share counts every sample")
+		local shut, none = Volumetrics.gapBands({ false, false }, 0.1, 3, 0.05)
+		t.eq(#shut, 0)
+		t.eq(none, 0, "a sealed opening lets nothing in")
+		local wide, all = Volumetrics.gapBands({ true, true, true }, 0.1, 3, 0.05)
+		t.eq(#wide, 1)
+		t.eq(all, 1)
+		local _, empty = Volumetrics.gapBands({}, 0.1, 3, 0.05)
+		t.eq(empty, 0)
+	end,
+
+	["shafts, spills and dust follow the air, the moon and the lightning"] = function(t: Expect)
+		local view = CFrame.lookAt(Vector3.zero, Vector3.new(0, 0, -1))
+		t.near(Volumetrics.rank(view, Vector3.new(0, 0, -20)), 20, 1e-6, "ahead ranks by distance")
+		t.truthy(Volumetrics.rank(view, Vector3.new(0, 0, 20)) > 20, "behind the camera ranks further away")
+
+		local quiet = Volumetrics.moonBrightness(true, 1, 0)
+		t.truthy(quiet > 0, "a shadowed spill burns")
+		t.truthy(Volumetrics.moonBrightness(false, 1, 0) < quiet, "an unshadowed spill burns at the planks' share")
+		t.eq(Volumetrics.moonBrightness(true, 0, 1), 0, "no moon, no spill, lightning or not")
+		t.truthy(Volumetrics.moonBrightness(true, 1, 1) > quiet * 3, "lightning surges through the windows")
+		t.eq(Volumetrics.rayBrightness(0, 1, 0), 0, "clear air shows no rays")
+		t.truthy(Volumetrics.rayBrightness(1.2, 1, 0) > Volumetrics.rayBrightness(1, 1, 0), "denser air shows more")
+		t.eq(Volumetrics.dustRate(0, 1), 0, "a budget without particles has no dust")
+		t.eq(Volumetrics.dustRate(1, 0), 0, "nor does air without dust")
+		t.truthy(Volumetrics.dustRate(1, 1.4) > Volumetrics.dustRate(0.4, 1.4))
+	end,
+
+	["burning fixtures throw haze cones that follow their glow"] = function(t: Expect)
+		for _, kind in { "Fluorescent", "Bulb", "Floodlight", "EmergencyRed", "ClassroomGlow" } do
+			local shape = FixtureGlow.cone(kind)
+			assert(shape, kind .. " throws a cone")
+			t.truthy(shape.width1 > shape.width0 and shape.length > 0, kind .. " widens toward the floor")
+			t.eq(FixtureGlow.coneBrightness(shape, 0, 1), 0, kind .. " dead: no cone")
+			local full = FixtureGlow.coneBrightness(shape, 1, 1)
+			local dip = FixtureGlow.coneBrightness(shape, 0.3, 1)
+			t.truthy(full > dip and dip > 0, kind .. " a dipping tube's cone thins with it")
+			t.near(FixtureGlow.coneBrightness(shape, 1, 0.5), full * 0.5, 1e-9, kind .. " the air scales it")
+		end
+		t.eq(FixtureGlow.cone("ExitSign"), nil, "exit signs throw no cone")
+		t.eq(FixtureGlow.cone("BoilerGlow"), nil, "nor do the boiler embers")
 	end,
 }

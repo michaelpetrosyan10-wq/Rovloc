@@ -9,9 +9,12 @@
 --     soon after being raised doubles the time the next raise needs (up to 160 s), so a device on the edge settles
 --     instead of flapping. Windows while the window is unfocused, during the first seconds after start (the world
 --     streaming in) and across hitches longer than 3 s are ignored.
---   * Output. Each tier is a Budget: level-light fixtures and shadows (applied to LightingController.SetBudget),
---     depth of field, particle scale, animation LOD distances and the teammate flashlight cap (read by their owners
---     through GetBudget / BudgetChanged).
+--   * Output. Each tier is a Budget: level-light fixtures and shadows (applied to LightingController.SetBudget), the
+--     atmosphere's extras (how many of those fixtures keep their shadows, moonlight spills through the windows and
+--     how many of them are shadowed, visible light shafts and dust emitters: LightingController.SetEffectsBudget),
+--     depth of field, particle scale, the torch's haze cone, animation LOD distances and the teammate flashlight cap
+--     (read by their owners through GetBudget / BudgetChanged). Low keeps only what a weak device can afford: no
+--     shadows, no shafts, no dust, no depth of field, a few unshadowed moonlight spills so the windows still read.
 
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -32,6 +35,12 @@ export type Budget = {
 	tier: Tier,
 	lights: number, -- level-light fixtures rendered at once (nearest first)
 	shadows: boolean, -- fixture and flashlight shadows
+	shadowLights: number, -- of the rendered fixtures, the nearest that keep their shadows
+	windowLights: number, -- moonlight spills through the nearest windows
+	windowShadows: number, -- of those, the nearest that are shadowed (the planks stripe the floor)
+	shafts: number, -- visible light shafts (fixture haze cones and window rays), nearest first
+	dust: number, -- dust-mote emitters, in the nearest shafts
+	flashlightHaze: boolean, -- the torch's faint visible cone in the haze
 	dof: boolean, -- panic depth of field
 	particleScale: number, -- emitter rate multiplier
 	animNear: number, -- studs: full-rate procedural animation inside this
@@ -67,6 +76,12 @@ local BUDGETS: { [Tier]: Budget } = {
 		tier = "Low",
 		lights = 16,
 		shadows = false,
+		shadowLights = 0,
+		windowLights = 4,
+		windowShadows = 0,
+		shafts = 0,
+		dust = 0,
+		flashlightHaze = false,
 		dof = false,
 		particleScale = 0.4,
 		animNear = 35,
@@ -77,6 +92,12 @@ local BUDGETS: { [Tier]: Budget } = {
 		tier = "Medium",
 		lights = 30,
 		shadows = true,
+		shadowLights = 20,
+		windowLights = 6,
+		windowShadows = 0,
+		shafts = 6,
+		dust = 3,
+		flashlightHaze = true,
 		dof = false,
 		particleScale = 0.7,
 		animNear = 55,
@@ -87,6 +108,12 @@ local BUDGETS: { [Tier]: Budget } = {
 		tier = "High",
 		lights = 48,
 		shadows = true,
+		shadowLights = 40,
+		windowLights = 10,
+		windowShadows = 4,
+		shafts = 14,
+		dust = 8,
+		flashlightHaze = true,
 		dof = true,
 		particleScale = 1,
 		animNear = 80,
@@ -241,6 +268,14 @@ end
 local function publish()
 	local budget = BUDGETS[state.tier]
 	LightingController.SetBudget(budget.lights, budget.shadows)
+	LightingController.SetEffectsBudget({
+		shadowLights = budget.shadowLights,
+		windowLights = budget.windowLights,
+		windowShadows = budget.windowShadows,
+		shafts = budget.shafts,
+		dust = budget.dust,
+		particleScale = budget.particleScale,
+	})
 	budgetChanged:Fire(budget)
 end
 

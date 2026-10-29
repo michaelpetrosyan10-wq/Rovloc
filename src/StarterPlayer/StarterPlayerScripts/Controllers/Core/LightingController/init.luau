@@ -6,7 +6,9 @@
 --     the camera; the lobby footprint and the school's floor bands only when no zone holds it, e.g. inside a duct or
 --     before the world is built). Stairwell lights (LevelId = the lower level) join when either level the stairwell
 --     joins is in focus. Broken fixtures (BaseBrightness 0, re-read whenever the server changes it) and burst bulbs
---     stay dark. SetBudget caps the set to the nearest `maxActive` fixtures and gates shadows. Every
+--     stay dark. SetBudget caps the set to the nearest `maxActive` fixtures and gates shadows; SetEffectsBudget lets
+--     only the nearest `shadowLights` of the set keep their authored shadows (soft-edged: LightingRig's
+--     ShadowSoftness), so the pools around the player cast real shadows and the far ones cost little. Every
 --     fixture outside the set is Enabled = false, so the GPU only ever sees a few dozen lights.
 --   * Flicker. Fixtures sharing a FlickerGroup flicker together: smooth value noise, sharp dropouts, and seeded
 --     blackouts (with a stuttering recovery) scheduled in fixed time slots. Everything is a pure function of
@@ -32,6 +34,13 @@
 --     the light budget still glow in the distance.
 --   * Area grade. A client-local ColorCorrectionEffect eases toward the tint of the level the camera is on
 --     (LightingMood.grade: green-teal on the school floors, amber in the basement, cyan at the pool).
+--   * Film (LightingController/Film). The server's Atmosphere, base grade, bloom, sun rays and the exposure ease
+--     toward the film of the level the camera is on (LightingMood.film: haze, bloom, contrast, lift, exposure trim);
+--     GetFilm hands the grade on screen to PanicVFX (its resting far-focus depth of field and vignette) and the torch
+--     (how much its haze cone shows).
+--   * Volumetrics (LightingController/Volumetrics). Moonlight spills through the nearest windows (lightning surges
+--     through them), visible light shafts under the nearest burning fixtures and through the lit windows, and dust
+--     motes in the nearest shafts, every count from SetEffectsBudget.
 
 local CollectionService = game:GetService("CollectionService")
 local Lighting = game:GetService("Lighting")
@@ -45,6 +54,7 @@ local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local FixtureGlow = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.FixtureGlow)
+local Film = require(script.Film)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LightingMood = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingMood)
 local LightingRig = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingRig)
@@ -55,6 +65,7 @@ local SpatialQuery = require(ReplicatedStorage.Shared.Util.SpatialQuery)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Volumetrics = require(script.Volumetrics)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local log = Log.new("LightingController")
@@ -137,6 +148,18 @@ type Entry = {
 	guis: { SurfaceGui }, -- FixtureGlow self-lit faces
 	lit: Color3?, -- the glow's full colour (from the primary light)
 	glowLevel: number, -- last level written to the glow (-1: never)
+	shadowed: boolean, -- among the nearest that keep their shadows
+	hazeCone: boolean, -- its kind throws a haze cone (Volumetrics)
+}
+
+-- What SetEffectsBudget takes (RenderBudgetController's tier).
+export type EffectsBudget = {
+	shadowLights: number,
+	windowLights: number,
+	windowShadows: number,
+	shafts: number,
+	dust: number,
+	particleScale: number,
 }
 
 export type FlickerProfile = {
@@ -168,6 +191,7 @@ type GroupState = {
 type Flash = {
 	started: number, -- os.clock()
 	strength: number,
+	raw: number, -- the strength before the indoor damping (what a window sees)
 	stages: number,
 }
 
@@ -186,6 +210,11 @@ export type Stats = {
 	lit: number,
 	budget: number,
 	shadows: boolean,
+	shadowed: number, -- active fixtures casting shadows
+	windows: number, -- windows that can spill moonlight
+	windowLights: number, -- moonlight spills burning
+	shafts: number,
+	dust: number,
 	focus: { string },
 	viewLayout: string?,
 	outdoors: boolean,
@@ -214,6 +243,7 @@ local dirty = true
 local refreshClock = 0
 local budgetMax = DEFAULT_BUDGET
 local budgetShadows = true
+local shadowLights = DEFAULT_BUDGET
 local focusLayouts: { string } = {}
 local viewLayout: string? = nil
 local viewOutdoors = false
@@ -227,6 +257,7 @@ local frameId = 0
 -- Lightning
 local flashScale = 1
 local flashes: { Flash } = {}
+local skyFlash = 0 -- this frame's lightning envelope before the indoor damping
 local rest: RestState? = nil
 local lastWrite: RestState? = nil
 local flashGrade: ColorCorrectionEffect? = nil
@@ -365,6 +396,26 @@ end
 -- One step of the area grade easing from `current` toward `target` over `dt` seconds.
 function LightingController.gradeStep(current: Color3, target: Color3, dt: number): Color3
 	return current:Lerp(target, 1 - math.exp(-AREA_GRADE_RATE * math.max(0, dt)))
+end
+
+-- Which of the fixtures `distances` studs from the camera keep their shadows: the nearest `count` (ties keep list
+-- order, so the choice is stable).
+function LightingController.shadowSlots(distances: { number }, count: number): { boolean }
+	local order: { number } = {}
+	for i = 1, #distances do
+		order[i] = i
+	end
+	table.sort(order, function(a: number, b: number): boolean
+		if distances[a] ~= distances[b] then
+			return distances[a] < distances[b]
+		end
+		return a < b
+	end)
+	local slots: { boolean } = table.create(#distances, false)
+	for rank = 1, math.min(math.max(0, count), #order) do
+		slots[order[rank]] = true
+	end
+	return slots
 end
 
 local lobbyBoundsCache: Bounds? = nil
@@ -631,7 +682,7 @@ end
 
 local function applyShadows(entry: Entry)
 	for _, rec in entry.lights do
-		local wanted = rec.shadows and budgetShadows
+		local wanted = rec.shadows and budgetShadows and entry.shadowed
 		if rec.light.Shadows ~= wanted then
 			rec.light.Shadows = wanted
 		end
@@ -707,7 +758,11 @@ local function updateEntry(entry: Entry, t: number, now: number)
 	for _, rec in entry.lights do
 		writeRec(rec, brightness * rec.ratio)
 	end
-	writeGlow(entry, FixtureGlow.level(brightness, entry.base))
+	local level = FixtureGlow.level(brightness, entry.base)
+	writeGlow(entry, level)
+	if entry.hazeCone then
+		Volumetrics.ConeLevel(entry.fixture, level)
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -769,6 +824,20 @@ local function refreshActive()
 	for i = 1, math.min(room, #candidates) do
 		table.insert(nextActive, candidates[i])
 	end
+	local distances: { number } = {}
+	for i, entry in nextActive do
+		distances[i] = (entry.position - view).Magnitude
+	end
+	local slots = LightingController.shadowSlots(distances, shadowLights)
+	for i, entry in nextActive do
+		local shadowed = slots[i] == true
+		if entry.shadowed ~= shadowed then
+			entry.shadowed = shadowed
+			if entry.active then
+				applyShadows(entry)
+			end
+		end
+	end
 	local keep: { [Entry]: boolean } = {}
 	for _, entry in nextActive do
 		keep[entry] = true
@@ -790,6 +859,20 @@ local function refreshActive()
 		end
 	end
 	activeList = nextActive
+
+	local cones: { Volumetrics.ConeCandidate } = {}
+	for _, entry in nextActive do
+		if entry.hazeCone and not entry.dead and (entry.base > 0 or overrides[entry.id] ~= nil) then
+			table.insert(cones, {
+				fixture = entry.fixture,
+				kind = entry.kind,
+				position = entry.position,
+				color = entry.lit or WHITE,
+			})
+		end
+	end
+	local camera = Workspace.CurrentCamera
+	Volumetrics.Refresh(if camera then camera.CFrame else CFrame.new(view), focus, cones)
 end
 
 --------------------------------------------------------------------------------
@@ -910,7 +993,10 @@ local function register(instance: Instance)
 		guis = {},
 		lit = nil,
 		glowLevel = -1,
+		shadowed = false,
+		hazeCone = false,
 	}
+	entry.hazeCone = FixtureGlow.cone(entry.kind) ~= nil
 	entries[instance] = entry
 	table.insert(entryList, entry)
 	if byId[entry.id] and byId[entry.id] ~= entry then
@@ -965,6 +1051,7 @@ local function unregister(instance: Instance)
 		table.remove(activeList, activeIndex)
 	end
 	entry.active = false
+	Volumetrics.Forget(instance)
 	dirty = true
 end
 
@@ -1138,14 +1225,16 @@ local function startFlash(intensity: number, stages: number, elapsed: number)
 	-- Decided from the camera right now (the active-set refresh only runs at 4 Hz).
 	local outdoors = LightingController.placeAt(viewPoint()).outdoors
 	local indoor = if outdoors then 1 else INDOOR_FLASH
-	local strength = math.clamp(intensity, 0, 2) * flashScale * indoor
+	local raw = math.clamp(intensity, 0, 2) * flashScale
+	local strength = raw * indoor
 	if strength <= 0 then
 		return
 	end
-	table.insert(flashes, { started = os.clock() - elapsed, strength = strength, stages = stages })
+	table.insert(flashes, { started = os.clock() - elapsed, strength = strength, raw = raw, stages = stages })
 end
 
 local function updateFlashes(now: number)
+	skyFlash = 0
 	if #flashes == 0 then
 		return
 	end
@@ -1157,6 +1246,7 @@ local function updateFlashes(now: number)
 			table.remove(flashes, i)
 		else
 			value = math.max(value, envelope * flash.strength)
+			skyFlash = math.max(skyFlash, math.min(1, envelope * flash.raw))
 		end
 	end
 	if #flashes == 0 then
@@ -1339,6 +1429,8 @@ local function onHeartbeat(dt: number)
 	updateFlashes(now)
 	updateStorm(t)
 	updateAreaGrade(dt)
+	Film.Update(dt, viewLayout, #flashes > 0)
+	Volumetrics.Step(dt, Film.Current(), skyFlash)
 end
 
 local function resetSeed(seed: number)
@@ -1432,6 +1524,31 @@ function LightingController.SetBudget(maxActive: number, shadows: boolean)
 	dirty = true
 end
 
+-- Atmosphere budget (P3 RenderBudgetController): how many of the rendered fixtures keep their shadows, and the
+-- moonlight spills, visible shafts and dust Volumetrics may draw.
+function LightingController.SetEffectsBudget(budget: EffectsBudget)
+	if type(budget) ~= "table" then
+		return
+	end
+	local count = budget.shadowLights
+	if type(count) == "number" and count == count then
+		shadowLights = math.max(0, math.floor(count))
+	end
+	Volumetrics.SetBudget({
+		windowLights = budget.windowLights,
+		windowShadows = budget.windowShadows,
+		shafts = budget.shafts,
+		dust = budget.dust,
+		particleScale = budget.particleScale,
+	})
+	dirty = true
+end
+
+-- The film grade on screen right now (LightingMood.film of the camera's level, mid-ease when it just changed).
+function LightingController.GetFilm(): LightingMood.Film
+	return Film.Current()
+end
+
 -- Pins a fixture (by its light id = fixture name) to `brightness` (the primary light's value; fills keep their
 -- ratio). nil releases it back to the active set rules, flicker and burn state. Overrides end with the run.
 function LightingController.SetOverride(lightId: string, brightness: number?)
@@ -1462,7 +1579,7 @@ function LightingController.HasLight(lightId: string): boolean
 end
 
 function LightingController.GetStats(): Stats
-	local lit = 0
+	local lit, shadowed = 0, 0
 	for _, entry in activeList do
 		for _, rec in entry.lights do
 			if rec.enabled then
@@ -1470,13 +1587,22 @@ function LightingController.GetStats(): Stats
 				break
 			end
 		end
+		if entry.shadowed and budgetShadows then
+			shadowed += 1
+		end
 	end
+	local air = Volumetrics.GetStats()
 	return {
 		registered = #entryList,
 		active = #activeList,
 		lit = lit,
 		budget = budgetMax,
 		shadows = budgetShadows,
+		shadowed = shadowed,
+		windows = air.windows,
+		windowLights = air.windowLights,
+		shafts = air.shafts,
+		dust = air.dust,
 		focus = table.clone(focusLayouts),
 		viewLayout = viewLayout,
 		outdoors = viewOutdoors,

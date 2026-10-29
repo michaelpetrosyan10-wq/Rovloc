@@ -5,7 +5,11 @@
 -- (INNER_ANGLE, INNER_RANGE, bright; shadows only when the render budget allows them) and the outer cone
 -- (OUTER_ANGLE, OUTER_RANGE, dim, never shadowed). The part sits just ahead of the torch lens (HandRig) or, without
 -- a torch, a little right of and below the eye; its orientation chases the player's look with a slight lag (a
--- damped slerp), pitched down a little while the torch is lowered for sprinting.
+-- damped slerp), pitched down a little while the torch is lowered for sprinting. The beam is filmic: a slightly warm
+-- white, a hot narrow core that falls off into the wide dim spill (the bloom catches the core where it lands close),
+-- and, when the render budget allows it, a faint visible cone in the haze: two layered camera-facing Beams with no
+-- texture, transparent at the lens, thinning out ahead, as bright as the light and the level's air
+-- (LightingController.GetFilm().shafts) allow.
 --
 -- Switch. The Flashlight action predicts on/off at once (turning on needs battery > 0; a dead cell only clicks),
 -- sends FlashlightToggle { on }, and plays UiClick. The prediction stands for RECONCILE_GRACE or until the server's
@@ -38,6 +42,8 @@ local SoundSynthesizer = require(ReplicatedStorage.Shared.Audio.SoundSynthesizer
 local Tags = require(ReplicatedStorage.Shared.Tags)
 
 local AudioController = require(script.Parent.Parent.Parent.Core.AudioController)
+local LightingController = require(script.Parent.Parent.Parent.Core.LightingController)
+local RenderBudgetController = require(script.Parent.Parent.Parent.Core.RenderBudgetController)
 
 local log = Log.new("Flashlight")
 
@@ -88,9 +94,9 @@ local SPUTTER_BELOW = 0.05
 local STATIC_THRESHOLD = 0.04
 local STATIC_VOLUME_EPSILON = 0.04
 
-local INNER_ANGLE = 40
+local INNER_ANGLE = 38
 local INNER_RANGE = 60 -- SpotLight.Range maximum
-local INNER_BRIGHTNESS = 8
+local INNER_BRIGHTNESS = 9
 local OUTER_ANGLE = 80
 local OUTER_RANGE = 48
 local OUTER_BRIGHTNESS = 2.2
@@ -99,7 +105,7 @@ local OUTER_BRIGHTNESS = 2.2
 local GLOW_RANGE = 10
 local GLOW_BRIGHTNESS = 0.45
 local GLOW_COLOR = Color3.fromRGB(176, 190, 214)
-local BEAM_COLOR = Color3.fromRGB(255, 238, 212)
+local BEAM_COLOR = Color3.fromRGB(255, 233, 202)
 local DYING_COLOR = Color3.fromRGB(255, 176, 112)
 local LAG_SPEED = 16 -- 1/s damped slerp of the beam toward the look
 local LOWERED_PITCH = math.rad(7)
@@ -108,6 +114,11 @@ local LOWERED_PITCH = math.rad(7)
 -- the player. The hand-held torch model (HandRig) stays the visual source.
 local BEAM_OFFSET = Vector3.new(0.3, -0.25, -0.6)
 local TOGGLE_COOLDOWN = 0.22
+-- The haze cone: how far it reaches, its two layers' opacity at their densest and its brightness at full output.
+local HAZE_LENGTH = 34
+local HAZE_CORE_OPACITY = 0.035
+local HAZE_SHEATH_OPACITY = 0.018
+local HAZE_BRIGHTNESS = 1.2
 
 export type Cones = {
 	innerAngle: number,
@@ -190,6 +201,14 @@ function Flashlight.sputter(fraction: number, t: number, seed: number): number
 	local depth = 1 - fraction / SPUTTER_BELOW
 	local wave = MathUtil.noise1((t % NOISE_PERIOD) * 11, seed + 101) * 0.5 + 0.5
 	return MathUtil.clamp01(1 - 0.55 * depth * MathUtil.clamp01(wave))
+end
+
+-- Brightness of the torch's haze cone at light `output` (0..1) in air that shows `shafts` (the level's film).
+function Flashlight.hazeBrightness(output: number, shafts: number): number
+	if not (output > 0.01) then
+		return 0
+	end
+	return HAZE_BRIGHTNESS * MathUtil.clamp01(output) * math.max(0, shafts)
 end
 
 -- Whether the light is on: the local prediction for `grace` seconds after a toggle, then the server's attribute.
@@ -322,6 +341,38 @@ end
 -- Local light
 --------------------------------------------------------------------------------
 
+local function newHaze(parent: BasePart, name: string, width1: number, opacity: number): Beam
+	local a0 = Instance.new("Attachment")
+	a0.Name = name .. "0"
+	a0.Parent = parent
+	local a1 = Instance.new("Attachment")
+	a1.Name = name .. "1"
+	a1.Position = Vector3.new(0, 0, -HAZE_LENGTH) -- the part's front face (the beam's direction) is -Z
+	a1.Parent = parent
+	local beam = Instance.new("Beam")
+	beam.Name = name
+	beam.Attachment0 = a0
+	beam.Attachment1 = a1
+	beam.FaceCamera = true
+	beam.Segments = 1
+	beam.Width0 = 0.3
+	beam.Width1 = width1
+	beam.LightEmission = 1
+	beam.LightInfluence = 0
+	beam.Brightness = 0
+	beam.Color = ColorSequence.new(BEAM_COLOR)
+	-- clear at the lens (nothing smears across the holder's own view), densest a few studs out, gone at the far end
+	beam.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.18, 1 - opacity),
+		NumberSequenceKeypoint.new(0.6, 1 - opacity * 0.45),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	beam.Enabled = false
+	beam.Parent = a0
+	return beam
+end
+
 local function newSpot(parent: Instance, name: string, angle: number, range: number, shadows: boolean): SpotLight
 	local light = Instance.new("SpotLight")
 	light.Name = name
@@ -356,6 +407,31 @@ function Flashlight.new(player: Player): Light
 	glow.Shadows = false
 	glow.Enabled = false
 	glow.Parent = part
+	local spread = 2 * HAZE_LENGTH
+	local hazeCore = newHaze(part, "HazeCore", spread * math.tan(math.rad(INNER_ANGLE / 2)) * 0.75, HAZE_CORE_OPACITY)
+	local hazeSheath =
+		newHaze(part, "HazeSheath", spread * math.tan(math.rad(OUTER_ANGLE / 2)) * 0.6, HAZE_SHEATH_OPACITY)
+	local hazeWritten = -1
+	local hazeColor = BEAM_COLOR
+
+	local function setHaze(brightness: number, color: Color3?)
+		local on = brightness > 0.01
+		if hazeCore.Enabled ~= on then
+			hazeCore.Enabled = on
+			hazeSheath.Enabled = on
+		end
+		if on and math.abs(brightness - hazeWritten) > 0.01 then
+			hazeWritten = brightness
+			hazeCore.Brightness = brightness
+			hazeSheath.Brightness = brightness * 0.8
+		end
+		if color and color ~= hazeColor then
+			hazeColor = color
+			local sequence = ColorSequence.new(color)
+			hazeCore.Color = sequence
+			hazeSheath.Color = sequence
+		end
+	end
 
 	local predicted: boolean? = nil
 	local predictedAt: number? = nil
@@ -437,6 +513,7 @@ function Flashlight.new(player: Player): Light
 				inner.Enabled = false
 				outer.Enabled = false
 				glow.Enabled = false
+				setHaze(0, nil)
 				rotation = nil
 				return
 			end
@@ -466,6 +543,7 @@ function Flashlight.new(player: Player): Light
 				if outer.Enabled then
 					outer.Enabled = false
 				end
+				setHaze(0, nil)
 				return
 			end
 
@@ -487,6 +565,10 @@ function Flashlight.new(player: Player): Light
 			if inner.Shadows ~= shadows then
 				inner.Shadows = shadows
 			end
+			local haze = if RenderBudgetController.GetBudget().flashlightHaze
+				then Flashlight.hazeBrightness(output, LightingController.GetFilm().shafts)
+				else 0
+			setHaze(haze, color)
 		end,
 		SetShadows = function(_self: Light, enabled: boolean)
 			shadows = enabled

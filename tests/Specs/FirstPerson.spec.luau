@@ -795,6 +795,36 @@ return {
 		end
 	end,
 
+	["flashlight: the haze cone follows the light and the air"] = function(t: Expect)
+		t.eq(Flashlight.hazeBrightness(0, 1), 0, "an off torch shows no cone")
+		t.truthy(Flashlight.hazeBrightness(1, 1) > Flashlight.hazeBrightness(0.4, 1), "a dying cell, a fainter cone")
+		t.eq(Flashlight.hazeBrightness(1, 0), 0, "clear air shows none")
+		t.truthy(Flashlight.hazeBrightness(1, 1.25) > Flashlight.hazeBrightness(1, 1), "thick air shows more")
+		local cones = Flashlight.Cones
+		t.truthy(cones.innerAngle < cones.outerAngle and cones.innerBrightness > cones.outerBrightness * 3, "hot core")
+		local warm = Flashlight.beamColor(1)
+		t.truthy(warm.R > warm.G and warm.G > warm.B, "a slightly warm white")
+		t.truthy(warm.B > 0.7, "white, not orange, on a full cell")
+	end,
+
+	["panic: depth of field rests at the film's far focus and pulls in with panic"] = function(t: Expect)
+		local far, focus, radius = PanicVFX.focus(0, 0.14, 38, 44)
+		t.near(far, 0.14, 1e-9, "the resting blur is the film's")
+		t.near(focus, 38, 1e-9)
+		t.near(radius, 44, 1e-9)
+		local panicFar, panicFocus, panicRadius = PanicVFX.focus(1, 0.14, 38, 44)
+		t.near(panicFar, CameraConfig.Panic.DofFarIntensity, 1e-9, "full panic blurs hard")
+		t.truthy(panicFocus < focus and panicRadius < radius, "and pulls the focus in close")
+		t.truthy(PanicVFX.vignetteOpacity(0, 0, 1, 0.36) > PanicVFX.vignetteOpacity(0, 0, 1, 0.26), "film vignette")
+		t.near(PanicVFX.vignetteOpacity(0, 0, 1, 0.3), 0.3, 1e-9, "rests at the film's vignette")
+		t.near(
+			PanicVFX.vignetteOpacity(1, 0, 1, 0.3),
+			1 - CameraConfig.Panic.VignetteTransparencyAtFull,
+			1e-9,
+			"full panic closes in whatever the film"
+		)
+	end,
+
 	["flashlight: the prediction holds for its grace window, then the server wins"] = function(t: Expect)
 		local grace = Flashlight.ReconcileGrace
 		t.eq(Flashlight.resolveOn(false, nil, nil, 10, grace), false)

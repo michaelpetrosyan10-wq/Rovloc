@@ -17,6 +17,14 @@
 --     basement's tubes and bulbs a sodium amber, the pool's a cold cyan. The layout's light colour is pulled toward the
 --     cast (scripted and wayfinding lights keep theirs), and `grade` is the gentle tint the client's colour grade
 --     blends toward while the camera is on that level (LightingController).
+-- Pools, not floods: working fixtures burn hard (strong keys under each fixture) over a tighter reach, so the floor
+-- between two pools falls off into shadow instead of a flat wash; the ambient fill (LightingRig) keeps those gaps
+-- readable.
+--
+-- Each level is also graded like a film shot (`film`): how thick and what colour its haze is, how far it carries,
+-- how hard the bloom catches the tubes, the base contrast / saturation / lift, the exposure trim, a far-focus depth of
+-- field, the resting vignette, how strongly light shafts and dust show in its air and how much moonlight its boarded
+-- windows let in. The client eases every value toward the film of the level the camera is on (LightingController).
 -- Pure and deterministic (seeded by layout and light id), so every server builds the same school and the specs can
 -- check the result without building anything.
 
@@ -44,15 +52,66 @@ export type Resolved = {
 	flickerGroup: string?,
 }
 
+-- One level's grade. Exposure is an EV trim over LightingRig.Baseline.ExposureCompensation; the colour-grade values
+-- are the base ColorCorrection's (the area tint stays `LevelMood.grade`); the haze values are the Atmosphere's.
+export type Film = {
+	exposure: number,
+	contrast: number,
+	saturation: number,
+	lift: number, -- base grade Brightness: a filmic lift of the blacks that keeps the shadows readable
+	bloomIntensity: number,
+	bloomSize: number,
+	bloomThreshold: number,
+	density: number,
+	offset: number,
+	haze: number,
+	glare: number,
+	hazeColor: Color3,
+	decay: Color3,
+	sunRays: number,
+	dofFar: number, -- resting far blur (render budget permitting)
+	dofFocus: number,
+	dofRadius: number,
+	vignette: number, -- resting vignette edge opacity
+	shafts: number, -- visible light-shaft strength in this air (fixture haze cones, window rays, the torch cone)
+	dust: number, -- dust-mote density multiplier
+	moon: number, -- moonlight through the boarded windows (multiplier)
+}
+
+-- A level's departures from the base film (every field optional).
+type FilmPatch = {
+	exposure: number?,
+	contrast: number?,
+	saturation: number?,
+	lift: number?,
+	bloomIntensity: number?,
+	bloomSize: number?,
+	bloomThreshold: number?,
+	density: number?,
+	offset: number?,
+	haze: number?,
+	glare: number?,
+	hazeColor: Color3?,
+	decay: Color3?,
+	sunRays: number?,
+	dofFar: number?,
+	dofFocus: number?,
+	dofRadius: number?,
+	vignette: number?,
+	shafts: number?,
+	dust: number?,
+	moon: number?,
+}
+
 local MAX_RANGE = 60
 
 -- Brightest a fixture of each kind may get after scaling.
 local MAX_BRIGHTNESS: { [string]: number } = {
-	Fluorescent = 1.8,
-	Bulb = 2.2,
-	EmergencyRed = 1.4,
+	Fluorescent = 2.1,
+	Bulb = 2.5,
+	EmergencyRed = 1.5,
 	ExitSign = 1,
-	BoilerGlow = 2.4,
+	BoilerGlow = 2.6,
 	ClassroomGlow = 1.3,
 	Floodlight = 4,
 }
@@ -80,16 +139,16 @@ local LEVELS: { [string]: LevelMood } = {
 	Lobby = {
 		revive = 1,
 		flicker = 0.1,
-		brightness = 2,
-		range = 1.2,
+		brightness = 2.2,
+		range = 1.15,
 		bulbCast = rgb(255, 172, 98),
 		grade = rgb(255, 240, 222),
 	},
 	Level0_Basement = {
 		revive = 0.45,
 		flicker = 0.35,
-		brightness = 2.4,
-		range = 1.35,
+		brightness = 2.75,
+		range = 1.3,
 		cast = rgb(236, 200, 136),
 		bulbCast = rgb(255, 160, 84),
 		grade = rgb(255, 236, 214),
@@ -97,8 +156,8 @@ local LEVELS: { [string]: LevelMood } = {
 	Level1_Hallways = {
 		revive = 0.4,
 		flicker = 0.4,
-		brightness = 2.3,
-		range = 1.3,
+		brightness = 2.65,
+		range = 1.25,
 		-- The scare: the corridor outside Classroom 108 stays dark except for the glow spilling from its door.
 		keepDark = { "L1_Corridor_East", "L1_Classroom_108" },
 		cast = rgb(168, 236, 196),
@@ -108,8 +167,8 @@ local LEVELS: { [string]: LevelMood } = {
 	Level2_ScienceHall = {
 		revive = 0.5,
 		flicker = 0.3,
-		brightness = 2.4,
-		range = 1.3,
+		brightness = 2.75,
+		range = 1.25,
 		cast = rgb(160, 232, 222),
 		bulbCast = rgb(236, 214, 160),
 		grade = rgb(232, 252, 252),
@@ -117,8 +176,8 @@ local LEVELS: { [string]: LevelMood } = {
 	Level3_Gymnasium = {
 		revive = 0.4,
 		flicker = 0.35,
-		brightness = 2.4,
-		range = 1.35,
+		brightness = 2.75,
+		range = 1.3,
 		cast = rgb(196, 232, 176),
 		bulbCast = rgb(240, 208, 146),
 		grade = rgb(244, 255, 236),
@@ -126,8 +185,8 @@ local LEVELS: { [string]: LevelMood } = {
 	Level4_FloodedPool = {
 		revive = 0.35,
 		flicker = 0.45,
-		brightness = 2.3,
-		range = 1.3,
+		brightness = 2.65,
+		range = 1.25,
 		cast = rgb(146, 212, 242),
 		bulbCast = rgb(214, 220, 214),
 		grade = rgb(226, 244, 255),
@@ -135,14 +194,195 @@ local LEVELS: { [string]: LevelMood } = {
 	Level5_Roof = {
 		revive = 0.5,
 		flicker = 0.5,
-		brightness = 2,
-		range = 1.2,
+		brightness = 2.2,
+		range = 1.15,
 		cast = rgb(190, 206, 236),
 		grade = rgb(234, 240, 255),
 	},
 }
 
-local DEFAULT: LevelMood = { revive = 0.4, flicker = 0.35, brightness = 2.3, range = 1.3 }
+local DEFAULT: LevelMood = { revive = 0.4, flicker = 0.35, brightness = 2.65, range = 1.25 }
+
+-- The base film: a cold, hazy school night. Contrast up with the blacks lifted a touch (so the gaps between pools
+-- read as dark grey-blue, not void), colour drained, bloom catching only what really burns (threshold above 1:
+-- tubes, lenses, glossy highlights), far-focus depth of field that only softens the end of a long corridor.
+local BASE_FILM: Film = table.freeze({
+	exposure = 0.08,
+	contrast = 0.2,
+	saturation = -0.22,
+	lift = 0.015,
+	bloomIntensity = 0.85,
+	bloomSize = 34,
+	bloomThreshold = 1.12,
+	density = 0.34,
+	offset = 0.06,
+	haze = 1.9,
+	glare = 0.2,
+	hazeColor = rgb(42, 48, 52),
+	decay = rgb(20, 26, 28),
+	sunRays = 0.03,
+	dofFar = 0.14,
+	dofFocus = 38,
+	dofRadius = 44,
+	vignette = 0.32,
+	shafts = 1,
+	dust = 1,
+	moon = 1,
+})
+
+local FILM_PATCHES: { [string]: FilmPatch } = {
+	-- Warm, safe-ish, clearer air: the squad's last look at something like comfort.
+	Lobby = {
+		exposure = 0.1,
+		contrast = 0.14,
+		saturation = -0.12,
+		bloomIntensity = 0.8,
+		bloomSize = 32,
+		bloomThreshold = 1.15,
+		density = 0.28,
+		offset = 0.1,
+		haze = 1.4,
+		hazeColor = rgb(60, 52, 44),
+		decay = rgb(30, 24, 20),
+		dofFar = 0.1,
+		dofRadius = 50,
+		vignette = 0.26,
+		shafts = 0.8,
+		dust = 0.8,
+		moon = 0,
+	},
+	-- Sodium amber in thick, dusty air: the boilers' heat haze, heavy bloom on the bulbs.
+	Level0_Basement = {
+		exposure = 0.05,
+		saturation = -0.18,
+		bloomIntensity = 0.95,
+		bloomSize = 36,
+		bloomThreshold = 1.05,
+		density = 0.42,
+		offset = 0.04,
+		haze = 2.4,
+		glare = 0.35,
+		hazeColor = rgb(62, 50, 36),
+		decay = rgb(34, 24, 14),
+		sunRays = 0,
+		dofFar = 0.16,
+		dofFocus = 34,
+		dofRadius = 40,
+		vignette = 0.36,
+		shafts = 1.25,
+		dust = 1.4,
+		moon = 0, -- every basement window looks into a soil-filled light well
+	},
+	-- Sickly green tubes in a stale, medium haze.
+	Level1_Hallways = {
+		saturation = -0.24,
+		hazeColor = rgb(42, 52, 48),
+		decay = rgb(20, 28, 26),
+	},
+	-- Clinical teal, a little clearer, colder.
+	Level2_ScienceHall = {
+		exposure = 0.1,
+		bloomIntensity = 0.9,
+		bloomThreshold = 1.1,
+		density = 0.32,
+		haze = 1.7,
+		hazeColor = rgb(38, 52, 54),
+		decay = rgb(18, 28, 30),
+		shafts = 0.95,
+		dust = 0.9,
+	},
+	-- A big volume: more air between the walls, so more haze and the window rays carry further.
+	Level3_Gymnasium = {
+		bloomIntensity = 0.9,
+		bloomSize = 38,
+		bloomThreshold = 1.1,
+		density = 0.38,
+		haze = 2.1,
+		hazeColor = rgb(46, 52, 42),
+		decay = rgb(24, 28, 20),
+		dofFocus = 44,
+		dofRadius = 52,
+		shafts = 1.15,
+		dust = 1.2,
+		moon = 1.15,
+	},
+	-- Cold cyan steam over black water: the densest haze, the wettest bloom, little dust in the damp.
+	Level4_FloodedPool = {
+		exposure = 0.12,
+		contrast = 0.22,
+		saturation = -0.16,
+		bloomIntensity = 1,
+		bloomSize = 40,
+		bloomThreshold = 1,
+		density = 0.46,
+		offset = 0.02,
+		haze = 2.6,
+		glare = 0.3,
+		hazeColor = rgb(40, 54, 62),
+		decay = rgb(18, 30, 38),
+		dofFar = 0.16,
+		vignette = 0.34,
+		shafts = 1.2,
+		dust = 0.6,
+		moon = 1.1,
+	},
+	-- Storm night in the open: rain haze, a far horizon, no dust in the wind.
+	Level5_Roof = {
+		exposure = 0.2,
+		contrast = 0.16,
+		bloomIntensity = 0.75,
+		bloomSize = 30,
+		bloomThreshold = 1.2,
+		density = 0.36,
+		offset = 0.12,
+		haze = 2.2,
+		glare = 0.1,
+		hazeColor = rgb(40, 44, 54),
+		decay = rgb(20, 24, 30),
+		sunRays = 0.06,
+		dofFar = 0.12,
+		dofFocus = 48,
+		dofRadius = 60,
+		vignette = 0.3,
+		shafts = 0.8,
+		dust = 0,
+		moon = 0,
+	},
+}
+
+local function patched(patch: FilmPatch): Film
+	local base = BASE_FILM
+	return table.freeze({
+		exposure = patch.exposure or base.exposure,
+		contrast = patch.contrast or base.contrast,
+		saturation = patch.saturation or base.saturation,
+		lift = patch.lift or base.lift,
+		bloomIntensity = patch.bloomIntensity or base.bloomIntensity,
+		bloomSize = patch.bloomSize or base.bloomSize,
+		bloomThreshold = patch.bloomThreshold or base.bloomThreshold,
+		density = patch.density or base.density,
+		offset = patch.offset or base.offset,
+		haze = patch.haze or base.haze,
+		glare = patch.glare or base.glare,
+		hazeColor = patch.hazeColor or base.hazeColor,
+		decay = patch.decay or base.decay,
+		sunRays = patch.sunRays or base.sunRays,
+		dofFar = patch.dofFar or base.dofFar,
+		dofFocus = patch.dofFocus or base.dofFocus,
+		dofRadius = patch.dofRadius or base.dofRadius,
+		vignette = patch.vignette or base.vignette,
+		shafts = patch.shafts or base.shafts,
+		dust = patch.dust or base.dust,
+		moon = patch.moon or base.moon,
+	})
+end
+
+local FILMS: { [string]: Film } = {}
+for layoutId, patch in FILM_PATCHES do
+	FILMS[layoutId] = patched(patch)
+end
+-- Outside every building (the street, the sky, the parachute drop) the camera sees the roof's storm.
+local OUTDOOR_FILM: Film = FILMS.Level5_Roof
 
 local LightingMood = {}
 
@@ -222,5 +462,28 @@ function LightingMood.grade(layoutId: string?): Color3
 	local mood = LEVELS[layoutId]
 	return if mood and mood.grade then mood.grade else WHITE
 end
+
+LightingMood.BaseFilm = BASE_FILM
+LightingMood.OutdoorFilm = OUTDOOR_FILM
+
+-- The film grade for a camera on `layoutId` (the outdoor storm outside every building; the base film for a layout
+-- without its own).
+function LightingMood.film(layoutId: string?): Film
+	if not layoutId then
+		return OUTDOOR_FILM
+	end
+	return FILMS[layoutId] or BASE_FILM
+end
+
+-- Moonlight through the boarded windows (a level's `film.moon` scales its brightness).
+LightingMood.Moonlight = table.freeze({
+	color = rgb(150, 174, 226),
+	brightness = 2.4, -- a shadowed spill: only the gaps between the planks let it through
+	unshadowedShare = 0.32, -- an unshadowed spill lights its whole cone, so it burns at about the planks' open share
+	range = 26,
+	angle = 64,
+	pitch = math.rad(38), -- how steeply the moonlight falls through a window
+	skew = 0.28, -- the sideways lean of every ray (the moon sits off to one side of the school)
+})
 
 return table.freeze(LightingMood)

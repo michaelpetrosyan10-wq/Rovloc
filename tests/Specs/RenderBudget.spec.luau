@@ -143,6 +143,26 @@ return {
 		)
 		t.falsy(low.shadows)
 		t.truthy(high.shadows and high.dof)
+		for _, budget in { low, medium, high } do
+			t.truthy(budget.shadowLights <= budget.lights, budget.tier .. " shadows only rendered fixtures")
+			t.truthy(budget.windowShadows <= budget.windowLights, budget.tier .. " shadows only lit windows")
+			t.truthy(budget.dust <= budget.shafts, budget.tier .. " dust only drifts in shafts")
+		end
+		for _, key in { "shadowLights", "windowLights", "windowShadows", "shafts", "dust" } do
+			local lowValue = (low :: any)[key] :: number
+			local mediumValue = (medium :: any)[key] :: number
+			local highValue = (high :: any)[key] :: number
+			t.truthy(lowValue <= mediumValue and mediumValue <= highValue, key .. " grows with the tier")
+		end
+		-- a weak device keeps its frame rate: nothing shadowed, no shafts, no dust, no torch haze
+		t.eq(low.shadowLights, 0)
+		t.eq(low.windowShadows, 0)
+		t.eq(low.shafts, 0)
+		t.eq(low.dust, 0)
+		t.falsy(low.flashlightHaze)
+		t.truthy(low.windowLights > 0, "the windows still read on Low")
+		t.truthy(high.shadowLights + high.windowShadows <= high.lights, "High casts no more shadows than before")
+		t.truthy(medium.shadowLights + medium.windowShadows <= medium.lights, "nor does Medium")
 		t.eq(RenderBudgetController.GetBudget().tier, RenderBudgetController.GetState().tier)
 	end,
 }

@@ -1,7 +1,8 @@
 --!strict
--- Server lighting baseline: a cold ambient fill, a light haze, a cool desaturated grade, bloom and a storm deck of
--- clouds. Lighting properties mirror the pins in default.project.json so a `rojo serve` session and a built
--- place look identical. Clients layer their own effects (panic grade, depth of field, lightning pulses) on top.
+-- Server lighting baseline: a cold ambient fill, a light haze, a cool desaturated grade, bloom, faint sun rays and a
+-- storm deck of clouds. Lighting properties mirror the pins in default.project.json so a `rojo serve` session and a
+-- built place look identical. Clients layer their own effects on top (each level's film grade, panic grade, depth of
+-- field, lightning pulses, light shafts and dust: LightingController, PanicVFX).
 --
 -- Lighting.LightingStyle and Lighting.PrioritizeLightingQuality (like the deprecated Technology) can only be
 -- written by plugins and Open Cloud (API dump: Capabilities.Write = PluginOrOpenCloud); a game script that writes
@@ -26,36 +27,44 @@ LightingRig.Names = table.freeze({
 	Atmosphere = "Atmosphere",
 	ColorCorrection = "BaseColorCorrection",
 	Bloom = "Bloom",
+	SunRays = "SunRays",
 	Sky = "Sky",
 	Clouds = "Clouds",
 })
 
--- Baseline values, also read by clients as the rest state their pulses decay back to.
+-- Baseline values, also read by clients as the rest state their pulses decay back to (and the place the film grade
+-- of each level, LightingMood.film, starts from: the client eases Atmosphere, grade, bloom, sun rays and exposure
+-- toward the level the camera is on).
 -- Dark but readable: a cold blue-grey ambient fill lets shapes read at the edge of every lit pool (the player is
 -- never staring into a void), haze gives long corridors depth, bloom makes the fixtures glow and the grade drains
 -- some colour without turning the school grey. The darkness comes from contrast with the level lights
--- (LightingMood) and the flashlight, not from switching everything off.
+-- (LightingMood) and the flashlight, not from switching everything off. The sky's diffuse fill is kept low (it
+-- would flatten the pools into a wash) and its specular high, so glossy floors and wet tile mirror the fixtures
+-- (Future lighting); shadows are soft-edged, so a pool fades out instead of ending on a hard line.
 LightingRig.Baseline = table.freeze({
 	ClockTime = 0.5,
 	Brightness = 0.5,
-	Ambient = Color3.fromRGB(28, 30, 38),
-	OutdoorAmbient = Color3.fromRGB(46, 50, 60),
-	EnvironmentDiffuseScale = 0.3,
-	EnvironmentSpecularScale = 0.55,
-	ExposureCompensation = 0.25,
-	ShadowSoftness = 0.25,
+	Ambient = Color3.fromRGB(24, 27, 35),
+	OutdoorAmbient = Color3.fromRGB(44, 49, 62),
+	EnvironmentDiffuseScale = 0.22,
+	EnvironmentSpecularScale = 1,
+	ExposureCompensation = 0.3,
+	ShadowSoftness = 0.42,
 	AtmosphereDensity = 0.34,
-	AtmosphereOffset = 0.08,
-	AtmosphereHaze = 1.8,
-	AtmosphereColor = Color3.fromRGB(44, 48, 56),
-	AtmosphereDecay = Color3.fromRGB(22, 26, 30),
-	GradeBrightness = 0,
-	GradeContrast = 0.16,
+	AtmosphereOffset = 0.06,
+	AtmosphereHaze = 1.9,
+	AtmosphereGlare = 0.2,
+	AtmosphereColor = Color3.fromRGB(42, 48, 52),
+	AtmosphereDecay = Color3.fromRGB(20, 26, 28),
+	GradeBrightness = 0.015,
+	GradeContrast = 0.2,
 	GradeSaturation = -0.22,
 	GradeTint = Color3.fromRGB(232, 240, 255),
-	BloomIntensity = 0.7,
-	BloomSize = 30,
-	BloomThreshold = 1.25,
+	BloomIntensity = 0.85,
+	BloomSize = 34,
+	BloomThreshold = 1.12,
+	SunRaysIntensity = 0.03,
+	SunRaysSpread = 0.6,
 	CloudCover = 0.93,
 	CloudDensity = 0.78,
 	CloudColor = Color3.fromRGB(38, 40, 46),
@@ -156,7 +165,7 @@ local function buildAtmosphere()
 	atmosphere.Density = Baseline.AtmosphereDensity
 	atmosphere.Offset = Baseline.AtmosphereOffset
 	atmosphere.Haze = Baseline.AtmosphereHaze
-	atmosphere.Glare = 0
+	atmosphere.Glare = Baseline.AtmosphereGlare
 	atmosphere.Color = Baseline.AtmosphereColor
 	atmosphere.Decay = Baseline.AtmosphereDecay
 	atmosphere.Parent = Lighting
@@ -179,6 +188,14 @@ local function buildBloom()
 	bloom.Size = Baseline.BloomSize
 	bloom.Threshold = Baseline.BloomThreshold
 	bloom.Parent = Lighting
+end
+
+local function buildSunRays()
+	local rays = Instance.new("SunRaysEffect")
+	rays.Name = Names.SunRays
+	rays.Intensity = Baseline.SunRaysIntensity
+	rays.Spread = Baseline.SunRaysSpread
+	rays.Parent = Lighting
 end
 
 -- Storm night: no sun, moon or stars behind the cloud deck (default sky textures are left untouched).
@@ -222,6 +239,7 @@ function LightingRig.apply(): { string }
 		{ name = Names.Atmosphere, write = buildAtmosphere },
 		{ name = Names.ColorCorrection, write = buildGrade },
 		{ name = Names.Bloom, write = buildBloom },
+		{ name = Names.SunRays, write = buildSunRays },
 		{ name = Names.Sky, write = buildSky },
 		{ name = Names.Clouds, write = buildClouds },
 	}
