@@ -522,18 +522,24 @@ export function partAabb(part) {
  * @param {any} part @param {string} faceName NormalId name @param {number} maxEdge @param {number} lift
  * @param {(verts: Vert[], tris: number[][]) => void} sink
  */
-export function decalFace(part, faceName, maxEdge, lift, sink) {
+export function decalFace(part, faceName, maxEdge, lift, sink, crop = null) {
   const f = blockFaces(part.size[0], part.size[1], part.size[2]).find((x) => x.face === faceName);
   if (!f || f.du < 1e-4 || f.dv < 1e-4) return;
   const c = part.cf;
   const nW = norm(cfVector(c, f.n[0], f.n[1], f.n[2]));
-  const nu = Math.max(1, Math.ceil(f.du / maxEdge - 1e-6));
-  const nv = Math.max(1, Math.ceil(f.dv / maxEdge - 1e-6));
+  // optional crop of the canvas: [u0, v0, u1, v1] in canvas units (v down)
+  const [cu0, cv0, cu1, cv1] = crop || [0, 0, 1, 1];
+  const a0 = -f.du / 2 + f.du * cu0;
+  const a1 = -f.du / 2 + f.du * cu1;
+  const b1 = f.dv / 2 - f.dv * cv0;
+  const b0 = f.dv / 2 - f.dv * cv1;
+  const nu = Math.max(1, Math.ceil((a1 - a0) / maxEdge - 1e-6));
+  const nv = Math.max(1, Math.ceil((b1 - b0) / maxEdge - 1e-6));
   const verts = [];
   for (let j = 0; j <= nv; j++) {
-    const b = -f.dv / 2 + (f.dv * j) / nv;
+    const b = b0 + ((b1 - b0) * j) / nv;
     for (let i = 0; i <= nu; i++) {
-      const a = -f.du / 2 + (f.du * i) / nu;
+      const a = a0 + ((a1 - a0) * i) / nu;
       const l = [
         f.origin[0] + f.u[0] * a + f.v[0] * b + f.n[0] * lift,
         f.origin[1] + f.u[1] * a + f.v[1] * b + f.n[1] * lift,

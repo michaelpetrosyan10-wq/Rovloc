@@ -169,7 +169,7 @@ for (const c of world.chunks) {
     check(!!tex, `material ${c.material} texture ${mat.texture} listed`);
     if (tex) for (const file of Object.values(tex.maps || {})) check(fs.existsSync(path.join(buildDir, file)), `texture file ${file}`);
   }
-  if (c.bucket === 'transparent') check(c.attributes.alpha && c.attributes.alpha.array.length === n, `chunk ${c.id} alpha`);
+  if (c.bucket === 'transparent') check(c.attributes.alpha && c.attributes.alpha.array.length === n && c.attributes.alpha.array.every((a) => a > 0), `chunk ${c.id} alpha`);
   if (c.kind === 'entity') {
     // ranges tile the chunk exactly
     const covered = new Uint8Array(n);
@@ -222,6 +222,10 @@ for (const [level, g] of Object.entries(world.probes)) {
   check(g.data.length === g.dims[0] * g.dims[1] * g.dims[2] * 3, `probes ${level} size`);
   const s = sampleProbe(g, g.origin[0] + g.spacing * 1.5, g.origin[1] + g.spacing * 0.5, g.origin[2] + g.spacing * 1.5);
   check(s.every((v) => Number.isFinite(v) && v >= 0), `probes ${level} sample`);
+  for (const gr of g.groups) {
+    check(gr.data.length === g.data.length, `probes ${level} group ${gr.group} size`);
+    check(meta.flickerGroups[gr.group] && meta.flickerGroups[gr.group].kind === 'scripted', `probes ${level} group ${gr.group} is scripted`);
+  }
 }
 // flicker groups name their lights
 for (const g of meta.flickerGroups) for (const li of g.lights) check(meta.lights[li] && meta.lights[li].group === g.id, `flicker group ${g.id} light ${li}`);

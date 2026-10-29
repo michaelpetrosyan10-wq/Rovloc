@@ -68,44 +68,7 @@ export async function bakeDecals(raw, outDir, opts = {}) {
     });
   });
 
-  // shelf packing, tallest first
-  const order = [...jobs].sort((a, b) => b.h - a.h || b.w - a.w);
-  const pages = [];
-  let page = null;
-  let x = 0;
-  let y = 0;
-  let shelf = 0;
-  const newPage = () => {
-    page = { index: pages.length, width: pageSize, height: 0, jobs: [] };
-    pages.push(page);
-    x = 0;
-    y = 0;
-    shelf = 0;
-  };
-  newPage();
-  for (const job of order) {
-    const w = job.w + PAD * 2;
-    const h = job.h + PAD * 2;
-    if (x + w > pageSize) {
-      x = 0;
-      y += shelf;
-      shelf = 0;
-    }
-    if (y + h > pageSize) newPage();
-    job.page = page.index;
-    job.x = x + PAD;
-    job.y = y + PAD;
-    page.jobs.push(job);
-    x += w;
-    shelf = Math.max(shelf, h);
-    page.height = Math.max(page.height, y + shelf);
-  }
-  // page heights rounded up to a power of two (mipmapping on WebGL1-era GPUs is happier)
-  for (const p of pages) {
-    let ph = 64;
-    while (ph < p.height) ph *= 2;
-    p.height = ph;
-  }
+  const pages = pack(jobs, pageSize);
 
   const { chromium } = require('playwright');
   const browser = await chromium.launch();
@@ -135,6 +98,122 @@ export async function bakeDecals(raw, outDir, opts = {}) {
     d.rect = [job.x / p.width, 1 - job.y / p.height, (job.x + job.w) / p.width, 1 - (job.y + job.h) / p.height];
   }
   return { pages, decals, skipped, cells: jobs.length };
+}
+
+
+/**
+ * Wear (grime at the foot of walls, soot under ceilings, dirt in corners, water runs, cracks, stains): every "Wear"
+ * SurfaceGui rendered at low resolution over its wall's own colour, then stored as a MULTIPLY factor
+ * (painted / bare, per channel, display-encoded): white = untouched. The engine draws these quads with multiplicative
+ * blending (dst * src), so no lighting and no alpha are needed and the result matches Roblox's paint over the lit
+ * wall. Each quad is cropped to the part of its canvas the paint actually darkens.
+ *
+ * @param {any} raw @param {string} outDir @param {{ pps?: number, pageSize?: number, quality?: number, textureRefs?: any }} [opts]
+ */
+export async function bakeWear(raw, outDir, opts = {}) {
+  const pageSize = opts.pageSize || 2048;
+  const quality = opts.quality ?? 0.8;
+  const pps = opts.pps || 3;
+  const refs = opts.textureRefs || {};
+  const jobs = [];
+  const wear = [];
+  raw.guis.forEach((g, index) => {
+    if (g.name !== 'Wear' || g.enabled === false || !g.children || !g.children.length) return;
+    const part = raw.parts[g.part - 1];
+    if (!part || part.entity || part.transparency > 0.01) return;
+    const [sw, sh] = faceStuds(part.size, g.face);
+    let k = pps;
+    if (Math.max(sw, sh) * k > 256) k = 256 / Math.max(sw, sh);
+    const w = Math.max(4, Math.round(sw * k));
+    const h = Math.max(4, Math.round(sh * k));
+    // the bare wall colour the paint is laid over (a textured part's colour was divided by its texture's reference)
+    const ref = part.texture && refs[part.texture] && refs[part.texture].reference ? refs[part.texture].reference : [1, 1, 1];
+    const base = part.color.map((c, i) => Math.min(1, c * ref[i]));
+    const job = { id: jobs.length, w, h, scale: (w / sw) / (g.pixelsPerStud || 6), children: g.children, base };
+    jobs.push(job);
+    wear.push({ gui: index, part: g.part - 1, face: g.face, job: job.id });
+  });
+  const pages = pack(jobs, pageSize, 2);
+  const { chromium } = require('playwright');
+  const browser = await chromium.launch();
+  try {
+    const tab = await browser.newPage();
+    await tab.setContent('<!doctype html><html><body></body></html>');
+    await tab.addScriptTag({ content: RENDERER });
+    fs.mkdirSync(outDir, { recursive: true });
+    for (const p of pages) {
+      const res = await tab.evaluate(([pg, q]) => window.renderWearPage(pg, q), [{ width: p.width, height: p.height, jobs: p.jobs }, quality]);
+      const file = `wear_${p.index}.webp`;
+      fs.writeFileSync(path.join(outDir, file), Buffer.from(res.dataUrl.split(',')[1], 'base64'));
+      p.file = file;
+      p.bytes = fs.statSync(path.join(outDir, file)).size;
+      for (const [id, crop] of Object.entries(res.crops)) jobs[id].crop = crop;
+      delete p.jobs;
+    }
+  } finally {
+    await browser.close();
+  }
+  const placed = [];
+  for (const d of wear) {
+    const job = jobs[d.job];
+    if (!job.crop) continue; // the paint darkens nothing visible
+    const p = pages[job.page];
+    const [c0, c1, c2, c3] = job.crop; // canvas fractions, v down
+    d.page = job.page;
+    d.crop = job.crop;
+    d.rect = [
+      (job.x + c0 * job.w) / p.width,
+      1 - (job.y + c1 * job.h) / p.height,
+      (job.x + c2 * job.w) / p.width,
+      1 - (job.y + c3 * job.h) / p.height,
+    ];
+    placed.push(d);
+  }
+  return { pages, wear: placed, total: wear.length };
+}
+
+/** Shelf-packs jobs ({ w, h }) onto pages of `pageSize` width (heights rounded up to a power of two). */
+function pack(jobs, pageSize, pad = PAD) {
+  // shelf packing, tallest first
+  const order = [...jobs].sort((a, b) => b.h - a.h || b.w - a.w);
+  const pages = [];
+  let page = null;
+  let x = 0;
+  let y = 0;
+  let shelf = 0;
+  const newPage = () => {
+    page = { index: pages.length, width: pageSize, height: 0, jobs: [] };
+    pages.push(page);
+    x = 0;
+    y = 0;
+    shelf = 0;
+  };
+  newPage();
+  for (const job of order) {
+    const w = job.w + pad * 2;
+    const h = job.h + pad * 2;
+    if (x + w > pageSize) {
+      x = 0;
+      y += shelf;
+      shelf = 0;
+    }
+    if (y + h > pageSize) newPage();
+    job.page = page.index;
+    job.x = x + pad;
+    job.y = y + pad;
+    page.jobs.push(job);
+    x += w;
+    shelf = Math.max(shelf, h);
+    page.height = Math.max(page.height, y + shelf);
+  }
+  // page heights rounded up to a power of two (mipmapping on WebGL1-era GPUs is happier)
+  for (const p of pages) {
+    let ph = 64;
+    while (ph < p.height) ph *= 2;
+    p.height = ph;
+  }
+
+  return pages;
 }
 
 // The in-browser renderer: draws Roblox GuiObject trees onto canvas regions, returns the page as WebP.
@@ -316,6 +395,57 @@ const RENDERER = String.raw`
     for (const [c] of ordered) drawNode(ctx, c, r, k);
     ctx.restore();
   }
+
+
+  // Wear pages: each job painted over its opaque base colour, then turned into a multiply factor (painted / base)
+  // with white padding; returns the darkened bounding box of every job (canvas fractions) or none when untouched.
+  window.renderWearPage = function (page, quality) {
+    const canvas = document.createElement('canvas');
+    canvas.width = page.width;
+    canvas.height = page.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, page.width, page.height);
+    const crops = {};
+    for (const job of page.jobs) {
+      seed = job.id * 7919 + 1;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(job.x, job.y, job.w, job.h);
+      ctx.clip();
+      ctx.fillStyle = rgba(job.base, 1);
+      ctx.fillRect(job.x, job.y, job.w, job.h);
+      const root = { x: job.x, y: job.y, w: job.w, h: job.h };
+      const ordered = job.children.filter((c) => c.size).map((c, i) => [c, i]).sort((a, b) => (a[0].z || 1) - (b[0].z || 1) || a[1] - b[1]);
+      for (const [c] of ordered) drawNode(ctx, c, root, job.scale);
+      ctx.restore();
+      const img = ctx.getImageData(job.x, job.y, job.w, job.h);
+      const d = img.data;
+      const b = job.base.map((v) => Math.max(1, Math.round(v * 255)));
+      let x0 = job.w, y0 = job.h, x1 = -1, y1 = -1;
+      for (let y = 0; y < job.h; y++) {
+        for (let x = 0; x < job.w; x++) {
+          const i = (y * job.w + x) * 4;
+          let dark = false;
+          for (let k = 0; k < 3; k++) {
+            const f = Math.min(255, Math.round((d[i + k] / b[k]) * 255));
+            d[i + k] = f;
+            if (f < 247) dark = true;
+          }
+          d[i + 3] = 255;
+          if (dark) {
+            if (x < x0) x0 = x;
+            if (y < y0) y0 = y;
+            if (x > x1) x1 = x;
+            if (y > y1) y1 = y;
+          }
+        }
+      }
+      ctx.putImageData(img, job.x, job.y);
+      if (x1 >= 0) crops[job.id] = [x0 / job.w, y0 / job.h, (x1 + 1) / job.w, (y1 + 1) / job.h];
+    }
+    return { dataUrl: canvas.toDataURL('image/webp', quality), crops };
+  };
 
   window.renderPage = function (page, quality) {
     const canvas = document.createElement('canvas');

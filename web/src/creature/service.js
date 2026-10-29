@@ -213,6 +213,8 @@ export class MonsterAI {
         if (this.jumpscareView) this.jumpscareView.abort();
       },
       play: (name, opts) => env.play(name, opts),
+      allowed: (kind) => env.catchAllowed(kind),
+      outcome: (kind) => env.catchOutcome(kind),
     });
     this.jumpscare.finished.connect((victim, kind, outcome) => {
       if (this.catching && this.catching.player === victim) this._settleCatch(outcome);
@@ -1040,10 +1042,15 @@ export class MonsterAI {
 
   // ------------------------------------------------------------------ run + levels
 
+  /** The difficulty the next run starts on (the lobby's choice). */
+  setDifficulty(name) {
+    this.difficulty = name === 'Nightmare' ? 'Nightmare' : 'Standard';
+  }
+
   /** Starts a run (BeginRun): the Creature is placed Dormant at `startLevel`'s spawn (Level 1 for the basement). */
   beginRun(opts = {}) {
     this.running = true;
-    this.difficulty = opts.difficulty === 'Nightmare' ? 'Nightmare' : 'Standard';
+    this.difficulty = (opts.difficulty ?? this.difficulty) === 'Nightmare' ? 'Nightmare' : 'Standard';
     this.pacing = new Pacing(this.difficulty, this.now());
     this.paused = false;
     this.stunUntil = 0;

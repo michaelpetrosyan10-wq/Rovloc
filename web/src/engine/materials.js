@@ -149,7 +149,7 @@ in float vMode;
 #endif
 out vec4 fragColor;
 uniform vec3 cameraPosition;
-#ifdef USE_MAP
+#if defined(USE_MAP) || defined(DECAL) || defined(WEAR)
 uniform sampler2D uMap;
 #endif
 #ifdef USE_NORMALMAP
@@ -164,6 +164,10 @@ uniform float uRoughness;
 uniform float uReflectance;
 uniform float uEmissive;
 uniform float uOpacity;
+#ifdef DECAL
+uniform float uLightInfluence;
+uniform float uDecalBrightness;
+#endif
 uniform vec3 uTint;
 uniform vec3 uProbe;
 uniform vec3 uFlPos;
@@ -250,8 +254,20 @@ float shadowAt(vec3 wp, float ndl) {
 #endif
 
 void main() {
+#ifdef WEAR
+  // SurfaceGui wear and grime: a display-encoded multiply factor (white = untouched), blended dst * src onto the
+  // display-encoded frame; it fades to neutral in the haze like the wall under it
+  float wearFog = 1.0 - exp(-pow(length(cameraPosition - vWorldPos) * uFogDensity, 2.0));
+  fragColor = vec4(mix(texture(uMap, vUv).rgb, vec3(1.0), wearFog), 1.0);
+  return;
+#endif
   vec2 tuv = vUv / uTile;
   vec3 albedo = vColor * uTint;
+#ifdef DECAL
+  // SurfaceGui decal: atlas texel (UVs already 0..1)
+  vec4 decal = texture(uMap, vUv);
+  albedo *= pow(decal.rgb, vec3(2.2));
+#endif
 #ifdef USE_MAP
   vec4 tex = texture(uMap, tuv);
   albedo *= pow(tex.rgb, vec3(2.2));
@@ -317,7 +333,13 @@ void main() {
   vec3 light = uProbe;
 #endif
   light += uFlash * max(n.y, 0.25);
+#ifdef DECAL
+  // SurfaceGui shading: LightInfluence of the scene's light, the rest self-lit at Brightness (flickering with its
+  // fixture's group)
+  vec3 col = albedo * (uLightInfluence * (light + diffuse) + (1.0 - uLightInfluence) * uDecalBrightness * vGlow);
+#else
   vec3 col = albedo * (light + diffuse) + spec;
+#endif
 #ifdef EMISSIVE
   col += albedo * uEmissive * vGlow;
 #endif
@@ -331,6 +353,10 @@ void main() {
 #endif
 #ifdef TRANSPARENT
   alphaOut = max(alphaOut, (spec.r + spec.g + spec.b) * 0.3);
+#endif
+#ifdef DECAL
+  alphaOut = decal.a;
+  if (alphaOut < 0.01) discard;
 #endif
   fragColor = vec4(col, alphaOut);
 }
@@ -353,6 +379,8 @@ void main() {
  * @property {number} [pointLights] dynamic point-light slots compiled in (the tier's budget)
  * @property {boolean} [nodes]     node-batched geometry (a `node` attribute indexing the node texture)
  * @property {THREE.Texture} [nodeTexture]
+ * @property {{lightInfluence: number, brightness: number}} [decal] SurfaceGui decal (map = the atlas)
+ * @property {boolean} [wear] SurfaceGui wear: multiply the frame by the atlas texel (map = the atlas)
  * @property {THREE.Color} [tint]
  */
 
@@ -364,7 +392,9 @@ void main() {
 export function createWorldMaterial(shared, spec) {
   const defines = {};
   if (spec.baked !== false) defines.BAKED = '';
-  if (spec.map) defines.USE_MAP = '';
+  if (spec.map && !spec.decal && !spec.wear) defines.USE_MAP = '';
+  if (spec.decal) defines.DECAL = '';
+  if (spec.wear) defines.WEAR = '';
   if (spec.normalMap) defines.USE_NORMALMAP = '';
   if (spec.roughMap) defines.USE_ROUGHMAP = '';
   if (spec.emissive) defines.EMISSIVE = '';
@@ -388,16 +418,32 @@ export function createWorldMaterial(shared, spec) {
     uProbe: { value: new THREE.Vector3(0.05, 0.05, 0.06) },
   };
   if (spec.nodes) uniforms.uNodeTex = { value: spec.nodeTexture || null };
+  if (spec.decal) {
+    uniforms.uLightInfluence = { value: spec.decal.lightInfluence ?? 1 };
+    uniforms.uDecalBrightness = { value: spec.decal.brightness ?? 1 };
+  }
+  const blended = !!spec.transparent || !!spec.decal || !!spec.wear;
   const mat = new THREE.RawShaderMaterial({
     glslVersion: THREE.GLSL3,
     vertexShader: VERT,
     fragmentShader: FRAG,
     uniforms,
     defines,
-    transparent: !!spec.transparent,
-    depthWrite: !spec.transparent,
+    transparent: blended,
+    depthWrite: !blended,
     side: THREE.DoubleSide,
   });
+  if (spec.decal || spec.wear) {
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -2;
+    mat.polygonOffsetUnits = -2;
+  }
+  if (spec.wear) {
+    mat.blending = THREE.CustomBlending;
+    mat.blendEquation = THREE.AddEquation;
+    mat.blendSrc = THREE.DstColorFactor;
+    mat.blendDst = THREE.ZeroFactor;
+  }
   mat.userData.spec = spec;
   return mat;
 }

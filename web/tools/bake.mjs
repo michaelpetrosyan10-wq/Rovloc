@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 import { FORMAT_VERSION, LIGHT_SCALE, UV_SCALE, deltaEncode, encodeLightByte, triEncode } from '../src/engine/data.js';
 import { SolidIndex, coarseTriangles, decalFace, partAabb, tessellatePart } from './bake/mesh.mjs';
-import { bakeDecals } from './bake/decals.mjs';
+import { bakeDecals, bakeWear } from './bake/decals.mjs';
 import { buildTracer } from './bake/trace.mjs';
 import { LightGrid, asArray, collectLights, directEstimate, srgbToLinear } from './bake/light.mjs';
 import { buildMeta } from './bake/meta.mjs';
@@ -55,13 +55,13 @@ const EDGE_DARK = 8;
 const EDGE_EVEN = 5;
 const DARK_LEVEL = 0.1; // peak unshadowed light below this (sqrt-encoded 0..1) counts as dark
 const EVEN_SPREAD = 0.035; // sqrt-encoded spread below this counts as even
-const CELL = { default: 120, Exterior: 4000 }; // static chunk cells (studs, XZ)
+const CELL = { default: 240, Exterior: 4000 }; // static chunk cells (studs, XZ): one per level footprint (draw calls)
 const MAX_CHUNK_VERTS = 65535;
 
 // Ambient fills (LightingRig.Baseline), as linear light. The scales map Roblox's ambient colours onto the same
 // units as the lights: dark but readable gaps between the pools.
-const AMBIENT_SCALE = 3.2;
-const OUTDOOR_SCALE = 2.6;
+const AMBIENT_SCALE = 4.5;
+const OUTDOOR_SCALE = 2.2;
 const MOON_SCALE = 0.07; // the night "sun" at ClockTime 0.5 behind the storm deck (Lighting.Brightness 0.5)
 
 // Roblox base materials -> PBR approximations (textured keys take roughness from their roughness map).
@@ -220,6 +220,7 @@ class ChunkBuilder {
     this.sample = []; // nudged light sample positions (world)
     this.wnrm = []; // world normals for the bake
     this.fx = []; // fixture index per vertex (glow parts) or 0
+    this.alpha = []; // 1 - Transparency per vertex (transparent chunks)
     this.idx = [];
     this.count = 0;
   }
@@ -308,6 +309,7 @@ function addPart(p, opts) {
             const uv = opts.uvMap ? opts.uvMap(v.uv) : v.uv;
             b.uv.push(uv[0], uv[1]);
             b.col.push(color[0], color[1], color[2]);
+            b.alpha.push(opts.alpha ?? 1);
             const sp = opts.bake ? samplePoint(v.p, v.n, p) : v.p;
             b.sample.push(sp[0], sp[1], sp[2]);
             b.wnrm.push(v.n[0], v.n[1], v.n[2]);
@@ -338,7 +340,7 @@ for (const p of staticParts) {
   const bucket = bucketOf(p);
   const material = registerMaterial(p);
   const level = p.level;
-  const opacity = bucket === 'transparent' ? Math.round((1 - p.transparency) * 20) / 20 : 1;
+  const opacity = bucket === 'transparent' ? 1 - p.transparency : 1;
   const group = p.source === 'Skyline' ? 'Skyline' : level;
   const maxEdge = bucket === 'emissive' ? 1e9 : MAX_EDGE[group] || MAX_EDGE.default;
   growBounds(level, p);
@@ -349,8 +351,9 @@ for (const p of staticParts) {
     adaptive: bucket !== 'emissive',
     cull: bucket === 'opaque',
     bake: bucket !== 'emissive',
-    info: { kind: 'static', level, bucket, material, opacity },
-    keyOf: (x, z) => `S|${level}|${bucket}|${material}|${opacity}|${Math.floor(x / cell)},${Math.floor(z / cell)}`,
+    alpha: opacity,
+    info: { kind: 'static', level, bucket, material },
+    keyOf: (x, z) => `S|${level}|${bucket}|${material}|${Math.floor(x / cell)},${Math.floor(z / cell)}`,
   });
   if (builderList.length === before && false) culledParts++;
 }
@@ -373,7 +376,7 @@ for (const p of entityParts) {
   const e = entities[p.entity - 1];
   const bucket = bucketOf(p);
   const material = registerMaterial(p);
-  const opacity = bucket === 'transparent' ? Math.round((1 - p.transparency) * 20) / 20 : 1;
+  const opacity = bucket === 'transparent' ? 1 - p.transparency : 1;
   const node = p.node || '';
   const entity = p.entity - 1;
   addPart(p, {
@@ -381,8 +384,9 @@ for (const p of entityParts) {
     adaptive: bucket !== 'emissive',
     cull: false,
     bake: bucket !== 'emissive',
-    info: { kind: 'entity', level: e.level, bucket, material, opacity },
-    keyOf: () => `E|${e.level}|${bucket}|${material}|${opacity}`,
+    alpha: opacity,
+    info: { kind: 'entity', level: e.level, bucket, material },
+    keyOf: () => `E|${e.level}|${bucket}|${material}`,
     onAppend: (b, start, end) => {
       if (end <= start) return;
       b.ranges ||= [];
@@ -406,14 +410,15 @@ for (const cp of creature ? creature.parts : []) {
   const p = { ...cp };
   const bucket = bucketOf(p);
   const material = registerMaterial(p);
-  const opacity = bucket === 'transparent' ? Math.round((1 - p.transparency) * 20) / 20 : 1;
+  const opacity = bucket === 'transparent' ? 1 - p.transparency : 1;
   const boneIndex = boneIndexOf.get(bone) ?? 0;
   addPart(p, {
     maxEdge: MAX_EDGE.creature,
     cull: false,
     bake: false,
-    info: { kind: 'creature', level: 'Creature', bucket, material, opacity },
-    keyOf: () => `C|${bucket}|${material}|${opacity}`,
+    alpha: opacity,
+    info: { kind: 'creature', level: 'Creature', bucket, material },
+    keyOf: () => `C|${bucket}|${material}`,
     onAppend: (b, start, end) => {
       b.bones ||= [];
       for (let v = start; v < end; v++) b.bones[v] = boneIndex;
@@ -478,7 +483,7 @@ for (const d of decalResult.decals) {
       color: white,
       bake: true,
       glowFixture,
-      info: { kind: 'entity', level: e.level, bucket: 'decal', material, opacity: 1, uvScale: DECAL_UV_SCALE },
+      info: { kind: 'entity', level: e.level, bucket: 'decal', material, uvScale: DECAL_UV_SCALE },
       keyOf: () => `ED|${e.level}|${material}`,
       onAppend: (b, start, end) => {
         if (end <= start) return;
@@ -497,13 +502,50 @@ for (const d of decalResult.decals) {
       color: white,
       bake: true,
       glowFixture,
-      info: { kind: 'static', level, bucket: 'decal', material, opacity: 1, uvScale: DECAL_UV_SCALE },
+      info: { kind: 'static', level, bucket: 'decal', material, uvScale: DECAL_UV_SCALE },
       keyOf: (x, z) => `SD|${level}|${material}|${Math.floor(x / cell)},${Math.floor(z / cell)}`,
     });
   }
   decalQuads++;
 }
 log(`decals: ${decalQuads} placed from ${decalResult.cells} atlas cells on ${decalResult.pages.length} page(s), ${decalResult.skipped} wear/finish guis skipped`);
+
+// Wear (decals.mjs bakeWear): grime, soot, corner dirt, water runs and cracks of every wall as multiply-blended quads
+// (bucket "wear"): no light, no alpha; the texel is the factor the lit wall is multiplied by.
+const wearResult = SKIP_DECALS ? { pages: [], wear: [], total: 0 } : await bakeWear(raw, path.join(OUT, 'textures'), { textureRefs: raw.textureRefs });
+for (const pg of wearResult.pages) {
+  textureMeta.textures[`Wear${pg.index}`] = { studsPerTile: 1, atlas: true, multiply: true, width: pg.width, height: pg.height, maps: { color: `textures/${pg.file}` }, bytes: pg.bytes };
+  materials[`Wear/${pg.index}`] = {
+    material: 'Wear',
+    texture: `Wear${pg.index}`,
+    studsPerTile: 1,
+    roughness: 1,
+    metalness: 0,
+    reflectance: 0,
+    emissive: false,
+    glass: false,
+    wear: true,
+    blend: 'multiply',
+  };
+}
+for (const d of wearResult.wear) {
+  const p = raw.parts[d.part];
+  const rect = d.rect;
+  const crop = d.crop;
+  const level = p.level;
+  const cell = CELL[level] || CELL.default;
+  const material = `Wear/${d.page}`;
+  addPart(p, {
+    generate: (sink) => decalFace(p, d.face, 1e9, 0.01, sink, crop),
+    uvMap: (uv) => [rect[0] + (rect[2] - rect[0]) * ((uv[0] - crop[0]) / (crop[2] - crop[0])), rect[1] + (rect[3] - rect[1]) * ((uv[1] - crop[1]) / (crop[3] - crop[1]))],
+    color: [1, 1, 1],
+    bake: false,
+    glowFixture: 0,
+    info: { kind: 'static', level, bucket: 'wear', material, uvScale: DECAL_UV_SCALE },
+    keyOf: (x, z) => `SW|${level}|${material}|${Math.floor(x / cell)},${Math.floor(z / cell)}`,
+  });
+}
+log(`wear: ${wearResult.wear.length} of ${wearResult.total} wear guis placed on ${wearResult.pages.length} page(s) (${wearResult.pages.map((p) => (p.bytes / 1024).toFixed(0) + ' KB').join(', ')})`);
 
 function buildCreatureBones(rig) {
   const boneOf = new Map();
@@ -631,7 +673,7 @@ const vertexJobs = [];
 const jobOwners = [];
 let bakedVerts = 0;
 for (const b of builderList) {
-  if (b.info.bucket === 'emissive' || b.info.kind === 'creature') continue;
+  if (b.info.bucket === 'emissive' || b.info.bucket === 'wear' || b.info.kind === 'creature') continue;
   for (let start = 0; start < b.count; start += BATCH) {
     const n = Math.min(BATCH, b.count - start);
     const points = new Float32Array(b.sample.slice(start * 3, (start + n) * 3));
@@ -643,6 +685,9 @@ for (const b of builderList) {
     bakedVerts += n;
   }
 }
+
+// Scripted groups (switched as a whole by a scene): probes keep their light apart, per group.
+const scriptedGroups = groups.map((g, i) => (g.kind === 'scripted' ? i : -1)).filter((g) => g > 0);
 
 // Probe grids per level key (within its static bounds, `probeSpacing` apart, a little above floors).
 const probeLevels = Object.keys(levelBounds).filter((k) => k !== 'Exterior');
@@ -672,7 +717,7 @@ for (const level of probeLevels) {
         pts.push(p[0], p[1], p[2]);
         where.push(i);
       }
-  probeGrids[level] = { origin, dims, spacing: sp, valid, rgb: new Float32Array(count * 3) };
+  probeGrids[level] = { origin, dims, spacing: sp, valid, rgb: new Float32Array(count * 3), extra: scriptedGroups.map(() => new Float32Array(count * 3)) };
   for (let s = 0; s < where.length; s += BATCH) {
     const n = Math.min(BATCH, where.length - s);
     const seeds = new Uint32Array(n);
@@ -722,12 +767,24 @@ probeJobs.forEach((_, j) => {
     grid.rgb[cell * 3] = r.rgb[i * 3];
     grid.rgb[cell * 3 + 1] = r.rgb[i * 3 + 1];
     grid.rgb[cell * 3 + 2] = r.rgb[i * 3 + 2];
+    scriptedGroups.forEach((g, k) => {
+      for (let c = 0; c < 3; c++) grid.extra[k][cell * 3 + c] = r.extra[(i * scriptedGroups.length + k) * 3 + c];
+    });
   });
 });
 // probes inside solids take the mean of their valid neighbours (repeated), so trilinear lookups near walls stay lit
 for (const grid of Object.values(probeGrids)) dilateProbes(grid);
 
 function dilateProbes(grid) {
+  const valid = grid.valid;
+  dilateArray(grid, grid.rgb);
+  for (const e of grid.extra) {
+    grid.valid = valid;
+    dilateArray(grid, e);
+  }
+}
+
+function dilateArray(grid, rgbArray) {
   const [nx, ny, nz] = grid.dims;
   for (let pass = 0; pass < 3; pass++) {
     const nextValid = grid.valid.slice();
@@ -747,15 +804,15 @@ function dilateProbes(grid) {
             if (X < 0 || Y < 0 || Z < 0 || X >= nx || Y >= ny || Z >= nz) continue;
             const j = (Y * nz + Z) * nx + X;
             if (!grid.valid[j]) continue;
-            r += grid.rgb[j * 3];
-            g += grid.rgb[j * 3 + 1];
-            b += grid.rgb[j * 3 + 2];
+            r += rgbArray[j * 3];
+            g += rgbArray[j * 3 + 1];
+            b += rgbArray[j * 3 + 2];
             k++;
           }
           if (k) {
-            grid.rgb[i * 3] = r / k;
-            grid.rgb[i * 3 + 1] = g / k;
-            grid.rgb[i * 3 + 2] = b / k;
+            rgbArray[i * 3] = r / k;
+            rgbArray[i * 3 + 1] = g / k;
+            rgbArray[i * 3 + 2] = b / k;
             nextValid[i] = 1;
           }
         }
@@ -851,7 +908,6 @@ for (const b of builderList) {
     level: info.level,
     bucket: info.bucket,
     material: info.material,
-    opacity: info.opacity,
     vertexOffset: vertexCursor,
     vertexCount: n,
     indexOffset: indexCursor,
@@ -860,6 +916,9 @@ for (const b of builderList) {
     aabb: [...lo, ...hi].map((v) => Math.round(v * 1000) / 1000),
   };
   if (info.uvScale) chunk.uvScale = info.uvScale;
+  if (info.bucket === 'transparent') {
+    chunk.alphaOffset = writer.push('alpha', Uint8Array, Uint8Array.from(b.alpha, (a) => Math.round(Math.max(0, Math.min(1, a)) * 255)));
+  }
   if (info.kind === 'entity') chunk.ranges = b.ranges || [];
   if (info.kind === 'creature') {
     chunk.boneOffset = writer.push('bone', Uint8Array, Uint8Array.from(b.bones));
@@ -942,8 +1001,20 @@ for (const [level, grid] of Object.entries(probeGrids)) {
   const bytes = new Uint8Array(count * 3);
   for (let i = 0; i < count * 3; i++) bytes[i] = encodeLightByte(grid.rgb[i]);
   writer.push('probe', Uint8Array, bytes);
-  probes[level] = { origin: grid.origin, dims: grid.dims, spacing: grid.spacing, offset: probeCursor };
+  probes[level] = { origin: grid.origin, dims: grid.dims, spacing: grid.spacing, offset: probeCursor, groups: [] };
   probeCursor += count;
+  // extra grids for the scripted groups that reach this level (base + level[group] x extra)
+  scriptedGroups.forEach((g, k) => {
+    const e = grid.extra[k];
+    let peak = 0;
+    for (let i = 0; i < e.length; i++) if (e[i] > peak) peak = e[i];
+    if (peak < 0.004) return;
+    const eb = new Uint8Array(count * 3);
+    for (let i = 0; i < count * 3; i++) eb[i] = encodeLightByte(e[i]);
+    writer.push('probe', Uint8Array, eb);
+    probes[level].groups.push({ group: g, offset: probeCursor });
+    probeCursor += count;
+  });
 }
 
 fs.mkdirSync(OUT, { recursive: true });

@@ -3,9 +3,10 @@
 // switch, ready pads, terminals).
 //
 // An entity has a pivot (its Roblox model CFrame) and nodes: the root ("") and its moving leaves (a door's leaves, a
-// grate's panel and screws, a trap's jaws). W1's chunks are in their node's space; they are drawn node-batched (one
-// draw call per level x material x bucket for every entity together, see batch.js), so moving a node is four texel
-// writes. A node at its built pose keeps the vertex light baked there; a node moved away from it is lit by the
+// grate's panel and screws, a trap's jaws). W1 batches every entity's parts per level x bucket x material in world
+// space at rest, with one contiguous vertex range per (entity, node); each vertex carries its node's slot in the node
+// table, which holds the node's delta frame `current x inverse(rest)` (identity at rest). So every entity of a level
+// draws in a handful of calls and moving a node is four texel writes. A node at its built pose keeps the vertex light baked there; a node moved away from it is lit by the
 // level's probe grid at its centre. Colliders (boxes in node space) block the player and rays through their node
 // frames; "MonsterPassthrough" ones are flagged so the creature can ignore them.
 //
@@ -28,11 +29,11 @@ const IDENTITY = new THREE.Matrix4();
  * @typedef {Object} EntityNode
  * @property {string} path
  * @property {number} slot node-table slot
- * @property {THREE.Matrix4} restWorld the node's world frame as built
+ * @property {THREE.Matrix4} restWorld the node's world frame as built (data.js entityNodeRest)
  * @property {THREE.Matrix4} restLocal the node relative to the entity's built pivot
  * @property {THREE.Matrix4} local the node relative to the entity pivot now
  * @property {THREE.Matrix4} matrix the node's world frame now
- * @property {THREE.Vector3} centre the node's chunk centre (node space), where its probe light is sampled
+ * @property {THREE.Vector3} centre the node's parts' centre at rest (world), where its probe light is sampled
  * @property {boolean} hidden
  */
 
@@ -67,6 +68,7 @@ export class Entities {
     this.attributeChanged = new Signal();
     let nodeCount = 0;
     for (const e of meta.entities || []) nodeCount += 1 + (e.nodes ? e.nodes.length : 0);
+    this._delta = new THREE.Matrix4();
     this.table = new NodeTable(nodeCount + 64);
     this.world.shared.uNodeTex.value = this.table.texture;
     for (const info of meta.entities || []) this._build(info);
@@ -85,7 +87,7 @@ export class Entities {
       const restLocal = new THREE.Matrix4().multiplyMatrices(restInv, world);
       const node = {
         path,
-        slot: this.table.alloc(world, 1),
+        slot: this.table.alloc(IDENTITY, 1),
         restWorld: world.clone(),
         restLocal,
         local: restLocal.clone(),
@@ -127,38 +129,25 @@ export class Entities {
   }
 
   _buildMeshes() {
-    const chunks = this.world.entityChunks;
-    // node centres from their chunks' bounds (node space)
     const bounds = new Map();
-    for (const c of chunks) {
-      const e = this.byIndex[c.entity];
-      if (!e) continue;
-      const node = e.nodes.get(c.node || '') || e.nodes.get('');
-      const b = bounds.get(node) || new THREE.Box3();
-      const a = c.aabb;
-      b.expandByPoint(_v.set(a[0], a[1], a[2])).expandByPoint(_v.set(a[3], a[4], a[5]));
-      bounds.set(node, b);
+    for (const c of this.world.entityChunks) {
+      const slots = new Float32Array(c.vertexCount);
+      const pos = c.attributes.position.array;
+      for (const r of c.ranges || []) {
+        const e = this.byIndex[r.entity];
+        if (!e) continue;
+        const node = e.nodes.get(r.node || '') || e.nodes.get('');
+        slots.fill(node.slot, r.start, r.start + r.count);
+        // the node's rest-space centre, where its probe light is sampled once it moves
+        let b = bounds.get(node);
+        if (!b) bounds.set(node, (b = new THREE.Box3()));
+        for (let v = r.start; v < r.start + r.count; v++) b.expandByPoint(_v.fromArray(pos, v * 3));
+      }
+      const mesh = this.world.nodeMesh(c, slots, this.table);
+      mesh.name = `entities:${c.level}:${c.material}:${c.bucket}`;
+      this.world._levelGroup(c.level).add(mesh);
     }
     for (const [node, b] of bounds) b.getCenter(node.centre);
-    // one batch per level x material x bucket
-    const perLevel = new Map();
-    for (const c of chunks) {
-      const e = this.byIndex[c.entity];
-      if (!e) continue;
-      if (!perLevel.has(e.level)) perLevel.set(e.level, []);
-      perLevel.get(e.level).push(c);
-    }
-    for (const [level, list] of perLevel) {
-      const meshes = this.world.buildNodeMeshes(list, (c) => {
-        const e = this.byIndex[c.entity];
-        return (e.nodes.get(c.node || '') || e.nodes.get('')).slot;
-      }, this.table);
-      const group = this.world._levelGroup(level);
-      for (const m of meshes) {
-        m.name = `entities:${level}`;
-        group.add(m);
-      }
-    }
     for (const e of this.byId.values()) this._relight(e);
     this.table.flush();
   }
@@ -264,7 +253,9 @@ export class Entities {
 
   _place(e, node) {
     node.matrix.multiplyMatrices(e.pivot, node.local);
-    this.table.setMatrix(node.slot, node.matrix);
+    // the vertices are at their rest pose in world space: draw them through current x inverse(rest)
+    _m.copy(node.restWorld).invert();
+    this.table.setMatrix(node.slot, this._delta.multiplyMatrices(node.matrix, _m));
     node.moved = !matricesClose(node.matrix, node.restWorld);
   }
 
@@ -277,7 +268,8 @@ export class Entities {
     for (const node of e.nodes.values()) {
       const mode = e.hidden || node.hidden ? 0 : node.moved ? 2 : 1;
       if (mode === 2) {
-        _v.copy(node.centre).applyMatrix4(node.matrix);
+        _m.copy(node.restWorld).invert();
+        _v.copy(node.centre).applyMatrix4(_m).applyMatrix4(node.matrix);
         this.world.probeAt(_v, _c);
         this.table.setLight(node.slot, _c.r, _c.g, _c.b, 2);
       } else {

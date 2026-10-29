@@ -12,7 +12,7 @@
 //   chunk.attributes.color      Uint8Array    rgb        normalized sRGB part colour (albedo tint)
 //   chunk.attributes.bakedLight Uint16Array   rgb        normalized: linear baked light / LIGHT_SCALE (x4 in GLSL)
 //   chunk.attributes.flicker    Uint8Array    (g, s)     NOT normalized: flicker group id (0 = steady), share 0..255
-//   chunk.attributes.alpha      Float32Array  a          transparent chunks only: 1 - Transparency
+//   chunk.attributes.alpha      Uint8Array    a          transparent chunks only: 1 - Transparency (normalized)
 //   chunk.index                 Uint16Array              triangle list
 //
 // Each attribute is { array, itemSize, normalized }, so `new THREE.BufferAttribute(a.array, a.itemSize,
@@ -41,6 +41,7 @@ export const STREAM_TYPES = {
   cidx: 'u32', // triangle-delta coded per level (u32 wrap-around)
   probe: 'u8', // sqrt-encoded probe irradiance
   bone: 'u8', // creature chunks: Motor6D bone index per vertex (meta.creature.bones order)
+  alpha: 'u8', // transparent chunks: 1 - Transparency per vertex (normalized)
 };
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -122,7 +123,7 @@ const ARRAY_TYPES = {
  * @property {'static'|'entity'|'creature'} kind
  * @property {EntityRange[]} [ranges] entity chunks: the contiguous vertex range of every (entity, node) in the chunk
  * @property {number} [boneOffset] creature chunks: element offset of the per-vertex bone index in the `bone` stream
- * @property {number} opacity      1 - Transparency (1 for opaque)
+ * @property {number} [alphaOffset] transparent chunks: element offset of their per-vertex alpha in the `alpha` stream
  * @property {number} vertexOffset vertex index into the streams
  * @property {number} vertexCount
  * @property {number} indexOffset  index element offset into the idx stream
@@ -208,6 +209,9 @@ const ARRAY_TYPES = {
  * @property {[number, number, number]} dims    nx, ny, nz
  * @property {number} spacing studs between probes
  * @property {Float32Array} data linear RGB irradiance; probe (x, y, z) is at element ((y * nz + z) * nx + x) * 3
+ *                         (without the scripted groups' light)
+ * @property {{ group: number, data: Float32Array }[]} groups extra irradiance of each scripted flicker group that
+ *                         reaches the level (the pool floodlights, the classroom glow): add level[group] x data
  */
 
 /**
@@ -281,8 +285,8 @@ export function decodeChunk(c, s) {
     bakedLight: { array: bakedLight, itemSize: 3, normalized: true },
     flicker: { array: s.flk.subarray(v0 * 2, (v0 + n) * 2), itemSize: 2, normalized: false },
   };
-  if (c.bucket === 'transparent') {
-    attributes.alpha = { array: new Float32Array(n).fill(c.opacity), itemSize: 1, normalized: false };
+  if (c.alphaOffset !== undefined && s.alpha) {
+    attributes.alpha = { array: s.alpha.subarray(c.alphaOffset, c.alphaOffset + n), itemSize: 1, normalized: true };
   }
   if (c.kind === 'creature' && s.bone) {
     // THREE.SkinnedMesh attributes: one bone per vertex at full weight
@@ -342,18 +346,26 @@ export function decodeWorld(meta, bin) {
     const raw = s.probe.subarray(p.offset * 3, (p.offset + count) * 3);
     const data = new Float32Array(count * 3);
     for (let i = 0; i < count * 3; i++) data[i] = decodeLightByte(raw[i]);
-    probes[level] = { origin: p.origin, dims: p.dims, spacing: p.spacing, data };
+    const groups = (p.groups || []).map((g) => {
+      const rawG = s.probe.subarray(g.offset * 3, (g.offset + count) * 3);
+      const gd = new Float32Array(count * 3);
+      for (let i = 0; i < count * 3; i++) gd[i] = decodeLightByte(rawG[i]);
+      return { group: g.group, data: gd };
+    });
+    probes[level] = { origin: p.origin, dims: p.dims, spacing: p.spacing, data, groups };
   }
   return { meta, chunks, collision, probes };
 }
 
 /**
- * Trilinear probe lookup (linear RGB written into `out`).
+ * Trilinear probe lookup (linear RGB written into `out`). `groupLevels[groupId]` (e.g. the flicker texture's data)
+ * adds the scripted groups' light at their current level; without it only the base light is returned.
  * @param {ProbeGrid} grid
  * @param {number} x @param {number} y @param {number} z
  * @param {number[]} [out]
+ * @param {ArrayLike<number> | null} [groupLevels]
  */
-export function sampleProbe(grid, x, y, z, out = [0, 0, 0]) {
+export function sampleProbe(grid, x, y, z, out = [0, 0, 0], groupLevels = null) {
   const [nx, ny, nz] = grid.dims;
   const fx = Math.min(nx - 1, Math.max(0, (x - grid.origin[0]) / grid.spacing));
   const fy = Math.min(ny - 1, Math.max(0, (y - grid.origin[1]) / grid.spacing));
@@ -377,6 +389,15 @@ export function sampleProbe(grid, x, y, z, out = [0, 0, 0]) {
     out[0] += grid.data[i] * w;
     out[1] += grid.data[i + 1] * w;
     out[2] += grid.data[i + 2] * w;
+    if (groupLevels && grid.groups) {
+      for (const g of grid.groups) {
+        const lv = groupLevels[g.group] ?? 1;
+        if (!lv) continue;
+        out[0] += g.data[i] * w * lv;
+        out[1] += g.data[i + 1] * w * lv;
+        out[2] += g.data[i + 2] * w * lv;
+      }
+    }
   }
   return out;
 }

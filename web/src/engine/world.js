@@ -3,7 +3,7 @@
 //
 //   * Scene. Static chunks arrive split per level x bucket (opaque / transparent / emissive Neon) x material x
 //     120-stud cell, in world space with their baked vertex light; each is one mesh, frustum culled. Entity chunks
-//     are node-batched by Entities; creature chunks are kept for W3 (creatureChunks + buildNodeMeshes).
+//     are node-batched by Entities; the Creature's skinned chunks render through createCreatureModel (W3).
 //   * Level culling. Only the levels in focus are visible: the player's level, the stairwells, both ends of the
 //     stairwell the player stands in, and the exterior from the roof (setFocus /
 //     focusFor).
@@ -17,12 +17,16 @@ import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { sampleProbe } from './data.js';
 import { createWorldMaterial } from './materials.js';
-import { mergeNodeChunks } from './batch.js';
+import { NodeTable } from './batch.js';
 import { toMatrix } from './math.js';
 import { WorldConfig } from './config.js';
 
 const NEON_STRENGTH = 2.4; // Roblox Neon renders well above its colour; the bloom catches it on High
 const STAIRWELLS = 'Stairwells';
+/**
+ * Draw order per bucket: opaque, Neon, wear (multiplied onto the walls), decals (alpha-blended), then glass and water.
+ */
+export const RENDER_ORDER = Object.freeze({ opaque: 0, emissive: 1, wear: 3, decal: 5, transparent: 10 });
 const EXTERIOR = 'Exterior';
 const EXTERIOR_FROM = new Set(['Level5_Roof']);
 
@@ -81,8 +85,10 @@ export class World {
     const image = set && set[kind];
     let tex = null;
     if (image) {
+      // images arrive already flipped (createImageBitmap imageOrientation 'flipY' = three's flipY upload)
       tex = new THREE.Texture(image);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      const atlas = this.meta.textures[id] && this.meta.textures[id].atlas;
+      tex.wrapS = tex.wrapT = atlas ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
       tex.colorSpace = THREE.NoColorSpace;
       tex.anisotropy = this.quality.budget.anisotropy;
       tex.generateMipmaps = true;
@@ -103,8 +109,10 @@ export class World {
   material(key, variant = {}) {
     const info = this.meta.materials[key] || { texture: null, studsPerTile: 8, roughness: 0.8, reflectance: 0 };
     const baked = variant.baked !== false;
-    const transparent = !!variant.transparent;
-    const emissive = !!(variant.emissive || info.emissive);
+    const decal = !!info.decal;
+    const wear = !!info.wear;
+    const transparent = !!variant.transparent && !decal && !wear;
+    const emissive = !!(variant.emissive || info.emissive) && !decal && !wear;
     const nodes = !!variant.nodes;
     const cacheKey = `${key}|${baked}|${transparent}|${emissive}|${nodes}|${variant.nodeTexture ? variant.nodeTexture.id : ''}`;
     let mat = this.materials.get(cacheKey);
@@ -113,8 +121,10 @@ export class World {
     const tex = info.texture;
     mat = createWorldMaterial(this.shared, {
       map: tex ? this._texture(tex, 'color') : null,
-      normalMap: tex && budget.normalMaps ? this._texture(tex, 'normal') : null,
-      roughMap: tex && budget.normalMaps ? this._texture(tex, 'orm') : null,
+      normalMap: tex && !decal && !wear && budget.normalMaps ? this._texture(tex, 'normal') : null,
+      roughMap: tex && !decal && !wear && budget.normalMaps ? this._texture(tex, 'orm') : null,
+      decal: decal ? { lightInfluence: info.lightInfluence ?? 1, brightness: info.brightness ?? 1 } : null,
+      wear,
       studsPerTile: info.studsPerTile || 8,
       roughness: info.roughness ?? 0.8,
       reflectance: (info.reflectance || 0) + (info.metalness || 0) * 0.3,
@@ -126,11 +136,11 @@ export class World {
       nodes,
       nodeTexture: variant.nodeTexture,
       pointLights: budget.pointLights,
-      shadow: budget.flashlightShadow && !emissive && !transparent,
+      shadow: budget.flashlightShadow && !emissive && !transparent && !decal && !wear,
     });
     mat.userData.key = cacheKey;
-    mat.userData.tex = tex;
-    mat.userData.castShadow = !emissive && !transparent;
+    mat.userData.tex = decal || wear ? null : tex;
+    mat.userData.castShadow = !emissive && !transparent && !decal && !wear;
     this.materials.set(cacheKey, mat);
     return mat;
   }
@@ -177,7 +187,7 @@ export class World {
       const mat = this.material(c.material, { emissive: c.bucket === 'emissive', transparent: c.bucket === 'transparent' });
       const mesh = new THREE.Mesh(chunkGeometry(c), mat);
       mesh.matrixAutoUpdate = false;
-      mesh.renderOrder = c.bucket === 'transparent' ? 10 : c.bucket === 'emissive' ? 1 : 0;
+      mesh.renderOrder = RENDER_ORDER[c.bucket] ?? 0;
       mesh.userData.level = c.level;
       group.add(mesh);
     }
@@ -411,32 +421,73 @@ export class World {
   }
 
   /**
-   * Builds node-batched meshes for chunks (W3's creature: one mesh per material, nodes = bones).
-   * @param {any[]} chunks decoded chunks
-   * @param {(chunk: any) => number} slotOf node slot of a chunk in `table`
+   * A node-batched mesh for one decoded chunk: `slots[v]` is vertex v's slot in `table`, whose entry holds the
+   * node's delta frame (current x inverse(rest)) and light. Entity chunks and the creature's skinned chunks use it.
+   * @param {any} chunk decoded chunk
+   * @param {Float32Array} slots per-vertex node slot
    * @param {import('./batch.js').NodeTable} table
-   * @returns {THREE.Mesh[]}
    */
-  buildNodeMeshes(chunks, slotOf, table) {
-    const groups = new Map();
-    for (const c of chunks) {
-      const key = `${c.material}|${c.bucket}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push({ chunk: c, slot: slotOf(c) });
+  nodeMesh(chunk, slots, table) {
+    const g = chunkGeometry(chunk);
+    g.setAttribute('node', new THREE.BufferAttribute(slots, 1));
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6); // nodes move: never frustum-cull on rest bounds
+    const mat = this.material(chunk.material, {
+      nodes: true, nodeTexture: table.texture, emissive: chunk.bucket === 'emissive',
+      transparent: chunk.bucket === 'transparent',
+    });
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.frustumCulled = false;
+    mesh.matrixAutoUpdate = false;
+    mesh.renderOrder = RENDER_ORDER[chunk.bucket] ?? 0;
+    return mesh;
+  }
+
+  /**
+   * The Creature's renderable rig for W3: its skinned chunks (model space at rest, one bone per vertex) drawn
+   * node-batched, one draw call per material. Pose it every frame with setBoneWorld(i, worldMatrix) (bone i is
+   * meta.creature.bones[i], whose `rest` is its model-space CFrame at rest), light it with setLight(probeColor), then
+   * flush(). Add `object` to the scene yourself (it is not level-culled).
+   */
+  createCreatureModel() {
+    const bones = (this.meta.creature && this.meta.creature.bones) || [];
+    const table = new NodeTable(Math.max(1, bones.length));
+    for (let i = 0; i < bones.length; i++) table.alloc(new THREE.Matrix4(), 2);
+    const restInverse = bones.map((b) => toMatrix(b.rest).invert());
+    const object = new THREE.Group();
+    object.name = 'Creature';
+    for (const c of this.creatureChunks) {
+      const skin = c.attributes.skinIndex.array;
+      const slots = new Float32Array(c.vertexCount);
+      for (let v = 0; v < c.vertexCount; v++) slots[v] = skin[v * 4];
+      const lean = { ...c, attributes: { ...c.attributes } };
+      delete lean.attributes.skinIndex;
+      delete lean.attributes.skinWeight;
+      object.add(this.nodeMesh(lean, slots, table));
     }
-    const meshes = [];
-    for (const [key, items] of groups) {
-      const [material, bucket] = key.split('|');
-      const mat = this.material(material, {
-        nodes: true, nodeTexture: table.texture, emissive: bucket === 'emissive', transparent: bucket === 'transparent',
-      });
-      const mesh = new THREE.Mesh(mergeNodeChunks(items), mat);
-      mesh.frustumCulled = false;
-      mesh.matrixAutoUpdate = false;
-      mesh.renderOrder = bucket === 'transparent' ? 10 : 0;
-      meshes.push(mesh);
-    }
-    return meshes;
+    const delta = new THREE.Matrix4();
+    return {
+      object,
+      table,
+      bones,
+      /** Bone i's world frame now (its part's CFrame). */
+      setBoneWorld(i, world) {
+        delta.multiplyMatrices(world, restInverse[i]);
+        table.setMatrix(i, delta);
+      },
+      /** Probe irradiance (THREE.Color) lighting the whole rig. */
+      setLight(color, bone) {
+        if (bone !== undefined) table.setLight(bone, color.r, color.g, color.b, 2);
+        else for (let i = 0; i < bones.length; i++) table.setLight(i, color.r, color.g, color.b, 2);
+      },
+      /** Hides / shows one bone's parts (or all). */
+      setVisible(on, bone) {
+        if (bone !== undefined) table.setMode(bone, on ? 2 : 0);
+        else for (let i = 0; i < bones.length; i++) table.setMode(i, on ? 2 : 0);
+      },
+      flush() {
+        table.flush();
+      },
+    };
   }
 }
 

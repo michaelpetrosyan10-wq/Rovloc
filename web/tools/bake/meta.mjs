@@ -175,7 +175,14 @@ export function buildMeta(raw, r) {
     if (a.entity) continue;
     const at = obj(a.attributes);
     if (at.AnchorKind) {
-      anchors.push({ id: at.AnchorId || a.name, kind: at.AnchorKind, level: at.LevelId || null, room: at.ZoneId || null, cframe: a.cframe, attributes: at, tags: arr(a.tags) });
+      const anchor = { id: at.AnchorId || a.name, kind: at.AnchorKind, level: at.LevelId || null, room: at.ZoneId || null, cframe: a.cframe, attributes: at, tags: arr(a.tags) };
+      // patrol loops (Brain.levelInfo): "<prefix>_WP_<loop>_<NN>", waypoint i leads to i + 1, the last back to the first
+      const wp = at.AnchorKind === 'PatrolWaypoint' ? /_WP_(.+)_(\d+)$/.exec(anchor.id) : null;
+      if (wp) {
+        anchor.loop = wp[1];
+        anchor.order = Number(wp[2]);
+      }
+      anchors.push(anchor);
     } else if (at.DoorId) {
       doors.push({ id: at.DoorId, kind: at.DoorKind, level: at.LevelId, width: at.DoorWidth, height: at.DoorHeight, scriptedId: at.ScriptedId || null, cframe: a.cframe });
     } else if (arr(a.tags).includes('VentNode')) {
@@ -184,6 +191,14 @@ export function buildMeta(raw, r) {
       grateMouths.push({ id: at.GrateId, cframe: a.cframe, attributes: at });
     }
   }
+
+  const patrolLoops = {};
+  for (const a of anchors) {
+    if (!a.loop) continue;
+    const key = `${a.level}|${a.loop}`;
+    (patrolLoops[key] ||= { level: a.level, loop: a.loop, waypoints: [] }).waypoints.push(a);
+  }
+  for (const l of Object.values(patrolLoops)) l.waypoints = l.waypoints.sort((x, y) => x.order - y.order).map((w) => ({ id: w.id, room: w.room, pos: w.cframe.slice(0, 3) }));
 
   // volumes: zones (rooms) and triggers
   const zones = [];
@@ -292,6 +307,7 @@ export function buildMeta(raw, r) {
     probes: r.probes,
     entities,
     anchors,
+    patrolLoops: Object.values(patrolLoops),
     doors,
     layoutDoors,
     triggers,
@@ -305,6 +321,7 @@ export function buildMeta(raw, r) {
     worldConfig: raw.worldConfig,
     windows: raw.windows,
     plan: raw.plan,
+    layouts: raw.layouts,
     creature,
   };
 }

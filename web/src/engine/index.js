@@ -34,6 +34,7 @@ import { Quality } from './quality.js';
 import { Renderer } from './renderer.js';
 import { Save } from './save.js';
 import { Settings } from './settings.js';
+import { Sky } from './sky.js';
 import { STRINGS, formatTime, getString } from './strings.js';
 import { UI } from './ui/ui.js';
 import { Volumetrics } from './volumetrics.js';
@@ -106,7 +107,8 @@ export async function loadAssets(assets, progress = () => {}) {
       const b64 = assets.textures[path];
       if (!b64) continue;
       const blob = new Blob([base64Bytes(b64)], { type: 'image/webp' });
-      jobs.push(createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
+      // flipped at decode: the data's UVs assume three's default flipY upload, which ImageBitmaps ignore
+      jobs.push(createImageBitmap(blob, { imageOrientation: 'flipY', colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
         .then((bmp) => {
           images[id][kind] = bmp;
         })
@@ -166,6 +168,7 @@ export class Engine {
     this.player = new Player(this);
     this.prompts = new Prompts(this);
     this.volumetrics = new Volumetrics(this);
+    this.sky = new Sky(this);
     this.audio.captioned.connect((text, preset) => {
       const p = this.audio.ready ? preset : '';
       this.ui.caption(text, { danger: /Screech|Lunge|Creature|Growl|Vent(Scrape|Breathing)|NeckSnap/.test(p) });
@@ -245,6 +248,7 @@ export class Engine {
     const film = this.lighting.update(realDt, camera.position, this.cameraLevel);
     this._post(film);
     this.volumetrics.update(dt, camera, film, this.world.focus);
+    this.sky.update(camera, this.world.focus, film);
     this._viewport.width = this.renderer.width;
     this._viewport.height = this.renderer.height;
     this.prompts.update(dt, camera, this._viewport);
@@ -349,7 +353,7 @@ export { THREE, GameConfig, CameraConfig, NoiseConfig, InputBindings, WorldConfi
 export { STRINGS, getString, formatTime };
 
 // Building blocks for W3 / W4 (node batching for the creature rig, CFrame helpers, the shared maths and signals).
-export { NodeTable, mergeNodeChunks } from './batch.js';
+export { NodeTable } from './batch.js';
 export { Signal } from './signal.js';
 export { emfIntensity, flickerFactor as torchFlicker, Cones as TorchCones } from './flashlight.js';
 export { proximity as panicProximity } from './panic.js';

@@ -104,6 +104,33 @@ export class UI {
     this.settings.changed.connect((key) => {
       if (key === 'Captions' && !this.settings.get('Captions')) this.clearCaptions();
     });
+    this.input.padPressed.connect((button) => this._padMenu(button));
+  }
+
+  /** Gamepad menu navigation: d-pad up / down moves, left / right adjusts, A activates, B closes. */
+  _padMenu(button) {
+    if (!this.menuOpen) return;
+    const items = [...this.menuEl.querySelectorAll('.rv-btn, input[type=range], .rv-toggle, select')];
+    if (!items.length) return;
+    let i = items.indexOf(document.activeElement);
+    const focus = (k) => {
+      const el = items[(k + items.length) % items.length];
+      if (!el.tabIndex || el.tabIndex < 0) el.tabIndex = 0;
+      el.focus();
+      el.scrollIntoView({ block: 'nearest' });
+    };
+    const cur = items[i];
+    if (button === 12) focus(i - 1);
+    else if (button === 13) focus(i + 1);
+    else if ((button === 14 || button === 15) && cur && cur.type === 'range') {
+      cur.value = String(Number(cur.value) + (button === 15 ? 1 : -1) * Number(cur.step));
+      cur.dispatchEvent(new Event('input'));
+    } else if ((button === 14 || button === 15) && cur && cur.tagName === 'SELECT') {
+      cur.selectedIndex = Math.max(0, Math.min(cur.options.length - 1, cur.selectedIndex + (button === 15 ? 1 : -1)));
+      cur.dispatchEvent(new Event('change'));
+    } else if (button === 0 && cur) cur.click();
+    else if (button === 1) this.closeMenu();
+    if (i < 0 && (button === 12 || button === 13)) focus(0);
   }
 
   // ------------------------------------------------------------------ primitives

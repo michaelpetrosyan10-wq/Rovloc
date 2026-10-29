@@ -48,6 +48,8 @@ export class Input {
     this.deviceChanged = new Signal();
     /** @type {Signal<[string, string]>} (new, old) */
     this.contextChanged = new Signal();
+    /** @type {Signal<[number]>} a gamepad button went down (standard mapping index; menus navigate with it) */
+    this.padPressed = new Signal();
     /** @type {Map<string, Signal<[Phase]>>} */
     this.signals = new Map();
     /** @type {Map<string, Set<string>>} action -> held input ids */
@@ -385,6 +387,7 @@ export class Input {
       if (down !== was) {
         this.gamepadButtons[i] = down;
         any = true;
+        if (down) this.padPressed.fire(i);
         for (const [action, b] of Object.entries(InputBindings)) {
           if (b.gamepad.includes(i)) this.inject(action, `pad:${i}`, down);
         }

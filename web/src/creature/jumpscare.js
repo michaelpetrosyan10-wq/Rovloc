@@ -126,6 +126,8 @@ export function faceOffset(rootCFrame, faceWorld, poseMode) {
  * @property {(cue: {kind: string, startAt: number, endsAt: number, face: THREE.Vector3}) => void} victimCue
  * @property {(kind: string, now: number) => void} abortCue
  * @property {(name: string, opts: any) => any} play audio: returns a voice with stop(fade), or null
+ * @property {(kind: string) => boolean} allowed the game lets this catch start
+ * @property {(kind: string) => (Outcome|null)} outcome the game's outcome rule (null: outcomeFor)
  */
 
 export class JumpscareHandler {
@@ -163,7 +165,7 @@ export class JumpscareHandler {
       controlLock: victimRoot ? d.controlLock(player) : 'None',
       distance,
     });
-    if (!ok || !creature || !victimRoot) return false;
+    if (!ok || !creature || !victimRoot || !d.allowed(kind)) return false;
     this._begin(creature.body, player, victimRoot, kind);
     return true;
   }
@@ -201,7 +203,7 @@ export class JumpscareHandler {
       return;
     }
     if (d.now() >= sequence.schedule.resolveAt) {
-      const outcome = outcomeFor(state, d.downedCount(sequence.victim));
+      const outcome = d.outcome(sequence.kind) || outcomeFor(state, d.downedCount(sequence.victim));
       if (!outcome) this._settle(sequence, 'Aborted', 'NotPlaying');
       else this._settle(sequence, outcome, null);
     }

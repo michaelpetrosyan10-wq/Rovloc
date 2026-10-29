@@ -258,9 +258,10 @@ export function directEstimate(lights, grid, p, n) {
  * @param {number[] | null} n unit normal, or null for a probe
  * @param {number} seed per-point seed for the jitter
  * @param {Float64Array} groupAcc scratch [groups] accumulators (luminance per group)
+ * @param {Float64Array | null} [groupRgb] scratch [groups * 3]: RGB per group (probes split scripted groups out)
  * @returns {{ r: number, g: number, b: number }}
  */
-export function shadePoint(ctx, p, n, seed, groupAcc) {
+export function shadePoint(ctx, p, n, seed, groupAcc, groupRgb = null) {
   const { lights, grid, tracer, settings } = ctx;
   let r = 0;
   let g = 0;
@@ -307,6 +308,11 @@ export function shadePoint(ctx, p, n, seed, groupAcc) {
     g += L.color[1] * w;
     b += L.color[2] * w;
     if (L.group && groupAcc) groupAcc[L.group] += w * (L.color[0] + L.color[1] + L.color[2]);
+    if (L.group && groupRgb) {
+      groupRgb[L.group * 3] += L.color[0] * w;
+      groupRgb[L.group * 3 + 1] += L.color[1] * w;
+      groupRgb[L.group * 3 + 2] += L.color[2] * w;
+    }
   }
   // ambient fills: indoor ambient everywhere (occluded by AO), outdoor ambient + moon where the sky is open
   const occ = occlusion(ctx, p, n, seed);

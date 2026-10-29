@@ -1,9 +1,10 @@
 // Builds the deliverable: ONE self-contained file, web/dist/Rovloc.html.
 //
-//   node tools/build.mjs [--sandbox] [--no-minify] [--out <file>]
+//   node tools/build.mjs [--sandbox | --entry <game module>] [--no-minify] [--out <file>]
 //
 // * esbuild bundles src/main.js (three, three-mesh-bvh and every module) into one IIFE. "@rovloc/game" resolves to
-//   src/game/index.js (W4's game) or, while that does not exist or with --sandbox, to the engine sandbox.
+//   src/game/index.js (W4's game; --entry picks another module) or, while that does not exist or with --sandbox, to
+//   the engine sandbox.
 // * The world data is inlined: build/world.json and build/world.bin gzipped (level 9) and base64'd, every
 //   build/textures/*.webp base64'd, each in its own non-executed <script type="application/x-rovloc"> tag that the
 //   engine reads with textContent and inflates with DecompressionStream at boot.
@@ -39,7 +40,8 @@ if (!fs.existsSync(worldJson) || !fs.existsSync(worldBin)) {
 }
 
 // ---------------------------------------------------------------------------------------------------- bundle
-const gameEntry = path.join(web, 'src/game/index.js');
+const entryArg = argv.indexOf('--entry');
+const gameEntry = entryArg >= 0 ? path.resolve(argv[entryArg + 1]) : path.join(web, 'src/game/index.js');
 const sandboxEntry = path.join(web, 'src/engine/sandbox.js');
 const useGame = !sandbox && fs.existsSync(gameEntry);
 const optionalModules = {

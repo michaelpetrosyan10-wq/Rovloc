@@ -8,11 +8,17 @@
 // 2. The engine walk (a sandbox build of the same engine, build/cache/check-sandbox.html, so the game's own flow
 //    cannot hold the player): spawn in the Level 1 corridor; walking W moves the body along the floor (it neither
 //    falls through nor floats), a wall stops it, Shift sprints and drains stamina, C crouches, F toggles the torch,
-//    a held E fills a prompt and triggers it, footsteps emit locomotion noise, and a Level 2 spawn renders too.
-// 3. Performance: fps and main-thread milliseconds per frame with the CPU throttled 4x
-//    (Emulation.setCPUThrottlingRate). Headless Chromium rasterizes WebGL in software (SwiftShader), so the fps
-//    reported is a floor, far below a real GPU; the CPU ms per frame is the figure that maps to a Chromebook's CPU.
-// 4. Screenshots of the main views (--shots <dir>, default build/cache/shots).
+//    a held E fills a prompt and triggers it once, walking emits locomotion noise, an airlock door's leaves swung
+//    shut through the entity API block rays (and open do not), decals and the creature rig build, the audio engine
+//    runs and every one of the 101 SynthPresets recipes renders non-silent, finite audio offline.
+// 3. Performance with the CPU throttled 4x (Emulation.setCPUThrottlingRate) per quality tier: main-thread ms per frame
+//    (measured on a tiny canvas so the software rasterizer's backlog cannot stall it: the figure that carries over to
+//    a Chromebook CPU) and the fps headless Chromium reaches at 1280x720. Headless WebGL is SwiftShader (CPU
+//    rasterization), so that fps is a floor far below any real GPU.
+// 4. Screenshots of the main views (--shots <dir>, default build/cache/shots), each asserted non-black.
+//
+// The deliverable runs W4's game when src/game/index.js exists: its start(engine) must resolve once its first screen
+// is up (main.js sets window.__rovloc.ready then), and the world must be drawn behind it for the non-black test.
 // Exit code 1 on any failure.
 
 import { execFileSync } from 'node:child_process';
@@ -186,6 +192,31 @@ async function main() {
   await page.keyboard.up('KeyE');
   const prompted = await page.evaluate(() => window.__prompt);
   report(triggered && prompted === 1, 'holding E fills a prompt ring and triggers it once', `${prompted} trigger(s)`);
+  // entities: an airlock door's leaves swung shut through the node table block rays, swung open they do not
+  const door = await page.evaluate(() => {
+    const e = window.__rovloc.engine;
+    const T = e.THREE;
+    const d = e.entities.list('AirlockDoor').find((x) => x.level === 'Level1_Hallways');
+    const p = new T.Vector3().setFromMatrixPosition(d.pivot);
+    const a = new T.Vector3(p.x - 3, p.y + 5, p.z - 2);
+    const b = new T.Vector3(p.x + 3, p.y + 5, p.z - 2);
+    const pose = (suffix) => {
+      for (const leaf of ['LeftLeaf', 'RightLeaf']) e.entities.setNodePivot(d.id, leaf, e.entities.attachmentWorld(d.id, leaf + suffix));
+    };
+    pose('Rest');
+    const shut = !e.world.lineClear(a, b);
+    pose('Open');
+    const open = e.world.lineClear(a, b);
+    const decals = [];
+    e.world.scene.traverse((o) => {
+      if (o.isMesh && o.material.defines && 'DECAL' in o.material.defines) decals.push(o);
+    });
+    const creature = e.world.createCreatureModel();
+    return { id: d.id, shut, open, decals: decals.length, creatureMeshes: creature.object.children.length, bones: creature.bones.length };
+  });
+  report(door.shut && door.open, 'entity nodes move: a shut airlock door blocks rays, an open one does not', JSON.stringify(door));
+  report(door.decals > 0 && door.creatureMeshes > 0 && door.bones > 0, 'decals and the creature rig build',
+    `${door.decals} decal meshes, creature ${door.creatureMeshes} meshes / ${door.bones} bones`);
   const audio = await page.evaluate(() => {
     const a = window.__rovloc.engine.audio;
     return { ready: a.ready, state: a.ctx && a.ctx.state, voices: a.voices.length };
