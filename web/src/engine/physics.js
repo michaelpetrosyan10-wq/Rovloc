@@ -198,12 +198,15 @@ export class CharacterBody {
       const dy = _seg.start.y - before.y;
       const dz = _seg.start.z - before.z;
       if (dx * dx + dy * dy + dz * dz < 1e-10) return;
-      // the capsule only blocks sideways and from above; the floor probe owns standing
+      // a walker's capsule only blocks sideways and from above (the floor probe owns standing); a body a driver moves
+      // without gravity (swimming) has no floor probe, so floors push it up too: a swimmer who hit the water fast
+      // used to sink straight through the pool's floor slab into the gap above the gym
+      const lift = this.shape === 'Ball' || dy < 0 || !this.gravity;
       this.position.x += dx;
       this.position.z += dz;
-      if (this.shape === 'Ball' || dy < 0) this.position.y += dy;
+      if (lift) this.position.y += dy;
       this.lastPush.x += dx;
-      this.lastPush.y += this.shape === 'Ball' || dy < 0 ? dy : 0;
+      this.lastPush.y += lift ? dy : 0;
       this.lastPush.z += dz;
     }
   }

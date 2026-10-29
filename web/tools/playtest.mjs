@@ -336,9 +336,12 @@ function pageLib() {
         }
         pt.watchMs = 0;
         pt.parts = {};
+        const heap0 = performance.memory ? performance.memory.usedJSHeapSize : 0;
         const t0 = performance.now();
         loop._run(1 / 30, 1 / 30);
         const ms = performance.now() - t0 - pt.watchMs;
+        // the heap shrinking by megabytes inside the frame: a garbage collection ran in it
+        const gc = !!performance.memory && performance.memory.usedJSHeapSize < heap0 - 4e6;
         const s = pt.sim;
         s.n++;
         s.total += ms;
@@ -349,8 +352,8 @@ function pageLib() {
           const top = Object.entries(pt.parts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${r1(v)}`);
           // a frame the game's own code made long (the parts sum), not a garbage collection or the harness
           const own = Object.values(pt.parts).reduce((a, b) => a + b, 0);
-          if (own > 50 && pt.gameSpikes.length < 20) pt.gameSpikes.push({ ms: r1(own), level: g.level, t: r1(g.env.now()), top });
-          if (s.worst.length < 12) s.worst.push({ ms: r1(ms), level: g.level, phase: g.phase, ms2: g.env.moveState(), t: r1(g.env.now()), top });
+          if (own > 50 && !gc && pt.gameSpikes.length < 20) pt.gameSpikes.push({ ms: r1(own), level: g.level, t: r1(g.env.now()), top });
+          if (s.worst.length < 12) s.worst.push({ ms: r1(ms), level: g.level, phase: g.phase, ms2: g.env.moveState(), t: r1(g.env.now()), top, gc });
         }
         out.ticks++;
         if (opts.until && pt.until(opts.until)) {
@@ -1816,7 +1819,10 @@ async function phaseTouch() {
   const mv = await D.G((g) => g.env.moveVector());
   check('touch: the thumbstick walks the player and lets go on release', moved > 4 && mv.x === 0 && mv.y === 0, { moved, mv });
   // into a run (the natural route was played on the keyboard): the run's context buttons, a locker's LEAVE
-  await D.G((g, pt) => pt.dev.deploy());
+  await D.G((g, pt) => {
+    pt.dev.deploy(); // not awaited: its fades resolve on frames, and the loop only runs when stepped
+    return true;
+  });
   await D.run(14, { until: { level: 'Level0_Basement' } });
   await D.run(2);
   await layout('in-run (on foot)');
