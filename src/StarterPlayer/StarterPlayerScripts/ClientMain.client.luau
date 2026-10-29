@@ -175,6 +175,18 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "DownedController",
+		load = function(): any
+			return require(Match.DownedController)
+		end,
+	},
+	{
+		name = "SpectatorController",
+		load = function(): any
+			return require(Match.SpectatorController)
+		end,
+	},
+	{
 		name = "LevelScenesController",
 		load = function(): any
 			return require(Gameplay.LevelScenesController)

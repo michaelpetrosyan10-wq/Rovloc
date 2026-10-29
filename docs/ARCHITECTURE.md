@@ -271,14 +271,16 @@ Rovloc/
     │       └── Match/
     │           ├── CheckpointAirlockService.luau [P6] Stairwell airlocks: 10 Hz checkpoint volume, 20s straggler timer,
     │           │                                 seal via DoorService, left-behind spectators, Advance, 50% HP respawn
+    │           ├── DownedReviveService.luau [P8] Revive anchor + prompt on Downed participants (4 s InteractionService
+    │           │                                 channel, Alive teammates only), cancels, Revive at 50%, notices
+    │           ├── SpectatorService.luau   [P8] Only writer of SpectateReason / SpectateTargetUserId: eliminated,
+    │           │                                 late joiners and over-capacity players, target ring, SpectateCycle
     │           └── MatchAndDataService/
     │               ├── init.luau           [P8] Match policy over RunLifecycleService + single RunOutcomeEvaluator
     │               ├── StoreBackend.luau   [P8] DataStore backend + Ephemeral Studio fallback + guest mode
     │               ├── PlayerDataStore.luau [P8] Session lock, serialized save queue, idempotent rewards, migrations
     │               ├── LobbyService.luau   [P8] Ready-up, difficulty vote, countdown, squad cap
     │               ├── PerkShopService.luau [P8] Credit spend → PerkStock, loadout equip
-    │               ├── DownedReviveService.luau [P8] 4s teammate revive prompt (server-timed channel)
-    │               ├── SpectatorService.luau [P8] Late joiners + eliminated players, target cycling
     │               ├── MatchResetService.luau [P8] Results → Resetting → Lobby; Play Again votes
     │               └── TelemetryService.luau [P8] AnalyticsService funnels, economy, death causes
     │
@@ -345,8 +347,10 @@ Rovloc/
                 └── Match/
                     ├── AirlockController.luau      [P6] Straggler countdown banner (inside / outside / sealing)
                     ├── LobbyController.luau        [P8] Ready-up, difficulty vote, perk shop UI
-                    ├── DownedController.luau       [P8] Downed crawl HUD + self-revive
-                    ├── SpectatorController.luau    [P8] Q / E teammate cycling through their first-person view
+                    ├── DownedController.luau       [P8] Downed HUD (bleedout ring, revive status, syringe button,
+                    │                                   vignette, heartbeat, desaturation), teammates' downed markers
+                    ├── SpectatorController.luau    [P8] Through the target's eyes ("Spectating" override, LookBroadcast
+                    │                                   look, their torch from inside), cuts, Q / E cycling, HUD
                     ├── ParachuteController.luau    [P8] Leap, ripcord, lookback camera
                     └── EscapeSummaryController.luau [P8] ESCAPED / WIPED summary + Play Again
 ```
@@ -619,6 +623,30 @@ the Creature to the water a few seconds into each pool session (`Alert`, once, 4
 floodlight switch (one use per run: the nine lamps lit for the run, a held swimmer released, otherwise a Creature in the
 natatorium stunned) and plays water beats out of sight.
 
+**Downed, revive and spectating (P8).** A Downed participant's root carries a `ReviveAnchor` attachment (tagged
+`Interactable`, `OwnerUserId` = the victim, lowered to where the crawling body lies) with one `Revive` prompt that
+`DownedReviveService` serves through `InteractionService`: audience `Others`, a 4 s server-timed hold
+(`GameConfig.ReviveHoldSeconds`), one reviver at a time, only an Alive participant with no control lock, never on a
+victim being caught (`Jumpscare` / `Drag` / `Cutscene`; a victim still in a bear trap can be revived). A 10 Hz pass
+re-checks every running hold and cancels it the moment it fails (InteractionService already covers range and the
+reviver's own life state). Completion is `LifeStateService.Revive(victim, 0.5)` + `RunStats Revives`; leaving Downed
+(revived, executed, bled out, the run ending, leaving) removes the anchor with that reason. Downs and deaths of Downed
+teammates are announced to the squad, and coming back up (teammate or syringe) gasps. On the client,
+`DownedController` claims the HUD's downed block and draws the bleedout ring, the revive status, the syringe button
+(the `Syringe` action sends `UseSyringe` SelfRevive while Downed, Stamina while Alive), the blood vignette and
+heartbeat (panic floor) and the draining colour, plus subtle through-wall markers on downed teammates; Revive prompts
+are hidden on clients that are not Alive. `SpectatorService` is the only writer of `SpectateReason` /
+`SpectateTargetUserId`: participants out of play (`Dead`, or `Spectating` after an airlock left them behind) are
+`Eliminated` until a checkpoint brings them back; players present at `BeginRun` but not deployed are `OverCapacity`
+(squad full) or `LateJoin`, and so are players joining during `Deploying` / `InRun`. Non-participants are made
+`Spectating`, hold no body for the rest of the run (despawned now or the moment one appears; a spawn in flight is never
+cancelled) and join the next run from the lobby: the airlocks only bring participants back. Targets are playing
+participants around the run's ring (next after me; a lost target hands over to the next one; `SpectateCycle` ±1
+wraps; nobody playing → none). `SpectatorController` puts the camera in the target's eyes through the `Spectating`
+override (their head + their `LookBroadcast` look, smoothed), hides their head (`SetBodySubject`), lights their torch
+from inside (`RemoteFlashlightRenderer.SetFocus`), cuts through black on switches and holds on the body for 2.5 s after
+a death.
+
 **Dev runs.** Any state-changing dev command during a run sets `ReplicatedStorage.DevRun = true`. `MatchAndDataService`
 (P8) must not award credits, escapes or BestTime for a run with `DevRun`.
 
@@ -640,7 +668,7 @@ is treated as an elimination, never a respawn.
 
 | Owner | Attributes |
 | --- | --- |
-| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `SpectateReason` |
+| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `SpectateReason` + `SpectateTargetUserId` |
 | `Creature` | `MonsterState` · `StateSince` · `PoseMode` · `TargetUserId` · `InVent` · `VentSegmentId` · `Hidden` · `GrabbedUserId` |
 | `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` |
 | `VentGrate` | `GrateId` · `GrateState` (Closed / Unscrewing / Open / Kicked / Locked) · `Lockable` · `CriticalPath` · `NodeId` |

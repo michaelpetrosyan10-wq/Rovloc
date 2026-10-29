@@ -145,6 +145,25 @@ local STRINGS: { [string]: string } = {
 	["Hud.ClimbOut.Gamepad"] = "Swim into the edge or press A to climb out.",
 	["Hud.ClimbOut.Touch"] = "Swim into the edge or tap JUMP to climb out.",
 
+	-- Downed and revive
+	["Downed.Title"] = "YOU'RE DOWN",
+	["Downed.TeammateCanRevive"] = "A teammate can revive you. Hold on.",
+	["Downed.NoTeammates"] = "No one is left to revive you.",
+	["Downed.BeingRevived"] = "%s is reviving you...",
+	["Downed.Marker"] = "DOWN",
+	["Downed.MarkerReviving"] = "REVIVING",
+	["Downed.TeammateDown"] = "%s is down! Get to them before they bleed out.",
+	["Downed.TeammateLost"] = "%s didn't make it.",
+	["Revive.YouRevived"] = "You pulled %s back to their feet.",
+	["Revive.RevivedBy"] = "%s pulled you back to your feet.",
+
+	-- Spectating
+	["Spectate.Eliminated"] = "You're dead. Watch over your squad.",
+	["Spectate.LeftBehind"] = "The doors sealed without you. Watch over your squad.",
+	["Spectate.Respawn"] = "If they make it to the next stairwell, you'll be back on your feet.",
+	["Spectate.LateJoin"] = "A run is already underway. Watch the squad; you'll join the next one.",
+	["Spectate.TargetDowned"] = "DOWN",
+
 	-- Checkpoints
 	["Checkpoint.Reached"] = "Checkpoint reached. +%d credits",
 	["Checkpoint.Respawned"] = "You stagger back to your feet.",

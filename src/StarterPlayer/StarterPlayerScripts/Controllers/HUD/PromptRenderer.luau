@@ -13,8 +13,11 @@
 --     (keyboard key, gamepad button, or a tap mark on touch) inside a hold ring, the object text above the action.
 --     Rows fade in and out; the ring fills while holding and drains when released. On touch (and with a free
 --     cursor) the row itself is the button: press = InputHoldBegin, release = InputHoldEnd.
+--   * Kinds. SetKindHidden(kind, true) disables every prompt of that PromptKind locally the same way, while it holds
+--     (P8: a Revive prompt shows to Alive players only, so a downed or dead teammate never sees one).
 --   * Teammates. While another player channels an Interactable host (ChannelActor / ChannelStartedAt /
---     ChannelDuration, server time) a quiet ring with their name shows their progress on it.
+--     ChannelDuration, server time) a quiet ring with their name shows their progress on it; never on a host inside
+--     my own character (a teammate reviving me: my own HUD shows that, and the ring would sit on my camera).
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -42,6 +45,7 @@ export type Context = {
 export type PromptRenderer = {
 	Update: (self: PromptRenderer, dt: number, hudAlpha: number) -> (),
 	RefreshGlyphs: (self: PromptRenderer) -> (),
+	SetKindHidden: (self: PromptRenderer, kind: string, hidden: boolean) -> (),
 	Destroy: (self: PromptRenderer) -> (),
 }
 
@@ -242,6 +246,7 @@ function PromptRenderer.mount(ctx: Context): PromptRenderer
 	local rowsByPrompt: { [ProximityPrompt]: Row } = {}
 	local channels: { [Instance]: Channel } = {}
 	local serviceConnections: { RBXScriptConnection } = {}
+	local hiddenKinds: { [string]: boolean } = {}
 	local visible = true
 	local scale = 1
 
@@ -256,7 +261,9 @@ function PromptRenderer.mount(ctx: Context): PromptRenderer
 
 	local function applyAudience(record: Record)
 		local prompt = record.prompt
+		local kind = prompt:GetAttribute(W.PromptKind)
 		local allowed = PromptRenderer.audienceAllows(prompt:GetAttribute(W.Audience), ownerOf(prompt), myUserId)
+			and not (type(kind) == "string" and hiddenKinds[kind] == true)
 		if allowed then
 			if record.suppressed then
 				record.suppressed = false
@@ -618,7 +625,9 @@ function PromptRenderer.mount(ctx: Context): PromptRenderer
 		local actor = host:GetAttribute(W.ChannelActor)
 		local isOther = type(actor) == "number" and actor ~= 0 and actor ~= myUserId
 		local duration = Attributes.getNumber(host, W.ChannelDuration, 0)
-		if isOther and duration > 0 then
+		local character = if localPlayer then localPlayer.Character else nil
+		local onMe = character ~= nil and host:IsDescendantOf(character)
+		if isOther and duration > 0 and not onMe then
 			local channel = channelFor(host)
 			if channel then
 				channel.active = true
@@ -846,6 +855,22 @@ function PromptRenderer.mount(ctx: Context): PromptRenderer
 					channel.gui:Destroy()
 					channels[host] = nil
 				end
+			end
+		end
+	end
+
+	function handle.SetKindHidden(_self: PromptRenderer, kind: string, hidden: boolean)
+		if (hiddenKinds[kind] == true) == hidden then
+			return
+		end
+		if hidden then
+			hiddenKinds[kind] = true
+		else
+			hiddenKinds[kind] = nil
+		end
+		for _, record in records do
+			if record.prompt:GetAttribute(W.PromptKind) == kind then
+				applyAudience(record)
 			end
 		end
 	end

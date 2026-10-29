@@ -61,6 +61,9 @@ local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIS
 
 local Levels = require(ServerScriptService.Services.Levels)
 
+local DownedReviveService = require(ServerScriptService.Services.Match.DownedReviveService)
+local SpectatorService = require(ServerScriptService.Services.Match.SpectatorService)
+
 --------------------------------------------------------------------------------
 -- Place-settings audit
 --------------------------------------------------------------------------------
@@ -174,6 +177,11 @@ end
 --                            Alert, LockerHidingService's checks), the Level 4 pool (the Creature called to the water,
 --                            the floodlight switch, FloodedPoolService.ReleaseGrab); EndRun (early, in reverse) lets the
 --                            Creature go.
+--   DownedReviveService      Match layer: the teammate Revive prompt on Downed participants (InteractionService
+--                            channel), LifeStateService.Revive, RunStats Revives, down / lost / revived notices.
+--   SpectatorService         Match layer: SpectateReason / SpectateTargetUserId for eliminated participants, late
+--                            joiners and over-capacity players (LifeStateService.SetSpectating, no body mid-run), the
+--                            SpectateCycle remote; BeginRun after LifeStateService made the participants Alive.
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
 --   DevToolsService          Dev commands and the Studio auto dev-run; it calls everything above.
 --
@@ -333,6 +341,21 @@ local SERVICES: { Types.Service } = {
 		Start = Levels.Start,
 		BeginRun = Levels.BeginRun,
 		EndRun = Levels.EndRun,
+	},
+	{
+		Name = DownedReviveService.Name,
+		Init = DownedReviveService.Init,
+		Start = DownedReviveService.Start,
+		BeginRun = DownedReviveService.BeginRun,
+		EndRun = DownedReviveService.EndRun,
+		OnPlayerRemoving = DownedReviveService.OnPlayerRemoving,
+	},
+	{
+		Name = SpectatorService.Name,
+		Init = SpectatorService.Init,
+		BeginRun = SpectatorService.BeginRun,
+		EndRun = SpectatorService.EndRun,
+		OnPlayerRemoving = SpectatorService.OnPlayerRemoving,
 	},
 	{ Name = RunLifecycleService.Name, Init = RunLifecycleService.Init, Start = RunLifecycleService.Start },
 	{

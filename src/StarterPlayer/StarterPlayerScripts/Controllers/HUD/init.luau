@@ -13,7 +13,8 @@
 --     small line at the top (dimmer during a run).
 --   * Downed. While LifeState is Downed: a blood vignette beating faster as the bleedout runs out, Hud.Downed, the
 --     time left (BleedoutEndsAt, server time) and the bleedout bar, and Hud.SelfRevive with the syringe glyph when a
---     charge is left.
+--     charge is left. A later phase that draws the whole downed state itself claims it (ClaimDowned; P8's
+--     DownedController), and this block then stays hidden.
 --   * Owns StatusBars, PromptRenderer, MobileControls, Captions and SettingsMenu, drives all of them from one
 --     PreRender step, and fades the lot out and back in through SetVisible (cutscenes).
 
@@ -147,6 +148,8 @@ type Screens = {
 local screens: Screens? = nil
 local downedAlpha = 0
 local bannerAlpha = 0
+local downedClaims: { [string]: boolean } = {}
+local hiddenPromptKinds: { [string]: { [string]: boolean } } = {} -- kind -> tokens hiding it
 
 --------------------------------------------------------------------------------
 -- Pure rules (specced)
@@ -490,7 +493,9 @@ end
 
 local function updateDowned(built: Screens, dt: number)
 	local player = localPlayer
-	local downedNow = player ~= nil and Attributes.getString(player, P.LifeState, "Lobby") == "Downed"
+	local downedNow = player ~= nil
+		and next(downedClaims) == nil
+		and Attributes.getString(player, P.LifeState, "Lobby") == "Downed"
 	downedAlpha = MathUtil.approach(
 		downedAlpha,
 		if downedNow then 1 else 0,
@@ -626,7 +631,11 @@ local function mount(gui: Instance)
 			return SettingsController.GetBool("Captions")
 		end,
 	})
-	promptRenderer = PromptRenderer.mount({ playerGui = gui, scale = currentScale, device = deviceName })
+	local renderer = PromptRenderer.mount({ playerGui = gui, scale = currentScale, device = deviceName })
+	promptRenderer = renderer
+	for kind, tokens in hiddenPromptKinds do
+		renderer:SetKindHidden(kind, next(tokens) ~= nil)
+	end
 	mobileControls = MobileControls.mount({ root = built.root, playerGui = gui, scale = currentScale })
 	settingsMenu = SettingsMenu.mount({ playerGui = gui, scale = currentScale })
 
@@ -681,6 +690,35 @@ end
 
 function HUD.IsVisible(): boolean
 	return visibleTarget
+end
+
+-- Hides every prompt of PromptKind `kind` on this client while any token holds it (P8: Revive prompts show to Alive
+-- players only), without touching other prompts.
+function HUD.SetPromptKindHidden(kind: string, token: string, hidden: boolean)
+	local tokens = hiddenPromptKinds[kind]
+	if not tokens then
+		tokens = {}
+		hiddenPromptKinds[kind] = tokens
+	end
+	if hidden then
+		tokens[token] = true
+	else
+		tokens[token] = nil
+	end
+	local prompts = promptRenderer
+	if prompts then
+		prompts:SetKindHidden(kind, next(tokens) ~= nil)
+	end
+end
+
+-- While any token claims it, the built-in downed block (vignette, message, timer, syringe line) stays hidden: the
+-- claimant draws the downed state itself (P8 DownedController).
+function HUD.ClaimDowned(token: string, claimed: boolean)
+	if claimed then
+		downedClaims[token] = true
+	else
+		downedClaims[token] = nil
+	end
 end
 
 -- A short message top-centre for `seconds` (default: by length).

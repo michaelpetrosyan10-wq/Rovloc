@@ -14,6 +14,11 @@
 -- same rules as the local light (FirstPersonController.FlashlightLevel): their Battery meter dims and warms it below
 -- 15 %, and EMF interference at their head (FirstPersonController.EmfIntensityAt with their ZoneId) makes it
 -- flicker, on server time, so everyone sees the same flicker.
+--
+-- Focus (P8 spectating). SetFocus(player, view) makes one teammate's torch the one seen from inside their eyes: it
+-- always has a beam (outside the budget cap), placed at view() (the spectator camera) plus the torch's look-space
+-- offset, and lit as the whole dual cone the holder sees (FirstPersonController.BeamCones: the inner cone too, shadowed
+-- when the budget allows shadows). SetFocus(nil) returns it to an ordinary outer-cone beam.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -36,7 +41,9 @@ export type Candidate = { userId: number, distance: number }
 
 type Look = { yaw: number, pitch: number, targetYaw: number, targetPitch: number }
 
-type Beam = { part: Part, light: SpotLight, player: Player? }
+type Beam = { part: Part, light: SpotLight, inner: SpotLight, player: Player?, focused: boolean }
+
+type Focus = { player: Player, view: () -> CFrame }
 
 local RemoteFlashlightRenderer = {}
 
@@ -60,6 +67,8 @@ local beams: { Beam } = {}
 local assigned: { [Player]: Beam } = {}
 local rankClock = math.huge
 local cap = 0
+local shadows = false
+local focus: Focus? = nil
 
 --------------------------------------------------------------------------------
 -- Pure helpers
@@ -117,7 +126,31 @@ local function newBeam(): Beam
 	light.Shadows = false
 	light.Enabled = false
 	light.Parent = part
-	return { part = part, light = light, player = nil }
+	local inner = Instance.new("SpotLight")
+	inner.Name = "Inner"
+	inner.Face = Enum.NormalId.Front
+	inner.Angle = FirstPersonController.BeamCones.innerAngle
+	inner.Range = FirstPersonController.BeamCones.innerRange
+	inner.Brightness = 0
+	inner.Shadows = false
+	inner.Enabled = false
+	inner.Parent = part
+	return { part = part, light = light, inner = inner, player = nil, focused = false }
+end
+
+-- Shapes a beam as the ordinary outer cone or as the focused teammate's whole dual cone.
+local function shape(beam: Beam, focused: boolean)
+	if beam.focused == focused then
+		return
+	end
+	beam.focused = focused
+	local cones = FirstPersonController.BeamCones
+	beam.light.Angle = if focused then cones.outerAngle else ANGLE
+	beam.light.Range = if focused then cones.outerRange else RANGE
+	if not focused then
+		beam.inner.Enabled = false
+		beam.inner.Shadows = false
+	end
 end
 
 local function headOf(player: Player): BasePart?
@@ -143,6 +176,7 @@ local function release(player: Player)
 		assigned[player] = nil
 		beam.player = nil
 		beam.light.Enabled = false
+		shape(beam, false)
 	end
 end
 
@@ -150,8 +184,10 @@ local function rerank(cameraPosition: Vector3)
 	local candidates: { Candidate } = {}
 	local byId: { [number]: Player } = {}
 	local current: { [number]: boolean } = {}
+	local focused = focus
+	local focusPlayer: Player? = if focused and isCandidate(focused.player) then focused.player else nil
 	for _, player in Players:GetPlayers() do
-		if isCandidate(player) then
+		if player ~= focusPlayer and isCandidate(player) then
 			local head = headOf(player)
 			if head then
 				table.insert(
@@ -169,6 +205,9 @@ local function rerank(cameraPosition: Vector3)
 	for _, userId in RemoteFlashlightRenderer.select(candidates, current, cap) do
 		chosen[byId[userId]] = true
 	end
+	if focusPlayer then
+		chosen[focusPlayer] = true
+	end
 	for player in table.clone(assigned) do
 		if not chosen[player] then
 			release(player)
@@ -185,7 +224,7 @@ local function rerank(cameraPosition: Vector3)
 				break
 			end
 		end
-		if free == nil and #beams < MAX_BEAMS then
+		if free == nil and (#beams < MAX_BEAMS or player == focusPlayer) then
 			local made = newBeam()
 			table.insert(beams, made)
 			free = made
@@ -224,19 +263,28 @@ local function onRender(dt: number)
 		rerank(camera.CFrame.Position)
 	end
 	local serverNow = Workspace:GetServerTimeNow()
+	local focused = focus
+	local cones = FirstPersonController.BeamCones
 	for player, beam in assigned do
 		local head = headOf(player)
 		if not head or not Attributes.getBool(player, P.FlashlightOn, false) then
 			beam.light.Enabled = false
+			beam.inner.Enabled = false
 			continue
 		end
 		if beam.part.Parent ~= camera then
 			beam.part.Parent = camera
 		end
-		local yaw, pitch = lookFor(player, head, dt)
-		local rotation = CFrame.fromOrientation(pitch, yaw, 0)
-		local position = head.Position + rotation.LookVector * HEAD_LEAD - Vector3.new(0, HEAD_DROP, 0)
-		beam.part.CFrame = CFrame.new(position) * rotation
+		local isFocus = focused ~= nil and focused.player == player
+		shape(beam, isFocus)
+		if focused and isFocus then
+			beam.part.CFrame = focused.view() * CFrame.new(cones.offset)
+		else
+			local yaw, pitch = lookFor(player, head, dt)
+			local rotation = CFrame.fromOrientation(pitch, yaw, 0)
+			local position = head.Position + rotation.LookVector * HEAD_LEAD - Vector3.new(0, HEAD_DROP, 0)
+			beam.part.CFrame = CFrame.new(position) * rotation
+		end
 
 		local maxBattery = Attributes.getNumber(player, P.BatteryMax, GameConfig.BatteryMax)
 		local battery = Attributes.readMeter(player, P.Battery, P.BatteryRate, P.BatteryAt, maxBattery, serverNow)
@@ -247,14 +295,42 @@ local function onRender(dt: number)
 		if beam.light.Enabled ~= on then
 			beam.light.Enabled = on
 		end
+		local innerOn = on and isFocus
+		if beam.inner.Enabled ~= innerOn then
+			beam.inner.Enabled = innerOn
+		end
 		if on then
-			beam.light.Brightness = BRIGHTNESS * level
+			beam.light.Brightness = (if isFocus then cones.outerBrightness else BRIGHTNESS) * level
 			local color = FirstPersonController.BeamColor(fraction)
 			if beam.light.Color ~= color then
 				beam.light.Color = color
 			end
+			if innerOn then
+				beam.inner.Brightness = cones.innerBrightness * level
+				if beam.inner.Color ~= color then
+					beam.inner.Color = color
+				end
+				if beam.inner.Shadows ~= shadows then
+					beam.inner.Shadows = shadows
+				end
+			end
 		end
 	end
+end
+
+--------------------------------------------------------------------------------
+-- Public API
+--------------------------------------------------------------------------------
+
+-- Lights `player`'s torch as seen from inside their eyes, placed along `view()` (the spectator camera, called every
+-- frame); nil returns every teammate to an ordinary beam.
+function RemoteFlashlightRenderer.SetFocus(player: Player?, view: (() -> CFrame)?)
+	if player and view then
+		focus = { player = player, view = view }
+	else
+		focus = nil
+	end
+	rankClock = math.huge
 end
 
 local function onLookBroadcast(payload: any)
@@ -283,6 +359,7 @@ end
 
 local function applyBudget(budget: RenderBudgetController.Budget)
 	cap = math.clamp(math.floor(budget.remoteFlashlights), 0, MAX_BEAMS)
+	shadows = budget.shadows
 	rankClock = math.huge
 end
 

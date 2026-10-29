@@ -108,6 +108,28 @@ local LOWERED_PITCH = math.rad(7)
 -- the player. The hand-held torch model (HandRig) stays the visual source.
 local BEAM_OFFSET = Vector3.new(0.3, -0.25, -0.6)
 local TOGGLE_COOLDOWN = 0.22
+
+export type Cones = {
+	innerAngle: number,
+	innerRange: number,
+	innerBrightness: number,
+	outerAngle: number,
+	outerRange: number,
+	outerBrightness: number,
+	offset: Vector3, -- look space, from the eye
+}
+
+-- The torch's dual cone as the holder sees it (RemoteFlashlightRenderer lights a spectated teammate's torch the
+-- same way, from inside their eyes).
+Flashlight.Cones = table.freeze({
+	innerAngle = INNER_ANGLE,
+	innerRange = INNER_RANGE,
+	innerBrightness = INNER_BRIGHTNESS,
+	outerAngle = OUTER_ANGLE,
+	outerRange = OUTER_RANGE,
+	outerBrightness = OUTER_BRIGHTNESS,
+	offset = BEAM_OFFSET,
+} :: Cones)
 local SAMPLE_TTL = 0.008
 
 --------------------------------------------------------------------------------

@@ -922,4 +922,7 @@ function FirstPersonController.BeamColor(batteryFraction: number): Color3
 	return Flashlight.beamColor(batteryFraction)
 end
 
+-- The torch's dual-cone shape (angles, ranges, brightness at full output, the beam's look-space offset).
+FirstPersonController.BeamCones = Flashlight.Cones
+
 return FirstPersonController
