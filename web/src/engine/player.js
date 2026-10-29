@@ -261,6 +261,8 @@ export class Player {
     this.snapNext = true;
     this.lastRoot = null;
     this.world.lastZone = null;
+    if (this.engine.lighting) this.engine.lighting.snapFilm();
+    if (this.engine.volumetrics) this.engine.volumetrics.snapNow();
   }
 
   /** Root (HumanoidRootPart centre) position. */

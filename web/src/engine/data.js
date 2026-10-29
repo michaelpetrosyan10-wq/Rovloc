@@ -40,6 +40,7 @@ export const STREAM_TYPES = {
   cpos: 'u16', // collision positions (per level quant), delta-coded
   cidx: 'u32', // triangle-delta coded per level (u32 wrap-around)
   probe: 'u8', // sqrt-encoded probe irradiance
+  bone: 'u8', // creature chunks: Motor6D bone index per vertex (meta.creature.bones order)
 };
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -115,12 +116,12 @@ const ARRAY_TYPES = {
  * @typedef {object} ChunkMeta
  * @property {number} id
  * @property {string} level        level key (LevelId, "Lobby", "Stairwells", "Exterior")
- * @property {'opaque'|'transparent'|'emissive'} bucket
+ * @property {'opaque'|'transparent'|'emissive'|'decal'} bucket  decal: alpha-blended SurfaceGui quads (atlas UVs)
+ * @property {number} [uvScale]    UV quantisation of this chunk (decals: 8192, atlas UVs in 0..1; default UV_SCALE)
  * @property {string} material     key into meta.materials
- * @property {number} [entity]     index into meta.entities (entity chunks only)
- * @property {string} [node]       entity node path ("" = the entity root; positions in that node's space)
- * @property {string} [bone]       creature bone (creature chunks only; positions in the bone part's space)
- * @property {boolean} [collide]   entity chunks: the parts collide
+ * @property {'static'|'entity'|'creature'} kind
+ * @property {EntityRange[]} [ranges] entity chunks: the contiguous vertex range of every (entity, node) in the chunk
+ * @property {number} [boneOffset] creature chunks: element offset of the per-vertex bone index in the `bone` stream
  * @property {number} opacity      1 - Transparency (1 for opaque)
  * @property {number} vertexOffset vertex index into the streams
  * @property {number} vertexCount
@@ -128,6 +129,14 @@ const ARRAY_TYPES = {
  * @property {number} indexCount
  * @property {[number, number, number, number, number, number]} quant origin xyz + scale xyz for positions
  * @property {[number, number, number, number, number, number]} aabb min xyz, max xyz (world for static chunks)
+ */
+
+/**
+ * @typedef {object} EntityRange
+ * @property {number} entity index into meta.entities
+ * @property {string} node   entity node path ("" = parts that move with the entity pivot)
+ * @property {number} start  first vertex (within the chunk)
+ * @property {number} count
  */
 
 /**
@@ -258,7 +267,8 @@ export function decodeChunk(c, s) {
   const qu = deltaDecode(new Uint16Array(s.uv.buffer, s.uv.byteOffset + v0 * 4, n * 2).slice(), 2, 0xffff);
   const uvSigned = new Int16Array(qu.buffer);
   const uv = new Float32Array(n * 2);
-  for (let i = 0; i < n * 2; i++) uv[i] = uvSigned[i] / UV_SCALE;
+  const uvScale = c.uvScale || UV_SCALE;
+  for (let i = 0; i < n * 2; i++) uv[i] = uvSigned[i] / uvScale;
   const ql = deltaDecode(s.lit.slice(v0 * 3, (v0 + n) * 3), 3, 0xff);
   const bakedLight = new Uint16Array(n * 3);
   for (let i = 0; i < n * 3; i++) bakedLight[i] = LIGHT_LUT[ql[i]];
@@ -273,6 +283,18 @@ export function decodeChunk(c, s) {
   };
   if (c.bucket === 'transparent') {
     attributes.alpha = { array: new Float32Array(n).fill(c.opacity), itemSize: 1, normalized: false };
+  }
+  if (c.kind === 'creature' && s.bone) {
+    // THREE.SkinnedMesh attributes: one bone per vertex at full weight
+    const bones = s.bone.subarray(c.boneOffset, c.boneOffset + n);
+    const skinIndex = new Uint16Array(n * 4);
+    const skinWeight = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) {
+      skinIndex[i * 4] = bones[i];
+      skinWeight[i * 4] = 1;
+    }
+    attributes.skinIndex = { array: skinIndex, itemSize: 4, normalized: false };
+    attributes.skinWeight = { array: skinWeight, itemSize: 4, normalized: false };
   }
   const index = triDecode(s.idx.slice(c.indexOffset, c.indexOffset + c.indexCount), 0xffff);
   return { ...c, attributes, index };
@@ -357,6 +379,107 @@ export function sampleProbe(grid, x, y, z, out = [0, 0, 0]) {
     out[2] += grid.data[i + 2] * w;
   }
   return out;
+}
+
+/**
+ * Rest-space frame of an entity node: the node's WorldPivot, or the entity pivot for root parts ("").
+ * @param {any} entity meta.entities[i]
+ * @param {string} node
+ * @returns {CFrameArray}
+ */
+export function entityNodeRest(entity, node) {
+  if (node) {
+    const n = entity.nodes.find((x) => x.path === node);
+    if (n && n.pivot) return n.pivot;
+  }
+  return entity.pivot;
+}
+
+/**
+ * Per-vertex node index for an entity chunk (GPU path: the shader fetches node i's matrix
+ * `current pivot x inverse(rest pivot)` from a texture or uniform array). Returns the attribute and the node table
+ * (index -> { entity, node }).
+ * @param {Chunk} chunk
+ */
+export function nodeIndexAttribute(chunk) {
+  const array = new Uint16Array(chunk.vertexCount);
+  const nodes = [];
+  const ids = new Map();
+  for (const r of chunk.ranges || []) {
+    const key = `${r.entity}|${r.node}`;
+    let id = ids.get(key);
+    if (id === undefined) {
+      id = nodes.length;
+      ids.set(key, id);
+      nodes.push({ entity: r.entity, node: r.node });
+    }
+    array.fill(id, r.start, r.start + r.count);
+  }
+  return { attribute: { array, itemSize: 1, normalized: false }, nodes };
+}
+
+/**
+ * CPU path: re-poses one entity node in a decoded entity chunk. `rest` keeps the chunk's original positions and
+ * normals (pass the same object every call; it is filled on first use). `matrix` is the 12-number CFrame
+ * `current pivot x inverse(rest pivot)`, or null to hide the node (vertices collapse to a point). Returns the range,
+ * so the caller can mark just that slice of the BufferAttributes for upload (addUpdateRange).
+ * @param {Chunk} chunk @param {EntityRange} range @param {CFrameArray|null} matrix @param {{ position?: Float32Array, normal?: Int8Array }} rest
+ */
+export function poseEntityRange(chunk, range, matrix, rest) {
+  const pos = /** @type {Float32Array} */ (chunk.attributes.position.array);
+  const nrm = /** @type {Int8Array} */ (chunk.attributes.normal.array);
+  if (!rest.position) rest.position = pos.slice();
+  if (!rest.normal) rest.normal = nrm.slice();
+  const rp = rest.position;
+  const rn = rest.normal;
+  for (let v = range.start; v < range.start + range.count; v++) {
+    const i = v * 3;
+    if (!matrix) {
+      pos[i] = pos[i + 1] = pos[i + 2] = 0;
+      continue;
+    }
+    const x = rp[i];
+    const y = rp[i + 1];
+    const z = rp[i + 2];
+    pos[i] = matrix[0] + matrix[3] * x + matrix[4] * y + matrix[5] * z;
+    pos[i + 1] = matrix[1] + matrix[6] * x + matrix[7] * y + matrix[8] * z;
+    pos[i + 2] = matrix[2] + matrix[9] * x + matrix[10] * y + matrix[11] * z;
+    const nx = rn[i];
+    const ny = rn[i + 1];
+    const nz = rn[i + 2];
+    nrm[i] = Math.round(matrix[3] * nx + matrix[4] * ny + matrix[5] * nz);
+    nrm[i + 1] = Math.round(matrix[6] * nx + matrix[7] * ny + matrix[8] * nz);
+    nrm[i + 2] = Math.round(matrix[9] * nx + matrix[10] * ny + matrix[11] * nz);
+  }
+  return range;
+}
+
+/**
+ * CFrame helpers on 12-number arrays (enough for entity posing without three.js).
+ * @param {CFrameArray} a @param {CFrameArray} b @returns {CFrameArray}
+ */
+export function cframeMul(a, b) {
+  const r = new Array(12);
+  r[0] = a[0] + a[3] * b[0] + a[4] * b[1] + a[5] * b[2];
+  r[1] = a[1] + a[6] * b[0] + a[7] * b[1] + a[8] * b[2];
+  r[2] = a[2] + a[9] * b[0] + a[10] * b[1] + a[11] * b[2];
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      r[3 + i * 3 + j] = a[3 + i * 3] * b[3 + j] + a[3 + i * 3 + 1] * b[6 + j] + a[3 + i * 3 + 2] * b[9 + j];
+    }
+  }
+  return /** @type {CFrameArray} */ (r);
+}
+
+/** @param {CFrameArray} c @returns {CFrameArray} */
+export function cframeInverse(c) {
+  const r = [c[3], c[6], c[9], c[4], c[7], c[10], c[5], c[8], c[11]];
+  return /** @type {CFrameArray} */ ([
+    -(r[0] * c[0] + r[1] * c[1] + r[2] * c[2]),
+    -(r[3] * c[0] + r[4] * c[1] + r[5] * c[2]),
+    -(r[6] * c[0] + r[7] * c[1] + r[8] * c[2]),
+    ...r,
+  ]);
 }
 
 /**

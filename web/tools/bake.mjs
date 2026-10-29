@@ -20,7 +20,8 @@ import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 
 import { FORMAT_VERSION, LIGHT_SCALE, UV_SCALE, deltaEncode, encodeLightByte, triEncode } from '../src/engine/data.js';
-import { SolidIndex, cfInverse, cfMul, cfPoint, coarseTriangles, partAabb, pointInPart, tessellatePart } from './bake/mesh.mjs';
+import { SolidIndex, coarseTriangles, decalFace, partAabb, tessellatePart } from './bake/mesh.mjs';
+import { bakeDecals } from './bake/decals.mjs';
 import { buildTracer } from './bake/trace.mjs';
 import { LightGrid, asArray, collectLights, directEstimate, srgbToLinear } from './bake/light.mjs';
 import { buildMeta } from './bake/meta.mjs';
@@ -37,6 +38,7 @@ const QUALITY = arg('quality', 'high');
 const RAW = path.resolve(webDir, arg('raw', 'build/cache/world-raw.json'));
 const OUT = path.resolve(webDir, arg('out', 'build'));
 const THREADS = Number(arg('threads', Math.max(1, Math.min(4, os.cpus().length))));
+const SKIP_DECALS = args.includes('--no-decals');
 
 /** Bake settings per quality. */
 const PRESETS = {
@@ -173,6 +175,16 @@ const { lights, groups } = collectLights(raw);
 log(`lights: ${lights.length} baked (${lights.filter((l) => l.kind === 'Moonlight').length} moonlight spills), ${groups.length - 1} flicker groups`);
 const lightGrid = new LightGrid(lights);
 
+// Fixture index -> flicker group (glow parts flicker with their light).
+const fixtureGroup = new Map();
+for (const l of lights) {
+  if (l.index >= 0) {
+    const fx = raw.lights[l.index].fixture;
+    if (l.group && !fixtureGroup.has(fx)) fixtureGroup.set(fx, l.group);
+  }
+}
+
+
 // Per-face subdivision from the unshadowed light over it (sampled every ~3 studs).
 function edgeFor(at, du, dv, n, fine) {
   const su = Math.min(28, Math.max(2, Math.ceil(du / 3) + 1));
@@ -259,10 +271,11 @@ const norm3 = (v) => {
  * builder key per triangle.
  */
 function addPart(p, opts) {
-  const color = p.color;
+  const color = opts.color || p.color;
   const maxEdge = opts.maxEdge;
   const cull = opts.cull ? (q) => solidIndex.inside(q, p) : null;
-  tessellatePart(p, { maxEdge, cull, edgeFor: opts.adaptive ? edgeFor : null }, (verts, tris) => {
+  const generate = opts.generate || ((sink) => tessellatePart(p, { maxEdge, cull, edgeFor: opts.adaptive ? edgeFor : null }, sink));
+  generate((verts, tris) => {
     // group triangles by builder key
     const groups = new Map();
     for (const t of tris) {
@@ -278,6 +291,7 @@ function addPart(p, opts) {
     }
     for (const [key, list] of groups) {
       const b = builderFor(key, opts.info);
+      const startCount = b.count;
       const remap = new Map();
       for (const t of list) {
         const out = [];
@@ -291,17 +305,19 @@ function addPart(p, opts) {
             const ln = opts.toLocalDir ? opts.toLocalDir(v.n) : v.n;
             b.pos.push(lp[0], lp[1], lp[2]);
             b.nrm.push(ln[0], ln[1], ln[2]);
-            b.uv.push(v.uv[0], v.uv[1]);
+            const uv = opts.uvMap ? opts.uvMap(v.uv) : v.uv;
+            b.uv.push(uv[0], uv[1]);
             b.col.push(color[0], color[1], color[2]);
             const sp = opts.bake ? samplePoint(v.p, v.n, p) : v.p;
             b.sample.push(sp[0], sp[1], sp[2]);
             b.wnrm.push(v.n[0], v.n[1], v.n[2]);
-            b.fx.push(p.glow && p.fixture ? p.fixture : 0);
+            b.fx.push(opts.glowFixture !== undefined ? opts.glowFixture : p.glow && p.fixture ? p.fixture : 0);
           }
           out.push(ni);
         }
         b.idx.push(out[0], out[1], out[2]);
       }
+      if (opts.onAppend) opts.onAppend(b, startCount, b.count);
     }
   });
 }
@@ -340,7 +356,9 @@ for (const p of staticParts) {
 }
 log(`static tessellated: ${builderList.length} builders`);
 
-// Entities: per entity x node x bucket x material, in the node's rest space.
+// Entities: batched per level x bucket x material in WORLD space at their rest pose; every (entity, node) owns one
+// contiguous vertex range per chunk (chunk.ranges), so the engine can move a door leaf by rewriting its range or by a
+// per-vertex node index (data.js nodeIndexAttribute). Parts are added sorted by entity and node to keep ranges whole.
 const entities = raw.entities;
 const entityPivot = (e) => e.pivot || [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1];
 const nodeFrame = (e, nodePath) => {
@@ -350,53 +368,142 @@ const nodeFrame = (e, nodePath) => {
   }
   return entityPivot(e);
 };
+entityParts.sort((x, y) => x.entity - y.entity || (x.node || '').localeCompare(y.node || ''));
 for (const p of entityParts) {
   const e = entities[p.entity - 1];
   const bucket = bucketOf(p);
   const material = registerMaterial(p);
   const opacity = bucket === 'transparent' ? Math.round((1 - p.transparency) * 20) / 20 : 1;
   const node = p.node || '';
-  const frame = nodeFrame(e, node);
-  const inv = cfInverse(frame);
-  const collide = !!p.canCollide;
+  const entity = p.entity - 1;
   addPart(p, {
     maxEdge: bucket === 'emissive' ? 1e9 : MAX_EDGE.entity,
     adaptive: bucket !== 'emissive',
     cull: false,
     bake: bucket !== 'emissive',
-    info: { kind: 'entity', level: e.level, bucket, material, opacity, entity: p.entity - 1, node, collide, frame },
-    keyOf: () => `E|${p.entity}|${node}|${bucket}|${material}|${opacity}|${collide}`,
-    toLocal: (q) => cfPoint(inv, q[0], q[1], q[2]),
-    toLocalDir: (d) => {
-      const r = cfMul(inv, [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]);
-      return [r[3] * d[0] + r[4] * d[1] + r[5] * d[2], r[6] * d[0] + r[7] * d[1] + r[8] * d[2], r[9] * d[0] + r[10] * d[1] + r[11] * d[2]];
+    info: { kind: 'entity', level: e.level, bucket, material, opacity },
+    keyOf: () => `E|${e.level}|${bucket}|${material}|${opacity}`,
+    onAppend: (b, start, end) => {
+      if (end <= start) return;
+      b.ranges ||= [];
+      const last = b.ranges[b.ranges.length - 1];
+      if (last && last.entity === entity && last.node === node && last.start + last.count === start) last.count += end - start;
+      else b.ranges.push({ entity, node, start, count: end - start });
     },
   });
 }
 log(`entities tessellated: ${builderList.length} builders`);
 
-// Creature: each part follows the Motor6D bone it is welded to; chunks per bone in that bone part's rest space.
+// Creature: one chunk per bucket x material in the rig's model space (built at the origin, rest pose), each vertex
+// tagged with the Motor6D bone it follows (welded parts follow their bone): ready for a THREE.SkinnedMesh with
+// skinIndex = bone, skinWeight = 1 (data.js adds both attributes).
 const creature = raw.creature;
 const creatureBones = buildCreatureBones(creature);
+const boneIndexOf = new Map(creatureBones.bones.map((name, i) => [name, i]));
 for (const cp of creature ? creature.parts : []) {
   if (cp.transparency >= 0.999 || cp.name === 'HumanoidRootPart' || cp.name === 'CreatureHitbox') continue;
   const bone = creatureBones.boneOf.get(cp.name) || creatureBones.root;
-  const bonePart = creature.parts.find((q) => q.name === bone);
-  const inv = cfInverse(bonePart ? bonePart.cf : [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]);
   const p = { ...cp };
   const bucket = bucketOf(p);
   const material = registerMaterial(p);
   const opacity = bucket === 'transparent' ? Math.round((1 - p.transparency) * 20) / 20 : 1;
+  const boneIndex = boneIndexOf.get(bone) ?? 0;
   addPart(p, {
     maxEdge: MAX_EDGE.creature,
     cull: false,
     bake: false,
-    info: { kind: 'creature', level: 'Creature', bucket, material, opacity, bone },
-    keyOf: () => `C|${bone}|${bucket}|${material}|${opacity}`,
-    toLocal: (q) => cfPoint(inv, q[0], q[1], q[2]),
-    toLocalDir: (d) => [inv[3] * d[0] + inv[4] * d[1] + inv[5] * d[2], inv[6] * d[0] + inv[7] * d[1] + inv[8] * d[2], inv[9] * d[0] + inv[10] * d[1] + inv[11] * d[2]],
+    info: { kind: 'creature', level: 'Creature', bucket, material, opacity },
+    keyOf: () => `C|${bucket}|${material}|${opacity}`,
+    onAppend: (b, start, end) => {
+      b.bones ||= [];
+      for (let v = start; v < end; v++) b.bones[v] = boneIndex;
+    },
   });
 }
+
+// SurfaceGui decals (decals.mjs): signs, plates, chalkboards, notices, posters, hazard stripes, numbers, labels and
+// the exit signs' letters, as alpha-blended quads on their faces (bucket "decal"). Lit decals take baked light like
+// any surface; a gui with LightInfluence < 1 mixes in its own Brightness (material lightInfluence / brightness), and a
+// self-lit one on a light fixture (exit letters) flickers with its fixture.
+const DECAL_UV_SCALE = 8192;
+const decalResult = SKIP_DECALS ? { pages: [], decals: [], skipped: 0, cells: 0 } : await bakeDecals(raw, path.join(OUT, 'textures'));
+for (const pg of decalResult.pages) {
+  textureMeta.textures[`Decals${pg.index}`] = {
+    studsPerTile: 1,
+    atlas: true,
+    width: pg.width,
+    height: pg.height,
+    maps: { color: `textures/${pg.file}` },
+    bytes: pg.bytes,
+  };
+}
+const decalMaterial = (d) => {
+  const li = Math.round(d.lightInfluence * 100) / 100;
+  const br = Math.round(d.brightness * 100) / 100;
+  const key = li >= 0.999 ? `Decal/${d.page}` : `Decal/${d.page}/li${li}/b${br}`;
+  if (!materials[key]) {
+    materials[key] = {
+      material: 'Decal',
+      texture: `Decals${d.page}`,
+      studsPerTile: 1,
+      roughness: 0.7,
+      metalness: 0,
+      reflectance: 0,
+      emissive: li < 0.001,
+      glass: false,
+      decal: true,
+      lightInfluence: li,
+      brightness: br,
+    };
+  }
+  return key;
+};
+let decalQuads = 0;
+for (const d of decalResult.decals) {
+  const p = raw.parts[d.part];
+  if (!p || p.creature) continue;
+  const material = decalMaterial(d);
+  const rect = d.rect;
+  const uvMap = (uv) => [rect[0] + (rect[2] - rect[0]) * uv[0], rect[1] + (rect[3] - rect[1]) * uv[1]];
+  const generate = (sink) => decalFace(p, d.face, MAX_EDGE.default, 0.015, sink);
+  const glowFixture = d.lightInfluence < 0.001 && p.fixture ? p.fixture : 0;
+  const white = [1, 1, 1];
+  if (p.entity) {
+    const e = entities[p.entity - 1];
+    const entity = p.entity - 1;
+    const node = p.node || '';
+    addPart(p, {
+      generate,
+      uvMap,
+      color: white,
+      bake: true,
+      glowFixture,
+      info: { kind: 'entity', level: e.level, bucket: 'decal', material, opacity: 1, uvScale: DECAL_UV_SCALE },
+      keyOf: () => `ED|${e.level}|${material}`,
+      onAppend: (b, start, end) => {
+        if (end <= start) return;
+        b.ranges ||= [];
+        const last = b.ranges[b.ranges.length - 1];
+        if (last && last.entity === entity && last.node === node && last.start + last.count === start) last.count += end - start;
+        else b.ranges.push({ entity, node, start, count: end - start });
+      },
+    });
+  } else {
+    const level = p.level;
+    const cell = CELL[level] || CELL.default;
+    addPart(p, {
+      generate,
+      uvMap,
+      color: white,
+      bake: true,
+      glowFixture,
+      info: { kind: 'static', level, bucket: 'decal', material, opacity: 1, uvScale: DECAL_UV_SCALE },
+      keyOf: (x, z) => `SD|${level}|${material}|${Math.floor(x / cell)},${Math.floor(z / cell)}`,
+    });
+  }
+  decalQuads++;
+}
+log(`decals: ${decalQuads} placed from ${decalResult.cells} atlas cells on ${decalResult.pages.length} page(s), ${decalResult.skipped} wear/finish guis skipped`);
 
 function buildCreatureBones(rig) {
   const boneOf = new Map();
@@ -460,15 +567,6 @@ const outdoor = lin(baseline.OutdoorAmbient).map((v, i) => v * OUTDOOR_SCALE + l
 const moon = raw.lighting.moonlight;
 const moonDir = norm3([-0.28, Math.tan(moon.pitch), 1]); // towards the moon: high and to one side (Volumetrics skew)
 const moonColor = lin(moon.color).map((v) => v * MOON_SCALE * (baseline.Brightness / 0.5));
-
-// Fixture index -> flicker group (glow parts flicker with their light).
-const fixtureGroup = new Map();
-for (const l of lights) {
-  if (l.index >= 0) {
-    const fx = raw.lights[l.index].fixture;
-    if (l.group && !fixtureGroup.has(fx)) fixtureGroup.set(fx, l.group);
-  }
-}
 
 async function runWorkers(jobs) {
   const workers = [];
@@ -712,6 +810,7 @@ function typeName(T) {
 }
 
 const writer = new StreamWriter();
+const golden = [];
 const chunks = [];
 let vertexCursor = 0;
 let indexCursor = 0;
@@ -734,7 +833,8 @@ for (const b of builderList) {
   const nr = new Int8Array(n * 3);
   for (let i = 0; i < n * 3; i++) nr[i] = Math.max(-127, Math.min(127, Math.round(b.nrm[i] * 127)));
   const uv = new Int16Array(n * 2);
-  for (let i = 0; i < n * 2; i++) uv[i] = Math.max(-32768, Math.min(32767, Math.round(b.uv[i] * UV_SCALE)));
+  const uvScale = b.info.uvScale || UV_SCALE;
+  for (let i = 0; i < n * 2; i++) uv[i] = Math.max(-32768, Math.min(32767, Math.round(b.uv[i] * uvScale)));
   const col = new Uint8Array(n * 3);
   for (let i = 0; i < n * 3; i++) col[i] = Math.round(Math.max(0, Math.min(1, b.col[i])) * 255);
   writer.push('pos', Uint16Array, deltaEncode(q, 3, 0xffff));
@@ -759,13 +859,25 @@ for (const b of builderList) {
     quant: [lo[0], lo[1], lo[2], scale[0], scale[1], scale[2]],
     aabb: [...lo, ...hi].map((v) => Math.round(v * 1000) / 1000),
   };
-  if (info.kind === 'entity') {
-    chunk.entity = info.entity;
-    chunk.node = info.node;
-    chunk.collide = info.collide;
+  if (info.uvScale) chunk.uvScale = info.uvScale;
+  if (info.kind === 'entity') chunk.ranges = b.ranges || [];
+  if (info.kind === 'creature') {
+    chunk.boneOffset = writer.push('bone', Uint8Array, Uint8Array.from(b.bones));
   }
-  if (info.kind === 'creature') chunk.bone = info.bone;
   chunks.push(chunk);
+  // golden samples for tools/data-test.mjs: the pre-encoding values of a few vertices / triangles of every 25th chunk
+  if (chunk.id % 25 === 0 || info.kind !== 'static') {
+    const k = Math.min(n, 48);
+    golden.push({
+      chunk: chunk.id,
+      position: b.pos.slice(0, k * 3),
+      uv: b.uv.slice(0, k * 2),
+      color: Array.from(col.subarray(0, k * 3)),
+      light: Array.from(b.lit.subarray(0, k * 3)),
+      flicker: Array.from(b.flk.subarray(0, k * 2)),
+      index: b.idx.slice(0, Math.min(b.idx.length, 96)),
+    });
+  }
   vertexCursor += n;
   indexCursor += b.idx.length;
   totalTris += b.idx.length / 3;
@@ -857,4 +969,6 @@ const meta = buildMeta(raw, {
   stats: { vertices: vertexCursor, triangles: totalTris, bakedVertices: bakedVerts, rays, bakeSeconds, threads: THREADS },
 });
 fs.writeFileSync(path.join(OUT, 'world.json'), JSON.stringify(meta));
+fs.mkdirSync(path.join(OUT, 'cache'), { recursive: true });
+fs.writeFileSync(path.join(OUT, 'cache', 'golden.json'), JSON.stringify({ format: FORMAT_VERSION, samples: golden }));
 log(`wrote world.bin (${(bytes / 1e6).toFixed(2)} MB) + world.json (${(fs.statSync(path.join(OUT, 'world.json')).size / 1e6).toFixed(2)} MB)`);

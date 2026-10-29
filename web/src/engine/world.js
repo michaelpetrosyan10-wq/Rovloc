@@ -5,7 +5,7 @@
 //     120-stud cell, in world space with their baked vertex light; each is one mesh, frustum culled. Entity chunks
 //     are node-batched by Entities; creature chunks are kept for W3 (creatureChunks + buildNodeMeshes).
 //   * Level culling. Only the levels in focus are visible: the player's level, the stairwells, both ends of the
-//     stairwell the player stands in, and the exterior from the street-level floor and the roof (setFocus /
+//     stairwell the player stands in, and the exterior from the roof (setFocus /
 //     focusFor).
 //   * Collision. Every level's collision buffer (every colliding static part, invisible walls included) has a
 //     three-mesh-bvh BVH; entity colliders (boxes in node space) are tested through their node frames.
@@ -24,7 +24,7 @@ import { WorldConfig } from './config.js';
 const NEON_STRENGTH = 2.4; // Roblox Neon renders well above its colour; the bloom catches it on High
 const STAIRWELLS = 'Stairwells';
 const EXTERIOR = 'Exterior';
-const EXTERIOR_FROM = new Set(['Level1_Hallways', 'Level5_Roof']);
+const EXTERIOR_FROM = new Set(['Level5_Roof']);
 
 /**
  * @typedef {import('./data.js').WorldData} Decoded
@@ -125,9 +125,11 @@ export class World {
       baked,
       nodes,
       nodeTexture: variant.nodeTexture,
+      pointLights: budget.pointLights,
       shadow: budget.flashlightShadow && !emissive && !transparent,
     });
     mat.userData.key = cacheKey;
+    mat.userData.tex = tex;
     mat.userData.castShadow = !emissive && !transparent;
     this.materials.set(cacheKey, mat);
     return mat;
@@ -137,22 +139,24 @@ export class World {
   applyQuality() {
     const budget = this.quality.budget;
     for (const mat of this.materials.values()) {
-      const spec = mat.userData.spec;
-      const tex = spec.map ? true : false;
-      const want = !!spec.map && budget.normalMaps;
+      const tex = mat.userData.tex;
+      const want = !!tex && budget.normalMaps;
       const defs = mat.defines;
       let changed = false;
-      if (want !== ('USE_NORMALMAP' in defs) && tex) {
-        const id = Object.entries(this.meta.materials).find(([, i]) => i.texture && this._texture(i.texture, 'color') === spec.map);
-        if (want && id) {
-          mat.uniforms.uNormalMap.value = this._texture(id[1].texture, 'normal');
-          mat.uniforms.uRoughMap.value = this._texture(id[1].texture, 'orm');
+      if (tex && want !== ('USE_NORMALMAP' in defs)) {
+        if (want) {
+          mat.uniforms.uNormalMap.value = this._texture(tex, 'normal');
+          mat.uniforms.uRoughMap.value = this._texture(tex, 'orm');
           defs.USE_NORMALMAP = '';
           defs.USE_ROUGHMAP = '';
         } else {
           delete defs.USE_NORMALMAP;
           delete defs.USE_ROUGHMAP;
         }
+        changed = true;
+      }
+      if (defs.NUM_POINT !== String(budget.pointLights)) {
+        defs.NUM_POINT = String(budget.pointLights);
         changed = true;
       }
       const shadow = budget.flashlightShadow && mat.userData.castShadow;
@@ -198,7 +202,7 @@ export class World {
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(c.position, 3));
       geometry.setIndex(new THREE.BufferAttribute(c.index, 1));
-      const bvh = new MeshBVH(geometry, { maxLeafTris: 8, strategy: 0 });
+      const bvh = new MeshBVH(geometry, { targetLeafSize: 8, strategy: 0 });
       const box = new THREE.Box3();
       bvh.getBoundingBox(box);
       this.colliders.set(level, { bvh, box, level });

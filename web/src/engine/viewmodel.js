@@ -30,7 +30,7 @@ const GRIP_COLOR = [20, 20, 21];
 const RING_COLOR = [150, 152, 156];
 const LENS_OFF = [196, 206, 214];
 const LENS_ON = [255, 240, 214];
-const SKIN = [204, 142, 105];
+const SKIN = [186, 132, 100];
 const SLEEVE = [46, 50, 58];
 
 function colored(geo, rgb) {
@@ -98,11 +98,24 @@ export class Viewmodel {
     });
   }
 
+  /** A fist closed around the torch grip (hand frame: -Z along the torch, the grip at HAND_MOUNT). */
   _hand() {
     const g = new THREE.Group();
-    const palm = new THREE.Mesh(colored(new THREE.BoxGeometry(0.3, 0.32, 0.3).translate(0.0, -0.02, 0.06), SKIN),
-      this.material);
-    g.add(palm);
+    const parts = [];
+    // back of the hand on the outside (right) of the grip, the wrist behind it
+    parts.push(new THREE.BoxGeometry(0.1, 0.26, 0.3).translate(0.17, -0.06, 0.05));
+    parts.push(new THREE.BoxGeometry(0.22, 0.22, 0.14).translate(0.08, -0.12, 0.24));
+    // four fingers curled under and around the grip
+    for (let i = 0; i < 4; i++) {
+      // a ring around the torch axis (Z) from the upper left, under the grip, to the upper right
+      const finger = new THREE.TorusGeometry(0.19, 0.052, 6, 10, Math.PI * 1.22);
+      finger.rotateZ(-3.49);
+      finger.translate(0, -0.08, -0.06 + i * 0.075);
+      parts.push(finger);
+    }
+    // thumb across the top of the grip
+    parts.push(new THREE.CylinderGeometry(0.05, 0.055, 0.24, 8).rotateZ(Math.PI / 2 - 0.35).translate(0.02, 0.07, -0.02));
+    for (const p of parts) g.add(new THREE.Mesh(colored(p, SKIN), this.material));
     return g;
   }
 

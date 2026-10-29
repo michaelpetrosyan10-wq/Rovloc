@@ -287,6 +287,12 @@ export class Lighting {
     this.stormEnabled = true;
   }
 
+  /** Lands the film and grade on the camera's level at once (spawns, teleports, cuts). */
+  snapFilm() {
+    this.snap = true;
+    this.filmLevel = undefined;
+  }
+
   /** OneShot "Lightning" (intensity 0..1+, stages 1|2). */
   lightning(opts = {}) {
     this.flashes.push({ start: this.engine.loop.realTime, strength: opts.intensity ?? 1, stages: opts.stages ?? 2 });
@@ -359,11 +365,13 @@ export class Lighting {
       this.filmTarget = this.filmFor(level);
       this.gradeFor(level, this.gradeTarget);
     }
-    const a = 1 - Math.exp(-FILM_RATE * dt);
+    const a = this.snap ? 1 : 1 - Math.exp(-FILM_RATE * dt);
+    if (this.snap) this.grade.copy(this.gradeTarget);
     for (const k of NUMERIC_FILM) this.film[k] = lerp(this.film[k], this.filmTarget[k], a);
     this.film.hazeColor = mixRgb(this.film.hazeColor, this.filmTarget.hazeColor, a);
     this.film.bloomSize = lerp(this.film.bloomSize, this.filmTarget.bloomSize, a);
     this.grade.lerp(this.gradeTarget, 1 - Math.exp(-GRADE_RATE * dt));
+    this.snap = false;
 
     // lightning
     this.outdoors = level === 'Level5_Roof' || level === 'Exterior' || !level;

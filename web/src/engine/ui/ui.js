@@ -14,6 +14,7 @@
 
 import { InputBindings } from '../config.js';
 import { Settings } from '../settings.js';
+import { getString } from '../strings.js';
 import { CSS, Palette } from './style.js';
 
 const MAX_TOASTS = 3;
@@ -71,6 +72,7 @@ export class UI {
     this.hud = el('div', 'rv-layer rv-hud', root);
     this.promptLayer = el('div', 'rv-layer', this.hud);
     this.dot = el('div', 'rv-dot', this.hud);
+    this.dot.style.display = 'none'; // the Roblox game hides the cursor in first person (CursorController)
     this.status = el('div', 'rv-status', this.hud);
     this.centre = el('div', 'rv-centre', this.hud);
     this.hintEl = el('div', 'rv-hint rv-outline', this.centre);
@@ -485,10 +487,10 @@ export class UI {
       const btn = el('button', 'rv-btn', panel, b.label);
       btn.addEventListener('click', () => b.onClick());
     }
-    el('div', 'rv-caps', panel, 'Settings').style.margin = '16px 0 6px';
+    el('div', 'rv-caps', panel, getString('Settings.Title')).style.margin = '16px 0 6px';
     for (const s of Settings.visible()) {
       const row = el('label', 'rv-setting', panel);
-      el('span', '', row, s.label);
+      el('span', '', row, s.key === 'Quality' ? 'Graphics quality' : getString(s.label));
       if (s.kind === 'Number') {
         const range = el('input', '', row);
         range.type = 'range';

@@ -176,7 +176,7 @@ export class Entities {
     for (const s of shapes.values()) {
       const node = s.e.nodes.get(s.node) || s.e.nodes.get('');
       const geo = boxesGeometry(s.boxes);
-      const bvh = new MeshBVH(geo, { maxLeafTris: 4 });
+      const bvh = new MeshBVH(geo, { targetLeafSize: 4 });
       const localBox = new THREE.Box3();
       bvh.getBoundingBox(localBox);
       this.colliderShapes.push({

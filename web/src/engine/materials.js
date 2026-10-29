@@ -175,6 +175,9 @@ uniform vec2 uFlRange;
 uniform vec3 uGlowPos;
 uniform vec3 uGlowColor;
 uniform float uGlowRange;
+#ifndef NUM_POINT
+#define NUM_POINT ${MAX_POINT}
+#endif
 uniform vec4 uPlPos[${MAX_POINT}];
 uniform vec3 uPlColor[${MAX_POINT}];
 #ifdef USE_SHADOW
@@ -210,11 +213,22 @@ vec3 perturbNormal(vec3 pos, vec3 n, vec3 mapN, vec2 uv) {
   return normalize(T * (mapN.x * scale) + B * (mapN.y * scale) + n * mapN.z);
 }
 
-vec3 aces(vec3 v) {
-  v *= 0.6;
-  vec3 a = v * (v + 0.0245786) - 0.000090537;
-  vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
-  return clamp(a / b, 0.0, 1.0);
+// three.js ACESFilmicToneMapping (Stephen Hill's fit with the AP1 input / output matrices), exposure / 0.6.
+vec3 aces(vec3 color) {
+  const mat3 ACESInputMat = mat3(
+    vec3(0.59719, 0.07600, 0.02840),
+    vec3(0.35458, 0.90834, 0.13383),
+    vec3(0.04823, 0.01566, 0.83777));
+  const mat3 ACESOutputMat = mat3(
+    vec3(1.60475, -0.10208, -0.00327),
+    vec3(-0.53108, 1.10813, -0.07276),
+    vec3(-0.07367, -0.00605, 1.07602));
+  color /= 0.6;
+  color = ACESInputMat * color;
+  vec3 a = color * (color + 0.0245786) - 0.000090537;
+  vec3 b = color * (0.983729 * color + 0.4329510) + 0.238081;
+  color = ACESOutputMat * (a / b);
+  return clamp(color, 0.0, 1.0);
 }
 
 #ifdef USE_SHADOW
@@ -283,7 +297,7 @@ void main() {
   diffuse += uGlowColor * max(dot(n, toG / max(dg, 1e-4)), 0.0) * falloff(dg, uGlowRange);
 
   // nearest dynamic point lights
-  for (int i = 0; i < ${MAX_POINT}; i++) {
+  for (int i = 0; i < NUM_POINT; i++) {
     vec3 tp = uPlPos[i].xyz - vWorldPos;
     float dp = length(tp);
     vec3 lp = tp / max(dp, 1e-4);
@@ -310,7 +324,7 @@ void main() {
   float fogF = 1.0 - exp(-pow(length(cameraPosition - vWorldPos) * uFogDensity, 2.0));
   col = mix(col, uFogColor, fogF);
   col = aces(col * uExposure);
-  col = pow(col, vec3(1.0 / 2.2));
+  col = mix(1.055 * pow(col, vec3(1.0 / 2.4)) - 0.055, col * 12.92, vec3(lessThanEqual(col, vec3(0.0031308))));
   float alphaOut = uOpacity;
 #ifdef VERTEX_ALPHA
   alphaOut *= vAlpha;
@@ -336,6 +350,7 @@ void main() {
  * @property {boolean} [transparent]
  * @property {boolean} [vertexAlpha]
  * @property {boolean} [shadow]    sample the flashlight shadow map
+ * @property {number} [pointLights] dynamic point-light slots compiled in (the tier's budget)
  * @property {boolean} [nodes]     node-batched geometry (a `node` attribute indexing the node texture)
  * @property {THREE.Texture} [nodeTexture]
  * @property {THREE.Color} [tint]
@@ -357,6 +372,7 @@ export function createWorldMaterial(shared, spec) {
   if (spec.vertexAlpha) defines.VERTEX_ALPHA = '';
   if (spec.shadow) defines.USE_SHADOW = '';
   if (spec.nodes) defines.NODES = '';
+  defines.NUM_POINT = String(spec.pointLights ?? MAX_POINT);
   const uniforms = {
     ...shared,
     uMap: { value: spec.map || null },

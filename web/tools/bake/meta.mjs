@@ -124,11 +124,14 @@ export function buildMeta(raw, r) {
   }));
 
   // entities
-  const entityChunks = new Map();
+  // where each entity's vertices live: (chunk, first vertex within the chunk, count, node)
+  const entityRanges = new Map();
   for (const c of r.chunks) {
     if (c.kind !== 'entity') continue;
-    if (!entityChunks.has(c.entity)) entityChunks.set(c.entity, []);
-    entityChunks.get(c.entity).push(c.id);
+    for (const g of c.ranges) {
+      if (!entityRanges.has(g.entity)) entityRanges.set(g.entity, []);
+      entityRanges.get(g.entity).push({ chunk: c.id, start: g.start, count: g.count, node: g.node });
+    }
   }
   const entityAttachments = new Map();
   for (const a of raw.attachments) {
@@ -160,7 +163,7 @@ export function buildMeta(raw, r) {
     attachments: entityAttachments.get(i) || {},
     prompts: arr(e.prompts),
     colliders: entityColliders.get(i) || [],
-    chunks: entityChunks.get(i) || [],
+    ranges: entityRanges.get(i) || [],
   }));
 
   // anchors / waypoints / layout doors from the level attachments
@@ -237,9 +240,12 @@ export function buildMeta(raw, r) {
         attributes: obj(raw.creature.attributes),
         primaryPart: raw.creature.primaryPart,
         hipHeight: raw.creature.hipHeight,
+        // bone i = skinIndex i; parent from the Motor6D tree (part0 -> part1); rest = the bone part's CFrame in
+        // model space (the rig is built at the origin facing -Z)
         bones: r.creatureBones.bones.map((name) => {
           const part = raw.creature.parts.find((p) => p.name === name);
-          return { name, rest: part ? part.cf : IDENTITY, size: part ? part.size : null };
+          const motor = raw.creature.joints.find((j) => j.class === 'Motor6D' && j.part1 === name);
+          return { name, parent: motor ? motor.part0 : null, motor: motor ? motor.name : null, rest: part ? part.cf : IDENTITY, size: part ? part.size : null };
         }),
         joints: raw.creature.joints.filter((j) => j.class === 'Motor6D'),
         parts: raw.creature.parts.map((p) => ({ name: p.name, bone: r.creatureBones.boneOf.get(p.name) || null, cf: p.cf, size: p.size, transparency: p.transparency, canCollide: p.canCollide, attributes: obj(p.attributes) })),

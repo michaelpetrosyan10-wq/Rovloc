@@ -139,6 +139,12 @@ export class Volumetrics {
     this._fwd = new THREE.Vector3();
   }
 
+  /** Shows the chosen shafts at once (after a teleport) instead of fading them in. */
+  snapNow() {
+    this.snap = true;
+    this.clock = REFRESH;
+  }
+
   update(dt, camera, film, focus) {
     const budget = this.engine.quality.budget;
     const lighting = this.engine.lighting;
@@ -170,6 +176,10 @@ export class Volumetrics {
       for (let i = 0; i < this.dustSlots.length; i++) this.dustSlots[i].source = dustWant[i] || null;
     }
     const shafts = Math.max(0, film.shafts);
+    if (this.snap) {
+      this.snap = false;
+      for (const s of this.sources) s.shown = s.wanted ? 1 : 0;
+    }
     for (const slot of this.slots) {
       const s = slot.source;
       if (!s) {

@@ -34,6 +34,7 @@ import { Quality } from './quality.js';
 import { Renderer } from './renderer.js';
 import { Save } from './save.js';
 import { Settings } from './settings.js';
+import { STRINGS, formatTime, getString } from './strings.js';
 import { UI } from './ui/ui.js';
 import { Volumetrics } from './volumetrics.js';
 import { World } from './world.js';
@@ -141,6 +142,8 @@ export class Engine {
     /** The configuration ports (GameConfig, CameraConfig, NoiseConfig, InputBindings, WorldConfig, PhysicsConfig). */
     this.config = { GameConfig, CameraConfig, NoiseConfig, InputBindings, WorldConfig, PhysicsConfig };
     this.THREE = THREE;
+    /** Strings.get(key, ...): every player-facing string of the Roblox game. */
+    this.strings = { get: getString, formatTime, all: STRINGS };
     this.save = new Save({ key: 'rovloc.save', version: 1 });
     this.settings = new Settings(this.save);
     this.quality = new Quality(this.settings, this.save);
@@ -175,6 +178,8 @@ export class Engine {
     this.zoneClock = ZONE_INTERVAL;
     this.showStats = /[?&]stats\b/.test(location.search);
     this.frameMs = 0;
+    /** Verification only: simulate frames without drawing them (headless software GL is slow). */
+    this.skipRender = false;
     this._viewport = { width: 1, height: 1 };
 
     this.loop.onTick((dt) => this.player.tick(dt), FramePriority.Logic);
@@ -200,11 +205,9 @@ export class Engine {
     progress(0.85, 'Waking the school');
     const levels = Object.keys(this.world.meta.levels || {});
     this.world.setFocus(levels);
-    try {
-      await this.renderer.gl.compileAsync(this.world.scene, this.renderer.camera);
-    } catch {
-      this.renderer.gl.compile(this.world.scene, this.renderer.camera);
-    }
+    const gl = this.renderer.gl;
+    if (gl.extensions.has('KHR_parallel_shader_compile')) await gl.compileAsync(this.world.scene, this.renderer.camera);
+    else gl.compile(this.world.scene, this.renderer.camera);
     progress(0.95, 'Waking the school');
     this.world.setFocus([]);
   }
@@ -259,13 +262,15 @@ export class Engine {
 
     const m = this.player.meters;
     this.ui.updateStatus(realDt, [
-      { id: 'Battery', label: 'Battery', fraction: m.battery.fraction, color: 'rgb(204,158,88)', active: this.player.flashlight.on },
-      { id: 'Stamina', label: 'Stamina', fraction: m.stamina.fraction, color: 'rgb(150,158,132)', active: false },
-      { id: 'Oxygen', label: 'Air', fraction: m.oxygen.fraction, color: 'rgb(110,148,160)', active: m.oxygen.rate !== 0 },
+      { id: 'Battery', label: getString('Hud.Battery'), fraction: m.battery.fraction, color: 'rgb(204,158,88)', active: this.player.flashlight.on },
+      { id: 'Stamina', label: getString('Hud.Stamina'), fraction: m.stamina.fraction, color: 'rgb(150,158,132)', active: false },
+      { id: 'Oxygen', label: getString('Hud.Oxygen'), fraction: m.oxygen.fraction, color: 'rgb(110,148,160)', active: m.oxygen.rate !== 0 },
     ], this.syringes || 0);
     this.ui.update(realDt);
 
-    this.renderer.render(this.world.scene, { shadow: this.player.flashlight.shadowSpec(), time: this.loop.realTime });
+    if (!this.skipRender) {
+      this.renderer.render(this.world.scene, { shadow: this.player.flashlight.shadowSpec(), time: this.loop.realTime });
+    }
     this.frameMs = performance.now() - t0;
     this.quality.frame(realDt);
     if (this.showStats) {
@@ -305,6 +310,31 @@ export class Engine {
     if (this.ambienceEnabled !== false) this.audio.setAmbience(bed);
   }
 
+  /**
+   * Renders one frame now and reads the canvas back: mean luminance (0..255) and the share of pixels brighter
+   * than 10/255 (verification: the world renders, not a black screen).
+   */
+  measure() {
+    const skip = this.skipRender;
+    this.skipRender = false;
+    this.loop.stepManual(1 / 30);
+    this.skipRender = skip;
+    const gl = this.renderer.gl.getContext();
+    const w = gl.drawingBufferWidth;
+    const h = gl.drawingBufferHeight;
+    const px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let sum = 0;
+    let lit = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      const l = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+      sum += l;
+      if (l > 10) lit++;
+    }
+    const n = w * h;
+    return { width: w, height: h, mean: sum / n, litShare: lit / n };
+  }
+
   /** Turns the automatic ambience beds on / off (title screen, results). */
   setAmbienceEnabled(on) {
     this.ambienceEnabled = !!on;
@@ -316,3 +346,14 @@ const _fwd = new THREE.Vector3();
 const _up = new THREE.Vector3();
 
 export { THREE, GameConfig, CameraConfig, NoiseConfig, InputBindings, WorldConfig, PhysicsConfig, FramePriority };
+export { STRINGS, getString, formatTime };
+
+// Building blocks for W3 / W4 (node batching for the creature rig, CFrame helpers, the shared maths and signals).
+export { NodeTable, mergeNodeChunks } from './batch.js';
+export { Signal } from './signal.js';
+export { emfIntensity, flickerFactor as torchFlicker, Cones as TorchCones } from './flashlight.js';
+export { proximity as panicProximity } from './panic.js';
+export { attenuation as rollOffAttenuation } from './audio/audio.js';
+export { CameraStates, CameraStack, ViewBob, OverridePriority as CameraOverridePriority } from './camera.js';
+export { flashlightTarget } from './viewmodel.js';
+export * as MathUtil from './math.js';

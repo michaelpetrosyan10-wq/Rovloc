@@ -181,7 +181,8 @@ export class Renderer {
     this.shadowCamera = new THREE.PerspectiveCamera(80, 1, 0.3, 60);
     this.shadowTarget = null;
     this.depthMaterial = createDepthMaterial(false);
-    this.depthNodes = createDepthMaterial(true, shared);
+    /** node-batch depth materials, one per node texture (entities share one, each creature has its own) */
+    this.depthNodes = new Map();
     this._casters = [];
     this.shadowBias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
 
@@ -276,7 +277,9 @@ export class Renderer {
       for (const o of list) {
         const m = o.material;
         o.userData.mat = m;
-        if (m.userData && m.userData.castShadow) o.material = m.defines && 'NODES' in m.defines ? this.depthNodes : this.depthMaterial;
+        if (m.userData && m.userData.castShadow) {
+          o.material = m.defines && 'NODES' in m.defines ? this._depthFor(m.uniforms.uNodeTex.value) : this.depthMaterial;
+        }
         else o.visible = false;
       }
       gl.setRenderTarget(this.shadowTarget);
@@ -326,6 +329,15 @@ export class Renderer {
     gl.render(this.postScene, this.postCamera);
     this.stats.calls = gl.info.render.calls;
     this.stats.triangles = gl.info.render.triangles;
+  }
+
+  _depthFor(texture) {
+    let mat = this.depthNodes.get(texture);
+    if (!mat) {
+      mat = createDepthMaterial(true, { uNodeTex: { value: texture } });
+      this.depthNodes.set(texture, mat);
+    }
+    return mat;
   }
 
   /** The post uniforms (grade, vignette, grain, overlay) for the lighting / panic / game systems to drive. */

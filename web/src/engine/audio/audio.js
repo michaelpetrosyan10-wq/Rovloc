@@ -162,7 +162,10 @@ class Voice {
 }
 
 export class Audio {
-  /** @param {{settings: import('../settings.js').Settings}} deps */
+  /**
+   * @param {{settings: import('../settings.js').Settings, context?: BaseAudioContext}} deps `context` replaces the
+   *   live AudioContext (an OfflineAudioContext renders presets for verification)
+   */
   constructor(deps) {
     this.settings = deps.settings;
     /** @type {Signal<[string, string]>} (caption text, preset) */
@@ -181,7 +184,7 @@ export class Audio {
     this.stingerRng = new Random(20251029);
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      this.ctx = new Ctx({ latencyHint: 'interactive' });
+      this.ctx = deps.context || new Ctx({ latencyHint: 'interactive' });
     } catch (err) {
       console.warn('[audio] WebAudio unavailable', err);
       this.ctx = null;
@@ -194,8 +197,10 @@ export class Audio {
       if (Object.values(SETTING_KEYS).includes(key)) this._applyVolumes(0.1);
     });
     this._applyVolumes(0);
-    const resume = () => this.resume();
-    for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, resume, { passive: true });
+    if (!deps.context) {
+      const resume = () => this.resume();
+      for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, resume, { passive: true });
+    }
   }
 
   /** Resumes the context (browsers start it suspended until a gesture). */

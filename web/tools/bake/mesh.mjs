@@ -513,3 +513,49 @@ export function partAabb(part) {
     [c[0] + ex, c[1] + ey, c[2] + ez],
   ];
 }
+
+/**
+ * A decal quad on one face of a part (a SurfaceGui's canvas): `lift` studs off the face, subdivided like a face so
+ * vertex light can vary across it. UVs are canvas coordinates in [0, 1], u to the right and v down as Roblox draws
+ * a SurfaceGui (Front: right = -X; Back: +X; Right: -Z; Left: +Z; Top: +X with down = +Z; Bottom: +X, down = -Z).
+ *
+ * @param {any} part @param {string} faceName NormalId name @param {number} maxEdge @param {number} lift
+ * @param {(verts: Vert[], tris: number[][]) => void} sink
+ */
+export function decalFace(part, faceName, maxEdge, lift, sink) {
+  const f = blockFaces(part.size[0], part.size[1], part.size[2]).find((x) => x.face === faceName);
+  if (!f || f.du < 1e-4 || f.dv < 1e-4) return;
+  const c = part.cf;
+  const nW = norm(cfVector(c, f.n[0], f.n[1], f.n[2]));
+  const nu = Math.max(1, Math.ceil(f.du / maxEdge - 1e-6));
+  const nv = Math.max(1, Math.ceil(f.dv / maxEdge - 1e-6));
+  const verts = [];
+  for (let j = 0; j <= nv; j++) {
+    const b = -f.dv / 2 + (f.dv * j) / nv;
+    for (let i = 0; i <= nu; i++) {
+      const a = -f.du / 2 + (f.du * i) / nu;
+      const l = [
+        f.origin[0] + f.u[0] * a + f.v[0] * b + f.n[0] * lift,
+        f.origin[1] + f.u[1] * a + f.v[1] * b + f.n[1] * lift,
+        f.origin[2] + f.u[2] * a + f.v[2] * b + f.n[2] * lift,
+      ];
+      verts.push({ p: cfPoint(c, l[0], l[1], l[2]), n: nW, uv: [(a + f.du / 2) / f.du, (f.dv / 2 - b) / f.dv] });
+    }
+  }
+  const tris = [];
+  const row = nu + 1;
+  for (let j = 0; j < nv; j++) {
+    for (let i = 0; i < nu; i++) {
+      const a = j * row + i;
+      tris.push([a, a + 1, a + row + 1], [a, a + row + 1, a + row]);
+    }
+  }
+  sink(verts, tris, faceName);
+}
+
+/** Size in studs of a part face (canvas width, height), as SurfaceArt.faceStuds. */
+export function faceStuds(size, faceName) {
+  if (faceName === 'Front' || faceName === 'Back') return [size[0], size[1]];
+  if (faceName === 'Left' || faceName === 'Right') return [size[2], size[1]];
+  return [size[0], size[2]];
+}

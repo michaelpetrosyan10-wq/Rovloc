@@ -1,0 +1,171 @@
+// hints.js: one short line the first time something new turns up (FirstTimeHints).
+//
+// TutorialConfig.Hints, highest priority first: the airlock countdown, a downed teammate (never solo), the first bear
+// trap, flask, vent grate or locker within the hint's radius on the current level, getting into the water, a low
+// battery with the light on. Each shows once ever: its hidden setting (Hint<Id>) is set the moment it shows and saved
+// with the settings. The card: a taped strip below the crosshair with the line and the device's input glyphs,
+// HintSeconds long, HintGap quiet seconds between two. Never at a bad moment: only Alive in a run with "First-time
+// hints" on, the HUD visible, no onboarding screen, outside the Cutscene / Menu / Struggle contexts, under no
+// Cutscene / Jumpscare / Drag lock, not while the Creature chases you, not while the panic is above HintPanicMax.
+
+import * as THREE from 'three';
+import { GameConfig, TutorialConfig } from '../config.js';
+import { S } from '../strings.js';
+import { cfPos } from '../util.js';
+import { glyphFor } from './nav.js';
+import { Palette, el } from './style.js';
+
+const T = TutorialConfig.Timing;
+const SCAN = 0.25;
+const FADE_IN = 3;
+const FADE_OUT = 2;
+const QUICK_FADE_OUT = 6;
+const BLOCKED_CONTEXTS = new Set(['Cutscene', 'Menu', 'Struggle']);
+const BLOCKED_LOCKS = new Set(['Cutscene', 'Jumpscare', 'Drag']);
+const WATER_STATES = new Set(['Treading', 'Freestyle', 'Underwater']);
+const GRATE_SHUT = new Set(['Closed', 'Unscrewing', 'Locked']);
+
+export class Hints {
+  /** @param {import('../game.js').Game} game */
+  constructor(game) {
+    this.name = 'Hints';
+    this.game = game;
+    this.env = game.env;
+    this.clock = 0;
+    this.alpha = 0;
+    this.showing = null;
+    this.shownAt = -Infinity;
+    this.endedAt = -Infinity;
+    this.scannedAt = -Infinity;
+    /** @type {Set<string>} */
+    this.due = new Set();
+    this.positions = new Map();
+    for (const type of ['BearTrap', 'Locker', 'VentGrate']) {
+      for (const e of game.world.entities(type)) this.positions.set(e.id, cfPos(e.pivot));
+    }
+    const root = this.env.uiRoot();
+    this.card = el('div', 'rg-sheet', root);
+    Object.assign(this.card.style, { position: 'absolute', left: '50%', top: '60%', transform: 'translateX(-50%) rotate(-0.4deg)',
+      width: 'min(460px, 92vw)', padding: '12px 16px', opacity: '0', display: 'none', pointerEvents: 'none', zIndex: '13' });
+    el('div', 'rg-tape l', this.card);
+    this.text = el('div', 'rg-body', this.card, '');
+    this.text.style.fontSize = '15px';
+    this.inputs = el('div', '', this.card);
+    Object.assign(this.inputs.style, { display: 'flex', gap: '16px', marginTop: '8px', flexWrap: 'wrap' });
+  }
+
+  /** The airlock just sealed: nothing to do (the hint is driven by the countdown). */
+  noteSeal() {}
+
+  _seen() {
+    const out = {};
+    for (const h of TutorialConfig.Hints) out[h.id] = !!this.env.setting(h.setting);
+    return out;
+  }
+
+  _allowed() {
+    const g = this.game;
+    return !!this.env.setting(TutorialConfig.HintsSetting) && g.phase === 'InRun' && g.life.state === 'Alive' &&
+      this.env.hudVisible() && !(g.onboarding && g.onboarding.busy()) && !BLOCKED_CONTEXTS.has(this.env.context()) &&
+      !BLOCKED_LOCKS.has(g.controlLock()) && !g.creature.chasingPlayer() && this.env.panic() <= T.HintPanicMax;
+  }
+
+  _near(id, from, radius) {
+    const p = this.positions.get(id);
+    return !!p && p.distanceTo(from) <= radius;
+  }
+
+  _scan(seen) {
+    const g = this.game;
+    this.due.clear();
+    if (g.phase !== 'InRun' || g.life.state !== 'Alive' || !g.level) return;
+    const level = g.level;
+    const from = this.env.rootPosition(_from);
+    const radius = (id) => (TutorialConfig.Hints.find((h) => h.id === id) || {}).radius || 0;
+    if (!seen.Airlock && g.airlock.level === level && g.airlock.deadline !== null) this.due.add('Airlock');
+    if (!seen.BearTrap && g.traps) {
+      for (const t of g.traps.traps) {
+        if (t.state === 'Armed' && t.level === level && this._near(t.id, from, radius('BearTrap'))) {
+          this.due.add('BearTrap');
+          break;
+        }
+      }
+    }
+    if (!seen.Flask && g.flasks) {
+      for (const f of g.flasks.pickupsOn(level)) {
+        if (f.position.distanceTo(from) <= radius('Flask')) {
+          this.due.add('Flask');
+          break;
+        }
+      }
+    }
+    if (!seen.VentGrate && g.vents) {
+      for (const gr of g.vents.gratesOn(level)) {
+        if (GRATE_SHUT.has(gr.state) && this._near(gr.id, from, radius('VentGrate'))) {
+          this.due.add('VentGrate');
+          break;
+        }
+      }
+    }
+    if (!seen.Locker) {
+      for (const e of g.world.entities('Locker', level)) {
+        if (this._near(e.id, from, radius('Locker'))) {
+          this.due.add('Locker');
+          break;
+        }
+      }
+    }
+    if (WATER_STATES.has(this.env.moveState())) this.due.add('Water');
+    if (!seen.LowBattery) {
+      const b = this.env.meters().battery;
+      const f = b.max > 0 ? b.value / b.max : 0;
+      if (this.env.flashlightOn() && f > 0 && f <= TutorialConfig.LowBatteryFraction) this.due.add('LowBattery');
+    }
+  }
+
+  _fill(hint) {
+    const env = this.env;
+    this.text.textContent = hint.id === 'Airlock' ? S(hint.text, GameConfig.StragglerSeconds) : S(hint.text);
+    this.inputs.textContent = '';
+    for (const input of hint.inputs) {
+      const row = el('div', '', this.inputs);
+      Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '6px' });
+      const device = env.device();
+      el('span', `rg-key${device === 'KeyboardMouse' ? '' : ' round'}`, row, glyphFor(env, input.action, device));
+      const label = el('span', 'rg-caps', row, S(input.label));
+      label.style.color = Palette.Bone;
+    }
+  }
+
+  frame(dt) {
+    this.clock += dt;
+    const ok = this._allowed();
+    const seen = this._seen();
+    if (this.clock - this.scannedAt >= SCAN) {
+      this.scannedAt = this.clock;
+      if (TutorialConfig.Hints.some((h) => !seen[h.id])) this._scan(seen);
+      else this.due.clear();
+    }
+    if (this.showing) {
+      if (!ok || this.clock - this.shownAt >= T.HintSeconds) {
+        this.showing = null;
+        this.endedAt = this.clock;
+      }
+    } else if (ok && this.clock - this.endedAt >= T.HintGap) {
+      const next = TutorialConfig.Hints.find((h) => this.due.has(h.id) && !seen[h.id]);
+      if (next) {
+        this.showing = next;
+        this.shownAt = this.clock;
+        this._fill(next);
+        this.env.setSetting(next.setting, true);
+      }
+    }
+    const target = this.showing ? 1 : 0;
+    const speed = target > this.alpha ? FADE_IN : ok ? FADE_OUT : QUICK_FADE_OUT;
+    this.alpha += Math.sign(target - this.alpha) * Math.min(Math.abs(target - this.alpha), dt * speed);
+    this.card.style.display = this.alpha > 0.001 ? '' : 'none';
+    this.card.style.opacity = String(this.alpha);
+  }
+}
+
+const _from = new THREE.Vector3();
