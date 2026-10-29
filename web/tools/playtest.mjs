@@ -1172,6 +1172,8 @@ async function roofMoment(D) {
   s = await D.st();
   check('Level 5: the ripcord (Space) opens the canopy', s.chute === 'Canopy' || s.chute === 'Landed', { chute: s.chute });
   await D.shot('canopy');
+  for (let i = 0; i < 24 && !(await D.G((g) => !!g.level5.finale)); i++) await D.run(0.5);
+  await finaleLedgeCheck(D);
   const finale = await D.run(12, { until: { phase: 'Results' } });
   await D.shot('finale-end');
   await D.run(4, { until: { phase: 'Results' } });
@@ -1193,4 +1195,164 @@ async function finaleLedgeCheck(D) {
   });
   check('Level 5 finale: the roof and the facade are drawn under the Creature on the ledge', v.roofDrawn && v.facadeDrawn, v);
   await D.shot('finale-ledge');
+}
+
+// ---------------------------------------------------------------------------------------------------- phases
+
+/** Title -> walkthrough -> lobby -> a ready pad -> the countdown -> Level 0, all by keyboard and walking. */
+async function titleToRun(D, firstTime = true) {
+  let s = await D.st();
+  check('title screen up', s.onboarding === 'Title', { onboarding: s.onboarding });
+  await D.shot('title');
+  await uiAudit(D, 'title');
+  if (firstTime) await D.G((g) => g.env.setSetting('TutorialDone', false));
+  await D.tab.keyboard.press('Enter');
+  await D.run(0.5);
+  s = await D.st();
+  if (s.onboarding === 'Walkthrough') {
+    for (let i = 0; i < 7; i++) {
+      await uiAudit(D, `walkthrough-${i}`);
+      if (i === 2) await D.shot('walkthrough');
+      await D.tab.keyboard.press('ArrowRight');
+      await D.run(0.3);
+    }
+    await D.tab.keyboard.press('Enter');
+    await D.run(0.8);
+  }
+  s = await D.st();
+  check('in the lobby after the title', s.phase === 'Lobby' && s.onboarding === 'Hidden', { phase: s.phase, onboarding: s.onboarding });
+  await D.shot('lobby');
+  await uiAudit(D, 'lobby');
+  // to the bus's rear step, then aboard onto the nearest pad
+  const bus = await D.G((g) => {
+    const e = g.lobby.bus.entrance;
+    const pad = g.lobby.pads.map((x) => x.centre).sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z))[0];
+    return { entrance: [e.x, e.y, e.z], pad: [pad.x, pad.y, pad.z] };
+  });
+  const toBus = await goTo(D, bus.entrance, { arrive: 1.5, timeout: 60 });
+  check('lobby: walking to the bus (floor route)', toBus.ok, toBus);
+  await D.G((g, pt, pad) => pt.go([pad], { arrive: 0.8, pitch: 0 }), bus.pad);
+  await D.down('KeyW');
+  await D.run(8, { until: { phase: 'Countdown' } });
+  await D.upAll();
+  await D.G((g, pt) => pt.stop());
+  s = await D.st();
+  check('lobby: stepping onto a ready pad starts the countdown', s.phase === 'Countdown', { phase: s.phase, root: s.root });
+  await D.shot('countdown');
+  await D.run(14, { until: { level: 'Level0_Basement' } });
+  await D.run(2.5);
+  s = await D.st();
+  check('deployed into Level 0', s.phase === 'InRun' && s.level === 'Level0_Basement' && s.life === 'Alive', s);
+  await heap(D.tab, 'Level0 start');
+}
+
+/** Restarts after a death: the results, Play Again, the pad, Level 0, then the level skip to `level`. */
+async function restartAt(D, level) {
+  let s = await D.st();
+  if (s.phase === 'RunEnded') await D.run(12, { until: { phase: 'Results' } });
+  s = await D.st();
+  if (s.phase !== 'Results') {
+    check(`restart: results screen after the run ended (${s.phase})`, false, s);
+    return false;
+  }
+  await D.shot('results');
+  await uiAudit(D, 'results');
+  await D.tab.keyboard.press('Enter');
+  await D.run(1.5);
+  s = await D.st();
+  check('Play Again: back in the lobby, ready (the countdown running)', s.phase === 'Countdown' || s.phase === 'Lobby', { phase: s.phase });
+  await D.run(16, { until: { level: 'Level0_Basement' } });
+  await D.run(2);
+  s = await D.st();
+  check('Play Again: the next run deploys', s.phase === 'InRun' && s.level === 'Level0_Basement' && s.health === 100, s);
+  if (level !== 'Level0_Basement') {
+    await D.G((g, pt, lv) => pt.dev.gotoLevel(lv), level);
+    await D.run(1.5);
+  }
+  return true;
+}
+
+/** The DOM audit: visible UI off screen, overflowing text, overlapping prompt rows (screens and panels). */
+async function uiAudit(D, label) {
+  const bad = await D.tab.evaluate(() => {
+    const out = [];
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const root = document.getElementById('rv-root') || document.body;
+    for (const el of root.querySelectorAll('*')) {
+      if (el.tagName === 'CANVAS' || el.closest('svg')) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+      let o = 1;
+      for (let p = el; p && p !== document.body; p = p.parentElement) o *= Number(getComputedStyle(p).opacity);
+      if (o < 0.2) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      const text = (el.childNodes.length === 1 && el.firstChild.nodeType === 3) ? el.textContent.trim() : '';
+      if (!text) continue;
+      if (r.left < -2 || r.top < -2 || r.right > vw + 2 || r.bottom > vh + 2) out.push({ issue: 'off-screen', text: text.slice(0, 60), r: [r.left, r.top, r.right, r.bottom].map(Math.round) });
+      if (el.scrollWidth > el.clientWidth + 3 && cs.overflowX !== 'visible' && el.clientWidth > 0) out.push({ issue: 'text-clipped', text: text.slice(0, 60) });
+    }
+    return out.slice(0, 10);
+  });
+  for (const b of bad) await D.G((g, pt, a) => pt.note(`ui-${a.b.issue}`, { ...a.b, screen: a.label }), { b, label });
+  return bad;
+}
+
+async function phaseRun(D) {
+  const budget = FLOOR_SECONDS;
+  let level = (await D.st()).level;
+  const startIdx = Math.max(0, LEVELS.indexOf(level));
+  for (let li = startIdx; li < LEVELS.length; li++) {
+    level = LEVELS[li];
+    let s = await D.st();
+    if (s.level !== level || s.phase !== 'InRun' || s.life !== 'Alive') {
+      const ok = await restartAt(D, level);
+      if (!ok) return;
+      s = await D.st();
+    }
+    console.log(`---- ${level} (${s.zone}, natural: ${!report.coverage[level] ? 'yes' : 'no'})`);
+    report.coverage[level] = { ...(report.coverage[level] || {}), arrivedNaturally: !report.coverage[level] && li > 0 ? true : li === 0 };
+    await D.G((g) => g.env.setFlashlight(true));
+    await D.shot(`${level}-start`);
+    await uiAudit(D, level);
+    if (level === 'Level0_Basement') await trapMoment(D);
+    if (level === 'Level5_Roof') {
+      await D.run(2);
+      await roofMoment(D);
+      await heap(D.tab, 'results');
+      break;
+    }
+    await exploreFloor(D, level, budget);
+    s = await D.st();
+    if (s.life === 'Alive' && s.level === level) {
+      if (level === 'Level2_ScienceHall') await flaskMoment(D);
+      if (level === 'Level3_Gymnasium') await lockerMoment(D);
+      if (level === 'Level4_FloodedPool') await poolMoment(D);
+    }
+    s = await D.st();
+    if (s.life !== 'Alive' || s.level !== level) {
+      console.log(`     ${level}: the run ended (${s.life}) — ${JSON.stringify((await D.G((g, pt) => pt.catches)).slice(-2))}`);
+      await D.shot(`${level}-ended`);
+      continue;
+    }
+    const left = await leaveFloor(D, level);
+    check(`${level}: left by its exit airlock`, left.ok, left);
+    await heap(D.tab, `${level} done`);
+    if (!left.ok) {
+      const t = await D.st();
+      if (t.life === 'Alive' && t.level === level) {
+        // a softlock (or a death on the way): the next floor by the level skip
+        await D.shot(`${level}-no-exit`);
+        await D.G((g, pt, lv) => pt.dev.gotoLevel(lv), LEVELS[li + 1]);
+        await D.run(1.5);
+      }
+    }
+  }
+  // the second run: Play Again from the results
+  const s = await D.st();
+  if (s.phase === 'Results' || s.phase === 'RunEnded') {
+    await restartAt(D, 'Level0_Basement');
+    await heap(D.tab, 'second run Level0');
+  }
 }
