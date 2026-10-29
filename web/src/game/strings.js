@@ -1,6 +1,7 @@
 // Every player-facing string, keyed (Shared/Strings.luau, value for value). UI code calls S(key, ...args) and never
 // embeds text. A few lines name a Roblox key the web binds differently (Dive is C here, not Ctrl, because Ctrl+W
-// closes a browser tab; the lobby's ready key is the Kick action's R / Y); WEB_OVERRIDES restates those.
+// closes a browser tab; the lobby's ready key is the Kick action's R / Y) or speaks to a squad where the web plays
+// alone; WEB_OVERRIDES restates those.
 
 const STRINGS = {
   // Boot / loading
@@ -496,6 +497,15 @@ const WEB_OVERRIDES = {
   "Lobby.Voted": "VOTED",
   "Downed.UseSyringe": "USE SYRINGE",
   "Downed.BleedingOut": "Bleeding out in %d",
+  // played alone: the squad's lines restated for one player (the stairwell seals as soon as you are in it)
+  "Tutorial.Teamwork.Title": "GOING DOWN",
+  "Tutorial.Teamwork.Body": "The first time something gets you in a run, you go down instead of dying. A Syringe from the loadout gets you back up before you bleed out; without one, the run is over. Every stairwell is a checkpoint: step inside and its fire doors seal behind you.",
+  "Tutorial.Art.Revive": "SYRINGE",
+  "Tutorial.Art.Seal": "CHECKPOINT",
+  "Objective.Airlock.Wait": "Stay inside while the fire doors seal",
+  "Hint.Airlock": "The stairwell is a checkpoint. Step inside and its fire doors seal behind you.",
+  "Lobby.WaitingForSquad": "Ready up to go down (%d / %d ready)",
+  "Results.Waiting": "Heading back down...",
 };
 
 /**

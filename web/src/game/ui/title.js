@@ -10,7 +10,7 @@
 //             skipping saves TutorialDone. openWalkthrough() replays it from the lobby and returns there.
 
 import * as THREE from 'three';
-import { GameConfig, TutorialConfig } from '../config.js';
+import { TutorialConfig } from '../config.js';
 import { S } from '../strings.js';
 import { lookAtMatrix } from '../util.js';
 import { FocusGroup, glyphFor } from './nav.js';
@@ -286,7 +286,7 @@ export class Onboarding {
     this.counter.textContent = S('Tutorial.Page', this.page + 1, pages.length);
     this.pageTitle.textContent = S(entry.title);
     this.pageBody.textContent = entry.deviceBody ? S(`${entry.body}.${device}`)
-      : entry.id === 'Teamwork' ? S(entry.body, GameConfig.StragglerSeconds) : S(entry.body);
+      : S(entry.body);
     this.dotEls.forEach((d, i) => (d.style.background = i === this.page ? Palette.Bone : Palette.Smoke));
     this.backBtn.toggleAttribute('disabled', this.page === 0);
     this.nextBtn.textContent = S(this.page >= pages.length - 1 ? 'Tutorial.Done' : 'Tutorial.Next');
@@ -421,24 +421,24 @@ const ART = {
     });
   },
   Teamwork(parent) {
+    // played alone: a downed figure and the syringe that gets it up; a stairwell's fire doors shut in the ring
     const s = svg(parent);
-    const figure = (x, y, rot, color) => {
-      const g = node(s, 'g', { transform: `translate(${x} ${y}) rotate(${rot})` });
-      node(g, 'circle', { cx: 0, cy: -26, r: 9, fill: color });
-      node(g, 'rect', { x: -9, y: -15, width: 18, height: 48, rx: 6, fill: color });
-    };
-    figure(46, 92, 0, Palette.Bone);
-    figure(110, 118, 90, Palette.Ember);
-    node(s, 'rect', { x: 107, y: 60, width: 6, height: 20, fill: Palette.Moss });
-    node(s, 'rect', { x: 100, y: 67, width: 20, height: 6, fill: Palette.Moss });
-    caption(s, 80, 156, S('Tutorial.Art.Revive'), Palette.Moss);
+    const g = node(s, 'g', { transform: 'translate(92 118) rotate(90)' });
+    node(g, 'circle', { cx: 0, cy: -26, r: 9, fill: Palette.Ember });
+    node(g, 'rect', { x: -9, y: -15, width: 18, height: 48, rx: 6, fill: Palette.Ember });
+    const syringe = node(s, 'g', { transform: 'translate(70 52) rotate(-35)' });
+    node(syringe, 'rect', { x: 0, y: -5, width: 34, height: 10, rx: 2, fill: 'none', stroke: Palette.Moss, 'stroke-width': 2.5 });
+    node(syringe, 'rect', { x: 2, y: -3, width: 18, height: 6, fill: Palette.Moss });
+    node(syringe, 'rect', { x: 34, y: -1, width: 16, height: 2, fill: Palette.Bone });
+    node(syringe, 'rect', { x: -10, y: -1.5, width: 10, height: 3, fill: Palette.Moss });
+    node(syringe, 'rect', { x: -13, y: -7, width: 3, height: 14, fill: Palette.Moss });
+    caption(s, 92, 172, S('Tutorial.Art.Revive'), Palette.Moss);
     const r = 34;
-    const c = 2 * Math.PI * r;
-    node(s, 'circle', { cx: 196, cy: 198, r, fill: 'none', stroke: Palette.Bone, 'stroke-opacity': 0.2, 'stroke-width': 5 });
-    node(s, 'circle', { cx: 196, cy: 198, r, fill: 'none', stroke: Palette.Amber, 'stroke-width': 5,
-      'stroke-dasharray': `${c} ${c}`, 'stroke-dashoffset': c * 0.3, transform: 'rotate(-90 196 198)' });
-    node(s, 'text', { x: 196, y: 204, fill: Palette.Bone, 'font-family': Fonts.Strong, 'font-size': 18, 'text-anchor': 'middle',
-      'font-weight': 700 }, `0:${String(GameConfig.StragglerSeconds).padStart(2, '0')}`);
+    node(s, 'circle', { cx: 196, cy: 198, r, fill: 'none', stroke: Palette.Amber, 'stroke-width': 5 });
+    node(s, 'rect', { x: 176, y: 180, width: 19, height: 36, fill: Palette.Ash });
+    node(s, 'rect', { x: 197, y: 180, width: 19, height: 36, fill: Palette.Ash });
+    node(s, 'rect', { x: 186, y: 196, width: 6, height: 2.5, fill: Palette.Ink });
+    node(s, 'rect', { x: 200, y: 196, width: 6, height: 2.5, fill: Palette.Ink });
     caption(s, 196, 250, S('Tutorial.Art.Seal'));
   },
   Lobby(parent, ui) {

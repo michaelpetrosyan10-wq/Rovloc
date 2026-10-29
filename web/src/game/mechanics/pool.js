@@ -857,6 +857,7 @@ export class Pool {
     const row = el('div', '', struggle);
     Object.assign(row.style, { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', margin: '10px 0' });
     const glyph = el('div', '', row);
+    Object.assign(glyph.style, { position: 'relative', width: '64px', height: '64px', flex: '0 0 64px' });
     env.keyCap(glyph, 'Struggle', 64);
     const mash = el('div', 'rg-caps', row, S('Hud.StruggleMash'));
     mash.style.color = Palette.Bone;
@@ -873,8 +874,23 @@ export class Pool {
     const v = this.volumes.find((x) => !x.duct && x.level === g.level) || this.volumes.find((x) => !x.duct);
     if (!v || !g.live()) return false;
     if (!this.swimmer) {
-      const p = new THREE.Vector3(0, 0, 0).applyMatrix4(v.matrix);
-      p.y = floatRootY(v.surface, 'Treading', env.eyeHeight('Treading'));
+      // open water nearest the player: nothing over it between the pool floor and the air (no bridge, no slab)
+      const root = env.rootPosition(new THREE.Vector3());
+      const y = floatRootY(v.surface, 'Treading', env.eyeHeight('Treading'));
+      let p = null;
+      let best = Infinity;
+      for (let x = -v.size[0] / 2 + 4; x <= v.size[0] / 2 - 4; x += 6) {
+        for (let z = -v.size[2] / 2 + 4; z <= v.size[2] / 2 - 4; z += 6) {
+          const c = new THREE.Vector3(x, 0, z).applyMatrix4(v.matrix);
+          if (!env.lineClear(_a.set(c.x, v.bottom + 1, c.z), _b.set(c.x, v.surface + 6, c.z), { ignoreEntities: false })) continue;
+          const d = Math.hypot(c.x - root.x, c.z - root.z);
+          if (d < best) {
+            best = d;
+            p = c.setY(y);
+          }
+        }
+      }
+      if (!p) return false;
       env.teleport({ position: p, yaw: env.look().yaw });
       if (g.traps) g.traps.noteTeleport();
       this._engage(v, p, env.now());

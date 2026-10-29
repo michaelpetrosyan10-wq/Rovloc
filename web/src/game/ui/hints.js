@@ -9,7 +9,7 @@
 // Cutscene / Jumpscare / Drag lock, not while the Creature chases you, not while the panic is above HintPanicMax.
 
 import * as THREE from 'three';
-import { GameConfig, TutorialConfig } from '../config.js';
+import { TutorialConfig } from '../config.js';
 import { S } from '../strings.js';
 import { cfPos } from '../util.js';
 import { glyphFor } from './nav.js';
@@ -125,7 +125,7 @@ export class Hints {
 
   _fill(hint) {
     const env = this.env;
-    this.text.textContent = hint.id === 'Airlock' ? S(hint.text, GameConfig.StragglerSeconds) : S(hint.text);
+    this.text.textContent = S(hint.text);
     this.inputs.textContent = '';
     for (const input of hint.inputs) {
       const row = el('div', '', this.inputs);

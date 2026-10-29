@@ -60,6 +60,7 @@ const ARC_OPACITY = 0.45;
 const RING_DIAMETER = 1.3;
 const RING_THICKNESS = 0.03;
 const MAX_CLOUD_PARTICLES = 160;
+const CLOUD_ALPHA = 0.42; // a puff's peak opacity (the built-in smoke texture's density)
 
 /** ChemicalFlaskBuilder.liquidColor (0..1 RGB). */
 export function liquidColor(variant) {
@@ -418,7 +419,7 @@ export class FlaskEffects {
   _cloud(centre, color, seconds, inVent, born) {
     const env = this.env;
     const r = this.random;
-    const gas = new Billboards(MAX_CLOUD_PARTICLES, color.clone().multiplyScalar(0.62), false);
+    const gas = new Billboards(MAX_CLOUD_PARTICLES, color.clone().multiplyScalar(0.78), false);
     const glow = env.addLight({ position: centre.clone(), color: [color.r, color.g, color.b], brightness: 0, range: CLOUD_LIGHT_RANGE });
     const scale = inVent ? 0.45 : 1;
     const puffs = [];
@@ -459,7 +460,7 @@ export class FlaskEffects {
         }
         for (const q of puffs) {
           const t = (now - q.born) / q.life;
-          const alpha = 0.32 * smoothstep(0, 0.15, t) * (1 - smoothstep(0.55, 1, t));
+          const alpha = CLOUD_ALPHA * smoothstep(0, 0.15, t) * (1 - smoothstep(0.55, 1, t));
           gas.set(n++, q.p, q.size0 + (q.size1 - q.size0) * Math.sqrt(t), alpha);
         }
         gas.commit(n);

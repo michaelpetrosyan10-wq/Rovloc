@@ -11,8 +11,9 @@
 // sealed doors stay Locked for the run.
 //
 // Web: the player also counts as inside while they stand in the stair tower beyond the vestibule (WorldConfig.Towers,
-// from the level's floor up to the next level's ceiling) or in the next level's entry vestibule: a lone survivor who runs on up the stairs while the doors
-// close is past the seal, not left behind on the floor (the Roblox squad waits in the vestibule for each other).
+// from the level's floor up to the next level's ceiling) or in the next level's entry vestibule: a lone survivor who
+// runs on up the stairs while the doors close is past the seal, not left behind on the floor (the Roblox squad waits
+// in the vestibule for each other). Alone, Waiting lasts one poll, so the squad's straggler toast is not sent.
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
@@ -131,8 +132,9 @@ export class Airlock {
     if (this.phase === 'Idle') {
       if (this.inside && playing) {
         this.phase = 'Waiting';
+        // (the Roblox squad hears "Hud.Straggler" here; played alone everyone is already in, so the doors start
+        // sealing on this same poll and there is nobody to warn)
         this._setDeadline(now + GameConfig.StragglerSeconds);
-        game.notify('Hud.Straggler', GameConfig.StragglerSeconds);
       } else return;
     }
     if (this.phase === 'Waiting') {

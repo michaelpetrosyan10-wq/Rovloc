@@ -24,10 +24,20 @@
 //   engine.lighting   setOverride(lightId, brightness), setGroupFactor(groupId, factor), burst(lightId),
 //                     lightning({intensity, stages}), setStormEnabled, resetForRun, addLight
 //   engine.save / engine.settings   localStorage blob (get / set / update / flush / persistent) and the settings
-//   engine            setCurrentLevel, setAmbienceEnabled, menuEnabled, syringes, renderer.camera, spawnPoints
+//   engine            setCurrentLevel, setAmbienceEnabled, menuEnabled, syringes, renderer.camera / height, spawnPoints
 
 import * as THREE from 'three';
 import { CameraConfig, WalkSpeeds } from '../engine/config.js';
+
+/** One stacked prompt row's height on screen (CSS pixels): the engine's .rv-prompt row plus a small gap. */
+const PROMPT_ROW_PIXELS = 58;
+const _promptFrame = new THREE.Matrix4();
+const _promptBasis = new THREE.Matrix3();
+const _promptAt = new THREE.Vector3();
+const _promptOffset = new THREE.Vector3();
+const _promptUp = new THREE.Vector3();
+const _promptEye = new THREE.Vector3();
+const _promptAhead = new THREE.Vector3();
 
 /** @typedef {import('three').Vector3} Vector3 */
 /** @typedef {import('three').Matrix4} Matrix4 */
@@ -45,8 +55,10 @@ export class Env {
     this.meta = engine.world.meta || engine.world.data;
     if (!this.meta || !this.meta.entities) throw new Error('game: the engine exposes no world metadata');
     this.THREE = THREE;
-    /** @type {Set<{raw: any, wanted: boolean}>} every prompt the game added (for suppressPrompts) */
+    /** @type {Set<{raw: any, wanted: boolean, group: Set<object>|null}>} every prompt the game added (suppressPrompts) */
     this.promptEntries = new Set();
+    /** @type {Map<string, Set<object>>} prompts sharing one entity attachment, stacked like PromptRenderer's rows */
+    this.promptGroups = new Map();
     /** @type {Set<string>} */
     this.promptSuppressors = new Set();
   }
@@ -453,6 +465,11 @@ export class Env {
     return !!this.engine.ui.menuOpen;
   }
 
+  /** Stops / restarts the game clock (ticks and every game-time timer; frames still draw with dt 0). */
+  setPaused(on) {
+    this.engine.loop.setPaused(!!on);
+  }
+
   /** Whether Menu / Escape opens the pause menu. */
   setMenuEnabled(on) {
     this.engine.menuEnabled = !!on;
@@ -529,16 +546,37 @@ export class Env {
 
   // ---------------------------------------------------------------------------------------------------- prompts
 
-  /** A proximity prompt (see engine/prompts.js PromptSpec). */
+  /**
+   * A proximity prompt (see engine/prompts.js PromptSpec). Prompts on one entity attachment stack in rows centred on
+   * it, as the original PromptRenderer's shared BillboardGui lays them out (a vent grate's Unscrew over its Kick):
+   * each is anchored through a position function that keeps the entity anchoring (pivot or attachment, `offset` in
+   * entity space, nothing while the entity is hidden) and adds its row's screen offset.
+   */
   addPrompt(spec) {
-    const raw = this.engine.prompts.add(spec);
-    const entry = { raw, wanted: spec.enabled !== false };
+    let group = null;
+    let rawSpec = spec;
+    const entry = { raw: null, wanted: spec.enabled !== false, group: null };
+    if (spec.entity) {
+      const key = `${spec.entity}\u0000${spec.attachment || ''}`;
+      group = this.promptGroups.get(key);
+      if (!group) {
+        group = new Set();
+        this.promptGroups.set(key, group);
+      }
+      group.add(entry);
+      entry.group = group;
+      rawSpec = { ...spec, entity: undefined, attachment: undefined, offset: undefined,
+        position: () => this._promptAnchor(spec, entry) };
+    }
+    const raw = this.engine.prompts.add(rawSpec);
+    entry.raw = raw;
     this.promptEntries.add(entry);
     raw.setEnabled(entry.wanted && this.promptSuppressors.size === 0);
     return {
       id: raw.id,
       remove: () => {
         this.promptEntries.delete(entry);
+        if (group) group.delete(entry);
         raw.remove();
       },
       setEnabled: (on) => {
@@ -566,6 +604,41 @@ export class Env {
   clearPrompts() {
     this.engine.prompts.clear();
     this.promptEntries.clear();
+    this.promptGroups.clear();
+  }
+
+  /** An entity prompt's world anchor this frame (null while the entity is hidden or gone). */
+  _promptAnchor(spec, entry) {
+    const entities = this.engine.entities;
+    const e = entities.get(spec.entity);
+    if (!e || e.hidden) return null;
+    const frame = (spec.attachment && entities.attachmentWorld(spec.entity, spec.attachment, _promptFrame)) ||
+      _promptFrame.copy(e.pivot);
+    const out = _promptAt.setFromMatrixPosition(frame);
+    if (spec.offset) {
+      const o = Array.isArray(spec.offset) ? _promptOffset.fromArray(spec.offset) : _promptOffset.copy(spec.offset);
+      out.add(o.applyMatrix3(_promptBasis.setFromMatrix4(frame)));
+    }
+    const group = entry.group;
+    if (!group || group.size < 2) return out;
+    const live = this.promptSuppressors.size === 0;
+    let index = 0;
+    let count = 0;
+    for (const other of group) {
+      if (!other.wanted || !live) continue;
+      if (other === entry) index = count;
+      count++;
+    }
+    if (count < 2) return out;
+    const camera = this.camera();
+    const height = this.engine.renderer.height || 720;
+    _promptUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+    _promptEye.setFromMatrixPosition(camera.matrixWorld);
+    _promptAhead.setFromMatrixColumn(camera.matrixWorld, 2).normalize().negate();
+    // a perspective pixel spans the view depth (not the distance) times the frustum's slope
+    const depth = Math.max(0.05, _promptEye.subVectors(out, _promptEye).dot(_promptAhead));
+    const perPixel = (2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / (camera.zoom || 1) / height;
+    return out.addScaledVector(_promptUp, -(index - (count - 1) / 2) * PROMPT_ROW_PIXELS * perPixel);
   }
 
   // ---------------------------------------------------------------------------------------------------- entities

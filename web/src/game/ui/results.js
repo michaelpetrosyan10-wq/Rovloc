@@ -1,12 +1,12 @@
 // results.js: the end-of-run screen (EscapeSummaryController).
 //
 // The run's summary opens a full-screen card: ESCAPED in bone white with a cold glow, landing with a lightning flash
-// (FlashScale), or THE SCHOOL KEPT YOU / YOU DIDN'T MAKE IT in blood red with a failing-bulb flicker; the squad line and
-// the difficulty; the run time, the best time and NEW BEST TIME; the credits counting up; the stat rows; "This run was
-// not saved." when it paid nothing. PLAY AGAIN (click / tap, gamepad A, Enter) and the auto-return countdown with a
-// draining bar. While it is up the cursor is free, gameplay input is off (Menu context) and the HUD is hidden. It waits
-// while a finale shot or a jumpscare owns the view (Cutscene context, Cutscene / Jumpscare / Parachute lock), at most
-// 10 s, then fades in from black.
+// (FlashScale), or THE SCHOOL KEPT YOU / YOU DIDN'T MAKE IT in blood red with a failing-bulb flicker; the squad line
+// (only for a squad) and the difficulty; the run time, the best time and NEW BEST TIME; the credits counting up; the
+// stat rows; "This run was not saved." when it paid nothing. PLAY AGAIN (click / tap, gamepad A, Enter) and the
+// auto-return countdown with a draining bar. While it is up the cursor is free, gameplay input is off (Menu context)
+// and the HUD is hidden. It waits while a finale shot or a jumpscare owns the view (Cutscene context, Cutscene /
+// Jumpscare / Parachute lock), at most 10 s, then fades in from black.
 
 import { S } from '../strings.js';
 import { formatTime } from '../util.js';
@@ -20,9 +20,10 @@ const CREDIT_DELAY = 0.8;
 const FLASH_PEAK = 0.55;
 const FLASH_DECAY = 6;
 const HOLDING_LOCKS = new Set(['Cutscene', 'Jumpscare', 'Parachute']);
+// (the Roblox card also lists Revives, teammates revived; played alone there is nobody to revive)
 const STAT_ROWS = [
   ['TrapsTriggered', 'Results.TrapsTriggered'], ['VentsCrawled', 'Results.VentsCrawled'],
-  ['FlasksThrown', 'Results.FlasksThrown'], ['Stuns', 'Results.Stuns'], ['Revives', 'Results.Revives'],
+  ['FlasksThrown', 'Results.FlasksThrown'], ['Stuns', 'Results.Stuns'],
   ['LockersHidden', 'Results.LockersHidden'], ['FloorsCleared', 'Results.FloorsCleared'], ['TimesDowned', 'Results.TimesDowned'],
 ];
 
@@ -142,6 +143,7 @@ export class Results {
       ? 'radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(18,34,46,0.9) 130%)'
       : `radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, ${Palette.Blood} 150%)`;
     this.squad.textContent = S('Results.Squad', s.escapees, s.squadSize);
+    this.squad.style.display = s.squadSize > 1 ? '' : 'none'; // "1 of 1 escaped" says nothing alone
     this.difficulty.textContent = S(`Lobby.Difficulty.${s.difficulty}`);
     this.time.textContent = S('Results.Time', formatTime(s.runSeconds));
     this.best.textContent = s.bestTime ? S('Results.BestTime', formatTime(s.bestTime)) : '';

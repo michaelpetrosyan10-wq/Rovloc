@@ -1,6 +1,8 @@
 // menu.js: the pause menu's buttons (the engine draws the menu and the settings under them). In the lobby: Resume
 // and How to play; in a run: Resume and Abandon the run (it resolves as a death, as leaving does). With ?dev in the
 // URL the dev shortcuts are listed too (each marks the run a dev run: no credits, escapes or best time).
+// Web: played alone, the menu really pauses: the game clock stops while it is open (the Roblox menu cannot stop a
+// shared server), so the Creature, timers and scenes all wait.
 
 import { LevelOrder } from './config.js';
 import { S } from './strings.js';
@@ -11,6 +13,8 @@ export class Menu {
     this.name = 'Menu';
     this.game = game;
     this.dev = dev;
+    /** whether this menu holds the game clock stopped */
+    this.paused = false;
     this.restoreButtons();
   }
 
@@ -56,6 +60,14 @@ export class Menu {
 
   phaseChanged() {
     this.restoreButtons();
+  }
+
+  frame() {
+    const open = this.game.env.menuOpen();
+    if (open !== this.paused) {
+      this.paused = open;
+      this.game.env.setPaused(open);
+    }
   }
 
   levelActivated() {

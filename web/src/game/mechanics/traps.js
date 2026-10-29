@@ -24,6 +24,7 @@ const SNAP_SECONDS = 0.07;
 const PRY_OPEN_SECONDS = 0.6;
 const PRIED_OPENNESS = 0.45;
 const CRUNCH_DELAY = 0.03;
+const PRY_REARM = 0.05;
 const TELEPORT_GRACE = 0.35;
 const LOOK_UP_SLACK = 10;
 const PRESS_HEIGHT = 0.75;
@@ -108,6 +109,10 @@ export class Traps {
     this.trembleClock = 0;
     this.hintAt = -Infinity;
     this.shakeAt = null;
+    /** @type {{at: number, point: THREE.Vector3}|null} the bone crunch after the snap (game clock) */
+    this.crunch = null;
+    /** @type {{at: number, trap: object}|null} a pry refused for the head being up comes back on (game clock) */
+    this.pryRearm = null;
     this.holdSince = null;
     for (const info of game.world.entities('BearTrap')) this.traps.push(this._make(info));
   }
@@ -246,7 +251,7 @@ export class Traps {
     // moments
     g.noise(trap.floor, 'TrapSnap');
     g.playAt('TrapSnap', trap.floor);
-    setTimeout(() => g.playAt('BoneCrunch', trap.leg), CRUNCH_DELAY * 1000);
+    this.crunch = { at: env.now() + CRUNCH_DELAY, point: trap.leg };
     g.stats.increment('TrapsTriggered');
     this._present(true);
     this.shakeAt = env.now() + LEAD;
@@ -263,9 +268,7 @@ export class Traps {
         this.env.hint(S('Hud.Trapped'), 4);
       }
       handle.setEnabled(false);
-      setTimeout(() => {
-        if (this.caught === trap) handle.setEnabled(true);
-      }, 50);
+      this.pryRearm = { at: this.env.now() + PRY_REARM, trap };
     }
   }
 
@@ -361,6 +364,15 @@ export class Traps {
     if (this.shakeAt !== null && now >= this.shakeAt) {
       this.shakeAt = null;
       env.shake(SNAP_SHAKE * clamp01(env.setting('MotionScale') ?? 1), SNAP_SHAKE_SECONDS);
+    }
+    if (this.crunch && now >= this.crunch.at) {
+      this.game.playAt('BoneCrunch', this.crunch.point);
+      this.crunch = null;
+    }
+    if (this.pryRearm && now >= this.pryRearm.at) {
+      const { trap: refused } = this.pryRearm;
+      this.pryRearm = null;
+      if (this.caught === refused && refused.handle) refused.handle.setEnabled(true);
     }
     const trap = this.caught;
     if (!trap) return;
