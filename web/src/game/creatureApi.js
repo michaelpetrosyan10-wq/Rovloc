@@ -14,14 +14,42 @@
 // plus what the level scenes and mechanics read from it, called when the module offers them:
 //   getPosition() -> Vector3 (root) / getEye() -> Vector3, isHidden(), getPoseMode(), getVentNode() -> node id | null,
 //   playAction(name) (the scene timelines' "creature" track: NeckSnap, DoorSmash, Reveal, Vanish),
-//   setDifficulty(name, spec), setCatchHooks({canCatch(kind), outcome(kind) -> 'Down'|'Execute', apply(outcome)}).
+//   setDifficulty(name), setCatchHooks({canCatch(kind), outcome(kind) -> 'Down'|'Execute', apply(outcome)}).
 //
-// The Creature arrives as engine.creature (or the `creature` option of start()). Without one (a build without W3's
-// module) every call is a dormant Creature's answer: acquireScripted returns null, so the scenes play their
-// Creature-less versions exactly as the Roblox controllers do when AcquireScripted refuses.
+// createCreatureApi(engine) builds W3's Creature (src/creature/index.js createCreature) on the engine; start() can
+// be handed another one (or null) instead. Without one every call is a dormant Creature's answer: acquireScripted
+// returns null, so the scenes play their Creature-less versions exactly as the Roblox controllers do when
+// AcquireScripted refuses.
+//
+// The game's side, told to the Creature: beginRun(difficulty) at each run start, bindGame(hooks) with the player's
+// life state, duct crawl, grates, fixture doors, locker and level (W3's GameHooks), setCatchHooks for the catches.
 
 import * as THREE from 'three';
+import { CreatureConfig, ROOT_HEIGHT } from '../creature/config.js';
+import { createCreature } from '../creature/index.js';
 import { Signal } from './util.js';
+
+/** The rig measures the level scenes stage with (CreatureConfig): root height over the floor, eye over the root. */
+export const CreatureMetrics = Object.freeze({
+  rootHeight: ROOT_HEIGHT,
+  eye: CreatureConfig.EyeHeightAboveRoot,
+});
+
+/**
+ * W3's Creature on `engine`, behind the adapter (a dormant stand-in when it cannot be built).
+ * @param {any} engine
+ * @param {any} [creature] a Creature to use instead (null: none)
+ */
+export function createCreatureApi(engine, creature) {
+  if (creature !== undefined) return new CreatureApi(creature);
+  if (engine.creature) return new CreatureApi(engine.creature);
+  try {
+    return new CreatureApi(createCreature(engine));
+  } catch (err) {
+    console.error('[game] the Creature could not be built; the run plays without it', err);
+    return new CreatureApi(null);
+  }
+}
 
 /** @typedef {'Empty'|'HiddenSafe'|'Caught'} LockerVerdict */
 
@@ -146,8 +174,28 @@ export class CreatureApi {
     this._call('deactivate');
   }
 
-  setDifficulty(name, spec) {
-    this._call('setDifficulty', name, spec);
+  setDifficulty(name) {
+    this._call('setDifficulty', name);
+  }
+
+  /** BeginRun: the Creature is placed Dormant for a run on `difficulty`. */
+  beginRun(difficulty) {
+    this._call('setDifficulty', difficulty);
+    this._call('beginRun', { difficulty });
+  }
+
+  /**
+   * The game state the Creature reads (W3's GameHooks: lifeState, downedCount, isInVent, grateState, forceGrate,
+   * doorOpen, lockerOccupied, playerLevel).
+   * @param {Record<string, Function>} hooks
+   */
+  bindGame(hooks) {
+    this._call('bindGame', hooks);
+  }
+
+  /** Dev: a MonsterAIService dev command ("ai patrol", "hunt", "ignoreme"). */
+  devCommand(command) {
+    return this._call('devCommand', command);
   }
 
   /** The game's side of a catch (who may be caught, what the outcome is, applying it). */
@@ -160,7 +208,7 @@ export class CreatureApi {
     this._call('registerLockerInspector', fn);
   }
 
-  /** @param {() => boolean} fn */
+  /** @param {(player?: any) => boolean} fn */
   registerPoolGrabber(fn) {
     this._call('registerPoolGrabber', fn);
   }
@@ -190,9 +238,9 @@ export class CreatureApi {
       setHidden: (hidden) => call('setHidden', hidden),
       face: (position) => call('face', position),
       release: (nextState) => call('release', nextState),
-      setTarget: (on) => call('setTarget', on),
+      setTarget: (on) => call('setTarget', on ? true : null),
       action: (name) => {
-        if (typeof raw.action === 'function') call('action', name);
+        if (typeof raw.playAction === 'function') call('playAction', name);
         else this._call('playAction', name);
       },
     };

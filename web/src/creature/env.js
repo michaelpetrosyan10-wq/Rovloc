@@ -25,13 +25,15 @@
 // fixtures) comes from W4's hooks (bindGame); without a hook the adapter derives it from the engine (player mode, the
 // entities' Roblox attributes) so the Creature still behaves.
 //
-// Monster collision. The Creature's collision group (Monster) walks through MonsterPassthrough parts (desks, lockers,
-// door leaves, trims). When world.json's collision table carries `defaultIndexCount` (the leading triangles that are
-// Default-group parts) the Creature collides with that prefix only; otherwise with the level's whole collision.
+// Monster collision. The Creature's collision group (Monster) walks through MonsterPassthrough parts (desks, lab
+// benches, lockers, door leaves and trims). Its walker collides with a level's collision minus the triangles of those
+// parts (monsterCollision.js, from the generated passthrough table), or with the whole collision when the table does
+// not describe the baked data. Entity colliders in the MonsterPassthrough group are skipped the same way.
 
 import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { CFrame } from './cframe.js';
+import { monsterIndex } from './monsterCollision.js';
 import { nearest as railNearest } from './ventgraph.js';
 
 const PASSTHROUGH = 'MonsterPassthrough';
@@ -170,11 +172,12 @@ export class CreatureEnv {
     const table = world.meta.collision && world.meta.collision[level];
     const decoded = world.decoded && world.decoded.collision && world.decoded.collision[level];
     let bvh = null;
-    if (table && Number.isFinite(table.defaultIndexCount) && decoded) {
+    const index = monsterIndex(level, table, decoded);
+    if (index && index.length > 0) {
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(decoded.position, 3));
-      geometry.setIndex(new THREE.BufferAttribute(decoded.index.slice(0, table.defaultIndexCount), 1));
-      bvh = new MeshBVH(geometry, { maxLeafTris: 8 });
+      geometry.setIndex(new THREE.BufferAttribute(index, 1));
+      bvh = new MeshBVH(geometry, { targetLeafSize: 8 });
     } else {
       const c = world.colliders && world.colliders.get(level);
       bvh = c ? c.bvh : null;

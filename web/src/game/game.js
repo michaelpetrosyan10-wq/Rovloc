@@ -73,7 +73,10 @@ export class Game {
     this.levelActivated = new Signal();
     /** @type {Signal<[string]>} */
     this.levelDeactivated = new Signal();
-    this.tickHz = 0;
+    /** @type {import('./creatureApi.js').ScriptedHandle|null} the scripted Creature a level scene holds */
+    this.creatureHandle = null;
+    /** @type {Set<string>} lights a level keeps lit past their scene (the pool floodlights) */
+    this.lightsKeptLit = new Set();
   }
 
   /** Registers a system (in dependency order). */
@@ -203,6 +206,17 @@ export class Game {
     return this.env.eye(out);
   }
 
+  /** The zone (room or duct chase) the player's root stands in (ZoneService ZoneId), or null. */
+  zoneId() {
+    const z = this.env.zoneAt(this.env.rootPosition(_root));
+    return z ? z.id : null;
+  }
+
+  /** The floor under the player (LevelKit.feetOf). */
+  feet(out = new THREE.Vector3()) {
+    return this.env.feetPosition(out);
+  }
+
   /** LevelKit.seenBy for the one player: within `range` of the eye with a clear line. */
   seen(point, range = 250) {
     if (!this.playing()) return false;
@@ -238,6 +252,7 @@ export class Game {
 }
 
 const _eye = new THREE.Vector3();
+const _root = new THREE.Vector3();
 
 function safe(fn, system) {
   try {

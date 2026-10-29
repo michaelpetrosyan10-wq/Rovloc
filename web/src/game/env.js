@@ -3,7 +3,8 @@
 // is the one src/engine/index.js documents:
 //
 //   engine.loop       time, realTime, onTick(fn, priority) (30 Hz), onFrame(fn, priority), setPaused
-//   engine.world      meta (world.json), raycast, lineClear, zoneAt, levelAt, probeAt
+//   engine.world      meta (world.json), raycast, lineClear, zoneAt, levelAt, probeAt, scene (the game's effects:
+//                     flask shards, splashes, clouds, the aim arc, are plain three.js objects added to it)
 //   engine.player     teleport, rootPosition, feetPosition, eye, look, setLook, moveState, speed, mode / setMode,
 //                     pushOverride / popOverride, lock / unlock / isLocked, setLifeState, setMetersActive, meters,
 //                     addStamina, refillStamina, setOxygenRate, addOxygen, addBattery, oxygenDepleted,
@@ -623,6 +624,22 @@ export class Env {
 
   onSettingChanged(fn) {
     return this.engine.settings.changed.connect(fn);
+  }
+
+  // ---------------------------------------------------------------------------------------------------- effects
+
+  /** Adds a three.js object (an effect: shards, a cloud, the aim arc) to the world scene. */
+  addToScene(object) {
+    this.engine.world.scene.add(object);
+  }
+
+  removeFromScene(object) {
+    if (object.parent) object.parent.remove(object);
+  }
+
+  /** The baked light probe's irradiance at a point (lights the effects like the world around them). */
+  probeAt(p, out = new THREE.Color()) {
+    return this.engine.world.probeAt(p, out);
   }
 
   // ---------------------------------------------------------------------------------------------------- helpers

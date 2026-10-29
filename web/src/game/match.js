@@ -71,8 +71,8 @@ export class Match {
     this.resultsEndsAt = null;
     game.setPhase('Deploying');
     await env.fade(1, 0.6);
+    env.resetLighting();
     game.beginRun(run);
-    game.creature.setDifficulty(chosen, DifficultyConfig[chosen]);
     this.spawnAt('Level0_Basement', 0);
     game.enterLevel('Level0_Basement');
     run.startedAt = env.now();

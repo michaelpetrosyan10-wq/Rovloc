@@ -9,8 +9,9 @@
 //     searches > AquaticStalk ends when the water is calm > a noise at least as loud as the one being investigated:
 //     InvestigateNoise > an investigation that found nothing: Patrol.
 //   * catchKind(check): whether a catch may happen now and which jumpscare (Hallway on floors, Vent in ducts).
-//   * levelInfo(levelId, meta): patrol loops (PatrolWaypoint anchors "<prefix>_WP_<loop>_<NN>", walked in order, the
-//     last back to the first), rooms and the open doorways between them, pool basins and the CreatureSpawn.
+//   * levelInfo(levelId, meta): patrol loops (world.json `patrolLoops`, else the PatrolWaypoint anchors by loop /
+//     order or "<prefix>_WP_<loop>_<NN>"; walked in order, the last back to the first), rooms and the open doorways
+//     between them, pool basins and the CreatureSpawn.
 
 import * as THREE from 'three';
 import { CFrame } from './cframe.js';
@@ -135,15 +136,39 @@ export function patrolLoops(anchors) {
   for (const anchor of anchors) {
     if (anchor.kind !== 'PatrolWaypoint') continue;
     const match = WAYPOINT_PATTERN.exec(anchor.id);
-    const number = match ? Number(match[2]) : NaN;
-    if (!match || !Number.isFinite(number)) continue;
-    const loop = match[1];
+    const loop = typeof anchor.loop === 'string' && anchor.loop !== '' ? anchor.loop : match ? match[1] : null;
+    const number = Number.isFinite(anchor.order) ? anchor.order : match ? Number(match[2]) : NaN;
+    if (loop === null || !Number.isFinite(number)) continue;
     if (!byLoop.has(loop)) byLoop.set(loop, []);
     const c = anchor.cframe;
     byLoop.get(loop).push({
       id: anchor.id, loop, order: number, position: new THREE.Vector3(c[0], c[1], c[2]), zoneId: anchor.room || '',
     });
   }
+  return finishLoops(byLoop);
+}
+
+/**
+ * Patrol loops from world.json `patrolLoops` (the exporter's PatrolWaypoint loops, already in walking order).
+ * @param {Array<{level: string, loop: string, waypoints: Array<{id: string, room: string, pos: number[]}>}>} entries
+ * @param {string} levelId
+ * @returns {Loop[]}
+ */
+export function exportedLoops(entries, levelId) {
+  /** @type {Map<string, Waypoint[]>} */
+  const byLoop = new Map();
+  for (const entry of entries) {
+    if (entry.level !== levelId || !Array.isArray(entry.waypoints) || entry.waypoints.length === 0) continue;
+    const list = entry.waypoints.map((w, i) => ({
+      id: w.id, loop: entry.loop, order: i + 1, position: new THREE.Vector3(w.pos[0], w.pos[1], w.pos[2]), zoneId: w.room || '',
+    }));
+    byLoop.set(entry.loop, list);
+  }
+  return finishLoops(byLoop);
+}
+
+/** @param {Map<string, Waypoint[]>} byLoop @returns {Loop[]} */
+function finishLoops(byLoop) {
   /** @type {Loop[]} */
   const loops = [];
   for (const [id, list] of byLoop) {
@@ -171,7 +196,8 @@ export function levelInfo(levelId, meta) {
   if (!level || !/^Level\d/.test(levelId)) return null;
   const origin = new THREE.Vector3(level.origin[0], level.origin[1], level.origin[2]);
   const anchors = (meta.anchors || []).filter((a) => a.level === levelId);
-  const loops = patrolLoops(anchors);
+  const exported = Array.isArray(meta.patrolLoops) ? exportedLoops(meta.patrolLoops, levelId) : [];
+  const loops = exported.length > 0 ? exported : patrolLoops(anchors);
   const waypoints = [];
   for (const loop of loops) for (const w of loop.waypoints) waypoints.push(w);
   /** @type {Record<string, Room>} */

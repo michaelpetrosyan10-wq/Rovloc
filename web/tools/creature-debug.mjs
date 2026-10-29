@@ -298,23 +298,17 @@ s.creature.beginRun({ difficulty: 'Standard' });
 s.creature.activateLevel(LEVEL);
 hideFar(s, LEVEL);
 const svc = s.creature.service;
-const until = Number(process.argv[3] || 16);
-for (let t = 0; t < until; t += 0.5) {
-  advance(s, 0.5);
+const until = Number(process.argv[3] || 240);
+const log = [];
+let lastState = '';
+for (let t = 0; t < until; t += 0.25) {
+  advance(s, 0.25);
   const m = svc.mover;
   const leg = m.legs[0];
   const p = svc.body.getPosition();
-  console.log(t.toFixed(1), svc.state, m.getStatus(), m.getMedium(), 'pos', p.x.toFixed(1), p.y.toFixed(2), p.z.toFixed(1), 'leg', leg && leg.kind,
-    'goal', leg && leg.goal && leg.goal.toArray().map(v=>v.toFixed(1)).join(','), 'wps', m.walk.waypoints.map(w=>w.x.toFixed(0)+'/'+w.z.toFixed(0)).join(' '), 'idx', m.walk.index, 'moveTo', svc.body.moveTarget && svc.body.moveTarget.toArray().map(v=>v.toFixed(1)).join(','));
+  log.push(`${s.engine.loop.time.toFixed(2)} ${svc.state} ${m.getStatus()} ${m.getMedium()} pos ${p.x.toFixed(1)} ${p.y.toFixed(2)} ${p.z.toFixed(1)} leg ${leg && leg.kind} goal ${leg && leg.goal ? leg.goal.toArray().map(v=>v.toFixed(1)).join(',') : ''} wps ${m.walk ? m.walk.waypoints.map(w=>w.x.toFixed(0)+'/'+w.y.toFixed(0)+'/'+w.z.toFixed(0)).join(' ') : ''} idx ${m.walk && m.walk.index} unsticks ${svc.unsticks||0}`);
 }
-const p = svc.body.getPosition();
-const env = svc.env;
-for (let k = 0; k < 8; k++) {
-  const a = k * Math.PI / 4;
-  const dir = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
-  for (const lift of [-2.5, -1, 0, 1]) {
-    const o = p.clone().add(new THREE.Vector3(0, lift, 0));
-    const d = env._monsterRay(o, dir, 6);
-    if (d !== null) console.log('dir', k, 'lift', lift, 'hit at', d.toFixed(2));
-  }
-}
+const at = s.stuck.maxAt;
+console.log('max', s.stuck.max.toFixed(2), at && at.t.toFixed(2), at && at.state, at && at.position.toArray().map(v=>v.toFixed(1)).join(','));
+const k = log.findIndex((l) => Number(l.split(' ')[0]) >= at.t);
+for (const l of log.slice(Math.max(0, k - 28), k + 6)) console.log(l);

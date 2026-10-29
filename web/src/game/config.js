@@ -48,6 +48,8 @@ export const GameConfig = Object.freeze({
   TreadSpeed: 4,
   FreestyleSpeed: 9,
   UnderwaterSpeed: 5,
+  OneShotLead: 0.2,
+  ServerTickHz: 10,
   CreditsPerLevelCleared: 20,
   CreditsEscapeBonus: 100,
 });

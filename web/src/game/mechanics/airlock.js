@@ -9,6 +9,10 @@
 // deadline with nobody inside. Sealing -> Sealed once the doors are shut (or SEAL_TIMEOUT): the level is marked
 // cleared and the run advances (the next floor activates), FloorsCleared + 1 and the floor's credits are told,
 // sealed doors stay Locked for the run.
+//
+// Web: the player also counts as inside while they stand in the stair tower beyond the vestibule (WorldConfig.Towers,
+// from the level's floor up to the next level's ceiling) or in the next level's entry vestibule: a lone survivor who runs on up the stairs while the doors
+// close is past the seal, not left behind on the floor (the Roblox squad waits in the vestibule for each other).
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
@@ -44,6 +48,7 @@ export class Airlock {
     this.deadline = null;
     this.sealingSince = null;
     this.volumes = level ? this.game.world.checkpointVolumes(level) : [];
+    this.tower = level ? towerBox(this.game.world.meta, level) : null;
     this.doors = level ? this.game.doors.exitDoors(level) : [];
     for (const d of this.doors) d.stragglerDeadline = null;
   }
@@ -64,7 +69,10 @@ export class Airlock {
     for (const v of this.volumes) {
       if (this.game.world.inTrigger(v, root) || this.game.world.inTrigger(v, _f)) return true;
     }
-    return false;
+    const t = this.tower;
+    if (t && t.toRoom && this.game.world.inRoom(t.toRoom, root)) return true;
+    return !!t && root.x >= t.minX && root.x <= t.maxX && root.z >= t.minZ && root.z <= t.maxZ && root.y >= t.minY &&
+      root.y <= t.maxY;
   }
 
   _setDeadline(value) {
@@ -195,6 +203,20 @@ class AirlockBanner {
     this.bar.set(Math.min(1, Math.max(0, remaining / GameConfig.StragglerSeconds)));
     this.bar.root.style.display = state === 'Waiting' ? '' : 'none';
   }
+}
+
+/** The stair tower leaving `level` (its box from the level's floor to the next level's ceiling), or null. */
+function towerBox(meta, level) {
+  const wc = meta.worldConfig || {};
+  const stair = (meta.stairwells || []).find((s) => s.from === level);
+  const tower = stair && wc.Towers ? wc.Towers[stair.tower] : null;
+  const from = meta.levels[level];
+  const to = stair ? meta.levels[stair.to] : null;
+  if (!tower || !from || !to) return null;
+  return {
+    minX: tower.minX, maxX: tower.maxX, minZ: tower.minZ, maxZ: tower.maxZ,
+    minY: from.elevation, maxY: to.elevation + (to.height || 14), toRoom: stair.toRoom,
+  };
 }
 
 const _p = new THREE.Vector3();

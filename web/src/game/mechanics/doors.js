@@ -12,7 +12,8 @@
 // Leaf poses come from the export's per-leaf attachments: <Leaf>Rest, <Leaf>Open, <Leaf>Smashed, <Leaf>Centre.
 // Sounds at the opening's centre: FireDoorSwing + FireDoorLatch (airlocks), DoorCreak + a soft latch (classroom,
 // roof), MetalCreak rising and GateSlam landing (the gate), DoorSmash. The gate and the fire doors slamming shut
-// emit the DoorSlam noise when they land.
+// emit the DoorSlam noise when they land. Impacts shake the camera with quadratic falloff (DoorController.Impacts):
+// the gate slamming down, a fire door latching shut, a door being smashed (just after the smash starts).
 
 import * as THREE from 'three';
 import { cfMatrix, smoothstep, Signal } from '../util.js';
@@ -35,6 +36,18 @@ const EPS = 1e-4;
 const THROW_HOP = 0.8;
 const BUCKLE_HOP = 0.15;
 const LIGHT_LATCH_VOLUME = 0.55;
+
+const IMPACTS = { Slam: { radius: 30, amplitude: 2.4, seconds: 0.7 }, Smash: { radius: 34, amplitude: 3.2, seconds: 0.8 },
+  Latch: { radius: 12, amplitude: 0.8, seconds: 0.35 } };
+const SMASH_IMPACT_DELAY = 0.12;
+
+/** DoorController.impactShake: [degrees, seconds] of an impact `distance` studs from the eye. */
+export function impactShake(kind, distance) {
+  const spec = IMPACTS[kind];
+  if (!spec || !Number.isFinite(distance) || distance >= spec.radius) return [0, 0];
+  const falloff = 1 - Math.max(0, distance) / spec.radius;
+  return [spec.amplitude * falloff * falloff, spec.seconds];
+}
 
 const INITIAL = { Airlock: 'Open', Gate: 'Open', Ajar: 'Open', RoofDoor: 'Closed' };
 const TRAVEL = { Airlock: { open: 1.6, close: 1.6 }, Gate: { open: 2.8, close: 0.35 }, Ajar: { open: 1.2, close: 0.9 },
@@ -351,13 +364,17 @@ export class Doors {
     const at = door.centre;
     if (motion.mode === 'Smash') {
       this.game.playAt('DoorSmash', at);
+      if (motion.seconds > 0) {
+        door.landing = { preset: null, volume: 0, impact: 'Smash' };
+        door.landingAt = motion.startAt + SMASH_IMPACT_DELAY;
+      }
       return;
     }
     const closing = motion.to < motion.from;
     const shuts = closing && motion.to <= EPS;
     if (door.kind === 'Gate') {
       if (shuts) {
-        door.landing = { preset: 'GateSlam', volume: 1 };
+        door.landing = { preset: 'GateSlam', volume: 1, impact: 'Slam' };
         door.landingAt = motion.startAt + motion.seconds;
       } else if (!closing && !resumed) this.game.playAt('MetalCreak', at);
       return;
@@ -365,7 +382,7 @@ export class Doors {
     const fire = door.kind === 'Airlock';
     this.game.playAt(fire ? 'FireDoorSwing' : 'DoorCreak', at);
     if (shuts) {
-      door.landing = { preset: 'FireDoorLatch', volume: fire ? 1 : LIGHT_LATCH_VOLUME };
+      door.landing = { preset: 'FireDoorLatch', volume: fire ? 1 : LIGHT_LATCH_VOLUME, impact: fire ? 'Latch' : null };
       door.landingAt = motion.startAt + motion.seconds;
     }
   }
@@ -440,7 +457,12 @@ export class Doors {
   tick(dt, now) {
     for (const door of this.byId.values()) {
       if (door.landing && door.landingAt !== null && now >= door.landingAt) {
-        this.game.playAt(door.landing.preset, door.centre, { volume: door.landing.volume });
+        const landing = door.landing;
+        if (landing.preset) this.game.playAt(landing.preset, door.centre, { volume: landing.volume });
+        if (landing.impact) {
+          const [amplitude, seconds] = impactShake(landing.impact, this.env.eye(_eye).distanceTo(door.centre));
+          if (amplitude > 0) this.env.shake(amplitude * (this.env.setting('MotionScale') ?? 1), seconds);
+        }
         this._stopLanding(door);
       }
       if (door.held) {
@@ -457,7 +479,8 @@ export class Doors {
           const closing = door.target < from;
           if (closing && door.target <= EPS) {
             door.landing = { preset: door.kind === 'Gate' ? 'GateSlam' : 'FireDoorLatch',
-              volume: door.kind === 'Airlock' || door.kind === 'Gate' ? 1 : LIGHT_LATCH_VOLUME };
+              volume: door.kind === 'Airlock' || door.kind === 'Gate' ? 1 : LIGHT_LATCH_VOLUME,
+              impact: door.kind === 'Gate' ? 'Slam' : door.kind === 'Airlock' ? 'Latch' : null };
             door.landingAt = now + LEAD + duration;
           }
           this._begin(door, { mode: 'Swing', from, to: door.target, startAt: now + LEAD, seconds: duration,
@@ -534,6 +557,7 @@ const _boxS = new THREE.Vector3();
 const _bodyC = new THREE.Matrix4();
 const _bodyS = new THREE.Vector3();
 const _root = new THREE.Vector3();
+const _eye = new THREE.Vector3();
 const _e = new THREE.Euler();
 const _one = new THREE.Vector3(1, 1, 1);
 const _ax0 = new THREE.Vector3();

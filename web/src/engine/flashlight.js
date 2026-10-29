@@ -3,7 +3,8 @@
 // Beam. Two spot cones from just ahead of the eye (BEAM_OFFSET: right and low, so nothing of the player's own body
 // can shadow it): the inner cone (38 deg, range 60, brightness 9, shadowed on Medium / High) and the outer cone
 // (80 deg, range 48, brightness 2.2). Its orientation chases the look with a damped slerp, pitched down while the
-// torch is lowered for sprinting. A faint visible cone in the haze shows on Medium / High (film shafts permitting).
+// torch is lowered for sprinting. A faint visible shaft in the haze shows on Medium / High (film shafts permitting):
+// like the Roblox HazeCore / HazeSheath, two camera-facing additive ribbons 34 studs long, clear at the lens.
 // The presence glow (range 10, brightness 0.45, cold) is always on around the player.
 // Switch. Toggle needs a charged cell (a dead cell only clicks); every toggle plays UiClick; toggles are spaced at
 // least TOGGLE_COOLDOWN apart.
@@ -51,6 +52,8 @@ const LOWERED_PITCH = (7 * Math.PI) / 180;
 const TOGGLE_COOLDOWN = 0.22;
 const HAZE_LENGTH = 34;
 const HAZE_CORE_OPACITY = 0.035;
+const HAZE_SHEATH_OPACITY = 0.018;
+const HAZE_SEGMENTS = 8;
 const HAZE_BRIGHTNESS = 1.2;
 /** Roblox light Brightness -> the shader's linear light units (the bake uses the same scale). */
 export const BRIGHTNESS_UNIT = 1;
@@ -190,15 +193,16 @@ export class Flashlight {
     s.uFlOuter.value.set(this.color.r, this.color.g, this.color.b)
       .multiplyScalar(Cones.outerBrightness * this.output * BRIGHTNESS_UNIT);
 
-    // haze cone
-    const hazeOn = this.quality.budget.flashlightHaze && this.output > 0.01;
+    // haze shafts
+    const hazeOn = this.quality.budget.flashlightHaze && this.output > 0.01 && this.filmShafts > 0;
     this.haze.visible = hazeOn;
     if (hazeOn) {
-      this.haze.position.copy(this.position);
-      this.haze.quaternion.copy(this.rotation);
       const u = this.haze.material.uniforms;
-      u.uColor.value.copy(this.color);
-      u.uStrength.value = HAZE_BRIGHTNESS * clamp01(this.output) * Math.max(0, this.filmShafts) * HAZE_CORE_OPACITY * 6;
+      u.uP0.value.copy(this.position);
+      u.uDir.value.copy(this.direction);
+      this.color.getRGB(_rgb, THREE.SRGBColorSpace);
+      u.uColor.value.setRGB(_rgb.r, _rgb.g, _rgb.b, THREE.LinearSRGBColorSpace);
+      u.uStrength.value = HAZE_BRIGHTNESS * clamp01(this.output) * Math.max(0, this.filmShafts);
     }
   }
 
@@ -225,29 +229,68 @@ export class Flashlight {
     return { position: this.position, direction: this.direction, fov: Cones.outerAngle * 0.9, far: Cones.innerRange };
   }
 
+  /**
+   * HazeCore and HazeSheath (Flashlight.luau newHaze): Beams with FaceCamera, Width0 0.3, Width1 from the cone
+   * angles over twice the length, LightEmission 1 (additive), transparency 1 -> 1-op at 0.18 -> 1-0.45op at 0.6 -> 1.
+   * Each ribbon's width axis is perpendicular to the beam and to the view at that point; the sheath's brightness is
+   * 0.8 of the core's. Drawn additively into the display-encoded frame, one draw for both.
+   */
   _buildHaze() {
-    const r = HAZE_LENGTH * Math.tan(((Cones.innerAngle / 2) * Math.PI) / 180) * 0.75;
-    const geo = new THREE.ConeGeometry(r, HAZE_LENGTH, 20, 1, true);
-    geo.translate(0, -HAZE_LENGTH / 2, 0);
-    geo.rotateX(-Math.PI / 2); // tip at the origin, opening toward -Z
-    geo.rotateY(Math.PI);
+    const spread = 2 * HAZE_LENGTH;
+    const layers = [
+      { width1: spread * Math.tan(((Cones.innerAngle / 2) * Math.PI) / 180) * 0.75, opacity: HAZE_CORE_OPACITY, gain: 1 },
+      { width1: spread * Math.tan(((Cones.outerAngle / 2) * Math.PI) / 180) * 0.6, opacity: HAZE_SHEATH_OPACITY, gain: 0.8 },
+    ];
+    const cols = HAZE_SEGMENTS + 1;
+    const pos = [];
+    const meta = [];
+    const index = [];
+    layers.forEach((layer, li) => {
+      const base = li * cols * 2;
+      for (let i = 0; i < cols; i++) {
+        const t = i / HAZE_SEGMENTS;
+        for (const side of [-1, 1]) {
+          pos.push(t, side, 0);
+          meta.push(0.15 + (layer.width1 / 2 - 0.15) * t, layer.opacity * layer.gain);
+        }
+        if (i < HAZE_SEGMENTS) {
+          const a = base + i * 2;
+          index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+        }
+      }
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('aRibbon', new THREE.Float32BufferAttribute(meta, 2));
+    geo.setIndex(index);
     const mat = new THREE.ShaderMaterial({
-      uniforms: { uColor: { value: new THREE.Color(1, 1, 1) }, uStrength: { value: 0 } },
+      uniforms: {
+        uP0: { value: new THREE.Vector3() },
+        uDir: { value: new THREE.Vector3(0, 0, -1) },
+        uColor: { value: new THREE.Color(1, 1, 1) },
+        uStrength: { value: 0 },
+      },
       vertexShader: /* glsl */ `
-        varying float vAlong; varying vec3 vN; varying vec3 vView;
+        uniform vec3 uP0; uniform vec3 uDir;
+        attribute vec2 aRibbon; // half width at this station, opacity x layer gain
+        varying float vT; varying float vOpacity;
         void main() {
-          vAlong = clamp(-position.z / ${HAZE_LENGTH.toFixed(1)}, 0.0, 1.0);
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          vN = normalize(normalMatrix * normal); vView = normalize(-mv.xyz);
-          gl_Position = projectionMatrix * mv;
+          vT = position.x;
+          vOpacity = aRibbon.y;
+          vec3 p = uP0 + uDir * (position.x * ${HAZE_LENGTH.toFixed(1)});
+          vec3 side = cross(uDir, cameraPosition - p);
+          float l = length(side);
+          side = l > 1e-4 ? side / l : vec3(1.0, 0.0, 0.0);
+          p += side * (position.y * aRibbon.x);
+          gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
         }`,
       fragmentShader: /* glsl */ `
         uniform vec3 uColor; uniform float uStrength;
-        varying float vAlong; varying vec3 vN; varying vec3 vView;
+        varying float vT; varying float vOpacity;
         void main() {
-          float prof = smoothstep(0.0, 0.18, vAlong) * (1.0 - smoothstep(0.45, 1.0, vAlong));
-          float edge = pow(abs(dot(normalize(vN), vView)), 1.5);
-          gl_FragColor = vec4(uColor * uStrength * prof * edge, 1.0);
+          // opacity curve: 0 at the lens, full at 0.18, 0.45 at 0.6, 0 at the far end
+          float o = vT < 0.18 ? vT / 0.18 : (vT < 0.6 ? mix(1.0, 0.45, (vT - 0.18) / 0.42) : mix(0.45, 0.0, (vT - 0.6) / 0.4));
+          gl_FragColor = vec4(uColor * uStrength * vOpacity * o, 1.0);
         }`,
       transparent: true,
       depthWrite: false,
@@ -258,10 +301,12 @@ export class Flashlight {
     mesh.visible = false;
     mesh.frustumCulled = false;
     mesh.renderOrder = 20;
+    mesh.matrixAutoUpdate = false;
     return mesh;
   }
 }
 
+const _rgb = { r: 0, g: 0, b: 0 };
 const _q = new THREE.Quaternion();
 const _lower = new THREE.Quaternion();
 const _x = new THREE.Vector3(1, 0, 0);
