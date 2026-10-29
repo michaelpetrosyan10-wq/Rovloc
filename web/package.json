@@ -1,0 +1,22 @@
+{
+  "name": "rovloc-web",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Rovloc for the browser: one self-contained HTML file for school Chromebooks",
+  "type": "module",
+  "scripts": {
+    "export": "lune run tools/export-world.luau",
+    "textures": "python3 tools/textures.py",
+    "bake": "node tools/bake.mjs",
+    "data": "npm run export && npm run textures && npm run bake",
+    "build": "node tools/build.mjs",
+    "check": "node tools/build.mjs && node tools/check.mjs"
+  },
+  "dependencies": {
+    "three": "0.186.1",
+    "three-mesh-bvh": "0.9.17"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
