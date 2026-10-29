@@ -15,6 +15,7 @@
 //   registerPoolGrabber(fn)       fn(PLAYER) -> boolean (a grab started)
 //   setSpeedScale(scale)          catchGrabbed(PLAYER) -> boolean
 //   stateChanged (new, old) / caught (player, kind) / jumpscareFinished (player, kind, outcome): Signals (connect)
+//   lungeTelegraph (origin, seconds): a pool lunge is coming (the pool shows its bubbles and ripple ring there)
 //   activateLevel(levelId) / deactivate()            bindGame(hooks) (env.js GameHooks)
 //   playAction(name, startAt?) / stopAction(name?)   one-shot animation layers on the rig
 //   snapshot() / setPaused(on) / devCommand("ai ..." | "hunt" | "ignoreme") / setClock(fn) / dispose()
@@ -102,8 +103,9 @@ export function createCreature(engine, opts = {}) {
 
   // single-player shapes of the events (W4's adapter reads `events` first): caught(kind),
   // jumpscareFinished(kind, outcome)
-  const events = { stateChanged: new Signal(), caught: new Signal(), jumpscareFinished: new Signal() };
+  const events = { stateChanged: new Signal(), caught: new Signal(), jumpscareFinished: new Signal(), lungeTelegraph: new Signal() };
   service.stateChanged.connect((next, previous) => events.stateChanged.fire(next, previous));
+  service.lungeTelegraph.connect((origin, seconds) => events.lungeTelegraph.fire(origin, seconds));
   service.caught.connect((_player, kind) => events.caught.fire(kind));
   service.jumpscareFinished.connect((_player, kind, outcome) => events.jumpscareFinished.fire(kind, outcome));
 

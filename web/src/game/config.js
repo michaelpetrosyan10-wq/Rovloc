@@ -28,14 +28,14 @@ export const GameConfig = Object.freeze({
   FlaskVentHopRadius: 2,
   BreathHoldMaxSeconds: 7,
   BreathRecoverPerSecond: 0.6,
-  StrugglePressesToEscape: 22,
+  StrugglePressesToEscape: 14, // Level 4 fairness (was 22)
   StruggleMaxPressesPerSecond: 12,
   ParachutePackCount: 4,
   ParachuteDescentSpeed: 9,
   StaminaMax: 100,
   OxygenMax: 100,
   OxygenDrain: 7,
-  OxygenDrainGrabbed: 9,
+  OxygenDrainGrabbed: 5, // slower than a dive while held (was 9): time to struggle free
   OxygenRegen: 30,
   BatteryMax: 100,
   BatteryDrain: 0.55,

@@ -10,20 +10,151 @@
 //   Flanger     a 1-6 ms delay swept by an LFO with feedback (Rate, Depth), Mix wet share
 //   Compressor  DynamicsCompressor (Threshold dB, Ratio <= 20, Attack, Release) + GainMakeup dB
 //   PitchShift  applied by the voice as a playback-rate multiplier (Octave), so it is not a node here
-// Impulses and LFO waves are cached and shared.
+// Impulses and LFO waves are cached and shared. Convolvers are pooled by impulse: handing a ConvolverNode its buffer
+// prepares the FFT kernels on the main thread (about 25 ms for a 3.5 s impulse on a desktop, several times that on a
+// Chromebook), so a reverb slot takes a prepared convolver from the pool and gives it back when its chain stops; one
+// the pool lacks is prepared in a task of its own (one per task, the sound's first moments dry), and a retuned decay
+// (the environment chain moving from a corridor to the gym) crossfades to the new convolver once it is in.
+// prewarmReverbs prepares the rooms' impulses in idle time. Offline contexts (the preset check) prepare at once.
 
 import { Random } from '../math.js';
 
 const dbToGain = (db) => (db <= -79.9 ? 0 : 10 ** (db / 20));
-const MAX_IMPULSE = 6; // seconds: longer tails are cut (Roblox reverbs go to 20 s; the last seconds are inaudible)
+// seconds: longer tails are cut, faded out over IMPULSE_FADE (Roblox reverbs go to 20 s; by 3.5 s even the gym's
+// 4.5 s RT60 is 47 dB down, while every extra second of impulse costs main-thread time when a convolver is prepared)
+const MAX_IMPULSE = 3.5;
+const IMPULSE_FADE = 0.4;
 
 const impulseCache = new Map();
+/** @type {WeakMap<BaseAudioContext, {byKey: Map<string, ConvolverNode[]>, seconds: number}>} per context: prepared
+ * convolvers by impulse key, free for the next reverb slot (a node never crosses contexts) */
+const convolverPools = new WeakMap();
+const POOL_PER_KEY = 2;
+const POOL_SECONDS = 24; // the most impulse (seconds, summed) a pool keeps prepared: bounds its native memory
+
+function poolOf(ctx) {
+  let pool = convolverPools.get(ctx);
+  if (!pool) {
+    pool = { byKey: new Map(), seconds: 0 };
+    convolverPools.set(ctx, pool);
+  }
+  return pool;
+}
 const pulseCache = new Map();
 const curveCache = new Map();
 
+function impulseKey(ctx, decay, density, diffusion) {
+  return `${decay.toFixed(1)}:${density.toFixed(1)}:${diffusion.toFixed(1)}:${ctx.sampleRate}`;
+}
+
+/** A prepared convolver ready in the pool now (or null). */
+function pooledConvolver(ctx, decay, density = 1, diffusion = 1) {
+  const pool = poolOf(ctx);
+  const list = pool.byKey.get(impulseKey(ctx, decay, density, diffusion));
+  const ready = list ? list.findIndex((c) => ctx.currentTime - c.releasedAt >= MAX_IMPULSE) : -1;
+  if (ready < 0) return null;
+  const conv = list.splice(ready, 1)[0];
+  pool.seconds -= conv.buffer.duration;
+  return conv;
+}
+
+// Convolvers still to prepare, one per task: a door slam whose layers each need a reverb no longer prepares them all
+// inside one frame (four or five at once stalled a Chromebook frame by a quarter of a second).
+const prepQueue = [];
+let prepScheduled = false;
+
+function runPrepQueue() {
+  prepScheduled = false;
+  const job = prepQueue.shift();
+  if (job) job();
+  if (prepQueue.length && !prepScheduled) {
+    prepScheduled = true;
+    setTimeout(runPrepQueue, 0);
+  }
+}
+
+/**
+ * `done(conv)` with a convolver for the impulse: at once from the pool, else prepared in a task of its own (the
+ * reverb's first moments of that sound play dry). Returns a cancel function for a chain stopped before it lands.
+ */
+function convolverSoon(ctx, decay, density, diffusion, done) {
+  const ready = pooledConvolver(ctx, decay, density, diffusion);
+  if (ready) {
+    done(ready);
+    return () => {};
+  }
+  if (typeof setTimeout !== 'function' || ctx instanceof (globalThis.OfflineAudioContext || class {})) {
+    done(takeConvolver(ctx, decay, density, diffusion));
+    return () => {};
+  }
+  let cancelled = false;
+  prepQueue.push(() => {
+    if (!cancelled) done(takeConvolver(ctx, decay, density, diffusion));
+  });
+  if (!prepScheduled) {
+    prepScheduled = true;
+    setTimeout(runPrepQueue, 0);
+  }
+  return () => {
+    cancelled = true;
+  };
+}
+
+/** A prepared convolver for the impulse (from the pool when one is free). */
+function takeConvolver(ctx, decay, density = 1, diffusion = 1) {
+  // a convolver given back still rings out what it was fed; it is only handed on once that tail has died
+  const pooled = pooledConvolver(ctx, decay, density, diffusion);
+  if (pooled) return pooled;
+  const key = impulseKey(ctx, decay, density, diffusion);
+  const conv = ctx.createConvolver();
+  conv.normalize = true;
+  conv.buffer = impulse(ctx, decay, density, diffusion);
+  conv.poolKey = key;
+  return conv;
+}
+
+/** Back to the pool (disconnected) when there is room, else dropped. */
+function releaseConvolver(conv) {
+  try {
+    conv.disconnect();
+  } catch { /* not connected */ }
+  const pool = poolOf(conv.context);
+  if (!conv.poolKey || !conv.buffer || pool.seconds + conv.buffer.duration > POOL_SECONDS) return;
+  let list = pool.byKey.get(conv.poolKey);
+  if (!list) {
+    list = [];
+    pool.byKey.set(conv.poolKey, list);
+  }
+  if (list.length >= POOL_PER_KEY) return;
+  conv.releasedAt = conv.context.currentTime;
+  list.push(conv);
+  pool.seconds += conv.buffer.duration;
+}
+
+/**
+ * Prepares convolvers for these impulses ({DecayTime, Density, Diffusion} props) one per idle slot, so the first
+ * reverb of each later costs nothing mid-game.
+ */
+export function prewarmReverbs(ctx, list) {
+  const queue = list.slice();
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(() => fn({ timeRemaining: () => 0 }), 50));
+  const next = () => {
+    const p = queue.shift();
+    if (!p) return;
+    const key = impulseKey(ctx, p.DecayTime ?? 1.5, p.Density ?? 1, p.Diffusion ?? 1);
+    if (!(poolOf(ctx).byKey.get(key) || []).length) {
+      const conv = takeConvolver(ctx, p.DecayTime ?? 1.5, p.Density ?? 1, p.Diffusion ?? 1);
+      releaseConvolver(conv);
+      conv.releasedAt = -Infinity; // never fed: ready at once
+    }
+    idle(next, { timeout: 2000 });
+  };
+  idle(next, { timeout: 2000 });
+}
+
 /** A stereo reverb impulse for (decay, density, diffusion). */
 export function impulse(ctx, decay, density = 1, diffusion = 1) {
-  const key = `${decay.toFixed(1)}:${density.toFixed(1)}:${diffusion.toFixed(1)}:${ctx.sampleRate}`;
+  const key = impulseKey(ctx, decay, density, diffusion);
   let buf = impulseCache.get(key);
   if (buf) return buf;
   const sr = ctx.sampleRate;
@@ -43,7 +174,7 @@ export function impulse(ctx, decay, density = 1, diffusion = 1) {
       let w = rng.next() * 2 - 1;
       if (t < 0.08 && rng.next() > sparse) w = 0;
       lp += (w - lp) * (1 - smooth * Math.min(1, t * 2)); // highs decay faster later in the tail
-      d[i] = lp * Math.exp(-k * t);
+      d[i] = lp * Math.exp(-k * t) * Math.min(1, (n - i) / (IMPULSE_FADE * sr));
     }
   }
   impulseCache.set(key, buf);
@@ -124,25 +255,77 @@ export function buildEffect(ctx, effect) {
     case 'Reverb': {
       const input = ctx.createGain();
       const output = ctx.createGain();
-      const conv = ctx.createConvolver();
-      conv.normalize = true;
-      conv.buffer = impulse(ctx, p.DecayTime ?? 1.5, p.Density ?? 1, p.Diffusion ?? 1);
       const wet = ctx.createGain();
       const dry = ctx.createGain();
       input.connect(dry).connect(output);
-      input.connect(conv).connect(wet).connect(output);
+      wet.connect(output);
+      // each convolver feeds the wet bus through its own fader, so a new decay crossfades in
       let decay = p.DecayTime ?? 1.5;
+      let stopped = false;
+      let current = { conv: null, fader: ctx.createGain() };
+      current.fader.connect(wet);
+      const first = current;
+      const cancelFirst = convolverSoon(ctx, decay, p.Density ?? 1, p.Diffusion ?? 1, (conv) => {
+        if (stopped || current !== first) {
+          releaseConvolver(conv);
+          return;
+        }
+        first.conv = conv;
+        input.connect(conv).connect(first.fader);
+      });
+      const retired = new Set();
       const set = (q, fade = 0) => {
         ramp(ctx, wet.gain, dbToGain(q.WetLevel ?? 0) * 0.9, fade);
         ramp(ctx, dry.gain, dbToGain(q.DryLevel ?? 0), fade);
         const d = q.DecayTime ?? decay;
         if (Math.abs(d - decay) > 0.05) {
           decay = d;
-          conv.buffer = impulse(ctx, d, q.Density ?? 1, q.Diffusion ?? 1);
+          retired.add(current);
+          const next = { conv: null, fader: ctx.createGain() };
+          next.fader.gain.value = 0;
+          next.fader.connect(wet);
+          current = next;
+          const xfade = Math.max(0.05, fade);
+          // the old tail fades out once the new convolver is in (at once from the pool, else a task later)
+          convolverSoon(ctx, d, q.Density ?? 1, q.Diffusion ?? 1, (conv) => {
+            if (stopped || current !== next) {
+              releaseConvolver(conv);
+              next.fader.disconnect();
+              return;
+            }
+            next.conv = conv;
+            input.connect(conv).connect(next.fader);
+            ramp(ctx, next.fader.gain, 1, xfade);
+            for (const old of retired) {
+              if (old.fading) continue;
+              old.fading = true;
+              ramp(ctx, old.fader.gain, 0, xfade);
+              setTimeout(() => {
+                if (!retired.delete(old)) return;
+                try {
+                  if (old.conv) input.disconnect(old.conv);
+                } catch { /* gone */ }
+                old.fader.disconnect();
+                if (old.conv) releaseConvolver(old.conv);
+              }, (xfade + 0.1) * 1000);
+            }
+          });
         }
       };
       set(p);
-      return { input, output, set, tail: Math.min(MAX_IMPULSE, decay), reverb: true };
+      const stop = () => {
+        stopped = true;
+        cancelFirst();
+        for (const r of [current, ...retired]) {
+          try {
+            if (r.conv) input.disconnect(r.conv);
+            r.fader.disconnect();
+          } catch { /* gone */ }
+          if (r.conv) releaseConvolver(r.conv);
+        }
+        retired.clear();
+      };
+      return { input, output, set, tail: Math.min(MAX_IMPULSE, decay), reverb: true, stop };
     }
     case 'Echo': {
       const input = ctx.createGain();

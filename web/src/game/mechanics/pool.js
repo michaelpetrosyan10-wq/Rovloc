@@ -34,6 +34,10 @@
 // LetGo (the Creature stopped holding for HoldGrace); each tops the air up to FreedMinOxygen and kicks the swimmer up
 // toward the surface with Hud.StruggleFree. Drowning: at DrownFloor the drain stops and the Creature's Underwater
 // catch runs (catchGrabbed); if none can start, the air runs out and the player goes down ("Drowned").
+//
+// The lunge telegraph (Level 4 fairness: the Creature's lungeTelegraph, TelegraphSeconds before every lunge): at the
+// lunge origin a stream of bubbles rises and a ripple ring pulses out on the surface above it (the Creature itself
+// growls there), so a swimmer sees where it will come from and can climb out or swim off.
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
@@ -67,7 +71,7 @@ const HOLD_FLOOR_CLEARANCE = 1.6;
 const HOLD_WALL_CLEARANCE = 1.5;
 const HOLD_SWAY = 0.25;
 const HOLD_GRACE = 1;
-const GRAB_MIN_OXYGEN = GameConfig.OxygenDrainGrabbed * 4.5;
+const GRAB_MIN_OXYGEN = 40; // the lungs topped up to this at a grab: 8 s of struggle at OxygenDrainGrabbed
 const FREED_MIN_OXYGEN = GameConfig.OxygenDrain * 2.5;
 const DROWN_FLOOR = 0.5;
 const RECOIL = { Escaped: 3.5, Flask: GameConfig.StunSeconds, Floodlight: GameConfig.StunSeconds };
@@ -108,7 +112,12 @@ const EXHALE_MAX = 4;
 const BUBBLE_LIFE = 3;
 const BUBBLE_RISE_MIN = 2.6;
 const BUBBLE_RISE_MAX = 4.6;
-const BUBBLE_POOL = 32;
+const BUBBLE_POOL = 64;
+const TELEGRAPH_BUBBLE_EVERY = 0.06;
+const TELEGRAPH_SPREAD = 0.7;
+const RIPPLE_RINGS = 4;
+const RIPPLE_PULSE = 0.6;
+const RIPPLE_RADIUS = 4.5;
 const FREESTYLE_STROKE = 0.55;
 const TREAD_STROKE = 1.25;
 const TREAD_IDLE = 2.6;
@@ -246,6 +255,10 @@ export class Pool {
     this.bubbles = [];
     this.bubbleFx = new Billboards(BUBBLE_POOL, new THREE.Color(0.75, 0.9, 0.88), true);
     this.env.addToScene(this.bubbleFx.mesh);
+    /** @type {{origin: THREE.Vector3, surface: number, startedAt: number, until: number, nextBubbleAt: number}[]} */
+    this.telegraphs = [];
+    this.ripples = this._buildRipples();
+    game.creature.lungeTelegraph.connect((origin, seconds) => this.telegraph(origin, seconds));
     this.ui = this._buildUi();
     this.env.onAction('Struggle', (phase) => {
       if (phase === 'Begin') this._press();
@@ -654,17 +667,84 @@ export class Pool {
     const env = this.env;
     const sw = this.swimmer;
     const mouth = env.eye(_a).add(_b.set(-Math.sin(env.look().yaw), -0.25, -Math.cos(env.look().yaw)).multiplyScalar(0.6));
-    const surface = sw ? sw.volume.surface : mouth.y + 4;
+    this._emitBubblesAt(mouth, count, sw ? sw.volume.surface : mouth.y + 4, 0.15, 0.06, 0.16);
+  }
+
+  _emitBubblesAt(point, count, surface, spread, minSize, maxSize) {
+    const env = this.env;
     for (let i = 0; i < count; i++) {
       if (this.bubbles.length >= BUBBLE_POOL) this.bubbles.shift();
       this.bubbles.push({
-        p: mouth.clone().add(new THREE.Vector3(this.random.number(-0.15, 0.15), 0, this.random.number(-0.15, 0.15))),
+        p: point.clone().add(new THREE.Vector3(this.random.number(-spread, spread), 0, this.random.number(-spread, spread))),
         rise: this.random.number(BUBBLE_RISE_MIN, BUBBLE_RISE_MAX),
         born: env.realNow(),
-        size: this.random.number(0.06, 0.16),
+        size: this.random.number(minSize, maxSize),
         surface,
         wobble: this.random.number(0, 6),
       });
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------------- the lunge telegraph
+
+  _buildRipples() {
+    const rings = [];
+    for (let i = 0; i < RIPPLE_RINGS; i++) {
+      const material = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.72, 0.86, 0.84), transparent: true, opacity: 0,
+        depthWrite: false, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(new THREE.RingGeometry(0.86, 1, 40).rotateX(-Math.PI / 2), material);
+      mesh.visible = false;
+      mesh.renderOrder = 6;
+      this.env.addToScene(mesh);
+      rings.push(mesh);
+    }
+    return rings;
+  }
+
+  /** The Creature's lunge is coming from `origin` in `seconds`: bubbles rising there, a ripple ring above it. */
+  telegraph(origin, seconds) {
+    const real = this.env.realNow();
+    let surface = origin.y + 2.5;
+    for (const v of this.volumes) {
+      if (v.duct) continue;
+      _l.copy(origin).applyMatrix4(v.inv);
+      if (Math.abs(_l.x) <= v.size[0] / 2 && Math.abs(_l.z) <= v.size[2] / 2) {
+        surface = v.surface;
+        break;
+      }
+    }
+    this.telegraphs.push({ origin: origin.clone(), surface, startedAt: real, until: real + seconds, nextBubbleAt: real });
+    if (this.telegraphs.length > RIPPLE_RINGS) this.telegraphs.shift();
+  }
+
+  _stepTelegraphs() {
+    const real = this.env.realNow();
+    for (let i = this.telegraphs.length - 1; i >= 0; i--) {
+      const t = this.telegraphs[i];
+      if (real > t.until + RIPPLE_PULSE) this.telegraphs.splice(i, 1);
+    }
+    for (let i = 0; i < this.ripples.length; i++) {
+      const ring = this.ripples[i];
+      const t = this.telegraphs[i];
+      if (!t) {
+        ring.visible = false;
+        continue;
+      }
+      if (real < t.until) {
+        while (t.nextBubbleAt <= real) {
+          t.nextBubbleAt += TELEGRAPH_BUBBLE_EVERY;
+          this._emitBubblesAt(t.origin, 2, t.surface, TELEGRAPH_SPREAD, 0.1, 0.24);
+        }
+      }
+      // two pulses out from the origin over the telegraph, the last fading after it
+      const age = real - t.startedAt;
+      const phase = (age % RIPPLE_PULSE) / RIPPLE_PULSE;
+      const fading = real > t.until ? 1 - clamp01((real - t.until) / RIPPLE_PULSE) : 1;
+      const radius = 0.6 + (RIPPLE_RADIUS - 0.6) * phase;
+      ring.visible = true;
+      ring.position.set(t.origin.x, t.surface + 0.04, t.origin.z);
+      ring.scale.set(radius, 1, radius);
+      ring.material.opacity = 0.55 * (1 - phase) * fading;
     }
   }
 
@@ -699,6 +779,7 @@ export class Pool {
     this._release(true);
     this.env.setOxygenRate(0);
     this.bubbles.length = 0;
+    this.telegraphs.length = 0;
   }
 
   tick(dt, now) {
@@ -755,6 +836,7 @@ export class Pool {
   frame(dt) {
     const env = this.env;
     const g = this.game;
+    this._stepTelegraphs();
     this._stepBubbles(dt);
     const sw = this.swimmer;
     const ui = this.ui;

@@ -20,7 +20,7 @@
 
 import { Presets, Beds, DefaultRollOff, Environments } from './presets.js';
 import { buildSamples, SampleLengths, Seamless } from './samples.js';
-import { buildChain, pitchOf, ramp, dbToGain } from './effects.js';
+import { buildChain, pitchOf, prewarmReverbs, ramp, dbToGain } from './effects.js';
 import { Signal } from '../signal.js';
 import { Vector3 } from 'three';
 import { Random } from '../math.js';
@@ -172,6 +172,7 @@ export class Audio {
     this.captioned = new Signal();
     this.ready = false;
     this.voices = [];
+    this.pausedMix = false;
     this.groups = new Map();
     this.reverbCount = 0;
     this.environment = 'Room';
@@ -198,6 +199,9 @@ export class Audio {
     });
     this._applyVolumes(0);
     if (!deps.context) {
+      // the rooms' reverbs prepared in idle time, so walking into a new acoustic space never hitches the frame
+      prewarmReverbs(this.ctx, Object.values(Environments).flatMap((env) => (env.effects || []).filter((e) => e.kind === 'Reverb')
+        .map((e) => e.props || {})));
       const resume = () => this.resume();
       for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, resume, { passive: true });
     }
@@ -246,7 +250,20 @@ export class Audio {
   _applyVolumes(fade) {
     if (!this.ctx) return;
     ramp(this.ctx, this.master.gain, (this.settings.get('MasterVolume') ?? 1) * 0.8, fade);
-    for (const b of BUSES) ramp(this.ctx, this.buses[b].gain, this.settings.get(SETTING_KEYS[b]) ?? 1, fade);
+    for (const b of BUSES) {
+      const hush = this.pausedMix && b !== 'UI' ? 0 : 1;
+      ramp(this.ctx, this.buses[b].gain, (this.settings.get(SETTING_KEYS[b]) ?? 1) * hush, fade);
+    }
+  }
+
+  /**
+   * The pause menu: the game's buses fade out (a struggle's thrashing, a crawl loop or the Creature's steps no longer
+   * play on under a frozen game) and back in on resume; the menu's own UI sounds keep playing.
+   */
+  setPausedMix(on) {
+    if (!!on === !!this.pausedMix) return;
+    this.pausedMix = !!on;
+    this._applyVolumes(0.15);
   }
 
   // ------------------------------------------------------------------ environment

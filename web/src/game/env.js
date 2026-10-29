@@ -465,9 +465,14 @@ export class Env {
     return !!this.engine.ui.menuOpen;
   }
 
-  /** Stops / restarts the game clock (ticks and every game-time timer; frames still draw with dt 0). */
+  /**
+   * Stops / restarts the game clock (ticks and every game-time timer; frames still draw with dt 0) and hushes the
+   * game's sound while stopped.
+   */
   setPaused(on) {
     this.engine.loop.setPaused(!!on);
+    const audio = this.engine.audio;
+    if (audio && audio.setPausedMix) audio.setPausedMix(!!on);
   }
 
   /** Whether Menu / Escape opens the pause menu. */

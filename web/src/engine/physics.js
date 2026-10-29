@@ -5,7 +5,9 @@
 // the level BVHs (and colliding entities through their pivots) by pushing out of every triangle closer than the
 // radius, in substeps short enough that a sprint never tunnels a 1-stud wall. Below the capsule, five downward rays
 // (centre + a ring) find the floor: within StepHeight above or SnapDown below the feet the body stands on it (steps,
-// stairs and debris are walked up and down), otherwise it falls under Workspace.Gravity. Jumps launch at
+// stairs and debris are walked up and down), otherwise it falls under Workspace.Gravity. A falling body's floor rays
+// start from where its feet were before the step, so a long frame (the loop allows 0.1 s) or a fast fall never drops
+// it through a slab between two probes. Jumps launch at
 // sqrt(2 g JumpHeight). "Ball" mode is the vent crawl's 2.6-stud VentCollider: a sphere at the root, no floor
 // probe, no gravity (the vent rail drives it).
 
@@ -30,6 +32,7 @@ const _down = new THREE.Vector3(0, -1, 0);
 const _o = new THREE.Vector3();
 const _ray = new THREE.Ray();
 const _m3 = new THREE.Matrix3();
+const _moved = new THREE.Vector3();
 
 export class CharacterBody {
   /** @param {import('./world.js').World} world */
@@ -90,8 +93,9 @@ export class CharacterBody {
       this.velocity.y -= PhysicsConfig.Gravity * dt;
       this.velocity.y = Math.max(this.velocity.y, -200);
     }
+    const feetBefore = this.feetY;
     this.move(_o.copy(this.velocity).multiplyScalar(dt));
-    if (this.shape === 'Biped' && this.gravity) this._probeFloor(false);
+    if (this.shape === 'Biped' && this.gravity) this._probeFloor(false, feetBefore);
   }
 
   /**
@@ -167,7 +171,7 @@ export class CharacterBody {
           if (!e.box.intersectsBox(_box)) continue;
           _inv.copy(e.matrix).invert();
           _segLocal.copy(_seg).applyMatrix4(_inv);
-          const moved = new THREE.Vector3().copy(_segLocal.start);
+          const moved = _moved.copy(_segLocal.start);
           e.bvh.shapecast({
             intersectsBounds: () => true,
             intersectsTriangle: (tri) => {
@@ -204,10 +208,13 @@ export class CharacterBody {
     }
   }
 
-  /** Finds the floor under the feet and stands on it (or starts falling). */
-  _probeFloor(force) {
+  /**
+   * Finds the floor under the feet and stands on it (or starts falling). `feetBefore` (the feet before this step)
+   * sweeps the rays down from there when the body dropped further than a step this frame.
+   */
+  _probeFloor(force, feetBefore = -Infinity) {
     const feet = this.feetY;
-    const reachUp = PhysicsConfig.StepHeight;
+    const reachUp = Math.max(PhysicsConfig.StepHeight, Math.min(feetBefore - feet, 60));
     const reachDown = this.grounded || force ? SNAP_DOWN : 0.05;
     let best = -Infinity;
     let bestNormal = null;

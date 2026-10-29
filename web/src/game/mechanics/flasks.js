@@ -162,6 +162,9 @@ export class Flasks {
     this.arcAlpha = 0;
     this.pollClock = 0;
     this.hintShownFor = null;
+    /** Until when (real seconds) the throw hint stands on the hint line, or null. */
+    this.hintUntil = null;
+    this.hintText = null;
     this.env.onAction('Throw', (phase) => this._onThrow(phase));
   }
 
@@ -616,14 +619,30 @@ export class Flasks {
     this.fx.step(dt);
   }
 
-  /** While holding a flask the hint line says how to throw it (once per flask and device). */
+  /**
+   * While holding a flask the hint line says how to throw it (once per flask and device), only where a throw is
+   * possible: it waits out a locker, a trap, a grab or a cutscene, and one still up when the player gets into such a
+   * spot is taken down (it read "Hold LMB to aim" inside a locker).
+   */
   _hint() {
-    if (!this.held || this.game.life.state !== 'Alive') return;
-    const device = this.env.device();
+    const env = this.env;
+    const real = env.realNow();
+    const canThrow = !!this.held && this.game.life.state === 'Alive' && Ballistics.mayThrowIn(env.moveState()) &&
+      LIVE_CONTEXTS.has(env.context());
+    if (!canThrow) {
+      // only our line: another system may have put its own hint up since
+      const line = env.ui && env.ui.hintEl ? env.ui.hintEl.textContent : null;
+      if (this.hintUntil !== null && real < this.hintUntil && line === this.hintText) env.clearHint();
+      this.hintUntil = null;
+      return;
+    }
+    const device = env.device();
     const key = `${this.held.id}:${device}`;
     if (this.hintShownFor === key) return;
     this.hintShownFor = key;
-    this.env.hint(S(`Hud.FlaskThrow.${device}`), HINT_SECONDS);
+    this.hintUntil = real + HINT_SECONDS;
+    this.hintText = S(`Hud.FlaskThrow.${device}`);
+    env.hint(this.hintText, HINT_SECONDS);
   }
 
   /** The aim arc while winding up (after ARC_DELAY), fading in and out over ARC_FADE. */

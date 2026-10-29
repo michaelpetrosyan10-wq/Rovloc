@@ -1,12 +1,13 @@
 // hints.js: one short line the first time something new turns up (FirstTimeHints).
 //
-// TutorialConfig.Hints, highest priority first: the airlock countdown, a downed teammate (never solo), the first bear
-// trap, flask, vent grate or locker within the hint's radius on the current level, getting into the water, a low
-// battery with the light on. Each shows once ever: its hidden setting (Hint<Id>) is set the moment it shows and saved
-// with the settings. The card: a taped strip below the crosshair with the line and the device's input glyphs,
-// HintSeconds long, HintGap quiet seconds between two. Never at a bad moment: only Alive in a run with "First-time
-// hints" on, the HUD visible, no onboarding screen, outside the Cutscene / Menu / Struggle contexts, under no
-// Cutscene / Jumpscare / Drag lock, not while the Creature chases you, not while the panic is above HintPanicMax.
+// TutorialConfig.Hints, highest priority first: the stairwell airlock (near its vestibule, or its countdown), a downed
+// teammate (never solo), the first bear trap, flask, vent grate or locker within the hint's radius on the current
+// level, getting into the water, a low battery with the light on. Each shows once ever: its hidden setting
+// (Hint<Id>) is set the moment it shows and saved with the settings. The card: a taped strip below the crosshair with
+// the line and the device's input glyphs, HintSeconds long, HintGap quiet seconds between two; it ends when the floor
+// changes. Never at a bad moment: only Alive in a run with "First-time hints" on, the HUD visible, no onboarding
+// screen, outside the Cutscene / Menu / Struggle / Locker / Trapped / Parachute contexts, under no Cutscene /
+// Jumpscare / Drag lock, not while the Creature chases you, not while the panic is above HintPanicMax.
 
 import * as THREE from 'three';
 import { TutorialConfig } from '../config.js';
@@ -20,10 +21,12 @@ const SCAN = 0.25;
 const FADE_IN = 3;
 const FADE_OUT = 2;
 const QUICK_FADE_OUT = 6;
-const BLOCKED_CONTEXTS = new Set(['Cutscene', 'Menu', 'Struggle']);
+// a locker, a trap and a grab show their own lines; a first-time card about flasks or grates does not belong there
+const BLOCKED_CONTEXTS = new Set(['Cutscene', 'Menu', 'Struggle', 'Locker', 'Trapped', 'Parachute']);
 const BLOCKED_LOCKS = new Set(['Cutscene', 'Jumpscare', 'Drag']);
 const WATER_STATES = new Set(['Treading', 'Freestyle', 'Underwater']);
 const GRATE_SHUT = new Set(['Closed', 'Unscrewing', 'Locked']);
+const AIRLOCK_HINT_RADIUS = 22;
 
 export class Hints {
   /** @param {import('../game.js').Game} game */
@@ -70,6 +73,11 @@ export class Hints {
       !BLOCKED_LOCKS.has(g.controlLock()) && !g.creature.chasingPlayer() && this.env.panic() <= T.HintPanicMax;
   }
 
+  _nearCheckpoint(level, from) {
+    const v = this.game.world.checkpointVolumes(level)[0];
+    return !!v && Math.hypot(v.cframe[0] - from.x, v.cframe[2] - from.z) <= AIRLOCK_HINT_RADIUS && Math.abs(v.cframe[1] - from.y) < 8;
+  }
+
   _near(id, from, radius) {
     const p = this.positions.get(id);
     return !!p && p.distanceTo(from) <= radius;
@@ -82,7 +90,12 @@ export class Hints {
     const level = g.level;
     const from = this.env.rootPosition(_from);
     const radius = (id) => (TutorialConfig.Hints.find((h) => h.id === id) || {}).radius || 0;
-    if (!seen.Airlock && g.airlock.level === level && g.airlock.deadline !== null) this.due.add('Airlock');
+    // what the stairwell airlock does, told on the way in (alone, Waiting lasts one poll: the doors are already
+    // sealing by the time a countdown hint could show, and it used to ride on into the next floor)
+    if (!seen.Airlock && g.airlock.level === level && (g.airlock.phase === 'Waiting' ||
+      (g.airlock.phase === 'Idle' && this._nearCheckpoint(level, from)))) {
+      this.due.add('Airlock');
+    }
     if (!seen.BearTrap && g.traps) {
       for (const t of g.traps.traps) {
         if (t.state === 'Armed' && t.level === level && this._near(t.id, from, radius('BearTrap'))) {
@@ -147,14 +160,16 @@ export class Hints {
       else this.due.clear();
     }
     if (this.showing) {
-      if (!ok || this.clock - this.shownAt >= T.HintSeconds) {
+      // a card belongs to the floor it came up on: the airlock's "step inside" must not ride into the next floor
+      const stale = this.showing.level !== this.game.level;
+      if (!ok || stale || this.clock - this.shownAt >= T.HintSeconds) {
         this.showing = null;
         this.endedAt = this.clock;
       }
     } else if (ok && this.clock - this.endedAt >= T.HintGap) {
       const next = TutorialConfig.Hints.find((h) => this.due.has(h.id) && !seen[h.id]);
       if (next) {
-        this.showing = next;
+        this.showing = { ...next, level: this.game.level };
         this.shownAt = this.clock;
         this._fill(next);
         this.env.setSetting(next.setting, true);

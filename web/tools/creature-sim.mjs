@@ -15,6 +15,12 @@
 //   6. soak         patrols every level 1..5 for --soak seconds each: it never stays stuck past the stuck window
 //                   (a stall, a fresh route, a second stall, then the unseen reposition) and nothing throws.
 //   7. determinism  scenario 1 twice gives the same path.
+//   8. pool         Level 4 fairness: in the first PoolGraceSeconds after the player enters the natatorium nothing
+//                   comes for a loud swimmer; a freestyle swimmer outswims it (never grabbed, the gap grows, its
+//                   swim never faster than AquaticStalk outside a lunge); every lunge is telegraphed (the growl at
+//                   the origin, TelegraphSeconds held still before the lunge leg); after a grab it retreats to the
+//                   far end and leaves the swimmer alone for GrabRetreatSeconds; and it never climbs out of the pool
+//                   (out only through its vent route).
 // Exit code 1 on any failure.
 
 import fs from 'node:fs';
@@ -467,6 +473,199 @@ report(p1.reached >= 5 && p1.travelled >= 250, 'patrol: walks its loops', `${p1.
   const again = scenarioPatrol(2);
   const same = again.pathLength === p1.pathLength && again.end.distanceTo(p1.end) < 1e-9;
   report(same, 'determinism: the same run gives the same path', `${again.pathLength} / ${p1.pathLength} samples`);
+}
+
+// 8. the pool (Level 4 fairness)
+{
+  const POOL = 'Level4_FloodedPool';
+  const W = CreatureConfig.Water;
+  const basin = meta.basins.find((b) => b.level === POOL);
+  const o = basin.origin;
+  const box = { minX: o[0] + basin.rect.x, maxX: o[0] + basin.rect.x + basin.rect.w, minZ: o[2] + basin.rect.z, maxZ: o[2] + basin.rect.z + basin.rect.d };
+  const surface = o[1] + basin.waterLevel;
+  const cx = (box.minX + box.maxX) / 2;
+  const swimAt = (x, z) => new THREE.Vector3(x, surface - 1, z);
+  /** A session on Level 4: the player on the natatorium deck (the grace starts), awake and past the grace. */
+  const poolSession = (skipGrace = true) => {
+    const s = session();
+    s.creature.beginRun({ difficulty: 'Standard' });
+    s.creature.activateLevel(POOL);
+    s.grabs = [];
+    s.telegraphs = [];
+    s.grabResult = false;
+    s.creature.registerPoolGrabber(() => {
+      s.grabs.push(s.engine.loop.time);
+      return s.grabResult;
+    });
+    s.creature.service.lungeTelegraph.connect((origin, seconds) => s.telegraphs.push({ at: s.engine.loop.time, origin: origin.clone(), seconds }));
+    hideFar(s, POOL);
+    s.player.moveState = 'Standing';
+    s.player.place(new THREE.Vector3(box.minX - 4, o[1], (box.minZ + box.maxZ) / 2));
+    if (skipGrace) advance(s, W.PoolGraceSeconds + 1);
+    return s;
+  };
+  /** The swimmer at `p` in `state`, its locomotion heard at 10 Hz. */
+  const swim = (s, p, state, speed) => {
+    s.player.mode = 'Swim';
+    s.player.moveState = state;
+    s.player.body.position.copy(p);
+    if (Math.round(s.engine.loop.time * 30) % 3 === 0) {
+      s.engine.noise.sampleLocomotion(p.clone().add(new THREE.Vector3(0, -2, 0)), state, speed, { level: POOL });
+    }
+  };
+  const putInWater = (s, p, toward) => {
+    const h = s.creature.acquireScripted('sim');
+    const at = new THREE.Vector3(p.x, surface - 2.5, p.z);
+    h.teleport(new THREE.Matrix4().lookAt(at, new THREE.Vector3(toward.x, at.y, toward.z), new THREE.Vector3(0, 1, 0)).setPosition(at));
+    h.setHidden(false);
+    h.release('Patrol');
+  };
+  const lungeLeg = (svc) => !!(svc.mover.legs[0] && svc.mover.legs[0].kind === 'Swim' && svc.mover.legs[0].lunge);
+  const pool = {};
+
+  // the grace: a loud swimmer right over it in the first seconds after entering the natatorium is left alone
+  {
+    const s = poolSession(false);
+    advance(s, 5);
+    const svc = s.creature.service;
+    putInWater(s, new THREE.Vector3(cx, 0, box.minZ + 20), new THREE.Vector3(cx, 0, box.minZ + 30));
+    const enteredAt = svc.poolEnteredAt;
+    const until = enteredAt + W.PoolGraceSeconds - 0.5;
+    let stalked = false;
+    while (s.engine.loop.time < until) {
+      swim(s, swimAt(cx, box.minZ + 26), 'Freestyle', 9);
+      s.engine.loop.step();
+      if (svc.state === 'AquaticStalk' || svc.state === 'WallChase') stalked = true;
+    }
+    pool.grace = { enteredAt, telegraphs: s.telegraphs.length, grabs: s.grabs.length, stalked };
+    report(enteredAt !== null && s.telegraphs.length === 0 && s.grabs.length === 0 && !stalked,
+      `pool: the ${W.PoolGraceSeconds} s grace after entering the natatorium (a loud swimmer 6 studs off is left alone)`,
+      JSON.stringify(pool.grace));
+  }
+
+  // outswimming it: a freestyle swimmer heading away from a stalker 8 studs off
+  {
+    const s = poolSession();
+    const svc = s.creature.service;
+    putInWater(s, new THREE.Vector3(cx, 0, box.minZ + 12), new THREE.Vector3(cx, 0, box.maxZ));
+    let z = box.minZ + 20;
+    for (let i = 0; i < 3; i++) {
+      swim(s, swimAt(cx, z), 'Treading', 0);
+      s.engine.loop.step();
+    }
+    const start = svc.body.getPosition().distanceTo(swimAt(cx, z));
+    let maxSwim = 0;
+    let prev = svc.body.getPosition().clone();
+    let minGap = Infinity;
+    for (let i = 0; i < 8 * 30 && z < box.maxZ - 4; i++) {
+      z += 9 * TICK;
+      swim(s, swimAt(cx, z), 'Freestyle', 9);
+      s.engine.loop.step();
+      const here = svc.body.getPosition();
+      if (svc.mover.getMedium() === 'Water' && !lungeLeg(svc)) maxSwim = Math.max(maxSwim, here.distanceTo(prev) / TICK);
+      prev = here.clone();
+      minGap = Math.min(minGap, here.distanceTo(swimAt(cx, z)));
+    }
+    const end = svc.body.getPosition().distanceTo(swimAt(cx, z));
+    pool.outswim = { start: +start.toFixed(1), end: +end.toFixed(1), minGap: +minGap.toFixed(1), grabs: s.grabs.length,
+      telegraphs: s.telegraphs.length, maxSwim: +maxSwim.toFixed(2), state: svc.state };
+    report(s.grabs.length === 0 && end > start + 5 && minGap > 4.5, 'pool: a freestyle swimmer outswims it (no grab, the gap grows)', JSON.stringify(pool.outswim));
+    report(maxSwim <= CreatureConfig.Speeds.AquaticStalk + 0.05, `pool: it never swims faster than AquaticStalk (${CreatureConfig.Speeds.AquaticStalk}) outside a lunge`, `max ${maxSwim.toFixed(2)} studs/s`);
+  }
+
+  // every lunge is telegraphed; a grab sends it to the far end for GrabRetreatSeconds
+  {
+    const s = poolSession();
+    const svc = s.creature.service;
+    putInWater(s, new THREE.Vector3(cx, 0, box.minZ + 30), new THREE.Vector3(cx, 0, box.minZ + 40));
+    const spot = swimAt(cx, box.minZ + 36);
+    // a few loud strokes (the splash meter crosses), then treading water close by; a strike is a lunge leg starting
+    // or a grab attempt (one already within GrabReach needs no lunge leg)
+    const lunges = [];
+    let was = false;
+    let grabsSeen = 0;
+    const stepTracked = (state, speed) => {
+      swim(s, spot, state, speed);
+      const before = svc.body.getPosition().clone();
+      s.engine.loop.step();
+      const now = lungeLeg(svc);
+      if ((now && !was) || (s.grabs.length > grabsSeen && !was)) lunges.push({ at: s.engine.loop.time, position: before });
+      grabsSeen = s.grabs.length;
+      was = now;
+    };
+    for (let i = 0; i < 8 * 30; i++) stepTracked('Freestyle', 9);
+    for (let i = 0; i < 12 * 30 && lunges.length < 3; i++) stepTracked('Treading', 1);
+    const growls = s.engine.audio.played.filter((p) => p.name === 'CreatureGrowl');
+    const firstOf = new Set();
+    const told = lunges.map((l) => {
+      const t = s.telegraphs.filter((x) => x.at <= l.at).pop();
+      const growl = growls.filter((g) => g.at <= l.at).pop();
+      const first = !!t && !firstOf.has(t);
+      if (t) firstOf.add(t);
+      return { lead: t ? +(l.at - t.at).toFixed(2) : null, first, fromOrigin: t ? +t.origin.distanceTo(l.position).toFixed(2) : null,
+        growlAtOrigin: !!growl && !!t && growl.position && growl.position.distanceTo(t.origin) < 0.01 };
+    });
+    // every strike falls in a telegraphed lunge window, the first one from the telegraph's origin (held still there)
+    const allTold = lunges.length > 0 && told.every((x) => x.lead !== null && x.lead >= W.TelegraphSeconds - 0.05 &&
+      x.lead <= W.TelegraphSeconds + W.LungeWindow + 0.1 && x.growlAtOrigin && (!x.first || x.fromOrigin < 1));
+    const grabAfter = s.grabs.length > 0 && s.telegraphs.length > 0 && s.grabs[0] - s.telegraphs[0].at >= W.TelegraphSeconds - 0.05;
+    pool.telegraph = { lunges: lunges.length, telegraphs: s.telegraphs.length, told, grabs: s.grabs.length };
+    report(allTold, `pool: every lunge is telegraphed ${W.TelegraphSeconds} s ahead (held still, the growl at its origin)`,
+      `${lunges.length} strikes after ${s.telegraphs.length} telegraphs: ${JSON.stringify(told.filter((x) => x.first))}`);
+    report(grabAfter, 'pool: the grab comes only after the telegraph', s.grabs.length ? `grab ${(s.grabs[0] - s.telegraphs[0].at).toFixed(2)} s after it` : 'no grab');
+    // the next grab takes: held 2 s, let go, then the retreat
+    s.grabResult = true;
+    for (let i = 0; i < 12 * 30 && !svc.grabbed; i++) {
+      swim(s, spot, 'Treading', 1);
+      s.engine.loop.step();
+    }
+    const grabbed = !!svc.grabbed;
+    s.player.moveState = 'Grabbed';
+    advance(s, 2);
+    s.player.moveState = 'Treading';
+    advance(s, 1.5);
+    const releasedAt = s.engine.loop.time;
+    const t0 = s.telegraphs.length;
+    const g0 = s.grabs.length;
+    let near = Infinity;
+    let far = 0;
+    while (s.engine.loop.time < releasedAt + W.GrabRetreatSeconds - 2) {
+      swim(s, spot, 'Freestyle', 9);
+      s.engine.loop.step();
+      const d = svc.body.getPosition().distanceTo(spot);
+      if (s.engine.loop.time > releasedAt + 6) near = Math.min(near, d);
+      far = Math.max(far, d);
+    }
+    pool.retreat = { grabbed, telegraphs: s.telegraphs.length - t0, grabs: s.grabs.length - g0, nearestAfter6s: +near.toFixed(1), farthest: +far.toFixed(1), state: svc.state };
+    report(grabbed && s.telegraphs.length === t0 && s.grabs.length === g0 && near > 25,
+      `pool: after a grab it retreats to the far end and leaves the swimmer alone for ${W.GrabRetreatSeconds} s`, JSON.stringify(pool.retreat));
+  }
+
+  // it never climbs out onto the deck: out only by its vent route (into the duct, then on unseen)
+  {
+    const s = poolSession();
+    const svc = s.creature.service;
+    putInWater(s, new THREE.Vector3(box.minX + 6, 0, box.minZ + 50), new THREE.Vector3(box.minX - 10, 0, box.minZ + 50));
+    s.player.mode = 'OnFoot';
+    s.player.moveState = 'Standing';
+    s.player.flashlight.on = true;
+    s.player.place(new THREE.Vector3(box.minX - 6, o[1], box.minZ + 50));
+    let medium = svc.mover.getMedium();
+    const media = [medium];
+    let climbedOut = false;
+    for (let i = 0; i < 40 * 30; i++) {
+      s.engine.loop.step();
+      const m = svc.mover.getMedium();
+      if (m !== medium) {
+        if (medium === 'Water' && m === 'Floor') climbedOut = true;
+        media.push(m);
+        medium = m;
+      }
+    }
+    pool.sealed = { media, climbedOut, state: svc.state, unsticks: svc.unsticks || 0, catches: s.events.caught.length };
+    report(!climbedOut, 'pool: it never climbs out onto the deck (out only through its vent route)', JSON.stringify(pool.sealed));
+  }
+  summary.pool = pool;
 }
 
 if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ results, summary }, null, 2));

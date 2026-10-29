@@ -81,10 +81,13 @@ export class CreatureApi {
     this.caught = new Signal();
     /** @type {Signal<[string, string]>} */
     this.jumpscareFinished = new Signal();
+    /** @type {Signal<[THREE.Vector3, number]>} a pool lunge is telegraphed at (origin, seconds) */
+    this.lungeTelegraph = new Signal();
     if (this.c) {
       this._bridge('stateChanged', this.stateChanged);
       this._bridge('caught', this.caught);
       this._bridge('jumpscareFinished', this.jumpscareFinished);
+      this._bridge('lungeTelegraph', this.lungeTelegraph);
     }
   }
 

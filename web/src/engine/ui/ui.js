@@ -84,6 +84,10 @@ export class UI {
     this.menuEl = el('div', 'rv-menu', root);
     this.statsEl = el('div', 'rv-stats', root);
     this.statsEl.style.display = 'none';
+    // the mouse look needs the pointer lock; after Escape closes the menu the browser refuses to lock again until a
+    // click (Escape is no user gesture), and the view just would not turn: say so
+    this.lockEl = el('div', 'rv-lock rv-outline', root, 'Click to look around');
+    this.lockWait = 0;
     this.hudAlpha = 1;
     this.hudTarget = 1;
     this.hudRate = 1;
@@ -589,6 +593,11 @@ export class UI {
   // ------------------------------------------------------------------ frame
 
   update(dt) {
+    const input = this.input;
+    const unlocked = input.device === 'KeyboardMouse' && input.wantPointerLock && !input.pointerLocked &&
+      !input.isCursorFree() && !this.menuOpen;
+    this.lockWait = unlocked ? this.lockWait + dt : 0;
+    this.lockEl.classList.toggle('on', this.lockWait > 0.6);
     const step = this.hudRate * dt;
     this.hudAlpha += Math.sign(this.hudTarget - this.hudAlpha) * Math.min(Math.abs(this.hudTarget - this.hudAlpha), step);
     this.hud.style.opacity = String(this.hudAlpha);

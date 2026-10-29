@@ -1,13 +1,15 @@
 // Brain (MonsterAIService/Brain.luau): the pure core of the Creature's mind, shared by the service and its states.
 //
 //   * decide(summary): the transition table. Priorities, highest first: Scripted > Stunned > Dormant (its level is
-//     not awake yet) > hold still while a catch plays > a stun just ended: Patrol (withdraw) > no hunting allowed
-//     (catch cooldown, airlock grace, Relax): Patrol, withdrawing from a chase > a chase that ran too long: Patrol
-//     (withdraw) > a crawler gave itself away: VentChase > VentChase continues until done, then WallChase if someone
-//     is in sight, else InvestigateNoise > someone in sight: WallChase (VentChase when both are in the ducts) > a
-//     swimmer on the pool level: AquaticStalk > a lost chase follows the last known position for MemorySeconds, then
-//     searches > AquaticStalk ends when the water is calm > a noise at least as loud as the one being investigated:
-//     InvestigateNoise > an investigation that found nothing: Patrol.
+//     not awake yet) > hold still while a catch plays > a stun just ended: Patrol (withdraw) > retreating in the water
+//     after a grab: AquaticStalk (to the far end, no lunges) > no hunting allowed (catch cooldown, airlock grace,
+//     Relax): Patrol, withdrawing from a chase > a chase that ran too long: Patrol (withdraw) > a crawler gave itself
+//     away: VentChase > VentChase continues until done, then WallChase if someone is in sight, else InvestigateNoise >
+//     someone in sight: WallChase (VentChase when both are in the ducts; AquaticStalk when it is in the water and they
+//     swim: a swimmer is only ever taken by the telegraphed lunge) > a swimmer on the pool level: AquaticStalk > a
+//     lost chase follows the last known position for MemorySeconds, then searches > AquaticStalk ends when the water
+//     is calm > a noise at least as loud as the one being investigated: InvestigateNoise > an investigation that found
+//     nothing: Patrol.
 //   * catchKind(check): whether a catch may happen now and which jumpscare (Hallway on floors, Vent in ducts).
 //   * levelInfo(levelId, meta): patrol loops (world.json `patrolLoops`, else the PatrolWaypoint anchors by loop /
 //     order or "<prefix>_WP_<loop>_<NN>"; walked in order, the last back to the first), rooms and the open doorways
@@ -45,6 +47,8 @@ export const CatchVertical = CATCH_VERTICAL;
  * @property {number|null} memoryAge
  * @property {boolean} breakChase
  * @property {boolean} swimmer
+ * @property {boolean} [inWater] the Creature swims
+ * @property {boolean} [retreating] it retreats in the water after a grab
  * @property {boolean} stateDone
  *
  * @typedef {{state: string, reason: string, reposition: boolean}} Decision
@@ -76,6 +80,7 @@ export function decide(s) {
   if (!s.awake) return go('Dormant', 'asleep');
   if (s.catching) return go(s.state, 'catching');
   if (state === 'Stunned') return go('Patrol', 'recovered', true);
+  if (s.retreating && s.inWater) return go('AquaticStalk', 'retreating');
   if (!s.canHunt) return go('Patrol', 'breather', CHASES.has(state));
   if (CHASES.has(state) && s.breakChase) return go('Patrol', 'chase ran too long', true);
   if (s.ventQuarry && state !== 'VentChase') return go('VentChase', 'crawler');
@@ -86,6 +91,7 @@ export function decide(s) {
   }
   if (s.sees) {
     if (s.seesInVent) return go('VentChase', 'seen in the ducts');
+    if (s.swimmer && s.inWater) return go('AquaticStalk', 'swimmer in sight');
     return go('WallChase', 'seen');
   }
   if (s.swimmer) return go('AquaticStalk', 'swimmer');
@@ -105,12 +111,15 @@ export function decide(s) {
 
 /**
  * @param {{horizontal: number, vertical: number, distance: number, creatureInVent: boolean, targetInVent: boolean,
+ *   creatureInWater?: boolean, targetSwimming?: boolean,
  *   lineClear: boolean, playing: boolean, hiding: boolean, canHunt: boolean, busy: boolean, hidden: boolean,
  *   stunned: boolean}} check
  * @returns {string|null} JumpscareKind
  */
 export function catchKind(check) {
   if (check.busy || !check.canHunt || check.hidden || check.stunned) return null;
+  // in the water the pool's telegraphed grab is the only catch
+  if (check.creatureInWater || check.targetSwimming) return null;
   if (!check.playing || check.hiding || !check.lineClear) return null;
   if (check.creatureInVent !== check.targetInVent) return null;
   if (check.creatureInVent) return check.distance <= SENSES.VentCatchDistance ? 'Vent' : null;
@@ -238,7 +247,10 @@ export function levelInfo(levelId, meta) {
   for (const basin of meta.basins || []) {
     if (basin.level !== levelId) continue;
     const room = roomRects[basin.room] || basin.rect;
-    basins.push(makeBasin(basin.id, origin, basin.rect, room, basin.waterLevel, basin.depth));
+    const made = makeBasin(basin.id, origin, basin.rect, room, basin.waterLevel, basin.depth);
+    // Level 4 fairness: the Creature leaves the pool only through its own vent route (never climbing out at the deck)
+    made.ventExitOnly = CreatureConfig.Water.VentExitOnly;
+    basins.push(made);
   }
   let spawn = null;
   for (const anchor of anchors) {

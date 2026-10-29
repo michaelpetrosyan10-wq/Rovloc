@@ -28,7 +28,7 @@ export const GameConfig = Object.freeze({
   FlaskVentHopRadius: 2,
   BreathHoldMaxSeconds: 7,
   BreathRecoverPerSecond: 0.6,
-  StrugglePressesToEscape: 22,
+  StrugglePressesToEscape: 14, // Level 4 fairness (was 22)
   StruggleMaxPressesPerSecond: 12,
   ParachutePackCount: 4,
   ParachuteDescentSpeed: 9,
@@ -41,7 +41,7 @@ export const GameConfig = Object.freeze({
   StaminaRegenDelay: 1.2,
   OxygenMax: 100,
   OxygenDrain: 7,
-  OxygenDrainGrabbed: 9,
+  OxygenDrainGrabbed: 5, // slower than a dive while held (was 9): time to struggle free
   OxygenRegen: 30,
   BatteryMax: 100,
   BatteryDrain: 0.55,
@@ -192,8 +192,9 @@ export const NoiseConfig = Object.freeze({
  */
 export const InputBindings = Object.freeze({
   Sprint: { kind: 'Hold', keyboard: ['ShiftLeft'], gamepad: [10], touch: { label: 'RUN', position: [1, -170, 1, -230], size: 76 }, contexts: ['OnFoot', 'Vent', 'Swim'] },
-  Crouch: { kind: 'Toggle', keyboard: ['KeyC'], gamepad: [1], touch: { label: 'CROUCH', position: [1, -90, 1, -150], size: 76 }, contexts: ['OnFoot'] },
-  Dive: { kind: 'Hold', keyboard: ['KeyC'], gamepad: [1], touch: { label: 'DIVE', position: [1, -90, 1, -150], size: 76 }, contexts: ['Swim'] },
+  // CROUCH / DIVE sit clear above JUMP (their circles overlapped at -150 / -90)
+  Crouch: { kind: 'Toggle', keyboard: ['KeyC'], gamepad: [1], touch: { label: 'CROUCH', position: [1, -90, 1, -172], size: 76 }, contexts: ['OnFoot'] },
+  Dive: { kind: 'Hold', keyboard: ['KeyC'], gamepad: [1], touch: { label: 'DIVE', position: [1, -90, 1, -172], size: 76 }, contexts: ['Swim'] },
   Flashlight: { kind: 'Tap', keyboard: ['KeyF'], gamepad: [12], touch: { label: 'LIGHT', position: [1, -90, 1, -310], size: 64 }, contexts: ['OnFoot', 'Vent', 'Swim', 'Downed', 'Trapped', 'Locker'] },
   Interact: { kind: 'Hold', keyboard: ['KeyE'], gamepad: [2], touch: null, contexts: ['OnFoot', 'Vent', 'Swim', 'Trapped', 'Locker'] },
   Kick: { kind: 'Tap', keyboard: ['KeyR'], gamepad: [3], touch: null, contexts: ['OnFoot', 'Vent'] },

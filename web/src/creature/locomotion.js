@@ -4,7 +4,9 @@
 // Mediums. Floor (the walker walks an unanchored root), Water (the root is anchored and glides under a pool's surface,
 // PoseMode Swim) and Vent (the root is anchored on the duct centreline, PoseMode Quadruped). GoTo(point) plans what the
 // change of medium needs: out of the ducts first through the best open grate, then a walk to the pool deck and a slip
-// into the water, or a swim to the deck edge and a climb out.
+// into the water, or a swim to the deck edge and a climb out. From a VentExitOnly pool (Level 4) there is no climbing
+// out: the way out is its own vent route, a swim to the nearest pool grate and in; the ducts give no exit back onto
+// the land from there, so the plan ends in the duct and the brain moves the Creature on unseen ("Failed" in a vent).
 //
 // Legs.
 //   Walk     floor pathfinding (FloorNav: the zone graph's portals, agent radius 2); waypoints followed with MoveTo,
@@ -12,7 +14,8 @@
 //            straight line it walks straight at it. Two failed computations fail the plan ("Failed"); no progress for
 //            Repath.StuckSeconds forces a fresh route, and a second stall soon after reports "Stuck" (the brain then
 //            repositions the Creature out of everyone's sight).
-//   Swim     a straight glide under the surface, clamped inside the basin's water.
+//   Swim     a straight glide under the surface, clamped inside the basin's water, at most the water pace
+//            (setWaterSpeedCap: the AquaticStalk speed) unless the leg is a telegraphed lunge.
 //   Transit  a short kinematic tween between two CFrames (through a grate mouth, into or out of a pool).
 //   Rail     the root steps along a polyline of VentGraph points at the vent speed, facing its travel (or a threat
 //            while it backs away), on the centreline.
@@ -58,7 +61,7 @@ export { SWIM_DEPTH };
  *   clear: (from: THREE.Vector3, to: THREE.Vector3) => boolean}} Engine
  * @typedef {{state: (id: string) => string, standPoint: (grate: import('./ventgraph.js').Grate) => CFrame,
  *   kick: (id: string) => void}} Grates
- * @typedef {{arrive?: number, depth?: number}} GoOptions
+ * @typedef {{arrive?: number, depth?: number, lunge?: boolean}} GoOptions
  */
 
 /**
@@ -156,11 +159,12 @@ function walkLeg(goal, arrive = 1.5) {
   return leg;
 }
 
-function swimLeg(goal, arrive = 1.5, depth = SWIM_DEPTH) {
+function swimLeg(goal, arrive = 1.5, depth = SWIM_DEPTH, lunge = false) {
   const leg = newLeg('Swim');
   leg.goal = goal.clone();
   leg.arrive = arrive;
   leg.depth = depth;
+  leg.lunge = lunge;
   return leg;
 }
 
@@ -219,6 +223,8 @@ export class Mover {
     /** @type {MoveStatus} */
     this.status = 'Idle';
     this.speed = CreatureConfig.Speeds.Patrol;
+    /** The most any swim but a lunge moves (studs/s). */
+    this.waterSpeed = Infinity;
     this.repathInterval = DEFAULT_REPATH;
     this.walk = this._newWalk();
     this.stuck = new StuckTracker(CreatureConfig.Repath.StuckSeconds);
@@ -425,7 +431,8 @@ export class Mover {
     const delta = target.clone().sub(position);
     const distance = delta.length();
     if (distance <= leg.arrive) return true;
-    const step = Math.min(distance, this.speed * dt);
+    const speed = leg.lunge ? this.speed : Math.min(this.speed, this.waterSpeed);
+    const step = Math.min(distance, speed * dt);
     const next = position.clone().addScaledVector(delta, step / distance);
     const f = flatDirection(delta);
     if (f) this.body.setCFrame(CFrame.lookAt(next, next.clone().add(f)));
@@ -533,6 +540,9 @@ export class Mover {
     const here = this._railHere();
     const position = this.body.getPosition();
     if (!level || !here) return [null, this.medium, position];
+    // a goal on land is never reached by dropping back into a pool the Creature may not climb out of
+    const landGoal = !!toward && !this.basinAt(toward);
+    const intoSealedPool = (candidate) => landGoal && this._sealedBasinAt(this._standCFrame(candidate)[0].position);
     const routeTo = (candidate) => {
       if (!level.nodes[candidate.nodeId]) return [null, Infinity];
       const mouth = { a: candidate.nodeId, b: null, t: 1, position: candidate.mouth.clone(), distance: 0 };
@@ -545,7 +555,7 @@ export class Mover {
       [route] = routeTo(chosen);
       const state = this.grates.state(chosen.id);
       kick = !(state === 'Open' || state === 'Kicked');
-      if (state === 'Locked') route = null;
+      if (state === 'Locked' || intoSealedPool(chosen)) route = null;
     } else {
       let bestCost = Infinity;
       let bestKickCost = Infinity;
@@ -554,7 +564,7 @@ export class Mover {
       for (const id of level.grateIds) {
         const candidate = level.grates[id];
         const state = this.grates.state(id);
-        if (state === 'Locked') continue;
+        if (state === 'Locked' || intoSealedPool(candidate)) continue;
         const [points, cost] = routeTo(candidate);
         if (!points) continue;
         const stand = this.grates.standPoint(candidate);
@@ -615,6 +625,7 @@ export class Mover {
       }
     } else if (from === 'Water' && !goalBasin) {
       const basin = this.basinAt(position) || this._nearestBasin(position);
+      if (basin && basin.ventExitOnly) return this._poolVentPlan(basin, position);
       let stand = null;
       let water = null;
       if (basin) [stand, water] = deckCrossing(basin, goal);
@@ -624,14 +635,60 @@ export class Mover {
       }
       plan.push(walkLeg(goal, arrive));
     } else if (from === 'Water') {
-      plan.push(swimLeg(goal, arrive, depth));
+      plan.push(swimLeg(goal, arrive, depth, !!(options && options.lunge)));
     } else {
       plan.push(walkLeg(goal, arrive));
     }
     return plan;
   }
 
+  /** A basin the Creature may leave only through its vent route, holding `p` (in its water), or null. */
+  _sealedBasinAt(p) {
+    const basin = this.basinAt(p);
+    return basin && basin.ventExitOnly ? basin : null;
+  }
+
+  /**
+   * The way out of a VentExitOnly pool: a swim to the nearest pool grate (one whose stand point is in this basin's
+   * water), a kick when it is shut, and in to its duct node. Empty when the pool has no usable grate (it stays in).
+   */
+  _poolVentPlan(basin, position) {
+    const level = this.graph;
+    if (!level) return [];
+    let best = null;
+    let bestDistance = Infinity;
+    for (const id of level.grateIds) {
+      const grate = level.grates[id];
+      if (!level.nodes[grate.nodeId] || this.grates.state(id) === 'Locked') continue;
+      const [stand, medium] = this._standCFrame(grate);
+      if (medium !== 'Water' || this.basinAt(stand.position) !== basin) continue;
+      const d = stand.position.distanceTo(position);
+      if (d < bestDistance) {
+        best = { grate, stand };
+        bestDistance = d;
+      }
+    }
+    if (!best) return [];
+    const { grate, stand } = best;
+    const state = this.grates.state(grate.id);
+    const intoWall = stand.lookVector.clone().negate();
+    const plan = [swimLeg(stand.position, 1, SWIM_DEPTH), holdLeg(FACE_SECONDS, intoWall)];
+    if (!(state === 'Open' || state === 'Kicked')) {
+      plan.push(doLeg(() => this.grates.kick(grate.id)));
+      plan.push(holdLeg(KICK_RECOVER, intoWall));
+    }
+    const f = flatDirection(intoWall) || new THREE.Vector3(0, 0, -1);
+    plan.push(transitLeg(CFrame.lookAt(grate.mouth, grate.mouth.clone().add(f)), SQUEEZE_SECONDS, 'Quadruped', 'Vent', null, null));
+    plan.push(railLeg([level.nodes[grate.nodeId].position.clone()], false, null));
+    return plan;
+  }
+
   // ------------------------------------------------------------------ API
+
+  /** The most any swim but a lunge may move (the AquaticStalk pace). */
+  setWaterSpeedCap(speed) {
+    this.waterSpeed = Number.isFinite(speed) && speed > 0 ? speed : Infinity;
+  }
 
   setLevel(graph, basins) {
     this.graph = graph;
@@ -661,6 +718,7 @@ export class Mover {
       current.goal = first.goal;
       current.arrive = first.arrive;
       current.depth = first.depth;
+      current.lunge = first.lunge;
       this.legs = [current];
       this.status = 'Moving';
       return;

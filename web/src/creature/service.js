@@ -17,6 +17,13 @@
 // stalls for good is put back on its level's patrol network at the nearest waypoint nobody can see, and only while
 // nobody can see the Creature either: it never pops in or out in front of the player.
 //
+// The pool (Level 4 fairness, CreatureConfig.Water). Its swims are capped at the AquaticStalk pace but for a lunge, and
+// every lunge is telegraphed (lungeTelegraph: the growl here, the pool's bubbles and ripple ring). In the water it
+// takes a swimmer only with the pool grab (no Hallway catch on or from the water). It leaves the pool only through
+// its vent route: into a pool grate, then (the ducts giving no way out onto land) on to a land spot nobody can see,
+// backing off along the duct first while watched. PoolGraceSeconds after the player first stands in a pool room, and
+// GrabRetreatSeconds after any grab (swimming to the far end of the water), it neither sees nor hears the player there.
+//
 // Levels. activateLevel (Level 1 or later): PacingDirector.noteAirlock (grace), the Creature is moved hidden to that
 // level's CreatureSpawn if it is elsewhere, reappears once nobody can see it, and wakes into Patrol WakeDelay seconds
 // later. A level controller that acquired it (acquireScripted) keeps it.
@@ -34,6 +41,7 @@ import { Pacing, repositionPoint } from './pacing.js';
 import * as Perception from './perception.js';
 import { Random, Signal, clamp, flatDirection, horizontalDistance, isFiniteNumber, isFiniteVector } from './util.js';
 import { buildGraph, nearest as railNearest } from './ventgraph.js';
+import { SWIM_DEPTH, clampToWater } from './water.js';
 import * as AquaticStalk from './states/aquatic.js';
 import * as Dormant from './states/dormant.js';
 import * as InvestigateNoise from './states/investigate.js';
@@ -59,6 +67,7 @@ const HEARD_ZONE_TTL = Patrol.HeardTtl;
 const NOISE_QUEUE_LIMIT = 64;
 const SIGHT_RANGE_LIMIT = 250;
 const UNSTICK_MIN = 6;
+const POOL_EXIT_MIN = 30; // studs from the player at least, where it comes back onto land from the pool's vent route
 const DUCT_SNAP = 1.5;
 const EXACT_RANK = Hearing.priorityRank('High');
 const DEV_FORCE_SECONDS = 30;
@@ -142,6 +151,8 @@ export class MonsterAI {
     this.caught = new Signal();
     /** (victim, kind, outcome) when a catch ends: "Downed", "Executed" or "Aborted". */
     this.jumpscareFinished = new Signal();
+    /** (origin, seconds) when a pool lunge is telegraphed (the pool shows the bubbles and the ripple there). */
+    this.lungeTelegraph = new Signal();
 
     this.running = false;
     this.difficulty = 'Standard';
@@ -183,6 +194,10 @@ export class MonsterAI {
     this.splashArmed = new Map();
     this.swimmerAt = -Infinity;
     this.swimmerPlayer = null;
+    /** When the player first stood in a pool room on this level (the pool grace runs from it), or null. */
+    this.poolEnteredAt = null;
+    /** Until when it retreats to the far end of the water after a grab. */
+    this.poolRetreatUntil = -Infinity;
     this.ignored = false;
     this.wasInVent = false;
     this.accumulated = 0;
@@ -426,6 +441,7 @@ export class MonsterAI {
     this.lastSeen.clear();
     this.swimmerPlayer = null;
     this.swimmerAt = -Infinity;
+    this.poolRetreatUntil = -Infinity;
     this.chaseStarted = null;
   }
 
@@ -441,21 +457,79 @@ export class MonsterAI {
     m.setLevel(c.graph, info ? info.basins : []);
     this.env.setNavLevel(levelId);
     this._forgetMind();
+    this.poolEnteredAt = null;
     let spawn = info ? info.spawn : null;
     if (!spawn && info && info.waypoints[0]) spawn = CFrame.at(this._standingSpots(info)[0]);
     if (spawn) this._placeBody(spawn);
     if (conceal) this._hide(REVEAL_RETRY);
   }
 
+  // ------------------------------------------------------------------ the pool (Level 4 fairness)
+
+  /** Whether `p` stands in a pool room (a room holding a basin) of the Creature's level. */
+  _inPoolRoomAt(p) {
+    const info = this.ctx ? this.ctx.level : null;
+    if (!p || !info || info.basins.length === 0) return false;
+    if (this.mover && this.mover.basinAt(p)) return true;
+    const room = Brain.roomAt(info, p);
+    return !!room && room.kind === 'Pool';
+  }
+
+  _inPoolRoom(player) {
+    return this._swimming(player) || this._inPoolRoomAt(this._rootOf(player));
+  }
+
+  /** The pool grace starts the first time the player stands in a pool room on this level. */
+  _updatePoolGrace(t) {
+    if (this.poolEnteredAt === null && this._playing(PLAYER) && this._inPoolRoom(PLAYER)) this.poolEnteredAt = t;
+  }
+
+  /** The grace after first entering the pool room, or the retreat after a grab: it leaves the pool room alone. */
+  _poolQuiet(t) {
+    const grace = this.poolEnteredAt !== null && t < this.poolEnteredAt + CreatureConfig.Water.PoolGraceSeconds;
+    return grace || t < this.poolRetreatUntil;
+  }
+
+  /** While it retreats after a grab: the point of its pool farthest from the player (else null). */
+  _poolRetreatPoint() {
+    const m = this.mover;
+    if (!m || this.now() >= this.poolRetreatUntil || m.getMedium() !== 'Water') return null;
+    const here = this.body.getPosition();
+    const basin = m.basinAt(here);
+    if (!basin) return null;
+    const from = this._rootOf(PLAYER) || here;
+    let best = null;
+    let bestDistance = -1;
+    for (const x of [basin.minX, (basin.minX + basin.maxX) / 2, basin.maxX]) {
+      for (const z of [basin.minZ, (basin.minZ + basin.maxZ) / 2, basin.maxZ]) {
+        const p = clampToWater(basin, new THREE.Vector3(x, basin.surfaceY - SWIM_DEPTH, z));
+        const d = horizontalDistance(p, from);
+        if (d > bestDistance) {
+          best = p;
+          bestDistance = d;
+        }
+      }
+    }
+    return best;
+  }
+
+  /** A lunge is coming: a low growl at its origin and the pool's bubbles and ripple ring (lungeTelegraph). */
+  _telegraph(origin, seconds) {
+    this.env.play('CreatureGrowl', { position: origin.clone(), speed: 0.72, volume: 1.2 });
+    this.lungeTelegraph.fire(origin.clone(), seconds);
+  }
+
   /** Teleports to the nearest standing spot (>= UNSTICK_MIN away) nobody can see, only while nobody sees it here. */
-  _relocateUnseen() {
+  _relocateUnseen(landOnly = false) {
     const c = this.ctx;
     const info = c ? c.level : null;
     if (!c || !info) return false;
     const here = this.body.getPosition();
     if (this._visible(here)) return false;
-    const spots = this._standingSpots(info).filter((s) => s.distanceTo(here) >= UNSTICK_MIN);
-    const point = repositionPoint(spots, this._playerEyes(), here, 0, Infinity, (p) => this._visible(p));
+    const spots = this._standingSpots(info).filter((s) => s.distanceTo(here) >= UNSTICK_MIN &&
+      !(landOnly && this.mover && this.mover.basinAt(s)));
+    // out of the pool's ducts it comes up well away from the player, not round the corner from them
+    const point = repositionPoint(spots, this._playerEyes(), here, landOnly ? POOL_EXIT_MIN : 0, Infinity, (p) => this._visible(p));
     if (!point) return false;
     const facing = flatDirection(this.body.getCFrame().lookVector) || new THREE.Vector3(0, 0, -1);
     this._placeBody(CFrame.lookAt(point, point.clone().add(facing)));
@@ -488,6 +562,8 @@ export class MonsterAI {
       distance: here.distanceTo(target),
       creatureInVent: this.mover.getMedium() === 'Vent',
       targetInVent: this._inVent(player),
+      creatureInWater: this.mover.getMedium() === 'Water',
+      targetSwimming: this._swimming(player),
       lineClear: this._lineClear(this._creatureEye(), eye),
       playing: this._huntable(player),
       hiding: this.env.playerMoveState() === 'Hiding',
@@ -669,7 +745,8 @@ export class MonsterAI {
         rail: pv ? this._railPointOf(player) : null,
       });
     }
-    const sightings = Perception.scan(viewer, observations);
+    const quiet = this._poolQuiet(t);
+    const sightings = Perception.scan(viewer, observations).filter((s) => !(quiet && this._inPoolRoom(s.player)));
     c.sightings = sightings;
     for (const s of sightings) {
       this.lastSeen.set(s.player, t);
@@ -699,6 +776,7 @@ export class MonsterAI {
     this.noiseQueue = [];
     for (const event of events) {
       if (event.sourceUserId === PLAYER.userId && this.ignored) continue;
+      if (quiet && (event.medium === 'Water' || this._inPoolRoomAt(event.position))) continue;
       const heard = Hearing.perceive(event, listener);
       if (!heard) continue;
       const room = c.level ? Brain.roomAt(c.level, heard.position) : null;
@@ -716,7 +794,7 @@ export class MonsterAI {
     }
     const pending = this.alerts;
     this.alerts = [];
-    for (const alert of pending) best = this._noteHeard(alert, best, t);
+    for (const alert of pending) if (!(quiet && this._inPoolRoomAt(alert.position))) best = this._noteHeard(alert, best, t);
     c.heard = best;
     for (const [zone, heard] of Object.entries(c.heardZones)) if (t - heard.at > HEARD_ZONE_TTL) delete c.heardZones[zone];
     for (const [player, at] of [...this.spotted]) if (t - at > SPOT_WINDOW) this.spotted.delete(player);
@@ -774,6 +852,8 @@ export class MonsterAI {
       memoryAge: c.memory ? t - c.memory.at : null,
       breakChase: this.chaseStarted !== null && !devHunt && p.shouldBreakChase(chaseSeconds),
       swimmer: level !== null && level.basins.length > 0 && t - this.swimmerAt <= SWIMMER_MEMORY,
+      inWater: m.getMedium() === 'Water',
+      retreating: t < this.poolRetreatUntil,
       stateDone: c.stateDone,
     };
     return [summary, quarry];
@@ -811,6 +891,8 @@ export class MonsterAI {
       this.grabbed = null;
       p.noteCatch(t);
       c.reposition = true;
+      this.poolRetreatUntil = t + CreatureConfig.Water.GrabRetreatSeconds;
+      this.splashArmed.delete(victim);
       AquaticStalk.released(c);
     }
   }
@@ -822,8 +904,15 @@ export class MonsterAI {
     if (!m || !c) return;
     const status = m.getStatus();
     if (status === 'Stuck' || (status === 'Failed' && m.getMedium() === 'Vent')) {
-      if (this._relocateUnseen()) this.current.enter(c, this.state);
-      else m.reset(m.getMedium());
+      // out of a sealed pool's ducts (its vent route) it comes out on land, unseen
+      const landOnly = m.getMedium() === 'Vent' && !!c.level && c.level.basins.some((b) => b.ventExitOnly);
+      if (this._relocateUnseen(landOnly)) this.current.enter(c, this.state);
+      else if (landOnly && status === 'Failed') {
+        // watched in the mouth of the pool's duct: back off along it, out of sight, and move on from there
+        const from = this._rootOf(PLAYER) || this.body.getPosition();
+        m.reset('Vent');
+        m.retreat(from, 4);
+      } else m.reset(m.getMedium());
     }
   }
 
@@ -898,6 +987,8 @@ export class MonsterAI {
     }
     const busy = this.catching !== null;
     if (!busy) this._updateReveal(t);
+    this._updatePoolGrace(t);
+    m.setWaterSpeedCap(c.speedOf('AquaticStalk'));
     this._sense(t);
     const target = c.target;
     c.phase = p.tick(dt, {
@@ -988,8 +1079,10 @@ export class MonsterAI {
       },
       grabArmed: (player) => {
         const at = this.splashArmed.get(player);
-        return at !== undefined && this.now() - at <= GRAB_ARMED_SECONDS;
+        return at !== undefined && this.now() - at <= GRAB_ARMED_SECONDS && !this._poolQuiet(this.now());
       },
+      telegraph: (origin, seconds) => this._telegraph(origin, seconds),
+      poolRetreat: () => this._poolRetreatPoint(),
       setGrabbed: (player) => {
         this.grabbed = player;
         this.grabbedHeldAt = this.now();

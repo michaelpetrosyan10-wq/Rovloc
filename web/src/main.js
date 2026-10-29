@@ -42,7 +42,9 @@ function bootScreen(root) {
       sub.style.textAlign = 'center';
     },
     hide() {
+      // fading out, it no longer takes the clicks and taps meant for the title under it
       screen.style.opacity = '0';
+      screen.style.pointerEvents = 'none';
       setTimeout(() => screen.remove(), 900);
     },
   };

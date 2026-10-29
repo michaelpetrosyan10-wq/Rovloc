@@ -501,9 +501,10 @@ const ART = {
     Object.assign(list.style, { display: 'flex', flexDirection: 'column', gap: '2px', paddingTop: '4px' });
     for (const row of TutorialConfig.ControlRows) {
       const r = el('div', '', list);
-      Object.assign(r.style, { display: 'flex', alignItems: 'center', height: '24px', gap: '10px' });
+      Object.assign(r.style, { display: 'flex', alignItems: 'center', height: '24px', gap: '8px' });
+      // the glyph column only as wide as its widest key ("W A S D"), so the longest line fits the half page
       const slot = el('div', '', r);
-      Object.assign(slot.style, { width: '96px', display: 'flex', justifyContent: 'flex-end' });
+      Object.assign(slot.style, { width: '76px', flex: '0 0 76px', display: 'flex', justifyContent: 'flex-end' });
       const text = row.action ? glyphFor(env, row.action, device) : S(`${row.glyph}.${device}`);
       el('span', `rg-key${device === 'KeyboardMouse' ? '' : ' round'}`, slot, text);
       const label = el('div', 'rg-body', r, S(row.label));

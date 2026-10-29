@@ -3,16 +3,17 @@
 // add({position | entity, text, holdSeconds, distance, onTriggered, ...}) registers a prompt. Each frame the one
 // prompt that may answer the Interact key is chosen (Roblox's OnePerButton exclusivity): enabled, within `distance`
 // of the player's root, in front of the camera and, unless requiresLineOfSight is false, visible from the eye; the
-// nearest wins (ties go to the one nearer the centre of the view). Holding Interact fills its ring over holdSeconds
-// (0 = instant); releasing drains it; leaving range cancels. onTriggered fires once per completed hold. Touch / a free
-// cursor press the row itself. The input context must have Interact live (on foot, in a vent, swimming, trapped,
-// in a locker).
+// nearest wins (ties go to the one nearer the centre of the view); one without line of sight still never answers
+// through a wall. Holding Interact fills its ring over holdSeconds (0 = instant); releasing drains it; leaving range
+// cancels. onTriggered fires once per completed hold (before its onHoldEnded). Touch / a free cursor press the row
+// itself. The input context must have Interact live (on foot, in a vent, swimming, trapped, in a locker).
 
 import * as THREE from 'three';
 
 const FADE_IN = 9;
 const FADE_OUT = 7;
 const DRAIN = 5;
+const THROUGH_SLACK = 1.5;
 
 /**
  * @typedef {Object} PromptSpec
@@ -149,12 +150,16 @@ export class Prompts {
     if (p && p.spec.onHoldEnded) safe(p.spec.onHoldEnded, p.handle);
   }
 
+  /**
+   * A completed hold: Triggered first, then HoldEnded (as Roblox orders them). The other way round a HoldEnded that
+   * cancels a half-done action (a grate's screws running back in) undid every completed hold before it landed.
+   */
   _trigger(p) {
     p.progress = p.hold > 0 ? 1 : 0;
     p.flash = 1;
     this.holding = null;
-    if (p.spec.onHoldEnded) safe(p.spec.onHoldEnded, p.handle);
     safe(p.spec.onTriggered, p.handle);
+    if (p.spec.onHoldEnded) safe(p.spec.onHoldEnded, p.handle);
   }
 
   /** Per frame: choose, hold, render. */
@@ -176,9 +181,14 @@ export class Prompts {
       const dist = _to.length();
       const facing = dist > 1e-3 ? _to.dot(_fwd) / dist : 1;
       if (facing < 0.2) continue;
-      if (p.los && dist > 0.5) {
+      if (dist > 0.5) {
+        // RequiresLineOfSight false (every prompt the export carries) still never answers through a solid wall: a
+        // flask or a battery on the far side of a lab wall could be picked up from the corridor. Only the world's
+        // static geometry counts, and anything within THROUGH_SLACK of the anchor (the counter under a flask, the
+        // wall a grate sits in) does not.
         _to.divideScalar(dist);
-        const hit = engine.world.raycast(eye, _to, Math.max(0, dist - 0.6), { ignoreEntities: true });
+        const reach = p.los ? Math.max(0, dist - 0.6) : Math.max(0, dist - THROUGH_SLACK);
+        const hit = reach > 0 && engine.world.raycast(eye, _to, reach, { ignoreEntities: true });
         if (hit) continue;
       }
       const score = d - facing * 2;

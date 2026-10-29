@@ -30,7 +30,11 @@ const STICK_DEADZONE = 0.14;
 const TOUCH_LOOK_MIN_X = 0.4; // CameraRig.TouchLookMinX
 const TOUCH_LOOK_TOP = 0.3; // CameraRig.TouchLookTop
 const THUMB_RADIUS = 60;
+const TOUCH_MOUSE_GRACE = 900; // ms after a touch in which mouse events are the browser's emulation of it
 const PREVENT = new Set(['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'KeyF']);
+// the contexts the body moves in: only there does the touch layer draw its thumbstick (in a locker it sat under the
+// LEAVE button, in a trap or a struggle it did nothing)
+const STICK_CONTEXTS = new Set(['OnFoot', 'Vent', 'Swim', 'Downed', 'Parachute']);
 
 /** @typedef {'Begin'|'End'} Phase */
 /** @typedef {'KeyboardMouse'|'Gamepad'|'Touch'} Device */
@@ -62,6 +66,7 @@ export class Input {
     this.thumb = { x: 0, y: 0 };
     this.pointerLocked = false;
     this.wantPointerLock = false;
+    this.lastTouchAt = -Infinity;
     /** @type {Map<string, boolean>} */
     this.cursorFreeTokens = new Map();
     this.gamepadButtons = [];
@@ -286,8 +291,15 @@ export class Input {
     });
     window.addEventListener('blur', () => this._releaseAll());
 
+    // a tap is followed by compatibility mouse events (mousedown, click): they must not turn the device to
+    // KeyboardMouse, which hid the touch controls after the first tap on PLAY or a prompt
+    const fromTouch = (e) => (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) ||
+      performance.now() - this.lastTouchAt < TOUCH_MOUSE_GRACE;
+    window.addEventListener('touchstart', () => {
+      this.lastTouchAt = performance.now();
+    }, { passive: true, capture: true });
     this.surface.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || fromTouch(e)) return;
       this._setDevice('KeyboardMouse');
       if (this.wantPointerLock && !document.pointerLockElement && !this.isCursorFree()) {
         this.requestPointerLock();
@@ -296,7 +308,7 @@ export class Input {
       if (document.pointerLockElement) this._pressKey('Mouse0', true);
     });
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this._pressKey('Mouse0', false);
+      if (e.button === 0 && !fromTouch(e)) this._pressKey('Mouse0', false);
     });
     window.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement === this.surface) {
@@ -370,6 +382,14 @@ export class Input {
     if (!pad) {
       this.stick.x = this.stick.y = 0;
       this.leftStick.x = this.leftStick.y = 0;
+      // unplugged (or asleep) with buttons down: let them go, or a held Sprint / Throw stays held for good
+      for (let i = 0; i < this.gamepadButtons.length; i++) {
+        if (!this.gamepadButtons[i]) continue;
+        this.gamepadButtons[i] = false;
+        for (const [action, b] of Object.entries(InputBindings)) {
+          if (b.gamepad.includes(i)) this.inject(action, `pad:${i}`, false);
+        }
+      }
       return;
     }
     const dz = (v) => (Math.abs(v) < STICK_DEADZONE ? 0 : v);
@@ -414,6 +434,8 @@ export class Input {
     root.textContent = '';
     root.style.display = this.device === 'Touch' && this.enabled ? '' : 'none';
     if (this.device !== 'Touch') return;
+    this._renderButtons(root);
+    if (!STICK_CONTEXTS.has(this.context)) return;
     // thumbstick
     const base = document.createElement('div');
     base.className = 'rv-thumb';
@@ -458,7 +480,10 @@ export class Input {
     };
     base.addEventListener('touchend', end);
     base.addEventListener('touchcancel', end);
+  }
 
+  /** The active context's touch buttons (InputBindings.touch). */
+  _renderButtons(root) {
     for (const [action, b] of Object.entries(InputBindings)) {
       if (!b.touch || !b.contexts.includes(this.context)) continue;
       const btn = document.createElement('button');

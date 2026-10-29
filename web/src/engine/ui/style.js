@@ -88,6 +88,10 @@ export const CSS = `
 .rv-hint { font-family: ${Fonts.Title}; font-size: 19px; text-align: center; padding: 6px 14px; opacity: 0;
   transition: opacity 1.4s linear; }
 .rv-hint.on { opacity: 1; transition: opacity 3s linear; }
+.rv-lock { position: absolute; left: 50%; top: 42%; transform: translateX(-50%); font-family: ${Fonts.Strong}; font-size: 14px;
+  letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border-radius: 4px; background: rgba(8,8,9,0.6);
+  opacity: 0; pointer-events: none; transition: opacity 0.4s linear; }
+.rv-lock.on { opacity: 0.9; }
 .rv-captions { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .rv-caption { font-family: ${Fonts.Body}; font-size: 15px; padding: 3px 12px 3px 10px; border-radius: 4px;
   background: rgba(8,8,9,0.72); color: ${Palette.Bone}; border-left: 2px solid transparent; transition: opacity 0.7s linear; }
@@ -110,7 +114,8 @@ export const CSS = `
 .rv-card-rule { height: 1px; margin: 10px auto 0; width: 60%; background: linear-gradient(90deg, transparent, ${Palette.Stroke}, transparent); }
 
 /* fade */
-.rv-fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+/* above the game's HUD layers (objectives 11, lobby HUD 12, hints 13): a fade to black hides them too */
+.rv-fade { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 20; }
 
 /* crosshair dot */
 .rv-dot { position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-radius: 50%;
@@ -129,8 +134,10 @@ export const CSS = `
 .rv-round.latched { border-color: ${Palette.Amber}; color: ${Palette.Amber}; box-shadow: inset 0 0 14px rgba(204,158,88,0.35); }
 
 /* menus */
+/* the pause menu covers the game's HUD layers, the floor card and the lobby terminals (25); the title (30) and the
+   results (40) own their screens */
 .rv-menu { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.55); pointer-events: auto; }
+  background: rgba(0,0,0,0.55); pointer-events: auto; z-index: 35; }
 .rv-menu.open { display: flex; }
 .rv-menu-panel { width: min(520px, 92vw); max-height: 86vh; overflow: auto; padding: 22px 26px; }
 .rv-menu h2 { font-family: ${Fonts.Title}; font-weight: normal; font-size: 26px; margin: 0 0 14px; letter-spacing: 0.06em; }

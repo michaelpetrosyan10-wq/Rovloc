@@ -25,8 +25,8 @@ export const CreatureConfig = Object.freeze({
     WallChase: 21,
     VentChase: 17,
     Stunned: 3,
-    AquaticStalk: 12,
-    AquaticLunge: 30,
+    AquaticStalk: 6.5, // slower than a freestyle swimmer (9), faster than one treading water (4)
+    AquaticLunge: 18,
     Scripted: 16,
   }),
   Senses: Object.freeze({
@@ -49,6 +49,20 @@ export const CreatureConfig = Object.freeze({
   }),
   Repath: Object.freeze({ ChaseInterval: 0.35, PatrolInterval: 2, StuckSeconds: 2.5 }),
   Jumpscare: Object.freeze({ LungeSeconds: 0.45, HoldSeconds: 1.4, FaceDistance: 1.6 }),
+  // The pool (Level 4 fairness): every lunge is telegraphed (rising bubbles, a ripple ring and a low growl at its
+  // origin) for TelegraphSeconds and may then run for LungeWindow before a new telegraph is needed; LungeCooldown
+  // after a lunge that missed. Any swim but a lunge is capped at the AquaticStalk pace. The Creature leaves a pool only
+  // through its vent route (VentExitOnly). PoolGraceSeconds after the player first enters a pool room it leaves them
+  // alone there; after any grab it retreats to the far end of the water for GrabRetreatSeconds.
+  Water: Object.freeze({
+    LungeRange: 9,
+    TelegraphSeconds: 1.2,
+    LungeWindow: 2.5,
+    LungeCooldown: 2,
+    VentExitOnly: true,
+    PoolGraceSeconds: 20,
+    GrabRetreatSeconds: 15,
+  }),
 });
 
 /** Height of the root's centre above the floor when the Creature stands (CreatureBody.RootHeight). */

@@ -15,7 +15,7 @@ const WATER_IN = 2; // water point inside the coping
 /**
  * @typedef {{from: THREE.Vector3, to: THREE.Vector3, outward: THREE.Vector3}} DeckEdge
  * @typedef {{id: string, minX: number, maxX: number, minZ: number, maxZ: number, surfaceY: number, floorY: number,
- *   deckY: number, edges: DeckEdge[]}} Basin
+ *   deckY: number, edges: DeckEdge[], ventExitOnly?: boolean}} Basin  ventExitOnly: no climbing out at the deck
  */
 
 /**
