@@ -184,6 +184,7 @@ VentNetworkService.EntryCooldown = ENTRY_COOLDOWN
 local entered: Signal.Signal<Player, string> = Signal.new()
 local exited: Signal.Signal<Player, string> = Signal.new()
 local grateChanged: Signal.Signal<string, Enums.GrateState, Player?> = Signal.new()
+local blockedGrates: { [string]: boolean } = {}
 local released: Signal.Signal<Player, string> = Signal.new()
 
 -- (player, grateId) after a player crawled in through that grate.
@@ -604,7 +605,7 @@ end
 
 local function serves(host: Instance, _prompt: ProximityPrompt): boolean
 	local grate = gratesByModel[host]
-	return grate ~= nil and GrateRules.servesPrompts(grate.state)
+	return grate ~= nil and not blockedGrates[grate.id] and GrateRules.servesPrompts(grate.state)
 end
 
 -- Unscrew on a grate's PromptPoint: an Alive player, from the room or from the duct, while it is Closed.
@@ -877,6 +878,25 @@ function VentNetworkService.IsGrateOpen(grateId: string): boolean
 	return GrateRules.isOpen(VentNetworkService.GetGrateState(grateId))
 end
 
+-- Blocks a grate for the squad (Floor 4's shut maintenance hatch covers its grate, ObjectiveService): no prompts, no
+-- crawling in or out through it, whatever its state, until unblocked (or the run ends). The Creature's own vent route
+-- is not the squad's: it ignores this.
+function VentNetworkService.SetBlocked(grateId: string, blocked: boolean)
+	if blocked then
+		blockedGrates[grateId] = true
+	else
+		blockedGrates[grateId] = nil
+	end
+	local grate = grates[grateId]
+	if grate then
+		refreshPrompts(grate)
+	end
+end
+
+function VentNetworkService.IsBlocked(grateId: string): boolean
+	return blockedGrates[grateId] == true
+end
+
 -- Sets a grate's state with its poses (see the header); Unscrewing cannot be forced.
 function VentNetworkService.ForceGrate(grateId: string, state: Enums.GrateState)
 	local grate = grates[grateId]
@@ -982,7 +1002,10 @@ local function pollEntry(player: Player)
 	for _, grate in grates do
 		local exitAnchor = grate.exitAnchor
 		local levelId = grate.levelId
-		if not (GrateRules.isOpen(grate.state) and exitAnchor and levelId and grate.model.Parent) then
+		if
+			not (GrateRules.isOpen(grate.state) and exitAnchor and levelId and grate.model.Parent)
+			or blockedGrates[grate.id]
+		then
 			continue
 		end
 		if MathUtil.horizontalDistance(grate.centre, position) > ENTRY_CULL then
@@ -1020,7 +1043,12 @@ local function pollOccupant(player: Player, occupant: Occupant)
 	end
 	local position = root.CFrame.Position
 	for _, grate in grates do
-		if grate.levelId ~= occupant.levelId or not GrateRules.isOpen(grate.state) or grate.model.Parent == nil then
+		if
+			grate.levelId ~= occupant.levelId
+			or not GrateRules.isOpen(grate.state)
+			or grate.model.Parent == nil
+			or blockedGrates[grate.id]
+		then
 			continue
 		end
 		local info = occupant.graph.grates[grate.id]
@@ -1302,6 +1330,7 @@ function VentNetworkService.EndRun()
 	table.clear(participants)
 	table.clear(crawled)
 	table.clear(cooldownUntil)
+	table.clear(blockedGrates)
 end
 
 function VentNetworkService.OnPlayerRemoving(player: Player)

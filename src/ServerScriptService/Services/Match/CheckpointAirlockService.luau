@@ -9,6 +9,7 @@
 -- airlocks on that level whose FromLevel is the level and StairwellId the route's). The last level (the roof) has no exit airlock: the service stays Idle there (P8's
 -- finale). Any level change it did not make itself (a dev level skip) resets it to Idle for the new level.
 --
+-- Nothing runs while the floor's objective keeps its exit locked (ObjectiveService.ExitOpen): no countdown, no seal.
 -- At GameConfig.ServerTickHz every run participant counts as inside while their root, or the point under their feet,
 -- is in the volume's box (pure maths: the volume is a NoCollide part).
 --   Idle     -> Waiting   the first playing participant (Alive or Downed) is inside: StragglerDeadline = now +
@@ -62,6 +63,7 @@ local RunLifecycleService = require(ServerScriptService.Services.Core.RunLifecyc
 local RunStatsService = require(ServerScriptService.Services.Core.RunStatsService)
 local LifeStateService = require(ServerScriptService.Services.Player.LifeStateService)
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
+local ObjectiveService = require(ServerScriptService.Services.Levels.ObjectiveService)
 
 local log = Log.new("Airlock")
 
@@ -416,6 +418,9 @@ function CheckpointAirlockService.Poll()
 	end
 	if levelId == nil or exitRoomId == nil then
 		return
+	end
+	if phase == "Idle" and not ObjectiveService.ExitOpen(levelId) then
+		return -- the floor's objective keeps the exit locked
 	end
 	resolve(false)
 	local sealing = phase == "Sealing"

@@ -39,8 +39,8 @@ CreatureConfig.Speeds = table.freeze({
 	WallChase = 21,
 	VentChase = 17,
 	Stunned = 3, -- stumbling retreat
-	AquaticStalk = 12,
-	AquaticLunge = 30,
+	AquaticStalk = 6.5, -- Floor 4 fairness: slower than a freestyle swimmer (9), faster than one treading water (4)
+	AquaticLunge = 18,
 	Scripted = 16,
 } :: { [string]: number })
 
@@ -76,6 +76,24 @@ CreatureConfig.Jumpscare = table.freeze({
 	LungeSeconds = 0.45,
 	HoldSeconds = 1.4,
 	FaceDistance = 1.6, -- camera distance from the face during the lock
+})
+
+-- The pool (Floor 4 fairness, mirrored by the web build): every lunge is telegraphed (rising bubbles, a ripple ring and
+-- a low growl at its origin) for TelegraphSeconds with the Creature held still, then may run for LungeWindow before a
+-- new telegraph is needed; LungeCooldown after a lunge that missed. Any swim but a lunge is capped at the AquaticStalk
+-- pace. In or from the water the telegraphed grab is its only catch. It leaves a pool only through the pool's own vent
+-- route (VentExitOnly) and comes back out on land unseen, at least PoolExitMin studs from every player. PoolGraceSeconds
+-- after any player first enters a pool room it leaves the pool rooms alone; after any grab it retreats to the far end
+-- of the water for GrabRetreatSeconds.
+CreatureConfig.Water = table.freeze({
+	LungeRange = 9,
+	TelegraphSeconds = 1.2,
+	LungeWindow = 2.5,
+	LungeCooldown = 2,
+	VentExitOnly = true,
+	PoolExitMin = 30,
+	PoolGraceSeconds = 20,
+	GrabRetreatSeconds = 15,
 })
 
 return table.freeze(CreatureConfig)

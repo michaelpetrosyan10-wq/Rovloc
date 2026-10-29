@@ -6,6 +6,10 @@
 -- surface, PoseMode Swim) and Vent (the root is anchored on the duct centreline, PoseMode Quadruped, exactly like a
 -- crawling player's root). GoTo(point) plans whatever the change of medium needs: out of the ducts first through the
 -- best open grate, then a walk to the pool deck and a slip into the water, or a swim to the deck edge and a climb out.
+-- From a VentExitOnly pool (Level 4, CreatureConfig.Water) there is no climbing out: the way out is its own vent route,
+-- a swim to the nearest pool grate and in; the ducts give no way back onto the land from there (a land goal is never
+-- reached through a grate that opens into a sealed pool), so the plan ends in the duct and the brain moves the Creature
+-- on unseen.
 --
 -- Legs.
 --   Walk     PathfindingService on floors (CreatureConfig.PathAgent: radius 2, height 8, no jumping or climbing, the
@@ -16,7 +20,8 @@
 --            straight line the Creature walks straight at it. Two failed computations fail the plan ("Failed"); no
 --            progress for Repath.StuckSeconds forces a fresh route, and a second stall soon after reports "Stuck" (the
 --            brain then repositions the Creature out of everyone's sight).
---   Swim     a straight glide under the surface, clamped inside the basin's water (SwimDepth below the surface).
+--   Swim     a straight glide under the surface, clamped inside the basin's water (SwimDepth below the surface), at
+--            most the water pace (SetWaterSpeedCap: the AquaticStalk speed) unless the leg is a telegraphed lunge.
 --   Transit  a short kinematic tween between two CFrames (crawling in or out of a grate mouth, slipping into or
 --            climbing out of a pool), with the pose and medium it switches.
 --   Rail     the root steps along a polyline of VentGraph points at the vent speed, facing its travel (or facing a
@@ -58,6 +63,7 @@ export type Basin = {
 	floorY: number,
 	deckY: number,
 	edges: { DeckEdge },
+	ventExitOnly: boolean?, -- the Creature leaves it only through its own vent route (Level 4 fairness)
 }
 
 export type ComputedPath = { waypoints: { Vector3 }, path: Path? }
@@ -75,11 +81,12 @@ export type Grates = {
 	kick: (grateId: string) -> (),
 }
 
-export type GoOptions = { arrive: number?, depth: number? }
+export type GoOptions = { arrive: number?, depth: number?, lunge: boolean? }
 
 export type Mover = {
 	SetLevel: (self: Mover, graph: VentGraph.Graph?, basins: { Basin }) -> (),
 	SetSpeed: (self: Mover, speed: number) -> (),
+	SetWaterSpeedCap: (self: Mover, speed: number?) -> (), -- the most any swim but a lunge moves (nil: no cap)
 	SetRepathInterval: (self: Mover, seconds: number) -> (),
 	GoTo: (self: Mover, position: Vector3, options: GoOptions?) -> (),
 	EnterVent: (self: Mover, grate: VentGraph.Grate, kick: boolean) -> (),
@@ -109,6 +116,7 @@ type Leg = {
 	goal: Vector3?, -- Walk / Swim
 	arrive: number,
 	depth: number, -- Swim: least depth under the surface
+	lunge: boolean, -- Swim: a telegraphed lunge (not held to the water pace)
 	to: CFrame?, -- Transit
 	from: CFrame?, -- Transit: where it started
 	seconds: number, -- Transit / Hold
@@ -453,6 +461,7 @@ local function newLeg(kind: LegKind): Leg
 		goal = nil,
 		arrive = 1.5,
 		depth = SWIM_DEPTH,
+		lunge = false,
 		to = nil,
 		from = nil,
 		seconds = 0,
@@ -477,11 +486,12 @@ local function walkLeg(goal: Vector3, arrive: number?): Leg
 	return leg
 end
 
-local function swimLeg(goal: Vector3, arrive: number?, depth: number?): Leg
+local function swimLeg(goal: Vector3, arrive: number?, depth: number?, lunge: boolean?): Leg
 	local leg = newLeg("Swim")
 	leg.goal = goal
 	leg.arrive = arrive or 1.5
 	leg.depth = depth or SWIM_DEPTH
+	leg.lunge = lunge == true
 	return leg
 end
 
@@ -558,6 +568,7 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 	local queued: { Leg }? = nil
 	local status: MoveStatus = "Idle"
 	local speed = CreatureConfig.Speeds.Patrol
+	local waterSpeed = math.huge
 	local repathInterval = DEFAULT_REPATH
 	local walk = newWalk()
 	local stuck = CreatureBody.newStuckTracker(CreatureConfig.Repath.StuckSeconds)
@@ -717,6 +728,7 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 	end
 
 	local planTo: (goal: Vector3, options: GoOptions?) -> { Leg }
+	local poolVentPlan: (basin: Basin, position: Vector3) -> { Leg }
 
 	local function stepWalk(leg: Leg): boolean
 		local humanoid = body.humanoid
@@ -819,7 +831,8 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 		if distance <= leg.arrive then
 			return true
 		end
-		local step = math.min(distance, speed * dt)
+		local pace = if leg.lunge then speed else math.min(speed, waterSpeed)
+		local step = math.min(distance, pace * dt)
 		local nextPosition = position + delta / distance * step
 		local flat = CreatureBody.flatDirection(delta)
 		if flat then
@@ -968,6 +981,15 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 				{ a = candidate.nodeId, b = nil, t = 1, position = candidate.mouth, distance = 0 }
 			return Locomotion.railRoute(level, here, mouth)
 		end
+		-- a goal on land is never reached by dropping back into a pool the Creature may not climb out of
+		local landGoal = toward ~= nil and basinAt(toward :: Vector3) == nil
+		local function intoSealedPool(candidate: VentGraph.Grate): boolean
+			if not landGoal then
+				return false
+			end
+			local basin = basinAt(standCFrame(candidate).Position)
+			return basin ~= nil and basin.ventExitOnly == true
+		end
 		local chosen: VentGraph.Grate? = grate
 		local kick = false
 		local route: { Vector3 }? = nil
@@ -975,7 +997,7 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 			route = routeTo(chosen)
 			local state = grates.state(chosen.id)
 			kick = not (state == "Open" or state == "Kicked")
-			if state == "Locked" then
+			if state == "Locked" or intoSealedPool(chosen) then
 				route = nil
 			end
 		else
@@ -985,7 +1007,7 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 			local kickRoute: { Vector3 }? = nil
 			for _, candidate in level.grates do
 				local state = grates.state(candidate.id)
-				if state == "Locked" then
+				if state == "Locked" or intoSealedPool(candidate) then
 					continue
 				end
 				local points, cost = routeTo(candidate)
@@ -1026,6 +1048,55 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 		return plan, outside :: Medium, stand.Position
 	end
 
+	-- The way out of a VentExitOnly pool: a swim to the nearest pool grate (one whose stand point is in this basin's
+	-- water), a kick when it is shut, and in to its duct node. Empty when the pool has no usable grate (it stays in).
+	poolVentPlan = function(basin: Basin, position: Vector3): { Leg }
+		local level = graph
+		if not level then
+			return {}
+		end
+		local best: VentGraph.Grate? = nil
+		local bestStand: CFrame? = nil
+		local bestDistance = math.huge
+		for _, candidate in level.grates do
+			if not level.nodes[candidate.nodeId] or grates.state(candidate.id) == "Locked" then
+				continue
+			end
+			local stand, outside = standCFrame(candidate)
+			if outside ~= "Water" or basinAt(stand.Position) ~= basin then
+				continue
+			end
+			local d = (stand.Position - position).Magnitude
+			if d < bestDistance then
+				best, bestStand, bestDistance = candidate, stand, d
+			end
+		end
+		if not (best and bestStand) then
+			return {}
+		end
+		local chosen = best :: VentGraph.Grate
+		local stand = bestStand :: CFrame
+		local state = grates.state(chosen.id)
+		local intoWall = -stand.LookVector
+		local plan: { Leg } = { swimLeg(stand.Position, 1, SWIM_DEPTH), holdLeg(FACE_SECONDS, intoWall) }
+		if not (state == "Open" or state == "Kicked") then
+			table.insert(
+				plan,
+				doLeg(function()
+					grates.kick(chosen.id)
+				end)
+			)
+			table.insert(plan, holdLeg(KICK_RECOVER, intoWall))
+		end
+		local flat = CreatureBody.flatDirection(intoWall) or Vector3.new(0, 0, -1)
+		table.insert(
+			plan,
+			transitLeg(CFrame.lookAt(chosen.mouth, chosen.mouth + flat), SQUEEZE_SECONDS, "Quadruped", "Vent", nil, nil)
+		)
+		table.insert(plan, railLeg({ level.nodes[chosen.nodeId].position }, false, nil))
+		return plan
+	end
+
 	planTo = function(goal: Vector3, options: GoOptions?): { Leg }
 		local arrive = if options and options.arrive then options.arrive else 1.5
 		local depth = if options and options.depth then options.depth else SWIM_DEPTH
@@ -1058,6 +1129,9 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 			end
 		elseif from == "Water" and not goalBasin then
 			local basin = basinAt(position) or nearestBasin(position)
+			if basin and basin.ventExitOnly then
+				return poolVentPlan(basin, position)
+			end
 			local stand: CFrame?, water: Vector3? = nil, nil
 			if basin then
 				stand, water = Locomotion.deckCrossing(basin, goal)
@@ -1068,7 +1142,7 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 			end
 			table.insert(plan, walkLeg(goal, arrive))
 		elseif from == "Water" then
-			table.insert(plan, swimLeg(goal, arrive, depth))
+			table.insert(plan, swimLeg(goal, arrive, depth, options ~= nil and options.lunge == true))
 		else
 			table.insert(plan, walkLeg(goal, arrive))
 		end
@@ -1084,6 +1158,10 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 
 		SetSpeed = function(_self: Mover, value: number)
 			speed = math.max(0, value)
+		end,
+
+		SetWaterSpeedCap = function(_self: Mover, value: number?)
+			waterSpeed = if value and value > 0 then value else math.huge
 		end,
 
 		SetRepathInterval = function(_self: Mover, seconds: number)
@@ -1109,6 +1187,7 @@ function Locomotion.new(body: CreatureBody.Body, engine: Engine, grates: Grates,
 				current.goal = first.goal
 				current.arrive = first.arrive
 				current.depth = first.depth
+				current.lunge = first.lunge
 				legs = { current }
 				status = "Moving"
 				return

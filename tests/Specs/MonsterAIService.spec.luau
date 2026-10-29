@@ -33,6 +33,9 @@ local CreatureBody = require(ServerScriptService.Services.Monster.MonsterAIServi
 local JumpscareHandler = require(ServerScriptService.Services.Monster.MonsterAIService.JumpscareHandler)
 local Locomotion = require(ServerScriptService.Services.Monster.MonsterAIService.Locomotion)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
+local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
+local SpawnRule = require(ServerScriptService.Services.Monster.MonsterAIService.SpawnRule)
 
 type Expect = SpecRunner.Expect
 
@@ -610,6 +613,51 @@ spec["locomotion: walks fail after two routes are refused, Stop keeps a squeeze 
 	t.eq(mover:Status(), "Idle", "reset")
 	mover:Destroy()
 	model:Destroy()
+end
+
+spec["spawns: on Level 2 it starts at the spawn rule's pick, waits its grace, and a loud noise ends it"] = function(
+	t: Expect
+)
+	local player = fakePlayer(CFrame.new(0, -600, 0), false)
+	inRun({ player }, false, function(world: World, runContext: Types.RunContext)
+		local level: Enums.LevelId = "Level2_ScienceHall"
+		local layout = Builder.getLayout(level)
+		assert(layout, "Level 2 layout")
+		local entry = LevelDirector.entryFor(level)
+		local choice = SpawnRule.choose(runContext.seed, layout, nil, if entry then entry.toRoom else layout.entry)
+		local candidate = choice.candidate
+		assert(candidate, "a spawn")
+		local levelCtx: Types.LevelContext =
+			{ levelId = level, run = runContext, root = Instance.new("Model"), runtime = Instance.new("Folder") }
+		LevelDirector.LevelActivated:Fire(level, levelCtx)
+		run(world, 1)
+		local at = WorldConfig.levelOrigin(level) + candidate.pos
+		local here = world.root.CFrame.Position
+		t.truthy(
+			Vector3.new(here.X - at.X, 0, here.Z - at.Z).Magnitude < 0.5,
+			"placed at " .. candidate.id .. ", not the level's CreatureSpawn"
+		)
+		t.eq(attr(world.model, C.Hidden), false, "shown once nobody sees it")
+		run(world, ObjectiveConfig.graceFor("Standard") - 3)
+		t.eq(attr(world.model, C.MonsterState), "Dormant", "it waits out its grace")
+		NoiseAndDirectorService.Emit(at + Vector3.new(40, 0, 0), "Gasp", { sourcePlayer = player, levelId = level })
+		run(world, 0.3)
+		t.truthy(attr(world.model, C.MonsterState) ~= "Dormant", "a participant's loud noise ends the grace")
+	end)
+	LifeStateService.OnPlayerRemoving(player)
+end
+
+spec["spawns: without a noise the grace runs its full length"] = function(t: Expect)
+	inRun({}, false, function(world: World, runContext: Types.RunContext)
+		local level: Enums.LevelId = "Level3_Gymnasium"
+		local levelCtx: Types.LevelContext =
+			{ levelId = level, run = runContext, root = Instance.new("Model"), runtime = Instance.new("Folder") }
+		LevelDirector.LevelActivated:Fire(level, levelCtx)
+		run(world, ObjectiveConfig.graceFor("Standard") - 0.5)
+		t.eq(attr(world.model, C.MonsterState), "Dormant", "still in its grace")
+		run(world, 1)
+		t.eq(attr(world.model, C.MonsterState), "Patrol", "then it patrols")
+	end)
 end
 
 return spec

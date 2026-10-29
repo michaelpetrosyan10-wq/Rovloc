@@ -36,6 +36,9 @@
 --     panic breathing held (FirstPersonController.SuppressBreathing: nobody breathes under water). At the
 --     surface the overlay is split at the projected waterline with a bright meniscus line, so a head bobbing at the
 --     surface sees the lens half under. Breaking the surface with less than half the air left plays a SurfaceGasp.
+--   * The lunge telegraph (Level 4 fairness: OneShot "LungeTelegraph", TelegraphSeconds before every lunge of the
+--     Creature): at the lunge origin a stream of bubbles rises and a ripple ring pulses out on the surface above it
+--     (the Creature growls there, a server cue), so a swimmer sees where it will come from and can climb out or swim off.
 --   * Bubbles: cosmetic, client-only glass beads (no images) rising from the mouth: an exhale every ExhaleMin..Max
 --     seconds under water (with the Bubbles sound), bursts on request (EmitBubbles: the struggle), and a trail from
 --     every teammate's head under water; counts scale with the render budget.
@@ -66,6 +69,7 @@ local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local SoundSynthesizer = require(ReplicatedStorage.Shared.Audio.SoundSynthesizer)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
+local Net = require(ReplicatedStorage.Shared.Net)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WaterRules = require(ReplicatedStorage.Shared.Util.WaterRules)
 
@@ -222,7 +226,13 @@ local PANIC_MAX = 0.75
 -- Bubbles
 local EXHALE_MIN = 2.4
 local EXHALE_MAX = 4
-local BUBBLE_POOL = 32
+local BUBBLE_POOL = 64
+local TELEGRAPH_BUBBLE_EVERY = 0.06
+local TELEGRAPH_SPREAD = 0.7
+local RIPPLE_PULSE = 0.6
+local RIPPLE_RADIUS = 4.5
+local RIPPLE_RINGS = 4
+local RIPPLE_COLOR = Color3.fromRGB(184, 219, 214)
 local BUBBLE_LIFE = 3
 local BUBBLE_RISE_MIN = 2.6
 local BUBBLE_RISE_MAX = 4.6
@@ -267,6 +277,17 @@ local underwater = 0 -- the camera's underwater amount this frame
 local wasUnder = false
 local nextExhaleAt = math.huge
 local bubbles: { Bubble } = {}
+
+type Telegraph = {
+	origin: Vector3,
+	surface: number,
+	startedAt: number, -- os.clock()
+	endsAt: number,
+	nextBubbleAt: number,
+	ring: Part,
+	stroke: UIStroke,
+}
+local telegraphs: { Telegraph } = {}
 local freeBubbles: { BasePart } = {}
 local strokeTracks: { [Player]: StrokeTrack } = {}
 local trailAt: { [Player]: number } = {}
@@ -563,6 +584,115 @@ local function stepBubbles(dt: number, now: number)
 	end
 end
 
+-- A flat ripple ring for a lunge telegraph: an invisible plate with a round stroke on its top face.
+local function makeRing(): (Part, UIStroke)
+	local ring = Instance.new("Part")
+	ring.Name = "LungeRipple"
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.CastShadow = false
+	ring.Transparency = 1
+	ring.Size = Vector3.new(1, 0.05, 1)
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Top
+	gui.LightInfluence = 0
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 40
+	gui.Parent = ring
+	local circle = Instance.new("Frame")
+	circle.BackgroundTransparency = 1
+	circle.Size = UDim2.fromScale(1, 1)
+	circle.Parent = gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = circle
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = RIPPLE_COLOR
+	stroke.Thickness = 6
+	stroke.Transparency = 1
+	stroke.Parent = circle
+	return ring, stroke
+end
+
+-- The Creature's lunge is coming from `origin` in `seconds` (from server time `startAt`).
+local function telegraph(origin: Vector3, seconds: number, startAt: number)
+	local folder = bubbleFolder()
+	if not folder then
+		return
+	end
+	local water = WaterRules.volumeAround(scanVolumes(), origin, 1)
+	local surface = if water then water.surface else origin.Y + 2.5
+	local start = os.clock() + math.max(0, startAt - Workspace:GetServerTimeNow())
+	if #telegraphs >= RIPPLE_RINGS then
+		local oldest = table.remove(telegraphs, 1)
+		if oldest then
+			oldest.ring:Destroy()
+		end
+	end
+	local ring, stroke = makeRing()
+	ring.CFrame = CFrame.new(origin.X, surface + 0.04, origin.Z)
+	ring.Parent = folder
+	table.insert(telegraphs, {
+		origin = origin,
+		surface = surface,
+		startedAt = start,
+		endsAt = start + math.max(0, seconds),
+		nextBubbleAt = start,
+		ring = ring,
+		stroke = stroke,
+	})
+end
+
+local function stepTelegraphs(now: number)
+	for index = #telegraphs, 1, -1 do
+		local t = telegraphs[index]
+		if now > t.endsAt + RIPPLE_PULSE then
+			t.ring:Destroy()
+			table.remove(telegraphs, index)
+			continue
+		end
+		if now < t.startedAt then
+			continue
+		end
+		if now < t.endsAt then
+			while t.nextBubbleAt <= now do
+				t.nextBubbleAt += TELEGRAPH_BUBBLE_EVERY
+				spawnBubbles(t.origin, t.surface, 2, TELEGRAPH_SPREAD)
+			end
+		end
+		-- pulses out from the origin over the telegraph, the last one fading after it
+		local age = now - t.startedAt
+		local phase = (age % RIPPLE_PULSE) / RIPPLE_PULSE
+		local fading = if now > t.endsAt then 1 - math.clamp((now - t.endsAt) / RIPPLE_PULSE, 0, 1) else 1
+		local radius = 0.6 + (RIPPLE_RADIUS - 0.6) * phase
+		t.ring.Size = Vector3.new(radius * 2, 0.05, radius * 2)
+		t.stroke.Transparency = 1 - 0.55 * (1 - phase) * fading
+	end
+end
+
+local function clearTelegraphs()
+	for _, t in telegraphs do
+		t.ring:Destroy()
+	end
+	table.clear(telegraphs)
+end
+
+local function onOneShot(payload: any)
+	if type(payload) ~= "table" or payload.kind ~= "LungeTelegraph" then
+		return
+	end
+	local args = payload.args
+	if type(args) ~= "table" then
+		return
+	end
+	local origin, seconds, startAt = args.origin, args.seconds, payload.startAt
+	if typeof(origin) == "Vector3" and type(seconds) == "number" and type(startAt) == "number" then
+		telegraph(origin, seconds, startAt)
+	end
+end
+
 local function clearBubbles()
 	for _, bubble in bubbles do
 		bubble.part:Destroy()
@@ -707,6 +837,7 @@ local function renderView(dt: number)
 		return
 	end
 	local now = os.clock()
+	stepTelegraphs(now)
 	stepBubbles(dt, now)
 	local eye = camera.CFrame.Position
 	local volume = WaterRules.volumeAround(scanVolumes(), eye, WATERLINE_BAND + 0.5)
@@ -1244,6 +1375,10 @@ function SwimController.Start()
 		end
 	end)
 	serviceTrove:Connect(RunService.PreSimulation, onPreSimulation)
+	local shots = Net.Client.on("OneShot", onOneShot)
+	if shots then
+		serviceTrove:Add(shots)
+	end
 	RunService:BindToRenderStep(RENDER_STEP, Enum.RenderPriority.Camera.Value + 2, onRender)
 	serviceTrove:Add(function()
 		RunService:UnbindFromRenderStep(RENDER_STEP)
@@ -1259,6 +1394,7 @@ end
 function SwimController.OnRunEnded()
 	release()
 	hideView()
+	clearTelegraphs()
 	clearBubbles()
 	table.clear(strokeTracks)
 	table.clear(trailAt)

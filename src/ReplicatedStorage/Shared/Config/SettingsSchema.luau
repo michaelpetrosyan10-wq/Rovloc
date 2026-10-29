@@ -128,6 +128,18 @@ SettingsSchema.List = table.freeze({
 	{ key = "HintWater", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
 	{ key = "HintLowBattery", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
 	{ key = "HintAirlock", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjLock0", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjLock1", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjLock2", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjLock3", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjLock4", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjBreaker", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjFumeHood", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjLockerSearch", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjStoreLock", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjGenerator", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjHatchValve", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintObjCrateChain", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
 } :: { Setting })
 
 local byKey: { [string]: Setting } = {}

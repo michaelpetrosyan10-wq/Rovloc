@@ -14,6 +14,10 @@
 --     blackouts (with a stuttering recovery) scheduled in fixed time slots. Everything is a pure function of
 --     (RunSeed or 1, group, server time), so every client sees the same flicker on the same frame. Only lights in
 --     the active set are animated.
+--   * The basement's power (Floor 0's objective, ObjectiveService): while ReplicatedStorage PowerOffLevel names a level,
+--     its mains fixtures (Bulb and Fluorescent ones in a flicker group) burn at ObjectiveConfig.Tuning.PowerOffFactor;
+--     from PowerOnAt (the main breaker thrown) each group stutters back on over PowerOnSeconds (powerFactor: seeded
+--     per group, the same on every client) and then flickers as ever.
 --   * OneShot "Lightning" (args.intensity?, args.stages? 1|2): a two-stage flash on Lighting (Brightness,
 --     OutdoorAmbient, ExposureCompensation), the Terrain cloud deck and a client-local ColorCorrectionEffect, scaled
 --     by SetFlashScale (P3 settings) and damped when the camera is indoors. Rest values are captured when a flash
@@ -60,6 +64,7 @@ local LightingMood = require(ReplicatedStorage.Shared.World.ProceduralWorldBuild
 local LightingRig = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingRig)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local Net = require(ReplicatedStorage.Shared.Net)
 local SpatialQuery = require(ReplicatedStorage.Shared.Util.SpatialQuery)
 local Tags = require(ReplicatedStorage.Shared.Tags)
@@ -251,6 +256,9 @@ local overrides: { [string]: number } = {}
 
 -- Flicker
 local seedBase = 1
+local powerOffLevel: string? = nil -- the level whose mains are out (ObjectiveService)
+local powerOnAt: number? = nil -- when they start coming back on
+local MAINS: { [string]: boolean } = { Bulb = true, Fluorescent = true }
 local groups: { [string]: GroupState } = {}
 local frameId = 0
 
@@ -725,6 +733,28 @@ local function burnFixture(entry: Entry)
 	writeGlow(entry, 0)
 end
 
+-- The factor of a mains group while the power is out (nil: none) and over its switch-on from `onAt` (server times).
+function LightingController.powerFactor(seed: number, group: string, onAt: number?, t: number): number
+	local tuning = ObjectiveConfig.Tuning
+	if onAt == nil or t < onAt then
+		return tuning.PowerOffFactor
+	end
+	local elapsed = t - onAt
+	if elapsed >= tuning.PowerOnSeconds then
+		return 1
+	end
+	local random = MathUtil.seededRandom(seed, "PowerOn:" .. group)
+	local at = random:NextNumber(0, 0.5)
+	local on = true
+	local lit = false
+	while at < tuning.PowerOnSeconds and at <= elapsed do
+		lit = on
+		at += if on then random:NextNumber(0.04, 0.22) else random:NextNumber(0.08, 0.4)
+		on = not on
+	end
+	return if lit then 1.25 else tuning.PowerOffFactor
+end
+
 -- The primary light's brightness for this frame.
 local function entryBrightness(entry: Entry, t: number, now: number): number
 	local burstStart = entry.burstStart
@@ -747,6 +777,12 @@ local function entryBrightness(entry: Entry, t: number, now: number): number
 		return 0
 	end
 	local group = entry.group
+	if group and powerOffLevel ~= nil and entry.layoutId == powerOffLevel and MAINS[entry.kind] then
+		local factor = LightingController.powerFactor(seedBase, group, powerOnAt, t)
+		if factor ~= 1 then
+			return entry.base * factor
+		end
+	end
 	if group then
 		return entry.base * groupFactor(group, t)
 	end
@@ -1423,6 +1459,10 @@ local function onHeartbeat(dt: number)
 	end
 	local t = Workspace:GetServerTimeNow()
 	local now = os.clock()
+	local offLevel = ReplicatedStorage:GetAttribute(M.PowerOffLevel)
+	powerOffLevel = if type(offLevel) == "string" then offLevel else nil
+	local onAt = ReplicatedStorage:GetAttribute(M.PowerOnAt)
+	powerOnAt = if type(onAt) == "number" then onAt else nil
 	for _, entry in activeList do
 		updateEntry(entry, t, now)
 	end

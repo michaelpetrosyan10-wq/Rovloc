@@ -17,6 +17,14 @@
 --       Floor 4     cross the pool to the roof stairs;
 --       the roof    out of the stair housing, find a way off (the parachute crate), "get to the parachutes!" once the
 --                   door is smashed, then the gap with a pack on, the cord in freefall, and "you made it" on landing.
+--   * The floor objective (ObjectiveService, ObjectiveState: ObjectiveLevel / ObjectiveSteps / ObjectiveUnlocked /
+--     ObjectiveTimerEndsAt / ObjectiveTargets, my Carrying, my HeldItem): until the floor's exit unlocks the goal line is
+--     the objective's title, each step a row with its count ("Fuses 1/3", "Survive while the door motor winds: 45s"),
+--     done steps ticked and the current one marked, then the carried items ("Carrying: Fuse ×2"); a step changing or a
+--     running countdown brings the sheet back. Once the exit unlocks the goal is the stairwell again (steps ticked).
+--     The direction nudge then points at the ROOM of the nearest undone step's target (its centre, or its doorway nearest
+--     me, labelled with the room's name), never at the item, first NudgeDelay after arriving on the floor and then every
+--     NudgeCooldown (ObjectiveConfig.Tuning). The floor card adds "OBJECTIVE: <title>".
 --   * A floating marker (BillboardGui on a client-side Attachment, through walls) hangs over the lobby's current step
 --     (the bus's rear door, then the nearest free ready pad) until it is done.
 --   * Directions: the Objective action shows a chevron around the crosshair pointing at the goal with its distance
@@ -54,6 +62,9 @@ local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local TutorialConfig = require(ReplicatedStorage.Shared.Config.TutorialConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
+local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
+local ObjectiveState = require(ReplicatedStorage.Shared.Util.ObjectiveState)
 
 local Controllers = script.Parent.Parent
 local AudioController = require(Controllers.Core.AudioController)
@@ -73,7 +84,7 @@ local W = Attributes.World
 local Palette = UIKit.Palette
 local Timing = TutorialConfig.Timing
 
-export type TargetKind = "Exit" | "BypassVent" | "RoofDoor" | "Crate" | "Gap" | "Bus" | "Pad"
+export type TargetKind = "Exit" | "BypassVent" | "RoofDoor" | "Crate" | "Gap" | "Bus" | "Pad" | "Floor"
 export type AirlockState = "None" | "Waiting" | "Sealing"
 
 export type Objective = { text: string, tip: string?, target: TargetKind? }
@@ -120,6 +131,7 @@ type View = {
 	card: CanvasGroup,
 	cardTitle: TextLabel,
 	cardName: TextLabel,
+	cardGoal: TextLabel,
 	pointer: Frame,
 	pointerArrow: Frame,
 	pointerLabel: TextLabel,
@@ -153,6 +165,7 @@ local ROOF_LEVEL = "Level5_Roof"
 local POOL_LEVEL = "Level4_FloodedPool"
 local ROOF_HOUSING = "L5_RoofAccess"
 local BEYOND_MARGIN = 3
+local ROWS = 6 -- the lobby's optional lines, or a floor objective's steps and its carried line
 
 local ObjectiveTracker = {}
 
@@ -183,6 +196,12 @@ local scan = {
 	lobby = nil :: LobbyObjective?,
 	target = nil :: Vector3?,
 	inLobby = false,
+	title = nil :: string?, -- the floor objective's title (or nil: the objective's own line)
+	steps = nil :: { ObjectiveState.StepLine }?,
+	carry = nil :: string?,
+	label = nil :: string?, -- the nudge's room name
+	floor = false, -- the nudge follows the floor objective's timing
+	activatedAt = nil :: number?,
 }
 
 --------------------------------------------------------------------------------
@@ -272,6 +291,20 @@ function ObjectiveTracker.direction(now: number, lastAt: number, cooldown: numbe
 		return true, 0
 	end
 	return false, remaining
+end
+
+-- The Tab nudge's cooldown and the seconds until it is first available: an objective floor waits NudgeDelay after
+-- arriving (`activatedAt`, server time) and then cools down NudgeCooldown; anywhere else the tutorial's cooldown.
+function ObjectiveTracker.nudgeTiming(
+	objectiveFloor: boolean,
+	activatedAt: number?,
+	serverNow: number
+): (number, number)
+	if not objectiveFloor then
+		return Timing.DirectionCooldown, 0
+	end
+	local readyAt = if activatedAt then activatedAt + ObjectiveConfig.Tuning.NudgeDelay else serverNow
+	return ObjectiveConfig.Tuning.NudgeCooldown, math.max(0, readyAt - serverNow)
 end
 
 -- The bearing of `target` from the camera, radians: 0 straight ahead, positive to the right, +-pi behind.
@@ -503,12 +536,62 @@ local function scanLevel(player: Player, level: string, root: BasePart?)
 			and not ParachuteMotion.inTower(root.Position),
 		parachute = Attributes.getString(player, P.Parachute, "None"),
 	})
+	scan.title = nil
+	scan.steps = nil
+	scan.carry = nil
+	scan.label = nil
+	scan.floor = false
+	scan.activatedAt = nil
+	local floorNudge: ObjectiveState.Nudge? = nil
+	local spec = ObjectiveConfig.forLevel(level)
+	if
+		spec
+		and objective
+		and objective.text ~= "Objective.Airlock.Get"
+		and objective.text ~= "Objective.Airlock.Wait"
+		and ReplicatedStorage:GetAttribute(M.ObjectiveLevel) == level
+	then
+		local progress = ObjectiveState.decodeSteps(ReplicatedStorage:GetAttribute(M.ObjectiveSteps))
+		local endsAt = ReplicatedStorage:GetAttribute(M.ObjectiveTimerEndsAt)
+		local left = if type(endsAt) == "number" then endsAt - Workspace:GetServerTimeNow() else nil
+		scan.steps = ObjectiveState.stepLines(spec, progress, left)
+		local unlocked = ReplicatedStorage:GetAttribute(M.ObjectiveUnlocked) == true
+		if not unlocked then
+			scan.title = Strings.get(spec.title)
+			scan.carry = ObjectiveState.carryLine(
+				ObjectiveState.decodeCarry(player:GetAttribute(P.Carrying)),
+				player:GetAttribute(P.HeldItem) == "AcidFlask"
+			)
+			local activated = ReplicatedStorage:GetAttribute(M.ObjectiveActivatedAt)
+			scan.activatedAt = if type(activated) == "number" then activated else nil
+			scan.floor = true
+			if objective.text == "Objective.Gate" or objective.text == "Objective.GateVent" then
+				-- the gate's bypass vent is the way to the objective: say so under the title
+				local viaVent: Objective = { text = objective.text, tip = objective.text, target = objective.target }
+				objective = viaVent
+			else
+				local floorGoal: Objective = { text = objective.text, tip = objective.tip, target = "Floor" }
+				objective = floorGoal
+				local layout = Builder.getLayout(level)
+				local targets = ObjectiveState.decodeTargets(ReplicatedStorage:GetAttribute(M.ObjectiveTargets))
+				if layout and root then
+					floorNudge = ObjectiveState.nudge(layout, targets, root.Position)
+				end
+			end
+		end
+	end
 	scan.objective = objective
 	scan.lobby = nil
 	scan.inLobby = false
 	local target: Vector3? = nil
 	local kind = if objective then objective.target else nil
-	if root and kind == "Exit" then
+	if kind == "Floor" then
+		local nudge = floorNudge
+		if nudge then
+			target = nudge.point
+			scan.label = nudge.label
+		end
+	elseif root and kind == "Exit" then
 		target = exitPoint
 	elseif root and kind == "BypassVent" then
 		local grates = positions(CollectionService:GetTagged(Tags.VentGrate), function(grate: Instance): boolean
@@ -562,6 +645,11 @@ local function rescan()
 	scan.lobby = nil
 	scan.target = nil
 	scan.inLobby = false
+	scan.title = nil
+	scan.steps = nil
+	scan.carry = nil
+	scan.label = nil
+	scan.floor = false
 end
 
 --------------------------------------------------------------------------------
@@ -627,7 +715,7 @@ local function build(parent: Instance): View
 	tip.TextXAlignment = Enum.TextXAlignment.Left
 
 	local optionalRows: { { frame: Frame, box: Frame, label: TextLabel } } = {}
-	for index = 1, 2 do
+	for index = 1, ROWS do
 		local row = UIKit.frame(sheet, "Optional" .. index)
 		row.LayoutOrder = 3 + index
 		row.Size = UDim2.new(1, 0, 0, 18)
@@ -683,7 +771,7 @@ local function build(parent: Instance): View
 	card.BorderSizePixel = 0
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
 	card.Position = UDim2.fromScale(0.5, 0.3)
-	card.Size = UDim2.fromOffset(520, 110)
+	card.Size = UDim2.fromOffset(520, 130)
 	card.GroupTransparency = 1
 	card.Visible = false
 	card.Parent = layer
@@ -703,6 +791,11 @@ local function build(parent: Instance): View
 	cardName.Size = UDim2.new(1, 0, 0, 24)
 	cardName.Position = UDim2.fromOffset(0, 78)
 	cardName.TextWrapped = false
+	local cardGoal = UIKit.label(card, "Goal", UIKit.Fonts.Strong, UIKit.TextSize.Small, Palette.Amber)
+	cardGoal.Size = UDim2.new(1, 0, 0, 20)
+	cardGoal.Position = UDim2.fromOffset(0, 104)
+	cardGoal.TextWrapped = false
+	cardGoal.Text = ""
 
 	-- Direction pointer around the crosshair
 	local pointer = UIKit.frame(layer, "Pointer")
@@ -775,6 +868,7 @@ local function build(parent: Instance): View
 		card = card,
 		cardTitle = cardTitle,
 		cardName = cardName,
+		cardGoal = cardGoal,
 		pointer = pointer,
 		pointerArrow = pointerArrow,
 		pointerLabel = pointerLabel,
@@ -838,8 +932,9 @@ local function onObjective(phase: string)
 		return
 	end
 	activeAt = clock
-	local ready = ObjectiveTracker.direction(clock, directionAt, Timing.DirectionCooldown)
-	if ready and scan.target then
+	local cooldown, wait = ObjectiveTracker.nudgeTiming(scan.floor, scan.activatedAt, Workspace:GetServerTimeNow())
+	local ready = ObjectiveTracker.direction(clock, directionAt, cooldown)
+	if ready and wait <= 0 and scan.target then
 		directionAt = clock
 		xpcall(function()
 			AudioController.PlayLocal("UiClick")
@@ -878,6 +973,8 @@ local function updateCard(current: View, dt: number, canShow: boolean)
 			if titleKey and nameKey then
 				current.cardTitle.Text = Strings.get(titleKey)
 				current.cardName.Text = Strings.get(nameKey)
+				local spec = ObjectiveConfig.forLevel(due)
+				current.cardGoal.Text = if spec then Strings.get("Obj.Card", Strings.get(spec.title)) else ""
 				cardStartedAt = clock
 			else
 				cardLevel = nil
@@ -939,25 +1036,50 @@ local function step(dt: number)
 		text = objective.text
 		tipKey = objective.tip
 	end
-	if text ~= lastText then
-		lastText = text
+	local steps = if lobby then nil else scan.steps
+	local title = if lobby then nil else scan.title
+	-- a new goal, or a step changing (a count, a tick), brings the tracker back; so does a running countdown
+	local shown = (title or text or "") .. "#"
+	local stepList: { ObjectiveState.StepLine } = steps or {}
+	for _, stepLine in stepList do
+		shown ..= (if stepLine.done then "1" else "0") .. (if stepLine.timed then "" else stepLine.text) .. "|"
+		if stepLine.timed and stepLine.active then
+			activeAt = clock
+		end
+	end
+	if shown ~= lastText then
+		lastText = shown
 		activeAt = clock
 	end
-	if text then
-		local line = Strings.get(text)
+	if title or text then
+		local line = if title then title else Strings.get(text :: string)
 		if current.line.Text ~= line then
 			current.line.Text = line
 		end
 	end
 	current.tip.Text = if tipKey then Strings.get(tipKey) else ""
 	current.tip.Visible = tipKey ~= nil
+	local carryLine = if lobby then nil else scan.carry
 	for index, row in current.optionalRows do
 		local entry = if lobby then lobby.optional[index] else nil
-		row.frame.Visible = entry ~= nil
+		local stepLine = if steps then steps[index] else nil
+		local carryRow = steps ~= nil and carryLine ~= nil and index == #steps + 1
+		row.frame.Visible = entry ~= nil or stepLine ~= nil or carryRow
+		row.box.Visible = not carryRow
 		if entry then
 			row.label.Text = Strings.get(entry.text)
 			row.label.TextColor3 = if entry.done then Palette.Moss else Palette.Ash
 			row.box.BackgroundColor3 = if entry.done then Palette.Moss else Palette.Ink
+		elseif stepLine then
+			row.label.Text = stepLine.text
+			row.label.TextColor3 = if stepLine.done
+				then Palette.Moss
+				elseif stepLine.active then Palette.Bone
+				else Palette.Ash
+			row.box.BackgroundColor3 = if stepLine.done then Palette.Moss else Palette.Ink
+		elseif carryRow then
+			row.label.Text = carryLine :: string
+			row.label.TextColor3 = Palette.Amber
 		end
 	end
 	current.help.Visible = scan.inLobby
@@ -971,7 +1093,11 @@ local function step(dt: number)
 		)
 	end
 
-	local readyNow, remaining = ObjectiveTracker.direction(clock, directionAt, Timing.DirectionCooldown)
+	local cooldown, wait = ObjectiveTracker.nudgeTiming(scan.floor, scan.activatedAt, Workspace:GetServerTimeNow())
+	local readyNow, remaining = ObjectiveTracker.direction(clock, directionAt, cooldown)
+	if wait > 0 then
+		readyNow, remaining = false, math.max(remaining, wait)
+	end
 	current.keyCap:SetGlyph(InputGlyphs.forAction("Objective", device))
 	current.keyLabel.Text = if readyNow
 		then Strings.get("Objective.Direction")
@@ -980,7 +1106,7 @@ local function step(dt: number)
 	current.keyLabel.Visible = scan.target ~= nil
 
 	local trackerTarget = 0
-	if text and canShow then
+	if (text or title) and canShow then
 		trackerTarget = if scan.inLobby
 			then 1
 			else ObjectiveTracker.trackerAlpha(clock - activeAt, Timing.TrackerHold, Timing.TrackerFade)
@@ -1008,7 +1134,9 @@ local function step(dt: number)
 		current.pointerArrow.Position = UDim2.new(0.5, x, 0.5, y)
 		current.pointerArrow.Rotation = math.deg(angle)
 		current.pointerLabel.Position = UDim2.new(0.5, x * 0.62, 0.5, y * 0.62)
-		current.pointerLabel.Text = Strings.get("Objective.Distance", ObjectiveTracker.meters(distance))
+		local far = Strings.get("Objective.Distance", ObjectiveTracker.meters(distance))
+		local room = scan.label
+		current.pointerLabel.Text = if room then Strings.get("Obj.Nudge", room, far) else far
 		local fade = 1 - pointerAlpha
 		for _, arm in current.pointerArrow:GetChildren() do
 			if arm:IsA("Frame") then
@@ -1032,7 +1160,7 @@ local function step(dt: number)
 		local bob = math.sin(clock * 2.2) * 0.35
 		current.markerAnchor.WorldPosition = target + Vector3.new(0, MARKER_LIFT + bob, 0)
 		local kind: TargetKind? = if lobby then lobby.target elseif objective then objective.target else nil
-		current.markerLabel.Text = markerText(kind)
+		current.markerLabel.Text = scan.label or markerText(kind)
 		current.markerDistance.Text = Strings.get("Objective.Distance", ObjectiveTracker.meters(distance))
 		local pulse = 0.5 + 0.5 * math.sin(clock * 3)
 		current.markerLabel.TextTransparency = UIKit.fade(0, markerAlpha)

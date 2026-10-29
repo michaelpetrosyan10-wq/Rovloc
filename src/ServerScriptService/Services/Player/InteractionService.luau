@@ -14,6 +14,10 @@
 -- Who may use a prompt (eligible, shared by a hold's start and its completion):
 --   * never a Dead or Spectating player (out of play),
 --   * the player's character root within the prompt's MaxActivationDistance + RangeSlack (2) of the prompt,
+--   * no wall in the way: the builders' prompts all have RequiresLineOfSight off (a prop's own parts must not hide its
+--     prompt), so the world's solid geometry is tested here instead, from the player's eye and from their root
+--     (characters, the Creature, lockers and the host left out, stopping ThroughSlack (1.5) short of it); a prompt is
+--     refused ("Blocked") only when both lines are cut, so nothing is used through a wall,
 --   * the audience: handler.audience(prompt, host) (default "All"); "Self" = only the host's OwnerUserId, "Others" =
 --     everyone else. It is also written on the prompt (Audience) so clients hide prompts they cannot use; the owning
 --     system writes the host's OwnerUserId (watched here),
@@ -78,6 +82,8 @@ local W = Attributes.World
 
 local LATENCY_TOLERANCE = 0.15
 local RANGE_SLACK = 2
+local THROUGH_SLACK = 1.5 -- a wall test stops this short of the prompt (the counter under it, the wall it sits in)
+local EYE_LIFT = 1.5 -- the eye line starts this far above the root
 local RELEASE_GRACE = 0.5
 local OVERRUN_SLACK = 2 -- seconds past the longest plausible hold before a silent channel is abandoned
 local MAX_HOLD_SECONDS = 60
@@ -107,6 +113,7 @@ export type Check = {
 	audience: Enums.Audience,
 	ownerUserId: number?, -- the host's OwnerUserId
 	canUse: (() -> (boolean, string?))?, -- the handler's canUse bound to this player, prompt and host
+	blocked: boolean?, -- a wall stands between the player and the prompt
 	now: number, -- server time
 	duration: number, -- the player's hold seconds for this prompt (0 = instant)
 	-- acceptBegin: the actor channelling the host (any of its prompts). acceptTrigger: the actor channelling this
@@ -214,6 +221,9 @@ function InteractionService.eligible(check: Check): (boolean, string?)
 	end
 	if not InteractionService.inRange(check.distance, check.maxDistance) then
 		return false, "OutOfRange"
+	end
+	if check.blocked then
+		return false, "Blocked"
 	end
 	if not InteractionService.audienceIncludes(check.audience, check.ownerUserId, check.userId) then
 		return false, "Audience"
@@ -617,6 +627,44 @@ local function feedback(player: Player, reason: string?)
 	Net.Server.fire("Notify", player, payload)
 end
 
+-- Whether a wall stands between `player` and `prompt` (see the header): both the eye and the root lines cut.
+local function blockedFrom(player: Player, prompt: ProximityPrompt, host: Instance): boolean
+	local root = livingRoot(player)
+	local position = promptPosition(prompt)
+	if not root or not position then
+		return false
+	end
+	local exclude: { Instance } = { host }
+	for _, other in Players:GetPlayers() do
+		if other.Character then
+			table.insert(exclude, other.Character)
+		end
+	end
+	local creature = Instances.creature()
+	if creature then
+		table.insert(exclude, creature)
+	end
+	-- lockers are furniture against the walls: a key hanging inside an open one is reached past its door
+	for _, locker in CollectionService:GetTagged(Tags.HideableLocker) do
+		table.insert(exclude, locker)
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = exclude
+	local base = root.CFrame.Position
+	for _, from in { base + Vector3.new(0, EYE_LIFT, 0), base } do
+		local offset = position - from
+		local length = offset.Magnitude
+		if length <= THROUGH_SLACK then
+			return false
+		end
+		if Workspace:Raycast(from, offset.Unit * (length - THROUGH_SLACK), params) == nil then
+			return false
+		end
+	end
+	return true
+end
+
 local function gather(
 	entry: Entry,
 	handler: Handler,
@@ -633,6 +681,7 @@ local function gather(
 		audience = audienceOf(handler, entry.prompt, entry.host),
 		ownerUserId = ownerOf(entry.host),
 		canUse = boundCanUse(handler, player, entry.prompt, entry.host),
+		blocked = blockedFrom(player, entry.prompt, entry.host),
 		now = now,
 		duration = duration,
 		channelUserId = if channel then channel.player.UserId else nil,

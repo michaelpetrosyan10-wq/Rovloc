@@ -239,6 +239,10 @@ Rovloc/
     │       │       │                            (a held swimmer out of air: the Underwater jumpscare), SetScriptedTarget
     │       │       │                            [P8] (a held Creature's stare: the roof finale)
     │       │       ├── Brain.luau          [P5] Shared state types, pure transition table, catch rules, level knowledge
+    │       │       ├── SpawnRule.luau      Where it starts on Levels 2-3: PatrolWaypoint / CreatureSpawn anchors 70-140
+    │       │       │                            studs walked from the entry, unseen from it (the layout's own sight lines),
+    │       │       │                            outside the objective rooms; seeded "CreatureSpawn|<level>", never-silent
+    │       │       │                            fallback
     │       │       ├── CreatureBody.luau   [P5] Ownership reassert, hitbox sizing per PoseMode, Hidden, collision modes
     │       │       ├── Perception.luau     [P5] Eye-to-EyePoint LOS (never limbs), view cones
     │       │       ├── Hearing.luau        [P5] Same-level filter, wall occlusion, vent path distance over VentGraph
@@ -275,6 +279,12 @@ Rovloc/
     │       ├── Levels/
     │       │   ├── init.luau                [P6] The Levels service: registers the controllers with LevelDirector, runs
     │       │   │                                their run resets and one Heartbeat driver
+    │       │   ├── ObjectiveService/init.luau   The floor objectives (ObjectiveConfig; its own service, wired before
+    │       │   │                                Levels): every exit Locked until its floor's lock step, the stations' and
+    │       │   │                                locks' prompts (one InteractionService handler per kind), working holds
+    │       │   │                                (noise once a second, kept progress), the carry (dropped on death / leave),
+    │       │   │                                the acid, the 45 s motor, the hatch's grate, the crate; ExitOpen (the
+    │       │   │                                airlock asks), Unlocked (the roof door smash), the HUD's Objective* attributes
     │       │   ├── LevelKit.luau            [P6] Shared: server eyes / feet, LOS, "can anyone see it", OneShots, a
     │       │   │                                server-time beat schedule
     │       │   ├── Level0_BasementController.luau [P6] Seeded ambience beats 25-50 s apart, 25-45 studs out of sight:
@@ -720,12 +730,42 @@ override (their head + their `LookBroadcast` look, smoothed), hides their head (
 from inside (`RemoteFlashlightRenderer.SetFocus`), cuts through black on switches and holds on the body for 2.5 s after
 a death.
 
+**Floor objectives.** Every floor's exit stays shut until its objective (`ObjectiveConfig`, seeded per run by
+`RunDirector.pickObjective`) is done; the browser build mirrors every rule and number. `ObjectiveService` (Levels layer,
+its own entry in `ServerMain` right before `Levels`) takes the floor's exit from the route (`LevelDirector.exitFor`): the
+`ExitLock` on that stairwell's fire door is the live one (every candidate carries a lock; a jammed stairwell's offers
+nothing) and its door is snapped Locked at `BeginRun`. It serves the builders' prompts through one `InteractionService` handler per kind: items into the carry
+(`Player.Carrying`; dropped at the carrier's feet, on the pool floor in the water, when they die, are left behind or
+leave), the fuses and the main breaker (the basement's mains held at 0.04 until it is thrown, then a 2.6 s seeded
+stutter on every client), the master keys and the padlock, the reagents, the fume hood's 5 s mix (kept when let go) and
+the acid flask (`ChemicalProjectileService` holds and throws it; a break within 3 studs of `ChainCentre`, or a 2 s pour,
+burns the chain; a miss re-arms the hood), the locker search (the Kick key, never Hide; `LockerHidingService.SetSearchOpen`),
+the store padlock and its door, the generator (the Critical `GeneratorStart` noise, then a 45 s motor countdown), the
+hatch valve (its grate blocked through `VentNetworkService.SetBlocked` until it opens) and the bolt cutters on the crate
+(`ParachuteService.SetCrateOpen`). Working holds emit `ObjectiveWork` (Normal, 34) at their start and once a second;
+the breaker, each unlock and the chain snap emit `ObjectiveClunk` (High, 110). The unlock clunks, the door swings
+0.75 s later, `CheckpointAirlockService` (which runs nothing while `ExitOpen` is false) takes over, and `Unlocked` fires
+(the roof's crate cut brings the door smash forward). The HUD reads `Objective*` on `ReplicatedStorage`
+(`Shared/Util/ObjectiveState` encodes it): the tracker's step rows and carried line, the Tab nudge to the next step's
+room (20 s after arriving, then every 30 s), and the first-time hints for each station and lock.
+
+**Creature spawns and the pool's fairness.** On Levels 2 and 3 `MonsterAIService` starts the Creature at
+`SpawnRule`'s seeded pick and holds it Dormant for its grace (20 s Standard, 12 s Nightmare), ended by a participant's
+High / Critical noise on the level, anyone within 30 studs, or a clear line to its head within 70. On Level 4 every lunge
+is telegraphed for 1.2 s (the growl, OneShot `LungeTelegraph` for the clients' bubbles and ripple ring; the lunge then
+runs up to 2.5 s, 2 s cooldown), swims are capped at the AquaticStalk pace (6.5; the lunge 18, range 9), the telegraphed
+grab is the only catch in or from the water, it leaves the pool only through its vent route (out on land unseen, at
+least 30 studs from everyone), the pool rooms are left alone for 20 s after anyone first enters them and for 15 s after
+any grab (it retreats to the far end), and a grab is fought with 14 presses at 5 oxygen/s from a 40-point floor.
+
 **The roof finale (P8).** `Level5_RoofController` takes the Creature at activation and keeps it hidden in the stair
-housing; the `RoofStairDoor` opens for the first arrival. Once every playing participant is out on the roof and clear of
-the door (or 20 s after the first stepped out, or 75 s after activation) the `L5_DoorSmash` scene plays: the wind slams
+housing; the `RoofStairDoor` opens for the first arrival. Once the first participant has stepped out, the Creature waits
+behind the door for its grace (20 s Standard, 12 s Nightmare), ended early by a participant's High / Critical noise on
+the roof or at once by the crate's chain being cut (or 75 s after activation), and then the `L5_DoorSmash` scene plays: the wind slams
 the door (never on someone still inside), the hidden Creature is staged behind it, three blows, it is shown behind the
 closed door (never in anyone's sight), `DoorService` smashes the door with the `DoorSmash` action on the beat, and it is
-released into `WallChase` while the squad is told to run. Through the final sprint its pace follows its gap to its target
+released into `WallChase` when it can see someone from the doorway (else into `Patrol`, left to its senses) while the
+squad is told to run once the crate is open. Through the final sprint its pace follows its gap to its target
 (`SetSpeedScale`: it closes on stragglers but never outruns a sprinter on Standard) and the players still on the roof
 sprint on adrenaline (stamina topped up). `ParachuteService` owns the crate's packs (one per member of a full squad; a
 pack goes back to the crate when its wearer dies or leaves before jumping) and the jump, with the rules it shares with
@@ -768,9 +808,9 @@ is treated as an elimination, never a respawn.
 
 | Owner | Attributes |
 | --- | --- |
-| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `Escapes` · `RunOutcome` · `Settings` (saved blob, JSON) · `SpectateReason` + `SpectateTargetUserId` · `PerkStock` · `DifficultyVote` · `SpectateReason` · `Parachute` + `ParachuteAt` + `ParachuteAuto` (the roof jump) |
+| `Player` | `Carrying` (the floor objective's items, ObjectiveService) · `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `Escapes` · `RunOutcome` · `Settings` (saved blob, JSON) · `SpectateReason` + `SpectateTargetUserId` · `PerkStock` · `DifficultyVote` · `SpectateReason` · `Parachute` + `ParachuteAt` + `ParachuteAuto` (the roof jump) |
 | `Creature` | `MonsterState` · `StateSince` · `PoseMode` · `TargetUserId` · `InVent` · `VentSegmentId` · `Hidden` · `GrabbedUserId` |
-| `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` · `DevRun` · `ResultsEndsAt` (MatchResetService) · `CountdownEndsAt` · `LobbySquad` · `LobbyDifficulty` |
+| `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` · `DevRun` · `ResultsEndsAt` (MatchResetService) · `CountdownEndsAt` · `LobbySquad` · `LobbyDifficulty` · `ObjectiveLevel` · `ObjectiveSteps` · `ObjectiveUnlocked` · `ObjectiveTimerEndsAt` · `ObjectiveActivatedAt` · `ObjectiveTargets` · `PowerOffLevel` · `PowerOnAt` (ObjectiveService) |
 | `VentGrate` | `GrateId` · `GrateState` (Closed / Unscrewing / Open / Kicked / Locked) · `Lockable` · `CriticalPath` · `NodeId` |
 | `VentNode` / `VentShaft` | `NodeId` · `Links` · `LevelId` · `GrateId` / `SegmentId` · `AdjacentZones` · `Submerged` |
 | Props | `BearTrap{Armed, TrappedUserId}` · `HideableLocker{OccupantUserId, DoorOpen}` · `AirlockDoor{DoorState, FromLevel, ToLevel, StragglerDeadline}` · `ScriptedDoor{DoorId, DoorState}` · `ParachutePack{TakenByUserId}` · `FloodlightSwitch{On}` · `ChemicalItem{HeldByUserId}` · `BatteryPickup{Charge}` · `Zone{ZoneId, LevelId, ReverbPreset}` · `Interactable{ChannelActor, ChannelStartedAt, ChannelDuration}` · `ReadyPad{OccupantUserId}` |

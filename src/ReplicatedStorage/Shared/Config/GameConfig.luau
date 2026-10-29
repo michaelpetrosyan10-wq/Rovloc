@@ -46,7 +46,7 @@ local GameConfig = table.freeze({
 	BreathRecoverPerSecond = 0.6,
 
 	-- Pool
-	StrugglePressesToEscape = 22,
+	StrugglePressesToEscape = 14, -- Floor 4 fairness (was 22): a grab is escapable
 	StruggleMaxPressesPerSecond = 12,
 
 	-- Roof
@@ -63,10 +63,10 @@ local GameConfig = table.freeze({
 	StaminaRegenDelay = 1.2,
 	OxygenMax = 100,
 	OxygenDrain = 7, -- about 14 s underwater
-	OxygenDrainGrabbed = 9,
+	OxygenDrainGrabbed = 5, -- slower than a dive while held (was 9): time to struggle free
 	OxygenRegen = 30,
 	BatteryMax = 100,
-	BatteryDrain = 0.55, -- about 3 minutes of light per full cell
+	BatteryDrain = 0.6325, -- +15 % (harder Standard; every difficulty): about 2.6 minutes of light per full cell
 	BatteryPickupCharge = 45,
 
 	-- Movement speeds (WalkSpeed)

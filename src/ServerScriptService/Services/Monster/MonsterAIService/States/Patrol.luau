@@ -47,7 +47,7 @@ type Run = {
 local NAME: Enums.MonsterState = "Patrol"
 local CORNER_DEGREES = 50
 local LOOK_SECONDS = { min = 0.6, max = 1.1 }
-local HEARD_TTL = 90
+local HEARD_TTL = 60 -- the noises it really heard in the last minute pull the next loop (harder Standard; was 90)
 local ARRIVE = 2
 local MAX_FAILURES = 3
 local WITHDRAW_MIN = 35 -- from the nearest player
@@ -58,7 +58,8 @@ local Patrol = {}
 Patrol.Name = NAME
 Patrol.CornerDegrees = CORNER_DEGREES
 Patrol.HeardTtl = HEARD_TTL
-Patrol.SweepChance = table.freeze({ BuildUp = 0.6, Peak = 0.45, Relax = 0 } :: { [string]: number })
+-- harder Standard (was 0.6 / 0.45): it sweeps toward the rooms it heard noises in more often
+Patrol.SweepChance = table.freeze({ BuildUp = 0.75, Peak = 0.6, Relax = 0 } :: { [string]: number })
 
 local runs: { [Context]: Run } = setmetatable({}, { __mode = "k" }) :: any
 

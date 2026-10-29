@@ -13,6 +13,12 @@
 --     (keyboard key, gamepad button, or a tap mark on touch) inside a hold ring, the object text above the action.
 --     Rows fade in and out; the ring fills while holding and drains when released. On touch (and with a free
 --     cursor) the row itself is the button: press = InputHoldBegin, release = InputHoldEnd.
+--   * Walls. Every prompt is built with RequiresLineOfSight off (a prop's own parts must not hide its prompt), so a
+--     prompt in range is tested here instead, BLOCK_SECONDS apart: a ray from the camera toward it through the world's
+--     solid geometry (characters, the Creature, lockers and the prompt's own host left out), stopping THROUGH_SLACK
+--     short of it (the counter under a flask, the wall a grate sits in). A prompt behind a wall is disabled locally the
+--     same way as an audience refusal, so nothing is picked up or opened through a wall; InteractionService refuses it
+--     too.
 --   * Kinds. SetKindHidden(kind, true) disables every prompt of that PromptKind locally the same way, while it holds
 --     (P8: a Revive prompt shows to Alive players only, so a downed or dead teammate never sees one).
 --   * Teammates. While another player channels an Interactable host (ChannelActor / ChannelStartedAt /
@@ -26,6 +32,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
+local Instances = require(ReplicatedStorage.Shared.Instances)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local PerkConfig = require(ReplicatedStorage.Shared.Config.PerkConfig)
 local Tags = require(ReplicatedStorage.Shared.Tags)
@@ -55,6 +62,7 @@ type Record = {
 	suppressed: boolean,
 	serverEnabled: boolean,
 	written: boolean?,
+	blocked: boolean?, -- behind a wall from this camera
 }
 
 type Row = {
@@ -108,6 +116,9 @@ local FADE_IN = 9
 local FADE_OUT = 7
 local DRAIN = 5
 local HOLD_EPSILON = 1e-3
+local BLOCK_SECONDS = 0.2 -- how often the prompts in range are tested for a wall in the way
+local BLOCK_RANGE_SLACK = 4 -- studs past a prompt's MaxActivationDistance (measured from the camera) still tested
+local THROUGH_SLACK = 1.5 -- the ray stops this short of the prompt
 
 local PromptRenderer = {}
 
@@ -116,6 +127,19 @@ local PromptRenderer = {}
 --------------------------------------------------------------------------------
 
 -- Whether a prompt with `audience` on a host owned by `ownerUserId` is for the player `myUserId`.
+-- A prompt's world position (its Attachment, BasePart or Model), or nil.
+function PromptRenderer.positionOf(prompt: ProximityPrompt): Vector3?
+	local parent = prompt.Parent
+	if parent and parent:IsA("Attachment") then
+		return parent.WorldPosition
+	elseif parent and parent:IsA("BasePart") then
+		return parent.Position
+	elseif parent and parent:IsA("Model") then
+		return parent:GetPivot().Position
+	end
+	return nil
+end
+
 function PromptRenderer.audienceAllows(audience: unknown, ownerUserId: unknown, myUserId: number): boolean
 	local owner = if type(ownerUserId) == "number" and ownerUserId ~= 0 then ownerUserId else nil
 	if audience == "Self" then
@@ -241,6 +265,7 @@ function PromptRenderer.mount(ctx: Context): PromptRenderer
 	local myUserId = if localPlayer then localPlayer.UserId else 0
 
 	local records: { [ProximityPrompt]: Record } = {}
+	local blockClock = 0
 	local hosts: { [Instance]: HostRecord } = {}
 	local groups: { [Instance]: Group } = {}
 	local rowsByPrompt: { [ProximityPrompt]: Row } = {}
@@ -264,6 +289,7 @@ function PromptRenderer.mount(ctx: Context): PromptRenderer
 		local kind = prompt:GetAttribute(W.PromptKind)
 		local allowed = PromptRenderer.audienceAllows(prompt:GetAttribute(W.Audience), ownerOf(prompt), myUserId)
 			and not (type(kind) == "string" and hiddenKinds[kind] == true)
+			and record.blocked ~= true
 		if allowed then
 			if record.suppressed then
 				record.suppressed = false
@@ -769,7 +795,60 @@ function PromptRenderer.mount(ctx: Context): PromptRenderer
 
 	local handle = {} :: PromptRenderer
 
+	-- The prompts in range tested for a wall in the way (see the header).
+	local function updateBlocked()
+		local camera = Workspace.CurrentCamera
+		local character = if localPlayer then localPlayer.Character else nil
+		if not camera then
+			return
+		end
+		local eye = camera.CFrame.Position
+		local exclude: { Instance } = {}
+		for _, other in Players:GetPlayers() do
+			if other.Character then
+				table.insert(exclude, other.Character)
+			end
+		end
+		local creature = Instances.creature()
+		if creature then
+			table.insert(exclude, creature)
+		end
+		table.insert(exclude, Instances.cosmetic())
+		for _, locker in CollectionService:GetTagged(Tags.HideableLocker) do
+			table.insert(exclude, locker)
+		end
+		for _, record in records do
+			local prompt = record.prompt
+			local position = PromptRenderer.positionOf(prompt)
+			local blocked = false
+			if position and character then
+				local reach = (position - eye).Magnitude
+				if reach <= prompt.MaxActivationDistance + BLOCK_RANGE_SLACK and reach > THROUGH_SLACK then
+					local host = interactableHost(prompt)
+					local params = RaycastParams.new()
+					params.FilterType = Enum.RaycastFilterType.Exclude
+					local list = table.clone(exclude)
+					if host then
+						table.insert(list, host)
+					end
+					params.FilterDescendantsInstances = list
+					local direction = (position - eye).Unit * (reach - THROUGH_SLACK)
+					blocked = Workspace:Raycast(eye, direction, params) ~= nil
+				end
+			end
+			if (record.blocked == true) ~= blocked then
+				record.blocked = blocked
+				applyAudience(record)
+			end
+		end
+	end
+
 	function handle.Update(_self: PromptRenderer, dt: number, hudAlpha: number)
+		blockClock += dt
+		if blockClock >= BLOCK_SECONDS then
+			blockClock = 0
+			updateBlocked()
+		end
 		local nextScale = ctx.scale()
 		if math.abs(nextScale - scale) > 1e-3 then
 			scale = nextScale

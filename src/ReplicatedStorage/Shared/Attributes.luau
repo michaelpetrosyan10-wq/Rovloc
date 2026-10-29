@@ -24,6 +24,9 @@ Attributes.Player = table.freeze({
 	FlashlightOn = "FlashlightOn",
 	HeldItem = "HeldItem", -- Enums.ItemId (ChemicalProjectileService)
 	HeldItemVariant = "HeldItemVariant", -- the held flask's look (ChemicalFlaskBuilder variant); nil with no item
+	-- The floor objective's items this player carries (ObjectiveService is the only writer): "<Kind>:<n>" pairs joined
+	-- by ";" in the order first carried (Fuse, MasterKeys, Reagent, CoachKey, ValveWheel, BoltCutters); "" for none.
+	Carrying = "Carrying",
 	SyringeCharges = "SyringeCharges",
 	Loadout = "Loadout", -- comma-separated PerkIds equipped for the next / current run
 	PerkStock = "PerkStock", -- PerkShopService: owned, unused perks ("PerkId:count,..."; PerkConfig.encodeStock)
@@ -88,6 +91,18 @@ Attributes.Match = table.freeze({
 	-- back in the Lobby phase, so it still reads true through RunEnded / Results / Resetting. MatchAndDataService (P8)
 	-- must not award Escapes, SurvivalCredits or BestTime (nor stamp LastRunId) for a run that ended with DevRun true.
 	DevRun = "DevRun",
+	-- Floor objectives (ObjectiveService is the only writer; ObjectiveConfig; nil outside a run):
+	ObjectiveLevel = "ObjectiveLevel", -- the level whose objective the rest describe
+	ObjectiveSteps = "ObjectiveSteps", -- "<StepId>=<done>" pairs joined by ";" in the floor's step order
+	ObjectiveUnlocked = "ObjectiveUnlocked", -- the floor's exit (the crate on the roof) is open
+	ObjectiveTimerEndsAt = "ObjectiveTimerEndsAt", -- server time a timed step (the door motor) completes
+	ObjectiveActivatedAt = "ObjectiveActivatedAt", -- server time the squad arrived on the floor (the Tab nudge waits)
+	ObjectiveTargets = "ObjectiveTargets", -- where the next undone step is worked: "<room>|x|y|z" joined by ";"
+	-- The basement's mains while the power is out (Floor 0): the level whose Bulb / Fluorescent flicker groups burn at
+	-- ObjectiveConfig.Tuning.PowerOffFactor, and once the main breaker is thrown the server time their seeded switch-on
+	-- stutter (PowerOnSeconds) starts.
+	PowerOffLevel = "PowerOffLevel",
+	PowerOnAt = "PowerOnAt",
 })
 
 -- World instances (written by builders, mutated by services)

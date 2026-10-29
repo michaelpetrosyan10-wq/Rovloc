@@ -9,7 +9,8 @@
 -- Hud.ParachuteHaveOne). The pack vanishes from the crate (its parts go transparent and its prompt closes),
 -- TakenByUserId names the taker, the worn ParachuteBackpack rig is welded onto their UpperTorso, the buckles click
 -- (PackBuckle) and they are told how to go (Hud.ParachuteTaken): state Packed. A pack goes back into the crate when its
--- wearer dies, leaves or loses their body before jumping, so the packs always cover the squad.
+-- wearer dies, leaves or loses their body before jumping, so the packs always cover the squad. While the roof
+-- objective keeps the crate chained (SetCrateOpen(false)) no pack can be taken.
 --
 -- The jump, every Heartbeat while the roof is the live level, for each of the run's participants with a body (the
 -- transition is advance, pure):
@@ -200,6 +201,7 @@ ParachuteService.Landed = landed
 local serviceTrove = Trove.new()
 local records: { [Player]: Record } = {}
 local initialized = false
+local crateOpen = true -- the roof objective keeps the crate chained until its chain is cut
 
 --------------------------------------------------------------------------------
 -- Pure rules
@@ -931,6 +933,24 @@ end
 -- Lifecycle
 --------------------------------------------------------------------------------
 
+-- The roof objective's lock (ObjectiveService): while the crate is chained (false) no pack can be taken. Open by
+-- default and again at every run end.
+function ParachuteService.SetCrateOpen(open: boolean)
+	if crateOpen == open then
+		return
+	end
+	crateOpen = open
+	for _, pack in CollectionService:GetTagged(Tags.ParachutePack) do
+		xpcall(InteractionService.Refresh, function(err: any)
+			log.warnThrottled("refresh", 10, "pack prompt refresh failed: %s", tostring(err))
+		end, pack)
+	end
+end
+
+function ParachuteService.IsCrateOpen(): boolean
+	return crateOpen
+end
+
 function ParachuteService.Init()
 	if initialized then
 		return
@@ -939,7 +959,7 @@ function ParachuteService.Init()
 	serviceTrove:Add(InteractionService.Register({
 		kind = PROMPT_KIND,
 		filter = function(host: Instance, _prompt: ProximityPrompt): boolean
-			return host:HasTag(Tags.ParachutePack) and host:GetAttribute(W.TakenByUserId) == nil
+			return crateOpen and host:HasTag(Tags.ParachutePack) and host:GetAttribute(W.TakenByUserId) == nil
 		end,
 		canUse = function(player: Player, _prompt: ProximityPrompt, host: Instance): (boolean, string?)
 			return ParachuteService.grabCheck(
@@ -980,6 +1000,7 @@ function ParachuteService.EndRun()
 	for _, record in table.clone(records) do
 		reset(record)
 	end
+	crateOpen = true
 end
 
 function ParachuteService.OnPlayerRemoving(player: Player)

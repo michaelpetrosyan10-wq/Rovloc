@@ -5,7 +5,8 @@
 -- Lockers. Every HideableLocker-tagged Model under Workspace.Runtime is tracked (CollectionService added / removed,
 -- plus a scan at BeginRun: WorldService rebuilds the run's fixtures in its own BeginRun before this one). A locker is
 -- Free, Entering, Hidden (one occupant), Exiting or Smashed (its door torn off by the Creature: never usable again this
--- run). The Hide prompt (InteractionService, its 0.25 s hold) serves every unsmashed locker.
+-- run). The Hide prompt (InteractionService, its 0.25 s hold) serves every unsmashed locker, except one that Floor 3's
+-- key search holds ajar (SetSearchOpen: ObjectiveService swings a Free locker's door to SearchOpen and back).
 --
 -- Getting in (canHide: the run is live, Alive with a living body, no control lock, on foot (Standing / Sprinting /
 -- Crouching), not hiding already, the locker Free, and the Creature not chasing this player; refusals that matter
@@ -68,6 +69,7 @@ local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local DoorMotion = require(ReplicatedStorage.Shared.Sequence.DoorMotion)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LockerMotion = require(ReplicatedStorage.Shared.Sequence.LockerMotion)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
@@ -126,6 +128,7 @@ local PEEK_ANCHOR = "PeekAnchor"
 local EXIT_ANCHOR = "ExitAnchor"
 
 local LEAD = GameConfig.OneShotLead
+local SEARCH_OPEN = ObjectiveConfig.Tuning.SearchOpen
 local SLIT_OUT = 0.45 -- studs from the peeking eye out through the door to the slits' outer face
 local EXIT_SIDE = 1.6 -- a blocked exit spot tries this far to either side
 local EXIT_FURTHER = 1.2 -- ... then this much further out
@@ -231,6 +234,7 @@ export type Locker = {
 	closing: boolean, -- the schedule's shut was sent
 	exitSpot: CFrame?, -- where the occupant leaving is put (root CFrame)
 	check: Check?,
+	searchOpen: boolean?, -- Floor 3's key search holds the door ajar (no hiding while it stands open)
 }
 
 local LockerHidingService = {}
@@ -1125,7 +1129,7 @@ LockerHidingService.HideHandler = {
 	kind = HIDE_KIND,
 	filter = function(host: Instance, _prompt: ProximityPrompt): boolean
 		local locker = lockerOf(host)
-		return locker ~= nil and locker.state ~= "Smashed"
+		return locker ~= nil and locker.state ~= "Smashed" and locker.searchOpen ~= true
 	end,
 	canUse = function(player: Player, _prompt: ProximityPrompt, host: Instance): (boolean, string?)
 		local locker = lockerOf(host)
@@ -1403,6 +1407,30 @@ function LockerHidingService.GetCheck(player: Player): (number?, number?, number
 		return nil, nil, nil
 	end
 	return check.startedAt, check.windowStart, check.windowEnd
+end
+
+-- Floor 3's key search: swings a Free locker's door ajar (`open`: ObjectiveConfig.Tuning.SearchOpen of fully open, the
+-- LockerDoor creak) or shut again; its Hide prompt waits while it stands open. False when the locker is not Free or
+-- already so.
+function LockerHidingService.SetSearchOpen(model: Model, open: boolean): boolean
+	local locker = lockers[model]
+	if not locker or locker.state ~= "Free" or (locker.searchOpen == true) == open then
+		return false
+	end
+	local now = serverNow()
+	local motion = locker.motion
+	local from = if motion then (DoorMotion.valueAt(motion, now)) elseif locker.searchOpen then SEARCH_OPEN else 0
+	locker.searchOpen = open
+	local seconds = if open then LockerMotion.OpenSeconds else LockerMotion.CloseSeconds
+	startDoor(locker, "Swing", from, if open then SEARCH_OPEN else 0, seconds, now + LEAD, "Shut", nil)
+	refreshPrompt(locker)
+	return true
+end
+
+-- Whether Floor 3's key search holds the locker ajar.
+function LockerHidingService.IsSearchOpen(model: Model): boolean
+	local locker = lockers[model]
+	return locker ~= nil and locker.searchOpen == true
 end
 
 function LockerHidingService.GetLockers(): { Model }

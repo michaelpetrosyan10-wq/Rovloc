@@ -5,11 +5,18 @@
 --     vent grate or locker within the hint's radius on the current level, getting into the water, a low battery with
 --     the light on. Each shows once per player, ever: its hidden setting (Hint<Id>) is set the moment it shows and
 --     saved with the Settings blob (guests and ephemeral data keep it for the session).
+--   * The floor objective's stations and locks (TutorialConfig hints with a `spot`, right after the airlock): a station or
+--     lock of the current floor (ObjectiveId on the level; the locker search: a locker-room locker with its Search prompt
+--     up) whose step is still undone (ObjectiveSteps), within the hint's radius (ObjectiveConfig.Tuning.HintRadius) of
+--     the eye with a clear line to it. Once ever, like every hint.
+--   * The airlock hint shows while its doors count down or on the way into the vestibule, and a card ends when the floor
+--     changes (it never rides into the next floor).
 --   * The card: a taped strip below the crosshair with the line and the right input glyphs for the device (InputGlyphs:
 --     key, button or the touch button's label), fading in, staying TutorialConfig.Timing.HintSeconds, fading out; at
 --     most one at a time, HintGap quiet seconds between two.
 --   * Never at a bad moment (allowed): only for an Alive player in a run, with Settings "First-time hints" on, the HUD
---     visible, no onboarding screen up, outside the Cutscene / Menu / Struggle input contexts, under no Cutscene /
+--     visible, no onboarding screen up, outside the Cutscene / Menu / Struggle / Locker / Trapped / Parachute input
+--     contexts (a locker, a trap and the jump show their own lines), under no Cutscene /
 --     Jumpscare / Drag control lock, not while the Creature is chasing this player (WallChase, VentChase, AquaticStalk
 --     with TargetUserId = me) and not while the panic is above HintPanicMax. A hint that is due while held back waits
 --     (it shows once the moment passes, if it is still due); a card already up fades out early when the moment turns.
@@ -32,6 +39,8 @@ local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local TutorialConfig = require(ReplicatedStorage.Shared.Config.TutorialConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
+local ObjectiveState = require(ReplicatedStorage.Shared.Util.ObjectiveState)
 
 local Controllers = script.Parent.Parent
 local InputController = require(Controllers.Core.InputController)
@@ -82,7 +91,9 @@ local SCAN_SECONDS = 0.25
 local FADE_IN = 3
 local FADE_OUT = 2
 local QUICK_FADE_OUT = 6
-local BLOCKED_CONTEXTS: { [string]: boolean } = { Cutscene = true, Menu = true, Struggle = true }
+local BLOCKED_CONTEXTS: { [string]: boolean } =
+	{ Cutscene = true, Menu = true, Struggle = true, Locker = true, Trapped = true, Parachute = true }
+local AIRLOCK_HINT_RADIUS = 22 -- the airlock hint also shows this close to an idle checkpoint
 local BLOCKED_LOCKS: { [string]: boolean } = { Cutscene = true, Jumpscare = true, Drag = true }
 local CHASE_STATES: { [string]: boolean } = { WallChase = true, VentChase = true, AquaticStalk = true }
 local WATER_STATES: { [string]: boolean } = { Treading = true, Freestyle = true, Underwater = true }
@@ -103,6 +114,7 @@ local shownAt = -math.huge
 local endedAt = -math.huge
 local scannedAt = -math.huge
 local due: { [string]: boolean } = {}
+local showingLevel: string? = nil
 
 --------------------------------------------------------------------------------
 -- Pure (specs: tests/Specs/Onboarding.spec.luau)
@@ -208,6 +220,103 @@ local function inRun(player: Player): boolean
 	return (phase == "InRun" or phase == "Deploying") and player:GetAttribute(P.LifeState) == "Alive"
 end
 
+-- The world point of an objective station or lock (its first prompt's position, else its pivot).
+local function spotPoint(model: Instance): Vector3?
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("ProximityPrompt") then
+			local parent = descendant.Parent
+			if parent and parent:IsA("Attachment") then
+				return parent.WorldPosition
+			end
+		end
+	end
+	return positionOf(model)
+end
+
+local function clearLine(from: Vector3, to: Vector3, model: Instance): boolean
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local exclude: { Instance } = { model, Instances.cosmetic() }
+	for _, other in Players:GetPlayers() do
+		if other.Character then
+			table.insert(exclude, other.Character)
+		end
+	end
+	params.FilterDescendantsInstances = exclude
+	return Workspace:Raycast(from, to - from, params) == nil
+end
+
+local function anyPromptUp(model: Instance): boolean
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("ProximityPrompt") and descendant.Enabled then
+			return true
+		end
+	end
+	return false
+end
+
+local function searchable(locker: Instance): boolean
+	for _, descendant in locker:GetDescendants() do
+		if descendant:IsA("ProximityPrompt") and descendant:GetAttribute(W.PromptKind) == "Search" then
+			return descendant.Enabled
+		end
+	end
+	return false
+end
+
+-- Whether the objective hint `hint` is due for an eye at `eye` on `level`.
+local function objectiveDue(hint: TutorialConfig.Hint, level: string, eye: Vector3): boolean
+	local spot = hint.spot
+	if not spot or spot.level ~= level or ReplicatedStorage:GetAttribute(M.ObjectiveLevel) ~= level then
+		return false
+	end
+	local spec = ObjectiveConfig.forLevel(level)
+	local progress = ObjectiveState.decodeSteps(ReplicatedStorage:GetAttribute(M.ObjectiveSteps))
+	if not spec or ObjectiveState.done(spec, progress, spot.step) then
+		return false
+	end
+	local after = spot.after
+	if after and not ObjectiveState.done(spec, progress, after) then
+		return false
+	end
+	local radius = hint.radius or ObjectiveConfig.Tuning.HintRadius
+	local tag = if spot.objectiveId == "Locker"
+		then Tags.HideableLocker
+		elseif spot.objectiveId == "ExitLock" or spot.objectiveId == "CrateChain" then Tags.ExitLock
+		else Tags.ObjectiveStation
+	for _, model in CollectionService:GetTagged(tag) do
+		if not onLevel(model, level) then
+			continue
+		end
+		if spot.objectiveId == "Locker" then
+			if not searchable(model) then
+				continue
+			end
+		elseif model:GetAttribute(W.ObjectiveId) ~= spot.objectiveId then
+			continue
+		elseif spot.objectiveId == "ExitLock" and not anyPromptUp(model) then
+			continue -- a jammed stairwell's lock (only the run's exit lock offers its prompts)
+		end
+		local point = spotPoint(model)
+		if point and (point - eye).Magnitude <= radius and clearLine(eye, point, model) then
+			return true
+		end
+	end
+	return false
+end
+
+local function nearCheckpoint(level: string, from: Vector3): boolean
+	for _, volume in CollectionService:GetTagged(Tags.CheckpointVolume) do
+		if volume:IsA("BasePart") and volume:GetAttribute(W.LevelId) == level then
+			local offset = volume.Position - from
+			if Vector3.new(offset.X, 0, offset.Z).Magnitude <= AIRLOCK_HINT_RADIUS and math.abs(offset.Y) < 8 then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 local function scanDue(player: Player, seen: { [string]: boolean })
 	table.clear(due)
 	if not inRun(player) then
@@ -220,6 +329,8 @@ local function scanDue(player: Player, seen: { [string]: boolean })
 	end
 	local from = root.Position
 	if not seen.Airlock then
+		local open = ReplicatedStorage:GetAttribute(M.ObjectiveLevel) ~= level
+			or ReplicatedStorage:GetAttribute(M.ObjectiveUnlocked) == true
 		for _, door in CollectionService:GetTagged(Tags.AirlockDoor) do
 			if
 				door:GetAttribute(W.FromLevel) == level
@@ -229,6 +340,17 @@ local function scanDue(player: Player, seen: { [string]: boolean })
 				due.Airlock = true
 				break
 			end
+		end
+		-- told on the way in, once the exit is open (alone, the doors seal before a countdown hint could show)
+		if not due.Airlock and open and nearCheckpoint(level, from) then
+			due.Airlock = true
+		end
+	end
+	local camera = Workspace.CurrentCamera
+	local eye = if camera then camera.CFrame.Position else from
+	for _, hint in TutorialConfig.Hints do
+		if hint.spot and not seen[hint.id] and objectiveDue(hint, level, eye) then
+			due[hint.id] = true
 		end
 	end
 	if not seen.DownedTeammate then
@@ -407,8 +529,10 @@ local function step(dt: number)
 	end
 
 	local hint = showing
+	local level = ReplicatedStorage:GetAttribute(M.CurrentLevel)
 	if hint then
-		if not ok or clock - shownAt >= Timing.HintSeconds then
+		-- a card belongs to the floor it came up on
+		if not ok or clock - shownAt >= Timing.HintSeconds or level ~= showingLevel then
 			showing = nil
 			endedAt = clock
 		end
@@ -416,6 +540,7 @@ local function step(dt: number)
 		local nextHint = FirstTimeHints.pick(due, seen)
 		if nextHint then
 			showing = nextHint
+			showingLevel = if type(level) == "string" then level else nil
 			shownAt = clock
 			fill(current, nextHint)
 			SettingsController.Set(nextHint.setting, true)

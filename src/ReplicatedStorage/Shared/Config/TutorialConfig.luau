@@ -44,6 +44,26 @@ export type HintId =
 	| "Locker"
 	| "Water"
 	| "LowBattery"
+	| "ObjLock0"
+	| "ObjLock1"
+	| "ObjLock2"
+	| "ObjLock3"
+	| "ObjLock4"
+	| "ObjBreaker"
+	| "ObjFumeHood"
+	| "ObjStoreLock"
+	| "ObjGenerator"
+	| "ObjLockerSearch"
+	| "ObjHatchValve"
+	| "ObjCrateChain"
+
+-- A floor objective's station or lock (FirstTimeHints finds it by ObjectiveId on `level` while its step is undone).
+export type HintSpot = {
+	objectiveId: string, -- ExitLock | BreakerPanel | FumeHood | StoreLock | Generator | Locker | HatchValve | CrateChain
+	level: string,
+	step: string, -- shown while this step is not done (ObjectiveSteps)
+	after: string?, -- and only once this one is done
+}
 
 export type HintInput = { action: Enums.InputAction, label: string }
 
@@ -53,6 +73,7 @@ export type Hint = {
 	inputs: { HintInput },
 	setting: string, -- hidden SettingsSchema Bool: true once shown
 	radius: number?, -- studs, for a thing in the world
+	spot: HintSpot?, -- a floor objective's station or lock (within ObjectiveConfig.Tuning.HintRadius, in sight)
 }
 
 export type Floor = {
@@ -123,6 +144,91 @@ local HINTS: { Hint } = {
 		text = "Hint.Airlock",
 		inputs = {},
 		setting = "HintAirlock",
+	},
+	{
+		id = "ObjLock0",
+		text = "Hint.Obj.Lock.Level0_Basement",
+		inputs = {},
+		setting = "HintObjLock0",
+		spot = { objectiveId = "ExitLock", level = "Level0_Basement", step = "ThrowBreaker" },
+	},
+	{
+		id = "ObjLock1",
+		text = "Hint.Obj.Lock.Level1_Hallways",
+		inputs = {},
+		setting = "HintObjLock1",
+		spot = { objectiveId = "ExitLock", level = "Level1_Hallways", step = "UnlockExit" },
+	},
+	{
+		id = "ObjLock2",
+		text = "Hint.Obj.Lock.Level2_ScienceHall",
+		inputs = {},
+		setting = "HintObjLock2",
+		spot = { objectiveId = "ExitLock", level = "Level2_ScienceHall", step = "BurnChain" },
+	},
+	{
+		id = "ObjLock3",
+		text = "Hint.Obj.Lock.Level3_Gymnasium",
+		inputs = {},
+		setting = "HintObjLock3",
+		spot = { objectiveId = "ExitLock", level = "Level3_Gymnasium", step = "WindMotor" },
+	},
+	{
+		id = "ObjLock4",
+		text = "Hint.Obj.Lock.Level4_FloodedPool",
+		inputs = {},
+		setting = "HintObjLock4",
+		spot = { objectiveId = "ExitLock", level = "Level4_FloodedPool", step = "TurnValve" },
+	},
+	{
+		id = "ObjBreaker",
+		text = "Hint.Obj.BreakerPanel",
+		inputs = {},
+		setting = "HintObjBreaker",
+		spot = { objectiveId = "BreakerPanel", level = "Level0_Basement", step = "ThrowBreaker" },
+	},
+	{
+		id = "ObjFumeHood",
+		text = "Hint.Obj.FumeHood",
+		inputs = {},
+		setting = "HintObjFumeHood",
+		spot = { objectiveId = "FumeHood", level = "Level2_ScienceHall", step = "MixAcid" },
+	},
+	{
+		id = "ObjLockerSearch",
+		text = "Hint.Obj.LockerSearch",
+		inputs = {},
+		setting = "HintObjLockerSearch",
+		radius = 8,
+		spot = { objectiveId = "Locker", level = "Level3_Gymnasium", step = "FindCoachKey" },
+	},
+	{
+		id = "ObjStoreLock",
+		text = "Hint.Obj.StoreLock",
+		inputs = {},
+		setting = "HintObjStoreLock",
+		spot = { objectiveId = "StoreLock", level = "Level3_Gymnasium", step = "UnlockStore" },
+	},
+	{
+		id = "ObjGenerator",
+		text = "Hint.Obj.Generator",
+		inputs = {},
+		setting = "HintObjGenerator",
+		spot = { objectiveId = "Generator", level = "Level3_Gymnasium", step = "StartGenerator", after = "UnlockStore" },
+	},
+	{
+		id = "ObjHatchValve",
+		text = "Hint.Obj.HatchValve",
+		inputs = {},
+		setting = "HintObjHatchValve",
+		spot = { objectiveId = "HatchValve", level = "Level4_FloodedPool", step = "FitWheel" },
+	},
+	{
+		id = "ObjCrateChain",
+		text = "Hint.Obj.CrateChain",
+		inputs = {},
+		setting = "HintObjCrateChain",
+		spot = { objectiveId = "CrateChain", level = "Level5_Roof", step = "CutChain" },
 	},
 	{
 		id = "DownedTeammate",

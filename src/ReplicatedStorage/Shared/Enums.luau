@@ -91,6 +91,10 @@ export type NoiseKind =
 	| "Splash"
 	| "FallingObject"
 	| "Scripted"
+	-- floor objectives: a working hold once a second, a loud single action, the gym generator starting
+	| "ObjectiveWork"
+	| "ObjectiveClunk"
+	| "GeneratorStart"
 
 export type NoiseMedium = "Air" | "Vent" | "Water"
 
@@ -109,10 +113,11 @@ export type OneShotKind =
 	| "LockerRip"
 	| "CreatureVanish"
 	| "CreatureReveal"
+	| "LungeTelegraph"
 
 export type JumpscareKind = "Hallway" | "Vent" | "Locker" | "Underwater"
 
-export type ItemId = "None" | "ChemicalFlask"
+export type ItemId = "None" | "ChemicalFlask" | "AcidFlask"
 
 export type GrateState = "Closed" | "Unscrewing" | "Open" | "Kicked" | "Locked"
 
@@ -142,6 +147,7 @@ export type PromptKind =
 	| "TurnValve"
 	| "CutChain"
 	| "Locked"
+	| "Search"
 
 export type Audience = "Self" | "Others" | "All"
 
@@ -410,6 +416,9 @@ Enums.NoiseKind = table.freeze({
 	"Splash",
 	"FallingObject",
 	"Scripted",
+	"ObjectiveWork",
+	"ObjectiveClunk",
+	"GeneratorStart",
 } :: { NoiseKind })
 
 Enums.NoiseMedium = table.freeze({ "Air", "Vent", "Water" } :: { NoiseMedium })
@@ -429,11 +438,12 @@ Enums.OneShotKind = table.freeze({
 	"LockerRip",
 	"CreatureVanish",
 	"CreatureReveal",
+	"LungeTelegraph",
 } :: { OneShotKind })
 
 Enums.JumpscareKind = table.freeze({ "Hallway", "Vent", "Locker", "Underwater" } :: { JumpscareKind })
 
-Enums.ItemId = table.freeze({ "None", "ChemicalFlask" } :: { ItemId })
+Enums.ItemId = table.freeze({ "None", "ChemicalFlask", "AcidFlask" } :: { ItemId })
 
 Enums.GrateState = table.freeze({ "Closed", "Unscrewing", "Open", "Kicked", "Locked" } :: { GrateState })
 
@@ -462,6 +472,7 @@ Enums.PromptKind = table.freeze({
 	"TurnValve",
 	"CutChain",
 	"Locked",
+	"Search",
 } :: { PromptKind })
 
 Enums.Audience = table.freeze({ "Self", "Others", "All" } :: { Audience })

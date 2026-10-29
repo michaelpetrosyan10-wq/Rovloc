@@ -10,15 +10,18 @@
 -- finale plays at that one (geometry). Its roof door (DoorService; it starts Closed)
 -- swings open OPEN_DELAY after the first playing participant reaches the housing at the top of the stairs.
 --
--- The door smash (Scenes.RoofDoor, from startAt S). Once the squad is out on the roof (squadOut: every playing
--- participant out of the housing and the stair tower and DOOR_CLEAR from the doorway), or SMASH_TIMEOUT after the first
--- one stepped out, or ARRIVAL_TIMEOUT after activation whoever is where (smashDue): OneShot Timeline "L5_DoorSmash".
+-- The door smash (Scenes.RoofDoor, from startAt S). The Creature waits behind the door for its grace
+-- (ObjectiveConfig.graceFor: 20 s Standard, 12 s Nightmare) once the first playing participant has stepped out of the
+-- housing, ended early by a High / Critical noise of a participant's on the roof after that, or at once by the crate's
+-- chain being cut (ObjectiveService.Unlocked: CrateCut); or ARRIVAL_TIMEOUT after activation whoever is where
+-- (smashDue): OneShot Timeline "L5_DoorSmash".
 -- The wind slams the door shut so it lands at Slam (skipped while anyone is still inside or in the doorway: they are
 -- never shut in with it), the hidden Creature is moved in right behind the door, facing it (Stage), three blows from
 -- the far side, it is shown behind the closed door at Reveal (only while nobody can see that spot, so a straggler inside
 -- never watches it pop in), DoorService Smashed so the leaf flies at Smash (the DoorSmash action with it), its cry, and
--- at Release it is let go into WallChase at the nearest player while everyone on the roof is told to run
--- (Hud.RoofRun).
+-- at Release it is let go: into WallChase when someone can be seen from behind the doorway, else into Patrol (its senses
+-- find them; it is never told where they are), and everyone on the roof is told to run (Hud.RoofRun) once the crate is
+-- open.
 --
 -- The final sprint, from the release until the finale: the Creature's pace follows its gap to its target (chaseScale
 -- through MonsterAIService.SetSpeedScale: it runs down a straggler and closes on anyone who stops, but it never quite
@@ -84,6 +87,9 @@ local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIS
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
 local LevelDirector = require(ServerScriptService.Services.Core.LevelDirector)
 local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
+local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
+local ObjectiveService = require(script.Parent.ObjectiveService)
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 
 local LevelKit = require(script.Parent.LevelKit)
 
@@ -110,8 +116,9 @@ export type Geometry = {
 export type Sample = { position: Vector3 }
 
 export type SmashInput = {
-	out: boolean, -- squadOut
+	smashNow: boolean, -- a loud noise after the first one stepped out, or the crate's chain cut
 	firstOutAt: number?, -- when the first participant stepped out of the housing
+	grace: number, -- ObjectiveConfig.graceFor(difficulty)
 	activatedAt: number,
 	now: number,
 }
@@ -163,7 +170,6 @@ local LEAD = GameConfig.OneShotLead
 local OPEN_DELAY = 1.2 -- the wind takes the door this long after the first arrival in the housing
 local OPEN_SECONDS = 1.4
 local DOOR_CLEAR = 9 -- studs from the doorway everyone must be before it slams
-local SMASH_TIMEOUT = 20
 local ARRIVAL_TIMEOUT = 75
 local BEHIND_DOOR = 3 -- studs behind the door the Creature stands for the blows
 local STAMINA_FLOOR = 55
@@ -179,6 +185,7 @@ local EYE_HEIGHT = CreatureConfig.EyeHeightAboveRoot.Biped
 local CHEST_HEIGHT = 1.2
 local BIPED: Enums.PoseMode = "Biped"
 local CHASE_STATE: Enums.MonsterState = "WallChase"
+local PATROL_STATE: Enums.MonsterState = "Patrol"
 local HUNT_STATE: Enums.MonsterState = "Patrol"
 local PARKED_STATE: Enums.MonsterState = "Dormant"
 local HUNT_PRIORITY: Enums.NoisePriority = "High"
@@ -202,7 +209,7 @@ Level5.LevelId = LEVEL
 Level5.Token = TOKEN
 Level5.OpenDelay = OPEN_DELAY
 Level5.DoorClear = DOOR_CLEAR
-Level5.SmashTimeout = SMASH_TIMEOUT
+Level5.SmashTimeout = ObjectiveConfig.graceFor("Standard") -- the wait behind the door on Standard
 Level5.ArrivalTimeout = ARRIVAL_TIMEOUT
 Level5.StaminaFloor = STAMINA_FLOOR
 Level5.FinaleWait = FINALE_WAIT
@@ -311,11 +318,11 @@ end
 
 -- Whether the door sequence starts now (see the header).
 function Level5.smashDue(input: SmashInput): boolean
-	if input.out then
+	if input.smashNow then
 		return true
 	end
 	local firstOut = input.firstOutAt
-	if firstOut ~= nil and input.now >= firstOut + SMASH_TIMEOUT then
+	if firstOut ~= nil and input.now >= firstOut + input.grace then
 		return true
 	end
 	return input.now >= input.activatedAt + ARRIVAL_TIMEOUT
@@ -432,6 +439,7 @@ local handle: Handle? = nil
 local activatedAt = 0
 local arrivedAt: number? = nil
 local firstOutAt: number? = nil
+local smashNow = false
 local doorOpened = false
 local smashRun: SmashRun? = nil
 local finaleRun: FinaleRun? = nil
@@ -584,10 +592,14 @@ local function startSmash(now: number, g: Geometry)
 		if phase == "Smash" then
 			phase = "Chase"
 		end
-		letGo(CHASE_STATE)
-		for _, player in deps.players() do
-			if ON_ROOF[jumpState(player)] then
-				deps.notify(player, RUN_KEY)
+		-- it runs down someone it can see from the doorway; anyone out of sight is left to its senses
+		local squad = deps.players()
+		letGo(if seen(g.behind.Position, squad) then CHASE_STATE else PATROL_STATE)
+		if ParachuteService.IsCrateOpen() then
+			for _, player in squad do
+				if ON_ROOF[jumpState(player)] then
+					deps.notify(player, RUN_KEY)
+				end
 			end
 		end
 		log.info("the Creature is through the roof door")
@@ -614,11 +626,19 @@ local function stepArrival(now: number, g: Geometry, players: { Player })
 			deps.setDoor(door, "Open", OPEN_SECONDS)
 		end
 	end
-	local out, anyOut = Level5.squadOut(samples, g)
+	local _, anyOut = Level5.squadOut(samples, g)
 	if anyOut and firstOutAt == nil then
 		firstOutAt = now
 	end
-	if Level5.smashDue({ out = out, firstOutAt = firstOutAt, activatedAt = activatedAt, now = now }) then
+	if
+		Level5.smashDue({
+			smashNow = smashNow,
+			firstOutAt = firstOutAt,
+			grace = ObjectiveConfig.graceFor(difficulty),
+			activatedAt = activatedAt,
+			now = now,
+		})
+	then
 		startSmash(now, g)
 	end
 end
@@ -921,6 +941,27 @@ function Level5.Pending(): { string }
 	return schedule:Pending()
 end
 
+-- The crate's chain was cut (the roof objective): the door smash starts at once while the Creature still waits behind
+-- the door. False otherwise.
+function Level5.CrateCut(): boolean
+	local g = geo()
+	if not (active and phase == "Arrival" and g) then
+		return false
+	end
+	startSmash(deps.now(), g)
+	return true
+end
+
+-- A participant's High / Critical noise on the roof once someone has stepped out ends the wait behind the door.
+function Level5.HeardNoise(event: Types.NoiseEvent)
+	if not (active and phase == "Arrival" and firstOutAt ~= nil) or event.sourceUserId == nil then
+		return
+	end
+	if event.levelId == LEVEL and (event.priority == "High" or event.priority == "Critical") then
+		smashNow = true
+	end
+end
+
 -- Starts the door sequence now (dev). False unless the squad is still arriving.
 function Level5.Smash(): boolean
 	local g = geo()
@@ -974,6 +1015,7 @@ function Level5.Activate(_ctx: Types.LevelContext)
 	activatedAt = deps.now()
 	arrivedAt = nil
 	firstOutAt = nil
+	smashNow = false
 	doorOpened = false
 	smashRun = nil
 	finaleRun = nil
@@ -1018,6 +1060,12 @@ end
 
 function Level5.Init()
 	DevToolsService.Register("roof", "roof [smash|finale]: the roof door sequence or the finale now", roofCommand)
+	NoiseAndDirectorService.NoiseEmitted:Connect(Level5.HeardNoise)
+	ObjectiveService.Unlocked:Connect(function(levelId: Enums.LevelId, _actor: Player?)
+		if levelId == LEVEL then
+			Level5.CrateCut()
+		end
+	end)
 end
 
 local function resetState()
@@ -1025,6 +1073,7 @@ local function resetState()
 	phase = "Idle"
 	arrivedAt = nil
 	firstOutAt = nil
+	smashNow = false
 	doorOpened = false
 	smashRun = nil
 	finaleRun = nil

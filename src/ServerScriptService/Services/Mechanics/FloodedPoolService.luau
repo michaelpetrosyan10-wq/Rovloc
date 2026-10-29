@@ -196,7 +196,8 @@ local HOLD_WALL_CLEARANCE = 1.5 -- studs the held root stays inside the volume's
 local HOLD_SWAY = 0.25 -- studs the held body is shaken about
 local HOLD_GRACE = 1 -- seconds the Creature may not read as holding before the grab counts as let go
 local GRAB_MIN_SECONDS = 4.5 -- every grab starts with at least this many seconds of air
-local GRAB_MIN_OXYGEN = GameConfig.OxygenDrainGrabbed * GRAB_MIN_SECONDS
+-- Floor 4 fairness: the lungs are topped up to this at a grab (8 s of struggle at OxygenDrainGrabbed)
+local GRAB_MIN_OXYGEN = math.max(40, GameConfig.OxygenDrainGrabbed * GRAB_MIN_SECONDS)
 local FREED_MIN_SECONDS = 2.5 -- a freed swimmer has at least this long to reach the surface
 local FREED_MIN_OXYGEN = GameConfig.OxygenDrain * FREED_MIN_SECONDS
 local DROWN_FLOOR = 0.5 -- the drain stops here while the drowning catch is tried

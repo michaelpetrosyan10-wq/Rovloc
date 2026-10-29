@@ -10,7 +10,7 @@ export type Validator = (value: unknown) -> boolean
 
 local Validators = {}
 
-local MAX_TABLE_KEYS = 32
+local MAX_TABLE_KEYS = 48 -- the settings blob is the widest payload (SettingsSchema: 36 keys)
 
 local function isFinite(n: number): boolean
 	return n == n and n ~= math.huge and n ~= -math.huge

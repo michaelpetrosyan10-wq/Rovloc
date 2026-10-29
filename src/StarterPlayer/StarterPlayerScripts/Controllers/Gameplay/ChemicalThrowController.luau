@@ -2,6 +2,9 @@
 -- ChemicalThrowController: chemical flasks on this client. ChemicalProjectileService judges every pickup, throw and
 -- shatter; this controller presents them.
 --
+-- The acid flask (Floor 2's objective, HeldItem "AcidFlask"; a Launch with item "AcidFlask") is held, thrown and
+-- drawn exactly like a flask (AcidFlaskBuilder's visual, its acid green), but breaks without a gas cloud.
+--
 -- Held flasks. Every player whose HeldItem is "ChemicalFlask" carries ChemicalFlaskBuilder.buildVisual (of their
 -- HeldItemVariant) in the right hand: a client-local, cosmetic, anchored model placed every frame (PreRender) with its
 -- Grip on the RightHand's grip point (HandGrip), on the local body (seen in first person) and on teammates' rigs within
@@ -37,7 +40,8 @@
 -- RenderBudgetController's particleScale; the Low budget drops the glow and the aim arc.
 --
 -- HUD. While the local player holds a flask they may throw, the hint line says how (Hud.FlaskThrow.<Device>, for the
--- current input device).
+-- current input device); never inside a locker, a trap, the water's grab, a parachute or a cutscene (the input context
+-- or a Cutscene / Jumpscare control lock), where no throw can happen.
 --
 -- Pure maths (tests/Specs/Chemical.spec.luau): handTarget, windupAmount, followAmount, reconcileWeight,
 -- refusedAfter, shouldPose, canWindUp, hintKey, snapNeeded, cloudRate, cloudGlow, shardCount, fadeAlpha,
@@ -62,6 +66,7 @@ local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
 
+local AcidFlaskBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.AcidFlaskBuilder)
 local ChemicalFlaskBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.ChemicalFlaskBuilder)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 
@@ -76,6 +81,11 @@ local log = Log.new("ChemicalClient")
 local P = Attributes.Player
 
 local ITEM: Enums.ItemId = "ChemicalFlask"
+local ACID_ITEM: Enums.ItemId = "AcidFlask"
+local ACID_VARIANT = -1 -- the variant every visual of the acid flask carries on this client
+local HINT_BLOCKED_CONTEXTS: { [string]: boolean } =
+	{ Locker = true, Trapped = true, Struggle = true, Parachute = true, Cutscene = true, Menu = true }
+local HINT_BLOCKED_LOCKS: { [string]: boolean } = { Cutscene = true, Jumpscare = true }
 local THROW_ACTION: Enums.InputAction = "Throw"
 local FOLDER_NAME = "Chemicals"
 local SMOKE_TEXTURE = "rbxasset://textures/particles/smoke_main.dds"
@@ -371,12 +381,26 @@ local function budget(): RenderBudgetController.Budget
 	return RenderBudgetController.GetBudget()
 end
 
+-- "ChemicalFlask" for a flask or the acid flask in hand (both are thrown the same way), else what the hand holds.
 local function heldItemOf(player: Player): string
-	return Attributes.getString(player, P.HeldItem, "None")
+	local item = Attributes.getString(player, P.HeldItem, "None")
+	return if item == ACID_ITEM then ITEM else item
 end
 
 local function variantOf(player: Player): number
+	if Attributes.getString(player, P.HeldItem, "None") == ACID_ITEM then
+		return ACID_VARIANT
+	end
 	return Attributes.getNumber(player, P.HeldItemVariant, 0)
+end
+
+-- A flight's look: the acid's own variant, else the flask's.
+local function payloadVariant(payload: Types.ProjectileEventPayload): number
+	return if payload.item == ACID_ITEM then ACID_VARIANT else payload.variant
+end
+
+local function liquidOf(variant: number): Color3
+	return if variant == ACID_VARIANT then AcidFlaskBuilder.AcidColor else ChemicalFlaskBuilder.liquidColor(variant)
 end
 
 local function myLifeState(): Enums.LifeState
@@ -435,6 +459,11 @@ local function place(rigid: Rigid, pivot: CFrame)
 end
 
 local function buildFlask(variant: number): Rigid
+	if variant == ACID_VARIANT then
+		-- built so its own grip lands where a flask's grip does (heldPivot / flightPivot are the flask's)
+		local at = ChemicalFlaskBuilder.GripOffset * AcidFlaskBuilder.GripOffset:Inverse()
+		return rigidOf(AcidFlaskBuilder.buildVisual(chemicalsFolder(), at), CFrame.identity)
+	end
 	local model = ChemicalFlaskBuilder.buildVisual(chemicalsFolder(), CFrame.identity, variant)
 	return rigidOf(model, CFrame.identity)
 end
@@ -727,7 +756,7 @@ end
 
 -- Glass and splash (the moment of the shatter).
 local function burst(point: Vector3, normal: Vector3, variant: number)
-	local liquid = ChemicalFlaskBuilder.liquidColor(variant)
+	local liquid = liquidOf(variant)
 	spawnShards(point, normal, liquid)
 	spawnSplash(point, normal, liquid)
 end
@@ -845,8 +874,15 @@ local function onLaunch(payload: Types.ProjectileEventPayload)
 	if findProjectile(payload.id) or serverNow() - payload.t0 > GameConfig.FlaskMaxFlightSeconds then
 		return
 	end
-	local projectile =
-		newProjectile(payload.origin, payload.velocity, payload.gravity, payload.t0, payload.variant, payload.id, false)
+	local projectile = newProjectile(
+		payload.origin,
+		payload.velocity,
+		payload.gravity,
+		payload.t0,
+		payloadVariant(payload),
+		payload.id,
+		false
+	)
 	projectile.id = payload.id
 end
 
@@ -863,10 +899,14 @@ local function onResolve(payload: Types.ProjectileEventPayload)
 	local rawNormal = payload.hitNormal
 	local normal = if rawNormal and rawNormal.Magnitude > 1e-6 then rawNormal.Unit else Vector3.yAxis
 	local played = if projectile and projectile.burstPlayed then projectile.impactPoint else nil
+	local variant = payloadVariant(payload)
 	if ChemicalThrowController.snapNeeded(played, point) then
-		burst(point, normal, payload.variant)
+		burst(point, normal, variant)
 	end
-	local liquid = ChemicalFlaskBuilder.liquidColor(payload.variant)
+	if variant == ACID_VARIANT then
+		return -- the acid eats in where it lands (the server's sizzle); no gas cloud
+	end
+	local liquid = liquidOf(variant)
 	local inVent = payload.inVent == true
 	spawnCloud(point + normal * 0.6, normal, liquid, inVent)
 	if kind == "World" and not inVent and normal.Y >= FLOOR_NORMAL_Y then
@@ -1036,7 +1076,7 @@ local function updateArc(dt: number, origin: Vector3, velocity: Vector3, variant
 	local hit, points =
 		Ballistics.trace(origin, velocity, Ballistics.Gravity, GameConfig.FlaskMaxFlightSeconds, ARC_STEP, flightCast)
 	local beads = Ballistics.resample(points, ARC_DOTS + 1)
-	local color = ChemicalFlaskBuilder.liquidColor(variant)
+	local color = liquidOf(variant)
 	local transparency = 1 - (1 - ARC_TRANSPARENCY) * arcAlpha
 	local frames: { CFrame } = table.create(ARC_DOTS)
 	for index, dot in dots do
@@ -1208,7 +1248,14 @@ local function stepThrow(dt: number)
 
 	-- Hint
 	local wanted: string? = nil
-	if localHolding() and lifeState == "Alive" and posing then
+	local lock = if player then Attributes.getString(player, P.ControlLock, "None") else "None"
+	if
+		localHolding()
+		and lifeState == "Alive"
+		and posing
+		and not HINT_BLOCKED_CONTEXTS[InputController.GetContext()]
+		and not HINT_BLOCKED_LOCKS[lock]
+	then
 		wanted = ChemicalThrowController.hintKey(InputController.GetDevice())
 	end
 	if wanted ~= shownHint then

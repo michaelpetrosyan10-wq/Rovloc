@@ -331,7 +331,12 @@ local function smashAndRelease(t: Expect, world: World)
 	for player in world.roots do
 		world.roots[player] = OUT_FAR
 	end
-	step(world, 0.2)
+	-- it waits behind the door for its grace (ObjectiveConfig.graceFor) once someone is out
+	local waited = 0
+	while Level5.GetPhase() == "Arrival" and waited < Level5.SmashTimeout + 1 do
+		step(world, 0.1)
+		waited += 0.1
+	end
 	t.eq(Level5.GetPhase(), "Smash", "the door sequence starts")
 	step(world, DOOR.Release + LEAD + 0.2)
 	t.eq(Level5.GetPhase(), "Chase", "the chase is on")
@@ -384,11 +389,22 @@ return {
 		allOut = Level5.squadOut({ { position = OUT_FAR }, { position = OUT_FAR + Vector3.new(0, 0, 9) } }, g)
 		t.truthy(allOut, "everyone out and clear")
 		t.falsy((Level5.squadOut({}, g)), "nobody at all")
-		t.falsy(Level5.smashDue({ out = false, firstOutAt = nil, activatedAt = 0, now = 10 }))
-		t.truthy(Level5.smashDue({ out = true, firstOutAt = nil, activatedAt = 0, now = 1 }))
-		t.falsy(Level5.smashDue({ out = false, firstOutAt = 5, activatedAt = 0, now = 5 + Level5.SmashTimeout - 0.1 }))
-		t.truthy(Level5.smashDue({ out = false, firstOutAt = 5, activatedAt = 0, now = 5 + Level5.SmashTimeout }))
-		t.truthy(Level5.smashDue({ out = false, firstOutAt = nil, activatedAt = 0, now = Level5.ArrivalTimeout }))
+		local grace = Level5.SmashTimeout
+		local function due(smashNow: boolean, firstOutAt: number?, now: number, g2: number?): boolean
+			return Level5.smashDue({
+				smashNow = smashNow,
+				firstOutAt = firstOutAt,
+				grace = g2 or grace,
+				activatedAt = 0,
+				now = now,
+			})
+		end
+		t.falsy(due(false, nil, 10), "nobody out yet")
+		t.truthy(due(true, nil, 1), "the chain cut (or a loud noise) brings it forward")
+		t.falsy(due(false, 5, 5 + grace - 0.1), "it waits out its grace behind the door")
+		t.truthy(due(false, 5, 5 + grace), "the grace is over")
+		t.truthy(due(false, 5, 5 + 12, 12), "Nightmare's grace is shorter")
+		t.truthy(due(false, nil, Level5.ArrivalTimeout), "the arrival timeout")
 	end,
 
 	["Level5: the chase's pace"] = function(t: Expect)
@@ -482,7 +498,9 @@ return {
 			t.eq(Level5.GetPhase(), "Arrival", "one still inside")
 			world.roots[players[2]] = OUT_FAR + Vector3.new(0, 0, 6)
 			step(world, 0.1)
-			t.eq(Level5.GetPhase(), "Smash")
+			t.eq(Level5.GetPhase(), "Arrival", "it waits behind the door for its grace")
+			step(world, Level5.SmashTimeout - 0.5)
+			t.eq(Level5.GetPhase(), "Smash", "the grace is over")
 			local shot = shotsOf(world, "Timeline", DOOR.Id)[1]
 			t.truthy(shot ~= nil, "the door scene plays")
 			t.truthy(typeof(shot.args.door) == "Vector3", "from the door")
@@ -499,7 +517,8 @@ return {
 			step(world, start + DOOR.Smash - LEAD + 0.05 - world.now)
 			t.eq(world.doorCalls[#world.doorCalls].state, "Smashed", "torn off on the beat")
 			step(world, start + DOOR.Release + 0.05 - world.now)
-			t.eq(callsNamed(world, "Release")[1].value, "WallChase", "let go into the chase")
+			-- nobody can be seen from behind the doorway: it is left to its senses (it is never told where they are)
+			t.eq(callsNamed(world, "Release")[1].value, "Patrol", "let go to find them")
 			t.eq(Level5.GetPhase(), "Chase")
 			t.eq(#world.notices, 2, "everyone is told to run")
 			t.eq(world.notices[1].key, Level5.RunKey)

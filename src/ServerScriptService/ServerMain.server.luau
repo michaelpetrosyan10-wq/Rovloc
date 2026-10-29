@@ -61,6 +61,7 @@ local CheckpointAirlockService = require(ServerScriptService.Services.Match.Chec
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 
 local Levels = require(ServerScriptService.Services.Levels)
+local ObjectiveService = require(ServerScriptService.Services.Levels.ObjectiveService)
 
 local MatchAndDataService = require(ServerScriptService.Services.Match.MatchAndDataService)
 local MatchResetService = require(ServerScriptService.Services.Match.MatchResetService)
@@ -180,6 +181,12 @@ end
 --   ParachuteService         The roof jump: the crate's packs (InteractionService), the leap off the edge, the cord /
 --                            auto-deploy, the canopy's LinearVelocity and its "Parachute" validator (MovementAuthority),
 --                            landings held for the finale (CharacterService locks); Heartbeat-stepped.
+--   ObjectiveService         The floor objectives (ObjectiveConfig): BeginRun (after DoorService, the lockers, the
+--                            flasks, the pool, the parachutes and the vents above) locks every floor's exit fire doors,
+--                            resets the locks and stations WorldService rebuilt and keeps the run's picked items; its
+--                            prompt handlers (InteractionService), the carry, the drop on death / leave, the acid
+--                            (ChemicalProjectileService), the store door, the hatch's grate (VentNetworkService), the
+--                            crate (ParachuteService); CheckpointAirlockService asks ExitOpen; Unlocked signals the roof.
 --   Levels                   The Level 0-5 controllers (registered with LevelDirector in Init): basement beats,
 --                            the Floor 1 classroom scare (MonsterAIService.AcquireScripted, DoorService's gate), Level 2
 --                            flask restock (ChemicalProjectileService), the Level 3 gym (MonsterAIService.SetSpeedScale /
@@ -362,6 +369,14 @@ local SERVICES: { Types.Service } = {
 		BeginRun = ParachuteService.BeginRun,
 		EndRun = ParachuteService.EndRun,
 		OnPlayerRemoving = ParachuteService.OnPlayerRemoving,
+	},
+	{
+		Name = ObjectiveService.Name,
+		Init = ObjectiveService.Init,
+		Start = ObjectiveService.Start,
+		BeginRun = ObjectiveService.BeginRun,
+		EndRun = ObjectiveService.EndRun,
+		OnPlayerRemoving = ObjectiveService.OnPlayerRemoving,
 	},
 	{
 		Name = Levels.Name,

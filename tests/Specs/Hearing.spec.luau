@@ -77,7 +77,10 @@ local function listenerAt(position: Vector3, difficulty: Enums.Difficulty?): Lis
 		grateOpen = function(_grateId: string): boolean
 			return false
 		end,
-		scale = nil,
+		-- the geometry specs measure plain reach: the pacing scale cancels the difficulty's hearing multiplier
+		-- (harder Standard hears 15 % further; the multiplier spec sets its own scale)
+		scale = 1
+			/ (if difficulty == "Nightmare" then DifficultyConfig.Nightmare else DifficultyConfig.Standard).hearingMultiplier,
 	}
 end
 
@@ -207,7 +210,7 @@ return {
 		bogus.scale = 0 / 0
 		t.near(
 			Hearing.multiplier("Standard", bogus.scale),
-			CreatureConfig.Senses.HearingMultiplier,
+			CreatureConfig.Senses.HearingMultiplier * spec("Standard").hearingMultiplier,
 			EPS,
 			"NaN scale = 1"
 		)

@@ -280,6 +280,7 @@ export type ProjectileEventPayload = {
 	hitNormal: Vector3?,
 	hitKind: Enums.ProjectileHitKind?,
 	inVent: boolean?,
+	item: Enums.ItemId?, -- "AcidFlask" for Floor 2's acid (no stun cloud); nil for a chemical flask
 }
 
 export type LookSample = { userId: number, yaw: number, pitch: number }

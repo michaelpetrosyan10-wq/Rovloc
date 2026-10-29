@@ -23,6 +23,19 @@
 -- Levels. When LevelDirector activates Level 1 or later: PacingDirector.NoteAirlock (grace), the Creature is moved
 -- (hidden) to that level's CreatureSpawn if it is elsewhere, it reappears once nobody can see it, and it wakes into
 -- Patrol WakeDelay seconds later. A level controller that acquired it (AcquireScripted) in its Activate keeps it.
+-- On Levels 2 and 3 (SpawnRule, ObjectiveConfig.Spawn) it starts instead at the run's seeded pick among the level's
+-- PatrolWaypoint / CreatureSpawn anchors 70-140 studs walked from the entry (LevelDirector.entryFor), out of sight of it
+-- and outside the objective rooms (a logged fallback to the nearest of the band, never silent), and its grace there is
+-- ObjectiveConfig.graceFor(difficulty) (20 s Standard, 12 s Nightmare), ended early by a participant's High / Critical
+-- noise on the level, by a participant within ReleaseNear, or by one with a clear line to its head within ReleaseSight.
+--
+-- The pool (Level 4 fairness, CreatureConfig.Water; the web build mirrors it). Swims are capped at the AquaticStalk
+-- pace but for a lunge, and every lunge is telegraphed (LungeTelegraph: the growl here, OneShot "LungeTelegraph" for the
+-- clients' bubbles and ripple ring). In or from the water the telegraphed grab is the only catch (no Hallway catch).
+-- It leaves the pool only through the pool's own vent route, and comes back out on land unseen, at least PoolExitMin
+-- from every player (backing off along the duct first while watched in its mouth). For PoolGraceSeconds after any
+-- participant first stands in a pool room, and for GrabRetreatSeconds after any grab (swimming to the far end of the
+-- water), it neither sees nor hears anyone in the pool rooms and arms no grab.
 --
 -- Hooks: RegisterLockerInspector (P7 lockers), RegisterPoolGrabber (P7 pool; CatchGrabbed finishes a held swimmer who
 -- ran out of air with the Underwater jumpscare), AcquireScripted (P6 / P8 cutscenes; SetScriptedTarget turns a held
@@ -45,6 +58,7 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
+local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local SpatialQuery = require(ReplicatedStorage.Shared.Util.SpatialQuery)
@@ -67,12 +81,16 @@ local LifeStateService = require(ServerScriptService.Services.Player.LifeStateSe
 local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
 local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
 
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
+local Net = require(ReplicatedStorage.Shared.Net)
+
 local Brain = require(script.Brain)
 local CreatureBody = require(script.CreatureBody)
 local Hearing = require(script.Hearing)
 local JumpscareHandler = require(script.JumpscareHandler)
 local Locomotion = require(script.Locomotion)
 local Perception = require(script.Perception)
+local SpawnRule = require(script.SpawnRule)
 
 local AquaticStalk = require(script.States.AquaticStalk)
 local Dormant = require(script.States.Dormant)
@@ -159,6 +177,10 @@ local STUN_PRESET = "Screech"
 local MIN_SPEED_SCALE = 0.5
 local MAX_SPEED_SCALE = 2
 local SWIM_STATES: { [string]: boolean } = { Treading = true, Freestyle = true, Underwater = true, Grabbed = true }
+local WATER = CreatureConfig.Water
+local SPAWN = ObjectiveConfig.Spawn
+local LOUD: { [string]: boolean } = { High = true, Critical = true }
+local TELEGRAPH_PRESET = "CreatureGrowl"
 local EXIT_ANCHOR = "ExitAnchor"
 
 local MonsterAIService = {}
@@ -169,11 +191,14 @@ MonsterAIService.SpotWindow = SPOT_WINDOW
 
 local stateChanged: Signal.Signal<Enums.MonsterState, Enums.MonsterState> = Signal.new()
 local caught: Signal.Signal<Player, Enums.JumpscareKind> = Signal.new()
+local lungeTelegraph: Signal.Signal<Vector3, number> = Signal.new()
 
 -- (new, old) on every MonsterState change.
 MonsterAIService.StateChanged = stateChanged
 -- (victim, kind) when a catch starts.
 MonsterAIService.Caught = caught
+-- (origin, seconds) when a pool lunge is telegraphed (the clients show the bubbles and the ripple ring there).
+MonsterAIService.LungeTelegraph = lungeTelegraph
 
 local serviceTrove = Trove.new()
 local initialized = false
@@ -225,6 +250,11 @@ local splashArmed: { [Player]: number } = {}
 local swimmerAt = -math.huge
 local swimmerPlayer: Player? = nil
 local ignored: { [number]: boolean } = {}
+local runSeed = 0
+local graceLevel: Enums.LevelId? = nil -- the spawn rule's grace holds the Creature on this level
+local poolEnteredAt: number? = nil -- when a participant first stood in a pool room on this level
+local poolRetreatUntil = -math.huge -- it retreats in the water after a grab until then
+local telegraphSeq = 0
 
 -- hooks
 local lockerInspector: Types.LockerInspector? = nil
@@ -493,7 +523,30 @@ local function forgetMind()
 	table.clear(lastSeen)
 	swimmerPlayer = nil
 	swimmerAt = -math.huge
+	poolRetreatUntil = -math.huge
 	chaseStarted = nil
+end
+
+-- The CreatureSpawn of `levelId` by the run's arrival: on the roof the one in the access housing the route arrives by
+-- (L5_CreatureSpawnNorth / South, or the middle L5_CreatureSpawn: the anchor id's North / South suffix names its route
+-- slot), elsewhere the level's own.
+local function arrivalSpawn(levelId: Enums.LevelId, info: Brain.LevelInfo): CFrame?
+	local layout = Builder.getLayout(levelId)
+	local entry = LevelDirector.entryFor(levelId)
+	if not (layout and entry) then
+		return info.spawn
+	end
+	for _, anchor in layout.anchors do
+		if anchor.kind ~= "CreatureSpawn" then
+			continue
+		end
+		local slot = string.match(anchor.id, "(North)$") or string.match(anchor.id, "(South)$") or "Middle"
+		if slot == entry.slot then
+			return CFrame.new(WorldConfig.levelOrigin(levelId) + anchor.pos)
+				* CFrame.Angles(0, math.rad(anchor.yaw or 0), 0)
+		end
+	end
+	return info.spawn
 end
 
 -- Moves the Creature onto `levelId` at its CreatureSpawn (hidden until nobody can see it when `conceal` is set).
@@ -508,7 +561,7 @@ local function relocate(levelId: Enums.LevelId, conceal: boolean)
 	c.graph = VentNetworkService.GetGraph(levelId)
 	m:SetLevel(c.graph, if info then info.basins else {})
 	forgetMind()
-	local spawn = if info then info.spawn else nil
+	local spawn = if info then arrivalSpawn(levelId, info) else nil
 	if not spawn and info and info.waypoints[1] then
 		spawn = CFrame.new(standingSpots(info, m)[1])
 	end
@@ -522,7 +575,7 @@ end
 
 -- Teleports the Creature to the nearest standing spot of its level (at least UNSTICK_MIN away) that nobody can see,
 -- and only while nobody can see it where it is. False when that is not possible right now.
-local function relocateUnseen(): boolean
+local function relocateUnseen(landOnly: boolean?): boolean
 	local c, b, m = ctx, body, mover
 	local info = c and c.level
 	if not (c and b and m and info) then
@@ -534,11 +587,13 @@ local function relocateUnseen(): boolean
 	end
 	local spots: { Vector3 } = {}
 	for _, spot in standingSpots(info, m) do
-		if (spot - here).Magnitude >= UNSTICK_MIN then
+		if (spot - here).Magnitude >= UNSTICK_MIN and not (landOnly and m:BasinAt(spot)) then
 			table.insert(spots, spot)
 		end
 	end
-	local point = PacingDirector.repositionPoint(spots, playerEyes(), here, 0, math.huge, visible)
+	-- out of the pool's ducts it comes up well away from everyone, not round the corner from them
+	local minDistance = if landOnly then WATER.PoolExitMin else 0
+	local point = PacingDirector.repositionPoint(spots, playerEyes(), here, minDistance, math.huge, visible)
 	if not point then
 		return false
 	end
@@ -594,6 +649,8 @@ local function catchKindFor(player: Player): Enums.JumpscareKind?
 		busy = catching ~= nil or JumpscareHandler.IsBusy(),
 		hidden = b.hidden,
 		stunned = now() < stunUntil,
+		creatureInWater = m:Medium() == "Water",
+		targetSwimming = swimmingPlayer(player),
 	})
 end
 
@@ -775,7 +832,15 @@ local function noteHeard(noise: Brain.HeardNoise, best: Brain.HeardNoise?, t: nu
 		c.heardZones[zone] = { at = t, rank = noise.rank, position = noise.position }
 	end
 	local sourceId = noise.sourceUserId
-	local source = if sourceId then Players:GetPlayerByUserId(sourceId) else nil
+	-- the run's participants are the only players it hunts (no engine lookup needed)
+	local source: Player? = nil
+	if sourceId then
+		for _, participant in participants do
+			if participant.UserId == sourceId then
+				source = participant
+			end
+		end
+	end
 	if source and huntable(source) then
 		if noise.medium == "Vent" and noise.rank >= EXACT_RANK and VentNetworkService.IsInVent(source) then
 			spotted[source] = t
@@ -792,6 +857,121 @@ local function noteHeard(noise: Brain.HeardNoise, best: Brain.HeardNoise?, t: nu
 	return best
 end
 
+--------------------------------------------------------------------------------
+-- The pool (Level 4 fairness)
+--------------------------------------------------------------------------------
+
+-- Whether `point` stands in a pool room (a basin's water, or a room of kind Pool) of the Creature's level.
+local function inPoolRoomAt(point: Vector3?): boolean
+	local c, m = ctx, mover
+	local info = c and c.level
+	if not (point and info and m) or #info.basins == 0 then
+		return false
+	end
+	if m:BasinAt(point) then
+		return true
+	end
+	local room = Brain.roomAt(info, point)
+	return room ~= nil and room.kind == "Pool"
+end
+
+local function inPoolRoom(player: Player): boolean
+	return swimmingPlayer(player) or inPoolRoomAt(rootOf(player))
+end
+
+-- The pool grace starts the first time a participant stands in a pool room on this level.
+local function updatePoolGrace(t: number)
+	local c = ctx
+	if poolEnteredAt ~= nil or not (c and c.level) or #(c.level :: Brain.LevelInfo).basins == 0 then
+		return
+	end
+	for _, player in huntablePlayers() do
+		if inPoolRoom(player) then
+			poolEnteredAt = t
+			log.info("the pool grace runs (%ds)", WATER.PoolGraceSeconds)
+			return
+		end
+	end
+end
+
+-- The grace after first entering the pool room, or the retreat after a grab: the pool rooms are left alone.
+local function poolQuiet(t: number): boolean
+	local entered = poolEnteredAt
+	return (entered ~= nil and t < entered + WATER.PoolGraceSeconds) or t < poolRetreatUntil
+end
+
+-- While it retreats after a grab: the point of its pool farthest from the nearest player (else nil).
+local function poolRetreatPoint(): Vector3?
+	local b, m = body, mover
+	if not (b and m) or now() >= poolRetreatUntil or m:Medium() ~= "Water" then
+		return nil
+	end
+	local here = b:GetPosition()
+	local basin = m:BasinAt(here)
+	if not basin then
+		return nil
+	end
+	local from = here
+	local nearest = math.huge
+	for _, player in huntablePlayers() do
+		local root = rootOf(player)
+		if root and (root - here).Magnitude < nearest then
+			from, nearest = root, (root - here).Magnitude
+		end
+	end
+	local best: Vector3? = nil
+	local bestDistance = -1
+	for _, x in { basin.minX, (basin.minX + basin.maxX) / 2, basin.maxX } do
+		for _, z in { basin.minZ, (basin.minZ + basin.maxZ) / 2, basin.maxZ } do
+			local point = Locomotion.clampToWater(basin, Vector3.new(x, basin.surfaceY - Locomotion.SwimDepth, z))
+			local d = MathUtil.horizontalDistance(point, from)
+			if d > bestDistance then
+				best, bestDistance = point, d
+			end
+		end
+	end
+	return best
+end
+
+-- A lunge is coming: a low growl at its origin, and the clients' bubbles and ripple ring (OneShot LungeTelegraph).
+local function telegraph(origin: Vector3, seconds: number)
+	AudioService.PlayAt(TELEGRAPH_PRESET, origin, { volume = 1.2 })
+	telegraphSeq += 1
+	local event: Types.OneShotEvent = {
+		seq = telegraphSeq,
+		kind = "LungeTelegraph",
+		subject = nil,
+		startAt = now(),
+		args = { origin = origin, seconds = seconds },
+	}
+	Net.Server.fireAll("OneShot", event)
+	lungeTelegraph:Fire(origin, seconds)
+end
+
+-- Ends the spawn rule's grace early (see the header): someone close, or someone who can see its head.
+local function updateSpawnGrace(t: number)
+	local b, model = body, creature
+	if graceLevel == nil or awake or not (b and model) or creatureLevel ~= graceLevel then
+		return
+	end
+	local here = b:GetPosition()
+	local head = Perception.creatureEye(model)
+	for _, player in huntablePlayers() do
+		local root = rootOf(player)
+		if root and (root - here).Magnitude <= SPAWN.ReleaseNear then
+			wakeAt = t
+			lastReason = "grace: someone came close"
+			return
+		end
+		local eye = Perception.playerEye(player)
+		if not b.hidden and eye and (eye - head).Magnitude <= SPAWN.ReleaseSight and lineClear(eye, head) then
+			wakeAt = t
+			lastReason = "grace: seen"
+			return
+		end
+	end
+end
+
 local function sense(t: number)
 	local c, m, p, model = ctx, mover, pacing, creature
 	if not (c and m and p and model) then
@@ -799,12 +979,19 @@ local function sense(t: number)
 	end
 	local inVent = m:Medium() == "Vent"
 	local segment = m:Segment()
-	local sightings = Perception.scan(model, huntablePlayers(), {
+	local quiet = poolQuiet(t)
+	local scanned = Perception.scan(model, huntablePlayers(), {
 		difficulty = difficulty,
 		creatureInVent = inVent,
 		creatureSegment = segment,
 		raycast = nil,
 	})
+	local sightings: { Perception.Sighting } = {}
+	for _, sighting in scanned do
+		if not (quiet and inPoolRoom(sighting.player)) then
+			table.insert(sightings, sighting)
+		end
+	end
 	c.sightings = sightings
 	for _, sighting in sightings do
 		local player = sighting.player
@@ -838,6 +1025,9 @@ local function sense(t: number)
 		if sourceId and ignored[sourceId] then
 			continue
 		end
+		if quiet and (event.medium == "Water" or inPoolRoomAt(event.position)) then
+			continue
+		end
 		local heard = Hearing.perceive(event, listener)
 		if not heard then
 			continue
@@ -859,7 +1049,9 @@ local function sense(t: number)
 	local pending = alerts
 	alerts = {}
 	for _, alert in pending do
-		best = noteHeard(alert, best, t)
+		if not (quiet and inPoolRoomAt(alert.position)) then
+			best = noteHeard(alert, best, t)
+		end
 	end
 	c.heard = best
 	for zone, heard in c.heardZones do
@@ -937,6 +1129,8 @@ local function summarize(t: number): (Brain.Summary, Player?)
 		memoryAge = if memory then t - memory.at else nil,
 		breakChase = chaseStarted ~= nil and not devHunt and p:ShouldBreakChase(chaseSeconds),
 		swimmer = level ~= nil and #level.basins > 0 and t - swimmerAt <= SWIMMER_MEMORY,
+		inWater = m:Medium() == "Water",
+		retreating = t < poolRetreatUntil,
 		stateDone = c.stateDone,
 	}
 	return summary, quarry
@@ -985,6 +1179,9 @@ local function updateGrab(t: number)
 		grabbed = nil
 		p:NoteCatch(t)
 		c.reposition = true
+		-- Level 4 fairness: off to the far end of the water for a while, and that swimmer's splashing starts over
+		poolRetreatUntil = t + WATER.GrabRetreatSeconds
+		splashArmed[victim] = nil
 		AquaticStalk.released(c)
 	end
 end
@@ -998,8 +1195,31 @@ local function handleMover()
 	end
 	local status = m:Status()
 	if status == "Stuck" or (status == "Failed" and m:Medium() == "Vent") then
-		if relocateUnseen() then
+		-- out of a sealed pool's ducts (its vent route) it comes out on land, unseen
+		local level = c.level
+		local landOnly = false
+		if m:Medium() == "Vent" and level then
+			for _, basin in level.basins do
+				if basin.ventExitOnly then
+					landOnly = true
+				end
+			end
+		end
+		if relocateUnseen(landOnly) then
 			current.enter(c, state)
+		elseif landOnly and status == "Failed" then
+			-- watched in the mouth of the pool's duct: back off along it, out of sight, and move on from there
+			local b = body
+			local from = if b then b:GetPosition() else Vector3.zero
+			for _, player in huntablePlayers() do
+				local root = rootOf(player)
+				if root then
+					from = root
+					break
+				end
+			end
+			m:Reset("Vent")
+			m:Retreat(from, 4)
 		else
 			m:Reset(m:Medium())
 		end
@@ -1070,6 +1290,9 @@ function MonsterAIService.Step(dt: number)
 	if not busy then
 		updateReveal(t)
 	end
+	updatePoolGrace(t)
+	updateSpawnGrace(t)
+	m:SetWaterSpeedCap(c.speedOf("AquaticStalk"))
 	sense(t)
 	local target = c.target
 	c.phase = p:Tick(dt, {
@@ -1081,6 +1304,7 @@ function MonsterAIService.Step(dt: number)
 	if not awake and wake and t >= wake then
 		awake = true
 		wakeAt = nil
+		graceLevel = nil
 	end
 	local summary, quarry = summarize(t)
 	c.canHunt = summary.canHunt
@@ -1165,8 +1389,10 @@ local function newContext(model: Model, b: CreatureBody.Body, m: Locomotion.Move
 		end,
 		grabArmed = function(player: Player): boolean
 			local at = splashArmed[player]
-			return at ~= nil and now() - at <= GRAB_ARMED_SECONDS
+			return at ~= nil and now() - at <= GRAB_ARMED_SECONDS and not poolQuiet(now())
 		end,
+		telegraph = telegraph,
+		poolRetreat = poolRetreatPoint,
 		setGrabbed = function(player: Player?)
 			grabbed = player
 			grabbedHeldAt = now()
@@ -1261,6 +1487,48 @@ end
 -- Levels
 --------------------------------------------------------------------------------
 
+-- The spawn rule's pick on `levelId` this run (a root CFrame at the anchor, facing the entry room), or nil.
+local function spawnFor(levelId: Enums.LevelId): CFrame?
+	local layout = Builder.getLayout(levelId)
+	if not layout then
+		return nil
+	end
+	local plan = NoiseAndDirectorService.GetPlan()
+	local picks = if plan and plan.objectives then plan.objectives[levelId] else nil
+	local entry = LevelDirector.entryFor(levelId)
+	local entryRoom = if entry then entry.toRoom else layout.entry
+	local choice = SpawnRule.choose(runSeed, layout, picks, entryRoom)
+	local candidate = choice.candidate
+	if not candidate then
+		log.warn("%s: no Creature spawn candidate at all; it starts at the CreatureSpawn", levelId)
+		return nil
+	end
+	if choice.fallback then
+		log.warn(
+			"%s: no Creature spawn in the %d-%d band out of sight of the entry; using %s (%d studs)",
+			levelId,
+			SPAWN.MinDistance,
+			SPAWN.MaxDistance,
+			candidate.id,
+			math.floor(candidate.walk)
+		)
+	else
+		log.info("%s: the Creature starts at %s (%d studs walked)", levelId, candidate.id, math.floor(candidate.walk))
+	end
+	local origin = WorldConfig.levelOrigin(levelId)
+	local position = origin + candidate.pos
+	local entryRect = LayoutSchema.indexRooms(layout)[entryRoom]
+	local toward = position + Vector3.new(0, 0, -1)
+	if entryRect then
+		local c = LayoutSchema.rectCenter(entryRect.rect)
+		toward = origin + Vector3.new(c.X, candidate.pos.Y, c.Y)
+	end
+	if MathUtil.horizontalDistance(toward, position) < 0.1 then
+		toward = position + Vector3.new(0, 0, -1)
+	end
+	return CFrame.lookAt(position, Vector3.new(toward.X, position.Y, toward.Z))
+end
+
 local function onLevelActivated(levelId: Enums.LevelId)
 	local p, c = pacing, ctx
 	if not (running and p and c) then
@@ -1283,7 +1551,19 @@ local function onLevelActivated(levelId: Enums.LevelId)
 	end
 	awake = false
 	wakeAt = t + WAKE_DELAY
+	graceLevel = nil
+	poolEnteredAt = nil
+	poolRetreatUntil = -math.huge
 	lastReason = "level " .. levelId .. " activated"
+	if SpawnRule.handles(levelId) and not scripted then
+		local spawn = spawnFor(levelId)
+		if spawn then
+			placeBody(spawn)
+			hide(REVEAL_RETRY)
+			wakeAt = t + ObjectiveConfig.graceFor(difficulty)
+			graceLevel = levelId
+		end
+	end
 	if not scripted then
 		enterState("Dormant", t)
 	end
@@ -1880,6 +2160,17 @@ local function onNoise(event: Types.NoiseEvent)
 	if not (running and creature) then
 		return
 	end
+	-- a participant's loud noise ends the spawn rule's grace (the noise itself is heard like any other)
+	if
+		graceLevel ~= nil
+		and not awake
+		and event.sourceUserId ~= nil
+		and LOUD[event.priority]
+		and event.levelId == graceLevel
+	then
+		wakeAt = now()
+		lastReason = "grace: a loud noise"
+	end
 	if #noiseQueue >= NOISE_QUEUE_LIMIT then
 		table.remove(noiseQueue, 1)
 	end
@@ -1946,6 +2237,10 @@ end
 function MonsterAIService.BeginRun(runContext: Types.RunContext)
 	running = true
 	difficulty = runContext.difficulty
+	runSeed = runContext.seed
+	graceLevel = nil
+	poolEnteredAt = nil
+	poolRetreatUntil = -math.huge
 	participants = table.clone(runContext.participants)
 	pacing = PacingDirector.new(difficulty, now())
 	paused = false

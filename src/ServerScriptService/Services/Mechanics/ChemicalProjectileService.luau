@@ -48,6 +48,12 @@
 -- A stun is MonsterAIService.Stun(GameConfig.StunSeconds, shatter point) (the Creature retreats away from it; in a
 -- duct along VentPathfinder.retreatPath) and counts RunStats Stuns for the thrower.
 --
+-- The acid flask (Floor 2's objective, ObjectiveService). GiveAcid puts it in a free hand (HeldItem "AcidFlask"):
+-- it is thrown exactly like a flask (the Launch carries item = "AcidFlask" so clients draw the acid) but breaks without
+-- a stun cloud or a stun: AcidShattered(point, thrower) instead, and ObjectiveService decides whether it burnt the
+-- chain. TakeAcid empties the hand (the Pour at the chained door). A flight that expires without contact, or a hand
+-- emptied any other way (dying, spectating, the run ending), fires AcidLost(player): the acid is gone.
+--
 -- Item lifecycle. Downed players keep their flask (and cannot throw it); dying, spectating, the lobby, leaving and
 -- the end of the run empty the hand. Give (dev / scripted) puts a flask in a playing player's free hand; SpawnFlask
 -- builds a world flask during a run (Level 2's restock); CountAvailable counts the untaken ones on a level.
@@ -111,6 +117,7 @@ local C = Attributes.Creature
 local RIG = CreatureRigBuilder.PartNames
 
 local ITEM: Enums.ItemId = "ChemicalFlask"
+local ACID_ITEM: Enums.ItemId = "AcidFlask"
 local NO_ITEM: Enums.ItemId = "None"
 local PICKUP_KIND: Enums.PromptKind = "Pickup"
 local SHATTER_NOISE: Enums.NoiseKind = "FlaskShatter"
@@ -122,6 +129,7 @@ local RESOLVE_PHASE: Enums.ProjectilePhase = "Resolve"
 local EXPIRED: Enums.ProjectileHitKind = "Expired"
 local SHATTER_PRESET = "FlaskShatter"
 local HISS_PRESET = "ChemHiss"
+local ACID_PRESET = "ObjAcidSizzle"
 local PICKUP_PRESET = "Pickup"
 local HANDS_FULL = "Hud.FlaskHandsFull" -- the refusal InteractionService shows a player who already holds a flask
 local DEFAULT_LEVEL: Enums.LevelId = "Level2_ScienceHall"
@@ -228,6 +236,7 @@ export type Flight = {
 	levelId: Enums.LevelId,
 	variant: number,
 	exclude: { Instance },
+	acid: boolean?, -- the objective's acid flask
 }
 
 export type Cloud = {
@@ -258,6 +267,13 @@ ChemicalProjectileService.CloudLift = CLOUD_LIFT
 ChemicalProjectileService.HandsFullHint = HANDS_FULL
 
 local shattered: Signal.Signal<Vector3, Player?, boolean> = Signal.new()
+local acidShattered: Signal.Signal<Vector3, Player?> = Signal.new()
+local acidLost: Signal.Signal<Player?> = Signal.new()
+
+-- (point, thrower) where a thrown acid flask broke (ObjectiveService: the chain on Floor 2's exit).
+ChemicalProjectileService.AcidShattered = acidShattered
+-- (player) an acid flask is gone without breaking anywhere: a flight that expired, a hand emptied.
+ChemicalProjectileService.AcidLost = acidLost
 
 -- (point, thrower, inVent) after a flask shattered (P7: a shatter near a grabbed player releases the grab).
 ChemicalProjectileService.Shattered = shattered
@@ -759,6 +775,8 @@ local function inRuntime(instance: Instance): boolean
 	return runtime ~= nil and instance:IsDescendantOf(runtime)
 end
 
+local heldAcid: { [Player]: boolean } = {}
+
 local function wholeVariant(variant: number): number
 	if not MathUtil.isFinite(variant) then
 		return 0
@@ -770,21 +788,31 @@ end
 -- Hands
 --------------------------------------------------------------------------------
 
-local function writeHeld(player: Player, variant: number?)
+local function writeHeld(player: Player, variant: number?, acid: boolean?)
 	if variant ~= nil then
 		held[player] = variant
-		Attributes.set(player, P.HeldItem, ITEM)
+		if acid then
+			heldAcid[player] = true
+		else
+			heldAcid[player] = nil
+		end
+		Attributes.set(player, P.HeldItem, if acid then ACID_ITEM else ITEM)
 		Attributes.set(player, P.HeldItemVariant, variant)
 	else
 		held[player] = nil
+		heldAcid[player] = nil
 		Attributes.set(player, P.HeldItem, NO_ITEM)
 		Attributes.set(player, P.HeldItemVariant, nil)
 	end
 end
 
 local function empty(player: Player)
+	local acid = heldAcid[player] == true
 	if held[player] ~= nil or player:GetAttribute(P.HeldItem) ~= NO_ITEM then
 		writeHeld(player, nil)
+	end
+	if acid then
+		acidLost:Fire(player)
 	end
 end
 
@@ -945,6 +973,7 @@ local function payloadOf(
 		hitNormal = normal,
 		hitKind = kind,
 		inVent = inVent,
+		item = if flight.acid then ACID_ITEM else nil,
 	}
 end
 
@@ -1023,6 +1052,13 @@ local function shatter(flight: Flight, hit: Ballistics.Hit)
 		ventNodeId = ventNode,
 	})
 	AudioService.PlayAt(SHATTER_PRESET, point)
+	if flight.acid then
+		-- the acid: its own sizzle, no stun cloud (ObjectiveService judges the chain)
+		AudioService.PlayAt(ACID_PRESET, point)
+		log.debug("acid flask %d broke (%s)", flight.id, hit.kind)
+		acidShattered:Fire(point, thrower)
+		return
+	end
 	AudioService.PlayAt(HISS_PRESET, centre, { duration = GameConfig.FlaskCloudSeconds })
 
 	nextCloudId += 1
@@ -1046,6 +1082,9 @@ end
 local function expire(flight: Flight, position: Vector3)
 	flights[flight.id] = nil
 	publish(payloadOf(flight, RESOLVE_PHASE, position, nil, EXPIRED, false))
+	if flight.acid then
+		acidLost:Fire(present(flight.thrower))
+	end
 end
 
 -- Flies every flask on to server time `at` (default now): the Heartbeat driver calls this every frame; specs drive
@@ -1141,6 +1180,7 @@ function ChemicalProjectileService.RequestThrow(player: Player, direction: Vecto
 	local origin = Ballistics.pullBack(eye, release, if releaseBlock then releaseBlock.position else nil)
 
 	local variant = held[player] :: number
+	local acid = heldAcid[player] == true
 	writeHeld(player, nil)
 	lastThrowAt[player] = now
 	RunStatsService.Increment(player, THROWN_STAT)
@@ -1158,6 +1198,7 @@ function ChemicalProjectileService.RequestThrow(player: Player, direction: Vecto
 		levelId = playerLevel(player),
 		variant = variant,
 		exclude = exclude,
+		acid = acid,
 	}
 	flights[flight.id] = flight
 	publish(payloadOf(flight, SPAWN_PHASE, nil, nil, nil, nil))
@@ -1189,6 +1230,35 @@ function ChemicalProjectileService.Give(player: Player, variant: number?): boole
 	end
 	writeHeld(player, chosen)
 	return true
+end
+
+-- Puts Floor 2's acid flask in a playing player's free hand (ObjectiveService). False without a run, when the player
+-- is not Alive, or with their hands full.
+function ChemicalProjectileService.GiveAcid(player: Player): boolean
+	if not running or held[player] ~= nil or LifeStateService.GetState(player) ~= "Alive" then
+		return false
+	end
+	writeHeld(player, 0, true)
+	return true
+end
+
+-- Takes the acid flask out of `player`'s hand (poured), without AcidLost. False when they do not hold it.
+function ChemicalProjectileService.TakeAcid(player: Player): boolean
+	if heldAcid[player] ~= true then
+		return false
+	end
+	writeHeld(player, nil)
+	return true
+end
+
+-- Whether `player` holds the acid flask.
+function ChemicalProjectileService.HoldsAcid(player: Player): boolean
+	return heldAcid[player] == true
+end
+
+-- Whether `player`'s hands are free (no flask, no acid).
+function ChemicalProjectileService.HandsFree(player: Player): boolean
+	return held[player] == nil
 end
 
 -- Builds an untaken world flask of `variant` resting on `cframe` in Workspace.Runtime.<levelId> (Level 2's restock,
@@ -1351,9 +1421,11 @@ end
 
 local function clearRun()
 	for player in table.clone(held) do
+		heldAcid[player] = nil
 		empty(player)
 	end
 	table.clear(held)
+	table.clear(heldAcid)
 	table.clear(lastThrowAt)
 	table.clear(flights)
 	table.clear(clouds)
@@ -1432,6 +1504,10 @@ function ChemicalProjectileService.EndRun()
 end
 
 function ChemicalProjectileService.OnPlayerRemoving(player: Player)
+	if heldAcid[player] then
+		heldAcid[player] = nil
+		acidLost:Fire(player)
+	end
 	held[player] = nil
 	lastThrowAt[player] = nil
 end

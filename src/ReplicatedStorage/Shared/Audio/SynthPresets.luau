@@ -3757,6 +3757,658 @@ local BEDS: { [string]: { Stinger } } = {
 	},
 }
 
+---------------------------------------------------------------- the floor objectives
+-- The objective stations and locks (ObjectiveService), the same recipes as the web build's objectives/sounds.js:
+--   ObjFuseClick       a cartridge fuse snapping into its clips            ObjBreakerThrow  the main breaker's clunk and the mains hum
+--   ObjKeyJingle       a ring of keys (pickups, the unlock's rattle)       ObjKeysWork      the keys worked in a padlock (loop)
+--   ObjPadlockClack    a padlock springing open                            ObjBubbling      the fume hood's mix bubbling and hissing (loop)
+--   ObjAcidSizzle      acid eating into steel                              ObjGeneratorPull the pull-start's cord and the sputter catching
+--   ObjGeneratorRun    the generator running (loop)                        ObjMotorWhine    the stairwell door motor winding (loop)
+--   ObjValveSqueal     a seized valve stem turning (loop)                  ObjBoltSnap      bolt cutters biting through a link
+--   ObjChainDrop       a chain slithering off and landing                  ObjLockRattle    a locked padlock / chain rattled (denied)
+--   ObjKeypadDenied    the keypad's denied double beep                     ObjKeypadAccept  the keypad's rising accept chirp
+--   ObjExitClunk       the stairwell door's lock bolts throwing back       ObjLockerSearch  a locker door eased open to look inside
+--   ObjWheelFit        the valve wheel clanking onto its stem              ObjItemPickup    a heavy item taken up (tools, the wheel)
+
+define("ObjFuseClick", {
+	bus = "World",
+	priority = 45,
+	maxVoices = 3,
+	rollOff = r(4, 45),
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.45,
+			speed = r(2.4, 2.8),
+			effects = { eq(-20, 2, 6) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.8,
+			speed = 1.9,
+			region = r(0, 0.06),
+			delay = 0.03,
+			effects = { eq(-10, 6, 4) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 0.35,
+			speed = 1.7,
+			delay = 0.05,
+			effects = { eq(-6, 2, -6) },
+		},
+	},
+})
+
+define("ObjBreakerThrow", {
+	bus = "World",
+	priority = 75,
+	maxVoices = 2,
+	rollOff = r(10, 160),
+	caption = "Caption.Breaker",
+	duck = { duck("Ambience", 0.6, 0.01, 0.4, 1) },
+	space = { reverb(2.4, -6) },
+	layers = {
+		{
+			sample = "JumpLand",
+			volume = 1.5,
+			speed = r(0.48, 0.55),
+			effects = { eq(8, 0, -12), compressor(-18, 6, 0.002, 0.15, 4) },
+		},
+		{
+			sample = "Explosion",
+			volume = 0.7,
+			speed = 1.3,
+			region = r(0, 0.22),
+			delay = 0.01,
+			effects = { distortion(0.3), eq(4, -2, -10) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.6,
+			speed = 2.2,
+			region = r(0, 0.2),
+			delay = 0.04,
+			grains = grains(2, 4, 0.03, 0.05),
+			effects = { distortion(0.5), eq(-18, 2, 6), echo(0.015, 0.35, -8) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.45,
+			speed = 0.16,
+			region = r(0.01, 0.05),
+			delay = 0.25,
+			duration = 3.6,
+			looped = true,
+			envelope = env(0.5, 1.4, 1.6),
+			effects = { tremolo(6, 0.25), eq(6, 2, -24) },
+		},
+	},
+})
+
+define("ObjKeyJingle", {
+	bus = "Player",
+	priority = 45,
+	maxVoices = 3,
+	rollOff = r(3, 40),
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.32,
+			speed = r(2.6, 3.6),
+			grains = grains(5, 8, 0.03, 0.07),
+			volumeJitter = 0.4,
+			effects = { eq(-24, 0, 6), chorus(4, 0.3, 0.5) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.35,
+			speed = r(2.2, 2.6),
+			region = r(0, 0.05),
+			delay = 0.02,
+			grains = grains(2, 4, 0.04, 0.09),
+			effects = { eq(-20, 4, 8) },
+		},
+	},
+})
+
+define("ObjKeysWork", {
+	bus = "World",
+	priority = 45,
+	maxVoices = 2,
+	rollOff = r(4, 50),
+	looped = true,
+	["repeat"] = pulse(0.42, 0.1),
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.3,
+			speed = r(2.4, 3.4),
+			grains = grains(3, 6, 0.03, 0.08),
+			volumeJitter = 0.4,
+			effects = { eq(-24, 0, 6), chorus(4, 0.3, 0.5) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.45,
+			speed = r(1.2, 1.5),
+			region = r(0, 0.08),
+			chance = 0.6,
+			effects = { eq(-12, 6, 2), flanger(4, 0.4, 0.5) },
+		},
+	},
+})
+
+define("ObjPadlockClack", {
+	bus = "World",
+	priority = 55,
+	maxVoices = 2,
+	rollOff = r(4, 60),
+	layers = {
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.9,
+			speed = 1.35,
+			region = r(0, 0.07),
+			effects = { eq(-6, 6, 2) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 0.5,
+			speed = 1.5,
+			delay = 0.04,
+			effects = { eq(-4, 4, -4) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = 1.9,
+			delay = 0.05,
+			effects = { eq(-18, 2, 4), reverb(0.6, -12) },
+		},
+	},
+})
+
+define("ObjBubbling", {
+	bus = "World",
+	priority = 45,
+	maxVoices = 2,
+	rollOff = r(4, 60),
+	caption = "Caption.Bubbling",
+	looped = true,
+	["repeat"] = pulse(0.3, 0.08),
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.45,
+			speed = 2.1,
+			looped = true,
+			effects = { eq(-30, -4, 6), tremolo(7, 0.4) },
+		},
+		{
+			sample = "WaterImpact",
+			volume = 0.4,
+			speed = r(2.2, 3.2),
+			region = r(0.05, 0.15),
+			regionJitter = 0.05,
+			grains = grains(2, 5, 0.04, 0.1),
+			volumeJitter = 0.5,
+			effects = { eq(-12, 4, -12), chorus(2.5, 0.5, 0.5) },
+		},
+	},
+})
+
+define("ObjAcidSizzle", {
+	bus = "World",
+	priority = 55,
+	maxVoices = 3,
+	rollOff = r(6, 80),
+	caption = "Caption.AcidSizzle",
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.9,
+			speed = r(2.6, 3),
+			region = r(0.1, 1.1),
+			duration = 3.2,
+			looped = true,
+			envelope = env(0.03, 1.8, 1.3),
+			effects = { eq(-30, -2, 8), distortion(0.35) },
+		},
+		{
+			sample = "Swim",
+			volume = 0.5,
+			speed = r(3, 3.4),
+			duration = 2.8,
+			looped = true,
+			envelope = env(0.05, 1.6, 1.1),
+			effects = { eq(-24, 0, 6), distortion(0.5) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.25,
+			speed = 3.2,
+			grains = grains(6, 10, 0.05, 0.18),
+			volumeJitter = 0.6,
+			effects = { eq(-30, 0, 4) },
+		},
+	},
+})
+
+define("ObjGeneratorPull", {
+	bus = "World",
+	priority = 70,
+	maxVoices = 2,
+	rollOff = r(8, 150),
+	space = { reverb(2, -8) },
+	layers = {
+		{
+			sample = "Jump",
+			volume = 0.8,
+			speed = 1.35,
+			glide = glide(0.7, 0.35),
+			effects = { eq(-6, 4, 2) },
+		},
+		{
+			sample = "Explosion",
+			volume = 0.5,
+			speed = r(1.6, 2),
+			region = r(0, 0.09),
+			delay = 0.3,
+			grains = grains(5, 7, 0.07, 0.12),
+			volumeJitter = 0.4,
+			effects = { distortion(0.4), eq(6, 2, -14) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.5,
+			speed = 0.42,
+			region = r(0.01, 0.05),
+			delay = 0.85,
+			duration = 0.9,
+			looped = true,
+			envelope = env(0.2, 0.4, 0.3),
+			glide = glide(1.25, 0.6),
+			effects = { tremolo(14, 0.6), distortion(0.3) },
+		},
+	},
+})
+
+define("ObjGeneratorRun", {
+	bus = "World",
+	priority = 60,
+	maxVoices = 2,
+	rollOff = r(8, 130),
+	caption = "Caption.Generator",
+	looped = true,
+	["repeat"] = pulse(0.16, 0.02),
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.45,
+			speed = 0.5,
+			region = r(0.01, 0.05),
+			looped = true,
+			effects = { tremolo(13, 0.55), distortion(0.35), eq(6, 2, -14) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.35,
+			speed = 0.5,
+			looped = true,
+			effects = { eq(8, -6, -30) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 0.22,
+			speed = r(1.1, 1.3),
+			volumeJitter = 0.3,
+			effects = { eq(6, 0, -12) },
+		},
+	},
+})
+
+define("ObjMotorWhine", {
+	bus = "World",
+	priority = 50,
+	maxVoices = 2,
+	rollOff = r(8, 120),
+	caption = "Caption.Motor",
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.28,
+			speed = 1.05,
+			region = r(0.01, 0.05),
+			looped = true,
+			effects = { flanger(0.35, 0.5, 0.5), eq(-12, 6, -4) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.12,
+			speed = 1.58,
+			region = r(0.02, 0.06),
+			looped = true,
+			effects = { tremolo(3, 0.3), eq(-18, 4, 0) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.18,
+			speed = 0.8,
+			looped = true,
+			effects = { eq(-6, 2, -22) },
+		},
+	},
+})
+
+define("ObjValveSqueal", {
+	bus = "World",
+	priority = 50,
+	maxVoices = 2,
+	rollOff = r(6, 90),
+	looped = true,
+	["repeat"] = pulse(0.95, 0.15),
+	space = { reverb(2.6, -6) },
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = r(0.7, 0.85),
+			region = r(0.01, 0.05),
+			duration = 0.8,
+			looped = true,
+			envelope = env(0.1, 0.3, 0.35),
+			glide = glide(1.35, 0.7),
+			effects = { flanger(0.6, 0.8, 0.5), distortion(0.4) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.4,
+			speed = 0.8,
+			region = r(0, 0.1),
+			effects = { eq(-4, 6, -6), echo(0.03, 0.3, -10) },
+		},
+	},
+})
+
+define("ObjBoltSnap", {
+	bus = "World",
+	priority = 70,
+	maxVoices = 2,
+	rollOff = r(8, 140),
+	layers = {
+		{
+			sample = "Explosion",
+			volume = 0.8,
+			speed = 2.4,
+			region = r(0, 0.06),
+			effects = { distortion(0.4), eq(-12, 4, 6) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 1,
+			speed = 1.7,
+			region = r(0, 0.05),
+			delay = 0.01,
+			effects = { eq(-8, 6, 6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.4,
+			speed = 3.1,
+			delay = 0.02,
+			effects = { eq(-24, 0, 8), reverb(0.8, -10) },
+		},
+	},
+})
+
+define("ObjChainDrop", {
+	bus = "World",
+	priority = 60,
+	maxVoices = 2,
+	rollOff = r(8, 110),
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = r(1.8, 2.8),
+			grains = grains(8, 10, 0.03, 0.06),
+			volumeJitter = 0.5,
+			effects = { eq(-20, 2, 6), chorus(5, 0.4, 0.5) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.6,
+			speed = r(1.1, 1.6),
+			region = r(0, 0.06),
+			grains = grains(4, 7, 0.04, 0.08),
+			effects = { eq(-8, 6, 2) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 0.9,
+			speed = 0.9,
+			delay = 0.42,
+			effects = { eq(6, 2, -8) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.3,
+			speed = r(1.4, 2),
+			delay = 0.45,
+			grains = grains(3, 5, 0.03, 0.06),
+			effects = { eq(-18, 4, 2), reverb(1.2, -10) },
+		},
+	},
+})
+
+define("ObjLockRattle", {
+	bus = "World",
+	priority = 40,
+	maxVoices = 2,
+	rollOff = r(3, 35),
+	layers = {
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.7,
+			speed = r(1.3, 1.6),
+			region = r(0, 0.06),
+			grains = grains(3, 5, 0.05, 0.08),
+			effects = { eq(-10, 6, 2), flanger(6, 0.4, 0.5) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.25,
+			speed = r(1.9, 2.4),
+			grains = grains(3, 4, 0.05, 0.08),
+			effects = { eq(-20, 2, 4) },
+		},
+	},
+})
+
+define("ObjKeypadDenied", {
+	bus = "World",
+	priority = 40,
+	maxVoices = 2,
+	rollOff = r(3, 35),
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = 0.75,
+			region = r(0.02, 0.026),
+			duration = 0.16,
+			looped = true,
+			envelope = env(0.005, 0.12, 0.03),
+			effects = { eq(-12, 4, -6), distortion(0.2) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = 0.62,
+			region = r(0.02, 0.026),
+			delay = 0.22,
+			duration = 0.16,
+			looped = true,
+			envelope = env(0.005, 0.12, 0.03),
+			effects = { eq(-12, 4, -6), distortion(0.2) },
+		},
+	},
+})
+
+define("ObjKeypadAccept", {
+	bus = "World",
+	priority = 50,
+	maxVoices = 2,
+	rollOff = r(4, 50),
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.32,
+			speed = 1.4,
+			region = r(0.02, 0.026),
+			duration = 0.1,
+			looped = true,
+			envelope = env(0.005, 0.07, 0.02),
+			effects = { eq(-18, 4, 0) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.32,
+			speed = 1.9,
+			region = r(0.02, 0.026),
+			delay = 0.12,
+			duration = 0.18,
+			looped = true,
+			envelope = env(0.005, 0.12, 0.04),
+			effects = { eq(-18, 4, 0), reverb(0.5, -12) },
+		},
+	},
+})
+
+define("ObjExitClunk", {
+	bus = "World",
+	priority = 80,
+	maxVoices = 2,
+	rollOff = r(12, 200),
+	caption = "Caption.ExitUnlock",
+	duck = { duck("Ambience", 0.55, 0.01, 0.5, 1) },
+	space = { reverb(2.8, -5) },
+	layers = {
+		{
+			sample = "JumpLand",
+			volume = 1.6,
+			speed = r(0.42, 0.48),
+			effects = { eq(9, -2, -16), compressor(-18, 6, 0.002, 0.15, 4) },
+		},
+		{
+			sample = "Explosion",
+			volume = 0.7,
+			speed = 1.15,
+			region = r(0, 0.3),
+			delay = 0.02,
+			effects = { distortion(0.25), eq(5, -2, -10) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.8,
+			speed = 1.4,
+			region = r(0, 0.12),
+			delay = 0.05,
+			grains = grains(2, 3, 0.06, 0.1),
+			effects = { eq(-12, 6, 4), echo(0.03, 0.3, -8) },
+		},
+	},
+})
+
+define("ObjLockerSearch", {
+	bus = "World",
+	priority = 35,
+	maxVoices = 3,
+	rollOff = r(3, 30),
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.22,
+			speed = r(0.3, 0.36),
+			region = r(0.01, 0.05),
+			duration = 0.9,
+			looped = true,
+			envelope = env(0.2, 0.3, 0.4),
+			glide = glide(0.75, 0.8),
+			effects = { flanger(0.5, 0.7, 0.5), distortion(0.2) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.35,
+			speed = 0.75,
+			region = r(0, 0.08),
+			delay = 0.1,
+			effects = { eq(-4, 4, -8) },
+		},
+	},
+})
+
+define("ObjWheelFit", {
+	bus = "World",
+	priority = 55,
+	maxVoices = 2,
+	rollOff = r(6, 80),
+	layers = {
+		{
+			sample = "JumpLand",
+			volume = 1,
+			speed = 1.05,
+			effects = { eq(4, 4, -8) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.8,
+			speed = 1.1,
+			region = r(0, 0.1),
+			delay = 0.03,
+			grains = grains(2, 3, 0.08, 0.14),
+			effects = { eq(-8, 6, 2), echo(0.025, 0.35, -8) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.3,
+			speed = 0.9,
+			delay = 0.05,
+			effects = { reverb(1.6, -8) },
+		},
+	},
+})
+
+define("ObjItemPickup", {
+	bus = "Player",
+	priority = 45,
+	maxVoices = 2,
+	layers = {
+		{
+			sample = "GetUp",
+			volume = 0.45,
+			speed = 1.1,
+			region = r(0, 0.3),
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.45,
+			speed = 1.2,
+			region = r(0, 0.06),
+			delay = 0.06,
+			effects = { eq(-10, 6, 0) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.25,
+			speed = 1.3,
+			delay = 0.08,
+			effects = { eq(-12, 2, 0) },
+		},
+	},
+})
+
 --------------------------------------------------------------------------------
 -- Every preset name the spec and architecture require (the specs assert each one exists).
 --------------------------------------------------------------------------------

@@ -5,11 +5,13 @@
 --     tick (sightings, noises, memory, cooldowns) plus what the current state reported; the Decision names the state
 --     to be in and whether it should first withdraw out of everyone's sight. Priorities, highest first:
 --       Scripted (a cutscene holds the Creature) > Stunned > Dormant (its level is not awake yet) > hold still while a
---       catch plays > a stun just ended: Patrol (withdraw) > no hunting allowed (catch cooldown, airlock grace, Relax):
+--       catch plays > a stun just ended: Patrol (withdraw) > retreating in the water after a grab: AquaticStalk (to the
+--       far end, no lunges) > no hunting allowed (catch cooldown, airlock grace, Relax):
 --       Patrol, withdrawing from a chase > a chase that ran too long: Patrol (withdraw) > a crawler gave itself away
 --       (seen climbing in, heard scurrying or kicking in the ducts, spotted through a grate): VentChase > VentChase
 --       continues until it is done (out of the ducts or no way in), then WallChase if someone is in sight, else
---       InvestigateNoise > someone in sight: WallChase (VentChase when both are in the ducts) > a swimmer on the pool
+--       InvestigateNoise > someone in sight: WallChase (VentChase when both are in the ducts; AquaticStalk when it swims
+--       and they swim: a swimmer is only ever taken by the telegraphed lunge) > a swimmer on the pool
 --       level: AquaticStalk > a lost chase is followed to the last known position for MemorySeconds, then searched
 --       (InvestigateNoise) > AquaticStalk ends when the water is calm > a noise at least as loud as the one being
 --       investigated: InvestigateNoise > an investigation that found nothing: Patrol.
@@ -55,6 +57,8 @@ export type Summary = {
 	memoryAge: number?, -- seconds since the target was last seen or heard
 	breakChase: boolean, -- the chase has run too long
 	swimmer: boolean, -- pool level, a swimmer sensed recently
+	inWater: boolean?, -- the Creature swims
+	retreating: boolean?, -- it retreats to the far end of the water after a grab (Level 4 fairness)
 	stateDone: boolean, -- the state finished its job
 }
 
@@ -73,6 +77,8 @@ export type CatchCheck = {
 	busy: boolean, -- a catch is already playing
 	hidden: boolean, -- the Creature is hidden
 	stunned: boolean,
+	creatureInWater: boolean?, -- in or from the water the pool's telegraphed grab is the only catch
+	targetSwimming: boolean?,
 }
 
 export type Waypoint = { id: string, loop: string, order: number, position: Vector3, zoneId: string }
@@ -167,6 +173,8 @@ export type Context = {
 	grateState: (grateId: string) -> Enums.GrateState,
 	standPoint: (grate: VentGraph.Grate) -> CFrame,
 	swimming: (player: Player) -> boolean,
+	telegraph: ((origin: Vector3, seconds: number) -> ())?, -- a lunge is coming from `origin` (Level 4 fairness)
+	poolRetreat: (() -> Vector3?)?, -- while it retreats after a grab: the far end of the water
 	rootOf: (player: Player) -> Vector3?,
 	lineClear: (from: Vector3, to: Vector3) -> boolean, -- a sight line (Default group, characters excluded)
 }
@@ -218,6 +226,9 @@ function Brain.decide(s: Summary): Decision
 	if state == "Stunned" then
 		return go("Patrol", "recovered", true)
 	end
+	if s.retreating and s.inWater then
+		return go("AquaticStalk", "retreating")
+	end
 	if not s.canHunt then
 		return go("Patrol", "breather", CHASES[state] == true)
 	end
@@ -239,6 +250,10 @@ function Brain.decide(s: Summary): Decision
 	if s.sees then
 		if s.seesInVent then
 			return go("VentChase", "seen in the ducts")
+		end
+		if s.swimmer and s.inWater then
+			-- a swimmer is only ever taken by the telegraphed lunge
+			return go("AquaticStalk", "swimmer in sight")
 		end
 		return go("WallChase", "seen")
 	end
@@ -274,6 +289,9 @@ end
 function Brain.catchKind(check: CatchCheck): Enums.JumpscareKind?
 	if check.busy or not check.canHunt or check.hidden or check.stunned then
 		return nil
+	end
+	if check.creatureInWater or check.targetSwimming then
+		return nil -- in the water the pool's telegraphed grab is the only catch
 	end
 	if not check.playing or check.hiding or not check.lineClear then
 		return nil
@@ -409,7 +427,10 @@ function Brain.levelInfo(layout: LayoutSchema.LevelLayout): LevelInfo?
 	local basins: { Locomotion.Basin } = {}
 	for _, basin in layout.basins or {} :: { LayoutSchema.Basin } do
 		local room = roomRects[basin.room] or basin.rect
-		table.insert(basins, Locomotion.makeBasin(basin.id, origin, basin.rect, room, basin.waterLevel, basin.depth))
+		local made = Locomotion.makeBasin(basin.id, origin, basin.rect, room, basin.waterLevel, basin.depth)
+		-- Level 4 fairness: the Creature leaves the pool only through its own vent route, never climbing out at the deck
+		made.ventExitOnly = CreatureConfig.Water.VentExitOnly
+		table.insert(basins, made)
 	end
 	local spawn: CFrame? = nil
 	for _, anchor in layout.anchors do

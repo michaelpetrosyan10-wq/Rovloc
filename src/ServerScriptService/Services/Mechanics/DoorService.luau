@@ -26,7 +26,10 @@
 -- every SAMPLE_STEP of openness, BLOCK_MARGIN wider) are tested against every living player character: a body box
 -- built from the root (characterBox, separating-axis test, so it works in every collision group: vent, locked,
 -- normal) and the engine's view of the real limbs (Workspace:GetPartBoundsInBox with OverlapParams including only the
--- characters). A leaf that would touch someone stops short where it is: a "held" OneShot parks the clients' leaves
+-- characters). A hinged leaf only sweeps the side of its doorway it swings into (from its shut pose toward its open
+-- one): a body behind it, pressed against the shut door, is never in its way, so it opens away from them instead of
+-- waiting for them to step back (it could otherwise stay shut for good). A leaf that would touch someone stops short
+-- where it is: a "held" OneShot parks the clients' leaves
 -- there and the landing sound is cancelled. A held door tests the whole rest of its travel, and once that has been
 -- clear for CLEAR_SECONDS it finishes at the pace it had (a new OneShot), so it never creeps back onto the same
 -- player. Opening and closing both stop; a smash does not.
@@ -117,8 +120,11 @@ type Door = {
 	recheckAt: number, -- while held: when to test the doorway again
 	motionId: number,
 	leaves: { LeafBox },
+	swing: Swing?, -- the side a hinged door's leaves swing into (nil for the gate, or when it cannot be told)
 	landing: AudioService.CueHandle?,
 }
+
+type Swing = { shut: Vector3, dir: Vector3 }
 
 local FIXTURE_KINDS: { [string]: boolean } = { Ajar = true, Gate = true, Airlock = true, RoofDoor = true }
 local INITIAL_STATES: { [string]: Enums.DoorState } = {
@@ -135,6 +141,7 @@ local TRAVEL: { [string]: Travel } = {
 	RoofDoor = { open = 1.2, close = 0.9 },
 }
 local FALLBACK_TRAVEL: Travel = { open = 1.2, close = 1.2 }
+local SWING_SIDE_SLACK = 0.5 -- studs behind the shut leaves' centre that still count as in the swing
 local SLAM_KINDS: { [string]: boolean } = { Gate = true, Airlock = true }
 local DOOR_STATES: { [string]: Enums.DoorState } = {
 	open = "Open",
@@ -466,12 +473,53 @@ local function padded(size: Vector3): Vector3
 	return size + Vector3.new(2 * BLOCK_MARGIN, 2 * BLOCK_MARGIN, 2 * BLOCK_MARGIN)
 end
 
+-- The side a hinged door's leaves swing into: the shut leaves' centre and the flat direction toward the open ones.
+local function swingSide(door: Door): Swing?
+	if door.kind == "Gate" or #door.leaves == 0 then
+		return nil
+	end
+	local shut, open, count = Vector3.zero, Vector3.zero, 0
+	for _, leaf in door.leaves do
+		local a, b = leafWorld(door, leaf, 0), leafWorld(door, leaf, 1)
+		if a and b then
+			shut += a.Position
+			open += b.Position
+			count += 1
+		end
+	end
+	if count == 0 then
+		return nil
+	end
+	local dir = MathUtil.flat(open - shut)
+	if dir.Magnitude < 1e-3 then
+		return nil
+	end
+	return { shut = shut / count, dir = dir.Unit }
+end
+
+-- Whether a body at `position` stands behind the shut leaves, out of the swing.
+function DoorService.behindSwing(swing: { shut: Vector3, dir: Vector3 }?, position: Vector3): boolean
+	if not swing then
+		return false
+	end
+	local offset = position - swing.shut
+	return Vector3.new(offset.X, 0, offset.Z):Dot(swing.dir) < -SWING_SIDE_SLACK
+end
+
 -- Whether moving the leaves from openness `from` to `to` would touch a player.
 local function obstructed(door: Door, from: number, to: number): boolean
 	if #door.leaves == 0 then
 		return false
 	end
-	local boxes, characters = bodies()
+	local allBoxes, allCharacters = bodies()
+	local boxes: { Body } = {}
+	local characters: { Instance } = {}
+	for index, body in allBoxes do
+		if not DoorService.behindSwing(door.swing, body.cframe.Position) then
+			table.insert(boxes, body)
+			table.insert(characters, allCharacters[index])
+		end
+	end
 	if #boxes == 0 then
 		return false
 	end
@@ -803,8 +851,10 @@ function DoorService.Track(model: Model): boolean
 		recheckAt = 0,
 		motionId = 0,
 		leaves = leafBoxes(model),
+		swing = nil,
 		landing = nil,
 	}
+	door.swing = swingSide(door)
 	if initial ~= "Open" and door.openness > EPSILON then
 		poseDoor(door, "Swing", 0)
 	end

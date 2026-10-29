@@ -229,6 +229,53 @@ ObjectiveConfig.EntryClearance = 35
 ObjectiveConfig.PickSpacing = 25
 ObjectiveConfig.PickQuarters = 2
 
+-- What the objective services tune beyond the floors above (seconds and studs; the web build mirrors every number).
+ObjectiveConfig.Tuning = table.freeze({
+	WorkNoisePeriod = 1, -- a working hold (unlock, mix, turn, cut) emits WorkNoise at its start and then this often
+	WorkNoise = "ObjectiveWork" :: Enums.NoiseKind,
+	LoudNoise = "ObjectiveClunk" :: Enums.NoiseKind, -- the breaker, each exit unlocking, the crate chain snapping
+	GeneratorNoise = "GeneratorStart" :: Enums.NoiseKind,
+	SearchHold = 1, -- Floor 3: a locker search (the Kick action, never Hide)
+	SearchEmptySeconds = 0.9, -- an empty locker stands ajar this long
+	SearchOpen = 0.42, -- a searched locker's door: this share of fully open
+	ChainHitRadius = 3, -- Floor 2: a thrown acid flask burns the chain when it breaks this close to ChainCentre
+	BurnSeconds = 1.3, -- the acid eats through the chain
+	LockOffSeconds = 0.9, -- a lock comes off over this
+	DoorDelay = 0.75, -- the exit door swings open this long after the unlock clunk
+	PowerOffFactor = 0.04, -- Floor 0: the basement's mains while the power is out
+	PowerOnSeconds = 2.6, -- their switch-on stutter
+	LeverCreep = 0.22, -- the share of the breaker lever's throw it creeps over the hold
+	SashSeconds = 0.8, -- Floor 2: the sash opens over this when the jars go in
+	WorkLampBrightness = 3, -- Floor 3: the generator's work lamp once it runs
+	HatchSeconds = 1.6, -- Floor 4: the hatch swings open over this
+	ValveTurns = 2.5, -- the wheel turns this many times over the hold
+	ChainDrop = 1.1, -- Floor 5: the cut chain drops this far
+	NudgeDelay = 20, -- the Tab nudge on an objective floor: first available this long after arriving ...
+	NudgeCooldown = 30, -- ... then this often
+	HintRadius = 12, -- a station or lock's first-time hint: this close to the eye, with a clear line
+	DropSpread = 1.2, -- studs between the items a carrier drops
+})
+
+-- Where the Creature starts on Levels 2 and 3, and its grace there (Level 1 keeps its scripted scare, Level 4 its
+-- pool, Level 5 the roof door, whose wait uses Grace too).
+ObjectiveConfig.Spawn = table.freeze({
+	Levels = table.freeze({ "Level2_ScienceHall", "Level3_Gymnasium" } :: { string }),
+	MinDistance = 70, -- studs walked from the entry (ObjectivePlaces.walkDistance)
+	MaxDistance = 140,
+	Grace = table.freeze({ Standard = 20, Nightmare = 12 } :: { [string]: number }),
+	EntryEyeHeight = 4.6, -- the entry room's sample points (its centre and its corners inset EntryInset) ...
+	EntryInset = 2,
+	AnchorHeights = table.freeze({ 2.2, 7.4 } :: { number }), -- ... to these heights over the anchor
+	ReleaseNear = 30, -- the held Creature lets go when a player comes this close ...
+	ReleaseSight = 70, -- ... or can see its head from this far
+	Stream = "CreatureSpawn|", -- the seeded stream, by level
+})
+
+-- The grace of a difficulty (Standard's for an unknown one).
+function ObjectiveConfig.graceFor(difficulty: string): number
+	return ObjectiveConfig.Spawn.Grace[difficulty] or ObjectiveConfig.Spawn.Grace.Standard
+end
+
 local byLevel: { [string]: FloorSpec } = {}
 local byProp: { [string]: FloorSpec } = {}
 for _, spec in ObjectiveConfig.Floors do

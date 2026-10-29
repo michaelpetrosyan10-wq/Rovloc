@@ -33,6 +33,12 @@ NoiseConfig.Kinds = table.freeze({
 	-- Something knocked loose (a scripted Level 0 ambience beat): a quiet clatter, heard like any other noise.
 	FallingObject = { radius = 24, priority = "Low", medium = "Air", interval = 0 },
 	Scripted = { radius = 0, priority = "Low", medium = "Air", interval = 0 },
+	-- Floor objectives (ObjectiveConfig): a working hold (keys in a lock, the mix, the valve, the cutters) at its start
+	-- and once a second while it runs; a loud single action (the main breaker, an exit unlocking, the crate chain
+	-- snapping); the gym generator starting.
+	ObjectiveWork = { radius = 34, priority = "Normal", medium = "Air", interval = 0 },
+	ObjectiveClunk = { radius = 110, priority = "High", medium = "Air", interval = 0 },
+	GeneratorStart = { radius = 170, priority = "Critical", medium = "Air", interval = 0 },
 } :: { [string]: NoiseSpec })
 
 -- Observed horizontal speed (studs/s) above which a moving character is at least this loud,
