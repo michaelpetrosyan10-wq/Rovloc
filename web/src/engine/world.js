@@ -29,6 +29,10 @@ const STAIRWELLS = 'Stairwells';
 export const RENDER_ORDER = Object.freeze({ opaque: 0, emissive: 1, wear: 3, decal: 5, transparent: 10 });
 const EXTERIOR = 'Exterior';
 const EXTERIOR_FROM = new Set(['Level5_Roof']);
+// The school's floors above ground: their outer walls, windows and slab edges are the building seen from outside.
+const FACADE_LEVELS = /^Level[1-5]_/;
+const FACADE_REACH = 600; // outdoors (the street, the canopy ride) within this of the school, its facade shows
+const FACADE_EDGE = 14; // on the roof within this of the outer wall, the floors below show over the parapet
 
 /**
  * @typedef {import('./data.js').WorldData} Decoded
@@ -235,6 +239,13 @@ export class World {
       this.levelBoxes.push({ id: STAIRWELLS, tower: name, box, volume: 1 });
     }
     this.levelBoxes.sort((a, b) => a.volume - b.volume);
+    /** The school's footprint (the union of its floors' boxes): where its facade stands. */
+    this.schoolFootprint = null;
+    for (const e of this.levelBoxes) {
+      if (!FACADE_LEVELS.test(e.id)) continue;
+      if (!this.schoolFootprint) this.schoolFootprint = e.box.clone();
+      else this.schoolFootprint.union(e.box);
+    }
     this.stairwells = (this.meta.stairwells || []).map((s) => {
       const t = towers[s.tower];
       const lo = (this.meta.levels[s.from] || {}).elevation ?? 0;
@@ -298,6 +309,21 @@ export class World {
       out.add(EXTERIOR);
     }
     for (const l of out) if (EXTERIOR_FROM.has(l)) out.add(EXTERIOR);
+    // Outdoors the Exterior box holds the point, so without this only the street and the stair towers drew: the
+    // building vanished under the canopy ride and the Creature stood on the finale's ledge over nothing.
+    const outdoors = !level || level === EXTERIOR;
+    if (outdoors || EXTERIOR_FROM.has(level)) {
+      const f = this.schoolFootprint;
+      if (f) {
+        const dx = Math.max(f.min.x - position.x, 0, position.x - f.max.x);
+        const dz = Math.max(f.min.z - position.z, 0, position.z - f.max.z);
+        const inside = dx === 0 && dz === 0;
+        const edge = inside ? Math.min(position.x - f.min.x, f.max.x - position.x, position.z - f.min.z, f.max.z - position.z) : 0;
+        if (outdoors ? Math.hypot(dx, dz) <= FACADE_REACH : !inside || edge <= FACADE_EDGE) {
+          for (const id of this.levelGroups.keys()) if (FACADE_LEVELS.test(id)) out.add(id);
+        }
+      }
+    }
     return out;
   }
 
