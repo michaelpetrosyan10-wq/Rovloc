@@ -13,9 +13,13 @@ in the same month never overspends. Maps go up in the manifest's `uploadOrder` (
 been uploaded once is never uploaded again: the log keeps its decal id and image id; a map Roblox rejected is only
 retried when the generator changes its pixels.
 
-Each upload creates a Decal asset; textures need the image behind it, so the image id is resolved through asset
-delivery (the API key needs the asset read permission). Maps under moderation review, still processing, or whose
-image id could not be resolved yet stay out of the game and are re-checked on the next run without re-uploading.
+The manifest's `assetType` picks what each upload creates. An "Image" upload's asset id is the image id itself and is
+ready as soon as moderation approves it. A "Decal" upload wraps the image, which is then resolved through asset
+delivery (that needs an extra API key permission). A map uploaded as a Decal whose image id never resolved is uploaded
+once more under the manifest's current type; its earlier upload stays in the log and counts against its month. The
+first Image upload of a run is checked: if Roblox answers with any other asset type the run stops, so a wrong type is
+never repeated 45 times. Maps under moderation review or still processing stay out of the game and are re-checked on
+the next run without re-uploading.
 
 Writes src/ReplicatedStorage/Shared/Config/TextureAssets.luau (image ids of the maps that are ready + the upload
 log) and src/MaterialService/RovlocTextures.model.json (one MaterialVariant per texture x base material whose
@@ -284,7 +288,13 @@ def settle(cloud: Cloud, key: str, rec: dict, wait: float) -> None:
                     print(f"  {key}: upload failed: {rec['error']}")
                     return
                 asset = op.get("response") or {}
-                rec["decalId"] = int(asset.get("assetId"))
+                rec["assetId"] = int(asset.get("assetId"))
+                rec["returnedType"] = str(asset.get("assetType") or "")
+                if rec.get("kind", "Decal") == "Image" and rec["returnedType"] and "IMAGE" not in rec["returnedType"].upper():
+                    print(f"  {key}: asked for an Image, Roblox created {rec['returnedType']}; resolving it as a decal")
+                    rec["kind"] = "Decal"
+                if rec.get("kind", "Decal") != "Image":
+                    rec["decalId"] = rec["assetId"]
                 rec["moderation"] = moderation_of(asset)
                 rec["state"] = "reviewing"
                 break
@@ -296,7 +306,7 @@ def settle(cloud: Cloud, key: str, rec: dict, wait: float) -> None:
         time.sleep(delay)
         delay = min(delay * 1.6, 10)
     if rec["state"] == "reviewing" and rec.get("moderation") != "Approved":
-        status, body = cloud.asset(rec["decalId"])
+        status, body = cloud.asset(rec.get("assetId") or rec["decalId"])
         if status == 200:
             rec["moderation"] = moderation_of(json.loads(body))
         if rec.get("moderation") == "Rejected":
@@ -306,6 +316,11 @@ def settle(cloud: Cloud, key: str, rec: dict, wait: float) -> None:
         if rec.get("moderation") != "Approved":
             print(f"  {key}: under moderation review; the next run re-checks it")
             return
+    if rec["state"] in ("reviewing", "unresolved") and rec.get("kind") == "Image":
+        rec["imageId"] = rec["assetId"]
+        rec["state"] = "ready"
+        print(f"  {key}: ready (image {rec['imageId']})")
+        return
     if rec["state"] in ("reviewing", "unresolved"):
         image = cloud.image_id(rec["decalId"])
         if image:
@@ -348,6 +363,10 @@ def main() -> int:
     remaining = max(0, args.budget - used)
     print(f"budget {args.budget}/month, {used} used in {today:%Y-%m}, {remaining} left")
 
+    def superseded(rec: dict | None) -> bool:
+        """An earlier upload of another asset type whose image id never resolved: it is uploaded again."""
+        return bool(rec) and rec.get("state") == "unresolved" and rec.get("kind", "Decal") != manifest["assetType"]
+
     plan = []
     for key in manifest["uploadOrder"]:
         texture, map_name = key.split("/")
@@ -356,6 +375,9 @@ def main() -> int:
         if info is None:
             print(f"  {key}: not generated (run generate.py)")
             continue
+        if superseded(rec):
+            plan.append((key, texture, map_name, info))
+            continue
         if rec and rec.get("state") != "rejected" and rec.get("state") != "failed":
             if rec.get("sha256") != info["sha256"] and rec.get("state") == "ready":
                 print(f"  {key}: generator output changed since upload; the uploaded version stays (no re-upload)")
@@ -363,7 +385,7 @@ def main() -> int:
         if rec and rec.get("state") == "rejected" and rec.get("sha256") == info["sha256"]:
             continue
         plan.append((key, texture, map_name, info))
-    pending = [k for k, r in log["maps"].items() if r.get("state") in PENDING]
+    pending = [k for k, r in log["maps"].items() if r.get("state") in PENDING and not superseded(r)]
     print(f"{len(plan)} maps without an asset, {len(pending)} uploads to settle")
 
     if args.dry_run:
@@ -418,7 +440,13 @@ def main() -> int:
         errors = 0
         uploaded += 1
         op = json.loads(body)
-        rec = {"state": "processing", "operation": op.get("path", ""), "sha256": info["sha256"], "uploadedAt": now()}
+        rec = {
+            "state": "processing",
+            "kind": manifest["assetType"],
+            "operation": op.get("path", ""),
+            "sha256": info["sha256"],
+            "uploadedAt": now(),
+        }
         previous = log["maps"].get(key)
         if previous:  # a failed or rejected earlier attempt still counts against its month
             rec["history"] = previous.get("history", []) + [previous.get("uploadedAt", "")]
@@ -428,6 +456,9 @@ def main() -> int:
         print(f"  {key}: uploaded ({info['bytes']} bytes)")
         settle(cloud, key, rec, args.wait)
         write_outputs(manifest, log)
+        if manifest["assetType"] == "Image" and rec.get("kind") != "Image":
+            print("  stopping: Roblox does not create Image assets for this key; the remaining maps are not uploaded")
+            break
         time.sleep(1.0)
 
     write_outputs(manifest, log)

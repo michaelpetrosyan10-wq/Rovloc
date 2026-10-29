@@ -4,7 +4,7 @@
 #   src/ReplicatedStorage/Shared/Config/TextureAssets.luau   image ids per texture and map + the upload log
 #   src/MaterialService/RovlocTextures.model.json            the MaterialVariants Rojo builds into MaterialService
 # Repository secrets (Settings -> Secrets and variables -> Actions):
-#   ROBLOX_API_KEY     Open Cloud key with the "assets" API, Read + Write (read resolves each decal's image id)
+#   ROBLOX_API_KEY     Open Cloud key with the "assets" API, Read + Write (maps upload as Image assets)
 #   ROBLOX_CREATOR_ID  the numeric Roblox user id that owns the uploads
 # Budget-aware: `budget` is the month's image-upload allowance (100 for an ID-verified account, 10 otherwise); uploads
 # already logged this calendar month count against it, maps go up in manifest.json `uploadOrder` (most visible first)
