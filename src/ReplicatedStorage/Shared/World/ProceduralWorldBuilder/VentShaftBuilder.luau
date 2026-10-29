@@ -4,7 +4,8 @@
 -- Every vent edge becomes a hollow, axis-aligned duct (floor, ceiling and two side walls) around an exact
 -- WorldConfig.VentBore x VentBore bore with a WorldConfig.VentShell skin. Ducts are anchored Default-group parts,
 -- so players outside collide with them and a vent crawler's VentCollider ball (the only part of a crawler that
--- collides, and only with Default) is contained by the walls. The interior is unlit.
+-- collides, and only with Default) is contained by the walls. The interior is unlit. A duct floor shows its
+-- sheet-metal joints, rust where water stood and the grime of every crawl (one SurfaceGui on its inner face).
 --
 -- What each node needs, from its arms (the ducts leaving it):
 --   * grate node   the duct stops flush with the chase-side face of the wall the grate opening is cut through,
@@ -38,11 +39,13 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Geometry = require(script.Parent.Geometry)
 local Palette = require(script.Parent.Palette)
+local SurfaceArt = require(script.Parent.SurfaceArt)
 local ZoneGraph = require(script.Parent.ZoneGraph)
 
 local log = Log.new("VentShafts")
@@ -532,6 +535,36 @@ local function axisBox(
 	return metalBox(builder, parent, name, cross0, cross1, y0, y1, along0, along1)
 end
 
+local SEAM = Color3.fromRGB(34, 36, 36)
+local RUST = Color3.fromRGB(92, 54, 28)
+local DUCT_SEAM_PITCH = 4 -- studs between the sheet-metal joints of a duct run
+
+-- The inside of a duct's floor sheet: the joints between its sheets, rust where water stood and grime ground in
+-- by every crawl (one low-resolution SurfaceGui, symmetric under any flip of the canvas).
+local function weatherDuct(floor: BasePart, axis: Axis, seed: string)
+	local size = floor.Size
+	local length = if axis == "X" then size.X else size.Z
+	local joints = math.max(1, math.floor(length / DUCT_SEAM_PITCH + 0.5))
+	local gui, pps = SurfaceArt.gui(floor, Enum.NormalId.Top, { name = "Wear", pixelsPerStud = 6, maxDistance = 40 })
+	local thickness = math.max(1, math.floor(pps * 0.1 + 0.5))
+	if axis == "X" then
+		SurfaceArt.grid(gui, joints, 1, SEAM, 0.3, thickness, 1)
+	else
+		SurfaceArt.grid(gui, 1, joints, SEAM, 0.3, thickness, 1)
+	end
+	local random = MathUtil.seededRandom(1, seed .. ":wear")
+	for _ = 1, random:NextInteger(0, 2) do
+		local at = random:NextNumber(0.15, 0.85)
+		local w, d = random:NextNumber(0.5, 0.9), random:NextNumber(0.1, 0.3)
+		if axis == "X" then
+			SurfaceArt.stain(gui, at, 0.5, d, w, RUST, random:NextNumber(0.45, 0.7), nil, 2)
+		else
+			SurfaceArt.stain(gui, 0.5, at, w, d, RUST, random:NextNumber(0.45, 0.7), nil, 2)
+		end
+	end
+	SurfaceArt.grime(gui, Color3.fromRGB(20, 18, 16), random:NextNumber(0.25, 0.45), random:NextNumber() < 0.5, 3)
+end
+
 -- The four walls of one duct, its side walls split around every branch opening. Returns the floor part (nil when
 -- the fittings at both ends already meet, so the duct has no length of its own).
 local function buildDuct(builder: Builder, edge: EdgePlan, plans: { [string]: NodePlan }, openings: { Opening }): Part?
@@ -566,6 +599,9 @@ local function buildDuct(builder: Builder, edge: EdgePlan, plans: { [string]: No
 		y - HALF_OUTER,
 		y - HALF_BORE
 	)
+	if floor then
+		weatherDuct(floor, axis, builder.layout.id .. ":" .. name)
+	end
 	axisBox(
 		builder,
 		builder.ducts,

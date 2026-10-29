@@ -11,8 +11,10 @@ local PropKit = require(script.PropKit)
 
 local BearTrapBuilder = require(script.BearTrapBuilder)
 local ChemicalFlaskBuilder = require(script.ChemicalFlaskBuilder)
+local DecayBuilder = require(script.DecayBuilder)
 local DoorBuilder = require(script.DoorBuilder)
 local FloodlightSwitchBuilder = require(script.FloodlightSwitchBuilder)
+local FurnitureBuilder = require(script.FurnitureBuilder)
 local LockerBuilder = require(script.LockerBuilder)
 local ParachuteBuilder = require(script.ParachuteBuilder)
 local PickupBuilder = require(script.PickupBuilder)
@@ -29,8 +31,10 @@ type Module = { register: (registrar: PropKit.Registrar) -> () }
 local MODULES: { { name: string, module: Module } } = {
 	{ name = "BearTrapBuilder", module = BearTrapBuilder },
 	{ name = "ChemicalFlaskBuilder", module = ChemicalFlaskBuilder },
+	{ name = "DecayBuilder", module = DecayBuilder },
 	{ name = "DoorBuilder", module = DoorBuilder },
 	{ name = "FloodlightSwitchBuilder", module = FloodlightSwitchBuilder },
+	{ name = "FurnitureBuilder", module = FurnitureBuilder },
 	{ name = "LockerBuilder", module = LockerBuilder },
 	{ name = "ParachuteBuilder", module = ParachuteBuilder },
 	{ name = "PickupBuilder", module = PickupBuilder },

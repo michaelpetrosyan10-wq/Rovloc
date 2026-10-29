@@ -1722,4 +1722,71 @@ return {
 		child(child(result.lobby, "Anchors"), "AnchorRoot")
 		host:Destroy()
 	end,
+	["textures: variantFor is the hook every surface asks; with no textures parts keep the plain material"] = function(
+		t: Expect
+	)
+		for _, key in Palette.keys() do
+			t.eq(Palette.variantFor(key), nil, key .. " has no generated texture yet")
+		end
+		local holder = Instance.new("Folder")
+		local part = Geometry.part(holder, "Probe", CFrame.new(), Vector3.one, "PlasterSchool")
+		t.eq(part.MaterialVariant, "", "no variant without textures")
+		Geometry.applyKey(part, "CeilingTile")
+		t.eq(part.Material, Palette.get("CeilingTile").material, "re-keyed material")
+		t.eq(part.MaterialVariant, "", "still no variant")
+		holder:Destroy()
+	end,
+
+	["wear: room-facing walls weathered, bevelled chair rails, capped door casings, ducts and shafts worn"] = function(
+		t: Expect
+	)
+		local layout = hallwaySlice()
+		local root = buildSlice(layout)
+		local shell = child(root, "Shell")
+		local wear, foot, soot = 0, 0, 0
+		for _, part in parts(shell, isWall) do
+			for _, gui in part:GetChildren() do
+				if gui:IsA("SurfaceGui") and gui.Name == "Wear" then
+					wear += 1
+					t.eq(gui.LightInfluence, 1, part.Name .. " wear sits in the scene's light")
+					t.truthy(gui.MaxDistance <= Finishes.WearDistance, part.Name .. " wear is drawn near only")
+					t.truthy(
+						gui.Face ~= Enum.NormalId.Top and gui.Face ~= Enum.NormalId.Bottom,
+						part.Name .. " wear on a side face"
+					)
+					foot += if gui:FindFirstChild("Grime") then 1 else 0
+					soot += if gui:FindFirstChild("Soot") then 1 else 0
+				end
+			end
+		end
+		t.truthy(wear >= 8, string.format("walls are weathered (%d faces)", wear))
+		t.truthy(foot >= 2 and soot >= 4, "grime at the foot of bare walls, soot under the ceilings")
+		local rails = 0
+		for _, part in parts(shell) do
+			if string.sub(part.Name, 1, 9) == "Wainscot_" and string.sub(part.Name, -5) == "_Rail" then
+				rails += 1
+				t.truthy(part:IsA("WedgePart"), part.Name .. " is bevelled")
+				t.truthy(math.abs(part.CFrame.UpVector.Y - 1) < 1e-4, part.Name .. " slope rises to the wall")
+			elseif string.sub(part.Name, -5) == "_Band" then
+				t.truthy(part:FindFirstChild("Wear") ~= nil, part.Name .. " has grime at its foot")
+			end
+		end
+		t.truthy(rails >= 4, "chair rails")
+		for _, doorId in { "T_HallStore", "T_ClassOffice" } do
+			local cap = childPart(shell, string.format("Door_%s_Cap", doorId))
+			local head = childPart(shell, string.format("Door_%s_Trim3", doorId))
+			t.truthy(
+				cap.Size.Y > 0 and cap.CFrame.Position.Y > head.CFrame.Position.Y,
+				cap.Name .. " over the head casing"
+			)
+			t.truthy(
+				math.max(cap.Size.X, cap.Size.Z) > math.max(head.Size.X, head.Size.Z),
+				cap.Name .. " runs past the jambs"
+			)
+			t.eq(cap.CollisionGroup, CollisionGroups.MonsterPassthrough, cap.Name .. " passthrough")
+		end
+		t.truthy(Finishes.uRunsRight(Enum.NormalId.Back) and not Finishes.uRunsRight(Enum.NormalId.Front), "Z walls")
+		t.truthy(Finishes.uRunsRight(Enum.NormalId.Left) and not Finishes.uRunsRight(Enum.NormalId.Right), "X walls")
+		root:Destroy()
+	end,
 }

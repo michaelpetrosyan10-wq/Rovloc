@@ -5,6 +5,8 @@
 -- floors, drop ceilings, wainscots kept clear of every opening, hazard plates at the fire doors and the gate), then
 -- the invisible gameplay layer: Zone volumes, trigger volumes, light fixtures (with their FixtureGlow surfaces),
 -- anchor attachments, door anchors and patrol waypoints. Also builds the street-level exterior around the school.
+-- Every wall face a room sees is weathered (Finishes.decorateWall: grime, soot, corner dirt, water runs, cracks), and
+-- every door casing carries a stepped head cap (Geometry.doorTrims).
 --
 -- Vertical layout of a level (level-local Y): every room floor occupies [-SlabThickness, 0], so the floors of a
 -- level are the structural slab under it (rooms tile the footprint, so the slab has no holes except basins and
@@ -913,7 +915,61 @@ end
 
 type CornerPiece = { u0: number, u1: number, key: string }
 
-local function buildWalls(origin: Vector3, shell: Folder, lines: { [string]: Line }, order: { string }): number
+-- What weathering a level's wall faces needs to know about its rooms.
+type WearContext = {
+	layout: Layout,
+	inner: { [string]: Rect }, -- room rects shrunk to their wall faces
+	wainscoted: { [string]: boolean },
+}
+
+local function wearContext(layout: Layout, exteriorSides: { [string]: { [string]: boolean } }): WearContext
+	local inner: { [string]: Rect } = {}
+	local wainscoted: { [string]: boolean } = {}
+	for _, room in layout.rooms do
+		inner[room.id] = innerRect(room, exteriorSides)
+		wainscoted[room.id] = Finishes.wainscotStyle(layout.id, room, SchoolShellBuilder.wallKey(room)) ~= nil
+	end
+	return { layout = layout, inner = inner, wainscoted = wainscoted }
+end
+
+-- Weathers the face of wall box `part` (wall-local [u0, u1] x [y0, y1] on `run`) that looks into `room`.
+local function wearFace(wear: WearContext, part: BasePart, run: Run, box: Geometry.WallBox, room: Room?, high: boolean)
+	if not room then
+		return
+	end
+	local r = wear.inner[room.id]
+	if not r then
+		return
+	end
+	local lo = if run.axis == "Z" then r.x else r.z
+	local hi = if run.axis == "Z" then r.x + r.w else r.z + r.d
+	if box.u1 <= lo + EPS or box.u0 >= hi - EPS then
+		return -- the box sits in a junction or beyond the room's corner
+	end
+	local face = if run.axis == "Z"
+		then (if high then Enum.NormalId.Back else Enum.NormalId.Front)
+		else (if high then Enum.NormalId.Right else Enum.NormalId.Left)
+	Finishes.decorateWall({
+		part = part,
+		face = face,
+		layoutId = wear.layout.id,
+		room = room,
+		y0 = box.y0,
+		y1 = box.y1,
+		ceiling = if hasCeiling(room) then SchoolShellBuilder.ceilingBottom(wear.layout, room) else math.huge,
+		wainscot = wear.wainscoted[room.id] == true,
+		cornerLo = if box.u0 <= lo + 0.6 then math.max(0, lo - box.u0) else nil,
+		cornerHi = if box.u1 >= hi - 0.6 then math.max(0, box.u1 - hi) else nil,
+	})
+end
+
+local function buildWalls(
+	origin: Vector3,
+	shell: Folder,
+	lines: { [string]: Line },
+	order: { string },
+	wear: WearContext
+): number
 	local runs: { Run } = {}
 	local segments: { Geometry.WallSegment } = {}
 	for _, key in order do
@@ -990,60 +1046,61 @@ local function buildWalls(origin: Vector3, shell: Folder, lines: { [string]: Lin
 		end
 		for i, box in boxes do
 			if run.lowKey == run.highKey then
-				if
-					Geometry.wallBox(
-						shell,
-						string.format("%s_%d", name, i),
-						origin,
-						run.axis,
-						run.coord,
-						box.u0,
-						box.u1,
-						box.y0,
-						box.y1,
-						-half,
-						half,
-						run.lowKey
-					)
-				then
+				local part = Geometry.wallBox(
+					shell,
+					string.format("%s_%d", name, i),
+					origin,
+					run.axis,
+					run.coord,
+					box.u0,
+					box.u1,
+					box.y0,
+					box.y1,
+					-half,
+					half,
+					run.lowKey
+				)
+				if part then
 					count += 1
+					wearFace(wear, part, run, box, run.low, false)
+					wearFace(wear, part, run, box, run.high, true)
 				end
 			else
-				if
-					Geometry.wallBox(
-						shell,
-						string.format("%s_%dL", name, i),
-						origin,
-						run.axis,
-						run.coord,
-						box.u0,
-						box.u1,
-						box.y0,
-						box.y1,
-						-half,
-						0,
-						run.lowKey
-					)
-				then
+				local low = Geometry.wallBox(
+					shell,
+					string.format("%s_%dL", name, i),
+					origin,
+					run.axis,
+					run.coord,
+					box.u0,
+					box.u1,
+					box.y0,
+					box.y1,
+					-half,
+					0,
+					run.lowKey
+				)
+				if low then
 					count += 1
+					wearFace(wear, low, run, box, run.low, false)
 				end
-				if
-					Geometry.wallBox(
-						shell,
-						string.format("%s_%dH", name, i),
-						origin,
-						run.axis,
-						run.coord,
-						box.u0,
-						box.u1,
-						box.y0,
-						box.y1,
-						0,
-						half,
-						run.highKey
-					)
-				then
+				local high = Geometry.wallBox(
+					shell,
+					string.format("%s_%dH", name, i),
+					origin,
+					run.axis,
+					run.coord,
+					box.u0,
+					box.u1,
+					box.y0,
+					box.y1,
+					0,
+					half,
+					run.highKey
+				)
+				if high then
 					count += 1
+					wearFace(wear, high, run, box, run.high, true)
 				end
 			end
 		end
@@ -1534,6 +1591,63 @@ local function buildHazardPlates(layout: Layout, rooms: { [string]: Room }, orig
 	return count
 end
 
+-- The world box of `room`'s ceiling panel and the fixtures hanging from it (which no missing tile may expose).
+local function ceilingPanel(
+	layout: Layout,
+	room: Room,
+	origin: Vector3,
+	exteriorSides: { [string]: { [string]: boolean } }
+): (Vector3, Vector3, { Finishes.Keepout })
+	local h = LayoutSchema.roomHeight(layout, room)
+	local r = innerRect(room, exteriorSides)
+	local keepouts: { Finishes.Keepout } = {}
+	local along = SchoolShellBuilder.fixtureAlong(room)
+	for _, light in (room.lights or {}) :: { LayoutSchema.Light } do
+		local lo, hi = SchoolShellBuilder.fixtureBox(light.kind, light.pos, h - CEILING, along)
+		table.insert(keepouts, {
+			x0 = origin.X + lo.X - 0.3,
+			x1 = origin.X + hi.X + 0.3,
+			z0 = origin.Z + lo.Z - 0.3,
+			z1 = origin.Z + hi.Z + 0.3,
+		})
+	end
+	return origin + Vector3.new(r.x, h - CEILING, r.z), origin + Vector3.new(r.x + r.w, h, r.z + r.d), keepouts
+end
+
+export type CeilingFall = {
+	room: string,
+	centre: Vector3, -- world: the underside of the missing tile
+	size: Vector2, -- the tile (X, Z)
+}
+
+-- The dressed holes of every drop ceiling of `layout` (Finishes.planCeiling's first holes, built as void plates):
+-- where DecayBuilder lays the fallen tiles and hangs the wiring. Pure layout maths, the same answer the build used.
+function SchoolShellBuilder.ceilingFalls(layout: Layout): { CeilingFall }
+	local out: { CeilingFall } = {}
+	local origin = WorldConfig.levelOrigin(layout.id)
+	local exteriorSides = SchoolShellBuilder.exteriorSides(layout)
+	for _, room in layout.rooms do
+		if not (hasCeiling(room) and Finishes.dropCeiling(room, SchoolShellBuilder.ceilingKey(room))) then
+			continue
+		end
+		local lo, hi, keepouts = ceilingPanel(layout, room, origin, exteriorSides)
+		local size = hi - lo
+		if size.X < EPS or size.Z < EPS then
+			continue
+		end
+		local cframe = CFrame.new((lo + hi) / 2)
+		local plan = Finishes.planCeiling(layout.id, room, cframe, size, keepouts)
+		for index = 1, plan.dressed do
+			table.insert(out, {
+				room = room.id,
+				centre = Finishes.cellCentre(cframe, size, plan, plan.holes[index]),
+				size = Vector2.new(size.X / plan.cols, size.Z / plan.rows),
+			})
+		end
+	end
+	return out
+end
+
 -- Builds every piece of `layout` into `root` (see SchoolShellBuilder.createRoot). Returns parts created.
 function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: LevelOptions): number
 	local before = Geometry.partsCreated()
@@ -1602,28 +1716,10 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		end
 		if hasCeiling(room) then
 			local h = LayoutSchema.roomHeight(layout, room)
-			local r = innerRect(room, exteriorSides)
 			local ceilingKey = SchoolShellBuilder.ceilingKey(room)
-			local ceiling = Geometry.box(
-				shell,
-				"Ceiling_" .. room.id,
-				origin + Vector3.new(r.x, h - CEILING, r.z),
-				origin + Vector3.new(r.x + r.w, h, r.z + r.d),
-				ceilingKey,
-				{ castShadow = true }
-			)
+			local lo, hi, keepouts = ceilingPanel(layout, room, origin, exteriorSides)
+			local ceiling = Geometry.box(shell, "Ceiling_" .. room.id, lo, hi, ceilingKey, { castShadow = true })
 			if ceiling then
-				local keepouts: { Finishes.Keepout } = {}
-				local along = SchoolShellBuilder.fixtureAlong(room)
-				for _, light in (room.lights or {}) :: { LayoutSchema.Light } do
-					local lo, hi = SchoolShellBuilder.fixtureBox(light.kind, light.pos, h - CEILING, along)
-					table.insert(keepouts, {
-						x0 = origin.X + lo.X - 0.3,
-						x1 = origin.X + hi.X + 0.3,
-						z0 = origin.Z + lo.Z - 0.3,
-						z1 = origin.Z + hi.Z + 0.3,
-					})
-				end
 				Finishes.decorateCeiling(ceiling, levelId, room, ceilingKey, keepouts)
 			end
 			if not options.hasLevelAbove then
@@ -1654,7 +1750,7 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		buildRuns(layout, lines[key], options)
 	end
 	local placed = planOpenings(layout, rooms, lines)
-	buildWalls(origin, shell, lines, order)
+	buildWalls(origin, shell, lines, order, wearContext(layout, exteriorSides))
 	buildWainscots(layout, origin, shell, lines, placed, exteriorSides)
 	buildHazardPlates(layout, rooms, origin, shell)
 

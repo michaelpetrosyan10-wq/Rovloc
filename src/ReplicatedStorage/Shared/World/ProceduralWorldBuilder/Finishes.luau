@@ -7,7 +7,9 @@
 --     into the pale squares, a SurfaceGui adds the dark ones, a little transparent so the gloss still shows through),
 --     a subtle two-tone vinyl tile in the classrooms and labs, and court lines on the gymnasium boards.
 --   * Ceilings. Every plaster ceiling is a drop ceiling: a grid of tile seams, and in the ruined rooms (seeded per
---     room) a few tiles gone (black holes into the plenum, never where a fixture hangs) and brown water stains.
+--     room) a few tiles gone (black holes into the plenum, never where a fixture hangs) and brown water stains. The
+--     first one or two holes of a room are real plates (planCeiling says where), so DecayBuilder can drop their tiles
+--     on the floor below and hang wiring out of them.
 --   * Wainscots. Two-tone walls in the rooms people walk through: a lower band (glazed tile down the corridors, the
 --     colour of each wing; dark gloss paint in classrooms, wood panelling in offices, contrasting tile in restrooms,
 --     locker rooms and labs) up to 3.2 studs, a chair rail on top of it and a rubber baseboard under painted bands. The
@@ -16,6 +18,13 @@
 --     against a wall (hideable lockers, the floodlight switch, terminals). SchoolShellBuilder works out the spans
 --     (it owns the wall lines); this module plans their look and builds the pieces.
 --   * Hazard plates. Yellow-and-black striped floor plates either side of every airlock fire door and the hallway gate.
+--   * Wear. Every wall face a room sees carries the dirt of years (one low-resolution SurfaceGui per face): grime
+--     gathered along the foot (on the wainscot band where there is one), soot under the ceiling, dirt in the inside
+--     corners, brown water runs down from the ceiling and the odd crack. The chair rail and tile cap are bevelled
+--     (a wedge whose slope faces the room), so the wainscot reads as moulding rather than a stack of boxes.
+--   * Textures. Where Palette.variantFor gives a surface's key a generated MaterialVariant, the part wears it (Geometry
+--     applies it); a textured checker or vinyl floor and a textured drop ceiling drop the painted squares and seams
+--     their texture already shows. With no textures the look is the painted one.
 -- Everything is deterministic (seeded by layout and room ids) and built once at boot with the shell.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -47,6 +56,26 @@ export type WainscotStyle = {
 
 export type Interval = { u0: number, u1: number }
 
+-- One drop-ceiling plan: the grid, the missing tiles (grid cells; the first `dressed` are built as plates) and the
+-- water stains (canvas Scale centre and stud size).
+export type Cell = { i: number, j: number }
+export type Stain = { x: number, y: number, w: number, d: number, transparency: number }
+export type CeilingPlan = { cols: number, rows: number, holes: { Cell }, dressed: number, stains: { Stain } }
+
+-- One wall face to weather (SchoolShellBuilder finds them; level-local heights).
+export type WallFace = {
+	part: BasePart,
+	face: Enum.NormalId,
+	layoutId: string,
+	room: Room,
+	y0: number, -- the box's bottom and top
+	y1: number,
+	ceiling: number, -- the room's ceiling underside (or its wall top where it is open to the sky)
+	wainscot: boolean, -- a wainscot band covers the foot of this face
+	cornerLo: number?, -- the face's low-u end meets an inside corner of the room this many studs in from its edge
+	cornerHi: number?,
+}
+
 -- A world-space box a ceiling hole must stay clear of (a fixture), projected on the ceiling plane.
 export type Keepout = { x0: number, x1: number, z0: number, z1: number }
 
@@ -74,6 +103,30 @@ local COURT_LINE = Color3.fromRGB(196, 176, 112)
 local HOLE = Color3.fromRGB(7, 7, 8)
 local STAIN = Color3.fromRGB(96, 76, 42)
 local STAIN_RING = Color3.fromRGB(62, 48, 28)
+
+local GRIME = Color3.fromRGB(30, 26, 19)
+local SOOT = Color3.fromRGB(16, 15, 13)
+local RUN = Color3.fromRGB(62, 48, 28)
+local CRACK = Color3.fromRGB(22, 20, 17)
+
+Finishes.WearPixelsPerStud = 6
+Finishes.WearDistance = 60
+Finishes.GrimeHeight = 2.6 -- studs of dirt up a wall's foot
+Finishes.SootDepth = 2.2 -- studs of soot down from the ceiling
+Finishes.CornerWidth = 1.6
+
+-- Room kinds that are weathered harder (service spaces) or not at all (shafts nobody sees).
+local WEAR_STRENGTH: { [string]: number } = {
+	Boiler = 0.78,
+	Storage = 0.7,
+	Chase = 0,
+	Restroom = 0.66,
+	LockerRoom = 0.64,
+	Pool = 0.6,
+	Airlock = 0.62,
+	Stairwell = 0.62,
+	Roof = 0.5,
+}
 
 local GLOSS: { [string]: number } = {
 	Linoleum = 0.1,
@@ -304,10 +357,13 @@ function Finishes.decorateFloor(part: BasePart, layoutId: string, room: Room, fl
 		return 0
 	end
 	if style.key then
-		Palette.apply(part, style.key)
+		Geometry.applyKey(part, style.key)
 	end
 	part.Reflectance = style.reflectance
 	local checker = style.checker
+	if checker and Palette.variantFor(style.key or floorKey) then
+		checker = nil -- the tile texture is the pattern
+	end
 	if not (checker or style.court) then
 		return 0
 	end
@@ -329,7 +385,9 @@ end
 
 -- Cells (i, j) of a cols x rows grid over a part whose local X/Z span size that any keepout touches, under every
 -- flip of the canvas axes (the engine's Bottom-face canvas orientation is not ours to assume).
-local function blockedCells(part: BasePart, cols: number, rows: number, keepouts: { Keepout }): { [number]: boolean }
+type Probe = { CFrame: CFrame, Size: Vector3 }
+
+local function blockedCells(part: Probe, cols: number, rows: number, keepouts: { Keepout }): { [number]: boolean }
 	local blocked: { [number]: boolean } = {}
 	local size = part.Size
 	local cw, cd = size.X / cols, size.Z / rows
@@ -358,8 +416,63 @@ local function blockedCells(part: BasePart, cols: number, rows: number, keepouts
 	return blocked
 end
 
+-- Where the tiles of the drop ceiling `size` big at `cframe` over `room` are missing (clear of `keepouts`, the fixtures
+-- hanging from it) and where it is stained. Pure and seeded per room, so SchoolShellBuilder.ceilingFalls() can find
+-- the dressed holes again without building anything.
+function Finishes.planCeiling(
+	layoutId: string,
+	room: Room,
+	cframe: CFrame,
+	size: Vector3,
+	keepouts: { Keepout }
+): CeilingPlan
+	local cols, rows = Finishes.ceilingGrid(size.X, size.Z)
+	local ruin = Finishes.ruin(layoutId, room.id)
+	local random = MathUtil.seededRandom(1, layoutId .. ":" .. room.id .. ":ceiling")
+	local missing = if ruin < 0.3 then 0 else math.floor(1 + (ruin - 0.3) / 0.7 * 7)
+	local holes: { Cell } = {}
+	if missing > 0 then
+		local blocked = blockedCells({ CFrame = cframe, Size = size }, cols, rows, keepouts)
+		local tries = 0
+		while missing > 0 and tries < 60 do
+			tries += 1
+			local i, j = random:NextInteger(0, cols - 1), random:NextInteger(0, rows - 1)
+			if blocked[j * cols + i] then
+				continue
+			end
+			blocked[j * cols + i] = true
+			table.insert(holes, { i = i, j = j })
+			missing -= 1
+		end
+	end
+	local stains: { Stain } = {}
+	for _ = 1, 1 + math.floor(ruin * 3.5) do
+		local sw = random:NextNumber(2.5, 6.5)
+		local sd = sw * random:NextNumber(0.6, 1.1)
+		table.insert(stains, {
+			x = random:NextNumber(0.1, 0.9),
+			y = random:NextNumber(0.1, 0.9),
+			w = sw,
+			d = sd,
+			transparency = random:NextNumber(0.62, 0.8),
+		})
+	end
+	local dressed = if #holes >= 5 then 2 elseif #holes >= 1 then 1 else 0
+	return { cols = cols, rows = rows, holes = holes, dressed = dressed, stains = stains }
+end
+
+-- World centre of the underside of grid cell `cell` of a ceiling `size` big at `cframe` (local X / Z are the grid's
+-- columns / rows, the same axes blockedCells measures).
+function Finishes.cellCentre(cframe: CFrame, size: Vector3, plan: CeilingPlan, cell: Cell): Vector3
+	local cw, cd = size.X / plan.cols, size.Z / plan.rows
+	local lx = -size.X / 2 + (cell.i + 0.5) * cw
+	local lz = -size.Z / 2 + (cell.j + 0.5) * cd
+	return cframe:PointToWorldSpace(Vector3.new(lx, -size.Y / 2, lz))
+end
+
 -- Finishes the ceiling panel of `room` (palette `ceilingKey`): drop-ceiling seams, and in a ruined room missing
--- tiles (clear of `keepouts`, the fixtures hanging from it) and water stains. Returns the GuiObjects painted.
+-- tiles (clear of `keepouts`, the fixtures hanging from it) and water stains. The dressed holes are thin void plates
+-- under the panel (into its parent); the rest are painted. Returns the GuiObjects painted.
 function Finishes.decorateCeiling(
 	part: BasePart,
 	layoutId: string,
@@ -370,53 +483,176 @@ function Finishes.decorateCeiling(
 	if not Finishes.dropCeiling(room, ceilingKey) then
 		return 0
 	end
+	Geometry.applyKey(part, "CeilingTile")
 	local size = part.Size
-	local cols, rows = Finishes.ceilingGrid(size.X, size.Z)
+	local plan = Finishes.planCeiling(layoutId, room, part.CFrame, size, keepouts)
+	local cols, rows = plan.cols, plan.rows
 	local gui, pps =
 		SurfaceArt.gui(part, Enum.NormalId.Bottom, { name = "Finish", pixelsPerStud = 8, maxDistance = 150 })
 	local base = part.Color
 	local seam = Color3.new(base.R * 0.58, base.G * 0.58, base.B * 0.56)
 	local thickness = math.max(1, math.floor(pps * 0.14 + 0.5))
-	local painted = SurfaceArt.grid(gui, cols, rows, seam, 0.2, thickness)
-
-	local ruin = Finishes.ruin(layoutId, room.id)
-	local random = MathUtil.seededRandom(1, layoutId .. ":" .. room.id .. ":ceiling")
-	local missing = if ruin < 0.3 then 0 else math.floor(1 + (ruin - 0.3) / 0.7 * 7)
-	if missing > 0 then
-		local blocked = blockedCells(part, cols, rows, keepouts)
-		local tries = 0
-		while missing > 0 and tries < 60 do
-			tries += 1
-			local i, j = random:NextInteger(0, cols - 1), random:NextInteger(0, rows - 1)
-			if blocked[j * cols + i] then
-				continue
-			end
-			blocked[j * cols + i] = true
-			local hole = SurfaceArt.frame(gui, "MissingTile", i / cols, j / rows, 1 / cols, 1 / rows, HOLE, 0, 2)
-			hole.Position = UDim2.new(i / cols, thickness, j / rows, thickness)
-			hole.Size = UDim2.new(1 / cols, -thickness * 2, 1 / rows, -thickness * 2)
-			painted += 1
-			missing -= 1
-		end
+	local painted = 0
+	if not Palette.variantFor("CeilingTile") then
+		painted += SurfaceArt.grid(gui, cols, rows, seam, 0.2, thickness)
 	end
-	local stains = 1 + math.floor(ruin * 3.5)
-	for _ = 1, stains do
-		local sw = random:NextNumber(2.5, 6.5)
-		local sd = sw * random:NextNumber(0.6, 1.1)
+
+	local parent = part.Parent or part
+	local cw, cd = size.X / cols, size.Z / rows
+	for index, cell in plan.holes do
+		if index <= plan.dressed then
+			local centre = Finishes.cellCentre(part.CFrame, size, plan, cell)
+			local plate = Geometry.part(
+				parent,
+				string.format("MissingTile_%s_%d", room.id, index),
+				CFrame.new(centre - Vector3.new(0, 0.02, 0)),
+				Vector3.new(cw - 0.1, 0.03, cd - 0.1),
+				"CeilingVoid",
+				{ castShadow = false }
+			)
+			Geometry.makeCosmetic(plate)
+			continue
+		end
+		local i, j = cell.i, cell.j
+		local hole = SurfaceArt.frame(gui, "MissingTile", i / cols, j / rows, 1 / cols, 1 / rows, HOLE, 0, 2)
+		hole.Position = UDim2.new(i / cols, thickness, j / rows, thickness)
+		hole.Size = UDim2.new(1 / cols, -thickness * 2, 1 / rows, -thickness * 2)
+		painted += 1
+	end
+	for _, stain in plan.stains do
 		SurfaceArt.stain(
 			gui,
-			random:NextNumber(0.1, 0.9),
-			random:NextNumber(0.1, 0.9),
-			sw / size.X,
-			sd / size.Z,
+			stain.x,
+			stain.y,
+			stain.w / size.X,
+			stain.d / size.Z,
 			STAIN,
-			random:NextNumber(0.62, 0.8),
+			stain.transparency,
 			STAIN_RING,
 			1
 		)
 		painted += 1
 	end
 	return painted
+end
+
+--------------------------------------------------------------------------------
+-- Wear
+--------------------------------------------------------------------------------
+
+-- Whether `face` of an axis-aligned part draws its canvas with world +u (the wall's along axis: +X on Front / Back,
+-- +Z on Left / Right) running toward canvas right. Seen from outside a face, the canvas's right is the viewer's right.
+function Finishes.uRunsRight(face: Enum.NormalId): boolean
+	return face == Enum.NormalId.Back or face == Enum.NormalId.Left
+end
+
+-- Weathers one wall face: grime at the foot (left to the wainscot band where there is one), soot under the ceiling,
+-- dirt in its inside corners, water runs and the odd crack. Seeded by the part and face. Returns the GuiObjects made.
+function Finishes.decorateWall(spec: WallFace): number
+	local strength = WEAR_STRENGTH[spec.room.kind] or 0.56
+	if strength <= 0 then
+		return 0
+	end
+	local part = spec.part
+	local studs = SurfaceArt.faceStuds(part.Size, spec.face)
+	if studs.X < 1.2 or studs.Y < 1 then
+		return 0
+	end
+	local onFloor = spec.y0 < 0.05
+	local foot = onFloor and not spec.wainscot
+	local topGap = spec.y1 - spec.ceiling
+	local underCeiling = topGap > -0.2 and topGap < studs.Y - 1
+	local cornerLo = if onFloor then spec.cornerLo else nil
+	local cornerHi = if onFloor then spec.cornerHi else nil
+	local ruin = Finishes.ruin(spec.layoutId, spec.room.id)
+	local random = MathUtil.seededRandom(1, spec.layoutId .. ":" .. part.Name .. ":" .. spec.face.Name)
+	local runs = if underCeiling and studs.X >= 2 then random:NextInteger(0, if ruin > 0.5 then 2 else 1) else 0
+	local cracked = random:NextNumber() < 0.18 + ruin * 0.3 and studs.Y >= 3 and studs.X >= 2
+	if not (foot or underCeiling or cornerLo or cornerHi or runs > 0 or cracked) then
+		return 0
+	end
+	local gui, pps = SurfaceArt.gui(
+		part,
+		spec.face,
+		{ name = "Wear", pixelsPerStud = Finishes.WearPixelsPerStud, maxDistance = Finishes.WearDistance }
+	)
+	local made = 0
+	local top = math.max(0, topGap) * pps
+	if foot then
+		SurfaceArt.edgeBand(gui, "Grime", false, 0, Finishes.GrimeHeight * pps, GRIME, strength, 1)
+		made += 1
+	end
+	if underCeiling then
+		SurfaceArt.edgeBand(gui, "Soot", true, top, Finishes.SootDepth * pps, SOOT, strength * 0.7, 1)
+		made += 1
+	end
+	local right = Finishes.uRunsRight(spec.face)
+	if cornerLo then
+		local inset = cornerLo * pps
+		SurfaceArt.sideBand(gui, "Corner", not right, inset, Finishes.CornerWidth * pps, GRIME, strength * 0.75, 1)
+		made += 1
+	end
+	if cornerHi then
+		local inset = cornerHi * pps
+		SurfaceArt.sideBand(gui, "Corner", right, inset, Finishes.CornerWidth * pps, GRIME, strength * 0.75, 1)
+		made += 1
+	end
+	for _ = 1, runs do
+		local length = math.min(random:NextNumber(3, 9), spec.ceiling - spec.y0)
+		SurfaceArt.streak(
+			gui,
+			random:NextNumber(0.08, 0.92),
+			top,
+			random:NextNumber(0.25, 0.7) * pps,
+			length * pps,
+			RUN,
+			random:NextNumber(0.3, 0.55),
+			2
+		)
+		made += 1
+	end
+	if cracked then
+		made += SurfaceArt.crack(
+			gui,
+			random,
+			random:NextNumber(0.15, 0.85),
+			random:NextNumber(0.15, 0.5),
+			random:NextNumber(-60, 60),
+			random:NextInteger(2, 4),
+			random:NextNumber(0.6, 1.2) * pps,
+			1,
+			CRACK,
+			3
+		)
+	end
+	return made
+end
+
+-- Grime gathered along the foot of a wainscot band (and a water run reaching down onto it now and then).
+local function weatherBand(part: BasePart, face: Enum.NormalId, seed: string)
+	local studs = SurfaceArt.faceStuds(part.Size, face)
+	if studs.X < 1 then
+		return
+	end
+	local gui, pps = SurfaceArt.gui(
+		part,
+		face,
+		{ name = "Wear", pixelsPerStud = Finishes.WearPixelsPerStud, maxDistance = Finishes.WearDistance }
+	)
+	local random = MathUtil.seededRandom(1, seed)
+	SurfaceArt.edgeBand(gui, "Grime", false, 0, math.min(studs.Y, 1.6) * pps, GRIME, random:NextNumber(0.5, 0.68), 1)
+	if studs.X >= 3 and random:NextNumber() < 0.3 then
+		SurfaceArt.streak(
+			gui,
+			random:NextNumber(0.1, 0.9),
+			0,
+			random:NextNumber(0.25, 0.6) * pps,
+			studs.Y * random:NextNumber(0.4, 0.9) * pps,
+			RUN,
+			random:NextNumber(0.25, 0.45),
+			2
+		)
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -439,9 +675,9 @@ local function overlay(
 	dir: number,
 	depth: number,
 	key: string
-): boolean
+): Part?
 	if u1 - u0 < EPS then
-		return false
+		return nil
 	end
 	local part = Geometry.wallBox(
 		parent,
@@ -459,10 +695,53 @@ local function overlay(
 		OVERLAY
 	)
 	if not part then
-		return false
+		return nil
 	end
 	Geometry.makeCosmetic(part)
-	return true
+	return part
+end
+
+-- A bevelled moulding along the wall: a wedge whose slope faces the room and rises to the wall, full `depth` at its
+-- underside (the ledge that throws a shadow line) and flush with the wall at its top. Its bounds are the same box a
+-- plain overlay would fill.
+local function bevel(
+	parent: Instance,
+	name: string,
+	origin: Vector3,
+	axis: Axis,
+	coord: number,
+	u0: number,
+	u1: number,
+	y0: number,
+	y1: number,
+	face: number,
+	dir: number,
+	depth: number,
+	key: string
+): WedgePart?
+	if u1 - u0 < EPS or y1 - y0 < EPS then
+		return nil
+	end
+	local centre = Geometry.wallPoint(origin, axis, coord, (u0 + u1) / 2, (y0 + y1) / 2, face + dir * depth / 2)
+	local normal = if axis == "X" then Vector3.new(dir, 0, 0) else Vector3.new(0, 0, dir)
+	local part = Geometry.wedge(
+		parent,
+		name,
+		CFrame.lookAt(centre, centre + normal),
+		Vector3.new(u1 - u0, y1 - y0, depth),
+		key,
+		OVERLAY
+	)
+	Geometry.makeCosmetic(part)
+	return part
+end
+
+-- The face of a wall overlay that looks along `dir` into the room.
+local function roomFace(axis: Axis, dir: number): Enum.NormalId
+	if axis == "X" then
+		return if dir > 0 then Enum.NormalId.Right else Enum.NormalId.Left
+	end
+	return if dir > 0 then Enum.NormalId.Back else Enum.NormalId.Front
 end
 
 -- The pieces of one wainscot span along the wall line (axis, coord) between u0 and u1, on the face `face` (signed
@@ -484,19 +763,26 @@ function Finishes.wainscot(
 	insetHi: boolean
 ): number
 	local count = 0
-	local function piece(suffix: string, y0: number, y1: number, depth: number, key: string)
+	local function piece(suffix: string, y0: number, y1: number, depth: number, key: string): BasePart?
 		local a = if insetLo then u0 + depth else u0
 		local b = if insetHi then u1 - depth else u1
-		if overlay(parent, name .. suffix, origin, axis, coord, a, b, y0, y1, face, dir, depth, key) then
+		local part: BasePart? = if suffix == "_Rail"
+			then bevel(parent, name .. suffix, origin, axis, coord, a, b, y0, y1, face, dir, depth, key)
+			else overlay(parent, name .. suffix, origin, axis, coord, a, b, y0, y1, face, dir, depth, key)
+		if part then
 			count += 1
 		end
+		return part
 	end
 	local bandBottom = 0
 	if style.base then
 		piece("_Base", 0, Finishes.BaseTop, Finishes.BaseDepth, style.base)
 		bandBottom = Finishes.BaseTop
 	end
-	piece("_Band", bandBottom, Finishes.BandTop, Finishes.BandDepth, style.band)
+	local band = piece("_Band", bandBottom, Finishes.BandTop, Finishes.BandDepth, style.band)
+	if band then
+		weatherBand(band, roomFace(axis, dir), name)
+	end
 	piece("_Rail", Finishes.BandTop, Finishes.RailTop, Finishes.RailDepth, style.rail)
 	return count
 end

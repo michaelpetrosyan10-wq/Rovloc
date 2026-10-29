@@ -87,6 +87,22 @@ local entries: { [string]: Entry } = {
 	PipeIron = entry(Enum.Material.CorrodedMetal, 72, 58, 48, "Metal"),
 	PipeCopper = entry(Enum.Material.CorrodedMetal, 112, 82, 58, "Metal"),
 	Conduit = entry(Enum.Material.Metal, 128, 132, 130, "Metal"),
+
+	-- Wear, furniture and decay (Finishes, FurnitureBuilder, DecayBuilder)
+	CeilingTile = entry(Enum.Material.Plaster, 128, 122, 102, "Concrete"), -- acoustic drop-ceiling tile
+	CeilingVoid = entry(Enum.Material.SmoothPlastic, 7, 7, 8, "Concrete"), -- the plenum behind a missing tile
+	DeskTop = entry(Enum.Material.Wood, 112, 92, 66, "Wood"), -- laminated school desk top
+	DeskSteel = entry(Enum.Material.Metal, 52, 56, 54, "Metal"), -- tubular desk and chair frames
+	ChairShell = entry(Enum.Material.Plastic, 70, 62, 48, "Wood"), -- moulded chair seats and backs
+	Chalkboard = entry(Enum.Material.Slate, 30, 44, 36, "Concrete"),
+	ChalkFrame = entry(Enum.Material.Metal, 104, 106, 100, "Metal"), -- aluminium board frame and chalk tray
+	Cork = entry(Enum.Material.Cardboard, 118, 88, 58, "Wood"), -- noticeboard
+	CabinetSteel = entry(Enum.Material.Metal, 74, 80, 74, "Metal"), -- filing cabinets, office desk carcasses
+	PaperSheet = entry(Enum.Material.SmoothPlastic, 176, 170, 148, "Concrete"), -- loose paper on the floor
+	Puddle = entry(Enum.Material.Glass, 14, 16, 14, "Water"), -- standing water: dark, glossy
+	PlasterFlap = entry(Enum.Material.Plaster, 136, 128, 106, "Concrete"), -- paint and plaster peeling off a wall
+	Lath = entry(Enum.Material.WoodPlanks, 84, 62, 40, "Wood"),
+	Cable = entry(Enum.Material.Rubber, 20, 20, 20, "Concrete"), -- wiring hanging out of the ceiling
 }
 
 -- Keys every layout may reference; the spec asserts they all exist.
@@ -148,6 +164,12 @@ function Palette.apply(part: BasePart, key: string?)
 	local value = Palette.get(key)
 	part.Material = value.material
 	part.Color = value.color
+end
+
+-- The MaterialVariant name a surface of palette `key` takes, or nil while that material has no textures. Builders ask
+-- this for every surface; a nil answer leaves the plain material (the look without generated textures).
+function Palette.variantFor(_key: string): string?
+	return nil
 end
 
 -- Every key, sorted (dev tooling and specs).

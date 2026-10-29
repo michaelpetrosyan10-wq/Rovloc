@@ -10,7 +10,8 @@
 -- Odd flights climb away from the building in the north band, even flights climb back in the south band, so the
 -- last flight always arrives at the near landing beside the upper TowerOpening. Steps rise at most 1 stud and run
 -- at least 1.6 (Humanoids walk up them). Segments that share a tower stack without overlapping: a segment's
--- floor slab sits exactly on top of the walls of the segment below it.
+-- floor slab sits exactly on top of the walls of the segment below it. The shaft walls and the core are weathered
+-- (soot under the cap, grime at the foot, water run down from the roof) by one low-resolution SurfaceGui per face.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -22,8 +23,10 @@ local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
+local Finishes = require(script.Parent.Finishes)
 local Geometry = require(script.Parent.Geometry)
 local SchoolShellBuilder = require(script.Parent.SchoolShellBuilder)
+local SurfaceArt = require(script.Parent.SurfaceArt)
 
 local log = Log.new("Stairwells")
 
@@ -142,6 +145,38 @@ local function setAttributes(instance: Instance, values: { [string]: any })
 	end
 end
 
+local GRIME = Color3.fromRGB(26, 22, 17)
+local RUN = Color3.fromRGB(58, 44, 28)
+
+-- Years on a shaft wall's inner `face`: soot under the cap, grime at the foot, and water that has run down it from
+-- the roof for the whole height of the shaft.
+local function weatherShaft(part: BasePart?, face: Enum.NormalId, seed: string)
+	if not part then
+		return
+	end
+	local studs = SurfaceArt.faceStuds(part.Size, face)
+	if studs.X < 2 or studs.Y < 4 then
+		return
+	end
+	local gui, pps =
+		SurfaceArt.gui(part, face, { name = "Wear", pixelsPerStud = 4, maxDistance = Finishes.WearDistance })
+	local random = MathUtil.seededRandom(1, seed)
+	SurfaceArt.edgeBand(gui, "Grime", false, 0, Finishes.GrimeHeight * pps, GRIME, 0.62, 1)
+	SurfaceArt.edgeBand(gui, "Soot", true, 0, 3 * pps, GRIME, 0.45, 1)
+	for _ = 1, random:NextInteger(2, 4) do
+		SurfaceArt.streak(
+			gui,
+			random:NextNumber(0.08, 0.92),
+			random:NextNumber(0, 0.3) * studs.Y * pps,
+			random:NextNumber(0.3, 0.8) * pps,
+			random:NextNumber(0.3, 0.7) * studs.Y * pps,
+			RUN,
+			random:NextNumber(0.3, 0.5),
+			2
+		)
+	end
+end
+
 local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 	local spec = plan.spec
 	local dims = towerDims(spec.tower)
@@ -176,9 +211,15 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 
 	-- Floor slab and enclosure
 	box("Floor", plan.slabFromBuilding, dims.depth, bottom - slab, bottom, tower.minZ, tower.maxZ, "ConcreteDark")
-	box("WallNorth", dims.halfExt, dims.depth, bottom, top, tower.minZ, tower.minZ + TOWER_WALL, "ConcreteDark")
-	box("WallSouth", dims.halfExt, dims.depth, bottom, top, tower.maxZ - TOWER_WALL, tower.maxZ, "ConcreteDark")
-	box("WallOuter", dims.depth - TOWER_WALL, dims.depth, bottom, top, dims.vInner0, dims.vInner1, "ConcreteDark")
+	local north =
+		box("WallNorth", dims.halfExt, dims.depth, bottom, top, tower.minZ, tower.minZ + TOWER_WALL, "ConcreteDark")
+	local south =
+		box("WallSouth", dims.halfExt, dims.depth, bottom, top, tower.maxZ - TOWER_WALL, tower.maxZ, "ConcreteDark")
+	local outer =
+		box("WallOuter", dims.depth - TOWER_WALL, dims.depth, bottom, top, dims.vInner0, dims.vInner1, "ConcreteDark")
+	weatherShaft(north, Enum.NormalId.Back, spec.id .. ":north")
+	weatherShaft(south, Enum.NormalId.Front, spec.id .. ":south")
+	weatherShaft(outer, if dims.dirX > 0 then Enum.NormalId.Left else Enum.NormalId.Right, spec.id .. ":outer")
 	local opening = WorldConfig.TowerOpening
 	local openings: { Geometry.Opening } = {}
 	for _, y in { bottom, upper } do
@@ -224,7 +265,9 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 	local northBand0, northBand1 = dims.vInner0, dims.vInner0 + FLIGHT_WIDTH
 	local southBand0, southBand1 = dims.vInner1 - FLIGHT_WIDTH, dims.vInner1
 	if southBand0 - northBand1 > EPS then
-		box("Core", nearEnd, farStart, bottom, top, northBand1, southBand0, "Concrete")
+		local core = box("Core", nearEnd, farStart, bottom, top, northBand1, southBand0, "Concrete")
+		weatherShaft(core, Enum.NormalId.Front, spec.id .. ":coreNorth")
+		weatherShaft(core, Enum.NormalId.Back, spec.id .. ":coreSouth")
 	end
 
 	-- Flights and landings

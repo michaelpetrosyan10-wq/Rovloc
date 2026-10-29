@@ -143,6 +143,26 @@ local function configure(
 			part.CastShadow = options.castShadow
 		end
 	end
+	if key then
+		local variant = Palette.variantFor(key)
+		if variant and part.Material == entry.material then
+			part.MaterialVariant = variant
+		end
+	end
+end
+
+-- Re-dresses `part` in palette `key`: material, colour and the key's textured MaterialVariant (cleared when the key
+-- has none). A variant only shows over its own base material, so a part that keeps another material keeps none.
+function Geometry.applyKey(part: BasePart, key: string)
+	local entry = Palette.get(key)
+	part.Material = entry.material
+	part.Color = entry.color
+	local variant = Palette.variantFor(key)
+	if variant then
+		part.MaterialVariant = variant
+	elseif part.MaterialVariant ~= "" then
+		part.MaterialVariant = ""
+	end
 end
 
 function Geometry.part(
@@ -643,8 +663,14 @@ local TRIM_WIDTH = 0.35
 local TRIM_PROUD = 0.15 -- how far trims stand off each wall face
 local TRIM_REVEAL = 0.05 -- trims cover the cut edge of the wall so the reveal never z-fights
 
--- Door casing (two jambs + head) around the opening [u0, u1] x [0, top] of a wall `thickness` thick.
--- The opening stays clear for the Creature: the casing is MonsterPassthrough with a pass-through modifier.
+local CAP_OVERHANG = 0.08 -- the head cap runs past each jamb's outer edge
+local CAP_PROUD = 0.06 -- and stands this much prouder than the casing
+local CAP_BOTTOM = 0.2 -- above the head casing's underside: clear of a shut leaf's lap over the head
+local CAP_HEIGHT = 0.24
+
+-- Door casing (two jambs + head, and a cap moulding stepped out over the head) around the opening [u0, u1] x [0, top]
+-- of a wall `thickness` thick. The opening stays clear for the Creature: the casing is MonsterPassthrough with a
+-- pass-through modifier.
 function Geometry.doorTrims(
 	parent: Instance,
 	name: string,
@@ -663,11 +689,18 @@ function Geometry.doorTrims(
 		{ u0 - TRIM_WIDTH, u0 + TRIM_REVEAL, 0, top + TRIM_WIDTH },
 		{ u1 - TRIM_REVEAL, u1 + TRIM_WIDTH, 0, top + TRIM_WIDTH },
 		{ u0 + TRIM_REVEAL, u1 - TRIM_REVEAL, top - TRIM_REVEAL, top + TRIM_WIDTH },
+		{
+			u0 - TRIM_WIDTH - CAP_OVERHANG,
+			u1 + TRIM_WIDTH + CAP_OVERHANG,
+			top + CAP_BOTTOM,
+			top + CAP_BOTTOM + CAP_HEIGHT,
+		},
 	}
 	for i, piece in pieces do
+		local depth = if i == 4 then a + CAP_PROUD else a
 		local part = Geometry.wallBox(
 			parent,
-			string.format("%s_Trim%d", name, i),
+			if i == 4 then name .. "_Cap" else string.format("%s_Trim%d", name, i),
 			origin,
 			axis,
 			coord,
@@ -675,8 +708,8 @@ function Geometry.doorTrims(
 			piece[2],
 			piece[3],
 			piece[4],
-			-a,
-			a,
+			-depth,
+			depth,
 			key,
 			{ castShadow = false }
 		)

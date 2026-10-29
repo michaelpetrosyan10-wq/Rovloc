@@ -1,11 +1,13 @@
 --!strict
--- CreatureRigBuilder: the Creature, built from Parts in code. An 8.5-stud, gaunt, pale humanoid: a narrow skull
+-- CreatureRigBuilder: the Creature, built from Parts in code. An 8.5-stud, gaunt humanoid: a narrow skull
 -- under a heavy brow, hollow pitch-black sockets holding pinprick Neon pupils, sunken cheeks and temples, a lipless
 -- ear-to-ear grin (gums bared, rows of uneven yellowed teeth, the side cuts running back toward the ears) on a
 -- separate hinged Jaw, a too-long sinewy neck, a ribcage flaring over a sucked-in belly with every rib showing,
 -- collarbones, jutting shoulder blades and spine knobs, bony hips, knees, ankles and knuckles, elongated arms ending in long curled fingers with 6-inch claws, and long
 -- stringy black hair hanging in clumps that a later animator can sway. The rest pose stands with a slight hunch
--- (upper torso and neck pitched forward, chin down).
+-- (upper torso and neck pitched forward, chin down). Its skin is dark, grey-green and wet: the skin, hair, gums and
+-- claws carry Reflectance, so every light it passes slides over it in a glossy sheen, and the Neon pupils are the
+-- brightest thing on it.
 --
 -- Rig-local space. Every piece is placed in the frame of the `cframe` handed to build(): its origin is the floor
 -- point at the CreatureSpawn anchor, +Y is up, -Z (LookVector) is the facing and +X the Creature's right. The
@@ -81,6 +83,7 @@ type Paint = {
 	color: Color3,
 	shadow: boolean,
 	transparency: number?,
+	reflectance: number?, -- wet sheen
 }
 
 type HairClump = {
@@ -245,21 +248,30 @@ local CLAW_STAIN = Color3.fromRGB(52, 40, 18)
 local ROT_STAIN = Color3.fromRGB(70, 56, 32)
 local GUM_RED = Color3.fromRGB(122, 40, 38)
 
-local SMOOTH = Enum.Material.SmoothPlastic
+local WET_DARK = Color3.fromRGB(28, 34, 31)
 
-local PAINT_SKIN: Paint = { material = SMOOTH, color = RIG.SkinColor, shadow = true }
-local PAINT_SKIN_SMALL: Paint = { material = SMOOTH, color = RIG.SkinColor, shadow = false }
-local PAINT_CORE: Paint = { material = SMOOTH, color = RIG.SkinColor:Lerp(SALLOW_TONE, 0.3), shadow = true }
-local PAINT_HOLLOW: Paint = { material = SMOOTH, color = RIG.SkinColor:Lerp(SHADOW_TONE, 0.55), shadow = true }
-local PAINT_BONE: Paint = { material = SMOOTH, color = RIG.SkinColor:Lerp(RIG.ToothColor, 0.55), shadow = true }
-local PAINT_BONE_SMALL: Paint = { material = SMOOTH, color = PAINT_BONE.color, shadow = false }
-local PAINT_HAIR: Paint = { material = SMOOTH, color = RIG.HairColor, shadow = true }
+local SMOOTH = Enum.Material.SmoothPlastic
+local WET = 0.16 -- skin reflectance: slick, never mirror-like
+local SKIN = RIG.SkinColor:Lerp(WET_DARK, 0.7)
+
+local PAINT_SKIN: Paint = { material = SMOOTH, color = SKIN, shadow = true, reflectance = WET }
+local PAINT_SKIN_SMALL: Paint = { material = SMOOTH, color = SKIN, shadow = false, reflectance = WET }
+local PAINT_CORE: Paint = { material = SMOOTH, color = SKIN:Lerp(SALLOW_TONE, 0.18), shadow = true, reflectance = WET }
+local PAINT_HOLLOW: Paint =
+	{ material = SMOOTH, color = SKIN:Lerp(SHADOW_TONE, 0.5), shadow = true, reflectance = WET * 0.6 }
+local PAINT_BONE: Paint =
+	{ material = SMOOTH, color = SKIN:Lerp(RIG.ToothColor, 0.4), shadow = true, reflectance = WET * 0.75 }
+local PAINT_BONE_SMALL: Paint =
+	{ material = SMOOTH, color = PAINT_BONE.color, shadow = false, reflectance = WET * 0.75 }
+local PAINT_HAIR: Paint = { material = SMOOTH, color = RIG.HairColor, shadow = true, reflectance = 0.12 }
 local PAINT_SCALP: Paint = { material = Enum.Material.Fabric, color = RIG.HairColor, shadow = true }
 local PAINT_SOCKET: Paint = { material = Enum.Material.Fabric, color = RIG.EyeSocketColor, shadow = false }
 local PAINT_PUPIL: Paint = { material = Enum.Material.Neon, color = RIG.PupilColor, shadow = false }
 local PAINT_CAVITY: Paint = { material = Enum.Material.Fabric, color = RIG.GrinColor, shadow = false }
-local PAINT_GUM: Paint = { material = SMOOTH, color = RIG.GrinColor:Lerp(GUM_RED, 0.35), shadow = false }
-local PAINT_CLAW: Paint = { material = SMOOTH, color = RIG.ToothColor:Lerp(CLAW_STAIN, 0.6), shadow = true }
+local PAINT_GUM: Paint =
+	{ material = SMOOTH, color = RIG.GrinColor:Lerp(GUM_RED, 0.35), shadow = false, reflectance = 0.22 }
+local PAINT_CLAW: Paint =
+	{ material = SMOOTH, color = RIG.ToothColor:Lerp(CLAW_STAIN, 0.6), shadow = true, reflectance = 0.2 }
 local PAINT_INVISIBLE: Paint = { material = SMOOTH, color = RIG.SkinColor, shadow = false, transparency = 1 }
 
 --------------------------------------------------------------------------------
@@ -395,6 +407,7 @@ local function options(paint: Paint, shape: Enum.PartType?): Geometry.PartOption
 		color = paint.color,
 		castShadow = paint.shadow,
 		transparency = paint.transparency,
+		reflectance = paint.reflectance,
 	}
 end
 
@@ -673,7 +686,7 @@ local function toothPaint(random: Random): Paint
 	if random:NextNumber() < 0.12 then
 		color = color:Lerp(ROT_STAIN, 0.55)
 	end
-	return { material = SMOOTH, color = color, shadow = false }
+	return { material = SMOOTH, color = color, shadow = false, reflectance = 0.1 }
 end
 
 -- One tooth leaving the gum at `root` and growing along `grow`, set in a row running along `along` on a gum

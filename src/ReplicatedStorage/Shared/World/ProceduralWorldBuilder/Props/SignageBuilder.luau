@@ -26,7 +26,9 @@ local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuild
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 
+local DecayBuilder = require(script.Parent.DecayBuilder)
 local Finishes = require(script.Parent.Parent.Finishes)
+local FurnitureBuilder = require(script.Parent.FurnitureBuilder)
 local Geometry = require(script.Parent.Parent.Geometry)
 local Palette = require(script.Parent.Parent.Palette)
 local PropKit = require(script.Parent.PropKit)
@@ -301,7 +303,8 @@ local function wallOn(info: LevelInfo, room: Room, axis: "X" | "Z", coord: numbe
 end
 
 -- What a sign keeps clear of along each wall line: every opening the shell cuts, padded by its casing, frame,
--- boards or grate frame (a fire door's sign plate above its head too).
+-- boards or grate frame (a fire door's sign plate above its head too), and what FurnitureBuilder and DecayBuilder
+-- mount on the walls.
 local function openingBlocks(layout: Layout): { [string]: { Block } }
 	local out: { [string]: { Block } } = {}
 	for _, item in SchoolShellBuilder.openings(layout) do
@@ -321,6 +324,20 @@ local function openingBlocks(layout: Layout): { [string]: { Block } }
 			out[key] = list
 		end
 		table.insert(list, { u0 = o.u0 - pad, u1 = o.u1 + pad, y0 = o.y0 - below, y1 = o.y1 + above })
+	end
+	-- the chalkboards, noticeboards and cabinets already up, and the plaster that has come away
+	local mounts = table.clone(FurnitureBuilder.plan(layout).mounts)
+	for _, mount in DecayBuilder.wallMounts(layout) do
+		table.insert(mounts, mount)
+	end
+	for _, mount in mounts do
+		local key = lineKey(mount.axis, mount.line)
+		local list = out[key]
+		if not list then
+			list = {}
+			out[key] = list
+		end
+		table.insert(list, { u0 = mount.u0, u1 = mount.u1, y0 = mount.y0, y1 = mount.y1 })
 	end
 	return out
 end

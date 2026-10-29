@@ -1,7 +1,8 @@
 --!strict
 -- SurfaceArt: procedural paint for part faces. Every pattern is a SurfaceGui of plain Frames (and the odd TextLabel,
 -- UICorner, UIStroke or UIGradient): no images, no decals, no textures. Used for checker floors, drop-ceiling grids,
--- hazard stripes, signs and posters.
+-- hazard stripes, signs and posters, and the wear on every wall: grime at the foot, soot under the ceiling, dirt in
+-- the corners, water runs and cracks.
 --
 -- Rules every surface follows:
 --   * PixelsPerStud sizing, low resolution (4..20 px per stud) and capped so no canvas side exceeds MaxCanvas pixels
@@ -204,6 +205,154 @@ function SurfaceArt.grime(parent: Instance, color: Color3, strength: number, fro
 		NumberSequenceKeypoint.new(0.55, math.clamp(dense + (1 - dense) * 0.7, 0, 1)),
 		NumberSequenceKeypoint.new(1, 1),
 	})
+	gradient.Parent = frame
+	return frame
+end
+
+-- A band `depthPx` pixels deep along the canvas bottom (or top with `fromTop`), `offsetPx` in from that edge, dense at
+-- the edge and fading away from it: grime gathered at a wall's foot, soot under a ceiling.
+function SurfaceArt.edgeBand(
+	parent: Instance,
+	name: string,
+	fromTop: boolean,
+	offsetPx: number,
+	depthPx: number,
+	color: Color3,
+	strength: number,
+	zIndex: number?
+): Frame
+	local frame = SurfaceArt.frame(parent, name, 0, 0, 1, 0, color, 0, zIndex)
+	frame.Size = UDim2.new(1, 0, 0, depthPx)
+	frame.Position = if fromTop then UDim2.new(0, 0, 0, offsetPx) else UDim2.new(0, 0, 1, -offsetPx - depthPx)
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = if fromTop then 90 else -90
+	local dense = math.clamp(1 - strength, 0, 1)
+	gradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, dense),
+		NumberSequenceKeypoint.new(0.3, math.clamp(dense + (1 - dense) * 0.45, 0, 1)),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	gradient.Parent = frame
+	return frame
+end
+
+-- A strip `widthPx` wide down the canvas's left (or right with `atRight`) edge, `insetPx` in from it, dark at its
+-- outer side and fading inward: the dirt that gathers in an inside corner.
+function SurfaceArt.sideBand(
+	parent: Instance,
+	name: string,
+	atRight: boolean,
+	insetPx: number,
+	widthPx: number,
+	color: Color3,
+	strength: number,
+	zIndex: number?
+): Frame
+	local frame = SurfaceArt.frame(parent, name, 0, 0, 0, 1, color, 0, zIndex)
+	frame.Size = UDim2.new(0, widthPx, 1, 0)
+	frame.Position = if atRight then UDim2.new(1, -insetPx - widthPx, 0, 0) else UDim2.new(0, insetPx, 0, 0)
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = if atRight then 180 else 0
+	gradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, math.clamp(1 - strength, 0, 1)),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	gradient.Parent = frame
+	return frame
+end
+
+-- A water run: a narrow streak from `topPx` down `lengthPx` pixels at canvas-Scale x, strongest where it starts and
+-- thinning out as it runs.
+function SurfaceArt.streak(
+	parent: Instance,
+	x: number,
+	topPx: number,
+	widthPx: number,
+	lengthPx: number,
+	color: Color3,
+	strength: number,
+	zIndex: number?
+): Frame
+	local frame = SurfaceArt.frame(parent, "Run", x, 0, 0, 0, color, 0, zIndex)
+	frame.Position = UDim2.new(x, -widthPx / 2, 0, topPx)
+	frame.Size = UDim2.new(0, widthPx, 0, lengthPx)
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = 90
+	local dense = math.clamp(1 - strength, 0, 1)
+	gradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, dense),
+		NumberSequenceKeypoint.new(0.6, math.clamp(dense + (1 - dense) * 0.5, 0, 1)),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	gradient.Parent = frame
+	return frame
+end
+
+-- A crack: `segments` thin dark strokes chained from canvas-Scale (x, y), wandering about `heading` degrees (0 = down
+-- the canvas). Returns the strokes drawn.
+function SurfaceArt.crack(
+	parent: Instance,
+	random: Random,
+	x: number,
+	y: number,
+	heading: number,
+	segments: number,
+	lengthPx: number,
+	thicknessPx: number,
+	color: Color3,
+	zIndex: number?
+): number
+	local px, py = 0, 0
+	local angle = heading
+	for i = 1, segments do
+		angle += random:NextNumber(-35, 35)
+		local length = lengthPx * random:NextNumber(0.6, 1.2)
+		local radians = math.rad(angle)
+		local dx, dy = math.sin(radians) * length, math.cos(radians) * length
+		local stroke = SurfaceArt.frame(parent, "Crack", x, y, 0, 0, color, 0.15 + i * 0.08, zIndex)
+		stroke.AnchorPoint = Vector2.new(0.5, 0.5)
+		stroke.Position = UDim2.new(x, px + dx / 2, y, py + dy / 2)
+		stroke.Size = UDim2.fromOffset(math.max(1, thicknessPx), length + thicknessPx)
+		stroke.Rotation = -angle
+		px += dx
+		py += dy
+	end
+	return segments
+end
+
+-- Hard-edged stripes across the canvas Scale box (x, y, w, h): `count` bands of `ink` over `ground`, each `duty` of
+-- its period thick, running across (`vertical` false: horizontal stripes stacked down the box). One Frame and one
+-- UIGradient however many stripes (at most 4), for printed lines, lath and mortar courses.
+function SurfaceArt.stripes(
+	parent: Instance,
+	name: string,
+	x: number,
+	y: number,
+	w: number,
+	h: number,
+	count: number,
+	duty: number,
+	ink: Color3,
+	ground: Color3,
+	transparency: number?,
+	zIndex: number?
+): Frame
+	local frame = SurfaceArt.frame(parent, name, x, y, w, h, Color3.new(1, 1, 1), transparency, zIndex)
+	local n = math.clamp(count, 1, 4)
+	local period = 1 / n
+	local keys: { ColorSequenceKeypoint } = { ColorSequenceKeypoint.new(0, ground) }
+	for i = 0, n - 1 do
+		local a = i * period + period * (1 - duty) / 2
+		local b = a + period * duty
+		table.insert(keys, ColorSequenceKeypoint.new(math.max(a - 1e-3, 1e-3), ground))
+		table.insert(keys, ColorSequenceKeypoint.new(a, ink))
+		table.insert(keys, ColorSequenceKeypoint.new(b, ink))
+		table.insert(keys, ColorSequenceKeypoint.new(math.min(b + 1e-3, 1 - 1e-3), ground))
+	end
+	table.insert(keys, ColorSequenceKeypoint.new(1, ground))
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = 90
+	gradient.Color = ColorSequence.new(keys)
 	gradient.Parent = frame
 	return frame
 end

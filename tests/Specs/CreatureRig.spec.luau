@@ -731,4 +731,24 @@ return {
 		t.eq(rigs.Creature, CreatureRigBuilder.build, "the Creature rig builder")
 		t.eq(others, 0, "the rig registers nothing else")
 	end,
+	["skin: dark, wet and glossy; the pupils the brightest thing on it"] = function(t: Expect)
+		local built = rest()
+		local skin = 0
+		for _, part in baseParts(built.model) do
+			if part.Transparency >= 1 then
+				continue
+			end
+			if part.Material == Enum.Material.SmoothPlastic and part.Reflectance > 0 then
+				skin += 1
+				t.truthy(part.Reflectance <= 0.25, part.Name .. " is wet, not chrome")
+			end
+		end
+		t.truthy(skin >= 40, string.format("the body glistens (%d glossy parts)", skin))
+		local upper = findPart(built.model, "UpperTorso")
+		local color = upper.Color
+		t.truthy((color.R + color.G + color.B) / 3 < 0.4, "the skin is dark")
+		t.truthy(upper.Reflectance >= 0.1, "the torso is wet")
+		local pupil = findPart(built.model, NAMES.LeftPupil)
+		t.eq(pupil.Material, Enum.Material.Neon, "the eyes glow")
+	end,
 }
