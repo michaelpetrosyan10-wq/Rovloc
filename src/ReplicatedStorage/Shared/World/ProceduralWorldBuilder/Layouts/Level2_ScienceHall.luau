@@ -733,18 +733,25 @@ labIslands("L2_PhysicsLab_229", 2, 2, {})
 -- The specimen store's sorting bench (its worktop carries a reagent candidate below)
 anchor("LabCounter", 107.5, 0, 103.5, FACE_N)
 
--- Floor objective (BurnChain): six labelled reagent jars on the worktops of the chem labs, the chem store, the bio
--- prep room, the specimen store and the east chem lab (RunDirector uses three), clear of each worktop's flasks; the
--- fume hood against the chem prep room's north wall (the anchor is the floor point on the wall face, facing into the
--- room); hideable lockers in the rooms and the corridor farther than a vent from their step; the chain on the east
--- stair airlock's fire door (the exit lock: the floor point on the door's corridor face, facing out of the door).
+-- Floor objective (BurnChain): twelve labelled reagent jars on lab worktops all over the floor, four of each kind (the
+-- candidates cycle through the kinds in this order: nitric, sulfuric, catalyst), clear of each worktop's flasks
+-- (RunDirector uses one of each kind, in three different rooms); the fume hood against the chem prep room's north
+-- wall (the anchor is the floor point on the wall face, facing into the room); hideable lockers in the rooms and the
+-- corridor farther than a vent from their step; the chain on the east stair airlock's fire door (the exit lock: the
+-- floor point on the door's corridor face, facing out of the door).
 scatter("ReagentCandidate", WORKTOP, {
-	{ 31.9, 63.1 }, -- chem lab 201
+	{ 18.6, 51.55 }, -- chem lab 201 (the bench farthest from the stairwell)
 	{ 61.1, 51.55 }, -- chem lab 203
 	{ 161.3, 9.1 }, -- chem store 243 (past the flask at its east end, so the sink keeps the middle)
 	{ 140.5, 56.5 }, -- bio prep 207
 	{ 105, 103.5 }, -- specimen store 225
 	{ 211.5, 110.1 }, -- chem lab 231
+	{ 37.4, 98.55 }, -- bio lab 221
+	{ 183.4, 63.1 }, -- bio lab 209
+	{ 186.4, 98.55 }, -- physics lab 229
+	{ 217.5, 63.1 }, -- bio lab 211
+	{ 68.4, 98.55 }, -- bio lab 223
+	{ 61.6, 63.1 }, -- chem lab 203, the south bench
 })
 anchor("FumeHood", 107.5, 0, 40.5, FACE_S, "L2_FumeHood")
 scatter("Locker", 0, {
@@ -752,6 +759,7 @@ scatter("Locker", 0, {
 	{ 148.2, 48, FACE_W }, -- bio prep
 	{ 226.2, 104, FACE_W }, -- chem lab 231
 	{ 222, 85.2, FACE_N }, -- east corridor, by the stairwell door
+	{ 13.8, 46, FACE_E }, -- chem lab 201
 })
 anchor("ExitLock", 227.5, 0, 80, FACE_W, "L2_ExitLock")
 

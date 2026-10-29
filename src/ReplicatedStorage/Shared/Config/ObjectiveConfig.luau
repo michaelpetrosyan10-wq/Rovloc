@@ -9,17 +9,25 @@
 -- lock it is worked at; every prompt the builders create takes its hold from `holds` (by PromptKind) and carries the
 -- Step attribute of the step it serves.
 --
---   Floor 0  RestorePower  3 fuses (6 candidates, 2+ guarded by a bear trap on the approach) -> fit them in the
---                          breaker panel (2 s each) -> throw the main breaker (3 s). Exit lock: Keypad (no power).
---   Floor 1  MasterKeys    the janitor's master keys (past the gate) -> unlock the west stairwell door (4 s). Padlock.
---   Floor 2  BurnChain     3 reagents, one of each kind (6 candidates, two per kind) -> mix them at the fume hood (5 s)
---                          -> an acid flask -> throw it at
---                          the chain (within 3 studs) or pour it at the door (2 s). Chain.
---   Floor 3  GymGenerator  the coach's key (in one of the locker-room lockers) -> unlock the equipment store (2 s) ->
+--   Floor 0  RestorePower  3 fuses (13 candidates, each with a bear-trap spot on its approach; the first 2 picked are
+--                          guarded) -> fit them in the breaker panel (2 s each) -> throw the main breaker (3 s). Exit
+--                          lock: Keypad (no power).
+--   Floor 1  MasterKeys    the janitor's master keys (10 spots, all past the gate) -> unlock the stairwell door (4 s).
+--                          Padlock.
+--   Floor 2  BurnChain     3 reagents, one of each kind (12 candidates, four per kind) -> mix them at the fume hood
+--                          (5 s) -> an acid flask -> throw it at the chain (within 3 studs) or pour it at the door (2 s).
+--                          Chain.
+--   Floor 3  GymGenerator  the coach's key (in any of the 32 locker-room lockers) -> unlock the equipment store (2 s) ->
 --                          start the generator (3 s) -> survive 45 s while the door motor winds. Keypad (motor).
---   Floor 4  ValveWheel    the valve wheel (3 spots on the deep pool floor) -> fit it on the hatch valve (3 s) -> turn
+--   Floor 4  ValveWheel    the valve wheel (8 spots on the deep pool floor) -> fit it on the hatch valve (3 s) -> turn
 --                          it (4 s). Keypad (hatch interlock).
---   Floor 5  CutCrate      the bolt cutters (4 candidates) -> cut the chain on the parachute crate (4 s).
+--   Floor 5  CutCrate      the bolt cutters (9 candidates) -> cut the chain on the parachute crate (4 s).
+--
+-- Fair spots (the specs and web/tools/data-test.mjs hold every candidate to them): on a real surface the squad can
+-- reach (on foot, through the vents or by swimming); a hiding spot within HideReach; at least EntryClearance studs of
+-- walking from the floor's entry (ObjectivePlaces.entryDistance), never in the Floor 1 scare classroom. A run's items
+-- (RunDirector.pickObjective) lie in different rooms, at least PickSpacing apart, and three of them in at least
+-- PickQuarters quarters of the floor.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -214,6 +222,12 @@ ObjectiveConfig.StoreLockReason = "Prompt.Locked.Store"
 -- How close a hiding spot (a hideable locker, an open vent grate, a dark corner, or on the roof a plant block to crouch
 -- behind) stands to every objective step's spot. The specs hold every layout to it.
 ObjectiveConfig.HideReach = 25
+
+-- How far (studs walked, ObjectivePlaces.entryDistance) every item candidate lies from the floor's entry, how far apart
+-- the items of one run lie (horizontal), and in how many quarters of the floor a run's three items lie at least.
+ObjectiveConfig.EntryClearance = 35
+ObjectiveConfig.PickSpacing = 25
+ObjectiveConfig.PickQuarters = 2
 
 local byLevel: { [string]: FloorSpec } = {}
 local byProp: { [string]: FloorSpec } = {}

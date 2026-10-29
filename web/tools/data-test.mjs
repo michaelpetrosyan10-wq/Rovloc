@@ -215,7 +215,7 @@ for (const e of meta.entities) {
   const ids = new Set(meta.entities.map((e) => e.id));
   check(new Set(meta.entities.map((e) => `${e.level}/${e.id}`)).size === meta.entities.length, 'entity ids unique per level');
   const byType = (type) => meta.entities.filter((e) => e.type === type);
-  const ITEMS = { Fuse: 6, MasterKeys: 5, ReagentJar: 6, CoachKey: 6, ValveWheel: 3, BoltCutters: 4, AcidFlask: 1 };
+  const ITEMS = { Fuse: 13, MasterKeys: 10, ReagentJar: 12, CoachKey: 32, ValveWheel: 8, BoltCutters: 9, AcidFlask: 1 };
   for (const [type, count] of Object.entries(ITEMS)) {
     const list = byType(type);
     check(list.length === count, `${type}: ${list.length} entities (want ${count})`);
@@ -257,6 +257,53 @@ for (const e of meta.entities) {
   }
   check(byType('StoreDoor').length === 1, 'the equipment store door');
   check(meta.objectives && Object.keys(meta.objectives.levels || {}).length === 6, 'meta.objectives for six floors');
+}
+
+// floor objectives: every item candidate is fair, and the export seed's picks keep the multi-item rules
+{
+  const o = meta.objectives || {};
+  const rules = o.rules || {};
+  check(rules.entryClearance === 35 && rules.pickSpacing === 25 && rules.pickQuarters === 2, 'objective rules exported');
+  const MIN = { Level0_Basement: 12, Level1_Hallways: 9, Level2_ScienceHall: 12, Level3_Gymnasium: 12, Level4_FloodedPool: 6, Level5_Roof: 8 };
+  const anchorIds = new Set(meta.anchors.map((a) => a.id));
+  const lockerIds = new Set(meta.entities.filter((e) => e.type === 'Locker').map((e) => e.id));
+  const [fw, fd] = rules.footprint || [240, 160];
+  const quarterOf = (p) => 1 + (p[0] >= fw / 2 ? 1 : 0) + (p[2] >= fd / 2 ? 2 : 0);
+  const flat = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
+  for (const floor of o.floors || []) {
+    const level = (o.levels || {})[floor.levelId];
+    check(!!level, `${floor.levelId} objective data`);
+    if (!level) continue;
+    const list = level.candidates || [];
+    check(list.length >= MIN[floor.levelId], `${floor.levelId}: ${list.length} candidates (want >= ${MIN[floor.levelId]})`);
+    check(level.entry && level.entry.room && Array.isArray(level.entry.pos), `${floor.levelId} entry point`);
+    for (const c of list) {
+      check(c.eligible === true, `${c.anchorId} is a candidate a run may use`);
+      check(c.entryDistance >= rules.entryClearance, `${c.anchorId} ${c.entryDistance} studs walked from the entry`);
+      if (level.entry) check(c.entryDistance + 0.1 >= flat(c.pos, level.entry.pos), `${c.anchorId} walk >= straight line`);
+      check(c.hide && c.hide.distance <= o.hideReach, `${c.anchorId} hiding spot within ${o.hideReach}`);
+      check(c.quarter === quarterOf(c.pos), `${c.anchorId} quarter`);
+      if (floor.item.guarded) check(c.ref && anchorIds.has(c.ref), `${c.anchorId} guard trap spot ${c.ref}`);
+      if (floor.item.candidate === 'CoachKeyCandidate') check(lockerIds.has(c.ref), `${c.anchorId} hangs in locker ${c.ref}`);
+    }
+    if (floor.item.slots) {
+      for (let k = 1; k <= floor.item.slots; k++) check(list.filter((c) => c.slot === k).length >= 4, `${floor.levelId} kind ${k} has 4+ spots`);
+    }
+    const picked = (level.picks ? level.picks.anchors : []).map((id) => list.find((c) => c.anchorId === id));
+    check(picked.length === floor.item.count && picked.every(Boolean), `${floor.levelId} export picks`);
+    check(list.filter((c) => c.planned).length === floor.item.count, `${floor.levelId} planned flags`);
+    for (let i = 0; i < picked.length; i++) {
+      for (let j = i + 1; j < picked.length; j++) {
+        const a = picked[i];
+        const b = picked[j];
+        if (!a || !b) continue;
+        check(a.room !== b.room, `${a.anchorId} / ${b.anchorId} in different rooms`);
+        check(flat(a.pos, b.pos) >= rules.pickSpacing, `${a.anchorId} / ${b.anchorId} ${flat(a.pos, b.pos).toFixed(1)} apart`);
+      }
+    }
+    if (picked.length >= 3 && picked.every(Boolean)) check(new Set(picked.map((c) => c.quarter)).size >= rules.pickQuarters, `${floor.levelId} picks spread`);
+    if (floor.item.slots) picked.forEach((c, i) => c && check(c.slot === i + 1, `${c.anchorId} is kind ${i + 1}`));
+  }
 }
 // collision
 for (const [level, c] of Object.entries(world.collision)) {

@@ -208,17 +208,41 @@ Every floor's exit stays locked until its objective is done (ObjectiveConfig in
   count, guarded?, slots?, hold, object}, `steps` [{id, count, label, seconds?}], `lockStep`, `lockVariant`,
   `lockReason`, `holds` by prompt kind);
 - `hideReach` (25): how close a hiding spot is to every step;
-- `levels[levelId]`: `candidates` [{anchorId, room, slot, ref, pos (level-local), planned}], `picks` (the export
-  seed's RunDirector picks: `anchors` in pick order, `guards`), `places` (every candidate, station and lock with its
-  nearest hiding spot: `hide` {kind Locker / Vent / DarkCorner / DryFooting / Cover, id, distance}).
+- `rules`: the fairness and spread rules of the item picks: `entryClearance` (35: studs walked from the floor's
+  entry to every candidate), `pickSpacing` (25: studs between two items of one run, horizontal), `pickQuarters` (2:
+  three items lie in at least this many quarters of the floor), `pickAttempts` (24: re-shuffles tried), `footprint`
+  ([240, 160]: the quarters split it at its centre);
+- `levels[levelId]`: `entry` {room, pos (level-local, the centroid of the entry room's PlayerSpawn anchors)},
+  `candidates` [{anchorId, room, slot, ref, pos (level-local), planned, entryDistance (studs walked from the entry,
+  ObjectivePlaces.walkDistance: door to door across rooms, through the vents a squad can always use, every Gate shut
+  and every lockable grate locked), quarter (1 NW, 2 NE, 3 SW, 4 SE), hide {kind, id, distance}, eligible (a run may
+  use it: every exported candidate is)}], `picks` (the export seed's RunDirector picks: `anchors` in pick order,
+  `guards`), `places` (every candidate, station and lock with its nearest hiding spot: `hide` {kind Locker / Vent /
+  DarkCorner / DryFooting / Cover, id, distance}).
+
+| Floor | Item candidates (brief minimum) | Where |
+| --- | --- | --- |
+| 0 | 13 `Fuse` (12), each with a guard trap spot `L0_TrapGuard_NN` (its `ref`) | benches, shelves (new statics `L0_Shelf_Furniture`, `L0_Shelf_Archive`, `L0_Shelf_E1`), by the boilers, pumps, switchgear, water heaters, washers, coal heap |
+| 1 | 10 `MasterKeys` (9), all west of the gate | nails in the janitor's closet, lounge, book store, stores, kitchen, classrooms 113 / 131, cafeteria, art room, library (new hideable lockers `L1_Locker_07..11` beside the new ones) |
+| 2 | 12 `ReagentJar` (12), four per kind | lab worktops all over the floor (new hideable locker `L2_Locker_05` in chem lab 201) |
+| 3 | 32 `CoachKey` (12) | inside every locker of both locker rooms (`ref` = the locker) |
+| 4 | 8 `ValveWheel` (6) | the deep pool floor in open water, never under a walkway, each 12 studs or less of swim from dry footing |
+| 5 | 9 `BoltCutters` (8) | against the HVAC units, the water tank, the boiler flue and the tool locker (new static `L5_ToolLocker`), on the maintenance box |
 
 Objective entities carry attributes `Floor` (0-5), `Step`, `ObjectiveId` (= the entity type), `LevelId`, `AnchorId`
 (the entity id; the acid flask's id is its name), and tags `ObjectiveItem` / `ObjectiveStation` / `ExitLock`.
 
 - **Items** are exported for every candidate, not just the export seed's picks: attribute `Planned` says which ones
-  the export seed uses; hide the others and pick per run with RunDirector's rule (one seeded shuffle per level,
-  stream `Objective|<levelId>`, the first `item.count`; reagents pick one candidate of each slot, the candidates'
-  slots cycling 1, 2, 3 in layout order; the basement arms the guard trap (`ref`) of the first two fuses picked).
+  the export seed uses; hide the others and pick per run with RunDirector.pickObjective's rule. One stream per level,
+  `seededRandom(seed, "Objective|" + levelId)`, over the level's candidates in layout order (all eligible):
+  - one item (keys, coach key, valve wheel, bolt cutters): `shuffle(candidates)`, take the first;
+  - several items, up to `pickAttempts` passes on the same stream: fuses `shuffle(candidates)` and take, in that
+    order, each candidate in another room than the items taken so far and at least `pickSpacing` from each of them,
+    until `item.count`; reagents (slot of candidate i = `(i - 1) % 3 + 1`) for k = 1..3 `shuffle(slot k's
+    candidates)` and take the first that keeps the same rule. A pass stands when it is full and its three items lie
+    in at least `pickQuarters` quarters; otherwise the next pass reshuffles (if none stands, the first fullest pass
+    is used). Slot = pick order (reagents: the kind);
+  - the basement arms the guard trap (`ref`) of the first two fuses picked.
   Item attributes add `Slot` (a reagent's colour / kind 1-3), `Candidate` (the anchor kind). Attachments `Grip`
   (the hand), `PromptPoint` (a disabled `Pickup` prompt with the item's hold), and on the valve wheel `Hub` (its axis
   is the UpVector). The `AcidFlask` stands at the fume hood's `AcidFlaskSpot` with `Planned` false: show it when the

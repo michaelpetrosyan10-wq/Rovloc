@@ -721,7 +721,7 @@ scatter("SmashedLocker", 0, {
 	{ 101, 85.8, FACE_N },
 })
 
--- Floor objective (MasterKeys): the janitor's master keys hang on a nail in one of five rooms past the gate (the
+-- Floor objective (MasterKeys): the janitor's master keys hang on a nail in one of ten rooms past the gate (the
 -- anchor is the nail on the wall face, facing into the room); hideable lockers in each of those rooms or the hall
 -- outside, and in classroom 101 a door away from the stairwell door, keep a hiding spot near every step; the exit
 -- lock on the west stair airlock's fire door (the floor point on its corridor face, facing out of the door).
@@ -732,6 +732,11 @@ scatter("MasterKeyCandidate", KEY_HOOK_Y, {
 	{ 112.5, 20, FACE_E }, -- book store (the records)
 	{ 11.5, 104, FACE_W }, -- the store by classroom 131
 	{ 119.5, 150, FACE_W }, -- kitchen
+	{ 56.5, 16, FACE_E }, -- classroom 113, by the teacher's desk
+	{ 6, 134.5, FACE_S }, -- cafeteria, inside the hall doors
+	{ 119.5, 104, FACE_W }, -- art room, by the supply shelves
+	{ 28, 25.5, FACE_N }, -- library, by the issue desk
+	{ 12.5, 110, FACE_E }, -- classroom 131
 })
 scatter("Locker", 0, {
 	{ 2.05, 58, FACE_E }, -- janitor's closet
@@ -740,6 +745,11 @@ scatter("Locker", 0, {
 	{ 2.05, 112, FACE_E }, -- the store by classroom 131
 	{ 102, 157.95, FACE_N }, -- kitchen
 	{ 13.8, 68, FACE_E }, -- classroom 101, a door away from the stairwell door
+	{ 58.05, 6, FACE_E }, -- classroom 113
+	{ 2.05, 140, FACE_E }, -- cafeteria
+	{ 118.2, 112, FACE_W }, -- art room
+	{ 34, 23.95, FACE_N }, -- library
+	{ 13.8, 100, FACE_E }, -- classroom 131
 })
 anchor("ExitLock", 12.5, 0, 80, FACE_E, "L1_ExitLock")
 

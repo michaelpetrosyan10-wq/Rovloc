@@ -1,13 +1,16 @@
 --!strict
 -- RunDirector: everything a run randomizes, as one pure function of (seed, difficulty, layouts, graph).
 --
---   Objectives     each floor's objective item (ObjectiveConfig): item.count of the layout's item.candidate anchors
---                  (with item.slots, one candidate of each kind: the candidates cycle through the kinds in layout
---                  order), as props of kind item.prop, each with its slot (pick order, 1..count; with kinds, the
---                  kind: a reagent's colour), listed
---                  in plan.objectives[levelId] (RunDirector.objectiveOf). One seeded shuffle per level
---                  ("Objective|<level>"), independent of the difficulty: a run's objective spots are a pure
---                  function of the seed.
+--   Objectives     each floor's objective item (ObjectiveConfig): item.count of the layout's fair item.candidate
+--                  anchors (objectiveCandidates: at least EntryClearance studs walked from the floor's entry, never in
+--                  the room of a CreatureScarePose), with item.slots one candidate of each kind (the candidates cycle
+--                  through the kinds in layout order), as props of kind item.prop, each with its slot (pick order,
+--                  1..count; with kinds, the kind: a reagent's colour), listed in plan.objectives[levelId]
+--                  (RunDirector.objectiveOf). Several items lie in different rooms, at least PickSpacing studs apart,
+--                  and (three or more) in at least PickQuarters quarters of the floor: a seeded pass takes the first
+--                  shuffled candidate that keeps those rules, and a pass that falls short or bunches up is
+--                  re-shuffled, up to PICK_ATTEMPTS times. One stream per level ("Objective|<level>"), independent
+--                  of the difficulty: a run's objective spots are a pure function of the seed.
 --   BearTrap       DifficultyConfig.trapCount Level0 TrapCandidate anchors. First the guard traps: the ref (a
 --                  TrapCandidate on the approach) of each of the first item.guarded fuses picked, so at least that
 --                  many fuses are guarded; then the rest. No two traps closer than MinTrapSpacing studs, and never
@@ -33,6 +36,7 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local ObjectivePlaces = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces)
 local Types = require(ReplicatedStorage.Shared.Types)
 local ZoneGraph = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph)
 
@@ -51,6 +55,7 @@ local FLASK_SPACING = 3 -- preferred, not required: flasks may share a long lab 
 local BATTERY_SPACING = 10 -- preferred, not required: spreads batteries over a level
 local TRAP_ATTEMPTS = 16 -- fresh shuffles tried when the spacing rule leaves a trap short
 local MAX_REROLLS = 64
+local PICK_ATTEMPTS = 24 -- fresh shuffles tried when a multi-item pick falls short of the room / spacing / spread rules
 local VARIANT_RANGE = 1000000
 
 local RunDirector = {}
@@ -62,6 +67,7 @@ RunDirector.PropKinds = table.freeze({
 })
 RunDirector.MinTrapSpacing = MIN_TRAP_SPACING
 RunDirector.MaxRerolls = MAX_REROLLS
+RunDirector.PickAttempts = PICK_ATTEMPTS
 RunDirector.TrapLevel = TRAP_LEVEL
 RunDirector.ScienceLevel = SCIENCE_LEVEL
 RunDirector.PoolLevel = POOL_LEVEL
@@ -290,35 +296,125 @@ function RunDirector.candidateSlot(spec: ObjectiveConfig.FloorSpec, index: numbe
 	return if slots then (index - 1) % slots + 1 else index
 end
 
--- The seeded objective picks of one level: `spec.item.count` of its candidate anchors (in pick order) and the guard
--- traps of the first `spec.item.guarded` of them whose ref is an eligible TrapCandidate. Depends on the seed only.
+-- The item candidates of `layout` a run may use for `spec` (layout order): at least ObjectiveConfig.EntryClearance
+-- studs walked from the floor's entry, and never in a room holding a CreatureScarePose (the Floor 1 scare classroom).
+-- Cached per layout (the walk is the same every run).
+local candidateCache: { [Layout]: { [string]: { Anchor } } } = setmetatable({}, { __mode = "k" }) :: any
+function RunDirector.objectiveCandidates(layout: Layout, spec: ObjectiveConfig.FloorSpec): { Anchor }
+	local byKind = candidateCache[layout]
+	if not byKind then
+		byKind = {}
+		candidateCache[layout] = byKind
+	end
+	local cached = byKind[spec.item.candidate]
+	if cached then
+		return cached
+	end
+	local scareRooms: { [string]: boolean } = {}
+	for _, anchor in layout.anchors do
+		if anchor.kind == "CreatureScarePose" then
+			scareRooms[anchor.room] = true
+		end
+	end
+	local out: { Anchor } = {}
+	for _, anchor in anchorsOfKind(layout, spec.item.candidate, scareRooms) do
+		local place = { id = anchor.id, kind = anchor.kind, room = anchor.room, pos = anchor.pos }
+		if ObjectivePlaces.entryDistance(layout, place) >= ObjectiveConfig.EntryClearance then
+			table.insert(out, anchor)
+		end
+	end
+	table.freeze(out)
+	byKind[spec.item.candidate] = out
+	return out
+end
+
+-- Whether `anchor` keeps the multi-item rules with the items already `taken`: another room, PickSpacing apart.
+local function keepsApart(anchor: Anchor, taken: { Anchor }): boolean
+	for _, other in taken do
+		if other.room == anchor.room then
+			return false
+		end
+	end
+	return spacedFrom(anchor, taken, ObjectiveConfig.PickSpacing)
+end
+
+-- How many quarters of the floor `picks` lie in.
+function RunDirector.quarters(picks: { Anchor }): number
+	local seen: { [number]: boolean } = {}
+	local count = 0
+	for _, anchor in picks do
+		local q = ObjectivePlaces.quarter(anchor.pos)
+		if not seen[q] then
+			seen[q] = true
+			count += 1
+		end
+	end
+	return count
+end
+
+-- Whether a full pick of `count` items is spread enough: three or more items in at least PickQuarters quarters.
+local function spreadEnough(picks: { Anchor }, count: number): boolean
+	return count < 3 or RunDirector.quarters(picks) >= ObjectiveConfig.PickQuarters
+end
+
+-- The seeded objective picks of one level: `spec.item.count` of its fair candidates (objectiveCandidates, in pick
+-- order; several in different rooms, PickSpacing apart and spread over PickQuarters quarters) and the guard traps of
+-- the first `spec.item.guarded` of them whose ref is an eligible TrapCandidate. Depends on the seed only.
 function RunDirector.pickObjective(
 	seed: number,
 	layout: Layout,
 	spec: ObjectiveConfig.FloorSpec
 ): ({ Anchor }, { Anchor })
-	local candidates = anchorsOfKind(layout, spec.item.candidate, nil)
+	local candidates = RunDirector.objectiveCandidates(layout, spec)
 	local random = MathUtil.seededRandom(seed, "Objective|" .. layout.id)
-	local picks: { Anchor } = {}
 	local slots = spec.item.slots
+	local count = if slots then math.min(slots, spec.item.count) else math.min(spec.item.count, #candidates)
+	local groups: { { Anchor } } = {}
 	if slots then
-		-- one of each kind: the candidates of slot k (layout order, cycling) shuffled, the first taken
-		for k = 1, math.min(slots, spec.item.count) do
-			local group: { Anchor } = {}
-			for i, anchor in candidates do
-				if RunDirector.candidateSlot(spec, i) == k then
-					table.insert(group, anchor)
-				end
-			end
-			local order = MathUtil.shuffle(group, random)
-			if order[1] then
-				table.insert(picks, order[1])
+		-- one of each kind: the fair candidates of slot k (the slot cycles over every candidate in layout order)
+		local fair: { [Anchor]: boolean } = {}
+		for _, anchor in candidates do
+			fair[anchor] = true
+		end
+		for k = 1, count do
+			groups[k] = {}
+		end
+		for i, anchor in anchorsOfKind(layout, spec.item.candidate, nil) do
+			local group = groups[RunDirector.candidateSlot(spec, i)]
+			if group and fair[anchor] then
+				table.insert(group, anchor)
 			end
 		end
-	else
-		local order = MathUtil.shuffle(candidates, random)
-		for i = 1, math.min(spec.item.count, #order) do
-			table.insert(picks, order[i])
+	end
+	local picks: { Anchor } = {}
+	for _ = 1, if count > 1 then PICK_ATTEMPTS else 1 do
+		local pass: { Anchor } = {}
+		if slots then
+			-- kind by kind, the first shuffled candidate that keeps apart from the kinds already taken
+			for k = 1, count do
+				for _, anchor in MathUtil.shuffle(table.clone(groups[k]), random) do
+					if keepsApart(anchor, pass) then
+						table.insert(pass, anchor)
+						break
+					end
+				end
+			end
+		else
+			for _, anchor in MathUtil.shuffle(table.clone(candidates), random) do
+				if #pass >= count then
+					break
+				end
+				if keepsApart(anchor, pass) then
+					table.insert(pass, anchor)
+				end
+			end
+		end
+		if #pass > #picks or #picks == 0 then
+			picks = pass
+		end
+		if #pass >= count and spreadEnough(pass, count) then
+			picks = pass
+			break
 		end
 	end
 	local guards: { Anchor } = {}

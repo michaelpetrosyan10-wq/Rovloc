@@ -231,7 +231,19 @@ local ObjectiveConfig = h.require("ReplicatedStorage.Shared.Config.ObjectiveConf
 local AcidFlaskBuilder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.AcidFlaskBuilder")
 local ObjectivePlaces = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces")
 local PropKit = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit")
-local objectiveData = { floors = toJson(ObjectiveConfig.Floors), hideReach = ObjectiveConfig.HideReach, levels = {} }
+local objectiveData = {
+	floors = toJson(ObjectiveConfig.Floors),
+	hideReach = ObjectiveConfig.HideReach,
+	-- the fairness and spread rules RunDirector.pickObjective applies (see web/DATA.md)
+	rules = {
+		entryClearance = ObjectiveConfig.EntryClearance,
+		pickSpacing = ObjectiveConfig.PickSpacing,
+		pickQuarters = ObjectiveConfig.PickQuarters,
+		pickAttempts = RunDirector.PickAttempts,
+		footprint = toJson(WorldConfig.FootprintSize),
+	},
+	levels = {},
+}
 for _, spec in ObjectiveConfig.Floors do
 	local layout = Builder.getLayout(spec.levelId)
 	local parent = Instances.runtimeLevel(spec.levelId, true)
@@ -264,6 +276,8 @@ for _, spec in ObjectiveConfig.Floors do
 		if model then
 			model:SetAttribute("Planned", picked[anchor.id] ~= nil)
 		end
+		local place = { id = anchor.id, kind = anchor.kind, room = anchor.room, pos = anchor.pos }
+		local hide = ObjectivePlaces.nearestHide(layout, place)
 		table.insert(candidates, {
 			anchorId = anchor.id,
 			room = anchor.room,
@@ -271,8 +285,13 @@ for _, spec in ObjectiveConfig.Floors do
 			ref = anchor.ref,
 			pos = toJson(anchor.pos),
 			planned = picked[anchor.id] ~= nil,
+			entryDistance = math.floor(ObjectivePlaces.entryDistance(layout, place) * 10 + 0.5) / 10,
+			quarter = ObjectivePlaces.quarter(anchor.pos),
+			hide = if hide then { kind = hide.kind, id = hide.id, distance = math.floor(hide.distance * 10 + 0.5) / 10 } else nil,
+			eligible = table.find(RunDirector.objectiveCandidates(layout, spec), anchor) ~= nil,
 		})
 	end
+	local entryPoint = ObjectivePlaces.entryPoint(layout)
 	local places = {}
 	for _, place in ObjectivePlaces.places(layout) do
 		local hide = ObjectivePlaces.nearestHide(layout, place)
@@ -287,6 +306,7 @@ for _, spec in ObjectiveConfig.Floors do
 	objectiveData.levels[spec.levelId] = {
 		floor = spec.floor,
 		id = spec.id,
+		entry = { room = layout.entry, pos = toJson(entryPoint) },
 		candidates = candidates,
 		picks = if picks then toJson(picks) else nil,
 		places = places,

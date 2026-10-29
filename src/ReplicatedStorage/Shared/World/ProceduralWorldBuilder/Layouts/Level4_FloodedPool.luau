@@ -707,8 +707,9 @@ scatter("PlayerSpawn", 3.5, { { 4, 74, FACE_E }, { 8, 74, FACE_E }, { 4, 86, FAC
 anchor("CreatureSpawn", 171, WATER - 4, 100, FACE_N, "L4_CreatureSpawn")
 anchor("FloodlightSwitch", 91.5, 4, 70, FACE_E, "L4_FloodlightSwitch")
 
--- Floor objective (ValveWheel): the valve wheel lies on the deep pool floor at one of three spots, each 12 studs or
--- less of swim from dry footing (the south spur, FallenSlab_C, the tower's footing); the hatch valve is the jammed
+-- Floor objective (ValveWheel): the valve wheel lies on the deep pool floor at one of eight spots all over the basin,
+-- never under a walkway and each 12 studs or less of swim from dry footing (the spurs, the bridge, the fallen slabs,
+-- the tower's footing, the decks); the hatch valve is the jammed
 -- watertight hatch over the duct's west grate on the inner face of the north coping, its valve socket half under the
 -- water (the anchor is the grate's centre at the waterline, facing into the hall), a short swim from FallenSlab_A; the
 -- exit lock on the east stair airlock's fire door. On this floor the Creature cannot leave the water, so dry footing is
@@ -717,6 +718,11 @@ scatter("ValveWheelCandidate", -POOL_DEPTH, {
 	{ 180, 106 },
 	{ 202, 104 },
 	{ 166, 121 },
+	{ 152, 55 }, -- off the north spur
+	{ 178, 58 }, -- south of FallenSlab_D
+	{ 156, 92 }, -- south of the bridge, between it and FallenSlab_C
+	{ 208, 50 }, -- off the east deck's coping
+	{ 134, 110 }, -- off the west deck's coping
 })
 anchor("HatchValve", 150, WATER, 31, FACE_S, "L4_HatchValve")
 anchor("ExitLock", 227.5, 0, 80, FACE_W, "L4_ExitLock")

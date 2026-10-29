@@ -42,13 +42,23 @@ local SEEDS = 120
 
 -- Candidate counts the brief asks for, and the stations every floor has
 local CANDIDATES: { [string]: number } = {
-	Level0_Basement = 6,
-	Level1_Hallways = 5,
-	Level2_ScienceHall = 6,
-	Level3_Gymnasium = 6,
-	Level4_FloodedPool = 3,
-	Level5_Roof = 4,
+	Level0_Basement = 13,
+	Level1_Hallways = 10,
+	Level2_ScienceHall = 12,
+	Level3_Gymnasium = 32,
+	Level4_FloodedPool = 8,
+	Level5_Roof = 9,
 }
+-- The least the brief asks for on each floor
+local MIN_CANDIDATES: { [string]: number } = {
+	Level0_Basement = 12,
+	Level1_Hallways = 9,
+	Level2_ScienceHall = 12,
+	Level3_Gymnasium = 12,
+	Level4_FloodedPool = 6,
+	Level5_Roof = 8,
+}
+local COVERAGE_SEEDS = 600 -- pickObjective alone (cheap): every candidate turns up within this many seeds
 local STATIONS: { [string]: { Enums.AnchorKind } } = {
 	Level0_Basement = { "BreakerPanel", "ExitLock" },
 	Level1_Hallways = { "ExitLock" },
@@ -281,6 +291,10 @@ return {
 			local layout = layoutOf(spec.levelId)
 			t.eq(#anchorsOf(layout, spec.item.candidate), CANDIDATES[spec.levelId], spec.levelId .. " candidates")
 			t.truthy(
+				#anchorsOf(layout, spec.item.candidate) >= MIN_CANDIDATES[spec.levelId],
+				spec.levelId .. " at least the brief's candidates"
+			)
+			t.truthy(
 				#anchorsOf(layout, spec.item.candidate) > spec.item.count,
 				spec.levelId .. " more spots than items"
 			)
@@ -456,6 +470,72 @@ return {
 		end
 	end,
 
+	["layouts: every item candidate is fair (entry clearance, real footing, kinds, lockers)"] = function(t: Expect)
+		for _, spec in ObjectiveConfig.Floors do
+			local layout = layoutOf(spec.levelId)
+			local scareRooms: { [string]: boolean } = {}
+			for _, a in anchorsOf(layout, "CreatureScarePose") do
+				scareRooms[a.room] = true
+			end
+			local all = anchorsOf(layout, spec.item.candidate)
+			t.eq(
+				#RunDirector.objectiveCandidates(layout, spec),
+				#all,
+				spec.levelId .. " every candidate is one a run may use"
+			)
+			local entry = ObjectivePlaces.entryPoint(layout)
+			for _, anchor in all do
+				local place = { id = anchor.id, kind = anchor.kind, room = anchor.room, pos = anchor.pos }
+				local walk = ObjectivePlaces.entryDistance(layout, place)
+				t.truthy(
+					walk >= ObjectiveConfig.EntryClearance and walk < math.huge,
+					string.format("%s is %.1f studs walked from the entry", anchor.id, walk)
+				)
+				local straight = (Vector3.new(anchor.pos.X, 0, anchor.pos.Z) - entry).Magnitude
+				t.truthy(walk >= straight - EPS, anchor.id .. " walk is never shorter than the straight line")
+				t.falsy(scareRooms[anchor.room], anchor.id .. " is not in the scare classroom")
+				-- floor items stand clear of solid plant and pillars; pool-floor items lie in open water
+				for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
+					local over = LayoutSchema.rectContains(platform.rect, anchor.pos.X, anchor.pos.Z, -0.8)
+					t.falsy(
+						over and platform.top > anchor.pos.Y + 0.05,
+						string.format("%s is clear of %s", anchor.id, platform.id)
+					)
+				end
+				for _, pillar in (layout.pillars or {}) :: { LayoutSchema.Pillar } do
+					t.falsy(
+						math.abs(pillar.x - anchor.pos.X) < pillar.size / 2 + 0.8
+							and math.abs(pillar.z - anchor.pos.Z) < pillar.size / 2 + 0.8,
+						anchor.id .. " is clear of the pillars"
+					)
+				end
+			end
+		end
+		-- reagents: at least four of each kind
+		local science = layoutOf("Level2_ScienceHall")
+		local spec2 = ObjectiveConfig.forLevel("Level2_ScienceHall") :: ObjectiveConfig.FloorSpec
+		local perKind: { [number]: number } = {}
+		for i in anchorsOf(science, "ReagentCandidate") do
+			local slot = RunDirector.candidateSlot(spec2, i)
+			perKind[slot] = (perKind[slot] or 0) + 1
+		end
+		for k = 1, spec2.item.slots or 0 do
+			t.truthy((perKind[k] or 0) >= 4, string.format("reagent kind %d has %d spots", k, perKind[k] or 0))
+		end
+		-- the coach's key: every locker of both locker rooms can hold it
+		local gym = layoutOf("Level3_Gymnasium")
+		local rooms = LayoutSchema.indexRooms(gym)
+		local holds: { [string]: boolean } = {}
+		for _, key in anchorsOf(gym, "CoachKeyCandidate") do
+			holds[key.ref or ""] = true
+		end
+		for _, locker in anchorsOf(gym, "Locker") do
+			if rooms[locker.room].kind == "LockerRoom" then
+				t.truthy(holds[locker.id], locker.id .. " can hold the coach's key")
+			end
+		end
+	end,
+
 	["layouts: a hiding spot within reach of every objective step"] = function(t: Expect)
 		for _, spec in ObjectiveConfig.Floors do
 			local layout = layoutOf(spec.levelId)
@@ -498,7 +578,7 @@ return {
 	end,
 
 	["plan: seeded picks, deterministic and independent of the difficulty"] = function(t: Expect)
-		local seen: { [string]: { [string]: boolean } } = {}
+		local sets: { [string]: { [string]: boolean } } = {}
 		local slotsSeen = 0
 		for seed = 1, SEEDS do
 			local plan = planFor(seed, "Standard")
@@ -526,13 +606,38 @@ return {
 				)
 				local layout = layoutOf(spec.levelId)
 				local used: { [string]: boolean } = {}
-				seen[spec.levelId] = seen[spec.levelId] or {}
+				local picked: { Anchor } = {}
 				for _, id in picks.anchors do
 					local anchor = anchorById(layout, id)
 					t.truthy(anchor and anchor.kind == spec.item.candidate, id .. " is a candidate")
 					t.falsy(used[id], id .. " picked once")
 					used[id] = true
-					seen[spec.levelId][id] = true
+					if anchor then
+						table.insert(picked, anchor)
+					end
+				end
+				sets[spec.levelId] = sets[spec.levelId] or {}
+				sets[spec.levelId][table.concat(picks.anchors, ",")] = true
+				-- several items: different rooms, PickSpacing apart, three spread over PickQuarters quarters
+				for i = 1, #picked do
+					for j = i + 1, #picked do
+						local a, b = picked[i], picked[j]
+						t.truthy(
+							a.room ~= b.room,
+							string.format("seed %d: %s and %s in different rooms", seed, a.id, b.id)
+						)
+						local apart = (Vector3.new(a.pos.X, 0, a.pos.Z) - Vector3.new(b.pos.X, 0, b.pos.Z)).Magnitude
+						t.truthy(
+							apart >= ObjectiveConfig.PickSpacing,
+							string.format("seed %d: %s and %s %.1f apart", seed, a.id, b.id, apart)
+						)
+					end
+				end
+				if #picked >= 3 then
+					t.truthy(
+						RunDirector.quarters(picked) >= ObjectiveConfig.PickQuarters,
+						string.format("seed %d: %s picks spread over the floor", seed, spec.levelId)
+					)
 				end
 				-- the plan's props of this floor are its picks, slots 1..count in pick order
 				local props = RunDirector.propsOf(plan, spec.item.prop, spec.levelId)
@@ -571,11 +676,27 @@ return {
 			t.eq(#RunDirector.propsOf(plan, "BearTrap"), DifficultyConfig.Standard.trapCount, "trap count unchanged")
 		end
 		t.truthy(slotsSeen > 0, "slots")
-		-- every candidate turns up in some run, and the picks vary
+		-- the picks vary from run to run: every multi-item floor gives at least 20 different sets over the seeds, and
+		-- every candidate turns up in some run
 		for _, spec in ObjectiveConfig.Floors do
 			local layout = layoutOf(spec.levelId)
+			local distinct = 0
+			for _ in sets[spec.levelId] do
+				distinct += 1
+			end
+			local wanted = if spec.item.count > 1 then 20 else math.min(8, #anchorsOf(layout, spec.item.candidate))
+			t.truthy(
+				distinct >= wanted,
+				string.format("%s: %d different picks over %d seeds", spec.levelId, distinct, SEEDS)
+			)
+			local seen: { [string]: boolean } = {}
+			for seed = 1, COVERAGE_SEEDS do
+				for _, anchor in (RunDirector.pickObjective(seed, layout, spec)) do
+					seen[anchor.id] = true
+				end
+			end
 			for _, anchor in anchorsOf(layout, spec.item.candidate) do
-				t.truthy(seen[spec.levelId][anchor.id], anchor.id .. " is used by some seed")
+				t.truthy(seen[anchor.id], anchor.id .. " is used by some seed")
 			end
 		end
 	end,

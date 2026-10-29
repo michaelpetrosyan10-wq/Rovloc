@@ -399,10 +399,13 @@ platform("L0_Pump_A", "L0_PumpRoom", 32, 140, 8, 6, 4, 4, "MetalRust")
 platform("L0_Pump_B", "L0_PumpRoom", 32, 150, 8, 6, 4, 4, "MetalRust")
 platform("L0_Switchgear", "L0_ElectricalRoom", 172, 2, 28, 4, 8, 8, "MetalGalvanized")
 platform("L0_Workbench", "L0_Workshop", 2, 52, 4, 8, 3, 3, "WoodPanel")
--- Steel shelving in the two corner stores and a bank of washers in the laundry (fuse candidates lie on their tops)
+-- Steel shelving in the stores and a bank of washers in the laundry (fuse candidates lie on their tops)
 platform("L0_Shelf_NW", "L0_Storage_NW", 2, 0, 8, 2.6, 4, 4, "MetalRust")
 platform("L0_Shelf_SW", "L0_Storage_SW", 12, 157.4, 10, 2.6, 4, 4, "MetalRust")
 platform("L0_Washers", "L0_Laundry", 0, 100, 7, 12, 3.2, 3.2, "MetalGalvanized")
+platform("L0_Shelf_Furniture", "L0_FurnitureStore", 110, 0, 8, 2.6, 4, 4, "MetalRust")
+platform("L0_Shelf_Archive", "L0_ArchiveStore", 100, 157.4, 10, 2.6, 4, 4, "MetalRust")
+platform("L0_Shelf_E1", "L0_Store_E1", 237.4, 34, 2.6, 10, 4, 4, "MetalRust")
 
 --------------------------------------------------------------------------------
 -- Lights: the basement is pitch black. Pilot flames glow behind boiler doors; one red lamp marks the stairs.
@@ -527,9 +530,10 @@ scatter("DripPipe", HEIGHT - 1.2, {
 
 scatter("Corpse", 0, { { 14, 44, 60 }, { 206, 120, -20 } })
 
--- Floor objective (RestorePower): six fuse candidates in the storage rooms, workshop, laundry, pump room and coal
--- bunker (RunDirector uses three), each with a bear-trap spot on its approach (its ref: the director arms the guard
--- traps of at least two of the fuses it uses); the breaker panel on the electrical room's east wall (the anchor is the
+-- Floor objective (RestorePower): thirteen fuse candidates on benches and shelves, by the boilers, the pumps, the
+-- switchgear and the water heaters, all over the basement (RunDirector uses three, in different rooms), each with a
+-- bear-trap spot on its approach (its ref: the director arms the guard traps of the first two fuses it uses), each a
+-- few studs from a dark corner of its room and well away from the delivery bay; the breaker panel on the electrical room's east wall (the anchor is the
 -- floor point on the wall face, facing into the room); the exit lock on the stair airlock's fire door (the floor point
 -- on the door's corridor face, facing out of the door).
 local function fuse(x: number, y: number, z: number, guardX: number, guardZ: number)
@@ -543,6 +547,13 @@ fuse(4, 3.2, 104, 10.5, 104) -- on the washers
 fuse(37, 0, 148, 44, 148) -- wedged between the pumps
 fuse(44, 3, 12.5, 45, 19.5) -- on the coal heap, past the coal dust
 fuse(17, 4, 158.4, 17, 151) -- on the shelving in the south-west store
+fuse(126, 0, 24, 132, 26) -- on the floor beside the north boiler
+fuse(126, 0, 136, 132, 134) -- on the floor beside the south boiler
+fuse(172, 0, 9, 176, 14) -- dropped in front of the switchgear
+fuse(114, 4, 1.8, 110, 8) -- on the shelving in the furniture store
+fuse(105, 4, 158.4, 100, 152) -- on the shelving in the archive store
+fuse(190, 0, 145, 196, 140) -- on the floor by the water heaters
+fuse(238.6, 4, 39, 234, 44) -- on the shelving in the east store by the stairs
 anchor("BreakerPanel", 203.5, 0, 18, FACE_W, "L0_BreakerPanel")
 anchor("ExitLock", 227.5, 0, 80, FACE_W, "L0_ExitLock")
 

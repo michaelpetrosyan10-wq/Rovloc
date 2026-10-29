@@ -290,6 +290,8 @@ platform("L5_RadioMast", "L5_Roof_East", 204, 100, 4, 4, 2, 2, "MetalRust")
 -- A maintenance box near the jump: cover to crouch behind while the crate chain is cut, and a bolt-cutter candidate
 -- lying on its lid
 platform("L5_MaintBox", "L5_Roof_SouthWest", 18, 104, 6, 3, 3.6, 3.6, "MetalGalvanized")
+-- A steel tool locker by the north-east corner: cover, and a bolt-cutter candidate leaning on it
+platform("L5_ToolLocker", "L5_Roof_East", 214, 10, 3, 6, 5, 5, "MetalRust")
 
 --------------------------------------------------------------------------------
 -- Lights
@@ -310,15 +312,23 @@ scatter("PlayerSpawn", 3.5, { { 232, 84, FACE_W }, { 236, 84, FACE_W }, { 232, 9
 anchor("CreatureSpawn", 233, 5, 70, FACE_S, "L5_CreatureSpawn")
 anchor("ParachuteCrate", 14, 0, 126, FACE_W, "L5_ParachuteCrate")
 
--- Floor objective (CutCrate): the bolt cutters at one of four spots (leaning against two HVAC units and the water
--- tank: the anchor is the deck point at the face, facing away from it; or lying on the maintenance box's lid); the
--- chain through the crate's packs (the anchor is the crate's own).
+-- Floor objective (CutCrate): the bolt cutters at one of nine spots all over the roof (leaning against the HVAC units,
+-- the water tank, the boiler flue or the tool locker: the anchor is the deck point at the face, facing away from it;
+-- or lying on the maintenance box's lid), each right beside cover; the chain through the crate's packs (the anchor is
+-- the crate's own).
 scatter("BoltCutterCandidate", 0, {
 	{ 148.6, 65, FACE_W }, -- against HVAC_3's west face
 	{ 186, 118.6, FACE_N }, -- against HVAC_2's north face
 	{ 85.4, 127, FACE_E }, -- against the water tank's east face
 })
 anchor("BoltCutterCandidate", 21, 3.6, 105.5, FACE_N) -- on the maintenance box
+scatter("BoltCutterCandidate", 0, {
+	{ 148, 33.4, FACE_S }, -- against HVAC_1's south face
+	{ 79.4, 36, FACE_E }, -- against HVAC_4's east face
+	{ 36, 68.6, FACE_N }, -- against HVAC_5's north face
+	{ 107.4, 11, FACE_E }, -- against the boiler flue's east face
+	{ 212.6, 13, FACE_W }, -- against the tool locker's west face
+})
 anchor("CrateChain", 14, 0, 126, FACE_W, "L5_CrateChain")
 
 scatter("BatteryCandidate", 0, {

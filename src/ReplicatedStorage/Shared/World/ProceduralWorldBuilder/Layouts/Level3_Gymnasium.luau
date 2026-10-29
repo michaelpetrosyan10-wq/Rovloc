@@ -656,35 +656,22 @@ lockerRow(84.8, { 131, 134, 152, 155, 158, 161 }, FACE_S)
 lockerRow(43.2, { 186, 189, 192, 195 }, FACE_N)
 lockerRow(116.8, { 186, 189, 192, 195 }, FACE_S)
 
--- Floor objective (GymGenerator): the coach's key hangs inside one of six locker-room lockers (each candidate's ref is
--- its locker; the anchor is the hook on the locker's back wall at chest height, facing out through its door); the
--- generator stands free in the equipment store, its pull start toward the door; the store door's padlock (the floor
--- point on the door's corridor face, facing out of the door); hideable lockers in the store, outside its door and in
--- the two stores off the gym beside the stairwell door, where the squad hides while the door motor winds; the exit
--- lock on the west stair airlock's fire door.
+-- Floor objective (GymGenerator): the coach's key hangs inside any one of the 32 lockers lining the two locker rooms
+-- (each candidate's ref is its locker; the anchor is the hook on the locker's back wall at chest height, facing out
+-- through its door); the generator stands free in the equipment store, its pull start toward the door; the store
+-- door's padlock (the floor point on the door's corridor face, facing out of the door); hideable lockers in the store,
+-- outside its door and in the two stores off the gym beside the stairwell door, where the squad hides while the door
+-- motor winds; the exit lock on the west stair airlock's fire door.
 local KEY_HOOK_Y = 4.6
 local KEY_BACK = 1.1 -- the hook sits this far behind the locker's floor centre, toward its back wall
-local function lockerAt(x: number, z: number): string
-	for _, a in anchors do
-		if a.kind == "Locker" and math.abs(a.pos.X - x) < 1e-3 and math.abs(a.pos.Z - z) < 1e-3 then
-			return a.id
-		end
+local LOCKER_ROOMS: { [string]: boolean } = { L3_LockerRoom_Boys = true, L3_LockerRoom_Girls = true }
+for _, locker in table.clone(anchors) do
+	if locker.kind ~= "Locker" or not LOCKER_ROOMS[locker.room] then
+		continue
 	end
-	error(string.format("%s layout: no locker at (%.1f, %.1f)", PREFIX, x, z), 2)
-end
-for _, spot in
-	{
-		{ 138, 46.8, FACE_S },
-		{ 164, 46.8, FACE_S },
-		{ 146, 76.2, FACE_N },
-		{ 138, 113.2, FACE_N },
-		{ 164, 113.2, FACE_N },
-		{ 158, 84.8, FACE_S },
-	} :: { { number } }
-do
-	local x, z, yaw = spot[1], spot[2], spot[3]
+	local yaw = locker.yaw or FACE_S
 	local back = if yaw == FACE_S then -KEY_BACK else KEY_BACK -- facing south, the back wall is to the north
-	anchor("CoachKeyCandidate", x, KEY_HOOK_Y, z + back, yaw, nil, lockerAt(x, z))
+	anchor("CoachKeyCandidate", locker.pos.X, KEY_HOOK_Y, locker.pos.Z + back, yaw, nil, locker.id)
 end
 anchor("Generator", 66, 0, 13, FACE_S, "L3_Generator")
 anchor("StoreLock", 66, 0, 31.5, FACE_S, "L3_StoreLock")
