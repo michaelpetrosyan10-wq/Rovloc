@@ -184,6 +184,14 @@ local STRINGS: { [string]: string } = {
 	["Hud.ClimbOut.KeyboardMouse"] = "Swim into the edge or press SPACE to climb out.",
 	["Hud.ClimbOut.Gamepad"] = "Swim into the edge or press A to climb out.",
 	["Hud.ClimbOut.Touch"] = "Swim into the edge or tap JUMP to climb out.",
+	["Hud.ParachuteTaken"] = "Parachute on. Jump through the gap in the wall, then pull the cord.",
+	["Hud.ParachuteHaveOne"] = "You're already wearing a parachute.",
+	["Hud.RoofNoPack"] = "NO PARACHUTE. That fall will kill you. Grab a pack from the crate.",
+	["Hud.RoofLeap"] = "Jump through the gap, then pull the cord.",
+	["Hud.Ripcord.KeyboardMouse"] = "Press SPACE to pull the cord!",
+	["Hud.Ripcord.Gamepad"] = "Press A to pull the cord!",
+	["Hud.Ripcord.Touch"] = "Tap PULL CORD!",
+	["Hud.RoofRun"] = "It's through the door. RUN for the parachutes!",
 
 	-- Downed and revive
 	["Downed.Title"] = "YOU'RE DOWN",
@@ -287,6 +295,11 @@ local STRINGS: { [string]: string } = {
 	["Caption.FloodlightBreaker"] = "[a heavy breaker clanks]",
 	["Caption.Floodlights"] = "[floodlights hum to life]",
 	["Caption.Thrash"] = "[violent thrashing in the water]",
+	["Caption.RoofDoorSlam"] = "[the wind slams a door shut]",
+	["Caption.DoorPound"] = "[something hammering on a steel door]",
+	["Caption.CanopyDeploy"] = "[a canopy snaps open]",
+	["Caption.HardLanding"] = "[a hard landing]",
+	["Caption.FinaleSting"] = "[a low, rising dread]",
 
 	-- Network (Net kicks a client that floods or sends malformed messages)
 	["Net.Kicked"] = "Disconnected: your game sent too many invalid requests. Please rejoin.",

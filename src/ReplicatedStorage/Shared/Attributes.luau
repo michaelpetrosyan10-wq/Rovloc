@@ -41,6 +41,11 @@ Attributes.Player = table.freeze({
 	WorldAcked = "WorldAcked",
 	DevTools = "DevTools", -- true when this player may use dev commands (Studio, allowlist or experience owner)
 	Settings = "Settings", -- JSON SettingsBlob written by the data layer (P8) after loading; clients read it once
+	-- The roof jump (ParachuteService is the only writer): Enums.ParachuteState (nil = None), the server time that
+	-- state began, and whether the canopy opened by itself (the late auto-deploy: a faster, harder descent).
+	Parachute = "Parachute",
+	ParachuteAt = "ParachuteAt",
+	ParachuteAuto = "ParachuteAuto",
 })
 
 -- Workspace.Creature

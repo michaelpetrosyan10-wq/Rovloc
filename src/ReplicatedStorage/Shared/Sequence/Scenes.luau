@@ -28,9 +28,24 @@
 -- another (FloodlightStagger apart, in the order of the flood1..flood9 args) each lamp sputters, catches, sags while
 -- the arc warms and settles at full brightness FloodlightStrike later; the last is up by FloodlightSeconds.
 --
+-- The roof (Level 5), seconds from each OneShot's startAt; the Level 5 controller times its authoritative beats from
+-- the same numbers:
+--   "L5_DoorSmash" (RoofDoor) once the squad is out on the roof: the wind slams the stairwell door shut behind them
+--     (0.35), the hidden Creature is moved in behind it (0.8), three blows from the far side, each harder (1.9, 3.0,
+--     3.55; the cameras near the door shake, panic climbs), it is shown behind the closed door (4.1), the door is torn
+--     off (4.6: DoorService's smash and the DoorSmash action together), the cry (4.7) and the chase (5.1).
+--   "L5_Finale" (Finale) once nobody is left on the roof to jump and every canopy is open: the lookback holds on the
+--     ledge; the first flash (1.0) reveals the Creature motionless on the edge, staring down (shown in the dark gap
+--     before the main strike, Reveal action at 1.42; every jumper's view tightens onto its face, panic, the sting,
+--     thunder); the second flash (4.6): it glitches in the first strike (Vanish), is gone before the main one (hidden at
+--     4.96) and the ledge stands empty; the view eases back; fade to black (6.6 to 8.0); at 8.2 anyone still under a
+--     canopy is landed in the dark and every lander's hold ends (the ESCAPED summary follows). "L5_FinaleSky" is the
+--     same storm without the Creature (it could not be taken); "L5_Touchdown" is one late jumper's own fade to black
+--     after landing, when the finale has already played (their hold ends at TouchdownRelease).
+--
 -- Track kinds beyond SequenceController's built-ins ("sound", "light", "callback") and CreatureController's
--- "creature" are LevelScenesController's: Tracks.* below. Pure camera maths (Flinch, PullWeight, Pulled) are specced
--- in tests/Specs/Levels.spec.luau.
+-- "creature" are LevelScenesController's (Tracks.* below) and ParachuteController's (RoofTracks.*). Pure camera maths
+-- (Flinch, PullWeight, Pulled) are specced in tests/Specs/Levels.spec.luau, the roof data in Roof.spec.luau.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -67,6 +82,51 @@ export type ClassroomScare = {
 	HushRadius: number,
 }
 
+export type RoofDoor = {
+	Id: string,
+	Slam: number, -- the door lands shut (the server starts the close SlamSeconds before)
+	SlamSeconds: number,
+	Stage: number, -- the hidden Creature is moved in behind it
+	Pounds: { number },
+	Reveal: number, -- shown behind the closed door
+	Smash: number, -- the door's smash motion starts (and the DoorSmash action)
+	Roar: number,
+	Release: number, -- the chase
+	Duration: number,
+	ShakeRadius: number, -- listeners this close to the door feel the blows
+	PanicRadius: number, -- listeners this close to the door take the panic floor
+}
+
+export type Finale = {
+	Id: string,
+	SkyId: string,
+	TouchdownId: string,
+	Flash1: number,
+	Reveal: number,
+	Thunder1: number,
+	Flash2: number,
+	Vanish: number,
+	Hide: number,
+	Thunder2: number,
+	FocusIn: number,
+	FocusHeld: number,
+	FocusOut: number,
+	FocusRest: number,
+	RestFocus: number, -- how far the view stays on the ledge after the vanish
+	FadeStart: number,
+	FadeEnd: number,
+	Land: number, -- the server lands everyone still in the air and lets every lander go (the view is theirs again)
+	Duration: number,
+	RevealLead: number, -- the server shows the Creature this long before Reveal (replication)
+	HideLead: number, -- and hides it this long before Hide
+	FlashIntensity: number,
+	Settle: number, -- seconds after the last canopy opened before the finale starts
+	TouchdownFadeStart: number,
+	TouchdownFadeEnd: number,
+	TouchdownRelease: number, -- the late lander's hold ends (after their fade)
+	TouchdownDuration: number,
+}
+
 local Scenes = {}
 
 -- Play args (OneShot args of the Timeline).
@@ -96,6 +156,79 @@ local TRACKS = table.freeze({
 	LightScale = "lightScale", -- continuous factor of the `arg` light's BaseBrightness (LightingController override)
 })
 Scenes.Tracks = TRACKS
+
+-- The roof scenes' Play args (Vector3 unless noted).
+local ROOF_ARGS = table.freeze({
+	Door = "door", -- the stairwell doorway's centre on the roof side
+	Head = ARGS.Head, -- the Creature's eyes on the ledge
+	Ledge = "ledge", -- the ledge point it stands on
+	Subject = ARGS.Subject, -- "L5_Touchdown": the UserId of the jumper it is for (number)
+})
+Scenes.RoofArgs = ROOF_ARGS
+
+-- ParachuteController's track kinds.
+local ROOF_TRACKS = table.freeze({
+	Shake = "roofShake", -- events: a camera shake of `value` degrees for listeners within RoofDoor.ShakeRadius of args.door
+	Panic = "roofPanic", -- continuous: the panic floor of players still on the roof near args.door
+	Focus = "finaleFocus", -- continuous 0..1: how far a jumper's lookback has tightened onto args.head
+	FinalePanic = "finalePanic", -- continuous: the panic floor of everyone in the finale
+	Fade = "finaleFade", -- continuous 0..1: the finale's black (only args.subject's when it is set); held at the end
+})
+Scenes.RoofTracks = ROOF_TRACKS
+
+local POUNDS: { number } = { 1.9, 3.0, 3.55 }
+table.freeze(POUNDS)
+
+local ROOF_DOOR: RoofDoor = table.freeze({
+	Id = "L5_DoorSmash",
+	Slam = 0.35,
+	SlamSeconds = 0.35,
+	Stage = 0.8,
+	Pounds = POUNDS,
+	Reveal = 4.1,
+	Smash = 4.6,
+	Roar = 4.7,
+	Release = 5.1,
+	Duration = 7,
+	ShakeRadius = 40,
+	PanicRadius = 90,
+})
+Scenes.RoofDoor = ROOF_DOOR
+
+local FLASH1 = 1.0
+local FLASH2 = 4.6
+local MAIN_STRIKE = 0.42 -- a two-stage flash's main strike (LightingController.lightningEnvelope)
+
+local FINALE: Finale = table.freeze({
+	Id = "L5_Finale",
+	SkyId = "L5_FinaleSky",
+	TouchdownId = "L5_Touchdown",
+	Flash1 = FLASH1,
+	Reveal = FLASH1 + MAIN_STRIKE,
+	Thunder1 = FLASH1 + 1,
+	Flash2 = FLASH2,
+	Vanish = FLASH2 + 0.06,
+	Hide = FLASH2 + 0.36,
+	Thunder2 = FLASH2 + 0.25,
+	FocusIn = FLASH1 + MAIN_STRIKE,
+	FocusHeld = FLASH1 + 1.3,
+	FocusOut = FLASH2 + 0.45,
+	FocusRest = FLASH2 + 1.6,
+	RestFocus = 0.35,
+	FadeStart = 6.6,
+	FadeEnd = 8,
+	Land = 8.2,
+	Duration = 8.4,
+	RevealLead = 0.25,
+	HideLead = 0.25,
+	FlashIntensity = 1,
+	Settle = 1.6,
+	TouchdownFadeStart = 1,
+	TouchdownFadeEnd = 2.4,
+	TouchdownRelease = 2.6,
+	TouchdownDuration = 2.7,
+})
+Scenes.Finale = FINALE
 
 local SNAP = 0.42
 local BURST = 2.05
@@ -429,6 +562,103 @@ function Scenes.gymBeatIds(kind: GymBeatKind): { string }
 	return Scenes.GymBeatIds[kind] or {}
 end
 
+-- The roof door: slammed by the wind, three blows from behind, torn off, the cry.
+local function doorSmash(): Spec
+	local d = ROOF_DOOR
+	local pounds = d.Pounds
+	local tracks: { Track } = {
+		sound(ROOF_ARGS.Door, "RoofDoorSlam", d.Slam, 1.2),
+		{ kind = "creature", keys = { key(d.Smash, "DoorSmash") } },
+		sound(ROOF_ARGS.Door, "Screech", d.Roar, 0.9),
+		{
+			kind = ROOF_TRACKS.Shake,
+			arg = ROOF_ARGS.Door,
+			keys = { key(pounds[1], 0.6), key(pounds[2], 0.8), key(pounds[3], 1.1), key(d.Smash, 2.4) },
+		},
+		{
+			kind = ROOF_TRACKS.Panic,
+			arg = ROOF_ARGS.Door,
+			keys = {
+				key(0, 0),
+				key(pounds[1], 0.25, "OutQuad"),
+				key(pounds[3], 0.5, "InOutSine"),
+				key(d.Smash, 0.9, "OutQuad"),
+				key(d.Duration, 0.75, "InOutSine"),
+			},
+		},
+	}
+	local volumes: { number } = { 1.1, 1.3, 1.5 }
+	for index, t in pounds do
+		table.insert(tracks, sound(ROOF_ARGS.Door, "DoorPound", t, volumes[index]))
+	end
+	return { duration = d.Duration, tracks = tracks }
+end
+
+-- The finale's tracks every version shares: thunder after each flash, the fade to black (held once complete) and
+-- the panic of the jumpers.
+local function finaleTracks(revealed: boolean): { Track }
+	local f = FINALE
+	return {
+		-- 2D (no position arg): the storm is all around the jumpers
+		{ kind = "sound", volume = 1.3, keys = { key(f.Thunder1, "Thunder") } },
+		{ kind = "sound", volume = 1.5, keys = { key(f.Thunder2, "Thunder") } },
+		{
+			kind = ROOF_TRACKS.Fade,
+			hold = true,
+			keys = { key(0, 0), key(f.FadeStart, 0), key(f.FadeEnd, 1, "InOutSine") },
+		},
+		{
+			kind = ROOF_TRACKS.FinalePanic,
+			keys = if revealed
+				then {
+					key(0, 0.3),
+					key(f.Reveal, 0.35),
+					key(f.Reveal + 0.3, 0.95, "OutQuad"),
+					key(f.Hide, 0.95),
+					key(f.FadeStart, 0.6, "InOutSine"),
+					key(f.Duration, 0.4),
+				}
+				else { key(0, 0.3), key(f.Flash2, 0.45, "InOutSine"), key(f.Duration, 0.3, "InOutSine") },
+		},
+	}
+end
+
+local function finale(): Spec
+	local f = FINALE
+	local tracks = finaleTracks(true)
+	table.insert(tracks, { kind = "creature", keys = { key(f.Reveal, "Reveal"), key(f.Vanish, "Vanish") } })
+	table.insert(tracks, { kind = "sound", keys = { key(f.Reveal, "FinaleSting") }, volume = 1.1 })
+	table.insert(tracks, {
+		kind = ROOF_TRACKS.Focus,
+		keys = {
+			key(0, 0),
+			key(f.FocusIn, 0),
+			key(f.FocusHeld, 1, "OutCubic"),
+			key(f.FocusOut, 1),
+			key(f.FocusRest, f.RestFocus, "InOutSine"),
+		},
+	})
+	return { duration = f.Duration, tracks = tracks }
+end
+
+local function finaleSky(): Spec
+	return { duration = FINALE.Duration, tracks = finaleTracks(false) }
+end
+
+local function touchdown(): Spec
+	local f = FINALE
+	return {
+		duration = f.TouchdownDuration,
+		tracks = {
+			{
+				kind = ROOF_TRACKS.Fade,
+				hold = true,
+				keys = { key(0, 0), key(f.TouchdownFadeStart, 0), key(f.TouchdownFadeEnd, 1, "InOutSine") },
+			},
+		},
+	}
+end
+
 -- Every scene timeline by id (fresh tables; callers register them).
 function Scenes.timelines(): { [string]: Spec }
 	local out = beats()
@@ -438,6 +668,10 @@ function Scenes.timelines(): { [string]: Spec }
 	out[CLASSROOM.Id] = classroomScare()
 	out[CLASSROOM.SkippedId] = glassStep()
 	out[Scenes.FloodlightsId] = floodlights()
+	out[ROOF_DOOR.Id] = doorSmash()
+	out[FINALE.Id] = finale()
+	out[FINALE.SkyId] = finaleSky()
+	out[FINALE.TouchdownId] = touchdown()
 	return out
 end
 

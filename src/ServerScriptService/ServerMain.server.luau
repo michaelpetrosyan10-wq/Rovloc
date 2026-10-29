@@ -53,6 +53,7 @@ local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
 local ChemicalProjectileService = require(ServerScriptService.Services.Mechanics.ChemicalProjectileService)
 local LockerHidingService = require(ServerScriptService.Services.Mechanics.LockerHidingService)
 local FloodedPoolService = require(ServerScriptService.Services.Mechanics.FloodedPoolService)
+local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
 
 local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
 
@@ -176,12 +177,16 @@ end
 --                            locker inspector), the LockerRip hand-over to JumpscareHandler; EndRun lets everyone out.
 --   FloodedPoolService       Level 4 water: who swims (Swim mode), oxygen rates, the Swim validator, the Creature's
 --                            grab (MonsterAIService's PoolGrabber), drag, struggle, flask / floodlight release, drowning.
---   Levels                   The Level 0-4 controllers (registered with LevelDirector in Init): basement beats,
+--   ParachuteService         The roof jump: the crate's packs (InteractionService), the leap off the edge, the cord /
+--                            auto-deploy, the canopy's LinearVelocity and its "Parachute" validator (MovementAuthority),
+--                            landings held for the finale (CharacterService locks); Heartbeat-stepped.
+--   Levels                   The Level 0-5 controllers (registered with LevelDirector in Init): basement beats,
 --                            the Floor 1 classroom scare (MonsterAIService.AcquireScripted, DoorService's gate), Level 2
 --                            flask restock (ChemicalProjectileService), the Level 3 gym (MonsterAIService.SetSpeedScale /
 --                            Alert, LockerHidingService's checks), the Level 4 pool (the Creature called to the water,
---                            the floodlight switch, FloodedPoolService.ReleaseGrab); EndRun (early, in reverse) lets the
---                            Creature go.
+--                            the floodlight switch, FloodedPoolService.ReleaseGrab), the Level 5 roof (the door smash,
+--                            the final sprint, the finale over ParachuteService; Levels.Level5.Escaped); EndRun (early,
+--                            in reverse) lets the Creature go.
 --   MatchAndDataService      Saved progress (session-locked records, serialized saves, BindToClose) and the match
 --                            policy: Deploy (perk stock, BeginRun, Level 0 spawns), the RunOutcomeEvaluator over
 --                            LifeStateService / Levels.Level5 escapes / leaves, rewards, RunSummary, RunResolved, Results.
@@ -349,6 +354,14 @@ local SERVICES: { Types.Service } = {
 		BeginRun = FloodedPoolService.BeginRun,
 		EndRun = FloodedPoolService.EndRun,
 		OnPlayerRemoving = FloodedPoolService.OnPlayerRemoving,
+	},
+	{
+		Name = ParachuteService.Name,
+		Init = ParachuteService.Init,
+		Start = ParachuteService.Start,
+		BeginRun = ParachuteService.BeginRun,
+		EndRun = ParachuteService.EndRun,
+		OnPlayerRemoving = ParachuteService.OnPlayerRemoving,
 	},
 	{
 		Name = Levels.Name,

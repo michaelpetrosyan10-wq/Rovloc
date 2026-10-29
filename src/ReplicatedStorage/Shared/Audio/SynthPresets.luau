@@ -2124,6 +2124,330 @@ define("FloodlightStrike", {
 	},
 })
 
+---------------------------------------------------------------- the roof finale (P8)
+
+-- The wind slamming the roof stairwell door shut behind the squad: a gust rushing through the frame, the steel slab
+-- hitting the jamb with a crack, the whole door ringing.
+define("RoofDoorSlam", {
+	bus = "World",
+	priority = 80,
+	maxVoices = 2,
+	rollOff = r(20, 260),
+	caption = "Caption.RoofDoorSlam",
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.7,
+			speed = 1.6,
+			region = r(0.1, 0.9),
+			duration = 0.5,
+			envelope = env(0.05, nil, 0.3),
+			glide = glide(0.7, 0.45),
+			effects = { eq(-6, 0, 2) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 1.7,
+			speed = r(0.48, 0.54),
+			delay = 0.12,
+			effects = { distortion(0.3), eq(8, 0, -10), compressor(-18, 8, 0.002, 0.25, 5) },
+		},
+		{
+			sample = "Explosion",
+			volume = 0.9,
+			speed = r(0.9, 1),
+			region = r(0, 0.35),
+			delay = 0.12,
+			effects = { eq(4, 0, -6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.5,
+			speed = 0.35,
+			delay = 0.13,
+			effects = { eq(-6, 2, -4), reverb(1.6, -6) },
+		},
+	},
+})
+
+-- Something hammering on the far side of a steel door in a concrete stairwell: a dull, distorted blow, the slab
+-- booming in its frame, the frame rattling.
+define("DoorPound", {
+	bus = "World",
+	priority = 85,
+	maxVoices = 3,
+	rollOff = r(18, 220),
+	caption = "Caption.DoorPound",
+	layers = {
+		{
+			sample = "JumpLand",
+			volume = 1.8,
+			speed = r(0.42, 0.5),
+			effects = { distortion(0.45), eq(9, -2, -14), compressor(-20, 8, 0.002, 0.3, 6) },
+		},
+		{
+			sample = "Explosion",
+			volume = 0.7,
+			speed = r(0.55, 0.65),
+			region = r(0, 0.4),
+			effects = { eq(6, -4, -20) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = r(0.3, 0.34),
+			delay = 0.005,
+			effects = { eq(-8, 0, -6), reverb(2.2, -8) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.5,
+			speed = 0.7,
+			region = r(0, 0.3),
+			regionJitter = 0.05,
+			delay = 0.02,
+			grains = grains(2, 3, 0.03, 0.05),
+			effects = { distortion(0.5), eq(0, 2, -6) },
+		},
+	},
+})
+
+-- Freefall (2D, the jumper's own ears): the wind roaring past, a lower buffeting under it, gusts slapping the hood.
+define("WindRush", {
+	bus = "Body",
+	priority = 80,
+	maxVoices = 1,
+	looped = true,
+	["repeat"] = pulse(0.24, 0.12),
+	layers = {
+		{
+			sample = "Falling",
+			volume = 1,
+			speed = 1.15,
+			looped = true,
+			envelope = env(0.25, nil, 0.6),
+			effects = { eq(-2, 0, 4) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.7,
+			speed = 0.62,
+			looped = true,
+			envelope = env(0.4, nil, 0.6),
+			effects = { eq(6, -4, -10), tremolo(7, 0.25, 0.5) },
+		},
+		{
+			sample = "Jump",
+			volume = 0.45,
+			speed = r(0.6, 0.9),
+			regionJitter = 0.04,
+			volumeJitter = 0.4,
+			effects = { eq(4, 0, -6) },
+		},
+	},
+})
+
+-- The canopy coming out: fabric rushing off the pack, the cells filling with a crack, the opening shock knocking the
+-- breath out of the jumper.
+define("CanopyDeploy", {
+	bus = "Player",
+	priority = 85,
+	maxVoices = 3,
+	rollOff = r(8, 160),
+	caption = "Caption.CanopyDeploy",
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.9,
+			speed = 2,
+			region = r(0.1, 0.6),
+			duration = 0.45,
+			envelope = env(0.01, nil, 0.25),
+			glide = glide(0.6, 0.4),
+			effects = { eq(-4, 2, 4) },
+		},
+		{
+			sample = "GetUp",
+			volume = 1,
+			speed = r(0.8, 1),
+			region = r(0, 0.4),
+			grains = grains(2, 3, 0.04, 0.07),
+			effects = { eq(2, 2, 0) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 1.6,
+			speed = 0.7,
+			delay = 0.38,
+			effects = { distortion(0.25), eq(6, 2, -4) },
+		},
+		{
+			sample = "Explosion",
+			volume = 0.5,
+			speed = 1.6,
+			region = r(0, 0.12),
+			delay = 0.38,
+			effects = { eq(-4, 4, 2) },
+		},
+		{ sample = "Jump", volume = 0.7, speed = r(0.62, 0.7), delay = 0.42, effects = { eq(2, 0, -6) } },
+	},
+})
+
+-- Under the canopy (2D): the cells fluttering in the gusts, the wind singing in the lines, the fabric luffing.
+define("CanopyFlutter", {
+	bus = "Body",
+	priority = 50,
+	maxVoices = 1,
+	looped = true,
+	["repeat"] = pulse(0.7, 0.4),
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.5,
+			speed = 0.8,
+			looped = true,
+			envelope = env(0.6, nil, 1),
+			effects = { eq(-2, -2, -8), tremolo(9, 0.35, 0.5) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.3,
+			speed = 1.3,
+			looped = true,
+			envelope = env(1, nil, 1),
+			effects = { eq(-12, 0, 2), chorus(0.8, 0.5, 0.4) },
+		},
+		{
+			sample = "GetUp",
+			volume = 0.35,
+			speed = r(0.7, 1.1),
+			region = r(0, 0.4),
+			regionJitter = 0.05,
+			volumeJitter = 0.4,
+			effects = { eq(0, 0, -4) },
+		},
+	},
+})
+
+-- Feet first into the dead grass under a full canopy: a soft thump, the harness and buckles jingling, grass flattening.
+define("ParachuteLanding", {
+	bus = "Player",
+	priority = 60,
+	maxVoices = 3,
+	rollOff = r(6, 90),
+	layers = {
+		{ sample = "JumpLand", volume = 1.2, speed = 0.8, effects = { eq(4, 0, -4) } },
+		{ sample = "GetUp", volume = 0.9, speed = r(0.9, 1.1), region = r(0, 0.4), delay = 0.03 },
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.4,
+			speed = 0.6,
+			region = r(0, 0.3),
+			delay = 0.05,
+			grains = grains(2, 4, 0.05, 0.09),
+			effects = { eq(-4, 0, -8) },
+		},
+		{ sample = "VolumeSlider", volume = 0.25, speed = 1.3, delay = 0.08, effects = { eq(-10, 0, 0) } },
+	},
+})
+
+-- A late, half-open canopy: the body slamming into the ground, the breath punched out, a roll through the grass.
+define("HardLanding", {
+	bus = "Player",
+	priority = 75,
+	maxVoices = 3,
+	rollOff = r(8, 120),
+	caption = "Caption.HardLanding",
+	layers = {
+		{
+			sample = "JumpLand",
+			volume = 2,
+			speed = 0.55,
+			effects = { distortion(0.35), eq(8, 0, -8), compressor(-18, 10, 0.002, 0.25, 6) },
+		},
+		{ sample = "Explosion", volume = 0.6, speed = 1.1, region = r(0, 0.25), effects = { eq(4, 0, -10) } },
+		{
+			sample = "Oof",
+			volume = 1.1,
+			speed = r(0.58, 0.66),
+			delay = 0.06,
+			effects = { distortion(0.25), eq(4, 2, -6) },
+		},
+		{ sample = "GetUp", volume = 0.8, speed = 0.7, region = r(0, 0.4), delay = 0.1 },
+	},
+})
+
+-- Shrugging into a parachute harness: straps dragged over the shoulders, two buckles clicking home.
+define("PackBuckle", {
+	bus = "Player",
+	priority = 45,
+	maxVoices = 3,
+	rollOff = r(6, 60),
+	layers = {
+		{ sample = "GetUp", volume = 0.7, speed = 1.2, region = r(0, 0.35) },
+		{ sample = "VolumeSlider", volume = 0.5, speed = 1.8, delay = 0.22, effects = { eq(-10, 0, 2) } },
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.3,
+			speed = 2.4,
+			region = r(0, 0.2),
+			delay = 0.24,
+			effects = { eq(-12, 0, 4) },
+		},
+		{ sample = "VolumeSlider", volume = 0.45, speed = 2.2, delay = 0.3, effects = { eq(-10, 0, 3) } },
+	},
+})
+
+-- The finale's reveal (2D): a sub-bass swell rising out of nothing, a low hum souring under it, a glassy shiver on
+-- top and a long breath of wind, while the world around it drops away.
+define("FinaleSting", {
+	bus = "Ambience",
+	priority = 90,
+	maxVoices = 1,
+	caption = "Caption.FinaleSting",
+	duck = { duck("World", 0.5, 0.3, 2.5, 2) },
+	layers = {
+		{
+			sample = "Explosion",
+			volume = 1.1,
+			speed = r(0.12, 0.14),
+			region = r(0.2, 1.8),
+			envelope = env(0.4, nil, 2.2),
+			effects = { eq(8, -10, -40), tremolo(0.8, 0.3, 0.5) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.3,
+			speed = 0.5,
+			region = r(0.02, 0.0283),
+			looped = true,
+			duration = 3,
+			envelope = env(1.2, nil, 1.5),
+			glide = glide(0.94, 2.6),
+			effects = { flanger(0.3, 0.6, 0.5), distortion(0.3), reverb(4, -6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.15,
+			speed = 1.6,
+			region = r(0.02, 0.025),
+			looped = true,
+			duration = 2.6,
+			envelope = env(1.5, nil, 1.2),
+			effects = { chorus(1.4, 0.6, 0.5), tremolo(6, 0.4, 0.5) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.4,
+			speed = 0.5,
+			region = r(0.1, 1.1),
+			duration = 2.5,
+			envelope = env(0.8, nil, 1.6),
+			effects = { eq(-6, -4, -12) },
+		},
+	},
+})
+
 ---------------------------------------------------------------- weather
 
 -- Thunder (2D): a close crack some of the time, the main rolling rumble, and a far second roll, all rolling around

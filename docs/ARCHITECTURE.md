@@ -63,7 +63,9 @@ Rovloc/
 │                                           client's maths), Level4 (pool alert, floodlights, beats), MatchData
 │                                           (schema + migrations, the session lock, save queue, guests, the data
 │                                           API), MatchFlow (deploy, the outcome evaluator, rewards, Results / Play
-│                                           Again, telemetry), EscapeSummary (the results screen's rules)
+│                                           Again, telemetry), EscapeSummary (the results screen's rules), Parachute
+│                                           (the roof jump's rules and ParachuteService's jumps), Roof (the Level 5
+│                                           door, sprint and finale on a fake clock)
 └── src/
     ├── ReplicatedFirst/
     │   └── LoadingCurtain.client.luau      [P1] Engine-only black curtain until WorldReady + local ack; 30s BootError fallback
@@ -86,7 +88,8 @@ Rovloc/
     │       ├── Types.luau                  [P1] Service/Controller lifecycle, RunContext, NoiseEvent, DataSchema, hook interfaces
     │       ├── Enums.luau                  [P1] MoveState, CameraState, LifeState, ControlLock, MonsterState (+Scripted), PoseMode,
     │       │                                    MatchPhase, LevelId, LevelPhase, NoiseKind, OneShotKind, JumpscareKind,
-    │       │                                    ItemId, GrateState, DoorState, PromptKind, StatKey, PerkId, Difficulty, RunOutcome
+    │       │                                    ItemId, GrateState, DoorState, PromptKind, StatKey, PerkId, Difficulty, RunOutcome,
+    │       │                                    ParachuteState [P8]
     │       ├── Tags.luau                   [P1] CollectionService tag registry (§6)
     │       ├── Attributes.luau             [P1] Attribute keys + typed get/set helpers (§6)
     │       ├── CollisionGroups.luau        [P1] Group names + matrix as data (§4)
@@ -105,8 +108,10 @@ Rovloc/
     │       │   │                                creak [P6], the Creature sniffing at locker slits, a locker torn open, a
     │       │   │                                held breath let out, locker slams, ball bounces, shower drips, a gasp at
     │       │   │                                the surface, climbing out, bubbles, the underwater thrash, pool drips,
-    │       │   │                                sloshes and falling tiles, the floodlight breaker and strike-up [P7]
-    │       │   │                                (+ caption text)
+    │       │   │                                sloshes and falling tiles, the floodlight breaker and strike-up [P7],
+    │       │   │                                the roof door slammed by the wind and pounded from behind, the freefall
+    │       │   │                                wind, the canopy opening and fluttering, soft and hard landings, the
+    │       │   │                                harness buckles, the finale's dread sting [P8] (+ caption text)
     │       │   ├── VoicePool.luau          [P1] Pooled voices, per-bus caps, priority stealing, distance pre-cull
     │       │   └── AudioBuses.luau         [P1] SoundGroup tree + environment DSP (Vent, Underwater, Outdoor, Lobby)
     │       ├── Animation/
@@ -125,10 +130,16 @@ Rovloc/
     │       │   ├── LockerMotion.luau       [P7] A locker's moments on server time, shared by LockerHidingService and
     │       │   │                                LockerController: enter / exit schedules, door poses (DoorMotion
     │       │   │                                messages), the lungs meter, the check's warning / peek / grace numbers
-    │       │   └── Scenes.luau             [P6] The level scenes as data: the Floor 1 classroom scare's beat times (the
-    │       │                                    server schedules from them) and every scene Timeline (the clients play
-    │       │                                    them), the basement beats, the subject camera maths (stumble, face drag),
-    │       │                                    the Floor 3 locker-room beats, the Floor 4 floodlight strike-up [P7]
+    │       │   ├── Scenes.luau             [P6] The level scenes as data: the Floor 1 classroom scare's beat times (the
+    │       │   │                                server schedules from them) and every scene Timeline (the clients play
+    │       │   │                                them), the basement beats, the subject camera maths (stumble, face drag),
+    │       │   │                                the Floor 3 locker-room beats, the Floor 4 floodlight strike-up [P7], the
+    │       │   │                                roof door smash, the finale (lightning reveal, vanish, fade) and a late
+    │       │   │                                lander's touchdown [P8]
+    │       │   └── ParachuteMotion.luau    [P8] The roof jump's rules shared by ParachuteService and ParachuteController:
+    │       │                                    off the roof, the outward edge, the canopy's velocity and canonical path,
+    │       │                                    auto-deploy / landing / fatal heights, the descent verdict, the jump gap's
+    │       │                                    warnings, the lookback / opening jolt / landing dip camera maths
     │       ├── World/
     │       │   └── ProceduralWorldBuilder/
     │       │       ├── init.luau           [P1] BuildAuthoritative / BuildCosmetic / ClearRuntime + RegisterProp / RegisterRig
@@ -225,7 +236,8 @@ Rovloc/
     │       │   └── MonsterAIService/
     │       │       ├── init.luau           [P5] State machine host, 10 Hz brain, AcquireScripted(), hook registry,
     │       │       │                            SetSpeedScale [P7] (level tuning: the Level 3 gym), CatchGrabbed [P7]
-    │       │       │                            (a held swimmer out of air: the Underwater jumpscare)
+    │       │       │                            (a held swimmer out of air: the Underwater jumpscare), SetScriptedTarget
+    │       │       │                            [P8] (a held Creature's stare: the roof finale)
     │       │       ├── Brain.luau          [P5] Shared state types, pure transition table, catch rules, level knowledge
     │       │       ├── CreatureBody.luau   [P5] Ownership reassert, hitbox sizing per PoseMode, Hidden, collision modes
     │       │       ├── Perception.luau     [P5] Eye-to-EyePoint LOS (never limbs), view cones
@@ -251,10 +263,15 @@ Rovloc/
     │       │   │                                prompt, Anchor lock + Hiding override, stepped doors, exit to a clear
     │       │   │                                spot; the locker inspector: server-judged hold-breath check, gasp (cue +
     │       │   │                                noise), the LockerRip hand-over to JumpscareHandler
-    │       │   └── FloodedPoolService.luau [P7] Who swims (10 Hz, Swim mode), oxygen rates, the Swim validator, the
-    │       │                                    climb exemption, splashes; the PoolGrabber: ServerOwned drag, Grabbed,
-    │       │                                    the struggle (StrugglePress), flask / floodlight / let-go releases, the
-    │       │                                    drowning catch
+    │       │   ├── FloodedPoolService.luau [P7] Who swims (10 Hz, Swim mode), oxygen rates, the Swim validator, the
+    │       │   │                                climb exemption, splashes; the PoolGrabber: ServerOwned drag, Grabbed,
+    │       │   │                                the struggle (StrugglePress), flask / floodlight / let-go releases, the
+    │       │   │                                drowning catch
+    │       │   └── ParachuteService.luau  [P8] Only writer of ParachutePack TakenByUserId + Player Parachute*: the
+    │       │                                    crate's packs (worn rig, back to the crate on death / leave), the leap,
+    │       │                                    the cord (ParachutePull) and the fair auto-deploy, the canopy rig + a
+    │       │                                    LinearVelocity descent held to its path (the Parachute validator), the
+    │       │                                    packless fatal fall, landings held for the finale, ForceLand
     │       ├── Levels/
     │       │   ├── init.luau                [P6] The Levels service: registers the controllers with LevelDirector, runs
     │       │   │                                their run resets and one Heartbeat driver
@@ -271,7 +288,11 @@ Rovloc/
     │       │   ├── Level4_FloodedPoolController.luau [P7] Pool sessions call the Creature to the water (Alert), the
     │       │   │                                emergency floodlight switch (prompt, On, lever, lamps lit for the run,
     │       │   │                                release / blind), seeded water beats out of sight
-    │       │   └── Level5_RoofController.luau [P8] Door smash, final sprint, parachute leap, lightning reveal + vanish
+    │       │   └── Level5_RoofController.luau [P8] The Creature held behind the stairwell door, the door opened for the
+    │       │                                    first arrival, slammed by the wind, pounded and smashed behind the squad;
+    │       │                                    the final sprint (chase pace, adrenaline); the finale (the Creature on the
+    │       │                                    ledge in the lightning, gone at the next flash, fade, scripted landing);
+    │       │                                    Escaped (Levels.Level5)
     │       └── Match/                      Each module is its own service; the others require MatchAndDataService,
     │           │                           it requires none of them
     │           ├── CheckpointAirlockService.luau [P6] Stairwell airlocks: 10 Hz checkpoint volume, 20s straggler timer,
@@ -365,7 +386,8 @@ Rovloc/
                     │                                   vignette, heartbeat, desaturation), teammates' downed markers
                     ├── SpectatorController.luau    [P8] Through the target's eyes ("Spectating" override, LookBroadcast
                     │                                   look, their torch from inside), cuts, Q / E cycling, HUD
-                    ├── ParachuteController.luau    [P8] Leap, ripcord, lookback camera
+                    ├── ParachuteController.luau    [P8] Edge warnings, predicted leap / ripcord / canopy / touchdown, the
+                    │                                   lookback camera, the roof scenes' shake / panic / focus / fade tracks
                     └── EscapeSummaryController.luau [P8] ESCAPED / WIPED / DEAD summary from RunSummary: stats,
                                                          credits, best time, Play Again + auto-return countdown
 ```
@@ -692,6 +714,31 @@ override (their head + their `LookBroadcast` look, smoothed), hides their head (
 from inside (`RemoteFlashlightRenderer.SetFocus`), cuts through black on switches and holds on the body for 2.5 s after
 a death.
 
+**The roof finale (P8).** `Level5_RoofController` takes the Creature at activation and keeps it hidden in the stair
+housing; the `RoofStairDoor` opens for the first arrival. Once every playing participant is out on the roof and clear of
+the door (or 20 s after the first stepped out, or 75 s after activation) the `L5_DoorSmash` scene plays: the wind slams
+the door (never on someone still inside), the hidden Creature is staged behind it, three blows, it is shown behind the
+closed door (never in anyone's sight), `DoorService` smashes the door with the `DoorSmash` action on the beat, and it is
+released into `WallChase` while the squad is told to run. Through the final sprint its pace follows its gap to its target
+(`SetSpeedScale`: it closes on stragglers but never outruns a sprinter on Standard) and the players still on the roof
+sprint on adrenaline (stamina topped up). `ParachuteService` owns the crate's packs (one per member of a full squad; a
+pack goes back to the crate when its wearer dies or leaves before jumping) and the jump, with the rules it shares with
+`ParachuteController` in `Shared/Sequence/ParachuteMotion`: off the edge with a pack is Freefall, the cord
+(`ParachutePull`) or the fair auto-deploy 32 studs over the ground opens the canopy (a server `LinearVelocity` at 9 studs/s
+down, drifting out from the edge at 7; the auto-deployed one comes down at 15 for a hard landing), the `Parachute`
+validator holds it to its canonical path, and the landing anchors the body for the finale (`Parachute` control lock; a
+Downed jumper is revived). Without a pack the fall is fatal (`Execute "Fall"`), and the gap warns about it. A jumper
+escapes at the landing (`Level5.Escaped`, so the touchdown is their escape time). The `L5_Finale` scene starts once
+nobody Alive is left on the roof to jump and every canopy has settled (or 40 s after the first landing): the hidden
+Creature is put on the ledge they jumped from staring down at the nearest jumper (`SetScriptedTarget`), the first
+`Lightning` reveals it motionless, the second finds the ledge empty, the clients' lookback tightens onto its face and
+eases back, and they fade to black. Then anyone still under a canopy is landed in the dark (`ForceLand`) and every
+lander's hold ends, which lets the ESCAPED summary in (the client keeps the `Cutscene` input context until its fade is
+black). The finale keeps playing in Results when the last landing resolved the run. Stragglers left on the roof are
+hunted again afterwards; a late lander gets their own `L5_Touchdown` fade. Nobody escapes without a pack, and every
+living participant can always take one (four packs, a squad of at most four, packs returned by the dead); a player who
+stays up there without one keeps playing, hunted, until they take one and jump, or die.
+
 **Dev runs.** Any state-changing dev command during a run sets `ReplicatedStorage.DevRun = true`. `MatchAndDataService`
 (P8) awards no credits, escapes or BestTime (and stamps no `LastRunId`) for a run with `DevRun`. Its Init calls
 `DevToolsService.SetMatchPolicyPresent(true)`, so the Studio auto dev run stays off (Play lands in the lobby); the dev
@@ -715,7 +762,7 @@ is treated as an elimination, never a respawn.
 
 | Owner | Attributes |
 | --- | --- |
-| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `Settings` (saved blob, JSON) · `SpectateReason` + `SpectateTargetUserId` · `PerkStock` · `DifficultyVote` · `SpectateReason` |
+| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `Settings` (saved blob, JSON) · `SpectateReason` + `SpectateTargetUserId` · `PerkStock` · `DifficultyVote` · `SpectateReason` · `Parachute` + `ParachuteAt` + `ParachuteAuto` (the roof jump) |
 | `Creature` | `MonsterState` · `StateSince` · `PoseMode` · `TargetUserId` · `InVent` · `VentSegmentId` · `Hidden` · `GrabbedUserId` |
 | `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` · `DevRun` · `ResultsEndsAt` (MatchResetService) · `CountdownEndsAt` · `LobbySquad` · `LobbyDifficulty` |
 | `VentGrate` | `GrateId` · `GrateState` (Closed / Unscrewing / Open / Kicked / Locked) · `Lockable` · `CriticalPath` · `NodeId` |

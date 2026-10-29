@@ -25,7 +25,8 @@
 -- Patrol WakeDelay seconds later. A level controller that acquired it (AcquireScripted) in its Activate keeps it.
 --
 -- Hooks: RegisterLockerInspector (P7 lockers), RegisterPoolGrabber (P7 pool; CatchGrabbed finishes a held swimmer who
--- ran out of air with the Underwater jumpscare), AcquireScripted (P6 / P8 cutscenes), Stun (P6 chemicals; a catch in
+-- ran out of air with the Underwater jumpscare), AcquireScripted (P6 / P8 cutscenes; SetScriptedTarget turns a held
+-- Creature's stare on a player, P8's roof finale), Stun (P6 chemicals; a catch in
 -- progress is called off), Alert (scripted noises, heard like any other), SetSpeedScale (P7 level tuning: Level 3's
 -- gym).
 --
@@ -1506,6 +1507,23 @@ function MonsterAIService.AcquireScripted(token: string): ScriptedHandle?
 	lastReason = "acquired by " .. token
 	enterState("Scripted", now())
 	return handle
+end
+
+-- P8 roof finale: while the cutscene `token` holds the Creature, turns its stare on `player` (TargetUserId, which every
+-- client's head look follows: a held Creature otherwise stares straight ahead); nil clears it. The brain never touches
+-- the target while a script holds it. False, with nothing changed, when `token` does not hold the Creature or
+-- `player` is not one of the run's participants.
+function MonsterAIService.SetScriptedTarget(token: string, player: Player?): boolean
+	local hold = scripted
+	if not (running and ctx and hold and hold.token == token) then
+		return false
+	end
+	if player ~= nil and table.find(participants, player) == nil then
+		return false
+	end
+	setTarget(player)
+	publish()
+	return true
 end
 
 -- Level tuning (P7: Level 3's gym, where it stalks at high speed): every state's pace times `scale` (clamped

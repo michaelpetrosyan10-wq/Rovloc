@@ -264,6 +264,11 @@ export type ProjectileHitKind = "World" | "Creature" | "Water" | "Expired"
 
 export type CueKind = "BreathCheck" | "Struggle" | "JumpscareVictim" | "TrapLeg" | "Toast" | "Terminal"
 
+-- The roof jump (Player.Parachute, ParachuteService): None (no pack), Packed (a pack on the back, still on the roof),
+-- Freefall (off the edge with a pack, cord not pulled), Canopy (descending under the canopy), Landed (down below,
+-- held for the finale), Falling (off the edge without a pack: a fatal fall).
+export type ParachuteState = "None" | "Packed" | "Freefall" | "Canopy" | "Landed" | "Falling"
+
 local Enums = {}
 
 Enums.MoveState = table.freeze({
@@ -585,6 +590,9 @@ Enums.CueKind = table.freeze({
 	"Toast",
 	"Terminal", -- a lobby terminal opened for this player (args.terminal = its AnchorId)
 } :: { CueKind })
+
+Enums.ParachuteState =
+	table.freeze({ "None", "Packed", "Freefall", "Canopy", "Landed", "Falling" } :: { ParachuteState })
 
 -- Runtime membership test used by validators and attribute readers.
 function Enums.has<T>(list: { T }, value: unknown): boolean

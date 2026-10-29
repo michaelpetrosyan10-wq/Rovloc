@@ -205,6 +205,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "ParachuteController",
+		load = function(): any
+			return require(Match.ParachuteController)
+		end,
+	},
+	{
 		name = "DevToolsController",
 		load = function(): any
 			return require(Core.DevToolsController)
