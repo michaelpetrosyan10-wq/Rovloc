@@ -63,7 +63,8 @@ export function levelObjective(input) {
     return { text: 'Objective.Gate', tip, target: 'BypassVent' };
   }
   if (input.level === 'Level4_FloodedPool') return { text: 'Objective.PoolStairs', tip, target: 'Exit' };
-  return { text: `Objective.Stairwell.${floor.stairwell || 'East'}`, tip, target: 'Exit' };
+  // the run route's stair tower (East / West / NorthEast / ...), else the floor's side
+  return { text: `Objective.Stairwell.${input.tower || floor.stairwell || 'East'}`, tip, target: 'Exit' };
 }
 
 /** ObjectiveTracker.lobbyObjective */
@@ -261,6 +262,7 @@ export class Objectives {
     const parachute = g.parachute ? g.parachute.state : 'None';
     const objective = levelObjective({
       level,
+      tower: route ? route.tower : null,
       airlock: airlockState,
       insideAirlock: airlock.inside,
       gateSlammed: !!gate && (gate.state === 'Locked' || gate.state === 'Closed'),

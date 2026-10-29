@@ -2,7 +2,7 @@
 //
 // The janitor's master keys hang on a nail at the run's pick among the candidates past the gate (only reachable by the
 // gate's bypass vent once the classroom scare has slammed it; the Creature is hunting by then). Taking them (the
-// item's hold) jingles. At the west stairwell door the padlock's Locked prompt gives way to Unlock (4 s) while the
+// item's hold) jingles. At the run route's stairwell door the padlock's Locked prompt gives way to Unlock (4 s) while the
 // keys are carried: the keys work in the lock (their rattle looped) with the Normal working noise once a second, so a
 // careful player waits for the Creature to be elsewhere. Done, the padlock springs and drops and the door unlocks.
 
