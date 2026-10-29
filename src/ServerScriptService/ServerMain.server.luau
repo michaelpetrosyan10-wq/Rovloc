@@ -66,6 +66,8 @@ local MatchResetService = require(ServerScriptService.Services.Match.MatchResetS
 local TelemetryService = require(ServerScriptService.Services.Match.TelemetryService)
 local DownedReviveService = require(ServerScriptService.Services.Match.DownedReviveService)
 local SpectatorService = require(ServerScriptService.Services.Match.SpectatorService)
+local LobbyService = require(ServerScriptService.Services.Match.LobbyService)
+local PerkShopService = require(ServerScriptService.Services.Match.PerkShopService)
 
 --------------------------------------------------------------------------------
 -- Place-settings audit
@@ -191,6 +193,10 @@ end
 --   SpectatorService         Match layer: SpectateReason / SpectateTargetUserId for eliminated participants, late
 --                            joiners and over-capacity players (LifeStateService.SetSpectating, no body mid-run), the
 --                            SpectateCycle remote; BeginRun after LifeStateService made the participants Alive.
+--   LobbyService             Ready pads / LobbyAction, the difficulty vote and console, the squad cap and the
+--                            countdown (RunLifecycleService.SetPhase Countdown / Lobby) into MatchAndDataService.Deploy.
+--   PerkShopService          The perks console: PerkPurchase through MatchAndDataService.Update, EquipPerk /
+--                            UnequipPerk (LobbyService routes them) into Player.Loadout, the PerkStock mirror.
 --   RunLifecycleService      Drives the fan-out above; boots to Lobby once WorldService is ready.
 --   DevToolsService          Dev commands and the Studio auto dev-run; it calls everything above.
 --
@@ -385,6 +391,13 @@ local SERVICES: { Types.Service } = {
 		EndRun = SpectatorService.EndRun,
 		OnPlayerRemoving = SpectatorService.OnPlayerRemoving,
 	},
+	{
+		Name = LobbyService.Name,
+		Init = LobbyService.Init,
+		Start = LobbyService.Start,
+		OnPlayerRemoving = LobbyService.OnPlayerRemoving,
+	},
+	{ Name = PerkShopService.Name, Init = PerkShopService.Init, Start = PerkShopService.Start },
 	{ Name = RunLifecycleService.Name, Init = RunLifecycleService.Init, Start = RunLifecycleService.Start },
 	{
 		Name = DevToolsService.Name,

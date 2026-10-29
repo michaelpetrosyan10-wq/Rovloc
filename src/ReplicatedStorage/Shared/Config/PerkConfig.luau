@@ -97,4 +97,34 @@ function PerkConfig.syringeCharges(perks: { Enums.PerkId }): number
 	return 0
 end
 
+-- Most unused units of one perk a player may own (PerkShopService refuses purchases past it).
+PerkConfig.MaxStock = 20
+
+-- PlayerData.PerkStock as the Player.PerkStock attribute: "PerkId:count" for every known perk with a count above 0,
+-- in Enums.PerkId order ("" when nothing is owned). Counts are whole and capped at MaxStock.
+function PerkConfig.encodeStock(stock: { [string]: number }): string
+	local entries: { string } = {}
+	for _, id: Enums.PerkId in Enums.PerkId do
+		local count = stock[id]
+		if type(count) == "number" and count >= 1 then
+			table.insert(entries, string.format("%s:%d", id, math.min(math.floor(count), PerkConfig.MaxStock)))
+		end
+	end
+	return table.concat(entries, ",")
+end
+
+-- The Player.PerkStock attribute back into counts (known perks only; anything malformed reads as 0).
+function PerkConfig.decodeStock(value: unknown): { [string]: number }
+	local out: { [string]: number } = {}
+	if type(value) ~= "string" then
+		return out
+	end
+	for id, digits in string.gmatch(value, "([%a]+):(%d+)") do
+		if Perks[id] then
+			out[id] = math.min(tonumber(digits) or 0, PerkConfig.MaxStock)
+		end
+	end
+	return out
+end
+
 return table.freeze(PerkConfig)

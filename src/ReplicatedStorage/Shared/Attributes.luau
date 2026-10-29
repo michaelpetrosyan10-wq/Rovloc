@@ -26,10 +26,11 @@ Attributes.Player = table.freeze({
 	HeldItemVariant = "HeldItemVariant", -- the held flask's look (ChemicalFlaskBuilder variant); nil with no item
 	SyringeCharges = "SyringeCharges",
 	Loadout = "Loadout", -- comma-separated PerkIds equipped for the next / current run
+	PerkStock = "PerkStock", -- PerkShopService: owned, unused perks ("PerkId:count,..."; PerkConfig.encodeStock)
 	DownedCount = "DownedCount",
 	BleedoutEndsAt = "BleedoutEndsAt",
-	Ready = "Ready",
-	DifficultyVote = "DifficultyVote",
+	Ready = "Ready", -- LobbyService
+	DifficultyVote = "DifficultyVote", -- LobbyService: Enums.Difficulty, nil until the player votes
 	DataLoaded = "DataLoaded",
 	Credits = "Credits",
 	RunOutcome = "RunOutcome",
@@ -72,6 +73,10 @@ Attributes.Match = table.freeze({
 	-- Server time the Results screen returns everyone to the lobby (MatchResetService is the only writer; nil
 	-- outside Results). EscapeSummaryController draws its auto-return countdown from it.
 	ResultsEndsAt = "ResultsEndsAt",
+	-- Lobby (LobbyService is the only writer)
+	CountdownEndsAt = "CountdownEndsAt", -- server time the lobby countdown deploys at; nil while not counting down
+	LobbySquad = "LobbySquad", -- comma-separated UserIds of the next run's squad (slot order, at most MaxSquad)
+	LobbyDifficulty = "LobbyDifficulty", -- the difficulty the squad's votes currently select
 	-- Dev taint (DevToolsService is the only writer). True from the first state-changing dev command while a run
 	-- exists (devrun, level, next, noise, and every later-phase command not registered read-only) until the match is
 	-- back in the Lobby phase, so it still reads true through RunEnded / Results / Resetting. MatchAndDataService (P8)

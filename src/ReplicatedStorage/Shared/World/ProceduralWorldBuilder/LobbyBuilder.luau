@@ -1,8 +1,15 @@
 --!strict
 -- The safe-zone lobby (Workspace.Lobby): built from Layouts/Lobby like any level (rooms, lights, zones, anchors),
 -- plus bespoke set pieces: a riveted coal boiler with its firebox glow and flue, overhead steam pipes, and the
--- burnt-out school bus shell the squad gathers in. ReadyPad and Terminal anchors become visible pads and
--- consoles (non-interactive until the lobby services arrive). No vents, warm dim light.
+-- burnt-out school bus shell the squad gathers in. No vents, warm dim light.
+--
+-- The interactive pieces (P8 LobbyService / PerkShopService / LobbyController):
+--   * ReadyPad anchors become floor pads: a painted ring, the steel pad ("ReadyPad_<id>", the part the lobby service
+--     measures and marks with OccupantUserId) and a thin Neon lamp band between them ("ReadyPad_<id>_Lamp", lit on
+--     each client from the pad's occupant).
+--   * Terminal anchors become consoles ("Terminal_<id>", tagged Interactable) with an instant Terminal prompt on the
+--     screen, built disabled like every prop prompt (InteractionService enables it once a lobby service serves it).
+--     LobbyBuilder.Terminals names the two the lobby uses; any other console gets a generic "Use" prompt.
 --
 -- Set pieces place themselves from the layout: the boiler goes against the wall of the Boiler room that keeps the
 -- most clearance from doors and anchors; the bus is centred on the ReadyPads (so the pads end up inside it) and
@@ -18,6 +25,7 @@ local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Geometry = require(script.Parent.Geometry)
+local PropKit = require(script.Parent.Props.PropKit)
 local SchoolShellBuilder = require(script.Parent.SchoolShellBuilder)
 
 local log = Log.new("Lobby")
@@ -45,7 +53,50 @@ local BUS_HOOD = 5.6
 local BUS_MIN_LENGTH = 26
 local BUS_MAX_LENGTH = 36
 
+-- Ready pads (diameters; heights above the floor)
+local PAD_RING_DIAMETER = 4.4
+local PAD_DIAMETER = 3.6
+local PAD_LAMP_DIAMETER = 4
+local PAD_RING_HEIGHT = 0.06
+local PAD_LAMP_HEIGHT = 0.09
+local PAD_HEIGHT = 0.12
+local PAD_LAMP_IDLE = Color3.fromRGB(96, 68, 28)
+
+-- Terminal prompts
+local TERMINAL_PROMPT_DISTANCE = 8
+local TERMINAL_OBJECT = "Prompt.Terminal"
+local TERMINAL_ACTION_DEFAULT = "Prompt.Terminal.Use"
+
 local LobbyBuilder = {}
+
+-- The lobby's two consoles by role (their layout AnchorIds).
+LobbyBuilder.Terminals = table.freeze({
+	Difficulty = "Lobby_Terminal_Difficulty",
+	Perks = "Lobby_Terminal_Perks",
+})
+
+local TERMINAL_ACTIONS: { [string]: string } = {
+	[LobbyBuilder.Terminals.Difficulty] = "Prompt.Terminal.Difficulty",
+	[LobbyBuilder.Terminals.Perks] = "Prompt.Terminal.Perks",
+}
+
+-- A ready pad counts out to its painted ring: a body whose root is over the ring stands on the pad.
+LobbyBuilder.PadRadius = PAD_RING_DIAMETER / 2
+-- The lamp band's colour while nobody stands on the pad.
+LobbyBuilder.PadLampIdle = PAD_LAMP_IDLE
+LobbyBuilder.TerminalPromptDistance = TERMINAL_PROMPT_DISTANCE
+
+function LobbyBuilder.padName(anchorId: string): string
+	return "ReadyPad_" .. anchorId
+end
+
+function LobbyBuilder.lampName(anchorId: string): string
+	return "ReadyPad_" .. anchorId .. "_Lamp"
+end
+
+function LobbyBuilder.terminalName(anchorId: string): string
+	return "Terminal_" .. anchorId
+end
 
 local function area(room: Room): number
 	return room.rect.w * room.rect.d
@@ -555,21 +606,37 @@ local function buildPads(layout: Layout, props: Instance, origin: Vector3): numb
 			props,
 			"ReadyPad_" .. anchor.id .. "_Ring",
 			base,
-			base + Vector3.new(0, 0.06, 0),
-			4.4,
+			base + Vector3.new(0, PAD_RING_HEIGHT, 0),
+			PAD_RING_DIAMETER,
 			"BusPaint",
 			{ canCollide = false, castShadow = false }
 		)
+		-- The lamp band shows between the pad's edge and the ring, dim until a client lights it for an occupant.
+		local lamp = Geometry.cylinder(
+			props,
+			LobbyBuilder.lampName(anchor.id),
+			base,
+			base + Vector3.new(0, PAD_LAMP_HEIGHT, 0),
+			PAD_LAMP_DIAMETER,
+			"BusPaint",
+			{
+				canCollide = false,
+				canQuery = false,
+				castShadow = false,
+				material = Enum.Material.Neon,
+				color = PAD_LAMP_IDLE,
+			}
+		)
 		local pad = Geometry.cylinder(
 			props,
-			"ReadyPad_" .. anchor.id,
+			LobbyBuilder.padName(anchor.id),
 			base,
-			base + Vector3.new(0, 0.12, 0),
-			3.6,
+			base + Vector3.new(0, PAD_HEIGHT, 0),
+			PAD_DIAMETER,
 			"MetalGalvanized",
 			{ canCollide = false, castShadow = false }
 		)
-		for _, part in { ring, pad } do
+		for _, part in { ring, lamp, pad } do
 			if part then
 				part:SetAttribute(W.AnchorId, anchor.id)
 				part:SetAttribute(W.AnchorKind, anchor.kind)
@@ -590,7 +657,7 @@ local function buildTerminals(layout: Layout, props: Instance, origin: Vector3):
 			* CFrame.new(anchor.pos.X, 0, anchor.pos.Z)
 			* CFrame.Angles(0, math.rad(anchor.yaw or 0), 0)
 		local model = Instance.new("Model")
-		model.Name = "Terminal_" .. anchor.id
+		model.Name = LobbyBuilder.terminalName(anchor.id)
 		model:SetAttribute(W.AnchorId, anchor.id)
 		model:SetAttribute(W.AnchorKind, anchor.kind)
 		Geometry.part(model, "Desk", frame * CFrame.new(0, 1.5, 0), Vector3.new(3.2, 3, 1.8), "TrimMetal")
@@ -612,6 +679,13 @@ local function buildTerminals(layout: Layout, props: Instance, origin: Vector3):
 		glow.Color = Color3.fromRGB(90, 255, 140)
 		glow.Shadows = true -- like every fixture: an unshadowed light shines through the walls behind it
 		glow.Parent = screen
+		PropKit.prompt(screen, {
+			kind = "Terminal",
+			action = TERMINAL_ACTIONS[anchor.id] or TERMINAL_ACTION_DEFAULT,
+			object = TERMINAL_OBJECT,
+			hold = 0,
+			distance = TERMINAL_PROMPT_DISTANCE,
+		}, model)
 		count += 3
 		model.Parent = props
 	end

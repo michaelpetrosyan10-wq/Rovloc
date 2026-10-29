@@ -143,7 +143,8 @@ Rovloc/
     │       │       ├── SurfaceArt.luau     SurfaceGui paint kit: checkers, seams, hazard stripes, stains, grime, print
     │       │       ├── Finishes.luau       Interior finishes: glossy / checker / vinyl floors, drop ceilings with missing
     │       │       │                       tiles, two-tone wainscots (band, chair rail, baseboard), floor hazard plates
-    │       │       ├── LobbyBuilder.luau   [P1] Boiler-room safe zone + wrecked bus staging area
+    │       │       ├── LobbyBuilder.luau   [P1] Boiler-room safe zone + wrecked bus staging area; [P8] ready pads with
+    │       │       │                       Neon lamp bands, consoles with instant Terminal prompts (Terminals ids)
     │       │       ├── SchoolShellBuilder.luau [P1] Levels 0–5: slabs, walls, rooms, corridors, boarded windows, Zone volumes
     │       │       ├── StairwellBuilder.luau [P1] Stair towers between levels (respawn points are the entry-airlock PlayerSpawn anchors)
     │       │       ├── VentShaftBuilder.luau [P1] 3.5×3.5 ducts per level, VentNodes with explicit Links, AdjacentZones, Submerged
@@ -271,7 +272,8 @@ Rovloc/
     │       │   │                                emergency floodlight switch (prompt, On, lever, lamps lit for the run,
     │       │   │                                release / blind), seeded water beats out of sight
     │       │   └── Level5_RoofController.luau [P8] Door smash, final sprint, parachute leap, lightning reveal + vanish
-    │       └── Match/
+    │       └── Match/                      Each module is its own service; the others require MatchAndDataService,
+    │           │                           it requires none of them
     │           ├── CheckpointAirlockService.luau [P6] Stairwell airlocks: 10 Hz checkpoint volume, 20s straggler timer,
     │           │                                 seal via DoorService, left-behind spectators, Advance, 50% HP respawn
     │           ├── MatchAndDataService/
@@ -283,8 +285,10 @@ Rovloc/
     │           │   ├── PlayerDataStore.luau [P8] Session lock + stale steal, per-player serialized save queue (pacing,
     │           │   │                            coalescing, retries), autosave, idempotent release, guest sessions
     │           │   └── DataMigration.luau  [P8] Schema version, defaults, migrations, sanitize / validate (pure)
-    │           ├── LobbyService.luau       [P8] Ready-up, difficulty vote, countdown, squad cap → Deploy
-    │           ├── PerkShopService.luau    [P8] Credit spend → PerkStock (through Update), loadout equip
+    │           ├── LobbyService.luau       [P8] Ready pads + LobbyAction, difficulty vote + console, squad cap,
+    │           │                                countdown into MatchAndDataService.Deploy, Play Again arrivals
+    │           ├── PerkShopService.luau    [P8] Perks console: PerkPurchase through one atomic Update, equip / unequip
+    │           │                                into Player.Loadout, the PerkStock mirror
     │           ├── DownedReviveService.luau [P8] Revive anchor + prompt on Downed participants (4 s InteractionService
     │           │                                 channel, Alive teammates only), cancels, Revive at 50%, notices
     │           ├── SpectatorService.luau   [P8] Only writer of SpectateReason / SpectateTargetUserId: eliminated,
@@ -355,7 +359,8 @@ Rovloc/
                 │                                       the server's rule, mash UI, the pulled-down shaking camera, darkness
                 └── Match/
                     ├── AirlockController.luau      [P6] Straggler countdown banner (inside / outside / sealing)
-                    ├── LobbyController.luau        [P8] Ready-up, difficulty vote, perk shop UI
+                    ├── LobbyController.luau        [P8] Lobby HUD (squad, ready, votes, countdown, hints), pad lamps,
+                    │                                   difficulty + loadout console screens (Terminal cue)
                     ├── DownedController.luau       [P8] Downed HUD (bleedout ring, revive status, syringe button,
                     │                                   vignette, heartbeat, desaturation), teammates' downed markers
                     ├── SpectatorController.luau    [P8] Through the target's eyes ("Spectating" override, LookBroadcast
@@ -424,7 +429,8 @@ destroys the old model on every swap (deploy, airlock respawn, return to lobby).
 
 ```text
 Workspace
-├── Lobby                    Model  ReadyPads · DifficultyTerminal · PerkLocker · SpawnAnchors
+├── Lobby                    Model  Props: ReadyPad_<id> (+ _Ring, _Lamp) · Terminal_Lobby_Terminal_Difficulty ·
+│                                   Terminal_Lobby_Terminal_Perks (Interactable, Terminal prompt) · SpawnAnchors
 ├── School                   Model
 │   ├── Level0_Basement      Model  Shell · Lights · Zones · Vents · Anchors · Triggers · Waypoints · Props (P2 statics:
 │   │                               open doors, lab counters, smashed lockers, drip pipes, debris, pool wreckage,
@@ -564,6 +570,21 @@ policy, each a service of its own under `Services/Match/` (Lobby, PerkShop, Matc
   Nothing for a `DevRun` or for read-only (guest) data. Survivors of an airlock are told the floor's credits
   (`Checkpoint.Reached`) when it seals.
 
+**The lobby (P8).** `LobbyService` runs the Lobby and Countdown phases (asking `RunLifecycleService.SetPhase` for
+both). Players queue in the order their data loads; the squad is the first `MaxSquad` of them (published as
+`LobbySquad`), later ones wait for the next run and lead the queue once they have sat one out, and players still
+loading block nobody. Stepping onto a ReadyPad in the bus readies a squad member, stepping off every pad clears it, and
+`LobbyAction Ready / Unready` works from anywhere; Play Again (`MatchResetService.PlayAgainRequested`) arrives Ready.
+The difficulty console (instant `Terminal` prompt → `PrivateCue Terminal`) takes `VoteDifficulty` within reach of its
+screen: the squad's cast votes decide, Nightmare only with strictly more votes (a tie plays Standard), published as
+`LobbyDifficulty`. Once the whole squad (at least `MinSquad`) is Ready the match counts down `CountdownSeconds` to
+`CountdownEndsAt`; anyone unreadying or the squad changing (a leave, a newly loaded player taking a slot) aborts it, and a
+squad still all Ready starts afresh; at zero `MatchAndDataService.Deploy(squad, voted difficulty)`. `PerkShopService`
+owns the perks console: `PerkPurchase` spends credits for one unit inside a single `MatchAndDataService.Update` (cost,
+stock cap and credits judged on the draft, so nothing is lost or duplicated), `EquipPerk / UnequipPerk` write
+`Player.Loadout` (a perk needs an owned unit; Deploy consumes one per equipped perk), and the lobby opening again drops
+equipped perks no longer owned. `PerkStock` mirrors the owned units for the client.
+
 **Death rules.** `LifeStateService` is the only writer of `Health` and `LifeState`. `CharacterService` just fires
 `Died`. Lethal damage goes to `Down`, which becomes `Execute` if the player has already been downed once. Oxygen
 reaching 0 goes through the same `Down` path. Execute and `Died` are idempotent.
@@ -694,12 +715,12 @@ is treated as an elimination, never a respawn.
 
 | Owner | Attributes |
 | --- | --- |
-| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `Settings` (saved blob, JSON) · `SpectateReason` + `SpectateTargetUserId` |
+| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `Settings` (saved blob, JSON) · `SpectateReason` + `SpectateTargetUserId` · `PerkStock` · `DifficultyVote` · `SpectateReason` |
 | `Creature` | `MonsterState` · `StateSince` · `PoseMode` · `TargetUserId` · `InVent` · `VentSegmentId` · `Hidden` · `GrabbedUserId` |
-| `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` · `DevRun` · `ResultsEndsAt` (MatchResetService) |
+| `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` · `DevRun` · `ResultsEndsAt` (MatchResetService) · `CountdownEndsAt` · `LobbySquad` · `LobbyDifficulty` |
 | `VentGrate` | `GrateId` · `GrateState` (Closed / Unscrewing / Open / Kicked / Locked) · `Lockable` · `CriticalPath` · `NodeId` |
 | `VentNode` / `VentShaft` | `NodeId` · `Links` · `LevelId` · `GrateId` / `SegmentId` · `AdjacentZones` · `Submerged` |
-| Props | `BearTrap{Armed, TrappedUserId}` · `HideableLocker{OccupantUserId, DoorOpen}` · `AirlockDoor{DoorState, FromLevel, ToLevel, StragglerDeadline}` · `ScriptedDoor{DoorId, DoorState}` · `ParachutePack{TakenByUserId}` · `FloodlightSwitch{On}` · `ChemicalItem{HeldByUserId}` · `BatteryPickup{Charge}` · `Zone{ZoneId, LevelId, ReverbPreset}` · `Interactable{ChannelActor, ChannelStartedAt, ChannelDuration}` |
+| Props | `BearTrap{Armed, TrappedUserId}` · `HideableLocker{OccupantUserId, DoorOpen}` · `AirlockDoor{DoorState, FromLevel, ToLevel, StragglerDeadline}` · `ScriptedDoor{DoorId, DoorState}` · `ParachutePack{TakenByUserId}` · `FloodlightSwitch{On}` · `ChemicalItem{HeldByUserId}` · `BatteryPickup{Charge}` · `Zone{ZoneId, LevelId, ReverbPreset}` · `Interactable{ChannelActor, ChannelStartedAt, ChannelDuration}` · `ReadyPad{OccupantUserId}` |
 
 `RunDirector` only ever locks `Lockable` grates, never `CriticalPath` ones (the Floor 1 bypass vent, the gym
 connectors, the pool ducts). After randomizing, it runs a breadth-first search over `ZoneGraph` from each level's

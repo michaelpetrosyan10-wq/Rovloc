@@ -262,7 +262,7 @@ export type ProjectilePhase = "Spawn" | "Resolve"
 
 export type ProjectileHitKind = "World" | "Creature" | "Water" | "Expired"
 
-export type CueKind = "BreathCheck" | "Struggle" | "JumpscareVictim" | "TrapLeg" | "Toast"
+export type CueKind = "BreathCheck" | "Struggle" | "JumpscareVictim" | "TrapLeg" | "Toast" | "Terminal"
 
 local Enums = {}
 
@@ -577,7 +577,14 @@ Enums.ProjectilePhase = table.freeze({ "Spawn", "Resolve" } :: { ProjectilePhase
 
 Enums.ProjectileHitKind = table.freeze({ "World", "Creature", "Water", "Expired" } :: { ProjectileHitKind })
 
-Enums.CueKind = table.freeze({ "BreathCheck", "Struggle", "JumpscareVictim", "TrapLeg", "Toast" } :: { CueKind })
+Enums.CueKind = table.freeze({
+	"BreathCheck",
+	"Struggle",
+	"JumpscareVictim",
+	"TrapLeg",
+	"Toast",
+	"Terminal", -- a lobby terminal opened for this player (args.terminal = its AnchorId)
+} :: { CueKind })
 
 -- Runtime membership test used by validators and attribute readers.
 function Enums.has<T>(list: { T }, value: unknown): boolean

@@ -193,6 +193,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "LobbyController",
+		load = function(): any
+			return require(Match.LobbyController)
+		end,
+	},
+	{
 		name = "LevelScenesController",
 		load = function(): any
 			return require(Gameplay.LevelScenesController)
