@@ -32,6 +32,7 @@ const CLEARANCE = RADIUS + 0.25; // a footprint grows by this for the agent
 const WALL_CLEARANCE = RADIUS + WorldDefaults.WallThickness / 2; // a detour corner stays this far inside its room
 const INTERIOR = 0.01; // footprints shrink by this for the crossing test, so legs along their edges are clear
 const MAX_SPLITS = 24;
+const SPACING = CreatureConfig.PathAgent.WaypointSpacing;
 
 /** @typedef {{id: string, minX: number, maxX: number, minZ: number, maxZ: number}} Obstacle */
 
@@ -140,7 +141,7 @@ export class FloorNav {
     const goal = this.roomAt(to) || this.nearestRoom(to);
     if (!start || !goal) return null;
     const goalPoint = new THREE.Vector3(to.x, goal.floorY, to.z);
-    if (start === goal) return { waypoints: this._detour(from, [goalPoint]) };
+    if (start === goal) return { waypoints: spaced(from, this._detour(from, [goalPoint])) };
     const route = this._search(start, goal, from, to);
     if (!route) return null;
     const corridor = [];
@@ -153,7 +154,7 @@ export class FloorNav {
     const points = funnel(from, goalPoint, corridor);
     const waypoints = [];
     for (const p of points) waypoints.push(new THREE.Vector3(p.x, p.y, p.z));
-    return { waypoints: this._detour(from, waypoints) };
+    return { waypoints: spaced(from, this._detour(from, waypoints)) };
   }
 
   /**
@@ -397,6 +398,27 @@ export function funnel(start, goal, segments) {
   const out = [];
   for (const p of path) if (!same(p, start) && (out.length === 0 || !same(out[out.length - 1], p))) out.push(p);
   if (out.length === 0 || !same(out[out.length - 1], goal)) out.push(goal);
+  return out;
+}
+
+/**
+ * The route as PathfindingService hands it out: a waypoint every WaypointSpacing studs along each leg, every turn
+ * kept (Locomotion moves on from a waypoint 2.5 studs short of it, so a turn is never cut by more than that).
+ * @param {THREE.Vector3} from @param {THREE.Vector3[]} points @returns {THREE.Vector3[]}
+ */
+export function spaced(from, points, spacing = SPACING) {
+  const out = [];
+  let a = from;
+  for (const b of points) {
+    const length = Math.hypot(b.x - a.x, b.z - a.z);
+    const steps = Math.floor(length / spacing - 1e-6);
+    for (let k = 1; k <= steps; k++) {
+      const t = (k * spacing) / length;
+      out.push(new THREE.Vector3(a.x + (b.x - a.x) * t, b.y, a.z + (b.z - a.z) * t));
+    }
+    out.push(b);
+    a = b;
+  }
   return out;
 }
 

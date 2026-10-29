@@ -10,7 +10,7 @@
 //                     addStamina, refillStamina, setOxygenRate, addOxygen, addBattery, oxygenDepleted,
 //                     moveStateChanged, setCameraOverride, forceCameraState, setPitchLimits, shake, setHandPose,
 //                     setMotionOverride, body, intent, flashlight (on, setOn), panic (setFloor, panic,
-//                     setBreathSuppressed, setCreatureSource), cameraEnabled, resetForRun
+//                     setBreathSuppressed, setCreatureSource), cameraEnabled, resetForRun, viewmodel.hands.right
 //   engine.noise      emit(position, kind, opts), on(fn), splashCrossed, resetSplash, splashValue(now)
 //   engine.audio      play(name, opts) -> voice {stop(fade), setVolume, setPosition}, setAmbience,
 //                     setEnvironmentOverride(token, name), stopAll
@@ -56,6 +56,12 @@ export class Env {
   /** Wall clock seconds since boot. */
   realNow() {
     return this.engine.loop.realTime;
+  }
+
+  /** The game clock interpolated to this render frame (smooth motion of things the ticks move). */
+  renderNow() {
+    const loop = this.engine.loop;
+    return loop.time + (loop.alpha || 0) * (loop.tickDt || 1 / 30);
   }
 
   /** Fixed 30 Hz logic. @param {(dt: number) => void} fn @returns {() => void} */
@@ -635,6 +641,11 @@ export class Env {
 
   removeFromScene(object) {
     if (object.parent) object.parent.remove(object);
+  }
+
+  /** The first-person right hand (posed every frame by the viewmodel): a held prop (the flask) is parented to it. */
+  rightHand() {
+    return this.engine.player.viewmodel.hands.right;
   }
 
   /** The baked light probe's irradiance at a point (lights the effects like the world around them). */

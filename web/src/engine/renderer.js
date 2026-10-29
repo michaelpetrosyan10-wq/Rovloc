@@ -216,6 +216,8 @@ export class Renderer {
     const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const w = Math.max(1, Math.floor(this.canvas.clientWidth || window.innerWidth));
     const h = Math.max(1, Math.floor(this.canvas.clientHeight || window.innerHeight));
+    // resizing the canvas clears its drawing buffer: only touch it when the size really changed
+    if (w === this.width && h === this.height && dpr === this.gl.getPixelRatio()) return;
     this.gl.setPixelRatio(dpr);
     this.gl.setSize(w, h, false);
     this.width = w;

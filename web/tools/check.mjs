@@ -265,6 +265,12 @@ async function main() {
   const perf = {};
   const setView = async (w, h) => {
     await page.setViewportSize({ width: w, height: h });
+    // the window resize (which resizes and clears the canvas) can land late behind a backlogged software GPU: wait
+    // until the renderer has taken the new size, so no frame drawn below is wiped by it
+    await page.waitForFunction(([ww, hh]) => {
+      const r = window.__rovloc.engine.renderer;
+      return window.innerWidth === ww && window.innerHeight === hh && r.width === ww && r.height === hh;
+    }, [w, h], { timeout: 120000 });
     await page.waitForTimeout(300);
   };
   for (const tier of ['Low', 'Medium', 'High']) {
