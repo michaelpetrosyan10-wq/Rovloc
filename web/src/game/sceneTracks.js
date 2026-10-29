@@ -33,10 +33,13 @@ export function registerSceneTracks(game) {
     const v = name ? ctx.args[name] : null;
     return v instanceof THREE.Vector3 ? v : null;
   };
-  /** Base brightness of a fixture light (its export brightness), null when unknown or dark. */
+  /**
+   * Base brightness of a fixture light (its layout brightness: a scripted fixture that starts dark, like the pool
+   * floodlights, strikes up to it), null when unknown or dark.
+   */
   const baseOf = (lightId) => {
     let best = 0;
-    for (const l of world.meta.lights) if (l.id === lightId) best = Math.max(best, l.baseBrightness ?? l.brightness ?? 0);
+    for (const l of world.meta.lights) if (l.id === lightId) best = Math.max(best, l.baseBrightness || 0, l.brightness || 0);
     return best > 0 ? best : null;
   };
 

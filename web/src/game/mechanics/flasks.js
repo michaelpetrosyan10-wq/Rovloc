@@ -295,6 +295,7 @@ export class Flasks {
     this._emptyHand();
     for (const fl of this.flights) if (fl.model) this._dropModel(fl);
     this.flights.length = 0;
+    for (const c of this.clouds) if (c.hiss) c.hiss.stop(0.3);
     this.clouds.length = 0;
     this.fx.clear();
     this.followStart = null;
@@ -505,9 +506,9 @@ export class Flasks {
     }
     game.playAt('FlaskShatter', point);
     const hiss = game.playAt('ChemHiss', centre, { loop: true });
-    if (hiss) setTimeout(() => hiss.stop(0.6), GameConfig.FlaskCloudSeconds * 1000);
     this.fx.shatter(point, normal, centre, flight.flask.color, GameConfig.FlaskCloudSeconds, inVent, hit.kind);
-    const cloud = { point: point.clone(), centre, level: flight.level, ventNode, inVent, expiresAt: now + GameConfig.FlaskCloudSeconds, spent: false };
+    const cloud = { point: point.clone(), centre, level: flight.level, ventNode, inVent, expiresAt: now + GameConfig.FlaskCloudSeconds,
+      spent: false, hiss };
     this.clouds.push(cloud);
     if (this.game.pool) this.game.pool.noteShatter(point);
     this._evaluate(cloud, now);
@@ -552,7 +553,11 @@ export class Flasks {
     this.pollClock += dt;
     if (this.pollClock >= POLL) {
       this.pollClock = 0;
-      this.clouds = this.clouds.filter((c) => now <= c.expiresAt);
+      this.clouds = this.clouds.filter((c) => {
+        if (now <= c.expiresAt) return true;
+        if (c.hiss) c.hiss.stop(0.6);
+        return false;
+      });
       for (const cloud of this.clouds.slice()) this._evaluate(cloud, now);
     }
   }

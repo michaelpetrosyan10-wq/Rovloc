@@ -27,6 +27,7 @@
 //   engine            setCurrentLevel, setAmbienceEnabled, menuEnabled, syringes, renderer.camera, spawnPoints
 
 import * as THREE from 'three';
+import { CameraConfig, WalkSpeeds } from '../engine/config.js';
 
 /** @typedef {import('three').Vector3} Vector3 */
 /** @typedef {import('three').Matrix4} Matrix4 */
@@ -60,6 +61,17 @@ export class Env {
   /** Wall clock seconds since boot. */
   realNow() {
     return this.engine.loop.realTime;
+  }
+
+  /** The eye's height above the root for a MoveState (CameraConfig.EyeHeightAboveRoot; Standing by default). */
+  eyeHeight(state) {
+    const h = CameraConfig.EyeHeightAboveRoot;
+    return h[state] ?? h.Standing;
+  }
+
+  /** WalkSpeed for a MoveState (the engine's table, GameConfig values). */
+  walkSpeed(state) {
+    return WalkSpeeds[state] ?? WalkSpeeds.Standing;
   }
 
   /** The game clock interpolated to this render frame (smooth motion of things the ticks move). */
@@ -491,6 +503,15 @@ export class Env {
   }
 
   /** {x right, y forward}, length <= 1. */
+  /**
+   * Whether the jump input (Space / gamepad A) is down whatever the context: a swimmer swims up and climbs out with
+   * it (Roblox's jump request) although Jump is not a Swim action. Touch swimmers climb by swimming into the edge.
+   */
+  jumpDown() {
+    const input = this.engine.input;
+    return input.keys.has('Space') || !!input.gamepadButtons[0] || this.engine.player.jumpHeld === true;
+  }
+
   moveVector() {
     return this.engine.input.moveVector();
   }

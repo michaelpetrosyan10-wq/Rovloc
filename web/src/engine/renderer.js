@@ -57,10 +57,15 @@ void main() {
   c += texture(tBloom, vUv).rgb * uBloom;
   c = mix(c, uOverlay.rgb, uOverlay.a);
   c += uLift;
-  // Contrast as a power curve through a dark-frame pivot. LightingMood's film raises contrast with the blacks lifted
+  // Contrast as an S-curve through a dark-frame pivot. LightingMood's film raises contrast with the blacks lifted
   // "so the gaps between pools read as dark grey-blue, not void": pivoting at mid-grey would crush this night-time
-  // frame (most of it sits below 0.15) to black, so the pivot sits where the frame's lit surfaces are.
-  c = CONTRAST_PIVOT * pow(max(c, vec3(0.0)) / CONTRAST_PIVOT, vec3(max(0.2, 1.0 + uContrast)));
+  // frame (most of it sits below 0.15) to black, so the pivot sits where the frame's lit surfaces are. Two power
+  // curves meet at the pivot with slope 1 + contrast; black stays black and white stays white (no clipped hotspots).
+  c = clamp(c, 0.0, 1.0);
+  vec3 k = vec3(max(0.2, 1.0 + uContrast));
+  vec3 lo = CONTRAST_PIVOT * pow(c / CONTRAST_PIVOT, k);
+  vec3 hi = 1.0 - (1.0 - CONTRAST_PIVOT) * pow((1.0 - c) / (1.0 - CONTRAST_PIVOT), k);
+  c = mix(lo, hi, step(CONTRAST_PIVOT, c));
   float l = dot(c, vec3(0.299, 0.587, 0.114));
   c = mix(vec3(l), c, 1.0 + uSaturation);
   c *= uTint;

@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { DifficultyConfig, LevelOrder } from './config.js';
-import { cfMatrix, cfPos, horizontalDistance, inVolume, seededRandom, shuffle } from './util.js';
+import { cfMatrix, cfPos, horizontalDistance, inVolume, list, seededRandom, shuffle } from './util.js';
 
 /**
  * @typedef {{id: string, kind: string, level: string, room: string|null, cframe: number[], attributes: Record<string, any>, tags: string[]}} Anchor
@@ -277,7 +277,7 @@ export class WorldData {
     const queue = [entry];
     while (queue.length) {
       const cur = queue.shift();
-      for (const edge of zg.adjacency[cur] || []) {
+      for (const edge of list(zg.adjacency[cur])) {
         if (blocked.has(edge.portalId)) continue;
         const next = edge.a === cur ? edge.b : edge.a;
         if (seen.has(next)) continue;

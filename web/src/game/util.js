@@ -281,6 +281,11 @@ export function inVolume(cframe, size, p, pad = 0) {
     Math.abs(_local.z) <= size[2] / 2 + pad;
 }
 
+/** An exported list as an array (an empty Luau table serialises as {}). */
+export function list(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 /** Yaw (radians, 0 = -Z) of a direction. */
 export function yawOf(dir) {
   return Math.atan2(-dir.x, -dir.z);

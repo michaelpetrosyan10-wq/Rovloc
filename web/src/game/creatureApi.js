@@ -29,10 +29,14 @@ import { CreatureConfig, ROOT_HEIGHT } from '../creature/config.js';
 import { createCreature } from '../creature/index.js';
 import { Signal } from './util.js';
 
-/** The rig measures the level scenes stage with (CreatureConfig): root height over the floor, eye over the root. */
+/**
+ * The rig measures the level scenes stage with (CreatureConfig): root height over the floor, eye over the root, and
+ * the states' base paces (the roof's chase pacing scales WallChase).
+ */
 export const CreatureMetrics = Object.freeze({
   rootHeight: ROOT_HEIGHT,
   eye: CreatureConfig.EyeHeightAboveRoot,
+  speeds: CreatureConfig.Speeds,
 });
 
 /**

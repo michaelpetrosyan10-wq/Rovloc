@@ -32,7 +32,7 @@ import * as THREE from 'three';
 import { CreatureMetrics } from '../creatureApi.js';
 import { GameConfig } from '../config.js';
 import * as Scenes from '../scenes.js';
-import { Schedule, lookAtMatrix, seededRandom } from '../util.js';
+import { Schedule, list, lookAtMatrix, seededRandom } from '../util.js';
 
 const LEVEL = 'Level1_Hallways';
 const TOKEN = 'L1_ClassroomScare';
@@ -97,7 +97,7 @@ export function geometry(meta) {
   const lights = [];
   for (const id of BURST_LIGHTS) {
     for (const room of layout.rooms) {
-      for (const light of room.lights || []) {
+      for (const light of list(room.lights)) {
         if (light.id === id) lights.push({ id, position: origin.clone().add(new THREE.Vector3(...light.pos)) });
       }
     }

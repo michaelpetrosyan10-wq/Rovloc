@@ -44,6 +44,10 @@ export class Dev {
     if (!g.run) return false;
     this._mark();
     if (g.traps.caught) g.traps._free(g.traps.caught, 'Release');
+    if (g.vents.inVent()) g.vents.leave();
+    g.lockers.release();
+    if (g.pool.grab) g.pool.releaseGrab('Ended');
+    g.pool.leaveWater(true);
     g.match.spawnAt(level, 0);
     g.traps.noteTeleport();
     g.enterLevel(level);

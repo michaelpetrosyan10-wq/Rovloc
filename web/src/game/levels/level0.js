@@ -128,7 +128,7 @@ export class Level0 {
     game.seq.play(id, startAt, args);
     if (kind === 'FallingObject') {
       const at = placement.from;
-      this.schedule.at(startAt + Scenes.FallImpact, 'fall', () => game.noise(at, 'FallingObject'));
+      this.schedule.at(startAt + Scenes.FallImpact, 'fall', () => game.noise(at, 'FallingObject', { source: 'world' }));
     }
     this.previous = kind;
     this.played++;

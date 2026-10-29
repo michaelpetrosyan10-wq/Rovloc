@@ -34,6 +34,13 @@ const STORM_QUIET_AFTER_SCRIPTED = 8;
 const FOG_SCALE = 0.02; // Atmosphere density -> exp2 fog coefficient
 const LOBBY = 'Lobby';
 const EXPOSURE_BASE = 0.3; // LightingRig.Baseline.ExposureCompensation
+/**
+ * Web calibration of the exposure, in stops on top of the film's (the browser frame has no Future-lighting
+ * auto-exposure, and players found the Roblox night "pitch black"): dark but readable, a lit corridor around 18-30
+ * mean luminance (of 255) without the torch, the safe warm lobby clearly readable, the torch hotspot unclipped.
+ */
+export const ExposureTrim = { base: 0.25, Lobby: 0.8 };
+// (The flashlight is scaled back by the same trim: see shared.torchGain.)
 
 const rgb = (r, g, b) => [r, g, b];
 
@@ -60,7 +67,7 @@ const GRADES = {
   Level5_Roof: rgb(234, 240, 255),
 };
 
-const NUMERIC_FILM = ['exposure', 'contrast', 'saturation', 'lift', 'bloomIntensity', 'bloomThreshold', 'density',
+const NUMERIC_FILM = ['exposure', 'trim', 'contrast', 'saturation', 'lift', 'bloomIntensity', 'bloomThreshold', 'density',
   'haze', 'vignette', 'shafts', 'dust', 'moon', 'dofFar'];
 
 /** Seeded flicker character of one group (LightingController.flickerProfile). */
@@ -158,8 +165,8 @@ export class Lighting {
     for (const l of meta.lights || []) this.lightsById.set(l.id, l);
     /** @type {Array<any>} dynamic point lights (added by the game / creature, or forced on by an override) */
     this.dynamic = [];
-    this.film = normalizeFilm(BASE_FILM);
-    this.filmTarget = BASE_FILM;
+    this.film = { ...normalizeFilm(BASE_FILM), trim: 0 };
+    this.filmTarget = { ...BASE_FILM, trim: 0 };
     this.filmLevel = undefined;
     this.grade = new THREE.Color(1, 1, 1);
     this.gradeTarget = new THREE.Color(1, 1, 1);
@@ -305,6 +312,13 @@ export class Lighting {
 
   /** The film of a layout: world.json's film (LightingMood.film per level, "Outdoor" outside every building). */
   filmFor(level) {
+    const f = this._filmOf(level);
+    f.trim = ExposureTrim.base + (ExposureTrim[level] || 0);
+    f.exposure += f.trim;
+    return f;
+  }
+
+  _filmOf(level) {
     const film = this.world.meta.film;
     const levelInfo = level && this.world.meta.levels[level];
     const key = levelInfo ? levelInfo.film : level ? null : 'Outdoor';
@@ -393,6 +407,8 @@ export class Lighting {
       .multiplyScalar(1 + this.flash * 6);
     this.shared.uFogDensity.value = film.density * FOG_SCALE;
     this.shared.uExposure.value = 2 ** (EXPOSURE_BASE + film.exposure + this.flash * 1.1);
+    // the trim lifts the baked world only: the torch keeps the brightness it was tuned with (no clipped hotspot)
+    this.shared.torchGain = 2 ** -film.trim;
     this.shared.uFlash.value.set(0.82, 0.86, 1).multiplyScalar(this.flash * FLASH_SKY);
 
     // dynamic point lights: nearest enabled within range, up to the tier's slots

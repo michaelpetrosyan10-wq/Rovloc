@@ -188,10 +188,11 @@ export class Flashlight {
     const flicker = 1 - (1 - flickerFactor(this.emf, ctx.time, this.seed)) * flashScale;
     this.output = batteryFactor(fraction) * sputter(fraction, ctx.time, this.seed) * flicker;
     beamColor(fraction, this.color);
+    const gain = BRIGHTNESS_UNIT * (s.torchGain ?? 1); // lighting's exposure trim, undone for the torch
     s.uFlInner.value.set(this.color.r, this.color.g, this.color.b)
-      .multiplyScalar(Cones.innerBrightness * this.output * BRIGHTNESS_UNIT);
+      .multiplyScalar(Cones.innerBrightness * this.output * gain);
     s.uFlOuter.value.set(this.color.r, this.color.g, this.color.b)
-      .multiplyScalar(Cones.outerBrightness * this.output * BRIGHTNESS_UNIT);
+      .multiplyScalar(Cones.outerBrightness * this.output * gain);
 
     // haze shafts
     const hazeOn = this.quality.budget.flashlightHaze && this.output > 0.01 && this.filmShafts > 0;

@@ -164,7 +164,7 @@ export class FlaskModel {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Billboard particles (the splash, the gas): camera-facing quads sized in studs
+// Billboard particles (the splash, the gas, the pool bubbles): camera-facing quads sized in studs
 // ---------------------------------------------------------------------------------------------------------------
 
 let softTexture = null;
@@ -207,7 +207,7 @@ void main() {
   gl_FragColor = vec4(uColor, a);
 }`;
 
-class Billboards {
+export class Billboards {
   constructor(capacity, color, additive) {
     const geo = new THREE.InstancedBufferGeometry();
     const quad = new THREE.PlaneGeometry(1, 1);

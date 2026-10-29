@@ -551,13 +551,14 @@ export class Vents {
 
   _kick(grate, byPlayer) {
     if (grate.state === 'Locked') {
-      this.env.hint(S('Prompt.GrateLocked'), 2.5);
+      if (byPlayer) this.env.hint(S('Prompt.GrateLocked'), 2.5);
       return false;
     }
     if (byPlayer && (grate.state !== 'Closed' || this.game.life.state !== 'Alive')) return false;
     grate.kickMotion = { from: 0, to: 1, startAt: this.env.now() + LEAD, seconds: KICK_SECONDS };
     this._setState(grate, 'Kicked');
-    this.game.noise(grate.centre, 'GrateKick', { medium: this.crawl ? 'Vent' : undefined, ventNodeId: grate.info.attributes.NodeId });
+    this.game.noise(grate.centre, 'GrateKick', { medium: byPlayer && this.crawl ? 'Vent' : undefined,
+      ventNodeId: grate.info.attributes.NodeId, source: byPlayer ? 'player' : 'creature' });
     this.game.playAt('MetalCrash', grate.centre);
     return true;
   }
@@ -720,6 +721,17 @@ export class Vents {
     env.popContext('Vent');
     env.setMode('OnFoot');
     this.cooldownUntil = env.now() + ENTRY_COOLDOWN;
+  }
+
+  /** Ends a crawl where the player is (the dev level skip, scripted moves). */
+  leave() {
+    this._release();
+  }
+
+  /** The grate's state ('Closed' | 'Unscrewing' | 'Open' | 'Kicked' | 'Locked'; the Creature's grateState hook). */
+  stateOf(id) {
+    const g = this.grates.get(id);
+    return g ? g.state : 'Closed';
   }
 
   /** Whether the player is crawling. */

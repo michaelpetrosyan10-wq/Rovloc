@@ -1,7 +1,7 @@
 // start.js: builds the game on a running engine (the web ClientMain + ServerMain bootstrap) and opens the title.
 // main.js calls start(engine) through index.js once the engine is up.
 
-import { CreatureApi } from './creatureApi.js';
+import { createCreatureApi } from './creatureApi.js';
 import { Dev } from './dev.js';
 import { Env } from './env.js';
 import { Game } from './game.js';
@@ -36,13 +36,13 @@ import { Onboarding } from './ui/title.js';
 
 /**
  * @param {any} engine the W2 Engine
- * @param {{creature?: any}} [opts] W3's Creature (defaults to engine.creature)
+ * @param {{creature?: any}} [opts] a Creature to use instead of W3's (null: none)
  * @returns {Promise<Game>}
  */
 export async function start(engine, opts = {}) {
   installStyle();
   const env = new Env(engine);
-  const creature = new CreatureApi(opts.creature ?? engine.creature ?? null);
+  const creature = createCreatureApi(engine, opts.creature);
   const world = new WorldData(env.meta);
   const profile = new Profile(env);
   const nav = new Nav();
@@ -61,13 +61,13 @@ export async function start(engine, opts = {}) {
   game.parachute = game.add(new Parachute(game));
   game.add(new Debris(game));
   game.airlock = game.add(new Airlock(game));
+  game.add(new CreatureLevels(game));
   game.level0 = game.add(new Level0(game));
   game.level1 = game.add(new Level1(game));
   game.level2 = game.add(new Level2(game));
   game.level3 = game.add(new Level3(game));
   game.level4 = game.add(new Level4(game));
   game.level5 = game.add(new Level5(game));
-  game.add(new CreatureLevels(game));
   game.lobby = game.add(new Lobby(game));
   game.onboarding = game.add(new Onboarding(game));
   game.objectives = game.add(new Objectives(game));
@@ -90,11 +90,34 @@ export async function start(engine, opts = {}) {
   return game;
 }
 
-/** The Creature's level activation (MonsterAIService's LevelActivated handler) and the run's teardown. */
+/**
+ * The Creature's run (BeginRun on the run's difficulty), its level activation (MonsterAIService's LevelActivated
+ * handler, before the level controllers take it for their scenes) and the run's teardown, and the game state it reads
+ * (W3's GameHooks: the life state, the duct crawl, the grates, the fixture doors, the locker and the level).
+ */
 class CreatureLevels {
   constructor(game) {
     this.name = 'CreatureLevels';
     this.game = game;
+    game.creature.bindGame({
+      lifeState: () => game.life.state,
+      downedCount: () => game.life.downedCount,
+      isInVent: () => game.vents.inVent(),
+      grateState: (id) => game.vents.stateOf(id),
+      forceGrate: (id, state) => {
+        game.vents.force(id, state);
+      },
+      doorOpen: (id) => {
+        const door = game.doors.get(id);
+        return !door || door.state === 'Open' || door.state === 'Smashed';
+      },
+      lockerOccupied: (id) => game.lockers.occupiedId() === id,
+      playerLevel: () => game.level,
+    });
+  }
+
+  beginRun(run) {
+    this.game.creature.beginRun(run.difficulty);
   }
 
   levelActivated(level) {
