@@ -315,6 +315,12 @@ local function buildCratePack(crate: Model, index: number, frame: CFrame, spec: 
 	return pack
 end
 
+-- The crate's half length (along X), half depth, rim height and wall thickness for `packCount` packs (crate space).
+function ParachuteBuilder.crateExtents(packCount: number): (number, number, number, number)
+	local inner = math.max(0, packCount) * PACK_SPACING + 2 * END_PAD
+	return (inner + 2 * WALL) / 2, CRATE_DEPTH / 2, RIM, WALL
+end
+
 -- Builds the crate and its packs into `parent`. Every random choice draws from `random`.
 function ParachuteBuilder.buildCrate(parent: Instance, spec: CrateSpec, random: Random): Model
 	local frame = spec.cframe

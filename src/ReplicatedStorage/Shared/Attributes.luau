@@ -110,7 +110,8 @@ Attributes.World = table.freeze({
 	DoorId = "DoorId",
 	DoorKind = "DoorKind",
 	DoorState = "DoorState",
-	ScriptedId = "ScriptedId", -- Door_<id> anchors: the ScriptedDoor DoorId (HallwayGate, RoofStairDoor, ClassroomDoor)
+	ScriptedId = "ScriptedId", -- Door_<id> anchors: the ScriptedDoor id (HallwayGate, RoofStairDoor, ClassroomDoor,
+	-- EquipmentStoreDoor)
 	DoorWidth = "DoorWidth", -- Door_<id> anchors: clear opening width
 	DoorHeight = "DoorHeight", -- Door_<id> anchors: clear opening height
 	FromLevel = "FromLevel",
@@ -141,6 +142,15 @@ Attributes.World = table.freeze({
 	BaseHold = "BaseHold",
 	Surface = "Surface",
 	ExpectedParts = "ExpectedParts",
+	-- Floor objectives (ObjectiveConfig)
+	Floor = "Floor", -- 0 (basement) .. 5 (roof)
+	Step = "Step", -- the objective step a prop or prompt serves (ObjectiveConfig step id)
+	ObjectiveId = "ObjectiveId", -- what the prop is: Fuse, BreakerPanel, ExitLock, ...
+	Slot = "Slot", -- which of a step's items or sockets (reagent colour 1..3, fuse slot 1..3)
+	LockVariant = "LockVariant", -- Padlock | Chain | Keypad
+	Locked = "Locked", -- an objective lock still holds (builders leave true)
+	LockerId = "LockerId", -- the hideable locker (Locker anchor id) a coach's key hangs in
+	Candidate = "Candidate", -- an objective item's candidate anchor kind
 })
 
 function Attributes.getString(instance: Instance, key: string, default: string): string

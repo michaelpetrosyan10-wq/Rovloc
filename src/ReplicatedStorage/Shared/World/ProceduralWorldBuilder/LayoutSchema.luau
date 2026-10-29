@@ -86,6 +86,7 @@ export type Anchor = {
 	room: string,
 	pos: Vector3, -- level-local
 	yaw: number?, -- degrees about +Y
+	ref: string?, -- another anchor of the layout this one belongs to (a coach's key's locker, a fuse's guard trap)
 }
 
 export type Trigger = {
@@ -266,7 +267,8 @@ end
 --     real room, inside that shared stretch, under a lintel, and above the floor (below it only over a pool basin);
 --   * openings on one wall line (doors, grates, windows, the stair-tower opening) keep a pier between them;
 --   * ducts are level, axis-aligned, listed once, stay inside chases, and never cross or touch without a shared node;
---   * anchors and triggers stay inside their room's volume, lights inside their room;
+--   * anchors and triggers stay inside their room's volume, lights inside their room; an anchor's ref names another
+--     anchor of the layout;
 --   * stairwell vestibules touch their tower; the exit stays reachable with every lockable grate locked and every
 --     gate shut.
 --------------------------------------------------------------------------------
@@ -869,6 +871,12 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 				floor,
 				top
 			)
+		end
+	end
+	for _, anchor in layout.anchors do
+		local ref = anchor.ref
+		if ref and (ref == anchor.id or seenIds[ref] ~= "anchor") then
+			pushf(errors, "anchor %s refers to %s, which is not another anchor of the layout", anchor.id, ref)
 		end
 	end
 	for _, trigger in layout.triggers do

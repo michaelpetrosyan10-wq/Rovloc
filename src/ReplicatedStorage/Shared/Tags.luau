@@ -14,6 +14,9 @@ local Tags = table.freeze({
 	ParachutePack = "ParachutePack",
 	BatteryPickup = "BatteryPickup",
 	FloodlightSwitch = "FloodlightSwitch",
+	ObjectiveItem = "ObjectiveItem", -- a floor objective's carryable item (attrs: Floor, Step, ObjectiveId, AnchorId)
+	ObjectiveStation = "ObjectiveStation", -- where a floor objective's step is worked (attrs: Floor, Step, ObjectiveId)
+	ExitLock = "ExitLock", -- the lock on a floor's exit (attrs: Floor, Step, ObjectiveId, LockVariant, Locked)
 	Interactable = "Interactable", -- any part/model hosting a server-timed ProximityPrompt channel
 
 	-- Doors

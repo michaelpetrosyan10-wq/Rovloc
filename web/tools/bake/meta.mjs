@@ -13,6 +13,9 @@ const obj = (v) => (v && !Array.isArray(v) && typeof v === 'object' ? v : {});
 function entityType(e) {
   const tags = arr(e.tags);
   const a = obj(e.attributes);
+  // floor objectives: items and stations by their ObjectiveId (Fuse, BreakerPanel, CrateChain, ...); door locks
+  if (tags.includes('ObjectiveItem') || tags.includes('ObjectiveStation')) return a.ObjectiveId || 'Objective';
+  if (tags.includes('ExitLock')) return a.ObjectiveId === 'CrateChain' ? 'CrateChain' : 'ExitLock';
   if (tags.includes('BearTrap')) return 'BearTrap';
   if (tags.includes('BatteryPickup')) return 'Battery';
   if (tags.includes('ChemicalItem')) return 'ChemicalFlask';
@@ -21,6 +24,7 @@ function entityType(e) {
   if (tags.includes('FloodlightSwitch')) return 'FloodlightSwitch';
   if (tags.includes('AirlockDoor')) return 'AirlockDoor';
   if (tags.includes('ScriptedDoor')) {
+    if (a.ScriptedId === 'EquipmentStoreDoor') return 'StoreDoor';
     if (a.DoorKind === 'Gate') return 'HallwayGate';
     if (a.DoorKind === 'RoofDoor') return 'RoofStairDoor';
     if (a.DoorKind === 'Ajar') return 'ClassroomDoor';
@@ -34,6 +38,11 @@ function entityType(e) {
 
 function entityId(e) {
   const a = obj(e.attributes);
+  const tags = arr(e.tags);
+  // floor objectives: their anchor (a lock also names its door in DoorId; the acid flask borrows the hood's anchor)
+  if (tags.includes('ObjectiveItem') || tags.includes('ObjectiveStation') || tags.includes('ExitLock')) {
+    return a.ObjectiveId === 'AcidFlask' ? e.name : a.AnchorId || e.name;
+  }
   return a.DoorId || a.GrateId || a.AnchorId || e.name;
 }
 
@@ -321,6 +330,7 @@ export function buildMeta(raw, r) {
     worldConfig: raw.worldConfig,
     windows: raw.windows,
     plan: raw.plan,
+    objectives: raw.objectives || null,
     layouts: raw.layouts,
     creature,
   };

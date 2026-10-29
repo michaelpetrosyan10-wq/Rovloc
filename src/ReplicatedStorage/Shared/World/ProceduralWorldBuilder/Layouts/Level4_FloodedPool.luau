@@ -8,14 +8,17 @@
 --   z  30..130 changing rooms + showers + lifeguard office (x 0..90) | NATATORIUM (x 90..228, 28 tall)
 --   z 130..160 plant room, spectator gallery, scoreboard room
 -- The natatorium is almost all basin: deep murky water wall to wall (x 128..214), a 38-stud west deck and a 14-stud
--- east deck. The old spectator bridge across the pool has collapsed into fragments on their broken piers with
--- 10-stud gaps, so every way across starts with a swim. The maintenance duct is sunk to the pool's waterline: its
--- centre sits at the water surface, so the murky water fills the lower half of the bore (every duct edge is
--- Submerged, VentShaftBuilder floods it, and a PoolWater volume covers the flooded half). It runs through the chase
--- floor into the void above the Level 3 ceilings, and its grates all open low in the natatorium's north wall,
--- straight over the water: the route is west deck -> swim to L4_Grate_M_PoolWest -> half-flooded crawl east ->
--- out at L4_Grate_M_PoolEast beside the east deck -> climb out by the exit airlock. The two grates between them
--- may be locked; they are the Creature's ways in and out of the duct from the deep water.
+-- east deck. The old spectator bridge across the pool has collapsed into 8-stud-wide slabs on their broken piers,
+-- parted by step-over cracks, with one fallen span mid-pool (a 12-stud swim); a north spur runs to the maintenance
+-- duct's jammed west hatch and a south spur into the deep end, and fallen roof slabs are rest islands, so the dry
+-- route covers most of the hall and every swim between safe dry spots is short (see the pool section). The
+-- maintenance duct is sunk to the pool's waterline: its centre sits at the water surface, so the murky water fills
+-- the lower half of the bore (every duct edge is Submerged, VentShaftBuilder floods it, and a PoolWater volume covers
+-- the flooded half). It runs through the chase floor into the void above the Level 3 ceilings, and its grates all
+-- open low in the natatorium's north wall, straight over the water: the crawl is FallenSlab_A -> a short swim to
+-- L4_Grate_M_PoolWest (behind the hatch the floor objective opens) -> half-flooded crawl east -> out at
+-- L4_Grate_M_PoolEast beside the east deck. The two grates between them may be locked; they are the Creature's ways
+-- in and out of the duct from the deep water.
 --
 -- The 9 Floodlight fixtures over the pool start dark (broken) in FlickerGroup "L4_Floodlights"; the emergency
 -- FloodlightSwitch on the west deck (P7) brings them up through LightingController overrides.
@@ -73,7 +76,7 @@ local POOL_DEPTH = 10
 local HALF_BORE = WorldConfig.VentBore / 2
 local DUCT_Y = WATER -- the flooded duct's centre line: the water surface halves the bore
 
-local FACE_N, FACE_E = 0, -90
+local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -518,10 +521,17 @@ table.insert(basins, {
 	waterLevel = WATER,
 })
 
--- Collapsed spectator bridge: deck fragments awash at the surface, each still standing on its broken pier (Bridge_1
--- and Bridge_5 also rest on the coping), with 10-stud gaps that must be swum. Two slabs fallen from the roof lie on
--- rubble heaps. Every support runs from the basin floor up to the underside of what it carries.
-local function onPier(
+-- The collapsed spectator bridge, a walkway the squad can trust: 8-stud-wide deck slabs awash just over the surface,
+-- each standing on its broken piers (Bridge_1 and Bridge_4 also rest on the coping), parted only by step-over cracks
+-- (CRACK: no jump), except where one span fell into the deep water mid-pool: a 12-stud swim. Two spurs of fallen
+-- walkway branch off it, cracked the same way: north to FallenSlab_A off the maintenance duct's west grate (the jammed
+-- hatch), south into the deep end to FallenSlab_B, which meets the diving tower's concrete footing, itself flush with
+-- the east deck's coping. FallenSlab_C and _D, fallen from the roof, are rest islands in the open water. So the dry
+-- route covers most of the hall, no swim between two safe dry spots is longer than about 25 studs (the swim legs
+-- below), and every valve-wheel spot on the pool floor is 12 studs or less of swim from a dry spot.
+-- Every support runs from the basin floor up to the underside of what it carries.
+local CRACK = 1.2 -- a step-over crack between two walkway slabs (the body never loses the floor crossing it)
+local function onPiers(
 	id: string,
 	x: number,
 	z: number,
@@ -530,29 +540,74 @@ local function onPier(
 	top: number,
 	thickness: number,
 	material: string,
-	pier: { number }
+	piers: { { number } }
 )
 	platform(id, "L4_Natatorium", x, z, w, d, top, thickness, material)
 	local underside = top - thickness
-	platform(
-		id .. "_Pier",
-		"L4_Natatorium",
-		pier[1],
-		pier[2],
-		pier[3],
-		pier[4],
-		underside,
-		underside + POOL_DEPTH,
-		"ConcreteDark"
-	)
+	for i, pier in piers do
+		platform(
+			if i == 1 then id .. "_Pier" else string.format("%s_Pier%d", id, i),
+			"L4_Natatorium",
+			pier[1],
+			pier[2],
+			pier[3],
+			pier[4],
+			underside,
+			underside + POOL_DEPTH,
+			"ConcreteDark"
+		)
+	end
 end
-onPier("L4_Bridge_1", 128, 76, 12, 8, 0, 1.2, "Concrete", { 136, 78.5, 3, 3 })
-onPier("L4_Bridge_2", 150, 77, 8, 8, -0.4, 1, "Concrete", { 152.5, 79.5, 3, 3 })
-onPier("L4_Bridge_3", 168, 75, 8, 8, -0.2, 1, "Concrete", { 170.5, 77.5, 3, 3 })
-onPier("L4_Bridge_4", 186, 76, 6, 8, -0.5, 1, "Concrete", { 187.5, 78.5, 3, 3 })
-onPier("L4_Bridge_5", 202, 76, 12, 8, 0, 1.2, "Concrete", { 203, 78.5, 3, 3 })
-onPier("L4_FallenSlab_A", 145, 40, 7, 6, -0.6, 1.2, "ConcreteStained", { 146.5, 41.5, 4, 3 })
-onPier("L4_FallenSlab_B", 196, 112, 8, 8, -0.3, 1, "ConcreteStained", { 197.5, 113.5, 5, 5 })
+-- The bridge, west to east along z 76..84; the fallen span leaves open water from x 164 to 176.
+local BRIDGE_Z, BRIDGE_D = 76, 8
+onPiers("L4_Bridge_1", 128, BRIDGE_Z, 18, BRIDGE_D, 0, 1.2, "Concrete", { { 131, 78.5, 3, 3 }, { 141, 78.5, 3, 3 } })
+onPiers(
+	"L4_Bridge_2",
+	146 + CRACK,
+	BRIDGE_Z,
+	164 - 146 - CRACK,
+	BRIDGE_D,
+	-0.2,
+	1,
+	"Concrete",
+	{ { 150, 78.5, 3, 3 }, { 160, 78.5, 3, 3 } }
+)
+onPiers("L4_Bridge_3", 176, BRIDGE_Z, 18, BRIDGE_D, -0.3, 1, "Concrete", { { 178, 78.5, 3, 3 }, { 187, 78.5, 3, 3 } })
+onPiers(
+	"L4_Bridge_4",
+	194 + CRACK,
+	BRIDGE_Z,
+	214 - 194 - CRACK,
+	BRIDGE_D,
+	0,
+	1.2,
+	"Concrete",
+	{ { 203, 78.5, 3, 3 }, { 209, 78.5, 3, 3 } }
+)
+-- North spur off Bridge_1 to the duct's west grate.
+onPiers("L4_Walk_N1", 138, 62, 8, BRIDGE_Z - CRACK - 62, -0.3, 1, "Concrete", { { 140.5, 66.5, 3, 3 } })
+onPiers("L4_Walk_N2", 138, 48, 8, 62 - CRACK - 48, -0.5, 1, "Concrete", { { 140.5, 52.5, 3, 3 } })
+onPiers("L4_FallenSlab_A", 138, 39, 14, 48 - CRACK - 39, -0.6, 1.2, "ConcreteStained", { { 144.5, 40.5, 5, 4 } })
+-- South spur off Bridge_3 into the deep end.
+local SOUTH_Z = BRIDGE_Z + BRIDGE_D + CRACK
+onPiers("L4_Walk_S1", 186, SOUTH_Z, 8, 98 - SOUTH_Z, -0.3, 1, "Concrete", { { 188.5, 90, 3, 3 } })
+onPiers("L4_Walk_S2", 186, 98 + CRACK, 8, 112 - 98 - CRACK, -0.5, 1, "Concrete", { { 188.5, 104, 3, 3 } })
+onPiers(
+	"L4_FallenSlab_B",
+	186,
+	112 + CRACK,
+	203 - CRACK - 186,
+	121 - 112 - CRACK,
+	-0.4,
+	1,
+	"ConcreteStained",
+	{ { 191, 115, 5, 4 } }
+)
+-- The diving tower's concrete footing, awash round its foot from FallenSlab_B to the east coping.
+platform("L4_TowerBase", "L4_Natatorium", 203, 114, 11, 13, -0.4, POOL_DEPTH - 0.4, "ConcreteDark")
+-- Rest islands: roof slabs fallen into the open water.
+onPiers("L4_FallenSlab_C", 156, 104, 8, 7, -0.5, 1, "ConcreteStained", { { 158.5, 106, 4, 3 } })
+onPiers("L4_FallenSlab_D", 174, 44, 8, 7, -0.6, 1.2, "ConcreteStained", { { 176.5, 46, 4, 3 } })
 -- The diving tower stands in the deep end, off the duct's east grate.
 platform("L4_DivingTower", "L4_Natatorium", 207, 118, 6, 6, 10, POOL_DEPTH + 10, "Concrete")
 for i, z in { 40, 52, 64, 96, 108, 120 } do
@@ -652,6 +707,20 @@ scatter("PlayerSpawn", 3.5, { { 4, 74, FACE_E }, { 8, 74, FACE_E }, { 4, 86, FAC
 anchor("CreatureSpawn", 171, WATER - 4, 100, FACE_N, "L4_CreatureSpawn")
 anchor("FloodlightSwitch", 91.5, 4, 70, FACE_E, "L4_FloodlightSwitch")
 
+-- Floor objective (ValveWheel): the valve wheel lies on the deep pool floor at one of three spots, each 12 studs or
+-- less of swim from dry footing (the south spur, FallenSlab_C, the tower's footing); the hatch valve is the jammed
+-- watertight hatch over the duct's west grate on the inner face of the north coping, its valve socket half under the
+-- water (the anchor is the grate's centre at the waterline, facing into the hall), a short swim from FallenSlab_A; the
+-- exit lock on the east stair airlock's fire door. On this floor the Creature cannot leave the water, so dry footing is
+-- the hiding spot near every step.
+scatter("ValveWheelCandidate", -POOL_DEPTH, {
+	{ 180, 106 },
+	{ 202, 104 },
+	{ 166, 121 },
+})
+anchor("HatchValve", 150, WATER, 31, FACE_S, "L4_HatchValve")
+anchor("ExitLock", 227.5, 0, 80, FACE_W, "L4_ExitLock")
+
 -- Flasks left on the starting blocks and the decks
 scatter("FlaskCandidate", 1.5, { { 125.5, 41.5 }, { 125.5, 65.5 }, { 125.5, 109.5 } })
 scatter("FlaskCandidate", 0, { { 220, 60 }, { 220, 120 }, { 100, 112 } })
@@ -668,7 +737,7 @@ scatter("BatteryCandidate", 0, {
 	{ 86, 126 },
 })
 
-anchor("Corpse", 154, -0.4, 81, 35)
+anchor("Corpse", 154, -0.2, 80, 35)
 scatter("Corpse", 0, { { 70, 30, 120 }, { 150, 150, -60 } })
 scatter("DripPipe", LOW - 1.2, { { 30, 50 }, { 50, 80 }, { 40, 145 }, { 70, 118 }, { 110, 12 } })
 anchor("DripPipe", 110, HEIGHT - 1.2, 50)
@@ -689,7 +758,7 @@ scatter("Clutter", 0, {
 
 patrol("DW", 0, { { 95, 36 }, { 122, 36 }, { 122, 124 }, { 95, 124 } })
 patrol("DE", 0, { { 218, 36 }, { 225, 80 }, { 218, 124 }, { 216, 80 } })
-patrol("POOL", WATER - 3, { { 140, 50 }, { 200, 50 }, { 200, 110 }, { 140, 110 } })
+patrol("POOL", WATER - 3, { { 156, 56 }, { 200, 56 }, { 200, 100 }, { 156, 96 } })
 patrol("WR", 0, { { 30, 80 }, { 34, 60 }, { 73, 40 }, { 100, 42 }, { 100, 80 }, { 80, 80 } })
 patrol("WS", 0, { { 34, 84 }, { 34, 100 }, { 73, 118 }, { 100, 118 }, { 100, 84 }, { 80, 84 } })
 

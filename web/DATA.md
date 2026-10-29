@@ -168,7 +168,12 @@ Each entity is one interactive or scripted object of a run. `type` is one of:
 - `AirlockDoor`, `HallwayGate`, `ClassroomDoor`, `RoofStairDoor`;
 - `VentGrate`, `BearTrap`, `Locker`, `ChemicalFlask`, `Battery`;
 - `ParachuteCrate`, `FloodlightSwitch`;
-- `ReadyPad`, `Terminal`.
+- `ReadyPad`, `Terminal`;
+- floor objectives (see "Floor objectives" below):
+  - items: `Fuse`, `MasterKeys`, `ReagentJar`, `CoachKey`, `ValveWheel`, `BoltCutters`, `AcidFlask`;
+  - stations: `BreakerPanel`, `FumeHood`, `Generator`, `HatchValve`, `StoreLock`, `CrateChain`;
+  - `ExitLock` (one per floor 0-4, on the exit airlock door) and `StoreDoor` (the Level 3 equipment store's steel
+    door, `DoorKind` RoofDoor, `ScriptedId` EquipmentStoreDoor).
 
 Fields:
 
@@ -193,6 +198,48 @@ let `M = P × inverse(entityNodeRest(e, n))`. Then either:
 - GPU: use `nodeIndexAttribute(chunk)` and fetch `M` per node in the vertex shader.
 
 Root parts use node `""` and move with the entity pivot.
+
+## Floor objectives (`meta.objectives`, objective entities)
+
+Every floor's exit stays locked until its objective is done (ObjectiveConfig in
+`src/ReplicatedStorage/Shared/Config/ObjectiveConfig.luau`). `meta.objectives` holds:
+
+- `floors`: ObjectiveConfig.Floors as data (per floor: `floor`, `levelId`, `id`, `title`, `item` {prop, candidate,
+  count, guarded?, slots?, hold, object}, `steps` [{id, count, label, seconds?}], `lockStep`, `lockVariant`,
+  `lockReason`, `holds` by prompt kind);
+- `hideReach` (25): how close a hiding spot is to every step;
+- `levels[levelId]`: `candidates` [{anchorId, room, slot, ref, pos (level-local), planned}], `picks` (the export
+  seed's RunDirector picks: `anchors` in pick order, `guards`), `places` (every candidate, station and lock with its
+  nearest hiding spot: `hide` {kind Locker / Vent / DarkCorner / DryFooting / Cover, id, distance}).
+
+Objective entities carry attributes `Floor` (0-5), `Step`, `ObjectiveId` (= the entity type), `LevelId`, `AnchorId`
+(the entity id; the acid flask's id is its name), and tags `ObjectiveItem` / `ObjectiveStation` / `ExitLock`.
+
+- **Items** are exported for every candidate, not just the export seed's picks: attribute `Planned` says which ones
+  the export seed uses; hide the others and pick per run with RunDirector's rule (one seeded shuffle per level,
+  stream `Objective|<levelId>`, the first `item.count`; reagents pick one candidate of each slot, the candidates'
+  slots cycling 1, 2, 3 in layout order; the basement arms the guard trap (`ref`) of the first two fuses picked).
+  Item attributes add `Slot` (a reagent's colour / kind 1-3), `Candidate` (the anchor kind). Attachments `Grip`
+  (the hand), `PromptPoint` (a disabled `Pickup` prompt with the item's hold), and on the valve wheel `Hub` (its axis
+  is the UpVector). The `AcidFlask` stands at the fume hood's `AcidFlaskSpot` with `Planned` false: show it when the
+  mix is done.
+- **Stations** (nodes = their leaves; each leaf's rest pose is attachment `<Leaf>Rest`):
+  - `BreakerPanel`: nodes `Door` (built open, `DoorOpen`), `FuseSlot1..3` (attachments `FuseSlot<i>Seat`: pose a
+    fitted fuse so its `Grip` lands there; `FuseSlot<i>Prompt` with a FitFuse prompt, `Slot` i), `Lever` (Breaker
+    prompt on `LeverPrompt`; ON is a rotation of `LeverThrow` = 110 degrees about the lever's X axis);
+  - `FumeHood`: node `Sash` (slides up, `SashOpen`), Mix prompt on `MixPrompt`, `ReagentSlot1..3`, `AcidFlaskSpot`,
+    `Exhaust`;
+  - `Generator`: node `PullCord` (slides out, `PullOut`), Generator prompt on `PullPrompt`, `Exhaust`, `LampHead` and
+    a disabled SpotLight `WorkLamp` in `LampLens`;
+  - `HatchValve`: nodes `Hatch` (top-hinged, `HatchOpen`) and `Stem` (turns about its axis), FitValve + TurnValve
+    prompts on `ValvePrompt`, `WheelSeat` (pose the wheel so its `Hub` lands there), `GrateId` = the duct grate it
+    shuts (the grate is unusable while the hatch is shut);
+  - `StoreLock`: the equipment store door's padlock (node `Padlock`), Locked + Unlock prompts on `LockPrompt`;
+  - `CrateChain`: nodes `Chain` and `Padlock`, Locked + CutChain prompts on `LockPrompt`, `ChainCentre`.
+- **ExitLock**: on the exit airlock door's shut leaves (the doors are exported open: close them at run start), with
+  `LockVariant` Padlock (L1: node `Padlock`), Chain (L2: nodes `Chain`, `Padlock`; `ChainCentre` is the throw target)
+  or Keypad (L0, L3, L4: node `Bar`), `Locked` true, `DoorId` (the door entity's id), a `Locked` prompt (hold 0,
+  ActionText "Locked — <reason>") and on L1 an `Unlock`, on L2 a `Pour` prompt, all on `LockPrompt`.
 
 ## Creature (`meta.creature`)
 

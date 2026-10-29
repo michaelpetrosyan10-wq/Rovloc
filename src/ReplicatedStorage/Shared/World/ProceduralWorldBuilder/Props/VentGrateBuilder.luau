@@ -168,6 +168,15 @@ local ANCHOR_KEEPOUT: { [string]: Vector2 } = {
 	Clutter = Vector2.new(3, 3),
 	ReadyPad = Vector2.new(5, 5),
 	Terminal = Vector2.new(3, 2.6),
+	-- Floor objectives (wall-mounted stations: centred on their wall-face anchor, so half the depth reaches out)
+	FuseCandidate = Vector2.new(1.6, 1.6),
+	MasterKeyCandidate = Vector2.new(1.2, 1.2),
+	ReagentCandidate = Vector2.new(1, 1),
+	ValveWheelCandidate = Vector2.new(2, 2),
+	BoltCutterCandidate = Vector2.new(1.8, 1.8),
+	BreakerPanel = Vector2.new(4.2, 7.2),
+	FumeHood = Vector2.new(6.2, 9),
+	Generator = Vector2.new(4.4, 6.6),
 }
 local ANCHOR_BAND = 4 -- an anchor's box spans this far above and below its point
 -- Floor in front of an anchored prop that stays its own, as width along the anchor's RightVector x depth beyond its

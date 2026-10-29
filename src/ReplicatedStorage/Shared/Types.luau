@@ -126,6 +126,15 @@ export type PlannedProp = {
 	levelId: Enums.LayoutId,
 	cframe: CFrame, -- world space
 	variant: number, -- seeded per prop, for visual variety
+	slot: number?, -- floor objective items: which of the floor's items this is (1..count; a reagent's colour)
+}
+
+-- One floor objective's seeded picks (RunDirector.plan; ObjectiveConfig names the floor's item and counts).
+export type ObjectivePicks = {
+	levelId: Enums.LayoutId,
+	prop: string, -- plan prop kind of the floor's item
+	anchors: { string }, -- the candidate anchors the run uses, in pick order (a prop's slot is its index here)
+	guards: { string }, -- bear-trap anchors armed on the approach of the guarded picks (Level 0), else empty
 }
 
 export type SpawnPlan = {
@@ -134,6 +143,7 @@ export type SpawnPlan = {
 	props: { PlannedProp },
 	lockedGrates: { [string]: boolean },
 	rerolls: number,
+	objectives: { [string]: ObjectivePicks }?, -- by level id; nil in hand-made plans
 }
 
 --------------------------------------------------------------------------------

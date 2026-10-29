@@ -61,7 +61,7 @@ local PREFIX = "L3"
 local HEIGHT = WorldConfig.Levels.Level3_Gymnasium.height
 local LOW = 14 -- ceiling of every room except the gym
 
-local FACE_N, FACE_W, FACE_S = 0, 90, 180
+local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -233,16 +233,27 @@ local function door(kind: Enums.DoorKind, a: string, b: string, at: number?, opt
 	})
 end
 
-local function anchor(kind: Enums.AnchorKind, x: number, y: number, z: number, yaw: number?, id: string?)
+local function anchor(
+	kind: Enums.AnchorKind,
+	x: number,
+	y: number,
+	z: number,
+	yaw: number?,
+	id: string?,
+	ref: string?
+): string
 	local n = (anchorCounts[kind] or 0) + 1
 	anchorCounts[kind] = n
+	local anchorId = id or string.format("%s_%s_%02d", PREFIX, kind, n)
 	table.insert(anchors, {
-		id = id or string.format("%s_%s_%02d", PREFIX, kind, n),
+		id = anchorId,
 		kind = kind,
 		room = roomAt(x, z),
 		pos = Vector3.new(x, y, z),
 		yaw = yaw,
+		ref = ref,
 	})
+	return anchorId
 end
 
 -- Each point is { x, z } or { x, z, yaw }.
@@ -488,7 +499,15 @@ door("Door", "L3_Gymnasium", "L3_Storage_W2", 102)
 
 -- North exterior row
 door("Doorway", "L3_NorthHall_West", "L3_WeightRoom", 24, { width = 8 })
-door("Door", "L3_NorthHall_West", "L3_EquipmentStore", 66, { width = 8 })
+-- The equipment store's steel door is a fixture (DoorBuilder "RoofDoor" kind, a single dented steel leaf): the
+-- floor objective keeps it locked until the coach's key opens it (the StoreLock below).
+door(
+	"RoofDoor",
+	"L3_NorthHall_West",
+	"L3_EquipmentStore",
+	66,
+	{ id = "L3_Door_EquipmentStore", width = 8, scriptedId = "EquipmentStoreDoor" }
+)
 door("Door", "L3_NorthHall_West", "L3_TrainerRoom", 98)
 door("Door", "L3_NorthHall_West", "L3_CoachOffice", 120)
 door("Door", "L3_NorthHall_East", "L3_AthleticDirector", 152)
@@ -636,6 +655,47 @@ lockerRow(113.2, { 132, 135, 138, 141, 144, 147, 158, 161, 164, 167 }, FACE_N)
 lockerRow(84.8, { 131, 134, 152, 155, 158, 161 }, FACE_S)
 lockerRow(43.2, { 186, 189, 192, 195 }, FACE_N)
 lockerRow(116.8, { 186, 189, 192, 195 }, FACE_S)
+
+-- Floor objective (GymGenerator): the coach's key hangs inside one of six locker-room lockers (each candidate's ref is
+-- its locker; the anchor is the hook on the locker's back wall at chest height, facing out through its door); the
+-- generator stands free in the equipment store, its pull start toward the door; the store door's padlock (the floor
+-- point on the door's corridor face, facing out of the door); hideable lockers in the store, outside its door and in
+-- the two stores off the gym beside the stairwell door, where the squad hides while the door motor winds; the exit
+-- lock on the west stair airlock's fire door.
+local KEY_HOOK_Y = 4.6
+local KEY_BACK = 1.1 -- the hook sits this far behind the locker's floor centre, toward its back wall
+local function lockerAt(x: number, z: number): string
+	for _, a in anchors do
+		if a.kind == "Locker" and math.abs(a.pos.X - x) < 1e-3 and math.abs(a.pos.Z - z) < 1e-3 then
+			return a.id
+		end
+	end
+	error(string.format("%s layout: no locker at (%.1f, %.1f)", PREFIX, x, z), 2)
+end
+for _, spot in
+	{
+		{ 138, 46.8, FACE_S },
+		{ 164, 46.8, FACE_S },
+		{ 146, 76.2, FACE_N },
+		{ 138, 113.2, FACE_N },
+		{ 164, 113.2, FACE_N },
+		{ 158, 84.8, FACE_S },
+	} :: { { number } }
+do
+	local x, z, yaw = spot[1], spot[2], spot[3]
+	local back = if yaw == FACE_S then -KEY_BACK else KEY_BACK -- facing south, the back wall is to the north
+	anchor("CoachKeyCandidate", x, KEY_HOOK_Y, z + back, yaw, nil, lockerAt(x, z))
+end
+anchor("Generator", 66, 0, 13, FACE_S, "L3_Generator")
+anchor("StoreLock", 66, 0, 31.5, FACE_S, "L3_StoreLock")
+scatter("Locker", 0, {
+	{ 82.2, 8, FACE_W }, -- equipment store
+	{ 82.2, 11, FACE_W },
+	{ 76, 32.8, FACE_S }, -- north hall, outside the store
+	{ 5.5, 64.7, FACE_N }, -- the two stores off the gym either side of the stairwell door
+	{ 5.5, 95.3, FACE_S },
+})
+anchor("ExitLock", 12.5, 0, 80, FACE_E, "L3_ExitLock")
 
 scatter(
 	"SmashedLocker",

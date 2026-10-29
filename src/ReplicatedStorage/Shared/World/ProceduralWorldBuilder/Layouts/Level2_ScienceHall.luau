@@ -62,7 +62,7 @@ local PREFIX = "L2"
 local HEIGHT = WorldConfig.Levels.Level2_ScienceHall.height
 local WORKTOP = 3.2
 
-local FACE_N, FACE_E = 0, -90
+local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -730,6 +730,30 @@ labIslands("L2_BioLab_211", 1, 2, { -3 })
 labIslands("L2_BioLab_221", 2, 2, { -3 })
 labIslands("L2_BioLab_223", 2, 2, { 3 })
 labIslands("L2_PhysicsLab_229", 2, 2, {})
+-- The specimen store's sorting bench (its worktop carries a reagent candidate below)
+anchor("LabCounter", 107.5, 0, 103.5, FACE_N)
+
+-- Floor objective (BurnChain): six labelled reagent jars on the worktops of the chem labs, the chem store, the bio
+-- prep room, the specimen store and the east chem lab (RunDirector uses three), clear of each worktop's flasks; the
+-- fume hood against the chem prep room's north wall (the anchor is the floor point on the wall face, facing into the
+-- room); hideable lockers in the rooms and the corridor farther than a vent from their step; the chain on the east
+-- stair airlock's fire door (the exit lock: the floor point on the door's corridor face, facing out of the door).
+scatter("ReagentCandidate", WORKTOP, {
+	{ 31.9, 63.1 }, -- chem lab 201
+	{ 61.1, 51.55 }, -- chem lab 203
+	{ 161.3, 9.1 }, -- chem store 243 (past the flask at its east end, so the sink keeps the middle)
+	{ 140.5, 56.5 }, -- bio prep 207
+	{ 105, 103.5 }, -- specimen store 225
+	{ 211.5, 110.1 }, -- chem lab 231
+})
+anchor("FumeHood", 107.5, 0, 40.5, FACE_S, "L2_FumeHood")
+scatter("Locker", 0, {
+	{ 173.2, 12, FACE_W }, -- chem store
+	{ 148.2, 48, FACE_W }, -- bio prep
+	{ 226.2, 104, FACE_W }, -- chem lab 231
+	{ 222, 85.2, FACE_N }, -- east corridor, by the stairwell door
+})
+anchor("ExitLock", 227.5, 0, 80, FACE_W, "L2_ExitLock")
 
 scatter("BatteryCandidate", 0, {
 	{ 6, 50 },
@@ -748,7 +772,7 @@ scatter("DripPipe", HEIGHT - 1.2, { { 40, 78 }, { 196, 82 }, { 140, 30 }, { 100,
 scatter("Clutter", 0, {
 	{ 16, 70, 10 },
 	{ 60, 46, -40 },
-	{ 110, 46, 85 },
+	{ 100, 66, 85 },
 	{ 140, 64, 0 },
 	{ 194, 68, 30 },
 	{ 222, 44, -15 },

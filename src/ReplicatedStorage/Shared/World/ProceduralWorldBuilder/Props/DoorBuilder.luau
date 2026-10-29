@@ -31,8 +31,9 @@
 --     KEEP CLOSED" sign above on the vestibule side. Rest = shut in the AirlockDoorWidth opening; built open 90 degrees
 --     into the vestibule (into the corridor when the vestibule has no room for them). Both faces of the frame's jambs
 --     and head are painted in yellow-and-black hazard stripes (SurfaceArt).
---   * RoofDoor (the Level 5 RoofStairDoor): a dented steel door, leaf "Leaf", in a steel frame, with a "ROOF ACCESS"
---     sign on the stairwell side. Rest = shut; built open onto the roof.
+--   * RoofDoor (the Level 5 RoofStairDoor, and the Level 3 EquipmentStoreDoor the floor objective locks): a dented
+--     steel door, leaf "Leaf", in a steel frame, with a "ROOF ACCESS" sign on the stairwell side when one of its rooms
+--     is a stairwell. Rest = shut; built open (onto the roof).
 -- Every leaf is surface-mounted on its swing-side face in front of the casing, hung from hinge knuckles whose pin runs
 -- along its front face just outside the opening: open at 90 degrees or more it stands entirely outside the doorway's
 -- clear width, and at no angle does it cut back into the casing or the wall.
@@ -819,11 +820,18 @@ local function planFixture(layout: Layout, clearance: Clearance, site: Site): Fi
 		if not leaves then
 			return nil
 		end
+		-- Only the roof stair door carries the ROOF ACCESS sign; another steel door (the Level 3 equipment store) has
+		-- none.
 		local stair = if site.rooms[1].kind == "Stairwell"
 			then -1
 			elseif site.rooms[2].kind == "Stairwell" then 1
-			else -leaves[1].swing
-		return { site = site, leaves = leaves, gate = nil, signSwing = signFace(layout, site, stair) }
+			else nil
+		return {
+			site = site,
+			leaves = leaves,
+			gate = nil,
+			signSwing = if stair then signFace(layout, site, stair) else nil,
+		}
 	elseif kind == "Airlock" then
 		local vestibule = if site.rooms[2].kind == "Airlock" then 1 elseif site.rooms[1].kind == "Airlock" then -1 else 1
 		for _, ignoreSoft in { false, true } do

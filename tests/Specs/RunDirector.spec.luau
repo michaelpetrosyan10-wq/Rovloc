@@ -35,6 +35,12 @@ local ANCHOR_KIND_FOR_PROP: { [string]: Enums.AnchorKind } = {
 	BearTrap = "TrapCandidate",
 	ChemicalFlask = "FlaskCandidate",
 	Battery = "BatteryCandidate",
+	Fuse = "FuseCandidate",
+	MasterKeys = "MasterKeyCandidate",
+	ReagentJar = "ReagentCandidate",
+	CoachKey = "CoachKeyCandidate",
+	ValveWheel = "ValveWheelCandidate",
+	BoltCutters = "BoltCutterCandidate",
 }
 
 --------------------------------------------------------------------------------

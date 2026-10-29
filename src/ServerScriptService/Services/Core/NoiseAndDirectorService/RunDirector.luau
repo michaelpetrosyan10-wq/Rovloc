@@ -1,9 +1,17 @@
 --!strict
 -- RunDirector: everything a run randomizes, as one pure function of (seed, difficulty, layouts, graph).
 --
---   BearTrap       DifficultyConfig.trapCount Level0 TrapCandidate anchors. No two traps closer than
---                  MinTrapSpacing studs, and never inside an airlock, a stairwell, the level's entry / exit room or a
---                  room holding PlayerSpawn anchors.
+--   Objectives     each floor's objective item (ObjectiveConfig): item.count of the layout's item.candidate anchors
+--                  (with item.slots, one candidate of each kind: the candidates cycle through the kinds in layout
+--                  order), as props of kind item.prop, each with its slot (pick order, 1..count; with kinds, the
+--                  kind: a reagent's colour), listed
+--                  in plan.objectives[levelId] (RunDirector.objectiveOf). One seeded shuffle per level
+--                  ("Objective|<level>"), independent of the difficulty: a run's objective spots are a pure
+--                  function of the seed.
+--   BearTrap       DifficultyConfig.trapCount Level0 TrapCandidate anchors. First the guard traps: the ref (a
+--                  TrapCandidate on the approach) of each of the first item.guarded fuses picked, so at least that
+--                  many fuses are guarded; then the rest. No two traps closer than MinTrapSpacing studs, and never
+--                  inside an airlock, a stairwell, the level's entry / exit room or a room holding PlayerSpawn anchors.
 --   ChemicalFlask  flasksScienceHall Level2 FlaskCandidate anchors and flasksPool Level4 FlaskCandidate anchors.
 --   Battery        batteriesPerLevel BatteryCandidate anchors on every school level.
 --   lockedGrates   round(lockedGrateFraction x lockable) of each level's Lockable grates (never CriticalPath ones).
@@ -20,6 +28,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local DifficultyConfig = require(ReplicatedStorage.Shared.Config.DifficultyConfig)
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
@@ -153,12 +162,14 @@ local function spacedFrom(anchor: Anchor, chosen: { Anchor }, spacing: number): 
 end
 
 -- One seeded pass over `candidates`: takes anchors in shuffled order while they keep `spacing` from every anchor
--- already taken. Returns the taken anchors and the ones passed over (in the order they were met).
+-- already taken (and from every `fixed` one, placed before the pass). Returns the taken anchors and the ones passed
+-- over (in the order they were met).
 local function spacedPass(
 	candidates: { Anchor },
 	count: number,
 	random: Random,
-	spacing: number
+	spacing: number,
+	fixed: { Anchor }?
 ): ({ Anchor }, { Anchor })
 	local order = MathUtil.shuffle(table.clone(candidates), random)
 	local chosen: { Anchor } = {}
@@ -167,7 +178,7 @@ local function spacedPass(
 		if #chosen >= count then
 			break
 		end
-		if spacedFrom(anchor, chosen, spacing) then
+		if spacedFrom(anchor, chosen, spacing) and (fixed == nil or spacedFrom(anchor, fixed, spacing)) then
 			table.insert(chosen, anchor)
 		else
 			table.insert(passed, anchor)
@@ -178,13 +189,19 @@ end
 
 -- Seeded choice of up to `count` anchors that are all at least `spacing` apart. A short pass is retried with
 -- fresh shuffles (from the same stream), keeping the fullest result.
-local function chooseSpaced(candidates: { Anchor }, count: number, random: Random, spacing: number): { Anchor }
+local function chooseSpaced(
+	candidates: { Anchor },
+	count: number,
+	random: Random,
+	spacing: number,
+	fixed: { Anchor }?
+): { Anchor }
 	local best: { Anchor } = {}
 	if count <= 0 or #candidates == 0 then
 		return best
 	end
 	for _ = 1, TRAP_ATTEMPTS do
-		local chosen = spacedPass(candidates, count, random, spacing)
+		local chosen = spacedPass(candidates, count, random, spacing, fixed)
 		if #chosen > #best then
 			best = chosen
 		end
@@ -223,7 +240,7 @@ local function inLayoutOrder(layout: Layout, chosen: { Anchor }): { Anchor }
 	return sorted
 end
 
-local function plannedProp(seed: number, kind: string, layout: Layout, anchor: Anchor): Types.PlannedProp
+local function plannedProp(seed: number, kind: string, layout: Layout, anchor: Anchor, slot: number?): Types.PlannedProp
 	local variantRandom = MathUtil.seededRandom(seed, "Variant|" .. kind .. "|" .. layout.id .. "|" .. anchor.id)
 	local prop: Types.PlannedProp = {
 		kind = kind,
@@ -231,6 +248,7 @@ local function plannedProp(seed: number, kind: string, layout: Layout, anchor: A
 		levelId = layout.id,
 		cframe = Builder.anchorCFrame(layout.id, anchor),
 		variant = variantRandom:NextInteger(1, VARIANT_RANGE),
+		slot = slot,
 	}
 	table.freeze(prop)
 	return prop
@@ -246,6 +264,89 @@ local function warnShort(what: string, layout: Layout, placed: number, wanted: n
 	if placed < wanted then
 		log.warn("%s: placed %d of %d %s (not enough candidate anchors)", layout.id, placed, wanted, what)
 	end
+end
+
+--------------------------------------------------------------------------------
+-- Floor objectives
+--------------------------------------------------------------------------------
+
+-- The anchor of `layout` with id `id`, if any.
+local function anchorById(layout: Layout, id: string?): Anchor?
+	if id == nil then
+		return nil
+	end
+	for _, anchor in layout.anchors do
+		if anchor.id == id then
+			return anchor
+		end
+	end
+	return nil
+end
+
+-- The slot of the `index`-th candidate (layout order) of a floor whose candidates cycle through kinds (reagents), else
+-- the index itself.
+function RunDirector.candidateSlot(spec: ObjectiveConfig.FloorSpec, index: number): number
+	local slots = spec.item.slots
+	return if slots then (index - 1) % slots + 1 else index
+end
+
+-- The seeded objective picks of one level: `spec.item.count` of its candidate anchors (in pick order) and the guard
+-- traps of the first `spec.item.guarded` of them whose ref is an eligible TrapCandidate. Depends on the seed only.
+function RunDirector.pickObjective(
+	seed: number,
+	layout: Layout,
+	spec: ObjectiveConfig.FloorSpec
+): ({ Anchor }, { Anchor })
+	local candidates = anchorsOfKind(layout, spec.item.candidate, nil)
+	local random = MathUtil.seededRandom(seed, "Objective|" .. layout.id)
+	local picks: { Anchor } = {}
+	local slots = spec.item.slots
+	if slots then
+		-- one of each kind: the candidates of slot k (layout order, cycling) shuffled, the first taken
+		for k = 1, math.min(slots, spec.item.count) do
+			local group: { Anchor } = {}
+			for i, anchor in candidates do
+				if RunDirector.candidateSlot(spec, i) == k then
+					table.insert(group, anchor)
+				end
+			end
+			local order = MathUtil.shuffle(group, random)
+			if order[1] then
+				table.insert(picks, order[1])
+			end
+		end
+	else
+		local order = MathUtil.shuffle(candidates, random)
+		for i = 1, math.min(spec.item.count, #order) do
+			table.insert(picks, order[i])
+		end
+	end
+	local guards: { Anchor } = {}
+	local wanted = spec.item.guarded or 0
+	if wanted > 0 then
+		local excluded = RunDirector.trapExcludedRooms(layout)
+		for _, pick in picks do
+			if #guards >= wanted then
+				break
+			end
+			local guard = anchorById(layout, pick.ref)
+			if
+				guard
+				and guard.kind == "TrapCandidate"
+				and not excluded[guard.room]
+				and spacedFrom(guard, guards, MIN_TRAP_SPACING)
+			then
+				table.insert(guards, guard)
+			end
+		end
+	end
+	return picks, guards
+end
+
+-- The objective picks of `plan` on `levelId` (nil for a level without an objective or a plan without picks).
+function RunDirector.objectiveOf(plan: Types.SpawnPlan, levelId: string): Types.ObjectivePicks?
+	local objectives = plan.objectives
+	return if objectives then objectives[levelId] else nil
 end
 
 --------------------------------------------------------------------------------
@@ -329,12 +430,56 @@ function RunDirector.plan(
 
 	local props: { Types.PlannedProp } = {}
 
-	-- Bear traps
+	-- Floor objectives (seed only); the basement's guard traps feed the trap plan below
+	local objectives: { [string]: Types.ObjectivePicks } = {}
+	local objectiveProps: { Types.PlannedProp } = {}
+	local guardsByLevel: { [string]: { Anchor } } = {}
+	for _, floor in ObjectiveConfig.Floors do
+		local layout = byId[floor.levelId]
+		if not layout then
+			continue
+		end
+		local picks, guards = RunDirector.pickObjective(runSeed, layout, floor)
+		warnShort(floor.item.prop, layout, #picks, floor.item.count)
+		guardsByLevel[layout.id] = guards
+		local anchorIds: { string } = {}
+		for slot, anchor in picks do
+			table.insert(anchorIds, anchor.id)
+			table.insert(objectiveProps, plannedProp(runSeed, floor.item.prop, layout, anchor, slot))
+		end
+		-- (with slots the picks come one per kind in kind order, so a pick's place in the list is its kind)
+		local guardIds: { string } = {}
+		for _, guard in guards do
+			table.insert(guardIds, guard.id)
+		end
+		objectives[layout.id] = table.freeze({
+			levelId = layout.id,
+			prop = floor.item.prop,
+			anchors = table.freeze(anchorIds),
+			guards = table.freeze(guardIds),
+		})
+	end
+
+	-- Bear traps: the objective's guard traps first, then the rest of the difficulty's count
 	local basement = byId[TRAP_LEVEL]
 	if basement then
-		local candidates = anchorsOfKind(basement, "TrapCandidate", RunDirector.trapExcludedRooms(basement))
+		local guards: { Anchor } = guardsByLevel[basement.id] or {}
+		local reserved: { [Anchor]: boolean } = {}
+		for _, guard in guards do
+			reserved[guard] = true
+		end
+		local candidates: { Anchor } = {}
+		for _, anchor in anchorsOfKind(basement, "TrapCandidate", RunDirector.trapExcludedRooms(basement)) do
+			if not reserved[anchor] then
+				table.insert(candidates, anchor)
+			end
+		end
 		local random = MathUtil.seededRandom(runSeed, "Traps|" .. basement.id)
-		local chosen = chooseSpaced(candidates, spec.trapCount, random, MIN_TRAP_SPACING)
+		local fill = math.max(0, spec.trapCount - #guards)
+		local chosen = chooseSpaced(candidates, fill, random, MIN_TRAP_SPACING, guards)
+		for _, guard in guards do
+			table.insert(chosen, guard)
+		end
 		warnShort("bear traps", basement, #chosen, spec.trapCount)
 		addProps(props, runSeed, RunDirector.PropKinds.BearTrap, basement, chosen)
 	end
@@ -385,14 +530,21 @@ function RunDirector.plan(
 		end
 	end
 
+	-- Objective items last, in floor order and pick order
+	for _, prop in objectiveProps do
+		table.insert(props, prop)
+	end
+
 	table.freeze(props)
 	table.freeze(lockedGrates)
+	table.freeze(objectives)
 	local plan: Types.SpawnPlan = {
 		seed = runSeed,
 		difficulty = resolved,
 		props = props,
 		lockedGrates = lockedGrates,
 		rerolls = rerolls,
+		objectives = objectives,
 	}
 	table.freeze(plan)
 	return plan

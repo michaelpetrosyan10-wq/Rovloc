@@ -587,12 +587,13 @@ local function across(wall: WallSide, x: number, z: number): number
 	return if wall.axis == "Z" then z else x
 end
 
--- Lab counter flasks: FlaskCandidate anchors standing on the worktop of `anchor`, in counter-local space.
+-- Lab counter flasks: FlaskCandidate (and objective ReagentCandidate) anchors standing on the worktop of `anchor`, in
+-- counter-local space.
 local function counterFlasks(layout: Layout, anchor: Anchor): { Vector3 }
 	local frame = levelLocal(anchor)
 	local out: { Vector3 } = {}
 	for _, other in layout.anchors do
-		if other.kind ~= "FlaskCandidate" or other.room ~= anchor.room then
+		if (other.kind ~= "FlaskCandidate" and other.kind ~= "ReagentCandidate") or other.room ~= anchor.room then
 			continue
 		end
 		local p = frame:PointToObjectSpace(other.pos)
@@ -754,6 +755,16 @@ local ANCHOR_CLEAR: { [string]: AnchorClear } = {
 	Terminal = { half = 2.2, back = 1.5, front = 3.2, y0 = -0.3, y1 = 6 },
 	Corpse = { half = 2.6, y0 = -0.3, y1 = 3, owned = true },
 	Clutter = { half = 2, y0 = -0.3, y1 = 2.5, owned = true },
+	-- Floor objectives: the items' candidate spots and the stations (wall-mounted ones reach forward from the wall)
+	FuseCandidate = { half = 1.2, y0 = -0.3, y1 = 1.5 },
+	MasterKeyCandidate = { half = 0.9, back = 0.6, front = 1.4, y0 = -1.8, y1 = 0.8 },
+	ReagentCandidate = { half = FLASK_CLEAR, y0 = 0, y1 = FLASK_HEIGHT },
+	ValveWheelCandidate = { half = 1.4, y0 = -0.3, y1 = 1.2 },
+	BoltCutterCandidate = { half = 1.6, y0 = -0.3, y1 = 3 },
+	BreakerPanel = { half = 2.3, back = 0.5, front = 3.6, y0 = -0.3, y1 = 9 },
+	FumeHood = { half = 3.1, back = 0.5, front = 4.4, y0 = -0.3, y1 = 9 },
+	Generator = { half = 2.4, back = 1.8, front = 3.4, y0 = -0.3, y1 = 6 },
+	HatchValve = { half = 4.4, back = 0.5, front = 2.2, y0 = -3, y1 = 3 },
 }
 
 -- Statics are fixed; the client dressing (corpses, clutter) arranges itself around them, so statics ignore the

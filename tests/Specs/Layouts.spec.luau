@@ -11,6 +11,7 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local PoolWaterBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PoolWaterBuilder)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
 type Expect = SpecRunner.Expect
@@ -65,6 +66,13 @@ local AMBIENCE: { [string]: string } = {
 }
 
 local EPS = 1e-3
+-- Floor 4 fairness: walkway pieces this wide at least, swims between dry spots this long at most, a gap that is not a
+-- step-over this wide at least (clearly a swim, never a tempting jump), and the climb-out band over the water
+-- (SwimController.ClimbMin / ClimbMax).
+local POOL_MIN_WIDTH = 6
+local POOL_MAX_LEG = 25
+local POOL_SWIM_GAP_MIN = 6
+local POOL_CLIMB_MIN, POOL_CLIMB_MAX = 0.1, 2.3
 local HALF_BORE = WorldConfig.VentBore / 2
 local HALF_OUTER = HALF_BORE + WorldConfig.VentShell
 -- Standing eye height over the floor: a normalized R15 root centre (HipHeight 2 + half the 2-stud root) plus the
@@ -901,7 +909,7 @@ return {
 		t.truthy(basin.rect.w * basin.rect.d >= 0.5 * pool.rect.w * pool.rect.d, "the hall is mostly basin")
 		t.truthy(
 			math.abs(basin.rect.z - pool.rect.z) < EPS and math.abs(basin.rect.d - pool.rect.d) < EPS,
-			"the basin runs wall to wall, so the crossing is a swim"
+			"the basin runs wall to wall, so only the walkway crosses it dry"
 		)
 		local fragments = 0
 		for _, p in (layout.platforms or {}) :: { LayoutSchema.Platform } do
@@ -1025,6 +1033,83 @@ return {
 					end
 				end
 				t.truthy(supported, p.id .. " rests on the basin floor or on a support standing on it")
+			end
+		end
+	end,
+
+	["flooded pool: a fair route (wide walkways, step-over cracks, short swims, most of the hall dry)"] = function(
+		t: Expect
+	)
+		local layout = LAYOUTS.Level4_FloodedPool
+		local basin = (layout.basins or {})[1]
+		assert(basin, "the pool basin")
+		local classified = PoolWaterBuilder.classify(layout, basin)
+		local interior = classified.interior
+		-- Every walkway piece is at least 6 studs wide
+		t.truthy(#classified.fragments >= 10, "a walkway of slabs, spurs and rest islands")
+		for _, f in classified.fragments do
+			t.truthy(
+				math.min(f.rect.w, f.rect.d) >= POOL_MIN_WIDTH - EPS,
+				string.format("%s is %.1f x %.1f (at least %d wide)", f.id, f.rect.w, f.rect.d, POOL_MIN_WIDTH)
+			)
+		end
+		-- Facing pieces are either a step-over apart or a clear swim apart: never a jump that tempts
+		for _, edge in PoolWaterBuilder.breakEdges(classified) do
+			t.truthy(
+				edge.gap <= PoolWaterBuilder.StepOver + EPS or edge.gap >= POOL_SWIM_GAP_MIN - EPS,
+				string.format("%s: a %.1f-stud gap is neither a step-over nor a swim", edge.fragment.id, edge.gap)
+			)
+			t.truthy(edge.gap <= POOL_MAX_LEG + EPS, edge.fragment.id .. " faces a swim no longer than a leg")
+		end
+		local groups = PoolWaterBuilder.dryGroups(layout, basin, POOL_CLIMB_MIN, POOL_CLIMB_MAX)
+		-- The dry route: the west deck's walkway reaches the duct's west grate, the east deck's the deep end, and the
+		-- crossing between them is one short swim (the fallen span)
+		local legs = PoolWaterBuilder.swimLegs(groups)
+		t.truthy(#legs >= 1, "the design keeps a swim")
+		for _, leg in legs do
+			t.truthy(
+				leg.length <= POOL_MAX_LEG + EPS,
+				string.format("a %.1f-stud swim leg between dry spots (at most %d)", leg.length, POOL_MAX_LEG)
+			)
+		end
+		local decks = 0
+		for _, group in groups do
+			if group.deck then
+				decks += 1
+				local gap = math.huge
+				for _, other in groups do
+					if other ~= group and other.deck then
+						gap = math.min(gap, PoolWaterBuilder.groupGap(group, other))
+					end
+				end
+				t.truthy(gap <= POOL_MAX_LEG / 2 + EPS, string.format("deck to deck is a %.1f-stud swim", gap))
+			end
+		end
+		t.eq(decks, 2, "the west and east decks are two dry groups, a swim apart")
+		-- Most of the hall is near dry footing: three quarters of the open water within half a leg of a dry spot
+		local near, total = 0, 0
+		for x = interior.x + 0.5, interior.x + interior.w, 1 do
+			for z = interior.z + 0.5, interior.z + interior.d, 1 do
+				local swim = PoolWaterBuilder.swimToDry(groups, x, z)
+				if swim > 0 then
+					total += 1
+					if swim <= POOL_MAX_LEG / 2 then
+						near += 1
+					end
+				end
+			end
+		end
+		t.truthy(near >= 0.75 * total, string.format("%d of %d stud cells of water near dry footing", near, total))
+		-- The duct's west grate is a short swim from the walkway (the hatch objective is worked treading water)
+		local nodes: { [string]: LayoutSchema.VentNodeSpec } = {}
+		for _, n in (layout.vents :: LayoutSchema.VentNetwork).nodes do
+			nodes[n.id] = n
+		end
+		for _, g in (layout.vents :: LayoutSchema.VentNetwork).grates do
+			local n = nodes[g.node]
+			if g.criticalPath and n then
+				local swim = PoolWaterBuilder.swimToDry(groups, n.x, n.z + 1)
+				t.truthy(swim <= POOL_MAX_LEG / 2, string.format("%s is a %.1f-stud swim from dry footing", g.id, swim))
 			end
 		end
 	end,

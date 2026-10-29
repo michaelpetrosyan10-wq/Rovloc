@@ -8,7 +8,9 @@
 --     stair towers, exterior) and the LightingRig baseline;
 --   * WorldService.BeginRun: the director's plan (RunDirector.plan over ZoneGraph.build) -> BuildProp for every
 --     planned prop and BuildFixtures for every level (grates with the plan's locks, doors, gate, lockers, crate,
---     floodlight switch) into Workspace.Runtime;
+--     floodlight switch, the floor objectives' stations and locks) into Workspace.Runtime; plus every floor
+--     objective's unpicked candidates and the fume hood's acid flask (attribute Planned = false), so the web can pick
+--     per run;
 --   * the client's CosmeticWorldController: BuildCosmetic(seed) (skyline + anchor dressing);
 --   * the Creature rig (CreatureRigBuilder) at the origin, for the rig export;
 --   * the client LightingController's moonlight windows (Volumetrics.windowSpecs) for every layout.
@@ -80,6 +82,7 @@ end
 for _, levelId in Enums.LevelId do
 	Builder.BuildFixtures(levelId, Instances.runtimeLevel(levelId, true), plan, plan.seed)
 end
+
 local cosmetic = roblox.Instance.new("Folder")
 cosmetic.Name = "Cosmetic"
 cosmetic.Parent = Workspace
@@ -215,6 +218,86 @@ local function tryPivot(model)
 		return primary.CFrame
 	end
 	return nil
+end
+
+--------------------------------------------------------------------------------
+-- Floor objectives (built before the entity roots are collected)
+--------------------------------------------------------------------------------
+
+-- Floor objectives. A run builds only its seed's picks; the web picks per run with the same rule, so every candidate
+-- is exported: attribute Planned is true on this seed's picks and false on the rest (hide them), and the acid flask
+-- the fume hood leaves once the mix is done stands at the hood's AcidFlaskSpot with Planned = false (show it then).
+local ObjectiveConfig = h.require("ReplicatedStorage.Shared.Config.ObjectiveConfig")
+local AcidFlaskBuilder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.AcidFlaskBuilder")
+local ObjectivePlaces = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces")
+local PropKit = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit")
+local objectiveData = { floors = toJson(ObjectiveConfig.Floors), hideReach = ObjectiveConfig.HideReach, levels = {} }
+for _, spec in ObjectiveConfig.Floors do
+	local layout = Builder.getLayout(spec.levelId)
+	local parent = Instances.runtimeLevel(spec.levelId, true)
+	local picks = plan.objectives and plan.objectives[spec.levelId]
+	local picked = {}
+	for slot, id in (if picks then picks.anchors else {}) do
+		picked[id] = slot
+	end
+	local candidates = {}
+	local index = 0
+	for _, anchor in layout.anchors do
+		if anchor.kind ~= spec.item.candidate then
+			continue
+		end
+		index += 1
+		local slot = picked[anchor.id] or RunDirector.candidateSlot(spec, index)
+		local name = spec.item.prop .. "_" .. anchor.id
+		if not picked[anchor.id] then
+			local prop = {
+				kind = spec.item.prop,
+				anchorId = anchor.id,
+				levelId = spec.levelId,
+				cframe = Builder.anchorCFrame(spec.levelId, anchor),
+				variant = 1,
+				slot = slot,
+			}
+			Builder.BuildProp(prop, parent, MathUtil.seededRandom(plan.seed, "prop:" .. prop.kind .. ":" .. prop.anchorId))
+		end
+		local model = parent:FindFirstChild(name)
+		if model then
+			model:SetAttribute("Planned", picked[anchor.id] ~= nil)
+		end
+		table.insert(candidates, {
+			anchorId = anchor.id,
+			room = anchor.room,
+			slot = RunDirector.candidateSlot(spec, index),
+			ref = anchor.ref,
+			pos = toJson(anchor.pos),
+			planned = picked[anchor.id] ~= nil,
+		})
+	end
+	local places = {}
+	for _, place in ObjectivePlaces.places(layout) do
+		local hide = ObjectivePlaces.nearestHide(layout, place)
+		table.insert(places, {
+			id = place.id,
+			kind = place.kind,
+			room = place.room,
+			pos = toJson(place.pos),
+			hide = if hide then { kind = hide.kind, id = hide.id, distance = math.floor(hide.distance * 10 + 0.5) / 10 } else nil,
+		})
+	end
+	objectiveData.levels[spec.levelId] = {
+		floor = spec.floor,
+		id = spec.id,
+		candidates = candidates,
+		picks = if picks then toJson(picks) else nil,
+		places = places,
+	}
+end
+for _, hood in (Instances.runtimeLevel("Level2_ScienceHall", true):FindFirstChild("FumeHoods") or roblox.Instance.new("Folder")):GetChildren() do
+	local spot = PropKit.findAttachment(hood, "AcidFlaskSpot")
+	if spot then
+		local flask = AcidFlaskBuilder.buildWorld(Instances.runtimeLevel("Level2_ScienceHall", true), PropKit.attachmentWorld(spot), hood.Name)
+		flask:SetAttribute("Planned", false)
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -926,6 +1009,7 @@ local out = {
 		return ids
 	end)(),
 	worldConfig = toJson(WorldConfig),
+	objectives = objectiveData,
 	lighting = {
 		baseline = toJson(LightingRig.Baseline),
 		properties = lightingProps,

@@ -64,7 +64,7 @@ type Stop = { coord: number, node: string }
 local PREFIX = "L1"
 local HEIGHT = WorldConfig.Levels.Level1_Hallways.height
 
-local FACE_N, FACE_W, FACE_S = 0, 90, 180
+local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -720,6 +720,28 @@ scatter("SmashedLocker", 0, {
 	{ 68, 85.8, FACE_N },
 	{ 101, 85.8, FACE_N },
 })
+
+-- Floor objective (MasterKeys): the janitor's master keys hang on a nail in one of five rooms past the gate (the
+-- anchor is the nail on the wall face, facing into the room); hideable lockers in each of those rooms or the hall
+-- outside, and in classroom 101 a door away from the stairwell door, keep a hiding spot near every step; the exit
+-- lock on the west stair airlock's fire door (the floor point on its corridor face, facing out of the door).
+local KEY_HOOK_Y = 4.6
+scatter("MasterKeyCandidate", KEY_HOOK_Y, {
+	{ 11.5, 52, FACE_W }, -- janitor's closet
+	{ 93, 40.5, FACE_S }, -- teachers' lounge
+	{ 112.5, 20, FACE_E }, -- book store (the records)
+	{ 11.5, 104, FACE_W }, -- the store by classroom 131
+	{ 119.5, 150, FACE_W }, -- kitchen
+})
+scatter("Locker", 0, {
+	{ 2.05, 58, FACE_E }, -- janitor's closet
+	{ 83.8, 52, FACE_E }, -- teachers' lounge
+	{ 100, 38.2, FACE_N }, -- north hall, outside the lounge and the book store
+	{ 2.05, 112, FACE_E }, -- the store by classroom 131
+	{ 102, 157.95, FACE_N }, -- kitchen
+	{ 13.8, 68, FACE_E }, -- classroom 101, a door away from the stairwell door
+})
+anchor("ExitLock", 12.5, 0, 80, FACE_E, "L1_ExitLock")
 
 -- Burst overhead pipes
 scatter("DripPipe", HEIGHT - 1.2, {

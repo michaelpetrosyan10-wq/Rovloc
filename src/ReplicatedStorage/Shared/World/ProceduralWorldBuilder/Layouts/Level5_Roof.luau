@@ -51,7 +51,7 @@ local PREFIX = "L5"
 local HEIGHT = 12 -- zone height over the open roof and the stair housing's ceiling (WorldConfig keeps 0: no slab above)
 local PARAPET = WorldConfig.ParapetHeight
 
-local FACE_W, FACE_S = 90, 180
+local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -287,6 +287,9 @@ platform("L5_SkylightCurb_A", "L5_Roof_East", 190, 30, 20, 10, 1.5, 1.5, "MetalG
 platform("L5_SkylightCurb_B", "L5_Roof_West", 80, 76, 20, 10, 1.5, 1.5, "MetalGalvanized")
 platform("L5_BoilerFlue", "L5_Roof_West", 100, 8, 6, 6, 10, 10, "Brick")
 platform("L5_RadioMast", "L5_Roof_East", 204, 100, 4, 4, 2, 2, "MetalRust")
+-- A maintenance box near the jump: cover to crouch behind while the crate chain is cut, and a bolt-cutter candidate
+-- lying on its lid
+platform("L5_MaintBox", "L5_Roof_SouthWest", 18, 104, 6, 3, 3.6, 3.6, "MetalGalvanized")
 
 --------------------------------------------------------------------------------
 -- Lights
@@ -306,6 +309,17 @@ scatter("PlayerSpawn", 3.5, { { 232, 84, FACE_W }, { 236, 84, FACE_W }, { 232, 9
 -- The Creature comes up the stairs behind the squad; P8 holds it until it smashes the RoofStairDoor.
 anchor("CreatureSpawn", 233, 5, 70, FACE_S, "L5_CreatureSpawn")
 anchor("ParachuteCrate", 14, 0, 126, FACE_W, "L5_ParachuteCrate")
+
+-- Floor objective (CutCrate): the bolt cutters at one of four spots (leaning against two HVAC units and the water
+-- tank: the anchor is the deck point at the face, facing away from it; or lying on the maintenance box's lid); the
+-- chain through the crate's packs (the anchor is the crate's own).
+scatter("BoltCutterCandidate", 0, {
+	{ 148.6, 65, FACE_W }, -- against HVAC_3's west face
+	{ 186, 118.6, FACE_N }, -- against HVAC_2's north face
+	{ 85.4, 127, FACE_E }, -- against the water tank's east face
+})
+anchor("BoltCutterCandidate", 21, 3.6, 105.5, FACE_N) -- on the maintenance box
+anchor("CrateChain", 14, 0, 126, FACE_W, "L5_CrateChain")
 
 scatter("BatteryCandidate", 0, {
 	{ 233, 120 },

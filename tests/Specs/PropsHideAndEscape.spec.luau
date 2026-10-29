@@ -506,7 +506,7 @@ return {
 	["every Locker anchor gets one hideable locker with its tags, attributes and number"] = function(t: Expect)
 		local layout = layoutOf(GYM)
 		local anchors = PropKit.anchorsOf(layout, "Locker")
-		t.eq(#anchors, 40, "Level 3 has 40 Locker anchors")
+		t.eq(#anchors, 45, "Level 3 has 45 Locker anchors (40 in the locker wing, 5 the floor objective added)")
 		local list = lockers()
 		t.eq(#list, #anchors, "one locker per anchor")
 		local byId: { [string]: Model } = {}
@@ -1145,7 +1145,7 @@ return {
 		local count = Builder.BuildFixtures(GYM, again[GYM], nil, SEED + 2)
 		Geometry.setYieldEvery(previous)
 		t.truthy(count >= 40, "fixture count reported")
-		t.eq(#modelsIn(child(again[GYM], LockerBuilder.Folder)), 40, "rebuild replaces, never duplicates")
+		t.eq(#modelsIn(child(again[GYM], LockerBuilder.Folder)), 45, "rebuild replaces, never duplicates")
 		local folders = 0
 		for _, c in again[GYM]:GetChildren() do
 			if c.Name == LockerBuilder.Folder then

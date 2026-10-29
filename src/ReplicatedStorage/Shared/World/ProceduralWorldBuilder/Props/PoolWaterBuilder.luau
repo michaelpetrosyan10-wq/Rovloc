@@ -3,9 +3,12 @@
 --
 -- The water itself (the basin shell, its murky surface part and the PoolWater volume) is SchoolShellBuilder's; this
 -- dresses it from the layout's basin and platform data:
---   * the collapsed walkways: where a bridge fragment breaks off toward the next one, a slab chunk hangs from the
---     broken edge down into the water, rusted rebar sticks out of the break, the edge is cracked and spalled lumps lie
---     half sunk at its foot; the fallen roof slabs get rebar and rubble too;
+--   * the collapsed walkways: where a bridge fragment breaks off toward the next one across open water, a slab chunk
+--     hangs from the broken edge down into the water, rusted rebar sticks out of the break, the edge is cracked and
+--     spalled lumps lie half sunk at its foot; across a step-over crack (StepOver or narrower) only rebar stubs and a
+--     crack line show, so nothing fills the crack; the fallen roof slabs get rebar and rubble too;
+--   * a low kerb (the lip, "Lip<i>") along every open-water edge of every walkway fragment, left open where the slab
+--     faces the next piece of the route, so a walker feels the edge before the drop;
 --   * lane ropes strung with floats (red near the walls), snapped and sagging, between the starting-block lanes;
 --   * the starting blocks' grab bars, chips and stains (their tops stay clear: flasks stand on them); pool ladders
 --     over the coping on the decks;
@@ -13,10 +16,11 @@
 --   * a toppled lifeguard chair on the deck, kickboards, a sunken chair and scum on the water;
 --   * the deep-end drain grate; broken and missing tiles on the decks and the coping.
 --
--- No-bypass rule: the dressing never shortens a swim. Every colliding piece over open water has its highest point
--- at least NoBypassDepth under the surface (a chunk that breaks the surface is split there: the part under that
--- line collides, the part above is seen but never collides), so nothing new can be stood on between the fragments.
--- Ropes, floats, boards, ladders and debris on the water never collide. The deck chair collides (Creature passes).
+-- No-bypass rule: the layout's walkway decides every crossing; the dressing never shortens a swim. Every colliding
+-- piece over open water has its highest point at least NoBypassDepth under the surface (a chunk that breaks the
+-- surface is split there: the part under that line collides, the part above is seen but never collides), so nothing
+-- new can be stood on between the fragments. The lips stand on their fragment, never over open water. Ropes, floats,
+-- boards, ladders and debris on the water never collide. The deck chair collides (Creature passes).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -46,6 +50,12 @@ local BUDGET = 260
 local NO_BYPASS = 0.6 -- colliding dressing over open water keeps its top this far below the surface
 local TILT_LIMIT = 40 -- degrees; the rule's alternative for a colliding chunk (this builder never relies on it)
 local BREAK_REACH = 14 -- a fragment across a gap at most this wide is the next piece of the same walkway
+local STEP_OVER = 1.5 -- a gap at most this wide is a crack the walkway steps over (no jump, no swim)
+local LIP_WIDTH = 0.3
+local LIP_HEIGHT = 0.3
+local LIP_INSET = 0.03 -- from the fragment's edge
+local LIP_OPENING = 0.5 -- the lip stops this far short of the stretch facing the next piece
+local LIP_MIN = 0.8
 
 export type Fragment = {
 	id: string,
@@ -73,6 +83,9 @@ local PoolWaterBuilder = {}
 PoolWaterBuilder.Budget = BUDGET
 PoolWaterBuilder.NoBypassDepth = NO_BYPASS
 PoolWaterBuilder.TiltLimit = TILT_LIMIT
+PoolWaterBuilder.StepOver = STEP_OVER
+PoolWaterBuilder.BreakReach = BREAK_REACH
+PoolWaterBuilder.LipHeight = LIP_HEIGHT
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -215,6 +228,149 @@ function PoolWaterBuilder.breakEdges(classified: Classified): { BreakEdge }
 end
 
 --------------------------------------------------------------------------------
+-- The route across the water (pure layout maths; the specs and the fairness report read the same answers)
+--------------------------------------------------------------------------------
+
+export type DryGroup = {
+	rects: { Rect }, -- every dry spot joined to the others by step-overs
+	deck: boolean, -- holds part of the hall's deck
+}
+
+export type SwimLeg = { a: number, b: number, length: number } -- groups a and b, open water between them
+
+-- Horizontal distance between two rects (0 when they touch or overlap).
+function PoolWaterBuilder.rectGap(a: Rect, b: Rect): number
+	local dx = math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w))
+	local dz = math.max(0, a.z - (b.z + b.d), b.z - (a.z + a.d))
+	return math.sqrt(dx * dx + dz * dz)
+end
+
+-- Horizontal distance from (x, z) to a rect (0 inside it).
+function PoolWaterBuilder.pointGap(r: Rect, x: number, z: number): number
+	local dx = math.max(0, r.x - x, x - (r.x + r.w))
+	local dz = math.max(0, r.z - z, z - (r.z + r.d))
+	return math.sqrt(dx * dx + dz * dz)
+end
+
+-- Safe dry spots of a basin's hall: the deck (the hall's floor outside the basin) and every platform in the basin a
+-- swimmer can climb onto and stand on (its top `climbMin` to `climbMax` over the water), joined into groups wherever
+-- a step-over (StepOver or less) separates them. Group 1 holds the deck when the hall has one.
+function PoolWaterBuilder.dryGroups(layout: Layout, basin: Basin, climbMin: number, climbMax: number): { DryGroup }
+	local rooms = LayoutSchema.indexRooms(layout)
+	local room = rooms[basin.room]
+	local rects: { Rect } = {}
+	local decks: { [number]: boolean } = {}
+	if room then
+		for _, piece in Geometry.subtractRects(room.rect, { basin.rect }) do
+			table.insert(rects, piece)
+			decks[#rects] = true
+		end
+	end
+	for _, platform in (layout.platforms or {}) :: { Platform } do
+		local above = platform.top - basin.waterLevel
+		if
+			platform.room == basin.room
+			and LayoutSchema.rectOverlapArea(platform.rect, basin.rect) > 0
+			and above >= climbMin - EPS
+			and above <= climbMax + EPS
+		then
+			table.insert(rects, platform.rect)
+		end
+	end
+	-- union-find over step-over joins
+	local parent: { number } = {}
+	for i = 1, #rects do
+		parent[i] = i
+	end
+	local function find(i: number): number
+		while parent[i] ~= i do
+			parent[i] = parent[parent[i]]
+			i = parent[i]
+		end
+		return i
+	end
+	for i = 1, #rects do
+		for j = i + 1, #rects do
+			if PoolWaterBuilder.rectGap(rects[i], rects[j]) <= STEP_OVER + EPS then
+				parent[find(i)] = find(j)
+			end
+		end
+	end
+	local byRoot: { [number]: DryGroup } = {}
+	local out: { DryGroup } = {}
+	for i, r in rects do
+		local root = find(i)
+		local found: DryGroup? = byRoot[root]
+		local group: DryGroup
+		if found then
+			group = found
+		else
+			group = { rects = {}, deck = false }
+			byRoot[root] = group
+			table.insert(out, group)
+		end
+		table.insert(group.rects, r)
+		group.deck = group.deck or decks[i] == true
+	end
+	return out
+end
+
+-- Open water between two dry groups (the shortest gap between any of their spots).
+function PoolWaterBuilder.groupGap(a: DryGroup, b: DryGroup): number
+	local best = math.huge
+	for _, ra in a.rects do
+		for _, rb in b.rects do
+			best = math.min(best, PoolWaterBuilder.rectGap(ra, rb))
+		end
+	end
+	return best
+end
+
+-- The swim legs that join every dry group with the shortest swims (a minimum spanning tree over the groups), longest
+-- last. Its last leg is the longest swim anyone ever has to make between two safe dry spots.
+function PoolWaterBuilder.swimLegs(groups: { DryGroup }): { SwimLeg }
+	local candidates: { SwimLeg } = {}
+	for i = 1, #groups do
+		for j = i + 1, #groups do
+			table.insert(candidates, { a = i, b = j, length = PoolWaterBuilder.groupGap(groups[i], groups[j]) })
+		end
+	end
+	table.sort(candidates, function(p: SwimLeg, q: SwimLeg): boolean
+		return p.length < q.length
+	end)
+	local parent: { number } = {}
+	for i = 1, #groups do
+		parent[i] = i
+	end
+	local function find(i: number): number
+		while parent[i] ~= i do
+			i = parent[i]
+		end
+		return i
+	end
+	local out: { SwimLeg } = {}
+	for _, leg in candidates do
+		local ra, rb = find(leg.a), find(leg.b)
+		if ra ~= rb then
+			parent[ra] = rb
+			table.insert(out, leg)
+		end
+	end
+	return out
+end
+
+-- Horizontal swim from (x, z) to the nearest safe dry spot.
+function PoolWaterBuilder.swimToDry(groups: { DryGroup }, x: number, z: number): number
+	local best = math.huge
+	for _, group in groups do
+		for _, r in group.rects do
+			best = math.min(best, PoolWaterBuilder.pointGap(r, x, z))
+		end
+	end
+	return best
+end
+
+--------------------------------------------------------------------------------
 -- Collapsed walkways
 --------------------------------------------------------------------------------
 
@@ -341,6 +497,15 @@ local function planWalkways(info: LevelInfo, classified: Classified, basin: Basi
 		broken[f] = true
 		local e0, e1 = edgeRange(f, edge.direction)
 		local length = e1 - e0
+		if edge.gap <= STEP_OVER + EPS then
+			-- A step-over crack: stubs of rebar and the crack line only, nothing reaching into the crack
+			table.insert(
+				pieces,
+				rebar(info, f, edge.direction, between(random, e0 + 0.3, e1 - 0.3), random, i * 10 + 1)
+			)
+			table.insert(pieces, crackLine(info, f, edge.direction, between(random, e0 + 0.8, e1 - 0.8), random, i))
+			continue
+		end
 		local width = length * between(random, 0.45, 0.7)
 		local c = between(random, e0 + width / 2 + 0.4, e1 - width / 2 - 0.4)
 		for _, piece in hangingChunk(info, edge, waterY, random, c - width / 2, c + width / 2) do
@@ -379,6 +544,77 @@ local function planWalkways(info: LevelInfo, classified: Classified, basin: Basi
 				pieces,
 				rubble(info, f, direction, between(random, e0 + 1, e1 - 1), waterY, random, 100 + i * 10 + k)
 			)
+		end
+	end
+	return pieces
+end
+
+-- The stretches of side `direction` of fragment `f` that face open water: not the stretch facing another piece in
+-- the basin within BreakReach (the next slab of the route, a footing), and not a side lying on the coping.
+function PoolWaterBuilder.openSides(classified: Classified, f: Fragment, direction: Vector3): { { number } }
+	local interior = classified.interior
+	local r = f.rect
+	local alongX = math.abs(direction.X) > 0.5 -- the side faces along X (it runs along Z)
+	local sign = if alongX then direction.X else direction.Z
+	local line = if alongX then (if sign > 0 then r.x + r.w else r.x) else (if sign > 0 then r.z + r.d else r.z)
+	local i0 = if alongX then interior.x else interior.z
+	local i1 = i0 + (if alongX then interior.w else interior.d)
+	if line <= i0 + EPS or line >= i1 - EPS then
+		return {}
+	end
+	local e0, e1 = edgeRange(f, direction)
+	local cuts: { { number } } = {}
+	for _, o in classified.obstacles do
+		if o == r then
+			continue
+		end
+		local oa0 = if alongX then o.x else o.z
+		local oa1 = oa0 + (if alongX then o.w else o.d)
+		local oc0 = if alongX then o.z else o.x
+		local oc1 = oc0 + (if alongX then o.d else o.w)
+		local gap = if sign > 0 then oa0 - line else line - oa1
+		if gap > -EPS and gap <= BREAK_REACH and math.min(e1, oc1) - math.max(e0, oc0) > EPS then
+			table.insert(cuts, { math.max(e0, oc0) - LIP_OPENING, math.min(e1, oc1) + LIP_OPENING })
+		end
+	end
+	table.sort(cuts, function(a: { number }, b: { number }): boolean
+		return a[1] < b[1]
+	end)
+	local out: { { number } } = {}
+	local cursor = e0 + LIP_INSET
+	for _, cut in cuts do
+		if cut[1] - cursor >= LIP_MIN then
+			table.insert(out, { cursor, cut[1] })
+		end
+		cursor = math.max(cursor, cut[2])
+	end
+	if e1 - LIP_INSET - cursor >= LIP_MIN then
+		table.insert(out, { cursor, e1 - LIP_INSET })
+	end
+	return out
+end
+
+-- Low kerbs along every walkway fragment's open-water edges (they collide; the Creature passes).
+local function planLips(info: LevelInfo, classified: Classified): { Piece }
+	local pieces: { Piece } = {}
+	local count = 0
+	for _, f in classified.fragments do
+		for _, direction in { Vector3.xAxis, -Vector3.xAxis, Vector3.zAxis, -Vector3.zAxis } do
+			for _, stretch in PoolWaterBuilder.openSides(classified, f, direction) do
+				count += 1
+				local frame = edgeFrame(info, f, direction, (stretch[1] + stretch[2]) / 2)
+				local cf = frame * CFrame.new(0, LIP_HEIGHT / 2, LIP_INSET + LIP_WIDTH / 2)
+				table.insert(
+					pieces,
+					Kit.block(
+						"Lip" .. count,
+						cf,
+						Vector3.new(stretch[2] - stretch[1], LIP_HEIGHT, LIP_WIDTH),
+						CONCRETE,
+						"Solid"
+					)
+				)
+			end
 		end
 	end
 	return pieces
@@ -1318,8 +1554,21 @@ end
 -- Build
 --------------------------------------------------------------------------------
 
+-- Whether a level-local box stands wholly on a walkway fragment's top (a lip), not over open water.
+local function onFragment(classified: Classified, box: SetDressingBuilder.Box): boolean
+	for _, f in classified.fragments do
+		local r = f.rect
+		if box.x0 >= r.x - EPS and box.x1 <= r.x + r.w + EPS and box.z0 >= r.z - EPS and box.z1 <= r.z + r.d + EPS then
+			return true
+		end
+	end
+	return false
+end
+PoolWaterBuilder.onFragment = onFragment
+
 -- Safety net for the no-bypass rule: a colliding piece over open water whose top is not deep enough stops colliding.
-local function enforceNoBypass(info: LevelInfo, pieces: { Piece }, basin: Basin, interior: Rect)
+local function enforceNoBypass(info: LevelInfo, pieces: { Piece }, basin: Basin, classified: Classified)
+	local interior = classified.interior
 	local limit = basin.waterLevel - NO_BYPASS
 	for _, piece in pieces do
 		if piece.role ~= "Solid" then
@@ -1328,7 +1577,7 @@ local function enforceNoBypass(info: LevelInfo, pieces: { Piece }, basin: Basin,
 		local box = Kit.localBox(info, piece)
 		local over = math.min(box.x1, interior.x + interior.w) - math.max(box.x0, interior.x) > EPS
 			and math.min(box.z1, interior.z + interior.d) - math.max(box.z0, interior.z) > EPS
-		if over and box.y1 > limit + EPS then
+		if over and box.y1 > limit + EPS and not onFragment(classified, box) then
 			log.warn("%s would rise to %.2f over the water; made non-colliding", piece.name, box.y1)
 			piece.role = "Visible"
 		end
@@ -1350,6 +1599,7 @@ local function buildPool(ctx: PropKit.StaticContext): number
 		local pieces: { Piece } = {}
 		local groups: { { Piece } } = {
 			planWalkways(info, classified, basin, random),
+			planLips(info, classified),
 			planLadders(info, classified, basin, random),
 			planRopes(info, classified, basin, random),
 			planBlocks(info, classified, random),
@@ -1368,7 +1618,7 @@ local function buildPool(ctx: PropKit.StaticContext): number
 				table.insert(pieces, piece)
 			end
 		end
-		enforceNoBypass(info, pieces, basin, classified.interior)
+		enforceNoBypass(info, pieces, basin, classified)
 		local r = basin.rect
 		local model = PropKit.model(
 			ctx.parent,

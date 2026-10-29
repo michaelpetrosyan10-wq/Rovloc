@@ -131,6 +131,17 @@ export type PromptKind =
 	| "ParachuteGrab"
 	| "Floodlight"
 	| "Terminal"
+	-- floor objectives (ObjectiveConfig)
+	| "FitFuse"
+	| "Breaker"
+	| "Unlock"
+	| "Mix"
+	| "Pour"
+	| "Generator"
+	| "FitValve"
+	| "TurnValve"
+	| "CutChain"
+	| "Locked"
 
 export type Audience = "Self" | "Others" | "All"
 
@@ -194,6 +205,21 @@ export type AnchorKind =
 	| "Clutter"
 	| "ReadyPad"
 	| "Terminal"
+	-- floor objectives: item candidate spots (RunDirector picks the ones a run uses) ...
+	| "FuseCandidate"
+	| "MasterKeyCandidate"
+	| "ReagentCandidate"
+	| "CoachKeyCandidate"
+	| "ValveWheelCandidate"
+	| "BoltCutterCandidate"
+	-- ... and the stations and locks
+	| "BreakerPanel"
+	| "FumeHood"
+	| "Generator"
+	| "StoreLock"
+	| "HatchValve"
+	| "CrateChain"
+	| "ExitLock"
 
 export type TriggerKind = "ScareStep" | "FloorDebris" | "Checkpoint" | "PoolWater" | "LevelExit"
 
@@ -426,6 +452,16 @@ Enums.PromptKind = table.freeze({
 	"ParachuteGrab",
 	"Floodlight",
 	"Terminal",
+	"FitFuse",
+	"Breaker",
+	"Unlock",
+	"Mix",
+	"Pour",
+	"Generator",
+	"FitValve",
+	"TurnValve",
+	"CutChain",
+	"Locked",
 } :: { PromptKind })
 
 Enums.Audience = table.freeze({ "Self", "Others", "All" } :: { Audience })
@@ -498,6 +534,19 @@ Enums.AnchorKind = table.freeze({
 	"Clutter",
 	"ReadyPad",
 	"Terminal",
+	"FuseCandidate",
+	"MasterKeyCandidate",
+	"ReagentCandidate",
+	"CoachKeyCandidate",
+	"ValveWheelCandidate",
+	"BoltCutterCandidate",
+	"BreakerPanel",
+	"FumeHood",
+	"Generator",
+	"StoreLock",
+	"HatchValve",
+	"CrateChain",
+	"ExitLock",
 } :: { AnchorKind })
 
 Enums.TriggerKind =

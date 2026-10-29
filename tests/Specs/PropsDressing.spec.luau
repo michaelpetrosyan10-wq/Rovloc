@@ -292,7 +292,7 @@ return {
 		local layout = layoutOf("Level2_ScienceHall")
 		local folder = props(layout.id)
 		local counters = anchorsOf(layout, "LabCounter")
-		t.eq(#counters, 32, "Level2 lab counters")
+		t.eq(#counters, 33, "Level2 lab counters (32 islands and the specimen store's bench)")
 		for _, anchor in counters do
 			local counter = model(folder, "LabCounter_" .. anchor.id)
 			t.eq(counter:GetAttribute(W.AnchorId), anchor.id)
@@ -519,7 +519,7 @@ return {
 		end
 	end,
 
-	["pool dressing: within budget, the water left to the shell, no route across that skips the swim"] = function(
+	["pool dressing: within budget, the water left to the shell, lips on the walkway, nothing that shortens a swim"] = function(
 		t: Expect
 	)
 		local layout = layoutOf("Level4_FloodedPool")
@@ -548,16 +548,34 @@ return {
 			end
 		end
 		t.eq(pools, expectedVolumes, "PoolWater volumes are the shell's alone")
-		-- No-bypass: every colliding piece over open water is deep enough (or too steep) to stand on
+		-- No-bypass: every colliding piece over open water is deep enough (or too steep) to stand on; the lips stand on
+		-- their walkway fragment and stay low on it
 		local interior = Geometry.insetRect(basin.rect, Geometry.BasinWall)
 		local limit = origin.Y + basin.waterLevel - PoolWaterBuilder.NoBypassDepth
+		local classified = PoolWaterBuilder.classify(layout, basin)
 		local colliding = 0
+		local lips = 0
 		for _, part in list do
 			if not part.CanCollide then
 				continue
 			end
 			colliding += 1
 			local lo, hi = aabb(part)
+			local box = {
+				x0 = lo.X - origin.X,
+				x1 = hi.X - origin.X,
+				z0 = lo.Z - origin.Z,
+				z1 = hi.Z - origin.Z,
+				y0 = lo.Y - origin.Y,
+				y1 = hi.Y - origin.Y,
+			}
+			if PoolWaterBuilder.onFragment(classified, box) then
+				lips += 1
+				t.truthy(string.sub(part.Name, 1, 3) == "Lip", part.Name .. " is a lip on its walkway")
+				t.truthy(box.y1 <= 0.5 + PoolWaterBuilder.LipHeight + 1e-3, part.Name .. " stays a low kerb")
+				t.truthy(isPassthrough(part), part.Name .. " lets the Creature through")
+				continue
+			end
 			local over = math.min(hi.X, origin.X + interior.x + interior.w) - math.max(lo.X, origin.X + interior.x)
 					> 1e-3
 				and math.min(hi.Z, origin.Z + interior.z + interior.d) - math.max(lo.Z, origin.Z + interior.z)
@@ -578,11 +596,18 @@ return {
 				t.truthy(isPassthrough(part), part.Name .. " lets the Creature through")
 			end
 		end
-		t.truthy(colliding > 0, "some wreckage under the water still collides")
+		t.truthy(colliding > lips, "some wreckage under the water still collides")
+		t.truthy(lips >= #classified.fragments, "every walkway fragment has its lip")
 		-- Between every pair of walkway fragments the water stays open: nothing solid above the line in a gap
-		local classified = PoolWaterBuilder.classify(layout, basin)
 		local edges = PoolWaterBuilder.breakEdges(classified)
-		t.eq(#edges, 8, "the collapsed bridge breaks off at eight edges")
+		local swims = 0
+		for _, edge in edges do
+			if edge.gap > PoolWaterBuilder.StepOver then
+				swims += 1
+			end
+		end
+		t.truthy(#edges >= 8, "the walkway breaks at its cracks and its fallen span")
+		t.truthy(swims >= 2, "the fallen span leaves open water on both sides")
 		for _, edge in edges do
 			local r = edge.fragment.rect
 			local gapLo: Vector3
@@ -612,8 +637,8 @@ return {
 			local key = string.match(part.Name, "^%a+") or part.Name
 			names[key] = (names[key] or 0) + 1
 		end
-		t.truthy((names.ChunkUnder or 0) + (names.Chunk or 0) >= #edges, "a chunk hangs off every break")
-		t.truthy((names.Rebar or 0) >= #edges * 2, "rebar at every break")
+		t.truthy((names.ChunkUnder or 0) + (names.Chunk or 0) >= swims, "a chunk hangs off every break over the water")
+		t.truthy((names.Rebar or 0) >= swims * 2 + (#edges - swims), "rebar at every break and crack")
 		t.truthy((names.Rope or 0) >= 4 and (names.Float or 0) >= 4, "lane ropes with floats")
 		t.truthy((names.Rail or 0) >= 4 and (names.Rung or 0) >= 3, "pool ladders")
 		t.truthy((names.BoardStub or 0) == 1 and (names.BoardAdrift or 0) == 1, "the snapped diving board")

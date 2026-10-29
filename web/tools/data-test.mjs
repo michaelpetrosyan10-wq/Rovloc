@@ -210,6 +210,54 @@ for (const e of meta.entities) {
   for (const r of e.ranges) check(world.chunks[r.chunk] && world.chunks[r.chunk].kind === 'entity', `entity ${e.id} range chunk`);
 }
 
+// floor objectives: every candidate, station and lock is an entity with its prompts, leaves and attachments
+{
+  const ids = new Set(meta.entities.map((e) => e.id));
+  check(new Set(meta.entities.map((e) => `${e.level}/${e.id}`)).size === meta.entities.length, 'entity ids unique per level');
+  const byType = (type) => meta.entities.filter((e) => e.type === type);
+  const ITEMS = { Fuse: 6, MasterKeys: 5, ReagentJar: 6, CoachKey: 6, ValveWheel: 3, BoltCutters: 4, AcidFlask: 1 };
+  for (const [type, count] of Object.entries(ITEMS)) {
+    const list = byType(type);
+    check(list.length === count, `${type}: ${list.length} entities (want ${count})`);
+    for (const e of list) {
+      check(e.tags.includes('ObjectiveItem'), `${e.id} tag`);
+      check(typeof e.attributes.Floor === 'number' && typeof e.attributes.Step === 'string', `${e.id} Floor / Step`);
+      check(typeof e.attributes.Planned === 'boolean', `${e.id} Planned`);
+      check(e.attachments && e.attachments.Grip && e.attachments.PromptPoint, `${e.id} Grip + PromptPoint`);
+      check(e.prompts.length === 1 && e.prompts[0].name === 'Pickup', `${e.id} Pickup prompt`);
+    }
+  }
+  check(byType('ValveWheel').every((e) => e.attachments.Hub), 'valve wheels have a Hub');
+  const STATIONS = {
+    BreakerPanel: ['Door', 'FuseSlot1', 'FuseSlot2', 'FuseSlot3', 'Lever'],
+    FumeHood: ['Sash'],
+    Generator: ['PullCord'],
+    HatchValve: ['Hatch', 'Stem'],
+    CrateChain: ['Chain', 'Padlock'],
+    StoreLock: ['Padlock'],
+  };
+  for (const [type, leaves] of Object.entries(STATIONS)) {
+    const list = byType(type);
+    check(list.length === 1, `${type}: one entity`);
+    for (const e of list) {
+      const paths = new Set(e.nodes.map((n) => n.path));
+      for (const leaf of leaves) {
+        check(paths.has(leaf), `${type} node ${leaf}`);
+        check(e.attachments[`${leaf}Rest`], `${type} ${leaf}Rest`);
+      }
+      check(e.prompts.length >= 1 && e.prompts.every((p) => typeof p.attributes.Step === 'string'), `${type} prompts carry Step`);
+    }
+  }
+  const locks = byType('ExitLock');
+  check(locks.length === 5, `ExitLock: ${locks.length} entities (want 5)`);
+  for (const e of locks) {
+    check(['Padlock', 'Chain', 'Keypad'].includes(e.attributes.LockVariant) && e.attributes.Locked === true, `${e.id} variant`);
+    check(e.prompts.some((p) => p.name === 'Locked'), `${e.id} Locked prompt`);
+    check(ids.has(e.attributes.DoorId), `${e.id} names its door entity`);
+  }
+  check(byType('StoreDoor').length === 1, 'the equipment store door');
+  check(meta.objectives && Object.keys(meta.objectives.levels || {}).length === 6, 'meta.objectives for six floors');
+}
 // collision
 for (const [level, c] of Object.entries(world.collision)) {
   let max = 0;

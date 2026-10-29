@@ -48,7 +48,7 @@ type DoorOptions = { id: string?, width: number?, height: number?, scriptedId: s
 local PREFIX = "L0"
 local HEIGHT = WorldConfig.Levels.Level0_Basement.height
 
-local FACE_N, FACE_E = 0, -90
+local FACE_N, FACE_W, FACE_E = 0, 90, -90
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -203,16 +203,27 @@ local function door(kind: Enums.DoorKind, a: string, b: string, at: number?, opt
 	})
 end
 
-local function anchor(kind: Enums.AnchorKind, x: number, y: number, z: number, yaw: number?, id: string?)
+local function anchor(
+	kind: Enums.AnchorKind,
+	x: number,
+	y: number,
+	z: number,
+	yaw: number?,
+	id: string?,
+	ref: string?
+): string
 	local n = (anchorCounts[kind] or 0) + 1
 	anchorCounts[kind] = n
+	local anchorId = id or string.format("%s_%s_%02d", PREFIX, kind, n)
 	table.insert(anchors, {
-		id = id or string.format("%s_%s_%02d", PREFIX, kind, n),
+		id = anchorId,
 		kind = kind,
 		room = roomAt(x, z),
 		pos = Vector3.new(x, y, z),
 		yaw = yaw,
+		ref = ref,
 	})
+	return anchorId
 end
 
 -- Each point is { x, z } or { x, z, yaw }.
@@ -388,6 +399,10 @@ platform("L0_Pump_A", "L0_PumpRoom", 32, 140, 8, 6, 4, 4, "MetalRust")
 platform("L0_Pump_B", "L0_PumpRoom", 32, 150, 8, 6, 4, 4, "MetalRust")
 platform("L0_Switchgear", "L0_ElectricalRoom", 172, 2, 28, 4, 8, 8, "MetalGalvanized")
 platform("L0_Workbench", "L0_Workshop", 2, 52, 4, 8, 3, 3, "WoodPanel")
+-- Steel shelving in the two corner stores and a bank of washers in the laundry (fuse candidates lie on their tops)
+platform("L0_Shelf_NW", "L0_Storage_NW", 2, 0, 8, 2.6, 4, 4, "MetalRust")
+platform("L0_Shelf_SW", "L0_Storage_SW", 12, 157.4, 10, 2.6, 4, 4, "MetalRust")
+platform("L0_Washers", "L0_Laundry", 0, 100, 7, 12, 3.2, 3.2, "MetalGalvanized")
 
 --------------------------------------------------------------------------------
 -- Lights: the basement is pitch black. Pilot flames glow behind boiler doors; one red lamp marks the stairs.
@@ -511,6 +526,25 @@ scatter("DripPipe", HEIGHT - 1.2, {
 })
 
 scatter("Corpse", 0, { { 14, 44, 60 }, { 206, 120, -20 } })
+
+-- Floor objective (RestorePower): six fuse candidates in the storage rooms, workshop, laundry, pump room and coal
+-- bunker (RunDirector uses three), each with a bear-trap spot on its approach (its ref: the director arms the guard
+-- traps of at least two of the fuses it uses); the breaker panel on the electrical room's east wall (the anchor is the
+-- floor point on the wall face, facing into the room); the exit lock on the stair airlock's fire door (the floor point
+-- on the door's corridor face, facing out of the door).
+local function fuse(x: number, y: number, z: number, guardX: number, guardZ: number)
+	local n = (anchorCounts.FuseCandidate or 0) + 1
+	local guard = anchor("TrapCandidate", guardX, 0, guardZ, nil, string.format("%s_TrapGuard_%02d", PREFIX, n))
+	anchor("FuseCandidate", x, y, z, nil, nil, guard)
+end
+fuse(4, 3, 57, 9.5, 56) -- on the workshop bench
+fuse(5, 4, 1.8, 7, 8) -- on the shelving in the north-west store
+fuse(4, 3.2, 104, 10.5, 104) -- on the washers
+fuse(37, 0, 148, 44, 148) -- wedged between the pumps
+fuse(44, 3, 12.5, 45, 19.5) -- on the coal heap, past the coal dust
+fuse(17, 4, 158.4, 17, 151) -- on the shelving in the south-west store
+anchor("BreakerPanel", 203.5, 0, 18, FACE_W, "L0_BreakerPanel")
+anchor("ExitLock", 227.5, 0, 80, FACE_W, "L0_ExitLock")
 
 scatter("Clutter", 0, {
 	{ 30, 36, 0 },

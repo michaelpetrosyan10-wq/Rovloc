@@ -17,38 +17,38 @@ export const PASSTHROUGH = {
       ],
     },
     "Level5_Roof": {
-      vertexCount: 420, indexCount: 3132, fingerprint: 1899927693,
+      vertexCount: 428, indexCount: 3168, fingerprint: 3641636029,
       runs: [
       ],
     },
     "Level4_FloodedPool": {
-      vertexCount: 5840, indexCount: 36936, fingerprint: 2627388509,
+      vertexCount: 6136, indexCount: 38376, fingerprint: 2256192197,
       runs: [
-        1292, 56, 80, 168, 72, 448, 1902, 1682,
+        1412, 56, 80, 168, 72, 448, 1902, 1858,
       ],
     },
     "Level3_Gymnasium": {
-      vertexCount: 7366, indexCount: 47220, fingerprint: 2714207533,
+      vertexCount: 7304, indexCount: 46896, fingerprint: 3341160181,
       runs: [
-        1756, 784, 2707, 1735,
+        1756, 756, 2707, 1701,
       ],
     },
     "Level2_ScienceHall": {
-      vertexCount: 13686, indexCount: 84708, fingerprint: 3382771027,
+      vertexCount: 13782, indexCount: 85176, fingerprint: 1522540671,
       runs: [
-        1888, 1428, 3915, 5581,
+        1888, 1428, 3915, 5677,
       ],
     },
     "Level1_Hallways": {
-      vertexCount: 13561, indexCount: 80844, fingerprint: 1912805708,
+      vertexCount: 13561, indexCount: 80844, fingerprint: 2691165874,
       runs: [
         1840, 1624, 3588, 6219,
       ],
     },
     "Level0_Basement": {
-      vertexCount: 5441, indexCount: 30996, fingerprint: 1967521256,
+      vertexCount: 5465, indexCount: 31104, fingerprint: 3979734796,
       runs: [
-        84, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16,
+        108, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16,
         8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16,
         8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16,
         8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16,
