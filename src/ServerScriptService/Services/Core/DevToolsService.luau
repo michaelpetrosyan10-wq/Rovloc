@@ -318,6 +318,10 @@ local function spawnAll(players: { Player }, layoutId: Enums.LayoutId)
 	end
 end
 
+-- The dev run's deploy, shared with P8's real one (MatchAndDataService.Deploy): each of `players` gets a character at
+-- `layoutId`'s spawn slot (their index) once their client holds the world. Returns at once.
+DevToolsService.SpawnSquad = spawnAll
+
 -- Starts a run with every player and spawns the participants at `spawnLevel`'s spawn slots.
 local function startDevRun(difficulty: Enums.Difficulty, seed: number?, spawnLevel: Enums.LevelId): Types.RunContext
 	local ctx = RunLifecycleService.BeginRun(Players:GetPlayers(), difficulty, seed)

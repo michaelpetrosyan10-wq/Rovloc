@@ -137,6 +137,182 @@ local function runSpecs(h)
 	failures += report.failed
 end
 
+-- The real match loop (Phase 8) with a squad probe in Players: its data loads on the Ephemeral backend, a commit and a
+-- SettingsSave are saved, Deploy consumes perk stock (dropping an unstocked perk) and starts a run, the squad goes
+-- through every level of that run, the evaluator wipes it (floor credits paid, RunSummary, Results), Play Again sends
+-- it straight back to the lobby ready, then a second deploy ends in an escape (bonus, Escapes, BestTime).
+local function runMatchLoop(h)
+	local task = require("@lune/task")
+	local game = h.game
+	local RS = game:GetService("ReplicatedStorage")
+	local Players = game:GetService("Players")
+	local Lifecycle = h.require("ServerScriptService.Services.Core.RunLifecycleService")
+	local LevelDirector = h.require("ServerScriptService.Services.Core.LevelDirector")
+	local RunStats = h.require("ServerScriptService.Services.Core.RunStatsService")
+	local LifeState = h.require("ServerScriptService.Services.Player.LifeStateService")
+	local Loadout = h.require("ServerScriptService.Services.Player.LoadoutService")
+	local MatchData = h.require("ServerScriptService.Services.Match.MatchAndDataService")
+	local MatchReset = h.require("ServerScriptService.Services.Match.MatchResetService")
+	local GameConfig = h.require("ReplicatedStorage.Shared.Config.GameConfig")
+	local Enums = h.require("ReplicatedStorage.Shared.Enums")
+
+	local squad = roblox.Instance.new("Player")
+	squad.Name = "SquadProbe"
+	squad.UserId = 202
+	squad.Parent = Players
+	local function firesAs(remoteName, payload)
+		local signal = h.signals["server:" .. remoteName]
+		if not signal then
+			fail("nothing listens to %s", remoteName)
+			return
+		end
+		signal:Fire(squad, payload)
+		task.wait()
+	end
+	local function waitFor(predicate, seconds)
+		local deadline = os.clock() + seconds
+		while not predicate() and os.clock() < deadline do
+			task.wait(0.02)
+		end
+		return predicate()
+	end
+	local function summarySince(from)
+		for i = #h.fired, from + 1, -1 do
+			local entry = h.fired[i]
+			if entry.remote == "RunSummary" and entry.player == squad then
+				return entry.payload
+			end
+		end
+		return nil
+	end
+	local readied = {}
+	MatchReset.PlayAgainRequested:Connect(function(players)
+		table.insert(readied, players)
+	end)
+
+	h.signals.PlayerAdded:Fire(squad)
+	firesAs("ClientWorldReady", { partCount = RS:GetAttribute("WorldPartCount") or 0 })
+	if not waitFor(function()
+		return squad:GetAttribute("DataLoaded") == true
+	end, 5) then
+		fail("the squad probe's data never loaded")
+		return
+	end
+	if squad:GetAttribute("Credits") ~= 0 or type(squad:GetAttribute("Settings")) ~= "string" then
+		fail("a new player's Credits / Settings were not published")
+	end
+	local committed = MatchData.Update(squad, "LifecycleCheck", function(data)
+		data.SurvivalCredits = 50
+		data.PerkStock.LithiumCell = 1
+		return true
+	end)
+	if not committed or squad:GetAttribute("Credits") ~= 50 then
+		fail("Update did not commit and mirror Credits")
+	end
+	firesAs("SettingsSave", { settings = { InvertY = true } })
+	local saved = MatchData.GetData(squad)
+	if not (saved and saved.Settings.InvertY == true) then
+		fail("SettingsSave was not saved")
+	end
+	Loadout.SetLoadout(squad, { "LithiumCell", "RustyScrewdriver" })
+
+	-- Run 1: deploy, every level, a wipe.
+	if not MatchData.Deploy({ squad }, "Nightmare") then
+		fail("Deploy refused the squad")
+		return
+	end
+	local run = Lifecycle.GetRun()
+	if Lifecycle.GetPhase() ~= "InRun" or not run or run.participants[1] ~= squad or RS:GetAttribute("Difficulty") ~= "Nightmare" then
+		fail("Deploy did not start a Nightmare run with the squad (phase %s)", tostring(Lifecycle.GetPhase()))
+		return
+	end
+	local stocked = MatchData.GetData(squad)
+	if not stocked or stocked.PerkStock.LithiumCell ~= 0 or squad:GetAttribute("Loadout") ~= "LithiumCell" then
+		fail("Deploy did not consume the stocked perk and drop the unstocked one (Loadout %s)", tostring(squad:GetAttribute("Loadout")))
+	end
+	if MatchData.Deploy({ squad }, "Standard") then
+		fail("a second Deploy was accepted during a run")
+	end
+	if squad:GetAttribute("RunOutcome") ~= "Pending" or LifeState.GetState(squad) ~= "Alive" then
+		fail("the participant is not Alive / Pending after the deploy")
+	end
+	for index, levelId in Enums.LevelId do
+		if index > 1 and (not LevelDirector.EnterLevel(levelId) or RS:GetAttribute("CurrentLevel") ~= levelId) then
+			fail("the deployed run could not enter %s", levelId)
+		end
+	end
+	RunStats.Increment(squad, "FloorsCleared", 2)
+	if RS:GetAttribute("DevRun") ~= false then
+		fail("a real deploy is dev-tainted")
+	end
+	local before = #h.fired
+	LifeState.Execute(squad, "LifecycleCheck")
+	if not waitFor(function()
+		return Lifecycle.GetPhase() == "Results"
+	end, 2) then
+		fail("the wipe did not resolve the run (phase %s)", tostring(Lifecycle.GetPhase()))
+		return
+	end
+	local summary = summarySince(before)
+	local floorPay = 2 * GameConfig.CreditsPerLevelCleared
+	if not (summary and summary.outcome == "Dead" and summary.creditsEarned == floorPay and summary.escapees == 0) then
+		fail("the wipe's RunSummary is wrong (%s)", if summary then tostring(summary.outcome) .. " " .. tostring(summary.creditsEarned) else "none")
+	end
+	if squad:GetAttribute("Credits") ~= 50 + floorPay or squad:GetAttribute("RunOutcome") ~= "Dead" then
+		fail("the floor credits were not paid (Credits %s)", tostring(squad:GetAttribute("Credits")))
+	end
+	if type(RS:GetAttribute("ResultsEndsAt")) ~= "number" then
+		fail("Results published no ResultsEndsAt")
+	end
+	firesAs("PlayAgain", {})
+	if not waitFor(function()
+		return Lifecycle.GetPhase() == "Lobby"
+	end, 5) then
+		fail("Play Again did not return to the lobby (phase %s)", tostring(Lifecycle.GetPhase()))
+		return
+	end
+	local ready = readied[#readied]
+	if not (ready and ready[1] == squad) then
+		fail("PlayAgainRequested did not carry the squad probe")
+	end
+	if RS:GetAttribute("ResultsEndsAt") ~= nil or squad:GetAttribute("RunOutcome") ~= nil or LifeState.GetState(squad) ~= "Lobby" then
+		fail("the reset left run state behind")
+	end
+
+	-- Run 2: deploy and escape.
+	before = #h.fired
+	if not MatchData.Deploy({ squad }, "Standard") then
+		fail("the second Deploy was refused")
+		return
+	end
+	h.advance(754) -- the server clock: a 12:34 escape
+	if not MatchData.MarkEscaped(squad) then
+		fail("MarkEscaped refused the participant")
+	end
+	if not waitFor(function()
+		return Lifecycle.GetPhase() == "Results"
+	end, 2) then
+		fail("the escape did not resolve the run")
+		return
+	end
+	local escaped = summarySince(before)
+	local data = MatchData.GetData(squad)
+	if not (escaped and escaped.outcome == "Escaped" and escaped.creditsEarned == GameConfig.CreditsEscapeBonus and escaped.runSeconds == 754 and escaped.newBest == true) then
+		fail("the escape's RunSummary is wrong")
+	end
+	if not (data and data.Escapes == 1 and data.BestTime.Standard == 754 and data.SurvivalCredits == 50 + floorPay + GameConfig.CreditsEscapeBonus) then
+		fail("the escape was not saved (Escapes, BestTime, credits)")
+	end
+	firesAs("PlayAgain", {})
+	if not waitFor(function()
+		return Lifecycle.GetPhase() == "Lobby"
+	end, 5) then
+		fail("the second Play Again did not return to the lobby")
+		return
+	end
+	print(string.format("  ok   match loop: data, deploy, %d levels, wipe, escape, play again", #Enums.LevelId))
+end
+
 -- Boots the real ServerMain (every service's Init / Start in ServerMain order), then drives the P1 server flow the
 -- way a dev player does: runs on both difficulties, every level, dev commands through the DevCommand remote, the
 -- ClientWorldReady ack, and run teardown. No physics and no characters (avatar builds need the engine).
@@ -251,20 +427,16 @@ local function runLifecycle(h)
 	if player:GetAttribute("WorldAcked") ~= true then
 		fail("ClientWorldReady did not set WorldAcked")
 	end
-	-- Studio AutoDevRun: the first ack schedules a Standard dev run AutoRunDelay seconds later. Deploying builds every
-	-- level's fixtures, so poll for InRun (up to 5 s past the delay) instead of betting on a fixed margin.
-	task.wait(DevTools.AutoRunDelay)
-	local deployDeadline = os.clock() + 5
-	while Lifecycle.GetPhase() ~= "InRun" and os.clock() < deployDeadline do
-		task.wait(0.05)
+	-- The match policy (MatchAndDataService) keeps the Studio auto dev run off: the first ack leaves the server in
+	-- the lobby, and the data layer runs on the Ephemeral backend (no DataStore API outside Roblox).
+	task.wait(DevTools.AutoRunDelay + 0.5)
+	if Lifecycle.GetPhase() ~= "Lobby" or RS:GetAttribute("RunId") ~= nil then
+		fail("a run started on its own although a match policy is present (phase %s)", tostring(Lifecycle.GetPhase()))
 	end
-	if Lifecycle.GetPhase() ~= "InRun" or RS:GetAttribute("DevRun") ~= true then
-		fail("the Studio auto dev run did not start (phase %s)", tostring(Lifecycle.GetPhase()))
+	if RS:GetAttribute("DataMode") ~= "Ephemeral" then
+		fail("DataMode is %s, expected Ephemeral", tostring(RS:GetAttribute("DataMode")))
 	end
-	Lifecycle.EndRun()
-	if RS:GetAttribute("DevRun") ~= false then
-		fail("DevRun stayed set after the auto run ended")
-	end
+	runMatchLoop(h)
 	clientFires("DevCommand", { command = "help", args = {} })
 	local helpReply = lastNotify()
 	if not (helpReply and helpReply.key == "Dev.Ok" and string.find(helpReply.args[1], "devrun", 1, true)) then

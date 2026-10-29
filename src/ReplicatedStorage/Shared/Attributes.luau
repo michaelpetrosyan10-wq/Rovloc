@@ -69,6 +69,9 @@ Attributes.Match = table.freeze({
 	WorldPartCount = "WorldPartCount",
 	DataMode = "DataMode",
 	BootError = "BootError",
+	-- Server time the Results screen returns everyone to the lobby (MatchResetService is the only writer; nil
+	-- outside Results). EscapeSummaryController draws its auto-return countdown from it.
+	ResultsEndsAt = "ResultsEndsAt",
 	-- Dev taint (DevToolsService is the only writer). True from the first state-changing dev command while a run
 	-- exists (devrun, level, next, noise, and every later-phase command not registered read-only) until the match is
 	-- back in the Lobby phase, so it still reads true through RunEnded / Results / Resetting. MatchAndDataService (P8)

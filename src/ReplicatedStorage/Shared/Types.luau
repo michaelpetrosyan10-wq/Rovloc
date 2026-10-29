@@ -273,13 +273,19 @@ export type LookSample = { userId: number, yaw: number, pitch: number }
 
 export type LookBroadcastPayload = { samples: { LookSample } }
 
+-- Sent by MatchAndDataService to each participant still in the server when a run resolves (before Results).
 export type RunSummaryPayload = {
 	outcome: Enums.RunOutcome,
-	runSeconds: number,
-	creditsEarned: number,
-	bestTime: number?,
+	runSeconds: number, -- the player's escape time when they escaped, else the run's length
+	creditsEarned: number, -- what was actually paid (0 for a DevRun or read-only data)
+	bestTime: number?, -- the player's best escape time on this difficulty, after this run
 	stats: { [string]: number }, -- StatKey -> count
 	levelsCleared: number,
+	difficulty: Enums.Difficulty?,
+	escapees: number?, -- participants who escaped (0: the squad wiped)
+	squadSize: number?, -- participants the run started with
+	newBest: boolean?, -- this run set the best time
+	saved: boolean?, -- false when nothing could be paid or saved (a DevRun, or guest / read-only data)
 }
 
 export type NotifyPayload = { key: string, args: { string } }

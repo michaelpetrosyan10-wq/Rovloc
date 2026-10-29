@@ -24,7 +24,7 @@ lighting, so its modern partner `LightingStyle = Realistic` is pinned next to it
 | Server authority | Clients send *intents* through validated, rate-limited remotes. The server owns noise, damage, life state, meters, interactions, items, progression and data. Noise tiers come from **observed** server-side speed as well as the claimed move state. |
 | No gameplay on `Touched` | The server polls triggers, traps, checkpoints, water and scare volumes at 10 Hz (`ZoneService`). It tests points against volumes with plain math (`volume.CFrame:PointToObjectSpace(root.Position)` against `Size/2`), so the test works in every collision group, `NoCollide` included. Spatial queries would skip those parts. `Touched` may drive client-only cosmetics. |
 | Events are remotes, state is attributes | Durable state replicates as Attributes. Moments (neck snap, gate slam, door motions, lightning, jumpscare) travel on one reliable `OneShot` remote: `{seq, kind, subject, startAt, args}`. `startAt = GetServerTimeNow() + lead`, so every client starts the same `Timeline` on the same frame, and late joiners fast-forward. |
-| Resettable runs | Each module has a `ServiceTrove` (process lifetime) and a `RunTrove` (one run). `RunLifecycleService` is the only writer of `MatchPhase` and the run attributes. **Deploying** calls `BeginRun(ctx)` on every service, in forward order, once the difficulty and participants are known. **Resetting** calls `EndRun` on every service in reverse order, then clears `Workspace.Runtime`. Before Phase 8, a Studio dev-run harness in `DevToolsService` drives the lifecycle, so every phase is playable on its own. |
+| Resettable runs | Each module has a `ServiceTrove` (process lifetime) and a `RunTrove` (one run). `RunLifecycleService` is the only writer of `MatchPhase` and the run attributes. **Deploying** calls `BeginRun(ctx)` on every service, in forward order, once the difficulty and participants are known. **Resetting** calls `EndRun` on every service in reverse order, then clears `Workspace.Runtime`. From Phase 8 the match policy (`MatchAndDataService`: lobby deploy, outcomes, Results) drives it; the Studio dev-run harness in `DevToolsService` that drove it before stays available from the dev panel. |
 | Procedural only | Geometry uses Parts, WedgeParts, built-in `Enum.Material`s, Attachments and Constraints, with no runtime CSG. Audio layers verified `rbxasset://sounds/` engine files through `SoundEffect` DSP chains, all built on clients. Animation writes `Motor6D.Transform` (or `AnimationConstraint.Transform`) in `PreSimulation` on clients. |
 
 ---
@@ -60,7 +60,10 @@ Rovloc/
 │                                           controllers on a fake clock), Lockers (hiding, the breath check, the rip
 │                                           hand-over), Level3 (gym stalk, sweeps, beats), Pool (water rules,
 │                                           swimming, oxygen, the grab, struggle and every release, the swim
-│                                           client's maths), Level4 (pool alert, floodlights, beats), DataMigration
+│                                           client's maths), Level4 (pool alert, floodlights, beats), MatchData
+│                                           (schema + migrations, the session lock, save queue, guests, the data
+│                                           API), MatchFlow (deploy, the outcome evaluator, rewards, Results / Play
+│                                           Again, telemetry), EscapeSummary (the results screen's rules)
 └── src/
     ├── ReplicatedFirst/
     │   └── LoadingCurtain.client.luau      [P1] Engine-only black curtain until WorldReady + local ack; 30s BootError fallback
@@ -271,18 +274,24 @@ Rovloc/
     │       └── Match/
     │           ├── CheckpointAirlockService.luau [P6] Stairwell airlocks: 10 Hz checkpoint volume, 20s straggler timer,
     │           │                                 seal via DoorService, left-behind spectators, Advance, 50% HP respawn
+    │           ├── MatchAndDataService/
+    │           │   ├── init.luau           [P8] Saved progress (GetData / Update / DataLoaded, SettingsSave, Credits) and
+    │           │   │                            the match policy over RunLifecycleService: Deploy (perk stock, Level 0
+    │           │   │                            spawns), the one RunOutcomeEvaluator, rewards, RunSummary, RunResolved
+    │           │   ├── StoreBackend.luau   [P8] DataStore backend (UpdateAsync, request budget) + the in-memory Ephemeral
+    │           │   │                            backend (Studio without API access, Lune)
+    │           │   ├── PlayerDataStore.luau [P8] Session lock + stale steal, per-player serialized save queue (pacing,
+    │           │   │                            coalescing, retries), autosave, idempotent release, guest sessions
+    │           │   └── DataMigration.luau  [P8] Schema version, defaults, migrations, sanitize / validate (pure)
+    │           ├── LobbyService.luau       [P8] Ready-up, difficulty vote, countdown, squad cap → Deploy
+    │           ├── PerkShopService.luau    [P8] Credit spend → PerkStock (through Update), loadout equip
     │           ├── DownedReviveService.luau [P8] Revive anchor + prompt on Downed participants (4 s InteractionService
     │           │                                 channel, Alive teammates only), cancels, Revive at 50%, notices
     │           ├── SpectatorService.luau   [P8] Only writer of SpectateReason / SpectateTargetUserId: eliminated,
     │           │                                 late joiners and over-capacity players, target ring, SpectateCycle
-    │           └── MatchAndDataService/
-    │               ├── init.luau           [P8] Match policy over RunLifecycleService + single RunOutcomeEvaluator
-    │               ├── StoreBackend.luau   [P8] DataStore backend + Ephemeral Studio fallback + guest mode
-    │               ├── PlayerDataStore.luau [P8] Session lock, serialized save queue, idempotent rewards, migrations
-    │               ├── LobbyService.luau   [P8] Ready-up, difficulty vote, countdown, squad cap
-    │               ├── PerkShopService.luau [P8] Credit spend → PerkStock, loadout equip
-    │               ├── MatchResetService.luau [P8] Results → Resetting → Lobby; Play Again votes
-    │               └── TelemetryService.luau [P8] AnalyticsService funnels, economy, death causes
+    │           ├── MatchResetService.luau  [P8] Results timer / everyone pressed Play Again → Resetting → Lobby,
+    │           │                                PlayAgainRequested, ResultsEndsAt
+    │           └── TelemetryService.luau   [P8] AnalyticsService funnel, deaths, floors reached, economy
     │
     └── StarterPlayer/
         └── StarterPlayerScripts/
@@ -352,7 +361,8 @@ Rovloc/
                     ├── SpectatorController.luau    [P8] Through the target's eyes ("Spectating" override, LookBroadcast
                     │                                   look, their torch from inside), cuts, Q / E cycling, HUD
                     ├── ParachuteController.luau    [P8] Leap, ripcord, lookback camera
-                    └── EscapeSummaryController.luau [P8] ESCAPED / WIPED summary + Play Again
+                    └── EscapeSummaryController.luau [P8] ESCAPED / WIPED / DEAD summary from RunSummary: stats,
+                                                         credits, best time, Play Again + auto-return countdown
 ```
 
 ---
@@ -530,15 +540,29 @@ export type Service = {
 ```
 
 **Match phases.** `Lobby → Countdown → Deploying → InRun → RunEnded → Results → Resetting → Lobby`.
-`RunLifecycleService` [P1] owns the transitions and the `BeginRun` / `EndRun` fan-out. `MatchAndDataService` [P8]
-owns the policy (votes, countdown, rewards). Until P8 exists, the Studio dev-run harness deploys straight into
-`InRun`.
+`RunLifecycleService` [P1] owns the transitions and the `BeginRun` / `EndRun` fan-out. The P8 Match services own the
+policy, each a service of its own under `Services/Match/` (Lobby, PerkShop, MatchReset and Telemetry require
+`MatchAndDataService`; it requires none of them; DownedRevive and Spectator need nothing from it).
 
-- Countdown aborts if the ready count drops.
-- Deploying snapshots the participants, calls `BeginRun(ctx)` and moves the squad to the basement.
-- Outcomes are per player (`Escaped / Dead / Disconnected`). One `RunOutcomeEvaluator` (coalesced with `task.defer`)
-  decides wipe or escape.
-- Wipe = no Alive participant and no Downed participant with a syringe charge left.
+- `LobbyService` runs the ready-up, the vote and the countdown (aborted when the ready count drops), then calls
+  `MatchAndDataService.Deploy(squad, difficulty)`: one stock unit of each equipped perk is consumed (perks without stock
+  are dropped from the loadout), `RunLifecycleService.BeginRun` snapshots the participants, and each one spawns at a
+  Level 0 `PlayerSpawn` slot once their client holds the world.
+- Outcomes are per player: `Pending → Escaped` (Level 5's `Escaped`) `/ Disconnected` (left) `/ Dead` (anything else
+  when the run resolves), mirrored on `Player.RunOutcome`. One `RunOutcomeEvaluator`, coalesced with `task.defer`, runs
+  on every LifeState change, escape and leave.
+- Wipe = no Alive participant and no Downed participant with a syringe charge left. With at least one escape the same
+  condition ends the run as an escape (everyone else is Dead or gone). An empty run is never judged.
+- Resolution: `RunEnded`, rewards (below), `RunSummary` to every participant still here, `RunResolved(outcomes)`, then
+  `Results`. `MatchResetService` holds Results for `GameConfig.ResultsSeconds` (+8 s after an escape, for the finale
+  shot) or until every participant still here pressed Play Again, publishing `ResultsEndsAt`; then
+  `RunLifecycleService.EndRun` (Resetting → Lobby) and `PlayAgainRequested(pressers)`, so `LobbyService` puts them on
+  the bus already Ready.
+- Rewards, once per participant per run (an atomic `Update` guarded by `LastRunId`): `CreditsPerLevelCleared` × the
+  floors they sealed in (RunStats `FloorsCleared`, from the airlocks) + `CreditsEscapeBonus`, `Escapes + 1` and
+  `BestTime[difficulty]` (their own escape time) when they escaped. A participant who leaves is paid as they leave.
+  Nothing for a `DevRun` or for read-only (guest) data. Survivors of an airlock are told the floor's credits
+  (`Checkpoint.Reached`) when it seals.
 
 **Death rules.** `LifeStateService` is the only writer of `Health` and `LifeState`. `CharacterService` just fires
 `Died`. Lethal damage goes to `Down`, which becomes `Execute` if the player has already been downed once. Oxygen
@@ -648,7 +672,9 @@ from inside (`RemoteFlashlightRenderer.SetFocus`), cuts through black on switche
 a death.
 
 **Dev runs.** Any state-changing dev command during a run sets `ReplicatedStorage.DevRun = true`. `MatchAndDataService`
-(P8) must not award credits, escapes or BestTime for a run with `DevRun`.
+(P8) awards no credits, escapes or BestTime (and stamps no `LastRunId`) for a run with `DevRun`. Its Init calls
+`DevToolsService.SetMatchPolicyPresent(true)`, so the Studio auto dev run stays off (Play lands in the lobby); the dev
+panel's Dev Run, `level N` and the P8 commands `escape`, `credits <n>` and `data` still work.
 
 **Self-reset.** `ClientMain` disables the Reset Character button. A Humanoid death that bypasses `LifeStateService`
 is treated as an elimination, never a respawn.
@@ -668,9 +694,9 @@ is treated as an elimination, never a respawn.
 
 | Owner | Attributes |
 | --- | --- |
-| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `SpectateReason` + `SpectateTargetUserId` |
+| `Player` | `LifeState` · `MoveState` (server-confirmed; the client predicts) · `ControlLock` · `Battery`/`Stamina`/`Oxygen` + `…Rate` + `…At` (extrapolated meters) · `FlashlightOn` · `HeldItem` + `HeldItemVariant` · `SyringeCharges` · `Loadout` · `DownedCount` · `BleedoutEndsAt` · `Ready` · `DataLoaded` · `Credits` · `RunOutcome` · `Settings` (saved blob, JSON) · `SpectateReason` + `SpectateTargetUserId` |
 | `Creature` | `MonsterState` · `StateSince` · `PoseMode` · `TargetUserId` · `InVent` · `VentSegmentId` · `Hidden` · `GrabbedUserId` |
-| `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` |
+| `ReplicatedStorage` | `MatchPhase` · `RunId` · `RunSeed` · `Difficulty` · `CurrentLevel` · `LevelPhase` · `RunStartedAt` · `RunEndedAt` · `WorldReady` · `DataMode` · `BootError` · `DevRun` · `ResultsEndsAt` (MatchResetService) |
 | `VentGrate` | `GrateId` · `GrateState` (Closed / Unscrewing / Open / Kicked / Locked) · `Lockable` · `CriticalPath` · `NodeId` |
 | `VentNode` / `VentShaft` | `NodeId` · `Links` · `LevelId` · `GrateId` / `SegmentId` · `AdjacentZones` · `Submerged` |
 | Props | `BearTrap{Armed, TrappedUserId}` · `HideableLocker{OccupantUserId, DoorOpen}` · `AirlockDoor{DoorState, FromLevel, ToLevel, StragglerDeadline}` · `ScriptedDoor{DoorId, DoorState}` · `ParachutePack{TakenByUserId}` · `FloodlightSwitch{On}` · `ChemicalItem{HeldByUserId}` · `BatteryPickup{Charge}` · `Zone{ZoneId, LevelId, ReverbPreset}` · `Interactable{ChannelActor, ChannelStartedAt, ChannelDuration}` |
@@ -697,10 +723,30 @@ Creature alike.
   Settings = {} :: SettingsBlob, LastRunId = "" }
 ```
 
-Session lock `{jobId, lockedAt}` with stale-lock steal, a serialized save queue, an idempotent `Release` shared by
-`PlayerRemoving` and `BindToClose` (25 s deadline), and run rewards guarded by `LastRunId`. In Studio without API
-access, the Ephemeral backend takes over and `DataMode="Ephemeral"` shows a HUD banner. After repeated failures
-in production, the player plays as a guest with saving off. Nobody is kicked and nobody blocks ready-up.
+Stored per player under `Player_<UserId>` in the `RovlocPlayers` DataStore as a record
+`{ data = <the schema above>, lock = { jobId, lockedAt }?, savedAt }`. `lock.jobId` is the server's `game.JobId` (a GUID
+in Studio) and `lockedAt` the holder's last write (`os.time`). Every write is one `UpdateAsync` whose transform decides
+from the stored value alone:
+
+- **Load** takes the lock (a fresh record gets the defaults). A lock held by another server and refreshed in the last
+  10 minutes (five autosaves) is waited out with backoff (1, 2, 4, 8 s); a staler one is stolen (that server died). A
+  record written by a newer build (`v` above ours) or a corrupt value is read-only for the session and never written
+  back. On a quick rejoin the load first waits for this server's own release of that UserId.
+- **Saves** go through one serialized queue per player: one write in flight, commits during it coalesce into one more,
+  writes to a key at least 6 s apart, failed writes retried (then left dirty for the autosave). Autosave every 120 s
+  also refreshes the lock. A save that finds the lock taken stops saving for the session (the player is told).
+- **Release** (leave, `BindToClose` with a 25 s deadline) writes the final snapshot with the lock cleared; it is
+  idempotent.
+- **Rewards** are idempotent through `LastRunId`; saves carry whole snapshots, so a retried write can never pay twice.
+- **Guests.** When the store keeps failing (or the lock is still held after the backoff) the player plays on default,
+  read-only data: no purchases, no rewards, `Boot.DataGuest` toast, `DataMode = "Guest"` while the store is failing; the
+  load is retried every 30 s and a recovered player gets their real data. Nobody is kicked and nobody blocks ready-up.
+- **Ephemeral.** In Studio without API access, and in the Lune harness, an in-memory backend with the same semantics
+  takes over and `DataMode = "Ephemeral"` shows the HUD banner.
+- **Settings.** `SettingsSave` blobs are sanitized against `SettingsSchema` and saved in `Settings`; on load the blob is
+  written once as JSON to `Player.Settings` for `SettingsController`.
+- **Migrations.** `DataMigration` steps a record up one version at a time (a record without `v` is version 0) and
+  sanitizes every field; commits are validated strictly (an invalid draft is refused, never repaired).
 
 ---
 

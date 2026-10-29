@@ -61,6 +61,9 @@ local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIS
 
 local Levels = require(ServerScriptService.Services.Levels)
 
+local MatchAndDataService = require(ServerScriptService.Services.Match.MatchAndDataService)
+local MatchResetService = require(ServerScriptService.Services.Match.MatchResetService)
+local TelemetryService = require(ServerScriptService.Services.Match.TelemetryService)
 local DownedReviveService = require(ServerScriptService.Services.Match.DownedReviveService)
 local SpectatorService = require(ServerScriptService.Services.Match.SpectatorService)
 
@@ -177,6 +180,12 @@ end
 --                            Alert, LockerHidingService's checks), the Level 4 pool (the Creature called to the water,
 --                            the floodlight switch, FloodedPoolService.ReleaseGrab); EndRun (early, in reverse) lets the
 --                            Creature go.
+--   MatchAndDataService      Saved progress (session-locked records, serialized saves, BindToClose) and the match
+--                            policy: Deploy (perk stock, BeginRun, Level 0 spawns), the RunOutcomeEvaluator over
+--                            LifeStateService / Levels.Level5 escapes / leaves, rewards, RunSummary, RunResolved, Results.
+--                            Init turns the Studio auto dev run off (DevToolsService.SetMatchPolicyPresent).
+--   MatchResetService        Results -> Resetting -> Lobby (timer or everyone pressed Play Again), PlayAgainRequested.
+--   TelemetryService         AnalyticsService funnel + custom + economy events (skipped in Studio).
 --   DownedReviveService      Match layer: the teammate Revive prompt on Downed participants (InteractionService
 --                            channel), LifeStateService.Revive, RunStats Revives, down / lost / revived notices.
 --   SpectatorService         Match layer: SpectateReason / SpectateTargetUserId for eliminated participants, late
@@ -341,6 +350,25 @@ local SERVICES: { Types.Service } = {
 		Start = Levels.Start,
 		BeginRun = Levels.BeginRun,
 		EndRun = Levels.EndRun,
+	},
+	{
+		Name = MatchAndDataService.Name,
+		Init = MatchAndDataService.Init,
+		Start = MatchAndDataService.Start,
+		BeginRun = MatchAndDataService.BeginRun,
+		EndRun = MatchAndDataService.EndRun,
+		OnPlayerRemoving = MatchAndDataService.OnPlayerRemoving,
+	},
+	{
+		Name = MatchResetService.Name,
+		Init = MatchResetService.Init,
+		Start = MatchResetService.Start,
+		OnPlayerRemoving = MatchResetService.OnPlayerRemoving,
+	},
+	{
+		Name = TelemetryService.Name,
+		Init = TelemetryService.Init,
+		OnPlayerRemoving = TelemetryService.OnPlayerRemoving,
 	},
 	{
 		Name = DownedReviveService.Name,

@@ -185,6 +185,15 @@ local STRINGS: { [string]: string } = {
 	["Results.Revives"] = "Teammates revived: %d",
 	["Results.PlayAgain"] = "Play Again",
 	["Results.Waiting"] = "Waiting for the squad...",
+	["Results.Dead"] = "YOU DIDN'T MAKE IT",
+	["Results.Squad"] = "%d of %d escaped",
+	["Results.FlasksThrown"] = "Flasks thrown: %d",
+	["Results.Stuns"] = "Creature stunned: %d",
+	["Results.LockersHidden"] = "Lockers hidden in: %d",
+	["Results.FloorsCleared"] = "Floors cleared: %d",
+	["Results.NewBest"] = "NEW BEST TIME",
+	["Results.NotSaved"] = "This run was not saved.",
+	["Results.Returning"] = "Back to the boiler room in %d",
 
 	-- Settings
 	["Settings.Title"] = "SETTINGS",

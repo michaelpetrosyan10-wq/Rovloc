@@ -187,6 +187,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "EscapeSummaryController",
+		load = function(): any
+			return require(Match.EscapeSummaryController)
+		end,
+	},
+	{
 		name = "LevelScenesController",
 		load = function(): any
 			return require(Gameplay.LevelScenesController)
