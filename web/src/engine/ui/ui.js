@@ -594,8 +594,9 @@ export class UI {
 
   update(dt) {
     const input = this.input;
+    const ctx = input.getContext();
     const unlocked = input.device === 'KeyboardMouse' && input.wantPointerLock && !input.pointerLocked &&
-      !input.isCursorFree() && !this.menuOpen;
+      !input.isCursorFree() && !this.menuOpen && ctx !== 'Struggle' && ctx !== 'Cutscene';
     this.lockWait = unlocked ? this.lockWait + dt : 0;
     this.lockEl.classList.toggle('on', this.lockWait > 0.6);
     const step = this.hudRate * dt;
