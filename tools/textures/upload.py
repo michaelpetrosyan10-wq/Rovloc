@@ -15,8 +15,9 @@ retried when the generator changes its pixels.
 
 The manifest's `assetType` picks what each upload creates. An "Image" upload's asset id is the image id itself and is
 ready as soon as moderation approves it. A "Decal" upload wraps the image, which is then resolved through asset
-delivery (that needs an extra API key permission). A map uploaded as a Decal whose image id never resolved is uploaded
-once more under the manifest's current type; its earlier upload stays in the log and counts against its month. The
+delivery (that needs an extra API key permission). Each run first retries that lookup for every unresolved decal; only
+a map whose image id still does not resolve is uploaded once more under the manifest's current type (its earlier
+upload stays in the log and counts against its month). The
 first Image upload of a run is checked: if Roblox answers with any other asset type the run stops, so a wrong type is
 never repeated 45 times. Maps under moderation review or still processing stay out of the game and are re-checked on
 the next run without re-uploading.
@@ -367,25 +368,31 @@ def main() -> int:
         """An earlier upload of another asset type whose image id never resolved: it is uploaded again."""
         return bool(rec) and rec.get("state") == "unresolved" and rec.get("kind", "Decal") != manifest["assetType"]
 
-    plan = []
-    for key in manifest["uploadOrder"]:
-        texture, map_name = key.split("/")
-        rec = log["maps"].get(key)
-        info = meta.get(texture, {}).get("files", {}).get(map_name)
-        if info is None:
-            print(f"  {key}: not generated (run generate.py)")
-            continue
-        if superseded(rec):
+    def make_plan() -> list:
+        plan = []
+        for key in manifest["uploadOrder"]:
+            texture, map_name = key.split("/")
+            rec = log["maps"].get(key)
+            info = meta.get(texture, {}).get("files", {}).get(map_name)
+            if info is None:
+                print(f"  {key}: not generated (run generate.py)")
+                continue
+            if superseded(rec):
+                plan.append((key, texture, map_name, info))
+                continue
+            if rec and rec.get("state") != "rejected" and rec.get("state") != "failed":
+                if rec.get("sha256") != info["sha256"] and rec.get("state") == "ready":
+                    print(f"  {key}: generator output changed since upload; the uploaded version stays (no re-upload)")
+                continue
+            if rec and rec.get("state") == "rejected" and rec.get("sha256") == info["sha256"]:
+                continue
             plan.append((key, texture, map_name, info))
-            continue
-        if rec and rec.get("state") != "rejected" and rec.get("state") != "failed":
-            if rec.get("sha256") != info["sha256"] and rec.get("state") == "ready":
-                print(f"  {key}: generator output changed since upload; the uploaded version stays (no re-upload)")
-            continue
-        if rec and rec.get("state") == "rejected" and rec.get("sha256") == info["sha256"]:
-            continue
-        plan.append((key, texture, map_name, info))
-    pending = [k for k, r in log["maps"].items() if r.get("state") in PENDING and not superseded(r)]
+        return plan
+
+    plan = make_plan()
+    # Earlier uploads still waiting (moderation, processing, an image id to resolve) are settled first, superseded ones
+    # included: a decal whose image id now resolves is ready and is not uploaded again.
+    pending = [k for k, r in log["maps"].items() if r.get("state") in PENDING]
     print(f"{len(plan)} maps without an asset, {len(pending)} uploads to settle")
 
     if args.dry_run:
@@ -419,6 +426,7 @@ def main() -> int:
     for key in pending:
         settle(cloud, key, log["maps"][key], args.wait)
         write_outputs(manifest, log)
+    plan = make_plan()
 
     uploaded = 0
     errors = 0
