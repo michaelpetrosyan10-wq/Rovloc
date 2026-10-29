@@ -36,6 +36,8 @@ uniform vec4 uOverlay; // rgb colour, a amount (underwater murk, flashes)
 uniform float uBlur;   // 0..1 cheap radial softening (panic depth of field stand-in)
 uniform vec2 uTexel;
 
+const float CONTRAST_PIVOT = 0.16;
+
 float edgeAlpha(float x, float depth) {
   float t = clamp(x / max(depth, 1e-4), 0.0, 1.0);
   float tr = t < 0.45 ? mix(0.0, 0.55, t / 0.45) : mix(0.55, 1.0, (t - 0.45) / 0.55);
@@ -55,7 +57,10 @@ void main() {
   c += texture(tBloom, vUv).rgb * uBloom;
   c = mix(c, uOverlay.rgb, uOverlay.a);
   c += uLift;
-  c = (c - 0.5) * (1.0 + uContrast) + 0.5;
+  // Contrast as a power curve through a dark-frame pivot. LightingMood's film raises contrast with the blacks lifted
+  // "so the gaps between pools read as dark grey-blue, not void": pivoting at mid-grey would crush this night-time
+  // frame (most of it sits below 0.15) to black, so the pivot sits where the frame's lit surfaces are.
+  c = CONTRAST_PIVOT * pow(max(c, vec3(0.0)) / CONTRAST_PIVOT, vec3(max(0.2, 1.0 + uContrast)));
   float l = dot(c, vec3(0.299, 0.587, 0.114));
   c = mix(vec3(l), c, 1.0 + uSaturation);
   c *= uTint;

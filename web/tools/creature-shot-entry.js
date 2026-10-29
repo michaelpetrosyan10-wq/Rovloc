@@ -5,7 +5,7 @@
 //   window.__shot.stage(name) -> {frames}   sets up one view; the runner then steps `frames` frames and captures
 //   window.__shot.place                      where the Creature and the camera stand
 //
-// Stages: idle, walk, hunched, crawl, necksnap, lunge, doorsmash, vanish, stunned, chase.
+// Stages: idle, walk, hunched, crawl, necksnap, lunge, doorsmash, vanish, chase, stunned.
 
 import * as THREE from 'three';
 import { createCreature, PLAYER } from '../src/creature/index.js';
@@ -81,8 +81,8 @@ export async function start(engine) {
     creature.stopAction();
     const h = handle();
     h.setHidden(false);
+    h.teleport(rootAt(offset)); // a teleport onto a floor stands a Quadruped back up, so the pose comes after it
     h.setPose(pose);
-    h.teleport(rootAt(offset));
     h.setTarget(PLAYER);
     return h;
   };
@@ -102,8 +102,8 @@ export async function start(engine) {
       return { frames: 2 * FPS };
     },
     crawl: () => {
-      const h = reset('Quadruped', 8);
-      h.moveTo(spot.at.clone().add(new THREE.Vector3(0, ROOT_HEIGHT, 0)), 8);
+      // the duct crawl's posture (Quadruped is the vent pose: walking a floor stands it back up, so it holds still)
+      reset('Quadruped', -3);
       return { frames: Math.round(1.2 * FPS) };
     },
     necksnap: () => {
@@ -126,15 +126,16 @@ export async function start(engine) {
       creature.playAction('Vanish');
       return { frames: Math.round(0.25 * FPS) };
     },
+    chase: () => {
+      const h = reset('Biped', 14);
+      h.release('Patrol');
+      creature.devCommand('hunt'); // the run has only begun: pacing would not let it hunt yet
+      return { frames: Math.round(0.6 * FPS) };
+    },
     stunned: () => {
       const h = reset('Biped');
       h.release('Stunned');
       return { frames: Math.round(0.8 * FPS) };
-    },
-    chase: () => {
-      const h = reset('Biped', 14);
-      h.release('WallChase');
-      return { frames: Math.round(0.6 * FPS) };
     },
   };
 

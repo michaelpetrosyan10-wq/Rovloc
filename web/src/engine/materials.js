@@ -217,22 +217,10 @@ vec3 perturbNormal(vec3 pos, vec3 n, vec3 mapN, vec2 uv) {
   return normalize(T * (mapN.x * scale) + B * (mapN.y * scale) + n * mapN.z);
 }
 
-// three.js ACESFilmicToneMapping (Stephen Hill's fit with the AP1 input / output matrices), exposure / 0.6.
-vec3 aces(vec3 color) {
-  const mat3 ACESInputMat = mat3(
-    vec3(0.59719, 0.07600, 0.02840),
-    vec3(0.35458, 0.90834, 0.13383),
-    vec3(0.04823, 0.01566, 0.83777));
-  const mat3 ACESOutputMat = mat3(
-    vec3(1.60475, -0.10208, -0.00327),
-    vec3(-0.53108, 1.10813, -0.07276),
-    vec3(-0.07367, -0.00605, 1.07602));
-  color /= 0.6;
-  color = ACESInputMat * color;
-  vec3 a = color * (color + 0.0245786) - 0.000090537;
-  vec3 b = color * (0.983729 * color + 0.4329510) + 0.238081;
-  color = ACESOutputMat * (a / b);
-  return clamp(color, 0.0, 1.0);
+// The ACES filmic curve fit (Narkowicz 2015), the tone curve W1's bake and its verification viewer were tuned
+// with at the same exposure (~1.3): matching it keeps the baked pools of light as bright as the bake intended.
+vec3 aces(vec3 x) {
+  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
 
 #ifdef USE_SHADOW

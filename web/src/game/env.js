@@ -44,6 +44,10 @@ export class Env {
     this.meta = engine.world.meta || engine.world.data;
     if (!this.meta || !this.meta.entities) throw new Error('game: the engine exposes no world metadata');
     this.THREE = THREE;
+    /** @type {Set<{raw: any, wanted: boolean}>} every prompt the game added (for suppressPrompts) */
+    this.promptEntries = new Set();
+    /** @type {Set<string>} */
+    this.promptSuppressors = new Set();
   }
 
   // ---------------------------------------------------------------------------------------------------- clock
@@ -506,11 +510,41 @@ export class Env {
 
   /** A proximity prompt (see engine/prompts.js PromptSpec). */
   addPrompt(spec) {
-    return this.engine.prompts.add(spec);
+    const raw = this.engine.prompts.add(spec);
+    const entry = { raw, wanted: spec.enabled !== false };
+    this.promptEntries.add(entry);
+    raw.setEnabled(entry.wanted && this.promptSuppressors.size === 0);
+    return {
+      id: raw.id,
+      remove: () => {
+        this.promptEntries.delete(entry);
+        raw.remove();
+      },
+      setEnabled: (on) => {
+        entry.wanted = !!on;
+        raw.setEnabled(entry.wanted && this.promptSuppressors.size === 0);
+      },
+      setText: (text, objectText) => raw.setText(text, objectText),
+      setHoldSeconds: (seconds) => raw.setHoldSeconds(seconds),
+      isHolding: () => raw.isHolding(),
+    };
+  }
+
+  /**
+   * Suppresses every prompt while any token holds it (a hidden player sees no Hide prompts through the door; the
+   * Locker context's Interact steps out instead). Each prompt keeps the enabled state its owner last set.
+   */
+  suppressPrompts(token, on) {
+    const before = this.promptSuppressors.size;
+    if (on) this.promptSuppressors.add(token);
+    else this.promptSuppressors.delete(token);
+    if ((before === 0) === (this.promptSuppressors.size === 0)) return;
+    for (const e of this.promptEntries) e.raw.setEnabled(e.wanted && this.promptSuppressors.size === 0);
   }
 
   clearPrompts() {
     this.engine.prompts.clear();
+    this.promptEntries.clear();
   }
 
   // ---------------------------------------------------------------------------------------------------- entities

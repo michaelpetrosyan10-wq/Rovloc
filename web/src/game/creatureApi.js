@@ -69,6 +69,8 @@ export class CreatureApi {
   /** @param {any} creature W3's Creature (or null) */
   constructor(creature) {
     this.c = creature || null;
+    this._box = new THREE.Matrix4();
+    this._boxInv = new THREE.Matrix4();
     /** @type {Signal<[string, string]>} */
     this.stateChanged = new Signal();
     /** @type {Signal<[string]>} */
@@ -139,6 +141,28 @@ export class CreatureApi {
   /** The duct node it crawls at (VentGraph node id) or null on a floor. */
   ventNode() {
     return this._call('getVentNode') || null;
+  }
+
+  /** MonsterAIService's read-only view ({running, state, pose, inVent, segment, hidden, levelId, position, eye}). */
+  snapshot() {
+    return this._call('snapshot') || null;
+  }
+
+  /**
+   * The CreatureHitbox (CreatureRigBuilder.setHitbox: the pose's box on the root, floor poses standing on the floor,
+   * the crouched and swimming ones pushed forward), or null when hidden or absent.
+   * @returns {{matrix: THREE.Matrix4, inv: THREE.Matrix4, size: number[]}|null}
+   */
+  hitbox() {
+    const c = this.c;
+    const body = c && c.service ? c.service.body : null;
+    if (!body || body.hidden || !c.service.running) return null;
+    const pose = body.pose || 'Biped';
+    const size = CreatureConfig.Hitbox[pose] || CreatureConfig.Hitbox.Biped;
+    const layout = HITBOX_LAYOUTS[pose] || HITBOX_LAYOUTS.Biped;
+    const y = layout.floor ? size[1] / 2 - ROOT_HEIGHT : 0;
+    const matrix = body.getCFrame().toMatrix4(this._box).multiply(_offset.makeTranslation(0, y, -layout.forward));
+    return { matrix, inv: this._boxInv.copy(matrix).invert(), size };
   }
 
   /** Whether it is chasing the player right now (WallChase / VentChase / AquaticStalk with us as its target). */
@@ -248,3 +272,10 @@ export class CreatureApi {
 }
 
 const EYE_LIFT = new THREE.Vector3(0, 3.2, 0);
+const HITBOX_LAYOUTS = {
+  Biped: { floor: true, forward: 0 },
+  Hunched: { floor: true, forward: 0.6 },
+  Quadruped: { floor: false, forward: 0.9 },
+  Swim: { floor: false, forward: 0.8 },
+};
+const _offset = new THREE.Matrix4();
