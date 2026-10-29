@@ -1,0 +1,114 @@
+# Generates Rovloc's PBR textures (tools/textures: seamless colour / normal / roughness / metalness maps and alpha
+# overlays, all made by our own code), uploads the maps that have no asset yet to the owner's Roblox account through
+# Open Cloud, and commits the image ids back to this branch:
+#   src/ReplicatedStorage/Shared/Config/TextureAssets.luau   image ids per texture and map + the upload log
+#   src/MaterialService/RovlocTextures.model.json            the MaterialVariants Rojo builds into MaterialService
+# Repository secrets (Settings -> Secrets and variables -> Actions):
+#   ROBLOX_API_KEY     Open Cloud key with the "assets" API, Read + Write (read resolves each decal's image id)
+#   ROBLOX_CREATOR_ID  the numeric Roblox user id that owns the uploads
+# Budget-aware: `budget` is the month's image-upload allowance (100 for an ID-verified account, 10 otherwise); uploads
+# already logged this calendar month count against it, maps go up in manifest.json `uploadOrder` (most visible first)
+# and a map is never uploaded twice. The full set is 45 maps, so one run at the default budget uploads everything.
+# Runs on demand (Actions -> Textures -> Run workflow) and on every push that changes tools/textures on the branch.
+name: Textures
+
+on:
+  workflow_dispatch:
+    inputs:
+      budget:
+        description: "Image uploads allowed this calendar month (100 ID-verified, 10 otherwise)"
+        required: true
+        default: "100"
+      dry_run:
+        description: "Generate and print the upload requests without sending them"
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [claude/coop-horror-game-arch-i9b7ko]
+    paths: ["tools/textures/**"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: textures-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  textures:
+    runs-on: ubuntu-latest
+    env:
+      ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+      ROBLOX_CREATOR_ID: ${{ secrets.ROBLOX_CREATOR_ID }}
+      BUDGET: ${{ github.event.inputs.budget || '100' }}
+      DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install generator dependencies (pinned so the pixels are reproducible)
+        run: python -m pip install --disable-pip-version-check numpy==2.5.3 pillow==12.3.0
+
+      - name: Validate manifest against Palette
+        run: python tools/textures/generate.py --check
+
+      - name: Generate textures
+        run: python tools/textures/generate.py --detail
+
+      - name: Keep the maps and preview sheets
+        uses: actions/upload-artifact@v4
+        with:
+          name: rovloc-textures
+          path: tools/textures/out
+          retention-days: 30
+
+      - name: Check secrets
+        id: secrets
+        run: |
+          if [ -z "$ROBLOX_API_KEY" ] || [ -z "$ROBLOX_CREATOR_ID" ]; then
+            echo "Uploads skipped: add the ROBLOX_API_KEY and ROBLOX_CREATOR_ID repository secrets."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload (dry run)
+        if: env.DRY_RUN == 'true' || steps.secrets.outputs.ready != 'true'
+        run: python tools/textures/upload.py --budget "$BUDGET" --dry-run
+
+      - name: Upload to Roblox
+        if: env.DRY_RUN != 'true' && steps.secrets.outputs.ready == 'true'
+        run: python tools/textures/upload.py --budget "$BUDGET"
+
+      - name: Commit asset ids
+        # Also after a failed upload step: every id that did come back is already written and must be kept.
+        if: always() && env.DRY_RUN != 'true' && steps.secrets.outputs.ready == 'true'
+        run: |
+          git add src/ReplicatedStorage/Shared/Config/TextureAssets.luau src/MaterialService/RovlocTextures.model.json
+          if git diff --cached --quiet; then
+            echo "No new asset ids to record."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Textures: record uploaded asset ids"
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+          done
+          echo "Could not push the asset ids; they are kept in this run's rovloc-texture-ids artifact."
+          exit 1
+
+      - name: Keep the asset ids if they could not be committed
+        if: failure() && env.DRY_RUN != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rovloc-texture-ids
+          path: |
+            src/ReplicatedStorage/Shared/Config/TextureAssets.luau
+            src/MaterialService/RovlocTextures.model.json

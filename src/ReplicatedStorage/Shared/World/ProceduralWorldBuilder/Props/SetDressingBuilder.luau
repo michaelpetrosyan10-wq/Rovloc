@@ -1359,21 +1359,49 @@ local function planCounter(info: LevelInfo, anchor: Anchor, random: Random): { P
 	local hx0, hx1 = sinkX - SINK_WIDTH / 2, sinkX + SINK_WIDTH / 2
 
 	-- Epoxy worktop around the sink hole
-	add(Kit.box(frame, "Top_1", Vector3.new(x0, base, -halfD), Vector3.new(hx0, top, halfD), "Rubber", "Solid", EPOXY))
-	add(Kit.box(frame, "Top_2", Vector3.new(hx1, base, -halfD), Vector3.new(x1, top, halfD), "Rubber", "Solid", EPOXY))
+	add(
+		Kit.box(
+			frame,
+			"Top_1",
+			Vector3.new(x0, base, -halfD),
+			Vector3.new(hx0, top, halfD),
+			"LabWorktop",
+			"Solid",
+			EPOXY
+		)
+	)
+	add(
+		Kit.box(
+			frame,
+			"Top_2",
+			Vector3.new(hx1, base, -halfD),
+			Vector3.new(x1, top, halfD),
+			"LabWorktop",
+			"Solid",
+			EPOXY
+		)
+	)
 	add(
 		Kit.box(
 			frame,
 			"Top_3",
 			Vector3.new(hx0, base, -halfD),
 			Vector3.new(hx1, top, SINK_Z0),
-			"Rubber",
+			"LabWorktop",
 			"Solid",
 			EPOXY
 		)
 	)
 	add(
-		Kit.box(frame, "Top_4", Vector3.new(hx0, base, SINK_Z1), Vector3.new(hx1, top, halfD), "Rubber", "Solid", EPOXY)
+		Kit.box(
+			frame,
+			"Top_4",
+			Vector3.new(hx0, base, SINK_Z1),
+			Vector3.new(hx1, top, halfD),
+			"LabWorktop",
+			"Solid",
+			EPOXY
+		)
 	)
 	add(
 		Kit.box(

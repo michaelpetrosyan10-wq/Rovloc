@@ -143,26 +143,13 @@ local function configure(
 			part.CastShadow = options.castShadow
 		end
 	end
-	if key then
-		local variant = Palette.variantFor(key)
-		if variant and part.Material == entry.material then
-			part.MaterialVariant = variant
-		end
-	end
+	Palette.dress(part, key) -- the key's generated texture, when uploaded and matching the part's material
 end
 
 -- Re-dresses `part` in palette `key`: material, colour and the key's textured MaterialVariant (cleared when the key
 -- has none). A variant only shows over its own base material, so a part that keeps another material keeps none.
 function Geometry.applyKey(part: BasePart, key: string)
-	local entry = Palette.get(key)
-	part.Material = entry.material
-	part.Color = entry.color
-	local variant = Palette.variantFor(key)
-	if variant then
-		part.MaterialVariant = variant
-	elseif part.MaterialVariant ~= "" then
-		part.MaterialVariant = ""
-	end
+	Palette.apply(part, key)
 end
 
 function Geometry.part(

@@ -942,7 +942,7 @@ return {
 				t.falsy(part.CastShadow, part.Name .. " casts no shadow")
 				t.eq(part.Transparency, 0, part.Name .. " opaque")
 				t.eq(part.Material, entry.material, part.Name .. " material")
-				t.eq(part.Color, entry.color, part.Name .. " colour")
+				t.eq(part.Color, Palette.colorFor("MetalGalvanized"), part.Name .. " colour")
 			end
 		end
 	end,

@@ -8,16 +8,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 
+local MaterialLibrary = require(script.Parent.MaterialLibrary)
+
 local log = Log.new("Palette")
 
 export type Entry = {
 	material: Enum.Material,
 	color: Color3,
 	surface: Enums.SurfaceKind,
+	-- Generated texture (a tools/textures/manifest.json id) that dresses this key once it is uploaded; see
+	-- `textured` below. Untextured until then: the key keeps its plain material.
+	variant: string?,
 }
 
 local function entry(material: Enum.Material, r: number, g: number, b: number, surface: Enums.SurfaceKind): Entry
-	return table.freeze({ material = material, color = Color3.fromRGB(r, g, b), surface = surface })
+	return { material = material, color = Color3.fromRGB(r, g, b), surface = surface }
 end
 
 local entries: { [string]: Entry } = {
@@ -103,7 +108,58 @@ local entries: { [string]: Entry } = {
 	PlasterFlap = entry(Enum.Material.Plaster, 136, 128, 106, "Concrete"), -- paint and plaster peeling off a wall
 	Lath = entry(Enum.Material.WoodPlanks, 84, 62, 40, "Wood"),
 	Cable = entry(Enum.Material.Rubber, 20, 20, 20, "Concrete"), -- wiring hanging out of the ceiling
+	LabWorktop = entry(Enum.Material.SmoothPlastic, 28, 30, 29, "Metal"), -- black epoxy resin bench top
 }
+
+-- Textured surfaces: palette key -> the generated texture that dresses it (tools/textures/manifest.json). Each
+-- texture's manifest `bases` lists the materials of its keys; `python3 tools/textures/generate.py --check` verifies.
+local textured: { [string]: string } = {
+	PlasterSchool = "PaintedPlaster",
+	PlasterGreen = "PaintedPlaster",
+	WainscotPaint = "PaintedPlaster",
+	CheckerLight = "CheckerTile",
+	Concrete = "StainedConcrete",
+	ConcreteDark = "StainedConcrete",
+	ConcreteStained = "StainedConcrete",
+	SlabEdge = "StainedConcrete",
+	CeilingTile = "CeilingTile",
+	MetalRust = "RustedMetal",
+	Iron = "RustedMetal",
+	PipeIron = "RustedMetal",
+	BusPaint = "RustedMetal",
+	TrimMetal = "RustedMetal",
+	MetalGalvanized = "GalvanizedMetal",
+	Conduit = "GalvanizedMetal",
+	WoodGym = "WornWood",
+	WoodPanel = "WornWood",
+	Plank = "WornWood",
+	PlankDark = "WornWood",
+	Trim = "WornWood",
+	WainscotWood = "WornWood",
+	PoolTile = "PoolMosaic",
+	TileWhite = "PoolMosaic",
+	TileGreen = "PoolMosaic",
+	TileBlue = "PoolMosaic",
+	WainscotBlue = "PoolMosaic",
+	WainscotGreen = "PoolMosaic",
+	WainscotTeal = "PoolMosaic",
+	Brick = "StainedBrick",
+	Linoleum = "VinylTile",
+	ClassroomVCT = "VinylTile",
+	LabWorktop = "LabWorktop",
+	Rubber = "RubberMat",
+	Baseboard = "RubberMat",
+	RoofGravel = "RoofGravel",
+}
+
+for key, texture in textured do
+	local value = entries[key]
+	assert(value, "textured key without a palette entry: " .. key)
+	value.variant = texture
+end
+for _, value in entries do
+	table.freeze(value)
+end
 
 -- Keys every layout may reference; the spec asserts they all exist.
 local layoutKeys: { string } = {
@@ -159,17 +215,54 @@ function Palette.get(key: string?): Entry
 	return entries[FALLBACK]
 end
 
--- Applies material + colour to a part.
+-- The MaterialVariant that dresses `key`'s surface: the name of its generated texture's variant for the key's
+-- material when that texture's colour map is uploaded (TextureAssets) and the variant is in MaterialService; nil
+-- otherwise, and then the surface keeps its plain material exactly as it looked before textures existed.
+function Palette.variantFor(key: string): string?
+	local value = entries[key]
+	if not value or not value.variant then
+		return nil
+	end
+	return MaterialLibrary.variantFor(value.variant, value.material)
+end
+
+-- Colour a part of `key` should take: `color` (default: the key's palette colour) as it is for an untextured key,
+-- or compensated for the variant's colour map when the key is textured, so the dressed surface keeps the grade.
+function Palette.colorFor(key: string, color: Color3?): Color3
+	local value = Palette.get(key)
+	local base = color or value.color
+	if value.variant and Palette.variantFor(key) then
+		return MaterialLibrary.tint(value.variant, base)
+	end
+	return base
+end
+
+-- Dresses `part` (already given its material and colour) in the variant of `key` when one is live for the part's
+-- material: sets MaterialVariant and compensates the colour. Returns whether it did; an untextured key, an
+-- overridden material or no uploaded texture leaves the part untouched. Unknown / nil keys resolve like `get`.
+function Palette.dress(part: BasePart, key: string?): boolean
+	local value = entries[key or FALLBACK] or entries[FALLBACK]
+	if not value or not value.variant then
+		return false
+	end
+	local name = MaterialLibrary.variantFor(value.variant, part.Material)
+	if not name then
+		return false
+	end
+	part.MaterialVariant = name
+	part.Color = MaterialLibrary.tint(value.variant, part.Color)
+	return true
+end
+
+-- Applies material + colour (and the key's texture when it is live) to a part, clearing a variant a previous key
+-- left on it.
 function Palette.apply(part: BasePart, key: string?)
 	local value = Palette.get(key)
 	part.Material = value.material
 	part.Color = value.color
-end
-
--- The MaterialVariant name a surface of palette `key` takes, or nil while that material has no textures. Builders ask
--- this for every surface; a nil answer leaves the plain material (the look without generated textures).
-function Palette.variantFor(_key: string): string?
-	return nil
+	if not Palette.dress(part, key) and part.MaterialVariant ~= "" then
+		part.MaterialVariant = ""
+	end
 end
 
 -- Every key, sorted (dev tooling and specs).

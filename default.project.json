@@ -89,6 +89,12 @@
 
     "ServerScriptService": {
       "$path": "src/ServerScriptService"
+    },
+
+    "MaterialService": {
+      "RovlocTextures": {
+        "$path": "src/MaterialService/RovlocTextures.model.json"
+      }
     }
   }
 }

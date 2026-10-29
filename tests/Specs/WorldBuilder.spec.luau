@@ -821,7 +821,7 @@ return {
 			elseif string.sub(name, 1, 9) == "SlabEdge_" then
 				table.insert(slabParts, part)
 				t.eq(part.Material, edgeEntry.material, name .. " material")
-				t.eq(part.Color, edgeEntry.color, name .. " colour")
+				t.eq(part.Color, Palette.colorFor("SlabEdge"), name .. " colour")
 			end
 		end
 		-- The floors and slab edges tile the slab exactly once, out to the outer face of every footprint wall.
@@ -877,7 +877,8 @@ return {
 		local root = buildSlice(layout)
 		local shell = child(root, "Shell")
 		local origin = WorldConfig.levelOrigin(layout.id)
-		local facade = Palette.get(SchoolShellBuilder.levelOptions(layout.id).facadeKey or "Brick")
+		local facadeKey = SchoolShellBuilder.levelOptions(layout.id).facadeKey or "Brick"
+		local facade = Palette.get(facadeKey)
 		local half = WorldConfig.ExteriorWallThickness / 2
 		local skin = 0.05 -- just inside the outer face
 		-- (corner x, corner z, outward x sign, outward z sign)
@@ -906,7 +907,7 @@ return {
 									facade.material,
 									string.format("%s at %s shows on the facade", wall.Name, tostring(point))
 								)
-								t.eq(wall.Color, facade.color, wall.Name .. " colour on the facade")
+								t.eq(wall.Color, Palette.colorFor(facadeKey), wall.Name .. " colour on the facade")
 							end
 						end
 						t.truthy(hit, string.format("corner closed at %s", tostring(point)))
@@ -1270,27 +1271,39 @@ return {
 		local hall = childPart(shell, "Floor_T_Hall_1")
 		local checker = Palette.get("CheckerLight")
 		t.eq(hall.Material, checker.material, "the corridor floor is the pale squares")
-		t.eq(hall.Color, checker.color)
+		t.eq(hall.Color, Palette.colorFor("CheckerLight"))
 		t.truthy(hall.Reflectance >= 0.05 and hall.Reflectance <= 0.15, "waxed and glossy")
 		local cols, rows = Finishes.checkerCounts(hall.Size.X, hall.Size.Z, 3)
 		t.eq(cols % 2, 1, "odd columns")
 		t.eq(rows % 2, 1, "odd rows")
-		local squares = frames(finish(hall, Enum.NormalId.Top), "Square")
-		t.eq(squares, math.ceil(cols * rows / 2), "every other square is dark")
-		t.truthy(squares <= Finishes.MaxSquares, "within the frame budget")
-		for _, item in (hall:FindFirstChild("Finish") :: Instance):GetChildren() do
-			if item:IsA("Frame") then
-				t.truthy(item.BackgroundTransparency > 0, "the gloss shows through the dark squares")
-				break
+		local hallTexture = Palette.variantFor("CheckerLight")
+		if hallTexture then
+			t.eq(hall.MaterialVariant, hallTexture, "the generated tile texture is the pattern")
+			t.falsy(hall:FindFirstChild("Finish"), "no painted squares over the texture")
+		else
+			local squares = frames(finish(hall, Enum.NormalId.Top), "Square")
+			t.eq(squares, math.ceil(cols * rows / 2), "every other square is dark")
+			t.truthy(squares <= Finishes.MaxSquares, "within the frame budget")
+			for _, item in (hall:FindFirstChild("Finish") :: Instance):GetChildren() do
+				if item:IsA("Frame") then
+					t.truthy(item.BackgroundTransparency > 0, "the gloss shows through the dark squares")
+					break
+				end
 			end
 		end
 		local wide, deep = Finishes.checkerCounts(240, 14, 3)
 		t.truthy(math.ceil(wide * deep / 2) <= Finishes.MaxSquares, "even the longest hall fits the budget")
 
 		local class = childPart(shell, "Floor_T_Class_1")
-		t.eq(class.Color, Palette.get("ClassroomVCT").color, "classroom vinyl tile")
+		t.eq(class.Color, Palette.colorFor("ClassroomVCT"), "classroom vinyl tile")
 		t.truthy(class.Reflectance > 0, "polished")
-		t.truthy(frames(finish(class, Enum.NormalId.Top), "Square") > 0, "two-tone tiles")
+		local classTexture = Palette.variantFor("ClassroomVCT")
+		if classTexture then
+			t.eq(class.MaterialVariant, classTexture, "the generated vinyl texture is the pattern")
+			t.falsy(class:FindFirstChild("Finish"), "no painted tiles over the texture")
+		else
+			t.truthy(frames(finish(class, Enum.NormalId.Top), "Square") > 0, "two-tone tiles")
+		end
 		local store = childPart(shell, "Floor_T_Store_1")
 		t.eq(store.Reflectance, 0, "a dry storeroom floor is matte")
 		t.falsy(store:FindFirstChild("Finish"), "and bare")
@@ -1298,8 +1311,12 @@ return {
 		local ceiling = childPart(shell, "Ceiling_T_Hall")
 		local grid = finish(ceiling, Enum.NormalId.Bottom)
 		local gc, gr = Finishes.ceilingGrid(ceiling.Size.X, ceiling.Size.Z)
-		t.eq(frames(grid, "SeamU"), gc - 1, "drop-ceiling seams across")
-		t.eq(frames(grid, "SeamV"), gr - 1, "and along")
+		if Palette.variantFor("CeilingTile") then
+			t.eq(frames(grid, "SeamU") + frames(grid, "SeamV"), 0, "the tile texture carries the seams")
+		else
+			t.eq(frames(grid, "SeamU"), gc - 1, "drop-ceiling seams across")
+			t.eq(frames(grid, "SeamV"), gr - 1, "and along")
+		end
 		t.falsy(childPart(shell, "Ceiling_T_Store"):FindFirstChild("Finish"), "a concrete ceiling is no drop ceiling")
 
 		for _, name in
@@ -1722,18 +1739,18 @@ return {
 		child(child(result.lobby, "Anchors"), "AnchorRoot")
 		host:Destroy()
 	end,
-	["textures: variantFor is the hook every surface asks; with no textures parts keep the plain material"] = function(
+	["textures: every part takes exactly its key's live variant, and re-keying clears a stale one"] = function(
 		t: Expect
 	)
-		for _, key in Palette.keys() do
-			t.eq(Palette.variantFor(key), nil, key .. " has no generated texture yet")
-		end
 		local holder = Instance.new("Folder")
+		for _, key in Palette.keys() do
+			local probe = Geometry.part(holder, "Probe_" .. key, CFrame.new(), Vector3.one, key)
+			t.eq(probe.MaterialVariant, Palette.variantFor(key) or "", key .. ": the key's variant, or none")
+		end
 		local part = Geometry.part(holder, "Probe", CFrame.new(), Vector3.one, "PlasterSchool")
-		t.eq(part.MaterialVariant, "", "no variant without textures")
-		Geometry.applyKey(part, "CeilingTile")
-		t.eq(part.Material, Palette.get("CeilingTile").material, "re-keyed material")
-		t.eq(part.MaterialVariant, "", "still no variant")
+		Geometry.applyKey(part, "CeilingVoid")
+		t.eq(part.Material, Palette.get("CeilingVoid").material, "re-keyed material")
+		t.eq(part.MaterialVariant, "", "an untextured key leaves no variant behind")
 		holder:Destroy()
 	end,
 

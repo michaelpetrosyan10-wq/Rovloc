@@ -11,6 +11,8 @@ sourcemap.json
 globalTypes*.d.luau
 API-Dump.json
 /build/
+tools/textures/out/
+__pycache__/
 
 # OS / editor noise
 .DS_Store
