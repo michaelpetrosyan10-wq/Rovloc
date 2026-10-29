@@ -345,7 +345,8 @@ export class World {
   }
 
   /**
-   * Irradiance at `pos` from the probe grid of the level holding it (linear RGB, the baked-light scale).
+   * Irradiance at `pos` from the probe grid of the level holding it (linear RGB, the baked-light scale), with every
+   * scripted light group's grid added at its current level (flicker table).
    * @returns {THREE.Color}
    */
   probeAt(pos, out = new THREE.Color()) {
@@ -353,7 +354,8 @@ export class World {
     if (!level || level === STAIRWELLS || !this.decoded.probes[level]) level = this.nearestLevel(pos.y);
     const grid = (level && this.decoded.probes[level]) || this.decoded.probes.Stairwells;
     if (!grid) return out.setRGB(0.04, 0.045, 0.055);
-    sampleProbe(grid, pos.x, pos.y, pos.z, _probe);
+    // scripted groups (the pool floodlights, the classroom glow) add their own grids at their current level
+    sampleProbe(grid, pos.x, pos.y, pos.z, _probe, this.shared.uFlickerData);
     return out.setRGB(_probe[0], _probe[1], _probe[2]);
   }
 
