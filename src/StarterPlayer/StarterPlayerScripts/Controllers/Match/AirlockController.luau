@@ -93,14 +93,35 @@ local volumes: { BasePart } = {}
 -- Pure (specs: tests/Specs/Airlock.spec.luau)
 --------------------------------------------------------------------------------
 
--- The exit vestibule of `level` (the lower-level room of the stairwell that leaves it; nil on the roof).
-function AirlockController.exitRoom(level: string): string?
-	for _, stairwell in WorldConfig.Stairwells do
-		if stairwell.from == level then
-			return stairwell.fromRoom
+-- The exit vestibule of `level` on `route` (from-level -> stairwell id; nil: the middle stairwells): the lower-level
+-- room of the stairwell the route leaves it by (nil on the roof).
+function AirlockController.exitRoom(level: string, route: { [string]: string }?): string?
+	local stairwell = WorldConfig.routeExit(route, level)
+	return if stairwell then stairwell.fromRoom else nil
+end
+
+-- The run's route as far as this client can see it: the stairwell of every built fire door of `level` that is not
+-- jammed (DoorBuilder.setJammed), keyed by its FromLevel. Empty before the doors replicate (then the middle ones).
+function AirlockController.visibleRoute(level: string?): { [string]: string }
+	local route: { [string]: string } = {}
+	for _, instance in CollectionService:GetTagged(Tags.AirlockDoor) do
+		local from = instance:GetAttribute(W.FromLevel)
+		local stairwell = instance:GetAttribute(W.StairwellId)
+		if
+			(level == nil or instance:GetAttribute(W.LevelId) == level)
+			and type(from) == "string"
+			and type(stairwell) == "string"
+			and instance:GetAttribute(W.Jammed) ~= true
+		then
+			route[from] = stairwell
 		end
 	end
-	return nil
+	return route
+end
+
+-- The stairwell this client sees the run leave `level` by (the middle one until the doors replicate; nil on the roof).
+function AirlockController.exitStairwell(level: string): WorldConfig.StairwellSpec?
+	return WorldConfig.routeExit(AirlockController.visibleRoute(level), level)
 end
 
 -- What the banner shows for an exit door's StragglerDeadline (nil when unset) and whether the door is sealing.
@@ -149,16 +170,19 @@ local function rescan(level: string?)
 	if level == nil then
 		return
 	end
+	local exit = AirlockController.exitStairwell(level)
 	for _, instance in CollectionService:GetTagged(Tags.AirlockDoor) do
+		local stairwell = instance:GetAttribute(W.StairwellId)
 		if
 			instance:IsA("Model")
 			and instance:GetAttribute(W.LevelId) == level
 			and instance:GetAttribute(W.FromLevel) == level
+			and (stairwell == nil or exit == nil or stairwell == exit.id)
 		then
 			table.insert(exitDoors, instance)
 		end
 	end
-	local room = AirlockController.exitRoom(level)
+	local room = if exit then exit.fromRoom else nil
 	local any: { BasePart } = {}
 	for _, instance in CollectionService:GetTagged(Tags.CheckpointVolume) do
 		if instance:IsA("BasePart") and instance:GetAttribute(W.LevelId) == level then

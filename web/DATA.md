@@ -172,7 +172,7 @@ Each entity is one interactive or scripted object of a run. `type` is one of:
 - floor objectives (see "Floor objectives" below):
   - items: `Fuse`, `MasterKeys`, `ReagentJar`, `CoachKey`, `ValveWheel`, `BoltCutters`, `AcidFlask`;
   - stations: `BreakerPanel`, `FumeHood`, `Generator`, `HatchValve`, `StoreLock`, `CrateChain`;
-  - `ExitLock` (one per floor 0-4, on the exit airlock door) and `StoreDoor` (the Level 3 equipment store's steel
+  - `ExitLock` (one per exit candidate on floors 0-4, on its fire door) and `StoreDoor` (the Level 3 equipment store's steel
     door, `DoorKind` RoofDoor, `ScriptedId` EquipmentStoreDoor).
 
 Fields:
@@ -265,6 +265,68 @@ Objective entities carry attributes `Floor` (0-5), `Step`, `ObjectiveId` (= the 
   or Keypad (L0, L3, L4: node `Bar`), `Locked` true, `DoorId` (the door entity's id), a `Locked` prompt (hold 0,
   ActionText "Locked — <reason>") and on L1 an `Unlock`, on L2 a `Pour` prompt, all on `LockPrompt`.
 
+## Routes: random exits (`meta.routes`, `meta.routePairs`, `meta.routeRule`)
+
+Every floor pair (1-5) has **three candidate stairwells**, one per stair tower on its side wall: slot `North`
+(towers `NorthWest` / `NorthEast`, Z -4..28, opening at z 12), `Middle` (`West` / `East`, Z 64..96, opening at z 80;
+the five original ids) and `South` (`SouthWest` / `SouthEast`, Z 132..164, opening at z 148). East side: 0→1, 2→3,
+4→5; west side: 1→2, 3→4. A run uses one per pair; **the other two are jammed** for that run. `meta.stairwells`
+lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones first) and `worldConfig.Towers` all six
+(`minX, maxX, minZ, maxZ, side, openingZ`).
+
+| Pair | North | Middle | South |
+| --- | --- | --- | --- |
+| 0→1 | `Stairwell_0_1_North`: `L0_AirlockNorthEast` → `L1_AirlockNorthEast` | `Stairwell_0_1`: `L0_AirlockEast` → `L1_AirlockEast` | `Stairwell_0_1_South`: `L0_AirlockSouthEast` → `L1_AirlockSouthEast` |
+| 1→2 | `Stairwell_1_2_North`: `L1_AirlockNorthWest` → `L2_AirlockNorthWest` | `Stairwell_1_2` (West) | `Stairwell_1_2_South`: `L1_AirlockSouthWest` → `L2_AirlockSouthWest` |
+| 2→3 | `Stairwell_2_3_North`: `L2_AirlockNorthEast` → `L3_AirlockNorthEast` | `Stairwell_2_3` (East) | `Stairwell_2_3_South`: `L2_AirlockSouthEast` → `L3_AirlockSouthEast` |
+| 3→4 | `Stairwell_3_4_North`: `L3_AirlockNorthWest` → `L4_AirlockNorthWest` | `Stairwell_3_4` (West) | `Stairwell_3_4_South`: `L3_AirlockSouthWest` → `L4_AirlockSouthWest` |
+| 4→5 | `Stairwell_4_5_North`: `L4_AirlockNorthEast` → `L5_RoofAccessNorth` | `Stairwell_4_5`: → `L5_RoofAccess` | `Stairwell_4_5_South`: `L4_AirlockSouthEast` → `L5_RoofAccessSouth` |
+
+- **`meta.routes[from]`** (the shape `worldData.routeCandidates` consumes): the floor's exit candidates in slot order
+  North, Middle, South, each `{ id = stairwellId, stairwellId, pair, slot, tower, from, to, fromRoom, toRoom,
+  exitDoorIds, entryDoorIds, checkpoint, spawns, exitLock, creatureSpawn, picked }`: the fire door between the floor
+  and the exit vestibule, the upper floor's entry door (a fire door, or on the roof the housing's `RoofStairDoor*`),
+  the exit vestibule's Checkpoint trigger id, the upper vestibule's PlayerSpawn anchor ids (sorted: slot 1 first),
+  the ExitLock entity id on the exit door (none on the roof), the housing's CreatureSpawn anchor (roof only) and
+  whether it is the export seed's pick.
+- **`meta.routePairs`**: `[{ pair, from, to, candidates: [ids], picked }]` (`picked` = RunDirector's route for the
+  export seed; `plan.route` holds the same as `{ [from]: id }`).
+- **`meta.routeRule`** = RunDirector.pickRoute: for each floor in climbing order, `seededRandom(seed, "Route|" +
+  from)`; draw `NextInteger(1, 3)` over the candidates in slot order; keep the draw if it is **fair** for the floor's
+  entry, else draw again from the same stream, up to `attempts` (8) draws, then take the first fair candidate in slot
+  order (else the middle one). The entry is the basement's layout entry, then each pick's `toRoom`. Fair: its exit
+  vestibule is at least `fairShare` (0.6) of the longest candidate's walk from the entry (the floor's door / vent walk
+  graph, worst case: gates shut, lockable grates locked), and on `creatureSpawnLevels` (Levels 2, 3) the next floor
+  keeps at least `minCreatureSpawns` (2) Creature starts (PatrolWaypoint / CreatureSpawn anchors) `creatureBand`
+  (70-140) studs walked from that candidate's entry vestibule, outside it and the rooms its doorways open into, and
+  outside every objective room (stations and every item candidate's room, whatever a run picks). The verdicts are
+  precomputed: `routeRule.checks[from][entryRoom]` = `[{ stairwellId, distance, share, creatureSpawns, fair }]` for
+  every way in (the layout entry and each entry vestibule candidate), so a port only needs the draws. Today every
+  candidate is fair from every way in (shares 0.82-1.00).
+- **Jam state.** Every stairwell door entity (`AirlockDoor` on both floors, the roof housings' `RoofStairDoor`)
+  carries `StairwellId`, `RouteSlot`, `RouteRole` (`Exit` on the lower floor, `Entry` on the upper) and `Jammed` (the
+  export seed's state), and has node **`Jam`** (no rest pose, never posed: a fallen slab leaning on the back of the
+  shut leaves, rubble, a bent rebar and a buckled lintel, on the vestibule side so it shows through the wired glass;
+  non-colliding) and a `Locked` prompt on attachment `JamPrompt` ("Jammed — this stairwell has collapsed", hold 0,
+  enabled only while jammed). The export shows every `Jam` node. Per run: for each door whose `StairwellId` is not the
+  run's pick for its pair, set it shut and `Locked` (and keep it so), show `Jam`, enable the prompt; on the picked
+  route's doors hide `Jam`. (In Roblox DoorBuilder.setJammed does this at build and DoorService starts such a door
+  Locked.)
+- **Per vestibule:** a Checkpoint volume, a dim EmergencyRed lamp (the same whichever route is picked; light is baked
+  once), 4 PlayerSpawn anchors on entry vestibules, an ExitLock anchor on every exit candidate's fire door (L0-L4) and
+  a hideable locker within reach of each new lock. Each roof housing has its `RoofStairDoor` /
+  `RoofStairDoorNorth` / `RoofStairDoorSouth` (ScriptedId), a CreatureSpawn behind it (`L5_CreatureSpawn`, `_North`,
+  `_South`), 4 PlayerSpawns, the same lamps, and the tower below it.
+- **Floor changes for the corner vestibules:** the corner rooms shrank (their side-wall windows went); L0's south-east
+  vestibule opens off `L0_Store_E2` (the condemned store stays boarded); L1-L3's open off the outer halls (L1's west
+  ones inside the sealed west half); L3's west halls are caved in at x = 60 (`L3_Door_NorthCaveIn` /
+  `L3_Door_SouthCaveIn`, Boarded; new rooms `L3_NorthHall_Mid` / `L3_SouthHall_Mid`), so the corner exits are only
+  reached across the gym floor; L4's corner vestibules open off the corner rooms, the east ones reached only from the
+  east deck: `L4_ChlorineHall` (x 214..228, z 25..30, a passage from the deck to the chlorine store; the maintenance
+  chase now ends at x 214) and a door from the deck into the scoreboard room (its door to `L4_Storage_E2` went).
+- **Bear traps:** 16 trap entities (Nightmare's trapCount): this seed's Standard traps (`Planned` true) and the rest
+  of the Nightmare plan's (`Planned` false); `worldData.plan` moves as many as a run's difficulty needs.
+
 ## Creature (`meta.creature`)
 
 - **Bones:** `bones[i] = { name, parent, motor, rest, size }`. Bone i is `skinIndex` i. `rest` is the bone part's
@@ -295,7 +357,7 @@ Objective entities carry attributes `Floor` (0-5), `Step`, `ObjectiveId` (= the 
 | `zoneGraph` | `ZoneGraph.build` output: `nodes`, `edges`, `adjacency` (rooms + portals) |
 | `vents.graphs[level]` | `VentGraph.build` output: `nodes` (positions, links, grateId), `grates` (wall CFrame, mouth, lockable, criticalPath), `grateAtNode`, `segments` |
 | `vents.nodes`, `vents.grates` | the raw VentNode / grate attachments |
-| `stairwells` | WorldConfig.Stairwells (towers, from / to rooms) |
+| `stairwells` | WorldConfig.Stairwells: all 15 candidates (`id, pair, slot, tower, from, to, fromRoom, toRoom`), see "Routes" |
 | `worldConfig` | WorldConfig as data |
 | `windows` | the moonlight window specs (Volumetrics.windowSpecs) |
 | `plan` | the director's plan for the seed (props, lockedGrates) |

@@ -13,6 +13,11 @@
 -- ends before the handler runs never activates a stale level.
 --
 -- MarkCleared() sets LevelPhase "Cleared" for the current level (P8 airlocks call it before Advance()).
+--
+-- Route. exitFor(levelId) is the stairwell the run leaves a level by and entryFor(levelId) the one it arrives by (the
+-- previous floor's exit): the run plan's route (NoiseAndDirectorService.GetPlan().route, RunDirector.pickRoute), or
+-- the middle stairwells without a plan. Its fromRoom / toRoom are the exit / entry vestibules; the fire doors and
+-- roof housing doors carry its id in StairwellId (the other candidates' doors are jammed shut for the run).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -23,6 +28,9 @@ local Log = require(ReplicatedStorage.Shared.Util.Log)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
+
+local NoiseAndDirectorService = require(script.Parent.NoiseAndDirectorService)
 
 local log = Log.new("LevelDirector")
 
@@ -152,6 +160,18 @@ function LevelDirector.RegisterLevel(controller: Types.LevelController)
 	if active and ctx and ctx.levelId == controller.LevelId then
 		activateController(controller, ctx)
 	end
+end
+
+-- The stairwell the run leaves `levelId` by (nil on the roof and the lobby).
+function LevelDirector.exitFor(levelId: string): WorldConfig.StairwellSpec?
+	local plan = NoiseAndDirectorService.GetPlan()
+	return WorldConfig.routeExit(if plan then plan.route else nil, levelId)
+end
+
+-- The stairwell the run arrives on `levelId` by (nil for the basement and the lobby).
+function LevelDirector.entryFor(levelId: string): WorldConfig.StairwellSpec?
+	local plan = NoiseAndDirectorService.GetPlan()
+	return WorldConfig.routeEntry(if plan then plan.route else nil, levelId)
 end
 
 function LevelDirector.GetCurrentLevel(): Enums.LevelId?

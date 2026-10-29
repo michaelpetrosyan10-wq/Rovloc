@@ -13,6 +13,7 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Types = require(ReplicatedStorage.Shared.Types)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local ZoneGraph = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph)
 local RunDirector = require(ServerScriptService.Services.Core.NoiseAndDirectorService.RunDirector)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
@@ -441,6 +442,83 @@ return {
 		t.eq(RunDirector.lockCount(0.25, 0), 0)
 		t.eq(RunDirector.lockCount(2, 4), 4)
 		t.eq(RunDirector.lockCount(0 / 0, 4), 0)
+	end,
+
+	["route: one fair stairwell per floor pair, seeded, varied, chained through the vestibules"] = function(t: Expect)
+		local byId: { [string]: Layout } = {}
+		for _, layout in layouts() do
+			byId[layout.id] = layout
+		end
+		local used: { [string]: number } = {}
+		for seed = 1, 40 do
+			local route = RunDirector.pickRoute(seed, layouts())
+			local again = RunDirector.pickRoute(seed, layouts())
+			local plan = planFor(seed, STANDARD)
+			local entry: string? = nil
+			for _, from in WorldConfig.LevelOrder do
+				local id = route[from]
+				t.eq(again[from], id, "deterministic per seed")
+				t.eq(plan.route and plan.route[from], id, "the plan carries the route")
+				local candidates = WorldConfig.stairwellCandidates(from)
+				if #candidates == 0 then
+					t.eq(id, nil, from .. " (the roof) has no exit stairwell")
+					continue
+				end
+				local spec = WorldConfig.stairwellById(id)
+				t.truthy(
+					spec and spec.from == from,
+					string.format("seed %d: %s leaves by %s", seed, from, tostring(id))
+				)
+				if not spec then
+					continue
+				end
+				used[spec.id] = (used[spec.id] or 0) + 1
+				local layout = byId[from]
+				for _, check in RunDirector.routeChecks(layout, entry or layout.entry, byId) do
+					if check.stairwellId == spec.id then
+						t.truthy(
+							check.fair,
+							string.format("seed %d: %s is fair from %s", seed, spec.id, tostring(entry))
+						)
+						t.truthy(check.share >= RunDirector.RouteFairShare - 1e-9, spec.id .. " is far enough")
+						t.truthy(
+							check.creatureSpawns == nil or check.creatureSpawns >= RunDirector.MinCreatureSpawns,
+							spec.id .. " leaves the next floor Creature starts"
+						)
+					end
+				end
+				entry = spec.toRoom
+			end
+		end
+		for _, spec in WorldConfig.Stairwells do
+			t.truthy((used[spec.id] or 0) > 0, spec.id .. " is picked by some seed")
+		end
+		-- every floor pair has a north, middle and south candidate, each reachable from every way in
+		for _, from in WorldConfig.LevelOrder do
+			local layout = byId[from]
+			local candidates = WorldConfig.stairwellCandidates(from)
+			if #candidates == 0 then
+				continue
+			end
+			t.eq(#candidates, 3, from .. " has three exit candidates")
+			local entries = { layout.entry }
+			for _, spec in WorldConfig.Stairwells do
+				if spec.to == from and spec.toRoom ~= layout.entry then
+					table.insert(entries, spec.toRoom)
+				end
+			end
+			for _, entryRoom in entries do
+				for _, check in RunDirector.routeChecks(layout, entryRoom, byId) do
+					t.truthy(check.distance < math.huge, check.stairwellId .. " reachable from " .. entryRoom)
+				end
+			end
+		end
+		-- no route in a hand-made plan: the middle stairwells
+		local exit, entry =
+			WorldConfig.routeExit(nil, "Level1_Hallways"), WorldConfig.routeEntry(nil, "Level1_Hallways")
+		t.eq(exit and exit.id, "Stairwell_1_2")
+		t.eq(entry and entry.id, "Stairwell_0_1")
+		t.eq(WorldConfig.routeEntry(nil, "Level0_Basement"), nil)
 	end,
 
 	["an unknown difficulty plans Standard"] = function(t: Expect)

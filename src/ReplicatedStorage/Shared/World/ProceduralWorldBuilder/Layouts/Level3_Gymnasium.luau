@@ -289,8 +289,6 @@ local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number
 end
 
 -- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
-local TOWER_MIN_Z = WorldConfig.Towers.West.minZ - 2
-local TOWER_MAX_Z = WorldConfig.Towers.West.maxZ + 2
 local function windowRow(
 	roomId: string,
 	side: LayoutSchema.Side,
@@ -306,7 +304,7 @@ local function windowRow(
 	local span = if alongX then rect.w else rect.d
 	for i = 1, count do
 		local at = from + span * (i - 0.5) / count
-		local facesTower = not alongX and at + width / 2 > TOWER_MIN_Z and at - width / 2 < TOWER_MAX_Z
+		local facesTower = not alongX and WorldConfig.facesTower(at - width / 2, at + width / 2, 2)
 		if not facesTower then
 			table.insert(
 				windows,
@@ -427,14 +425,18 @@ end
 --------------------------------------------------------------------------------
 
 -- Halls (split where the gym wing meets the locker wing)
-room("L3_NorthHall_West", "Corridor", 0, 31, 127, 14, HALL, LOW)
+room("L3_NorthHall_West", "Corridor", 0, 31, 60, 14, HALL, LOW)
+room("L3_NorthHall_Mid", "Corridor", 60, 31, 67, 14, HALL, LOW)
 room("L3_NorthHall_East", "Corridor", 127, 31, 113, 14, HALL, LOW)
-room("L3_SouthHall_West", "Corridor", 0, 115, 127, 14, HALL, LOW)
+room("L3_SouthHall_West", "Corridor", 0, 115, 60, 14, HALL, LOW)
+room("L3_SouthHall_Mid", "Corridor", 60, 115, 67, 14, HALL, LOW)
 room("L3_SouthHall_East", "Corridor", 127, 115, 113, 14, HALL, LOW)
 
 -- West end: the gym and the exit vestibule
 room("L3_Storage_W1", "Storage", 0, 45, 12, 21, STORAGE, LOW)
 room("L3_AirlockWest", "Airlock", 0, 66, 12, 28, AIRLOCK, LOW)
+room("L3_AirlockNorthWest", "Airlock", 0, 0, 12, 31, AIRLOCK, LOW)
+room("L3_AirlockSouthWest", "Airlock", 0, 129, 12, 31, AIRLOCK, LOW)
 room("L3_Storage_W2", "Storage", 0, 94, 12, 21, STORAGE, LOW)
 room("L3_Gymnasium", "Gym", 12, 45, 110, 70, GYM)
 
@@ -450,25 +452,27 @@ room("L3_GymFoyer", "Corridor", 196, 45, 32, 70, FOYER, LOW)
 -- East end: the arrival vestibule
 room("L3_Storage_E1", "Storage", 228, 45, 12, 21, STORAGE, LOW)
 room("L3_AirlockEast", "Airlock", 228, 66, 12, 28, AIRLOCK, LOW)
+room("L3_AirlockNorthEast", "Airlock", 228, 0, 12, 31, AIRLOCK, LOW)
+room("L3_AirlockSouthEast", "Airlock", 228, 129, 12, 31, AIRLOCK, LOW)
 room("L3_Storage_E2", "Storage", 228, 94, 12, 21, STORAGE, LOW)
 
 -- North exterior row
-room("L3_WeightRoom", "Storage", 0, 0, 48, 31, WEIGHTS, LOW)
+room("L3_WeightRoom", "Storage", 12, 0, 36, 31, WEIGHTS, LOW)
 room("L3_EquipmentStore", "Storage", 48, 0, 36, 31, STORAGE, LOW)
 room("L3_TrainerRoom", "Office", 84, 0, 28, 31, SERVICE, LOW)
 room("L3_CoachOffice", "Office", 112, 0, 28, 31, OFFICE, LOW)
 room("L3_AthleticDirector", "Office", 140, 0, 24, 31, OFFICE, LOW)
 room("L3_LaundryRoom", "Storage", 164, 0, 32, 31, SERVICE, LOW)
 room("L3_Restroom_North", "Restroom", 196, 0, 20, 31, SHOWERS, LOW)
-room("L3_Storage_N", "Storage", 216, 0, 24, 31, STORAGE, LOW)
+room("L3_Storage_N", "Storage", 216, 0, 12, 31, STORAGE, LOW)
 
 -- South exterior row
-room("L3_WrestlingRoom", "Gym", 0, 129, 60, 31, MATS, LOW)
+room("L3_WrestlingRoom", "Gym", 12, 129, 48, 31, MATS, LOW)
 room("L3_DanceStudio", "Gym", 60, 129, 52, 31, DANCE, LOW)
 room("L3_TeamRoom", "Classroom", 112, 129, 36, 31, OFFICE, LOW)
 room("L3_MatStore", "Storage", 148, 129, 28, 31, STORAGE, LOW)
 room("L3_ConcessionStand", "Storage", 176, 129, 32, 31, SERVICE, LOW)
-room("L3_TicketOffice", "Office", 208, 129, 32, 31, OFFICE, LOW)
+room("L3_TicketOffice", "Office", 208, 129, 20, 31, OFFICE, LOW)
 
 --------------------------------------------------------------------------------
 -- Doors
@@ -476,8 +480,16 @@ room("L3_TicketOffice", "Office", 208, 129, 32, 31, OFFICE, LOW)
 
 door("Airlock", "L3_AirlockEast", "L3_GymFoyer", 80, { id = "L3_Door_AirlockEast" })
 door("Airlock", "L3_Gymnasium", "L3_AirlockWest", 80, { id = "L3_Door_AirlockWest" })
-door("Boarded", "L3_NorthHall_East", "L3_NorthHall_West", 38, { id = "L3_Door_NorthBarricade", width = 12 })
-door("Boarded", "L3_SouthHall_East", "L3_SouthHall_West", 122, { id = "L3_Door_SouthBarricade", width = 12 })
+-- The corner stair vestibules open off the outer halls; the west halls are caved in at x = 60, so the corner exits
+-- too are only reached across the gym floor (through its west doorways)
+door("Airlock", "L3_AirlockNorthEast", "L3_NorthHall_East", 234, { id = "L3_Door_AirlockNorthEast" })
+door("Airlock", "L3_AirlockSouthEast", "L3_SouthHall_East", 234, { id = "L3_Door_AirlockSouthEast" })
+door("Airlock", "L3_NorthHall_West", "L3_AirlockNorthWest", 6, { id = "L3_Door_AirlockNorthWest" })
+door("Airlock", "L3_SouthHall_West", "L3_AirlockSouthWest", 6, { id = "L3_Door_AirlockSouthWest" })
+door("Boarded", "L3_NorthHall_West", "L3_NorthHall_Mid", 38, { id = "L3_Door_NorthCaveIn", width = 12 })
+door("Boarded", "L3_SouthHall_West", "L3_SouthHall_Mid", 122, { id = "L3_Door_SouthCaveIn", width = 12 })
+door("Boarded", "L3_NorthHall_East", "L3_NorthHall_Mid", 38, { id = "L3_Door_NorthBarricade", width = 12 })
+door("Boarded", "L3_SouthHall_East", "L3_SouthHall_Mid", 122, { id = "L3_Door_SouthBarricade", width = 12 })
 
 -- Locker wing
 door("Doorway", "L3_GymFoyer", "L3_NorthHall_East", 212, { width = 10 })
@@ -491,9 +503,9 @@ door("Doorway", "L3_LockerRoom_Girls", "L3_Showers_Girls", 99)
 
 -- Gym (double doors in the corners, clear of the bleachers)
 door("Doorway", "L3_NorthHall_West", "L3_Gymnasium", 18, { width = 8 })
-door("Doorway", "L3_NorthHall_West", "L3_Gymnasium", 116, { width = 8 })
+door("Doorway", "L3_NorthHall_Mid", "L3_Gymnasium", 116, { width = 8 })
 door("Doorway", "L3_SouthHall_West", "L3_Gymnasium", 18, { width = 8 })
-door("Doorway", "L3_SouthHall_West", "L3_Gymnasium", 116, { width = 8 })
+door("Doorway", "L3_SouthHall_Mid", "L3_Gymnasium", 116, { width = 8 })
 door("Door", "L3_Gymnasium", "L3_Storage_W1", 58)
 door("Door", "L3_Gymnasium", "L3_Storage_W2", 102)
 
@@ -503,22 +515,22 @@ door("Doorway", "L3_NorthHall_West", "L3_WeightRoom", 24, { width = 8 })
 -- floor objective keeps it locked until the coach's key opens it (the StoreLock below).
 door(
 	"RoofDoor",
-	"L3_NorthHall_West",
+	"L3_NorthHall_Mid",
 	"L3_EquipmentStore",
 	66,
 	{ id = "L3_Door_EquipmentStore", width = 8, scriptedId = "EquipmentStoreDoor" }
 )
-door("Door", "L3_NorthHall_West", "L3_TrainerRoom", 98)
-door("Door", "L3_NorthHall_West", "L3_CoachOffice", 120)
+door("Door", "L3_NorthHall_Mid", "L3_TrainerRoom", 98)
+door("Door", "L3_NorthHall_Mid", "L3_CoachOffice", 120)
 door("Door", "L3_NorthHall_East", "L3_AthleticDirector", 152)
 door("Door", "L3_NorthHall_East", "L3_LaundryRoom", 180)
 door("Door", "L3_NorthHall_East", "L3_Restroom_North", 206)
-door("Door", "L3_NorthHall_East", "L3_Storage_N", 228)
+door("Door", "L3_NorthHall_East", "L3_Storage_N", 222)
 
 -- South exterior row
 door("Doorway", "L3_SouthHall_West", "L3_WrestlingRoom", 30, { width = 8 })
-door("Doorway", "L3_SouthHall_West", "L3_DanceStudio", 86, { width = 8 })
-door("Door", "L3_SouthHall_West", "L3_TeamRoom", 119)
+door("Doorway", "L3_SouthHall_Mid", "L3_DanceStudio", 86, { width = 8 })
+door("Door", "L3_SouthHall_Mid", "L3_TeamRoom", 119)
 door("Door", "L3_SouthHall_East", "L3_MatStore", 162, { width = 8 })
 door("Door", "L3_SouthHall_East", "L3_ConcessionStand", 192)
 door("Door", "L3_SouthHall_East", "L3_TicketOffice", 224)
@@ -529,8 +541,8 @@ door("Door", "L3_SouthHall_East", "L3_TicketOffice", 224)
 
 -- Gym chase: the boys' locker grate and the gym grate share one junction, a straight crawl through the wall.
 chaseRun("L3_Chase_GymEast", {
-	{ id = "L3_Grate_GE_NorthHall", room = "L3_NorthHall_West", side = "N", lockable = true, critical = false },
-	{ id = "L3_Grate_GE_SouthHall", room = "L3_SouthHall_West", side = "S", lockable = true, critical = false },
+	{ id = "L3_Grate_GE_NorthHall", room = "L3_NorthHall_Mid", side = "N", lockable = true, critical = false },
+	{ id = "L3_Grate_GE_SouthHall", room = "L3_SouthHall_Mid", side = "S", lockable = true, critical = false },
 	{ id = "L3_Grate_GE_Gym1", room = "L3_Gymnasium", side = "W", at = 56, lockable = true, critical = false },
 	{ id = "L3_Grate_GE_Gym2", room = "L3_Gymnasium", side = "W", at = 66, lockable = false, critical = true },
 	{ id = "L3_Grate_GE_Gym3", room = "L3_Gymnasium", side = "W", at = 104, lockable = false, critical = false },
@@ -596,15 +608,18 @@ platform("L3_Bench_Boys1", "L3_LockerRoom_Boys", 137, 61, 12, 1.5, 1.6, 1.6, "Wo
 platform("L3_Bench_Boys2", "L3_LockerRoom_Boys", 157, 61, 12, 1.5, 1.6, 1.6, "WoodPanel")
 platform("L3_Bench_Girls1", "L3_LockerRoom_Girls", 137, 98, 12, 1.5, 1.6, 1.6, "WoodPanel")
 platform("L3_Bench_Girls2", "L3_LockerRoom_Girls", 157, 98, 12, 1.5, 1.6, 1.6, "WoodPanel")
-platform("L3_WeightRack", "L3_WeightRoom", 4, 4, 20, 3, 4, 4, "MetalRust")
+platform("L3_WeightRack", "L3_WeightRoom", 16, 4, 20, 3, 4, 4, "MetalRust")
 
 --------------------------------------------------------------------------------
 -- Lights: one sputtering high-bay in the gym, dead tubes everywhere else, a forgotten desk lamp.
 --------------------------------------------------------------------------------
 
 lightGrid("L3_Gymnasium", "Floodlight", 4, 2, "xxxxxfxx", { flicker = "L3_GymHighBay" })
-for _, id in { "L3_NorthHall_West", "L3_SouthHall_West", "L3_SouthHall_East" } :: { string } do
-	lightGrid(id, "Fluorescent", 7, 1, "x")
+for _, id in { "L3_NorthHall_Mid", "L3_SouthHall_Mid", "L3_SouthHall_East" } :: { string } do
+	lightGrid(id, "Fluorescent", if id == "L3_SouthHall_East" then 7 else 4, 1, "x")
+end
+for _, id in { "L3_NorthHall_West", "L3_SouthHall_West" } :: { string } do
+	lightGrid(id, "Fluorescent", 3, 1, "x")
 end
 lightGrid("L3_NorthHall_East", "Fluorescent", 7, 1, "xxxfxxx", { flicker = "L3_NorthHall", brightness = 0.3 })
 lightGrid("L3_LockerRoom_Boys", "Fluorescent", 3, 2, "x")
@@ -637,6 +652,16 @@ end
 light("L3_CoachOffice", "Bulb", 130, 3.2, 8, { brightness = 0.22, range = 10 })
 light("L3_AirlockEast", "EmergencyRed", 234, LOW - 1, 80, { flicker = "L3_AirlockEast", brightness = 0.35 })
 light("L3_AirlockWest", "EmergencyRed", 6, LOW - 1, 80, { flicker = "L3_AirlockWest", brightness = 0.35 })
+for _, spot in
+	{
+		{ "L3_AirlockNorthWest", 6, 15.5 },
+		{ "L3_AirlockSouthWest", 6, 144.5 },
+		{ "L3_AirlockNorthEast", 234, 15.5 },
+		{ "L3_AirlockSouthEast", 234, 144.5 },
+	} :: { { any } }
+do
+	light(spot[1], "EmergencyRed", spot[2], LOW - 1, spot[3], { flicker = spot[1], brightness = 0.35 })
+end
 light("L3_Gymnasium", "ExitSign", 13.5, 11, 80)
 light("L3_GymFoyer", "ExitSign", 226.5, 11, 80)
 
@@ -646,6 +671,9 @@ light("L3_GymFoyer", "ExitSign", 226.5, 11, 80)
 
 -- Arrival from Stairwell_2_3
 scatter("PlayerSpawn", 3.5, { { 232, 74, FACE_W }, { 236, 74, FACE_W }, { 232, 86, FACE_W }, { 236, 86, FACE_W } })
+-- Arrival from Stairwell_2_3_North / _South (the corner vestibules)
+scatter("PlayerSpawn", 3.5, { { 232, 5, FACE_S }, { 236, 5, FACE_S }, { 232, 19, FACE_S }, { 236, 19, FACE_S } })
+scatter("PlayerSpawn", 3.5, { { 232, 141, FACE_N }, { 236, 141, FACE_N }, { 232, 155, FACE_N }, { 236, 155, FACE_N } })
 anchor("CreatureSpawn", 60, 5, 80, FACE_W, "L3_CreatureSpawn")
 
 -- Hideable lockers (kept clear of doors and grate openings)
@@ -683,20 +711,24 @@ scatter("Locker", 0, {
 	{ 5.5, 95.3, FACE_S },
 })
 anchor("ExitLock", 12.5, 0, 80, FACE_E, "L3_ExitLock")
+anchor("ExitLock", 6, 0, 31.5, FACE_S, "L3_ExitLock_North")
+anchor("ExitLock", 6, 0, 128.5, FACE_N, "L3_ExitLock_South")
+-- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
+scatter("Locker", 0, { { 8, 43.2, FACE_N }, { 8, 116.8, FACE_S } })
 
 scatter(
 	"SmashedLocker",
 	0,
-	{ { 60, 43.2, FACE_N }, { 90, 43.2, FACE_N }, { 60, 116.8, FACE_S }, { 96, 116.8, FACE_S } }
+	{ { 52, 43.2, FACE_N }, { 90, 43.2, FACE_N }, { 52, 116.8, FACE_S }, { 96, 116.8, FACE_S } }
 )
 
 scatter("BatteryCandidate", 0, {
-	{ 4, 26 },
+	{ 16, 26 },
 	{ 136, 4 },
 	{ 80, 4 },
 	{ 192, 4 },
 	{ 172, 156 },
-	{ 236, 156 },
+	{ 224, 156 },
 	{ 6, 50 },
 	{ 234, 110 },
 	{ 190, 112 },
@@ -723,15 +755,17 @@ scatter("Clutter", 0, {
 
 patrol("GYM", { { 20, 60 }, { 66, 60 }, { 116, 60 }, { 116, 100 }, { 66, 100 }, { 20, 100 } })
 patrol("GC", { { 66, 70 }, { 90, 80 }, { 66, 90 }, { 40, 80 } })
-patrol("GN", { { 18, 62 }, { 18, 38 }, { 116, 38 }, { 114, 62 } })
-patrol("GS", { { 18, 98 }, { 18, 122 }, { 116, 122 }, { 114, 98 } })
+patrol("GN", { { 18, 62 }, { 18, 38 }, { 52, 38 }, { 40, 62 } })
+patrol("GS", { { 18, 98 }, { 18, 122 }, { 52, 122 }, { 40, 98 } })
 patrol("LB", { { 152, 38 }, { 150, 52 }, { 170, 70 }, { 186, 62 }, { 165, 54 } })
 patrol("LG", { { 152, 122 }, { 150, 108 }, { 170, 90 }, { 186, 99 }, { 165, 106 } })
 patrol("FY", { { 212, 55 }, { 220, 80 }, { 212, 105 }, { 204, 80 } })
 patrol("NE", { { 140, 38 }, { 230, 38 }, { 180, 40 } })
 patrol("SE", { { 140, 122 }, { 230, 122 }, { 180, 120 } })
-patrol("NW", { { 10, 38 }, { 120, 38 }, { 60, 40 } })
-patrol("SW", { { 10, 122 }, { 120, 122 }, { 60, 120 } })
+patrol("NW", { { 10, 38 }, { 52, 38 }, { 30, 60 } })
+patrol("NM", { { 66, 38 }, { 120, 38 }, { 100, 40 } })
+patrol("SW", { { 10, 122 }, { 52, 122 }, { 30, 100 } })
+patrol("SM", { { 66, 122 }, { 120, 122 }, { 100, 120 } })
 
 --------------------------------------------------------------------------------
 -- Triggers
@@ -741,6 +775,8 @@ trigger("L3_Trigger_DebrisCourt", "FloorDebris", 60, 76, 8, 8, 4)
 trigger("L3_Trigger_DebrisShowers", "FloorDebris", 180, 102, 6, 6, 4)
 trigger("L3_Trigger_DebrisNorthHall", "FloorDebris", 140, 33, 6, 10, 4)
 trigger("L3_Trigger_Checkpoint", "Checkpoint", 1, 67, 10, 26, 10)
+trigger("L3_Trigger_CheckpointNorthWest", "Checkpoint", 1, 1, 10, 29, 10)
+trigger("L3_Trigger_CheckpointSouthWest", "Checkpoint", 1, 130, 10, 29, 10)
 
 --------------------------------------------------------------------------------
 -- Boarded windows on the facade
@@ -760,18 +796,14 @@ windowRow("L3_TeamRoom", "S", 2, 7, 6, 3.5, true)
 windowRow("L3_MatStore", "S", 1, 5, 3, 8, true)
 windowRow("L3_ConcessionStand", "S", 2, 7, 6, 3.5, true)
 windowRow("L3_TicketOffice", "S", 2, 7, 6, 3.5, true)
-windowRow("L3_WeightRoom", "W", 1, 7, 6, 3.5, true)
 windowRow("L3_NorthHall_West", "W", 1, 6, 6, 3.5, true)
 windowRow("L3_Storage_W1", "W", 1, 4, 4, 5, true)
 windowRow("L3_Storage_W2", "W", 1, 4, 4, 5, true)
 windowRow("L3_SouthHall_West", "W", 1, 6, 6, 3.5, true)
-windowRow("L3_WrestlingRoom", "W", 1, 7, 6, 3.5, true)
-windowRow("L3_Storage_N", "E", 1, 5, 3, 8, true)
 windowRow("L3_NorthHall_East", "E", 1, 6, 6, 3.5, true)
 windowRow("L3_Storage_E1", "E", 1, 4, 4, 5, true)
 windowRow("L3_Storage_E2", "E", 1, 4, 4, 5, true)
 windowRow("L3_SouthHall_East", "E", 1, 6, 6, 3.5, true)
-windowRow("L3_TicketOffice", "E", 1, 7, 6, 3.5, true)
 
 --------------------------------------------------------------------------------
 

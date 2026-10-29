@@ -48,7 +48,12 @@
 --   openTransform / smashedTransform(model, leaf, value) are the same poses for one leaf as a transform from its rest
 --   pivot, and leafNames(model) lists the leaves: DoorService (server) and DoorController (clients) step a door's
 --   motion through them, so both sides compute identical poses (Shared/Sequence/DoorMotion).
--- Budgets: static door <= 8 parts, Ajar / RoofDoor <= 12, Airlock <= 30, Gate <= 45.
+-- Stairwell doors (the fire doors and the roof housings' doors) also carry StairwellId, RouteSlot and RouteRole ("Exit"
+-- on the lower floor, "Entry" on the upper), a leaf "Jam" (the collapse behind the door: a slab, rubble, a rebar and a
+-- buckled lintel on the vestibule side, non-colliding, never posed) and a Locked prompt on "JamPrompt". The run's route
+-- (plan.route) uses one stairwell per floor pair; setJammed shuts every other one (DoorState Locked, Jammed true),
+-- shows its collapse and enables its prompt, and hides them on the used ones.
+-- Budgets: static door <= 8 parts, Ajar / RoofDoor <= 12, Airlock <= 30, Gate <= 45 (a stairwell door's Jam adds 7).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -59,6 +64,7 @@ local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuild
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
+local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Geometry = require(script.Parent.Parent.Geometry)
@@ -1678,6 +1684,109 @@ local function buildGate(model: Model, ctx: Ctx, plan: FixturePlan, random: Rand
 	DoorBuilder.setOpen(model, 1)
 end
 
+--------------------------------------------------------------------------------
+-- Jammed stairwells
+--------------------------------------------------------------------------------
+
+local JAM = "Jam"
+local JAM_PROMPT = "JamPrompt"
+local RUBBLE = Color3.fromRGB(92, 88, 82)
+
+-- Whether `plan`'s route leaves `stairwell` unused (no plan: only the middle stairwells are used).
+function DoorBuilder.jammedBy(plan: Types.SpawnPlan?, stairwell: WorldConfig.StairwellSpec): boolean
+	local used = WorldConfig.routeExit(if plan then plan.route else nil, stairwell.from)
+	return used == nil or used.id ~= stairwell.id
+end
+
+-- The collapse behind a stairwell door: a fallen ceiling slab leaning on the back of the shut leaves, a rubble heap
+-- with a bent rebar and the stairwell's buckled lintel, all on the vestibule side so they show through the wired
+-- glass. Leaf "Jam" (no rest pose: it never moves), hidden unless the door is jammed (setJammed); non-colliding detail
+-- (the shut, Locked door is what blocks). A disabled-unless-jammed Locked prompt on attachment "JamPrompt".
+local function buildJam(model: Model, ctx: Ctx, site: Site, random: Random)
+	local base = model.PrimaryPart
+	if not base then
+		return
+	end
+	local intoVestibule = if site.rooms[2].kind == "Airlock" or site.rooms[2].kind == "Stairwell" then 0 else math.pi
+	local back = ctx.frame * CFrame.Angles(0, intoVestibule, 0)
+	local jam = PropKit.model(model, JAM, back)
+	local half = site.width / 2
+	local function piece(name: string, cframe: CFrame, size: Vector3, key: string, color: Color3?)
+		local part = Geometry.part(jam, name, cframe, size, key, if color then { color = color } else nil)
+		PropKit.detail(part)
+	end
+	local tilt = math.rad(random:NextNumber(13, 18))
+	piece(
+		"Slab",
+		back * CFrame.new(0, 3, -2.3) * CFrame.Angles(tilt, math.rad(random:NextNumber(-4, 4)), math.rad(3)),
+		Vector3.new(site.width - 1, 6, 0.7),
+		"ConcreteDark"
+	)
+	local blocks: { { x: number, z: number, size: Vector3 } } = {
+		{ x = -half + 1.4, z = -2.2, size = Vector3.new(2.4, 1.6, 2) },
+		{ x = half - 1.6, z = -2.6, size = Vector3.new(2, 1.1, 1.6) },
+		{ x = 0.3, z = -3.6, size = Vector3.new(3, 0.9, 2.2) },
+		{ x = -1.2, z = -4.4, size = Vector3.new(1.5, 0.7, 1.4) },
+	}
+	for i, block in blocks do
+		local size, x, z = block.size, block.x, block.z
+		local turn = CFrame.Angles(
+			math.rad(random:NextNumber(-12, 12)),
+			math.rad(random:NextNumber(0, 90)),
+			math.rad(random:NextNumber(-12, 12))
+		)
+		piece(string.format("Rubble%d", i), back * CFrame.new(x, size.Y / 2 - 0.15, z) * turn, size, "Concrete", RUBBLE)
+	end
+	piece(
+		"Rebar",
+		back * CFrame.new(1.2, 1.6, -3) * CFrame.Angles(math.rad(35), math.rad(25), 0),
+		Vector3.new(0.18, 0.18, 4.4),
+		"MetalRust"
+	)
+	piece(
+		"Lintel",
+		back * CFrame.new(0, site.height + 0.2, -1.6) * CFrame.Angles(0, 0, math.rad(random:NextNumber(9, 14))),
+		Vector3.new(site.width + 1, 0.6, 0.8),
+		"MetalRust"
+	)
+	local attachment = Geometry.attachment(base, JAM_PROMPT, base.CFrame:ToObjectSpace(ctx.frame * CFrame.new(0, 4, 0)))
+	PropKit.prompt(
+		attachment,
+		{ kind = "Locked", action = "Prompt.Jammed", object = "Prompt.ExitDoor", hold = 0 },
+		model
+	)
+end
+
+-- Shows or hides a stairwell door's collapse (leaf "Jam"); false when the door has none.
+function DoorBuilder.showJam(model: Model, shown: boolean): boolean
+	local jam = model:FindFirstChild(JAM)
+	if not jam then
+		return false
+	end
+	for _, part in jam:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.Transparency = if shown then 0 else 1
+		end
+	end
+	return true
+end
+
+-- Applies a run's route to a stairwell door: a jammed one is shut (Locked from the start, DoorService), shows its
+-- collapse and enables its Locked prompt ("Jammed — this stairwell has collapsed", hold 0); a used one hides them and
+-- keeps its built pose.
+function DoorBuilder.setJammed(model: Model, jammed: boolean)
+	model:SetAttribute(W.Jammed, jammed)
+	DoorBuilder.showJam(model, jammed)
+	local prompt = PropKit.findPrompt(model, "Locked")
+	if prompt then
+		prompt.Enabled = jammed
+	end
+	if jammed then
+		DoorBuilder.setOpen(model, 0)
+		model:SetAttribute(W.DoorState, "Locked")
+	end
+end
+
 local function anchorRootOf(root: Instance?): Instance?
 	local anchors = root and root:FindFirstChild(Names.Anchors)
 	return anchors and anchors:FindFirstChild("AnchorRoot")
@@ -1714,13 +1823,23 @@ local function buildFixtures(ctx: PropKit.FixtureContext): number
 		else
 			buildSwingDoor(model, doorCtx, plan, layout, ctx.random)
 		end
-		if site.door.kind == "Airlock" then
+		local kind = site.door.kind
+		local stairwell = if kind == "Airlock" or kind == "RoofDoor" then stairwellOf(site) else nil
+		if kind == "Airlock" then
 			model:AddTag(Tags.AirlockDoor)
-			local stairwell = stairwellOf(site)
 			if stairwell then
 				model:SetAttribute(W.FromLevel, stairwell.from)
 				model:SetAttribute(W.ToLevel, stairwell.to)
 			end
+		end
+		if stairwell then
+			PropKit.setAttributes(model, {
+				[W.StairwellId] = stairwell.id,
+				[W.RouteSlot] = stairwell.slot,
+				[W.RouteRole] = if stairwell.from == layout.id then "Exit" else "Entry",
+			})
+			buildJam(model, doorCtx, site, ctx.random)
+			DoorBuilder.setJammed(model, DoorBuilder.jammedBy(ctx.plan, stairwell))
 		end
 		built += 1
 	end

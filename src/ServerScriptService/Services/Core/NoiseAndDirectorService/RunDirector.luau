@@ -22,6 +22,13 @@
 --                  every Gate door shut. A failing roll is re-rolled deterministically, up to MaxRerolls times per
 --                  level; a level that never passes keeps every grate unlocked. `rerolls` counts every re-roll.
 --
+--   Route          plan.route: the stairwell every floor is left by (pickRoute), one of its pair's three candidates
+--                  (WorldConfig.stairwellCandidates: North, Middle, South), uniform by the seed (stream
+--                  "Route|<from>"), drawn again while it is unfair for the entry the previous pick leads to: its exit
+--                  vestibule under RouteFairShare of the longest candidate's walk from the entry, or (Levels 2 and 3)
+--                  fewer than MinCreatureSpawns Creature starts CreatureBand studs from its entry vestibule, out of
+--                  sight and outside every objective room. The unused candidates are jammed shut for the run.
+--
 -- Pure: no instances, no clocks, no global random. Every decision draws from its own
 -- MathUtil.seededRandom(seed, <decision key>) stream and walks layouts, anchors and grates in list order, so the
 -- same inputs always produce an identical plan, and changing one decision (say the trap count) never shifts another
@@ -38,6 +45,7 @@ local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local ObjectivePlaces = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces)
 local Types = require(ReplicatedStorage.Shared.Types)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local ZoneGraph = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph)
 
 local log = Log.new("RunDirector")
@@ -57,6 +65,11 @@ local TRAP_ATTEMPTS = 16 -- fresh shuffles tried when the spacing rule leaves a 
 local MAX_REROLLS = 64
 local PICK_ATTEMPTS = 24 -- fresh shuffles tried when a multi-item pick falls short of the room / spacing / spread rules
 local VARIANT_RANGE = 1000000
+local ROUTE_ATTEMPTS = 8 -- draws from a floor's Route stream before falling back to its first fair candidate
+local ROUTE_FAIR_SHARE = 0.6 -- an exit is at least this share of the longest exit candidate's walk from the entry
+local CREATURE_BAND = { 70, 140 } -- studs walked from the entry to a Creature start (the web's SpawnTuning)
+local MIN_CREATURE_SPAWNS = 2
+local CREATURE_SPAWN_LEVELS: { [string]: boolean } = { Level2_ScienceHall = true, Level3_Gymnasium = true }
 
 local RunDirector = {}
 
@@ -71,6 +84,11 @@ RunDirector.PickAttempts = PICK_ATTEMPTS
 RunDirector.TrapLevel = TRAP_LEVEL
 RunDirector.ScienceLevel = SCIENCE_LEVEL
 RunDirector.PoolLevel = POOL_LEVEL
+RunDirector.RouteAttempts = ROUTE_ATTEMPTS
+RunDirector.RouteFairShare = ROUTE_FAIR_SHARE
+RunDirector.CreatureBand = table.freeze(table.clone(CREATURE_BAND))
+RunDirector.MinCreatureSpawns = MIN_CREATURE_SPAWNS
+RunDirector.CreatureSpawnLevels = table.freeze(table.clone(CREATURE_SPAWN_LEVELS))
 
 --------------------------------------------------------------------------------
 -- Rules (public so specs and later services ask the same questions)
@@ -439,6 +457,157 @@ function RunDirector.pickObjective(
 	return picks, guards
 end
 
+--------------------------------------------------------------------------------
+-- Route: which stairwell every floor is left by
+--------------------------------------------------------------------------------
+
+export type RouteCheck = {
+	stairwellId: string,
+	distance: number, -- studs walked from the floor's entry to this exit vestibule (math.huge: no way)
+	share: number, -- distance / the longest candidate's distance (0 when none is finite)
+	creatureSpawns: number?, -- Creature start candidates on the next floor from this entry (levels with the rule)
+	fair: boolean,
+}
+
+local routeCache: { [Layout]: { [string]: { RouteCheck } } } = setmetatable({}, { __mode = "k" }) :: any
+
+local STATION_KINDS: { [string]: boolean } =
+	{ BreakerPanel = true, FumeHood = true, Generator = true, HatchValve = true, CrateChain = true }
+
+-- Rooms of `layout` a Creature never starts in: those holding an objective station or any item candidate (whatever a
+-- run picks), so the rule holds for every seed.
+local function objectiveRooms(layout: Layout): { [string]: boolean }
+	local spec = ObjectiveConfig.forLevel(layout.id)
+	local rooms: { [string]: boolean } = {}
+	for _, anchor in layout.anchors do
+		if STATION_KINDS[anchor.kind] or (spec and anchor.kind == spec.item.candidate) then
+			rooms[anchor.room] = true
+		end
+	end
+	return rooms
+end
+
+-- How many Creature start candidates `layout` keeps for a squad arriving in `entryRoom` (the web's spawn rule):
+-- PatrolWaypoint / CreatureSpawn anchors CreatureBand studs walked from the arrival point, out of sight of the
+-- entry (not in it, nor in a room a doorway of it opens into), and never in an objective room.
+function RunDirector.creatureSpawnCount(layout: Layout, entryRoom: string): number
+	local seen: { [string]: boolean } = { [entryRoom] = true }
+	for _, door in layout.doors do
+		if door.kind ~= "Boarded" and table.find(door.rooms, entryRoom) then
+			for _, room in door.rooms do
+				seen[room] = true
+			end
+		end
+	end
+	local avoid = objectiveRooms(layout)
+	local from = ObjectivePlaces.arrivalPoint(layout, entryRoom)
+	local count = 0
+	for _, anchor in layout.anchors do
+		if (anchor.kind == "PatrolWaypoint" or anchor.kind == "CreatureSpawn") and not seen[anchor.room] then
+			if not avoid[anchor.room] then
+				local walk = ObjectivePlaces.walkDistance(layout, entryRoom, from, anchor.room, anchor.pos)
+				if walk >= CREATURE_BAND[1] and walk <= CREATURE_BAND[2] then
+					count += 1
+				end
+			end
+		end
+	end
+	return count
+end
+
+-- The fairness verdict of every exit candidate of `layout` for a squad that entered it in `entryRoom` (candidate
+-- order): fair when its vestibule is at least RouteFairShare of the longest candidate's walk from the entry, and the
+-- next floor (on the Creature-start levels) keeps at least MinCreatureSpawns starts from its entry vestibule. `byId`
+-- holds the layouts (the next floor's may be missing: then only the walk counts). Cached per layout and entry.
+function RunDirector.routeChecks(layout: Layout, entryRoom: string, byId: { [string]: Layout }): { RouteCheck }
+	local cached = routeCache[layout]
+	if not cached then
+		cached = {}
+		routeCache[layout] = cached
+	end
+	local hit = cached[entryRoom]
+	if hit then
+		return hit
+	end
+	local from = ObjectivePlaces.arrivalPoint(layout, entryRoom)
+	local checks: { RouteCheck } = {}
+	local longest = 0
+	for _, spec in WorldConfig.stairwellCandidates(layout.id) do
+		local to = ObjectivePlaces.arrivalPoint(layout, spec.fromRoom)
+		local distance = ObjectivePlaces.walkDistance(layout, entryRoom, from, spec.fromRoom, to)
+		if distance < math.huge then
+			longest = math.max(longest, distance)
+		end
+		local nextLayout = byId[spec.to]
+		local spawns = if nextLayout and CREATURE_SPAWN_LEVELS[spec.to]
+			then RunDirector.creatureSpawnCount(nextLayout, spec.toRoom)
+			else nil
+		table.insert(
+			checks,
+			{ stairwellId = spec.id, distance = distance, share = 0, creatureSpawns = spawns, fair = false }
+		)
+	end
+	for _, check in checks do
+		check.share = if longest > 0 and check.distance < math.huge then check.distance / longest else 0
+		check.fair = check.distance < math.huge
+			and check.share >= ROUTE_FAIR_SHARE - 1e-9
+			and (check.creatureSpawns == nil or check.creatureSpawns >= MIN_CREATURE_SPAWNS)
+		table.freeze(check)
+	end
+	table.freeze(checks)
+	cached[entryRoom] = checks
+	return checks
+end
+
+-- The run's route: for every floor pair in climbing order, one of its three candidate stairwells (slot order North,
+-- Middle, South), uniform by the seed (stream "Route|<from>"); a draw that is not fair for the floor's entry (the
+-- previous pick's upper vestibule; the basement's layout entry) is drawn again from the same stream, up to
+-- RouteAttempts draws, then the first fair candidate in slot order (else the middle one). { [from level] = id }.
+function RunDirector.pickRoute(seed: number, layouts: { Layout }?): { [string]: string }
+	local byId: { [string]: Layout } = {}
+	local list: { Layout } = if layouts then layouts else Builder.layouts()
+	for _, layout in list do
+		byId[layout.id] = byId[layout.id] or layout
+	end
+	local route: { [string]: string } = {}
+	local entry: string? = nil
+	for _, from in WorldConfig.LevelOrder do
+		local candidates = WorldConfig.stairwellCandidates(from)
+		local layout = byId[from]
+		if #candidates == 0 or not layout then
+			entry = nil
+			continue
+		end
+		local fair: { [string]: boolean } = {}
+		for _, check in RunDirector.routeChecks(layout, entry or layout.entry, byId) do
+			fair[check.stairwellId] = check.fair
+		end
+		local random = MathUtil.seededRandom(seed, "Route|" .. from)
+		local pick: WorldConfig.StairwellSpec? = nil
+		for _ = 1, ROUTE_ATTEMPTS do
+			local candidate = candidates[random:NextInteger(1, #candidates)]
+			if fair[candidate.id] then
+				pick = candidate
+				break
+			end
+		end
+		if not pick then
+			for _, candidate in candidates do
+				if fair[candidate.id] then
+					pick = candidate
+					break
+				end
+			end
+		end
+		local chosen = pick or WorldConfig.routeExit(nil, from)
+		if chosen then
+			route[from] = chosen.id
+			entry = chosen.toRoom
+		end
+	end
+	return table.freeze(route)
+end
+
 -- The objective picks of `plan` on `levelId` (nil for a level without an objective or a plan without picks).
 function RunDirector.objectiveOf(plan: Types.SpawnPlan, levelId: string): Types.ObjectivePicks?
 	local objectives = plan.objectives
@@ -641,6 +810,7 @@ function RunDirector.plan(
 		lockedGrates = lockedGrates,
 		rerolls = rerolls,
 		objectives = objectives,
+		route = RunDirector.pickRoute(runSeed, layouts),
 	}
 	table.freeze(plan)
 	return plan

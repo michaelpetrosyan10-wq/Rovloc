@@ -72,6 +72,7 @@ local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local CollisionService = require(ServerScriptService.Services.Core.CollisionService)
+local LevelDirector = require(ServerScriptService.Services.Core.LevelDirector)
 local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
 local RunLifecycleService = require(ServerScriptService.Services.Core.RunLifecycleService)
 local WorldService = require(ServerScriptService.Services.Core.WorldService)
@@ -218,9 +219,10 @@ function CharacterService.summarizeLocks(held: LockTable): LockSummary
 	return summary
 end
 
--- World CFrame of spawn slot `index` (1-based) in `layoutId`: the PlayerSpawn anchors in its entry room (any
--- PlayerSpawn anchors when the entry room has none) in layout order, wrapping and stepping sideways by
--- WorldConfig.SpawnSpacing per wrap; else the entry room's centre; else the layout origin.
+-- World CFrame of spawn slot `index` (1-based) in `layoutId`: the PlayerSpawn anchors in its entry room (on a floor
+-- reached by stairs the run's entry vestibule, LevelDirector.entryFor; else the layout's entry; any PlayerSpawn
+-- anchors when that room has none) in layout order, wrapping and stepping sideways by WorldConfig.SpawnSpacing per
+-- wrap; else the entry room's centre; else the layout origin.
 function CharacterService.SpawnCFrame(layoutId: Enums.LayoutId, index: number): CFrame
 	local slot = math.max(1, math.floor(index))
 	local layout = Builder.getLayout(layoutId)
@@ -228,12 +230,14 @@ function CharacterService.SpawnCFrame(layoutId: Enums.LayoutId, index: number): 
 	if not layout then
 		return CFrame.new(origin + Vector3.new(0, SPAWN_HEIGHT, 0))
 	end
+	local stair = LevelDirector.entryFor(layoutId)
+	local entryRoom = if stair and stair.to == layoutId then stair.toRoom else layout.entry
 	local spawns: { LayoutSchema.Anchor } = {}
 	local anywhere: { LayoutSchema.Anchor } = {}
 	for _, anchor in layout.anchors do
 		if anchor.kind == "PlayerSpawn" then
 			table.insert(anywhere, anchor)
-			if anchor.room == layout.entry then
+			if anchor.room == entryRoom then
 				table.insert(spawns, anchor)
 			end
 		end
@@ -247,7 +251,7 @@ function CharacterService.SpawnCFrame(layoutId: Enums.LayoutId, index: number): 
 		return Builder.anchorCFrame(layoutId, anchor) * CFrame.new(wrap * WorldConfig.SpawnSpacing, 0, 0)
 	end
 	local rooms = LayoutSchema.indexRooms(layout)
-	local entry = rooms[layout.entry]
+	local entry = rooms[entryRoom]
 	if entry then
 		local center = LayoutSchema.rectCenter(entry.rect)
 		local offset = (slot - 1) * WorldConfig.SpawnSpacing

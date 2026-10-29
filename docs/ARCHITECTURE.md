@@ -466,8 +466,10 @@ Workspace
 │   ├── Level3_Gymnasium     Model
 │   ├── Level4_FloodedPool   Model
 │   ├── Level5_Roof          Model
-│   └── Stairwells           Model  Stairwell_0_1 … Stairwell_4_5 (stairs + emergency lights; checkpoint volumes are the
-│                                   layouts' Checkpoint triggers in each exit airlock; fire doors come from P2 DoorBuilder)
+│   └── Stairwells           Model  Stairwell_0_1 … Stairwell_4_5 + their _North / _South candidates in the corner towers
+│                                   (stairs + emergency lights; checkpoint volumes are the layouts' Checkpoint triggers in
+│                                   each exit airlock; fire doors come from P2 DoorBuilder; a run uses one per floor pair,
+│                                   RunDirector plan.route, and DoorBuilder jams the others shut)
 ├── Cosmetic                 Folder (client-local) Skyline, trims, loose clutter, posed corpses
 ├── Creature                 Model  [tag Creature] Humanoid · HumanoidRootPart · CreatureHitbox · Motor6D rig
 └── Runtime                  Folder  Level0 … Level5: per-run traps, flasks, batteries, and the P2 fixtures rebuilt every

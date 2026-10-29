@@ -244,8 +244,6 @@ local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number
 end
 
 -- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
-local TOWER_MIN_Z = WorldConfig.Towers.West.minZ - 2
-local TOWER_MAX_Z = WorldConfig.Towers.West.maxZ + 2
 local function windowRow(
 	roomId: string,
 	side: LayoutSchema.Side,
@@ -261,7 +259,7 @@ local function windowRow(
 	local span = if alongX then rect.w else rect.d
 	for i = 1, count do
 		local at = from + span * (i - 0.5) / count
-		local facesTower = not alongX and at + width / 2 > TOWER_MIN_Z and at - width / 2 < TOWER_MAX_Z
+		local facesTower = not alongX and WorldConfig.facesTower(at - width / 2, at + width / 2, 2)
 		if not facesTower then
 			table.insert(
 				windows,
@@ -329,7 +327,8 @@ room("L0_CoalBunker", "Boiler", 24, 0, 48, 30, BOILER)
 room("L0_FurnitureStore", "Storage", 72, 0, 48, 30, STORE)
 room("L0_BoilerRoom_North", "Boiler", 120, 0, 48, 30, BOILER)
 room("L0_ElectricalRoom", "Storage", 168, 0, 36, 30, ELECTRICAL)
-room("L0_Storage_NE", "Storage", 204, 0, 36, 30, STORE)
+room("L0_Storage_NE", "Storage", 204, 0, 24, 30, STORE)
+room("L0_AirlockNorthEast", "Airlock", 228, 0, 12, 30, AIRLOCK)
 
 -- The three halls
 room("L0_Undercroft_West", "Storage", 24, 30, 80, 100, HALL)
@@ -346,7 +345,8 @@ room("L0_PumpRoom", "Boiler", 24, 130, 48, 30, PLANT)
 room("L0_ArchiveStore", "Storage", 72, 130, 48, 30, STORE)
 room("L0_BoilerRoom_South", "Boiler", 120, 130, 48, 30, BOILER)
 room("L0_WaterHeaterRoom", "Boiler", 168, 130, 36, 30, PLANT)
-room("L0_CondemnedStore", "Storage", 204, 130, 36, 30, STORE)
+room("L0_CondemnedStore", "Storage", 204, 130, 24, 30, STORE)
+room("L0_AirlockSouthEast", "Airlock", 228, 130, 12, 30, AIRLOCK)
 
 --------------------------------------------------------------------------------
 -- Doors
@@ -372,6 +372,10 @@ door("Doorway", "L0_BoilerHall", "L0_Undercroft_East", 80, { width = 10 })
 door("Door", "L0_Undercroft_East", "L0_Store_E1", 48)
 door("Airlock", "L0_Undercroft_East", "L0_AirlockEast", 80, { id = "L0_Door_AirlockEast" })
 door("Door", "L0_Undercroft_East", "L0_Store_E2", 112)
+-- The corner stair vestibules: off the north-east store, and off the south-east store (the condemned store beside
+-- it is boarded up)
+door("Airlock", "L0_Storage_NE", "L0_AirlockNorthEast", 15, { id = "L0_Door_AirlockNorthEast" })
+door("Airlock", "L0_Store_E2", "L0_AirlockSouthEast", 234, { id = "L0_Door_AirlockSouthEast" })
 
 door("Doorway", "L0_Undercroft_West", "L0_PumpRoom", 48, { width = 8 })
 door("Door", "L0_Undercroft_West", "L0_ArchiveStore", 88)
@@ -437,7 +441,9 @@ do
 	lightGrid(id, "Bulb", 1, 1, "x")
 end
 lightGrid("L0_DeliveryBay", "Bulb", 1, 2, "fx", { flicker = "L0_Spawn", brightness = 0.3 })
-lightGrid("L0_AirlockEast", "Fluorescent", 1, 2, "x")
+for _, id in { "L0_AirlockEast", "L0_AirlockNorthEast", "L0_AirlockSouthEast" } :: { string } do
+	lightGrid(id, "Fluorescent", 1, 2, "x")
+end
 
 light("L0_BoilerHall", "BoilerGlow", 127, 2, 61, { flicker = "L0_Boilers" })
 light("L0_BoilerHall", "BoilerGlow", 153, 2, 99, { flicker = "L0_Boilers" })
@@ -446,6 +452,8 @@ light("L0_BoilerRoom_South", "BoilerGlow", 144, 2, 139, { flicker = "L0_Boilers"
 light("L0_Undercroft_East", "EmergencyRed", 226, HEIGHT - 3, 80, { flicker = "L0_Exit", brightness = 0.5 })
 light("L0_Undercroft_East", "ExitSign", 226.5, 11, 80)
 light("L0_AirlockEast", "EmergencyRed", 234, HEIGHT - 1, 80, { brightness = 0.3 })
+light("L0_AirlockNorthEast", "EmergencyRed", 234, HEIGHT - 1, 15, { brightness = 0.3 })
+light("L0_AirlockSouthEast", "EmergencyRed", 234, HEIGHT - 1, 145, { brightness = 0.3 })
 
 --------------------------------------------------------------------------------
 -- Anchors
@@ -515,7 +523,7 @@ scatter("BatteryCandidate", 0, {
 	{ 6, 124 },
 	{ 66, 156 },
 	{ 78, 152 },
-	{ 230, 10 },
+	{ 224, 10 },
 	{ 234, 100 },
 })
 
@@ -556,6 +564,10 @@ fuse(190, 0, 145, 196, 140) -- on the floor by the water heaters
 fuse(238.6, 4, 39, 234, 44) -- on the shelving in the east store by the stairs
 anchor("BreakerPanel", 203.5, 0, 18, FACE_W, "L0_BreakerPanel")
 anchor("ExitLock", 227.5, 0, 80, FACE_W, "L0_ExitLock")
+anchor("ExitLock", 227.5, 0, 15, FACE_W, "L0_ExitLock_North")
+anchor("ExitLock", 234, 0, 129.5, FACE_N, "L0_ExitLock_South")
+-- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
+anchor("Locker", 225.95, 0, 26, FACE_W)
 
 scatter("Clutter", 0, {
 	{ 30, 36, 0 },
@@ -583,6 +595,8 @@ trigger("L0_Trigger_DebrisBoilerGap", "FloorDebris", 136, 72, 8, 16, 4)
 trigger("L0_Trigger_DebrisGlass", "FloorDebris", 196, 100, 8, 8, 4)
 trigger("L0_Trigger_DebrisCoal", "FloorDebris", 34, 16, 10, 8, 4)
 trigger("L0_Trigger_Checkpoint", "Checkpoint", 229, 67, 10, 26, 12)
+trigger("L0_Trigger_CheckpointNorthEast", "Checkpoint", 229, 1, 10, 28, 12)
+trigger("L0_Trigger_CheckpointSouthEast", "Checkpoint", 229, 131, 10, 28, 12)
 
 --------------------------------------------------------------------------------
 -- Boarded windows high on the foundation walls (light wells to the street)
@@ -605,10 +619,8 @@ windowRow("L0_Storage_NW", "W", 1, PANE_W, PANE_H, SILL, true)
 windowRow("L0_Workshop", "W", 1, PANE_W, PANE_H, SILL, true)
 windowRow("L0_Laundry", "W", 1, PANE_W, PANE_H, SILL, true)
 windowRow("L0_Storage_SW", "W", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_Storage_NE", "E", 1, PANE_W, PANE_H, SILL, true)
 windowRow("L0_Store_E1", "E", 1, PANE_W, PANE_H, SILL, true)
 windowRow("L0_Store_E2", "E", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_CondemnedStore", "E", 1, PANE_W, PANE_H, SILL, true)
 
 --------------------------------------------------------------------------------
 

@@ -548,19 +548,25 @@ return {
 			t.falsy(DoorService.IsMoving(roof), "snapped, not moving")
 
 			local forL1 = DoorService.ForLevel(L1)
-			t.eq(#forL1, 4, "two fire doors, the gate and the classroom door on Level 1")
+			t.eq(#forL1, 8, "six fire doors (three entry, three exit candidates), the gate and the classroom door")
 			for index = 2, #forL1 do
 				local previous = forL1[index - 1]:GetAttribute(W.DoorId) :: string
 				local current = forL1[index]:GetAttribute(W.DoorId) :: string
 				t.truthy(previous < current, "sorted by DoorId")
 			end
 			local airlocks = DoorService.Airlocks(L1)
-			t.eq(#airlocks, 4, "Level 1's stairwells: the basement's exit, its entry, its exit and Level 2's entry")
+			t.eq(
+				#airlocks,
+				12,
+				"Level 1's stairwells (three candidates each): the basement's exits, its entries, exits and Level 2's entries"
+			)
 			local into, outOf = 0, 0
 			for _, model in airlocks do
 				t.eq(model:GetAttribute(W.DoorKind), "Airlock")
-				t.eq(DoorService.GetState(model), "Open", model.Name .. " starts open")
-				t.truthy(isAt(model, 1), model.Name .. " stands fully open")
+				-- the run's route uses one stairwell per floor pair; the others are jammed shut from the start
+				local jammed = model:GetAttribute(W.Jammed) == true
+				t.eq(DoorService.GetState(model), if jammed then "Locked" else "Open", model.Name .. " initial state")
+				t.truthy(isAt(model, if jammed then 0 else 1), model.Name .. " stands fully open, or shut when jammed")
 				if model:GetAttribute(W.ToLevel) == L1 then
 					into += 1
 				end
@@ -568,10 +574,14 @@ return {
 					outOf += 1
 				end
 			end
-			t.eq(into, 2, "both sides of the stairwell up from the basement")
-			t.eq(outOf, 2, "both sides of the stairwell up to Level 2")
-			t.eq(#DoorService.Airlocks(L0), 2, "the basement: its exit and Level 1's entry")
-			t.eq(#DoorService.Airlocks(L2), 3, "Level 2: Level 1's exit, its entry and its exit (Level 3 is not built)")
+			t.eq(into, 6, "both sides of the three stairwells up from the basement")
+			t.eq(outOf, 6, "both sides of the three stairwells up to Level 2")
+			t.eq(#DoorService.Airlocks(L0), 6, "the basement: its exits and Level 1's entries")
+			t.eq(
+				#DoorService.Airlocks(L2),
+				9,
+				"Level 2: Level 1's exits, its entries and its exits (Level 3 is not built)"
+			)
 			t.eq(#DoorService.Airlocks(L5), 0, "the roof has no fire doors")
 		end)
 	end,

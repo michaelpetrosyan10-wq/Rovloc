@@ -9,7 +9,8 @@
 --       lobby       get on the bus (the glowing arrows) -> stand on a pad to ready up; optional lines for the vote and
 --                   the perk shop tick off once done; "you're ready, waiting for the squad"; the countdown; a full
 --                   squad's waiting list;
---       every floor find the stairwell it leaves by (WorldConfig.Stairwells' tower: east or west), and once its fire
+--       every floor find the stairwell the run leaves it by (the tower of the route's exit: east, north-east, ...;
+--                   AirlockController.exitStairwell reads it off the fire doors that are not jammed), and once its fire
 --                   doors are counting down, get in (or hold it, from inside the vestibule);
 --       Floor 1     after the HallwayGate slams: find a vent around it (the CriticalPath bypass grate), crawl through,
 --                   then the stairwell again once past the gate;
@@ -84,7 +85,8 @@ export type LevelInput = {
 	gateSlammed: boolean,
 	beyondGate: boolean,
 	inVent: boolean,
-	roofDoor: string?, -- the RoofStairDoor's DoorState
+	roofDoor: string?, -- the run's roof door's DoorState (the housing the route arrives in)
+	exitTower: string?, -- the tower of the stairwell the run leaves the level by (nil: the floor's default)
 	onRoof: boolean, -- out of the stair housing and the towers
 	parachute: string?, -- Player.Parachute (Enums.ParachuteState)
 }
@@ -227,7 +229,7 @@ function ObjectiveTracker.levelObjective(input: LevelInput): Objective?
 	if level == POOL_LEVEL then
 		return { text = "Objective.PoolStairs", tip = tip, target = "Exit" }
 	end
-	local tower = floor.stairwell or "East"
+	local tower = input.exitTower or floor.stairwell or "East"
 	return { text = "Objective.Stairwell." .. tower, tip = tip, target = "Exit" }
 end
 
@@ -367,7 +369,7 @@ end
 local function exitDoors(level: string): { Instance }
 	local out: { Instance } = {}
 	for _, door in CollectionService:GetTagged(Tags.AirlockDoor) do
-		if door:GetAttribute(W.FromLevel) == level and onLevel(door, level) then
+		if door:GetAttribute(W.FromLevel) == level and onLevel(door, level) and door:GetAttribute(W.Jammed) ~= true then
 			table.insert(out, door)
 		end
 	end
@@ -388,7 +390,8 @@ local function airlockState(doors: { Instance }): AirlockState
 end
 
 local function insideAirlock(level: string, root: BasePart): boolean
-	local room = AirlockController.exitRoom(level)
+	local exit = AirlockController.exitStairwell(level)
+	local room = if exit then exit.fromRoom else nil
 	for _, volume in CollectionService:GetTagged(Tags.CheckpointVolume) do
 		if
 			volume:IsA("BasePart")
@@ -476,7 +479,10 @@ local function scanLevel(player: Player, level: string, root: BasePart?)
 	local gate = if level == GATE_LEVEL then scriptedDoor(level, GATE_ID) else nil
 	local gatePoint = if gate then positionOf(gate) else nil
 	local gateState = if gate then gate:GetAttribute(W.DoorState) else nil
-	local roofDoor = if level == ROOF_LEVEL then scriptedDoor(level, ROOF_DOOR_ID) else nil
+	local arrival = if level == ROOF_LEVEL then AirlockController.exitStairwell(POOL_LEVEL) else nil
+	local roofDoorId = ROOF_DOOR_ID .. (if arrival and arrival.slot ~= "Middle" then arrival.slot else "")
+	local roofDoor = if level == ROOF_LEVEL then scriptedDoor(level, roofDoorId) else nil
+	local exit = AirlockController.exitStairwell(level)
 	local zone = player:GetAttribute(P.ZoneId)
 	local moveState = player:GetAttribute(P.MoveState)
 	local objective = ObjectiveTracker.levelObjective({
@@ -490,9 +496,11 @@ local function scanLevel(player: Player, level: string, root: BasePart?)
 			and ObjectiveTracker.beyond(gatePoint, exitPoint, root.Position, BEYOND_MARGIN),
 		inVent = type(moveState) == "string" and VENT_STATES[moveState] == true,
 		roofDoor = if roofDoor then Attributes.getString(roofDoor, W.DoorState, "") else nil,
-		onRoof = root ~= nil and type(zone) == "string" and zone ~= ROOF_HOUSING and not ParachuteMotion.inTower(
-			root.Position
-		),
+		exitTower = if exit then exit.tower else nil,
+		onRoof = root ~= nil
+			and type(zone) == "string"
+			and string.sub(zone, 1, #ROOF_HOUSING) ~= ROOF_HOUSING
+			and not ParachuteMotion.inTower(root.Position),
 		parachute = Attributes.getString(player, P.Parachute, "None"),
 	})
 	scan.objective = objective

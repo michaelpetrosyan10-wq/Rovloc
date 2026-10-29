@@ -506,7 +506,11 @@ return {
 	["every Locker anchor gets one hideable locker with its tags, attributes and number"] = function(t: Expect)
 		local layout = layoutOf(GYM)
 		local anchors = PropKit.anchorsOf(layout, "Locker")
-		t.eq(#anchors, 45, "Level 3 has 45 Locker anchors (40 in the locker wing, 5 the floor objective added)")
+		t.eq(
+			#anchors,
+			47,
+			"Level 3 has 47 Locker anchors (40 in the locker wing, 5 for the objective, 2 by corner exits)"
+		)
 		local list = lockers()
 		t.eq(#list, #anchors, "one locker per anchor")
 		local byId: { [string]: Model } = {}
@@ -1145,7 +1149,7 @@ return {
 		local count = Builder.BuildFixtures(GYM, again[GYM], nil, SEED + 2)
 		Geometry.setYieldEvery(previous)
 		t.truthy(count >= 40, "fixture count reported")
-		t.eq(#modelsIn(child(again[GYM], LockerBuilder.Folder)), 45, "rebuild replaces, never duplicates")
+		t.eq(#modelsIn(child(again[GYM], LockerBuilder.Folder)), 47, "rebuild replaces, never duplicates")
 		local folders = 0
 		for _, c in again[GYM]:GetChildren() do
 			if c.Name == LockerBuilder.Folder then
@@ -1156,7 +1160,7 @@ return {
 		-- Levels without the anchors build none of these kinds.
 		for _, id in LEVELS do
 			for _, folderName in { LockerBuilder.Folder, FloodlightSwitchBuilder.Folder, ParachuteBuilder.Folder } do
-				local expected = (id == GYM and folderName == LockerBuilder.Folder)
+				local expected = ((id == GYM or id == POOL) and folderName == LockerBuilder.Folder)
 					or (id == POOL and folderName == FloodlightSwitchBuilder.Folder)
 					or (id == ROOF and folderName == ParachuteBuilder.Folder)
 				t.eq(first[id]:FindFirstChild(folderName) ~= nil, expected, id .. " " .. folderName)
@@ -1176,7 +1180,7 @@ return {
 				table.insert(roots, folder)
 			end
 		end
-		t.eq(#roots, 3, "a locker, a switch and a crate folder")
+		t.eq(#roots, 4, "a locker folder on the gym and the pool floor, a switch and a crate folder")
 		local host = Instance.new("Folder")
 		local backpack = Builder.BuildRig(ParachuteBuilder.BackpackRig, host, CFrame.new())
 		local canopy = Builder.BuildRig(ParachuteBuilder.CanopyRig, host, CFrame.new())

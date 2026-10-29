@@ -299,7 +299,9 @@ spec["floor goals: the stairwell each level leaves by"] = function(t: Expect)
 	t.eq(ObjectiveTracker.levelObjective(levelInput(nil)), nil)
 	t.eq(ObjectiveTracker.levelObjective(levelInput("Lobby")), nil)
 	for _, stairwell in WorldConfig.Stairwells do
-		local goal = ObjectiveTracker.levelObjective(levelInput(stairwell.from))
+		local input = levelInput(stairwell.from)
+		input.exitTower = stairwell.tower
+		local goal = ObjectiveTracker.levelObjective(input)
 		t.truthy(goal ~= nil, stairwell.from)
 		if goal then
 			t.eq(goal.target, "Exit", stairwell.from .. " points at its exit")

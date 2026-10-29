@@ -1316,15 +1316,16 @@ local function planOpenings(layout: Layout, rooms: { [string]: Room }, lines: { 
 				continue
 			end
 			local tower = WorldConfig.Towers[spec.tower]
-			local coord = if spec.tower == "East" then room.rect.x + room.rect.w else room.rect.x
-			local expected = if spec.tower == "East" then tower.minX else tower.maxX
+			local east = tower.side == "East"
+			local coord = if east then room.rect.x + room.rect.w else room.rect.x
+			local expected = if east then tower.minX else tower.maxX
 			if math.abs(coord - expected) > EPS then
 				log.warn("%s: room %s does not touch the %s tower", layout.id, roomId, spec.tower)
 				continue
 			end
 			add("Tower", "X", coord, {
-				u0 = opening.centerZ - opening.width / 2,
-				u1 = opening.centerZ + opening.width / 2,
+				u0 = tower.openingZ - opening.width / 2,
+				u1 = tower.openingZ + opening.width / 2,
 				y0 = 0,
 				y1 = opening.height,
 			})
@@ -2299,14 +2300,14 @@ function SchoolShellBuilder.buildExterior(parent: Instance): number
 		)
 	end
 	local lampSpots: { { number } } = {
-		{ -walk + 1.5, 20 },
-		{ -walk + 1.5, 140 },
+		{ -walk + 1.5, 44 },
+		{ -walk + 1.5, 116 },
 		{ 60, -walk + 1.5 },
 		{ 180, -walk + 1.5 },
 		{ 60, size.Y + walk - 1.5 },
 		{ 180, size.Y + walk - 1.5 },
-		{ size.X + walk - 1.5, 20 },
-		{ size.X + walk - 1.5, 140 },
+		{ size.X + walk - 1.5, 44 },
+		{ size.X + walk - 1.5, 116 },
 	}
 	for i, spot in lampSpots do
 		local x, z = spot[1], spot[2]

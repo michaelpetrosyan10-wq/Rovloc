@@ -299,11 +299,13 @@ return {
 				spec.levelId .. " more spots than items"
 			)
 			for _, kind in STATIONS[spec.levelId] do
-				t.eq(#anchorsOf(layout, kind :: Enums.AnchorKind), 1, spec.levelId .. " " .. kind)
+				-- an exit lock on every exit candidate's fire door
+				local want = if kind == "ExitLock" then 3 else 1
+				t.eq(#anchorsOf(layout, kind :: Enums.AnchorKind), want, spec.levelId .. " " .. kind)
 			end
 			local exitLocks = anchorsOf(layout, "ExitLock")
 			if spec.lockVariant then
-				t.eq(#exitLocks, 1, spec.levelId .. " exit lock")
+				t.eq(#exitLocks, 3, spec.levelId .. " an exit lock per exit candidate")
 				-- on the fire door into the exit room
 				local face = LockBuilder.doorFace(layout, exitLocks[1])
 				t.truthy(face ~= nil, spec.levelId .. " exit lock sits in a door")
@@ -483,7 +485,8 @@ return {
 				#all,
 				spec.levelId .. " every candidate is one a run may use"
 			)
-			local entry = ObjectivePlaces.entryPoint(layout)
+			local entries = ObjectivePlaces.entries(layout)
+			t.eq(#entries, if spec.levelId == "Level0_Basement" then 1 else 3, spec.levelId .. " ways in")
 			for _, anchor in all do
 				local place = { id = anchor.id, kind = anchor.kind, room = anchor.room, pos = anchor.pos }
 				local walk = ObjectivePlaces.entryDistance(layout, place)
@@ -491,7 +494,10 @@ return {
 					walk >= ObjectiveConfig.EntryClearance and walk < math.huge,
 					string.format("%s is %.1f studs walked from the entry", anchor.id, walk)
 				)
-				local straight = (Vector3.new(anchor.pos.X, 0, anchor.pos.Z) - entry).Magnitude
+				local straight = math.huge
+				for _, entry in entries do
+					straight = math.min(straight, (Vector3.new(anchor.pos.X, 0, anchor.pos.Z) - entry.pos).Magnitude)
+				end
 				t.truthy(walk >= straight - EPS, anchor.id .. " walk is never shorter than the straight line")
 				t.falsy(scareRooms[anchor.room], anchor.id .. " is not in the scare classroom")
 				-- floor items stand clear of solid plant and pillars; pool-floor items lie in open water
@@ -850,11 +856,19 @@ return {
 				end
 				continue
 			end
-			t.truthy(folder and #folder:GetChildren() == 1, spec.levelId .. " exit lock")
+			t.truthy(folder and #folder:GetChildren() == 3, spec.levelId .. " an exit lock per exit candidate")
 			if not folder then
 				continue
 			end
-			local model = folder:GetChildren()[1] :: Model
+			local layoutAnchors = anchorsOf(layoutOf(spec.levelId), "ExitLock")
+			local model = folder:FindFirstChild("ExitLock_" .. layoutAnchors[1].id) :: Model
+			if not model then
+				for _, candidate in folder:GetChildren() do
+					if candidate:GetAttribute(W.AnchorId) == layoutAnchors[1].id then
+						model = candidate :: Model
+					end
+				end
+			end
 			t.truthy(model:HasTag(Tags.ExitLock), "ExitLock tag")
 			t.eq(model:GetAttribute(W.LockVariant), spec.lockVariant, spec.levelId .. " variant")
 			t.eq(model:GetAttribute(W.Locked), true, "built locked")

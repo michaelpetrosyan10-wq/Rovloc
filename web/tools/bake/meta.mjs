@@ -331,6 +331,11 @@ export function buildMeta(raw, r) {
     windows: raw.windows,
     plan: raw.plan,
     objectives: raw.objectives || null,
+    // routes: per floor (from level) its exit stairwell candidates, the shape worldData.routeCandidates consumes;
+    // routePairs: per floor pair the candidate ids and this seed's pick; routeRule: the pick rule + fairness verdicts
+    routes: raw.routes || null,
+    routePairs: raw.routePairs || null,
+    routeRule: raw.routeRule || null,
     layouts: raw.layouts,
     creature,
   };

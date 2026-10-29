@@ -249,7 +249,7 @@ for (const e of meta.entities) {
     }
   }
   const locks = byType('ExitLock');
-  check(locks.length === 5, `ExitLock: ${locks.length} entities (want 5)`);
+  check(locks.length === 15, `ExitLock: ${locks.length} entities (want 15: one per exit candidate on floors 0-4)`);
   for (const e of locks) {
     check(['Padlock', 'Chain', 'Keypad'].includes(e.attributes.LockVariant) && e.attributes.Locked === true, `${e.id} variant`);
     check(e.prompts.some((p) => p.name === 'Locked'), `${e.id} Locked prompt`);
@@ -280,7 +280,8 @@ for (const e of meta.entities) {
     for (const c of list) {
       check(c.eligible === true, `${c.anchorId} is a candidate a run may use`);
       check(c.entryDistance >= rules.entryClearance, `${c.anchorId} ${c.entryDistance} studs walked from the entry`);
-      if (level.entry) check(c.entryDistance + 0.1 >= flat(c.pos, level.entry.pos), `${c.anchorId} walk >= straight line`);
+      const ways = level.entries && level.entries.length ? level.entries : level.entry ? [level.entry] : [];
+      if (ways.length) check(c.entryDistance + 0.1 >= Math.min(...ways.map((e) => flat(c.pos, e.pos))), `${c.anchorId} walk >= straight line`);
       check(c.hide && c.hide.distance <= o.hideReach, `${c.anchorId} hiding spot within ${o.hideReach}`);
       check(c.quarter === quarterOf(c.pos), `${c.anchorId} quarter`);
       if (floor.item.guarded) check(c.ref && anchorIds.has(c.ref), `${c.anchorId} guard trap spot ${c.ref}`);
@@ -304,6 +305,55 @@ for (const e of meta.entities) {
     if (picked.length >= 3 && picked.every(Boolean)) check(new Set(picked.map((c) => c.quarter)).size >= rules.pickQuarters, `${floor.levelId} picks spread`);
     if (floor.item.slots) picked.forEach((c, i) => c && check(c.slot === i + 1, `${c.anchorId} is kind ${i + 1}`));
   }
+}
+// routes: three candidate stairwells per floor pair, each complete (exit fire doors, entry doors, Checkpoint volume,
+// arrival spawns, an ExitLock on every exit candidate below the roof), its doors carrying the jam data, every
+// candidate reachable and fair from at least one way in, and the export seed's pick among them
+{
+  const routes = meta.routes || {};
+  const pairs = meta.routePairs || [];
+  const rule = meta.routeRule || {};
+  const entityById = new Map(meta.entities.map((e) => [e.id, e]));
+  const anchorById = new Map(meta.anchors.map((a) => [a.id, a]));
+  const triggerIds = new Set(meta.triggers.map((t) => t.id));
+  const roomIds = new Set(meta.rooms.map((r) => r.id));
+  const stairIds = new Set((meta.stairwells || []).map((s) => s.id));
+  check(pairs.length === 5, `5 floor pairs (${pairs.length})`);
+  check(stairIds.size === 15, `15 stairwells in meta.stairwells (${stairIds.size})`);
+  check(rule.stream === 'Route|<from>' && rule.attempts > 0 && rule.fairShare > 0, 'route rule');
+  for (const p of pairs) {
+    const list = routes[p.from] || [];
+    check(list.length === 3, `${p.from}: 3 exit candidates`);
+    check(list.map((c) => c.slot).join() === 'North,Middle,South', `${p.from}: slot order`);
+    check(p.candidates.includes(p.picked), `${p.from}: export pick ${p.picked}`);
+    for (const c of list) {
+      const tag = `${c.stairwellId}`;
+      check(stairIds.has(c.stairwellId) && c.id === c.stairwellId, `${tag} is a stairwell`);
+      check(roomIds.has(c.fromRoom) && roomIds.has(c.toRoom), `${tag} vestibules ${c.fromRoom} / ${c.toRoom}`);
+      check(c.exitDoorIds.length === 1, `${tag} exit fire door`);
+      check(c.entryDoorIds.length === 1, `${tag} entry door`);
+      for (const id of [...c.exitDoorIds, ...c.entryDoorIds]) {
+        const e = entityById.get(id);
+        check(!!e, `${tag} door ${id} entity`);
+        if (!e) continue;
+        check(e.attributes.StairwellId === c.stairwellId && e.attributes.RouteSlot === c.slot, `${id} StairwellId / RouteSlot`);
+        check(e.attributes.Jammed === (c.stairwellId !== p.picked), `${id} Jammed matches the export pick`);
+        check(e.nodes.some((n) => n.path === 'Jam'), `${id} has the Jam leaf`);
+        check(e.prompts.some((pr) => pr.name === 'Locked' && pr.holdDuration === 0), `${id} Jammed prompt`);
+      }
+      check(triggerIds.has(c.checkpoint), `${tag} Checkpoint ${c.checkpoint}`);
+      check(c.spawns.length >= 4 && c.spawns.every((id) => anchorById.has(id) && anchorById.get(id).room === c.toRoom), `${tag} 4+ arrival spawns`);
+      if (c.from !== 'Level5_Roof') check(!!c.exitLock && entityById.has(c.exitLock) && c.exitDoorIds.includes(entityById.get(c.exitLock).attributes.DoorId), `${tag} ExitLock on its fire door`);
+      if (c.to === 'Level5_Roof') check(!!c.creatureSpawn && anchorById.has(c.creatureSpawn), `${tag} housing has the Creature's spot`);
+      const verdicts = Object.values((rule.checks || {})[p.from] || {}).map((list2) => list2.find((v) => v.stairwellId === c.stairwellId));
+      check(verdicts.length >= 1 && verdicts.every((v) => v && v.distance > 0), `${tag} reachable from every way in`);
+      check(verdicts.some((v) => v && v.fair), `${tag} fair from some way in`);
+    }
+  }
+  // Nightmare's trap count is served by trap entities
+  const traps = meta.entities.filter((e) => e.type === 'BearTrap');
+  check(traps.length >= 16, `${traps.length} bear trap entities (want >= 16)`);
+  console.log(`  ok   routes ${pairs.length} pairs, ${Object.values(routes).flat().length} candidates, ${traps.length} traps`);
 }
 // collision
 for (const [level, c] of Object.entries(world.collision)) {

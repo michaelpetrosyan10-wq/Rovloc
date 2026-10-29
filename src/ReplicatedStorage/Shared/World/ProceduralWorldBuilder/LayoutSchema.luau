@@ -983,17 +983,18 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 				LayoutSchema.rect(tower.minX, tower.minZ, tower.maxX - tower.minX, tower.maxZ - tower.minZ)
 			local edge = LayoutSchema.sharedEdge(room.rect, towerRect)
 			local opening = WorldConfig.TowerOpening
+			local centerZ = tower.openingZ
 			if
 				not edge
-				or opening.centerZ - opening.width / 2 < edge.from - EPS
-				or opening.centerZ + opening.width / 2 > edge.to + EPS
+				or centerZ - opening.width / 2 < edge.from - EPS
+				or centerZ + opening.width / 2 > edge.to + EPS
 			then
 				pushf(
 					errors,
 					"room %s must touch the %s tower across Z %.0f +/- %.0f",
 					roomId,
 					spec.tower,
-					opening.centerZ,
+					centerZ,
 					opening.width / 2
 				)
 			else
@@ -1001,8 +1002,8 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 					what = string.format("%s tower opening", spec.tower),
 					axis = edge.axis,
 					coord = edge.coord,
-					u0 = opening.centerZ - opening.width / 2,
-					u1 = opening.centerZ + opening.width / 2,
+					u0 = centerZ - opening.width / 2,
+					u1 = centerZ + opening.width / 2,
 					y0 = 0,
 					y1 = opening.height,
 				})
@@ -1039,16 +1040,26 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		end
 	end
 
-	-- Solvability: the exit must be reachable with every lockable grate locked and every gate shut.
-	if rooms[layout.entry] and rooms[layout.exit] then
-		local seen = reachable(layout, layout.entry, true)
-		if not seen["room:" .. layout.exit] then
-			pushf(
-				errors,
-				"exit %s is unreachable from %s once lockable grates lock and gates shut",
-				layout.exit,
-				layout.entry
-			)
+	-- Solvability: the exit (and every exit vestibule candidate) must be reachable from the entry (and from every
+	-- entry vestibule candidate) with every lockable grate locked and every gate shut.
+	local entries: { string } = { layout.entry }
+	local exits: { string } = { layout.exit }
+	if isSchoolLevel(layout) then
+		for roomId, spec in stairwellRooms(layout.id) do
+			table.insert(if spec.from == layout.id then exits else entries, roomId)
+		end
+		table.sort(entries)
+		table.sort(exits)
+	end
+	for _, entry in entries do
+		if not rooms[entry] then
+			continue
+		end
+		local seen = reachable(layout, entry, true)
+		for _, exit in exits do
+			if rooms[exit] and not seen["room:" .. exit] then
+				pushf(errors, "exit %s is unreachable from %s once lockable grates lock and gates shut", exit, entry)
+			end
 		end
 	end
 

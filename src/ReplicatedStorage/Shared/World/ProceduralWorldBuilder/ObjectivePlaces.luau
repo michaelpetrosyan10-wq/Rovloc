@@ -11,13 +11,17 @@
 --                               Cover       a plant block to crouch behind, at least CoverHeight tall (the roof)
 --   nearestHide(layout, place) the closest hide spot the place can use, with its distance (straight line; lockers and
 --                              vents only count in the place's own room or a room joined to it by a doorway)
---   entryPoint(layout)         where the squad arrives: the centroid of the entry room's PlayerSpawn anchors
+--   arrivalPoint(layout, room) where the squad arrives in a room: the centroid of its PlayerSpawn anchors
+--   entryPoint(layout)         the arrival point of the layout's entry room
+--   entries(layout)            every way a run may enter the floor: the entry room and every entry vestibule candidate
+--                              (WorldConfig.Stairwells arriving on it), with their arrival points
 --   walkDistance(layout, fromRoom, from, toRoom, to)
 --                              studs walked between two floor points: straight lines across rooms (rooms are convex
 --                              rects) from door to door, and crawled through the vents a squad can always use, in the
 --                              worst case a run produces (every Gate shut, every lockable grate locked, the grates a
 --                              HatchValve shuts closed). math.huge when there is no way.
---   entryDistance(layout, place) walkDistance from the entry point to the place
+--   entryDistance(layout, place) walkDistance to the place from the nearest of the entries (whichever stairwell a
+--                              run arrives by, it is never close)
 --   quarter(pos)               which quarter of the footprint a point lies in (1 NW, 2 NE, 3 SW, 4 SE; split at its
 --                              centre), for the pick spread rule
 -- ObjectiveConfig.HideReach is how close a hiding spot must be; ObjectiveConfig.EntryClearance how far every item
@@ -260,12 +264,12 @@ end
 -- Walking distances (the fairness rules: never right at the door you came in by)
 --------------------------------------------------------------------------------
 
--- Where the squad arrives on `layout`: the centroid of its entry room's PlayerSpawn anchors (the room's centre when
--- it has none).
-function ObjectivePlaces.entryPoint(layout: Layout): Vector3
+-- Where the squad arrives in room `roomId` of `layout`: the centroid of the room's PlayerSpawn anchors (the room's
+-- centre when it has none).
+function ObjectivePlaces.arrivalPoint(layout: Layout, roomId: string): Vector3
 	local sum, count = Vector3.zero, 0
 	for _, anchor in layout.anchors do
-		if anchor.kind == "PlayerSpawn" and anchor.room == layout.entry then
+		if anchor.kind == "PlayerSpawn" and anchor.room == roomId then
 			sum += Vector3.new(anchor.pos.X, 0, anchor.pos.Z)
 			count += 1
 		end
@@ -273,9 +277,28 @@ function ObjectivePlaces.entryPoint(layout: Layout): Vector3
 	if count > 0 then
 		return sum / count
 	end
-	local room = LayoutSchema.indexRooms(layout)[layout.entry]
+	local room = LayoutSchema.indexRooms(layout)[roomId]
 	local centre = if room then LayoutSchema.rectCenter(room.rect) else Vector2.zero
 	return Vector3.new(centre.X, 0, centre.Y)
+end
+
+-- Where the squad arrives on `layout` by default: the arrival point of its entry room.
+function ObjectivePlaces.entryPoint(layout: Layout): Vector3
+	return ObjectivePlaces.arrivalPoint(layout, layout.entry)
+end
+
+export type Entry = { room: string, pos: Vector3 }
+
+-- Every room a run may enter `layout` by: its entry room and every entry vestibule candidate (the upper rooms of the
+-- stairwells that arrive on it), each with its arrival point, in that order.
+function ObjectivePlaces.entries(layout: Layout): { Entry }
+	local out: { Entry } = { { room = layout.entry, pos = ObjectivePlaces.entryPoint(layout) } }
+	for _, spec in WorldConfig.Stairwells do
+		if spec.to == layout.id and spec.toRoom ~= layout.entry then
+			table.insert(out, { room = spec.toRoom, pos = ObjectivePlaces.arrivalPoint(layout, spec.toRoom) })
+		end
+	end
+	return out
 end
 
 type WalkNode = { pos: Vector2, links: { { to: string, length: number } } }
@@ -406,9 +429,14 @@ function ObjectivePlaces.walkDistance(
 	return best
 end
 
--- Studs walked from the entry point of `layout` to `place`.
+-- Studs walked to `place` from the nearest way in to `layout` (ObjectivePlaces.entries: the entry room and every entry
+-- vestibule candidate), so no run's entry is close to it.
 function ObjectivePlaces.entryDistance(layout: Layout, place: Place): number
-	return ObjectivePlaces.walkDistance(layout, layout.entry, ObjectivePlaces.entryPoint(layout), place.room, place.pos)
+	local best = math.huge
+	for _, entry in ObjectivePlaces.entries(layout) do
+		best = math.min(best, ObjectivePlaces.walkDistance(layout, entry.room, entry.pos, place.room, place.pos))
+	end
+	return best
 end
 
 -- The quarter of the footprint `pos` lies in: 1 north-west, 2 north-east, 3 south-west, 4 south-east.

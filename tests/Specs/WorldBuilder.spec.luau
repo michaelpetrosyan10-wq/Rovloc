@@ -1420,15 +1420,15 @@ return {
 
 			-- Openings on the building side are clear at both floors.
 			local tower = WorldConfig.Towers[spec.tower]
-			local edge = if spec.tower == "East" then tower.minX else tower.maxX
-			local dir = if spec.tower == "East" then 1 else -1
+			local edge = if tower.side == "East" then tower.minX else tower.maxX
+			local dir = if tower.side == "East" then 1 else -1
 			local half = WorldConfig.ExteriorWallThickness / 2
 			local opening = WorldConfig.TowerOpening
 			for _, y in { plan.bottom, plan.bottom + plan.rise } do
 				local xa, xb = edge + dir * (half + 0.01), edge + dir * (half + 0.99)
-				local lo = Vector3.new(math.min(xa, xb), y + 0.01, opening.centerZ - opening.width / 2 + 0.01)
+				local lo = Vector3.new(math.min(xa, xb), y + 0.01, tower.openingZ - opening.width / 2 + 0.01)
 				local hi =
-					Vector3.new(math.max(xa, xb), y + opening.height - 0.01, opening.centerZ + opening.width / 2 - 0.01)
+					Vector3.new(math.max(xa, xb), y + opening.height - 0.01, tower.openingZ + opening.width / 2 - 0.01)
 				for _, part in shells[spec.id] do
 					local a, b = aabb(part)
 					t.eq(overlapVolume(a, b, lo, hi), 0, spec.id .. " opening blocked by " .. part.Name)

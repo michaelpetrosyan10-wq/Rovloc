@@ -7,7 +7,8 @@
 -- service's BeginRun, which scans every AirlockDoor / ScriptedDoor model there (tag signals catch any built later).
 -- Each door is found by its ScriptedId (HallwayGate, ClassroomDoor, RoofStairDoor) or its DoorId, per level.
 -- Initial states: airlock doors Open (built open), the gate Open (rolled up), the ClassroomDoor Open at its built
--- ajar pose, the RoofStairDoor Closed (snapped shut silently).
+-- ajar pose, the RoofStairDoor Closed (snapped shut silently); a stairwell door the run's route jams (attribute Jammed)
+-- Locked.
 --
 -- States (SetState; `plan` is the table): Open = the fully open pose; Closed and Locked = the shut pose, and Locked
 -- additionally refuses RequestOpen (the gameplay path: a prompt or a mechanic asking for a door), while scripts may
@@ -779,7 +780,8 @@ function DoorService.Track(model: Model): boolean
 	end
 	local doorKind: Enums.DoorKind = (kind :: any) :: Enums.DoorKind
 	local scripted = model:GetAttribute(W.ScriptedId)
-	local initial: Enums.DoorState = INITIAL_STATES[doorKind]
+	-- a stairwell the run's route does not use is jammed: shut and Locked for the whole run (DoorBuilder.setJammed)
+	local initial: Enums.DoorState = if model:GetAttribute(W.Jammed) == true then "Locked" else INITIAL_STATES[doorKind]
 	local door: Door = {
 		model = model,
 		id = id,

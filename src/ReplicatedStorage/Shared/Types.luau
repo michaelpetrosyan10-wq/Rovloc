@@ -144,6 +144,9 @@ export type SpawnPlan = {
 	lockedGrates: { [string]: boolean },
 	rerolls: number,
 	objectives: { [string]: ObjectivePicks }?, -- by level id; nil in hand-made plans
+	-- the stairwell each floor is left by (from-level id -> WorldConfig.Stairwells id, RunDirector.pickRoute); nil in
+	-- hand-made plans, where every floor uses its middle stairwell
+	route: { [string]: string }?,
 }
 
 --------------------------------------------------------------------------------

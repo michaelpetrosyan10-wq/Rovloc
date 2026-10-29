@@ -4,9 +4,9 @@
 -- their health, and move the run on to that floor.
 --
 -- One airlock at a time: the current level's (LevelDirector) exit vestibule, the lower-level room of the stairwell
--- that leaves it (WorldConfig.Stairwells fromRoom), with that level's Checkpoint trigger (a CheckpointVolume part,
--- ZoneId = the vestibule) and the fire door(s) between the vestibule and the level (DoorService airlocks on that level
--- whose FromLevel is the level). The last level (the roof) has no exit airlock: the service stays Idle there (P8's
+-- the run's route leaves it by (LevelDirector.exitFor: its fromRoom), with that vestibule's Checkpoint trigger (a
+-- CheckpointVolume part, ZoneId = the vestibule) and the fire door(s) between the vestibule and the level (DoorService
+-- airlocks on that level whose FromLevel is the level and StairwellId the route's). The last level (the roof) has no exit airlock: the service stays Idle there (P8's
 -- finale). Any level change it did not make itself (a dev level skip) resets it to Idle for the new level.
 --
 -- At GameConfig.ServerTickHz every run participant counts as inside while their root, or the point under their feet,
@@ -135,6 +135,7 @@ local initialized = false
 local phase: AirlockPhase = "Idle"
 local levelId: Enums.LevelId? = nil -- the level whose exit airlock is watched
 local exitRoomId: string? = nil
+local exitStairwellId: string? = nil -- the route's stairwell out of the watched level
 local volumes: { BasePart } = {}
 local exitDoors: { Model } = {}
 local resolvedAt = -math.huge
@@ -145,14 +146,11 @@ local sealingSince: number? = nil
 -- Pure rules (specs: tests/Specs/Airlock.spec.luau)
 --------------------------------------------------------------------------------
 
--- The exit vestibule of `level`: the lower-level room of the stairwell that leaves it (nil on the roof).
-function CheckpointAirlockService.exitRoom(level: Enums.LevelId): string?
-	for _, stairwell in WorldConfig.Stairwells do
-		if stairwell.from == level then
-			return stairwell.fromRoom
-		end
-	end
-	return nil
+-- The exit vestibule of `level` on `route` (a plan's route; nil: the middle stairwells): the lower-level room of the
+-- stairwell the route leaves it by (nil on the roof).
+function CheckpointAirlockService.exitRoom(level: Enums.LevelId, route: { [string]: string }?): string?
+	local stairwell = WorldConfig.routeExit(route, level)
+	return if stairwell then stairwell.fromRoom else nil
 end
 
 local function isPlaying(state: Enums.LifeState): boolean
@@ -232,11 +230,16 @@ local function findVolumes(level: Enums.LevelId, room: string): { BasePart }
 	return if #matching > 0 then matching else any
 end
 
--- The fire door(s) between the level and its exit vestibule.
+-- The fire door(s) between the level and its exit vestibule (the route's stairwell; the jammed ones never count).
 local function findExitDoors(level: Enums.LevelId): { Model }
 	local out: { Model } = {}
 	for _, door in DoorService.Airlocks(level) do
-		if door:GetAttribute(W.FromLevel) == level and door:GetAttribute(W.LevelId) == level then
+		local stairwell = door:GetAttribute(W.StairwellId)
+		if
+			door:GetAttribute(W.FromLevel) == level
+			and door:GetAttribute(W.LevelId) == level
+			and (stairwell == nil or stairwell == exitStairwellId)
+		then
 			table.insert(out, door)
 		end
 	end
@@ -317,7 +320,9 @@ local function resetFor(level: Enums.LevelId?)
 	phase = "Idle"
 	sealingSince = nil
 	levelId = level
-	exitRoomId = if level then CheckpointAirlockService.exitRoom(level) else nil
+	local exit = if level then LevelDirector.exitFor(level) else nil
+	exitRoomId = if exit then exit.fromRoom else nil
+	exitStairwellId = if exit then exit.id else nil
 	volumes = {}
 	exitDoors = {}
 	resolvedAt = -math.huge

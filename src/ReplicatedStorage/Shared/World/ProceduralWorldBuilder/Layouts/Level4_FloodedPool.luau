@@ -301,8 +301,6 @@ local function trigger(
 end
 
 -- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
-local TOWER_MIN_Z = WorldConfig.Towers.West.minZ - 2
-local TOWER_MAX_Z = WorldConfig.Towers.West.maxZ + 2
 local function windowRow(
 	roomId: string,
 	side: LayoutSchema.Side,
@@ -318,7 +316,7 @@ local function windowRow(
 	local span = if alongX then rect.w else rect.d
 	for i = 1, count do
 		local at = from + span * (i - 0.5) / count
-		local facesTower = not alongX and at + width / 2 > TOWER_MIN_Z and at - width / 2 < TOWER_MAX_Z
+		local facesTower = not alongX and WorldConfig.facesTower(at - width / 2, at + width / 2, 2)
 		if not facesTower then
 			table.insert(
 				windows,
@@ -443,11 +441,13 @@ end
 --------------------------------------------------------------------------------
 
 -- North service row
-room("L4_StaffRoom", "Office", 0, 0, 40, 25, OFFICE, LOW)
+room("L4_AirlockNorthWest", "Airlock", 0, 0, 12, 25, AIRLOCK, LOW)
+room("L4_StaffRoom", "Office", 12, 0, 28, 25, OFFICE, LOW)
 room("L4_Laundry", "Storage", 40, 0, 50, 25, SHOWERS, LOW)
 room("L4_FilterRoom", "Boiler", 90, 0, 50, 25, PLANT, LOW)
 room("L4_PumpRoom", "Boiler", 140, 0, 50, 25, PLANT, LOW)
-room("L4_ChlorineStore", "Storage", 190, 0, 50, 25, CHEMICALS, LOW)
+room("L4_ChlorineStore", "Storage", 190, 0, 38, 25, CHEMICALS, LOW)
+room("L4_AirlockNorthEast", "Airlock", 228, 0, 12, 25, AIRLOCK, LOW)
 
 -- West wing: changing rooms off the pool corridor
 room("L4_Storage_W1", "Storage", 0, 25, 12, 41, STORAGE, LOW)
@@ -462,7 +462,9 @@ room("L4_FirstAid", "Office", 56, 87, 34, 20, OFFICE, LOW)
 room("L4_Showers_Girls", "Restroom", 56, 107, 34, 23, SHOWERS, LOW)
 
 -- The natatorium and its flooded maintenance duct
-room("L4_Chase_Maintenance", "Chase", 90, 25, 138, 5, CHASE, DUCT_ROOM)
+room("L4_Chase_Maintenance", "Chase", 90, 25, 124, 5, CHASE, DUCT_ROOM)
+-- A service passage through the natatorium's north wall: the east deck to the chlorine store
+room("L4_ChlorineHall", "Corridor", 214, 25, 14, 5, STORAGE, LOW)
 room("L4_Natatorium", "Pool", 90, 30, 138, 100, NATATORIUM)
 
 -- East end
@@ -471,9 +473,11 @@ room("L4_AirlockEast", "Airlock", 228, 66, 12, 28, AIRLOCK, LOW)
 room("L4_Storage_E2", "Storage", 228, 94, 12, 36, STORAGE, LOW)
 
 -- South row
-room("L4_PlantRoom", "Boiler", 0, 130, 90, 30, BOILERS, LOW)
+room("L4_AirlockSouthWest", "Airlock", 0, 130, 12, 30, AIRLOCK, LOW)
+room("L4_PlantRoom", "Boiler", 12, 130, 78, 30, BOILERS, LOW)
 room("L4_SpectatorGallery", "Corridor", 90, 130, 110, 30, GALLERY, LOW)
-room("L4_ScoreboardRoom", "Storage", 200, 130, 40, 30, STORAGE, LOW)
+room("L4_ScoreboardRoom", "Storage", 200, 130, 28, 30, STORAGE, LOW)
+room("L4_AirlockSouthEast", "Airlock", 228, 130, 12, 30, AIRLOCK, LOW)
 
 --------------------------------------------------------------------------------
 -- Doors
@@ -482,6 +486,12 @@ room("L4_ScoreboardRoom", "Storage", 200, 130, 40, 30, STORAGE, LOW)
 door("Airlock", "L4_AirlockWest", "L4_Corridor_West", 80, { id = "L4_Door_AirlockWest" })
 door("Airlock", "L4_Natatorium", "L4_AirlockEast", 80, { id = "L4_Door_AirlockEast" })
 door("Doorway", "L4_Corridor_West", "L4_Natatorium", 80, { width = 8 })
+-- The corner stair vestibules open off the corner rooms; the east ones (the chlorine store, the scoreboard room)
+-- are reached only from the east deck, across the pool
+door("Airlock", "L4_AirlockNorthWest", "L4_StaffRoom", 12.5, { id = "L4_Door_AirlockNorthWest" })
+door("Airlock", "L4_AirlockSouthWest", "L4_PlantRoom", 145, { id = "L4_Door_AirlockSouthWest" })
+door("Airlock", "L4_ChlorineStore", "L4_AirlockNorthEast", 12.5, { id = "L4_Door_AirlockNorthEast" })
+door("Airlock", "L4_ScoreboardRoom", "L4_AirlockSouthEast", 145, { id = "L4_Door_AirlockSouthEast" })
 
 door("Door", "L4_Corridor_West", "L4_ChangingRoom_Boys", 34)
 door("Door", "L4_Corridor_West", "L4_LifeguardOffice", 73)
@@ -500,10 +510,11 @@ door("Door", "L4_Laundry", "L4_ChangingRoom_Boys", 48)
 door("Door", "L4_Laundry", "L4_FilterRoom", 12)
 door("Boarded", "L4_FilterRoom", "L4_PumpRoom", 12, { id = "L4_Door_PumpCollapse" })
 door("Door", "L4_PumpRoom", "L4_ChlorineStore", 12)
-door("Door", "L4_ChlorineStore", "L4_Storage_E1", 234)
+door("Doorway", "L4_ChlorineStore", "L4_ChlorineHall", 221)
+door("Doorway", "L4_ChlorineHall", "L4_Natatorium", 221)
 door("Door", "L4_Storage_E1", "L4_Natatorium", 48)
 door("Door", "L4_Storage_E2", "L4_Natatorium", 112)
-door("Door", "L4_Storage_E2", "L4_ScoreboardRoom", 234)
+door("Door", "L4_Natatorium", "L4_ScoreboardRoom", 221)
 door("Door", "L4_SpectatorGallery", "L4_Natatorium", 108, { width = 8 })
 door("Boarded", "L4_SpectatorGallery", "L4_ScoreboardRoom", 145, { id = "L4_Door_GalleryCollapse" })
 door("Door", "L4_PlantRoom", "L4_ChangingRoom_Girls", 34)
@@ -696,6 +707,17 @@ lightGrid("L4_PlantRoom", "Bulb", 3, 1, "x")
 light("L4_PlantRoom", "BoilerGlow", 20, 2, 150, { flicker = "L4_PoolHeater" })
 light("L4_AirlockWest", "EmergencyRed", 6, LOW - 1, 80, { flicker = "L4_AirlockWest", brightness = 0.35 })
 light("L4_AirlockEast", "EmergencyRed", 234, LOW - 1, 80, { flicker = "L4_AirlockEast", brightness = 0.35 })
+for _, spot in
+	{
+		{ "L4_AirlockNorthWest", 6, 12.5 },
+		{ "L4_AirlockSouthWest", 6, 145 },
+		{ "L4_AirlockNorthEast", 234, 12.5 },
+		{ "L4_AirlockSouthEast", 234, 145 },
+	} :: { { any } }
+do
+	light(spot[1], "EmergencyRed", spot[2], LOW - 1, spot[3], { flicker = spot[1], brightness = 0.35 })
+end
+lightGrid("L4_ChlorineHall", "Bulb", 1, 1, "o", { brightness = 0.2, range = 10 })
 
 --------------------------------------------------------------------------------
 -- Anchors
@@ -703,6 +725,9 @@ light("L4_AirlockEast", "EmergencyRed", 234, LOW - 1, 80, { flicker = "L4_Airloc
 
 -- Arrival from Stairwell_3_4
 scatter("PlayerSpawn", 3.5, { { 4, 74, FACE_E }, { 8, 74, FACE_E }, { 4, 86, FACE_E }, { 8, 86, FACE_E } })
+-- Arrival from Stairwell_3_4_North / _South (the corner vestibules; their fire doors are in the east wall)
+scatter("PlayerSpawn", 3.5, { { 3, 4, FACE_E }, { 7, 4, FACE_E }, { 3, 21, FACE_E }, { 7, 21, FACE_E } })
+scatter("PlayerSpawn", 3.5, { { 3, 136, FACE_E }, { 7, 136, FACE_E }, { 3, 154, FACE_E }, { 7, 154, FACE_E } })
 -- The Creature waits on the pool floor (AquaticStalk).
 anchor("CreatureSpawn", 171, WATER - 4, 100, FACE_N, "L4_CreatureSpawn")
 anchor("FloodlightSwitch", 91.5, 4, 70, FACE_E, "L4_FloodlightSwitch")
@@ -726,6 +751,10 @@ scatter("ValveWheelCandidate", -POOL_DEPTH, {
 })
 anchor("HatchValve", 150, WATER, 31, FACE_S, "L4_HatchValve")
 anchor("ExitLock", 227.5, 0, 80, FACE_W, "L4_ExitLock")
+anchor("ExitLock", 227.5, 0, 12.5, FACE_W, "L4_ExitLock_North")
+anchor("ExitLock", 227.5, 0, 145, FACE_W, "L4_ExitLock_South")
+-- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
+scatter("Locker", 0, { { 222, 2.05, FACE_S }, { 214, 157.95, FACE_N } })
 
 -- Flasks left on the starting blocks and the decks
 scatter("FlaskCandidate", 1.5, { { 125.5, 41.5 }, { 125.5, 65.5 }, { 125.5, 109.5 } })
@@ -734,12 +763,12 @@ scatter("FlaskCandidate", 0, { { 220, 60 }, { 220, 120 }, { 100, 112 } })
 scatter("BatteryCandidate", 0, {
 	{ 60, 70 },
 	{ 86, 90 },
-	{ 4, 4 },
+	{ 16, 4 },
 	{ 186, 4 },
-	{ 236, 4 },
+	{ 224, 4 },
 	{ 234, 126 },
 	{ 196, 156 },
-	{ 4, 156 },
+	{ 16, 156 },
 	{ 86, 126 },
 })
 
@@ -791,6 +820,8 @@ trigger(
 trigger("L4_Trigger_DebrisCorridor", "FloorDebris", 40, 75, 6, 10, 4)
 trigger("L4_Trigger_DebrisShowers", "FloorDebris", 64, 30, 6, 6, 4)
 trigger("L4_Trigger_Checkpoint", "Checkpoint", 229, 67, 10, 26, 10)
+trigger("L4_Trigger_CheckpointNorthEast", "Checkpoint", 229, 1, 10, 23, 10)
+trigger("L4_Trigger_CheckpointSouthEast", "Checkpoint", 229, 131, 10, 28, 10)
 
 --------------------------------------------------------------------------------
 -- Boarded windows on the facade
@@ -804,14 +835,10 @@ windowRow("L4_ChlorineStore", "N", 2, 5, 3, 8, true)
 windowRow("L4_PlantRoom", "S", 3, 5, 3, 8, true)
 windowRow("L4_SpectatorGallery", "S", 5, 9, 7, 3, true)
 windowRow("L4_ScoreboardRoom", "S", 2, 6, 4, 6, true)
-windowRow("L4_StaffRoom", "W", 1, 7, 6, 3.5, true)
 windowRow("L4_Storage_W1", "W", 1, 4, 4, 5, true)
 windowRow("L4_Storage_W2", "W", 1, 4, 4, 5, true)
-windowRow("L4_PlantRoom", "W", 1, 5, 3, 8, true)
-windowRow("L4_ChlorineStore", "E", 1, 5, 3, 8, true)
 windowRow("L4_Storage_E1", "E", 1, 4, 4, 5, true)
 windowRow("L4_Storage_E2", "E", 1, 4, 4, 5, true)
-windowRow("L4_ScoreboardRoom", "E", 1, 6, 4, 6, true)
 
 --------------------------------------------------------------------------------
 

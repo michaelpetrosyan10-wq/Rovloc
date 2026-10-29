@@ -272,8 +272,6 @@ local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number
 end
 
 -- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
-local TOWER_MIN_Z = WorldConfig.Towers.West.minZ - 2
-local TOWER_MAX_Z = WorldConfig.Towers.West.maxZ + 2
 local function windowRow(
 	roomId: string,
 	side: LayoutSchema.Side,
@@ -289,7 +287,7 @@ local function windowRow(
 	local span = if alongX then rect.w else rect.d
 	for i = 1, count do
 		local at = from + span * (i - 0.5) / count
-		local facesTower = not alongX and at + width / 2 > TOWER_MIN_Z and at - width / 2 < TOWER_MAX_Z
+		local facesTower = not alongX and WorldConfig.facesTower(at - width / 2, at + width / 2, 2)
 		if not facesTower then
 			table.insert(
 				windows,
@@ -417,6 +415,10 @@ room("L2_CrossHall_SE", "Corridor", 150, 87, 14, 33, CORRIDOR)
 -- Stair vestibules
 room("L2_AirlockWest", "Airlock", 0, 66, 12, 28, AIRLOCK)
 room("L2_AirlockEast", "Airlock", 228, 66, 12, 28, AIRLOCK)
+room("L2_AirlockNorthWest", "Airlock", 0, 0, 12, 26, AIRLOCK)
+room("L2_AirlockSouthWest", "Airlock", 0, 134, 12, 26, AIRLOCK)
+room("L2_AirlockNorthEast", "Airlock", 228, 0, 12, 26, AIRLOCK)
+room("L2_AirlockSouthEast", "Airlock", 228, 134, 12, 26, AIRLOCK)
 
 -- Chem wing (north of the main corridor)
 room("L2_Storage_201A", "Storage", 0, 40, 12, 26, STORAGE)
@@ -445,7 +447,7 @@ room("L2_ChemLab_231", "Lab", 201, 87, 27, 33, CHEM_LAB)
 room("L2_Storage_231A", "Storage", 228, 94, 12, 26, STORAGE)
 
 -- North exterior row
-room("L2_Classroom_241", "Classroom", 0, 0, 30, 26, CLASSROOM)
+room("L2_Classroom_241", "Classroom", 12, 0, 18, 26, CLASSROOM)
 room("L2_Restroom_North", "Restroom", 30, 0, 16, 26, RESTROOM)
 room("L2_ScienceLibrary", "Classroom", 46, 0, 60, 26, LIBRARY)
 room("L2_StaffRoom", "Office", 106, 0, 28, 26, OFFICE)
@@ -453,10 +455,10 @@ room("L2_Chase_G", "Chase", 134, 0, 5, 26, CHASE)
 room("L2_ChemStore_243", "Storage", 139, 0, 36, 26, CHEM_STORE)
 room("L2_Classroom_245", "Classroom", 175, 0, 30, 26, CLASSROOM)
 room("L2_Chase_J", "Chase", 205, 0, 5, 26, CHASE)
-room("L2_HeadOfScience", "Office", 210, 0, 30, 26, OFFICE)
+room("L2_HeadOfScience", "Office", 210, 0, 18, 26, OFFICE)
 
 -- South exterior row
-room("L2_LectureHall", "Classroom", 0, 134, 59, 26, LECTURE)
+room("L2_LectureHall", "Classroom", 12, 134, 47, 26, LECTURE)
 room("L2_Chase_K", "Chase", 59, 134, 5, 26, CHASE)
 room("L2_Restroom_South", "Restroom", 64, 134, 16, 26, RESTROOM)
 room("L2_Chase_H", "Chase", 80, 134, 5, 26, CHASE)
@@ -464,7 +466,7 @@ room("L2_BotanyRoom_247", "Lab", 85, 134, 55, 26, BOTANY)
 room("L2_Classroom_249", "Classroom", 140, 134, 36, 26, CLASSROOM)
 room("L2_Chase_I", "Chase", 176, 134, 5, 26, CHASE)
 room("L2_Classroom_251", "Classroom", 181, 134, 25, 26, CLASSROOM)
-room("L2_EquipmentStore", "Storage", 206, 134, 34, 26, STORAGE)
+room("L2_EquipmentStore", "Storage", 206, 134, 22, 26, STORAGE)
 
 --------------------------------------------------------------------------------
 -- Doors
@@ -472,6 +474,11 @@ room("L2_EquipmentStore", "Storage", 206, 134, 34, 26, STORAGE)
 
 door("Airlock", "L2_AirlockWest", "L2_Corridor_West", 80, { id = "L2_Door_AirlockWest" })
 door("Airlock", "L2_Corridor_East", "L2_AirlockEast", 80, { id = "L2_Door_AirlockEast" })
+-- The corner stair vestibules open off the outer halls
+door("Airlock", "L2_AirlockNorthWest", "L2_NorthHall", 6, { id = "L2_Door_AirlockNorthWest" })
+door("Airlock", "L2_AirlockSouthWest", "L2_SouthHall", 6, { id = "L2_Door_AirlockSouthWest" })
+door("Airlock", "L2_NorthHall", "L2_AirlockNorthEast", 234, { id = "L2_Door_AirlockNorthEast" })
+door("Airlock", "L2_SouthHall", "L2_AirlockSouthEast", 234, { id = "L2_Door_AirlockSouthEast" })
 door("Boarded", "L2_Corridor_West", "L2_Corridor_East", 80, { id = "L2_Door_CorridorCollapse", width = 12 })
 
 door("Doorway", "L2_CrossHall_NW", "L2_NorthHall", 88, { width = 10 })
@@ -513,22 +520,22 @@ door("Door", "L2_Corridor_East", "L2_ChemLab_231", 214)
 door("Door", "L2_SouthHall", "L2_ChemLab_231", 220)
 door("Door", "L2_Storage_231A", "L2_SouthHall", 234)
 
-door("Door", "L2_NorthHall", "L2_Classroom_241", 15)
+door("Door", "L2_NorthHall", "L2_Classroom_241", 21)
 door("Door", "L2_NorthHall", "L2_Restroom_North", 38)
 door("Doorway", "L2_NorthHall", "L2_ScienceLibrary", 60, { width = 8 })
 door("Doorway", "L2_NorthHall", "L2_ScienceLibrary", 92, { width = 8 })
 door("Door", "L2_NorthHall", "L2_StaffRoom", 120)
 door("Door", "L2_NorthHall", "L2_ChemStore_243", 157)
 door("Door", "L2_NorthHall", "L2_Classroom_245", 192)
-door("Door", "L2_NorthHall", "L2_HeadOfScience", 225)
+door("Door", "L2_NorthHall", "L2_HeadOfScience", 219)
 
-door("Doorway", "L2_SouthHall", "L2_LectureHall", 16, { width = 8 })
+door("Doorway", "L2_SouthHall", "L2_LectureHall", 20, { width = 8 })
 door("Doorway", "L2_SouthHall", "L2_LectureHall", 48, { width = 8 })
 door("Door", "L2_SouthHall", "L2_Restroom_South", 72)
 door("Door", "L2_SouthHall", "L2_BotanyRoom_247", 112)
 door("Door", "L2_SouthHall", "L2_Classroom_249", 158)
 door("Door", "L2_SouthHall", "L2_Classroom_251", 191)
-door("Door", "L2_SouthHall", "L2_EquipmentStore", 223)
+door("Door", "L2_SouthHall", "L2_EquipmentStore", 217)
 
 --------------------------------------------------------------------------------
 -- Vents: one fume-extract chase between every pair of labs, plus service chases in the outer rows.
@@ -707,6 +714,16 @@ light(
 )
 light("L2_AirlockWest", "EmergencyRed", 6, HEIGHT - 1, 80, { flicker = "L2_AirlockWest", brightness = 0.35 })
 light("L2_AirlockEast", "EmergencyRed", 234, HEIGHT - 1, 80, { flicker = "L2_AirlockEast", brightness = 0.35 })
+for _, spot in
+	{
+		{ "L2_AirlockNorthWest", 6, 13 },
+		{ "L2_AirlockSouthWest", 6, 147 },
+		{ "L2_AirlockNorthEast", 234, 13 },
+		{ "L2_AirlockSouthEast", 234, 147 },
+	} :: { { any } }
+do
+	light(spot[1], "EmergencyRed", spot[2], HEIGHT - 1, spot[3], { flicker = spot[1], brightness = 0.35 })
+end
 light("L2_Corridor_West", "ExitSign", 13.5, 11, 80)
 light("L2_Corridor_East", "ExitSign", 226.5, 11, 80)
 
@@ -716,6 +733,9 @@ light("L2_Corridor_East", "ExitSign", 226.5, 11, 80)
 
 -- Arrival from Stairwell_1_2
 scatter("PlayerSpawn", 3.5, { { 4, 74, FACE_E }, { 8, 74, FACE_E }, { 4, 86, FACE_E }, { 8, 86, FACE_E } })
+-- Arrival from Stairwell_1_2_North / _South (the corner vestibules)
+scatter("PlayerSpawn", 3.5, { { 4, 5, FACE_S }, { 8, 5, FACE_S }, { 4, 19, FACE_S }, { 8, 19, FACE_S } })
+scatter("PlayerSpawn", 3.5, { { 4, 141, FACE_N }, { 8, 141, FACE_N }, { 4, 155, FACE_N }, { 8, 155, FACE_N } })
 anchor("CreatureSpawn", 180, 5, 104, FACE_N, "L2_CreatureSpawn")
 
 -- Lab islands and the flasks left on them
@@ -762,17 +782,21 @@ scatter("Locker", 0, {
 	{ 13.8, 46, FACE_E }, -- chem lab 201
 })
 anchor("ExitLock", 227.5, 0, 80, FACE_W, "L2_ExitLock")
+anchor("ExitLock", 234, 0, 26.5, FACE_S, "L2_ExitLock_North")
+anchor("ExitLock", 234, 0, 133.5, FACE_N, "L2_ExitLock_South")
+-- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
+scatter("Locker", 0, { { 226, 38.2, FACE_N }, { 226, 121.8, FACE_S } })
 
 scatter("BatteryCandidate", 0, {
 	{ 6, 50 },
 	{ 128, 6 },
-	{ 234, 6 },
+	{ 224, 6 },
 	{ 100, 4 },
-	{ 236, 156 },
+	{ 224, 156 },
 	{ 145, 116 },
 	{ 234, 116 },
-	{ 4, 4 },
-	{ 6, 156 },
+	{ 16, 4 },
+	{ 16, 156 },
 })
 
 scatter("Corpse", 0, { { 70, 70, 30 }, { 190, 84, -110 }, { 40, 152, 75 } })
@@ -815,6 +839,8 @@ trigger("L2_Trigger_GlassLab203", "FloorDebris", 60, 66, 8, 5, 4)
 trigger("L2_Trigger_DebrisNorthHall", "FloorDebris", 100, 28, 6, 10, 4)
 trigger("L2_Trigger_DebrisSouthHall", "FloorDebris", 140, 122, 6, 10, 4)
 trigger("L2_Trigger_Checkpoint", "Checkpoint", 229, 67, 10, 26, 10)
+trigger("L2_Trigger_CheckpointNorthEast", "Checkpoint", 229, 1, 10, 24, 10)
+trigger("L2_Trigger_CheckpointSouthEast", "Checkpoint", 229, 135, 10, 24, 10)
 
 --------------------------------------------------------------------------------
 -- Boarded windows on the facade
@@ -833,18 +859,14 @@ windowRow("L2_BotanyRoom_247", "S", 4, 9, 8, 2.5, true)
 windowRow("L2_Classroom_249", "S", 2, 7, 6, 3.5, true)
 windowRow("L2_Classroom_251", "S", 2, 7, 6, 3.5, true)
 windowRow("L2_EquipmentStore", "S", 2, 4, 3, 7, true)
-windowRow("L2_Classroom_241", "W", 1, 7, 6, 3.5, true)
 windowRow("L2_NorthHall", "W", 1, 6, 6, 3.5, true)
 windowRow("L2_Storage_201A", "W", 1, 4, 4, 5, true)
 windowRow("L2_Storage_221A", "W", 1, 4, 4, 5, true)
 windowRow("L2_SouthHall", "W", 1, 6, 6, 3.5, true)
-windowRow("L2_LectureHall", "W", 1, 7, 6, 3.5, true)
-windowRow("L2_HeadOfScience", "E", 1, 7, 6, 3.5, true)
 windowRow("L2_NorthHall", "E", 1, 6, 6, 3.5, true)
 windowRow("L2_Storage_211A", "E", 1, 4, 4, 5, true)
 windowRow("L2_Storage_231A", "E", 1, 4, 4, 5, true)
 windowRow("L2_SouthHall", "E", 1, 6, 6, 3.5, true)
-windowRow("L2_EquipmentStore", "E", 1, 4, 3, 7, true)
 
 --------------------------------------------------------------------------------
 

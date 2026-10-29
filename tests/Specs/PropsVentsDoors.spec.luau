@@ -54,6 +54,7 @@ local SIGNS: { number } = { -1, 1 }
 local GRATE_BUDGET = 22
 local STATIC_DOOR_BUDGET = 8
 local FIXTURE_BUDGET: { [string]: number } = { Ajar = 12, RoofDoor = 12, Airlock = 30, Gate = 45 }
+local JAM_PARTS = 7 -- a stairwell door's collapse (leaf "Jam")
 local FIXTURE_KINDS: { [string]: boolean } = { Ajar = true, Gate = true, Airlock = true, RoofDoor = true }
 
 --------------------------------------------------------------------------------
@@ -649,7 +650,8 @@ return {
 				seen[door.kind] = (seen[door.kind] or 0) + 1
 				t.eq(model:GetAttribute(W.DoorId), door.id)
 				t.eq(model:GetAttribute(W.DoorKind), door.kind)
-				t.eq(model:GetAttribute(W.DoorState), "Open")
+				local jammed = model:GetAttribute(W.Jammed) == true
+				t.eq(model:GetAttribute(W.DoorState), if jammed then "Locked" else "Open", door.id .. " state")
 				t.eq(model:GetAttribute(W.LevelId), id)
 				t.eq(model:GetAttribute(W.DoorWidth), source:GetAttribute(W.DoorWidth), door.id .. " width")
 				t.eq(model:GetAttribute(W.DoorHeight), source:GetAttribute(W.DoorHeight), door.id .. " height")
@@ -658,7 +660,7 @@ return {
 				t.eq(model:HasTag(Tags.AirlockDoor), door.kind == "Airlock", door.id .. " AirlockDoor tag")
 				local parts = partsOf(model)
 				t.truthy(
-					#parts <= FIXTURE_BUDGET[door.kind],
+					#parts <= FIXTURE_BUDGET[door.kind] + (if model:FindFirstChild("Jam") then JAM_PARTS else 0),
 					string.format("%s (%s) has %d parts", door.id, door.kind, #parts)
 				)
 				for _, part in parts do
@@ -685,7 +687,7 @@ return {
 				end
 			end
 		end
-		t.eq(seen.Airlock, 4, "airlocks")
+		t.eq(seen.Airlock, 12, "airlocks: three exit and three entry candidates on each floor checked")
 		t.eq(seen.Gate, 1, "hallway gate")
 		t.eq(seen.Ajar, 1, "ajar classroom door")
 	end,
@@ -720,6 +722,7 @@ return {
 			end
 			painted[name] = (painted[name] or 0) + 1
 		end
+		local fireDoors = 0
 		for _, id in LEVELS do
 			local layout = layoutOf(id)
 			for _, door in layout.doors do
@@ -729,6 +732,7 @@ return {
 				local model = child(built.runtime[id], "Door_" .. door.id)
 				assert(model:IsA("Model"), door.id .. " is a model")
 				if door.kind == "Airlock" then
+					fireDoors += 1
 					for _, name in { "Base", "JambLeft", "JambRight" } do
 						expectStripes(model, name, { Enum.NormalId.Front, Enum.NormalId.Back })
 					end
@@ -740,7 +744,8 @@ return {
 				end
 			end
 		end
-		t.eq(painted.JambLeft, 4, "every fire door frame")
+		t.truthy(fireDoors >= 4, "fire doors on the floors checked")
+		t.eq(painted.JambLeft, fireDoors, "every fire door frame")
 		t.eq(painted.RailLeft, 1, "the hallway gate")
 	end,
 
@@ -760,6 +765,16 @@ return {
 				local frame = PropKit.attachmentWorld(doorAttachment(root, door.id))
 				local width = model:GetAttribute(W.DoorWidth) :: number
 				local leaves: { string } = if door.kind == "Airlock" then { "LeftLeaf", "RightLeaf" } else { "Leaf" }
+				if model:GetAttribute(W.Jammed) == true then
+					-- a jammed stairwell's door is built shut; its leaves move like any other
+					for _, leaf in leaves do
+						t.truthy(
+							isIdentity(PropKit.leafTransform(model, leaf)),
+							door.id .. " " .. leaf .. " jammed shut"
+						)
+					end
+					DoorBuilder.setOpen(model, 1)
+				end
 				-- built state
 				local builtPose: { [string]: CFrame } = {}
 				for _, leaf in leaves do
@@ -888,6 +903,55 @@ return {
 		DoorBuilder.setOpen(model, 1)
 	end,
 
+	["doors: the run's route jams the stairwells it does not use, on both floors they join"] = function(t: Expect)
+		local route = {
+			Level0_Basement = "Stairwell_0_1_North",
+			Level1_Hallways = "Stairwell_1_2_South",
+		}
+		local plan = ({ route = route } :: any) :: Types.SpawnPlan
+		local layout = layoutOf("Level1_Hallways")
+		local root = SchoolShellBuilder.createRoot(layout)
+		SchoolShellBuilder.buildAnchors(layout, SchoolShellBuilder.folders(root), WorldConfig.levelOrigin(layout.id))
+		local folder = Instance.new("Folder")
+		local build = doorBuilders().Doors
+		assert(build, "DoorBuilder registers the Doors fixture")
+		build({ layout = layout, levelRoot = root, parent = folder, plan = plan, random = Random.new(5) })
+		local seen = 0
+		for _, model in folder:GetChildren() do
+			local id = model:GetAttribute(W.StairwellId)
+			if not (model:IsA("Model") and type(id) == "string") then
+				continue
+			end
+			seen += 1
+			local spec = WorldConfig.stairwellById(id)
+			assert(spec, id)
+			local used = route[spec.from] == id
+			t.eq(model:GetAttribute(W.RouteSlot), spec.slot, model.Name .. " RouteSlot")
+			t.eq(model:GetAttribute(W.RouteRole), if spec.from == layout.id then "Exit" else "Entry", model.Name)
+			t.eq(model:GetAttribute(W.Jammed), not used, model.Name .. " jammed unless the route uses it")
+			t.eq(model:GetAttribute(W.DoorState), if used then "Open" else "Locked", model.Name .. " state")
+			local jam = model:FindFirstChild("Jam")
+			t.truthy(jam ~= nil, model.Name .. " has its collapse leaf")
+			local prompt = PropKit.findPrompt(model, "Locked")
+			t.truthy(prompt and prompt.HoldDuration == 0, model.Name .. " Jammed prompt, hold 0")
+			t.eq(prompt and prompt.Enabled, not used, model.Name .. " prompt only while jammed")
+			t.eq(prompt and prompt.ActionText, Strings.get("Prompt.Jammed"), model.Name .. " prompt text")
+			for _, part in (jam :: Instance):GetDescendants() do
+				if part:IsA("BasePart") then
+					t.eq(part.Transparency, if used then 1 else 0, part.Name .. " shown only while jammed")
+					t.falsy(part.CanCollide, part.Name .. " never collides")
+				end
+			end
+			for _, leaf in { "LeftLeaf", "RightLeaf" } do
+				local transform = PropKit.leafTransform(model, leaf)
+				if not used then
+					t.truthy(transform and isIdentity(transform), model.Name .. " " .. leaf .. " jammed shut")
+				end
+			end
+		end
+		t.eq(seen, 6, "three entry and three exit fire doors on Level 1")
+	end,
+
 	["doors: the roof stair door builds from its anchors alone"] = function(t: Expect)
 		local layout = layoutOf("Level5_Roof")
 		local origin = WorldConfig.levelOrigin(layout.id)
@@ -898,10 +962,10 @@ return {
 		local build = fixtures.Doors
 		assert(build, "DoorBuilder registers the Doors fixture")
 		local count = build({ layout = layout, levelRoot = root, parent = folder, plan = nil, random = Random.new(5) })
-		t.eq(count, 1, "one fixture door on the roof")
+		t.eq(count, 3, "one fixture door per stair housing on the roof")
 		local door: LayoutSchema.Door? = nil
 		for _, item in layout.doors do
-			if item.kind == "RoofDoor" then
+			if item.kind == "RoofDoor" and item.scriptedId == "RoofStairDoor" then
 				door = item
 			end
 		end
@@ -913,7 +977,7 @@ return {
 		t.eq(model:GetAttribute(W.DoorState), "Open")
 		t.eq(model:GetAttribute(W.ScriptedId), "RoofStairDoor")
 		t.truthy(model:HasTag(Tags.ScriptedDoor), "ScriptedDoor tag")
-		t.truthy(#partsOf(model) <= FIXTURE_BUDGET.RoofDoor, "roof door budget")
+		t.truthy(#partsOf(model) <= FIXTURE_BUDGET.RoofDoor + JAM_PARTS, "roof door budget")
 		t.eq(signText(model), Strings.get("Prop.Roof.Sign"), "roof sign")
 		local built = rotationAngle(transformOf(model, "Leaf"))
 		t.truthy(built >= math.rad(88) and built <= math.rad(101), "built open")

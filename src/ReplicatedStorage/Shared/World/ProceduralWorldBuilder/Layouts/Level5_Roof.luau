@@ -252,20 +252,36 @@ room("L5_Roof_WestEdge_N", "Roof", 0, 100, 4, 20, ROOF, OPEN_ROOF)
 room("L5_JumpGap", "Roof", 0, 120, 4, 12, ROOF, { wallHeight = 0, noCeiling = true })
 room("L5_Roof_WestEdge_S", "Roof", 0, 132, 4, 28, ROOF, OPEN_ROOF)
 room("L5_Roof_East", "Roof", 120, 0, 106, 160, ROOF, OPEN_ROOF)
-room("L5_Roof_NECorner", "Roof", 226, 0, 14, 66, ROOF, OPEN_ROOF)
+room("L5_RoofAccessNorth", "Stairwell", 226, 0, 14, 28, HOUSING)
+room("L5_Roof_NECorner", "Roof", 226, 28, 14, 38, ROOF, OPEN_ROOF)
 room("L5_RoofAccess", "Stairwell", 226, 66, 14, 28, HOUSING)
-room("L5_Roof_SECorner", "Roof", 226, 94, 14, 66, ROOF, OPEN_ROOF)
+room("L5_Roof_SECorner", "Roof", 226, 94, 14, 38, ROOF, OPEN_ROOF)
+room("L5_RoofAccessSouth", "Stairwell", 226, 132, 14, 28, HOUSING)
 
 --------------------------------------------------------------------------------
 -- Doors: the scripted roof stair door; everything else is an open portal between roof zones
 --------------------------------------------------------------------------------
 
 door("RoofDoor", "L5_RoofAccess", "L5_Roof_East", 80, { id = "L5_Door_RoofStair", scriptedId = "RoofStairDoor" })
+door(
+	"RoofDoor",
+	"L5_RoofAccessNorth",
+	"L5_Roof_East",
+	14,
+	{ id = "L5_Door_RoofStairNorth", scriptedId = "RoofStairDoorNorth" }
+)
+door(
+	"RoofDoor",
+	"L5_RoofAccessSouth",
+	"L5_Roof_East",
+	146,
+	{ id = "L5_Door_RoofStairSouth", scriptedId = "RoofStairDoorSouth" }
+)
 door("Doorway", "L5_Roof_West", "L5_Roof_East", 50, { width = 98 })
 door("Doorway", "L5_Roof_SouthWest", "L5_Roof_East", 130, { width = 58 })
 door("Doorway", "L5_Roof_West", "L5_Roof_SouthWest", 62, { width = 114 })
-door("Doorway", "L5_Roof_East", "L5_Roof_NECorner", 33, { width = 64 })
-door("Doorway", "L5_Roof_East", "L5_Roof_SECorner", 127, { width = 64 })
+door("Doorway", "L5_Roof_East", "L5_Roof_NECorner", 47, { width = 36 })
+door("Doorway", "L5_Roof_East", "L5_Roof_SECorner", 113, { width = 36 })
 door("Doorway", "L5_Roof_West", "L5_Roof_WestEdge_N", 2, { width = 3 })
 door("Doorway", "L5_Roof_WestEdge_N", "L5_Roof_SouthWest", 110, { width = 18 })
 door("Doorway", "L5_Roof_WestEdge_S", "L5_Roof_SouthWest", 146, { width = 26 })
@@ -290,8 +306,8 @@ platform("L5_RadioMast", "L5_Roof_East", 204, 100, 4, 4, 2, 2, "MetalRust")
 -- A maintenance box near the jump: cover to crouch behind while the crate chain is cut, and a bolt-cutter candidate
 -- lying on its lid
 platform("L5_MaintBox", "L5_Roof_SouthWest", 18, 104, 6, 3, 3.6, 3.6, "MetalGalvanized")
--- A steel tool locker by the north-east corner: cover, and a bolt-cutter candidate leaning on it
-platform("L5_ToolLocker", "L5_Roof_East", 214, 10, 3, 6, 5, 5, "MetalRust")
+-- A steel tool locker out on the east roof: cover, and a bolt-cutter candidate leaning on it
+platform("L5_ToolLocker", "L5_Roof_East", 196, 50, 3, 6, 5, 5, "MetalRust")
 
 --------------------------------------------------------------------------------
 -- Lights
@@ -300,6 +316,12 @@ platform("L5_ToolLocker", "L5_Roof_East", 214, 10, 3, 6, 5, 5, "MetalRust")
 light("L5_RoofAccess", "Bulb", 233, HEIGHT - 0.4, 80, { broken = true })
 light("L5_RoofAccess", "EmergencyRed", 232, HEIGHT - 2, 72, { flicker = "L5_StairLamp", brightness = 0.3 })
 light("L5_Roof_East", "Bulb", 224.5, 10.8, 80, { broken = true }) -- above the roof door's swing
+-- The corner housings get the same set
+for _, spot in { { "L5_RoofAccessNorth", 14, 6 }, { "L5_RoofAccessSouth", 146, 138 } } :: { { any } } do
+	light(spot[1], "Bulb", 233, HEIGHT - 0.4, spot[2], { broken = true })
+	light(spot[1], "EmergencyRed", 232, HEIGHT - 2, spot[3], { flicker = "L5_StairLamp", brightness = 0.3 })
+	light("L5_Roof_East", "Bulb", 224.5, 10.8, spot[2], { broken = true })
+end
 light("L5_Roof_East", "EmergencyRed", 206, HEIGHT - 1, 102, { flicker = "L5_Beacon", brightness = 0.5, range = 20 })
 
 --------------------------------------------------------------------------------
@@ -310,6 +332,11 @@ light("L5_Roof_East", "EmergencyRed", 206, HEIGHT - 1, 102, { flicker = "L5_Beac
 scatter("PlayerSpawn", 3.5, { { 232, 84, FACE_W }, { 236, 84, FACE_W }, { 232, 90, FACE_W }, { 236, 90, FACE_W } })
 -- The Creature comes up the stairs behind the squad; P8 holds it until it smashes the RoofStairDoor.
 anchor("CreatureSpawn", 233, 5, 70, FACE_S, "L5_CreatureSpawn")
+-- The corner housings (Stairwell_4_5_North / _South): the same arrival slots and the Creature's spot behind the door
+scatter("PlayerSpawn", 3.5, { { 232, 18, FACE_W }, { 236, 18, FACE_W }, { 232, 24, FACE_W }, { 236, 24, FACE_W } })
+anchor("CreatureSpawn", 233, 5, 4, FACE_S, "L5_CreatureSpawnNorth")
+scatter("PlayerSpawn", 3.5, { { 232, 152, FACE_W }, { 236, 152, FACE_W }, { 232, 156, FACE_W }, { 236, 156, FACE_W } })
+anchor("CreatureSpawn", 233, 5, 136, FACE_S, "L5_CreatureSpawnSouth")
 anchor("ParachuteCrate", 14, 0, 126, FACE_W, "L5_ParachuteCrate")
 
 -- Floor objective (CutCrate): the bolt cutters at one of nine spots all over the roof (leaning against the HVAC units,
@@ -327,7 +354,7 @@ scatter("BoltCutterCandidate", 0, {
 	{ 79.4, 36, FACE_E }, -- against HVAC_4's east face
 	{ 36, 68.6, FACE_N }, -- against HVAC_5's north face
 	{ 107.4, 11, FACE_E }, -- against the boiler flue's east face
-	{ 212.6, 13, FACE_W }, -- against the tool locker's west face
+	{ 194.6, 53, FACE_W }, -- against the tool locker's west face
 })
 anchor("CrateChain", 14, 0, 126, FACE_W, "L5_CrateChain")
 
@@ -349,14 +376,14 @@ scatter("Clutter", 0, {
 	{ 40, 50, -20 },
 	{ 50, 145, 60 },
 	{ 110, 150, 0 },
-	{ 233, 140, 90 },
+	{ 233, 120, 90 },
 })
 
 patrol("E", { { 215, 80 }, { 200, 18 }, { 130, 14 }, { 130, 146 }, { 200, 146 } })
 patrol("W", { { 110, 24 }, { 20, 20 }, { 20, 90 }, { 110, 76 } })
 patrol("SW", { { 110, 130 }, { 30, 110 }, { 30, 150 }, { 100, 150 } })
 patrol("X", { { 130, 76 }, { 110, 78 }, { 40, 95 }, { 40, 106 }, { 110, 132 }, { 130, 130 } })
-patrol("C", { { 220, 30 }, { 233, 30 }, { 233, 10 }, { 220, 10 } })
+patrol("C", { { 220, 34 }, { 233, 34 }, { 233, 60 }, { 220, 60 } })
 
 --------------------------------------------------------------------------------
 -- Triggers

@@ -220,9 +220,10 @@ local function fakePlayer(): (Player, BasePart)
 	return player, root
 end
 
--- The Checkpoint volume in `level`'s exit vestibule.
+-- The Checkpoint volume in `level`'s exit vestibule (the run's route).
 local function volumeOf(level: Enums.LevelId): BasePart
-	local room = CheckpointAirlockService.exitRoom(level)
+	local exit = LevelDirector.exitFor(level)
+	local room = if exit then exit.fromRoom else nil
 	for _, instance in CollectionService:GetTagged(Tags.CheckpointVolume) do
 		if
 			instance:IsA("BasePart")
@@ -244,12 +245,29 @@ local function insideOf(level: Enums.LevelId): CFrame
 end
 
 local function exitDoor(level: Enums.LevelId): Model
+	local exit = LevelDirector.exitFor(level)
 	for _, model in DoorService.Airlocks(level) do
-		if model:GetAttribute(W.FromLevel) == level and model:GetAttribute(W.LevelId) == level then
+		if
+			model:GetAttribute(W.FromLevel) == level
+			and model:GetAttribute(W.LevelId) == level
+			and exit
+			and model:GetAttribute(W.StairwellId) == exit.id
+		then
 			return model
 		end
 	end
 	error("no exit door on " .. level)
+end
+
+-- The fire door of `level`'s entry vestibule on the run's route.
+local function entryDoor(level: Enums.LevelId): Model?
+	local entry = LevelDirector.entryFor(level)
+	for _, model in DoorService.Airlocks(level) do
+		if entry and model:GetAttribute(W.StairwellId) == entry.id and model:GetAttribute(W.LevelId) == level then
+			return model
+		end
+	end
+	return nil
 end
 
 -- Steps the doors through `seconds` of Heartbeats.
@@ -347,9 +365,11 @@ end
 return {
 	["rules: every floor but the roof has an exit vestibule at the bottom of its stairwell up"] = function(t: Expect)
 		for _, stairwell in WorldConfig.Stairwells do
-			t.eq(CheckpointAirlockService.exitRoom(stairwell.from), stairwell.fromRoom, stairwell.id)
+			local route: { [string]: string } = {}
+			route[stairwell.from] = stairwell.id
+			t.eq(CheckpointAirlockService.exitRoom(stairwell.from, route), stairwell.fromRoom, stairwell.id)
 			t.eq(
-				AirlockController.exitRoom(stairwell.from),
+				AirlockController.exitRoom(stairwell.from, route),
 				stairwell.fromRoom,
 				"the client agrees on " .. stairwell.id
 			)
@@ -363,14 +383,18 @@ return {
 			local room = CheckpointAirlockService.exitRoom(level)
 			if room then
 				t.eq(room, layout.exit, level .. "'s exit vestibule is its layout exit")
+				local vestibules: { [string]: boolean } = {}
+				for _, stairwell in WorldConfig.stairwellCandidates(level) do
+					vestibules[stairwell.fromRoom] = true
+				end
 				local checkpoints = 0
 				for _, trigger in layout.triggers do
 					if trigger.kind == "Checkpoint" then
 						checkpoints += 1
-						t.eq(trigger.room, room, level .. "'s checkpoint is in its exit vestibule")
+						t.truthy(vestibules[trigger.room], level .. "'s checkpoint is in an exit vestibule")
 					end
 				end
-				t.eq(checkpoints, 1, level .. " has one checkpoint")
+				t.eq(checkpoints, 3, level .. " has a checkpoint per exit candidate")
 			end
 		end
 	end,
@@ -440,7 +464,7 @@ return {
 		inRun({ a, b, c }, function(run: Run)
 			local clock = run.clock
 			local door = exitDoor(L0)
-			local entry = DoorService.Get(L1, "L1_Door_AirlockEast")
+			local entry = entryDoor(L1)
 			assert(entry, "Level 1's entry fire door")
 			capture(function(sent: { Sent })
 				CheckpointAirlockService.Poll()

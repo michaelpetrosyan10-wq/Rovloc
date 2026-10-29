@@ -4,7 +4,10 @@
 --
 -- Arrival. On activation the Creature is taken (MonsterAIService.AcquireScripted(TOKEN); a Creature that is busy is
 -- asked for again at the tick rate, and only taken while nobody can see it) and kept hidden in the stair housing
--- (MonsterAIService brought it to the level's CreatureSpawn there). The RoofStairDoor (DoorService; it starts Closed)
+-- (MonsterAIService brought it to the level's CreatureSpawn there). The run arrives in one of three stair housings
+-- (the route's Stairwell_4_5 candidate, LevelDirector.entryFor: L5_RoofAccess, L5_RoofAccessNorth or
+-- L5_RoofAccessSouth, each with its own roof door, RoofStairDoor / RoofStairDoorNorth / RoofStairDoorSouth); the
+-- finale plays at that one (geometry). Its roof door (DoorService; it starts Closed)
 -- swings open OPEN_DELAY after the first playing participant reaches the housing at the top of the stairs.
 --
 -- The door smash (Scenes.RoofDoor, from startAt S). Once the squad is out on the roof (squadOut: every playing
@@ -79,6 +82,7 @@ local LifeStateService = require(ServerScriptService.Services.Player.LifeStateSe
 local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
+local LevelDirector = require(ServerScriptService.Services.Core.LevelDirector)
 local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
 
 local LevelKit = require(script.Parent.LevelKit)
@@ -225,22 +229,36 @@ local function inRect(rect: Rect, position: Vector3): boolean
 	return position.X >= rect.minX and position.X <= rect.maxX and position.Z >= rect.minZ and position.Z <= rect.maxZ
 end
 
--- Everything the level needs from the roof's blueprint (world positions).
-function Level5.geometry(layout: LayoutSchema.LevelLayout): Geometry
-	local origin = WorldConfig.levelOrigin(layout.id)
-	local rooms = LayoutSchema.indexRooms(layout)
-	local housing = rooms[HOUSING_ROOM]
-	local roofSide = rooms[ROOF_SIDE_ROOM]
-	assert(housing and roofSide, "Level 5 has no " .. HOUSING_ROOM .. " / " .. ROOF_SIDE_ROOM)
-	local door: LayoutSchema.Door? = nil
+-- The roof door of the housing `arrival` (a Stairwell_4_5 candidate; nil: the middle one) leads up to.
+function Level5.roofDoor(layout: LayoutSchema.LevelLayout, arrival: WorldConfig.StairwellSpec?): LayoutSchema.Door?
+	local housingId = if arrival then arrival.toRoom else HOUSING_ROOM
 	for _, candidate in layout.doors do
-		if candidate.scriptedId == DOOR_ID then
-			door = candidate
+		if candidate.kind == "RoofDoor" and table.find(candidate.rooms, housingId) and candidate.scriptedId then
+			return candidate
 		end
 	end
-	assert(door, "Level 5 has no " .. DOOR_ID)
+	return nil
+end
+
+-- The ScriptedId of the roof door the run arrives behind (DoorService.Get on the roof).
+function Level5.doorId(layout: LayoutSchema.LevelLayout?, arrival: WorldConfig.StairwellSpec?): string
+	local door = if layout then Level5.roofDoor(layout, arrival) else nil
+	return if door and door.scriptedId then door.scriptedId else DOOR_ID
+end
+
+-- Everything the level needs from the roof's blueprint (world positions), for a squad arriving by `arrival` (a
+-- Stairwell_4_5 candidate; nil: the middle one).
+function Level5.geometry(layout: LayoutSchema.LevelLayout, arrival: WorldConfig.StairwellSpec?): Geometry
+	local origin = WorldConfig.levelOrigin(layout.id)
+	local rooms = LayoutSchema.indexRooms(layout)
+	local housingId = if arrival then arrival.toRoom else HOUSING_ROOM
+	local housing = rooms[housingId]
+	local roofSide = rooms[ROOF_SIDE_ROOM]
+	assert(housing and roofSide, "Level 5 has no " .. housingId .. " / " .. ROOF_SIDE_ROOM)
+	local door = Level5.roofDoor(layout, arrival)
+	assert(door, "Level 5 has no roof door on " .. housingId)
 	local edge = LayoutSchema.sharedEdge(housing.rect, roofSide.rect)
-	assert(edge, HOUSING_ROOM .. " and " .. ROOF_SIDE_ROOM .. " share no wall")
+	assert(edge, housingId .. " and " .. ROOF_SIDE_ROOM .. " share no wall")
 	local at = door.at
 	local doorway = if edge.axis == "X"
 		then origin + Vector3.new(edge.coord, 0, at)
@@ -251,14 +269,8 @@ function Level5.geometry(layout: LayoutSchema.LevelLayout): Geometry
 		then Vector3.new(if fromCentre.X < 0 then -1 else 1, 0, 0)
 		else Vector3.new(0, 0, if fromCentre.Z < 0 then -1 else 1)
 	local spot = doorway - out * BEHIND_DOOR + Vector3.new(0, ROOT_HEIGHT, 0)
-	local towerSpec: WorldConfig.StairwellSpec? = nil
-	for _, stairwell in WorldConfig.Stairwells do
-		if stairwell.to == layout.id then
-			towerSpec = stairwell
-		end
-	end
-	local towerSide = if towerSpec then towerSpec.tower else "East"
-	local tower = WorldConfig.Towers[towerSide]
+	local towerSpec = arrival or WorldConfig.routeEntry(nil, layout.id)
+	local tower = WorldConfig.Towers[if towerSpec then towerSpec.tower else "East"]
 	local school = WorldConfig.SchoolOrigin
 	return {
 		origin = origin,
@@ -394,7 +406,7 @@ local function realDependencies(): Dependencies
 		creatureTarget = MonsterAIService.GetTarget,
 		setSpeedScale = MonsterAIService.SetSpeedScale,
 		door = function(): Model?
-			return DoorService.Get(LEVEL, DOOR_ID)
+			return DoorService.Get(LEVEL, Level5.doorId(Builder.getLayout(LEVEL), LevelDirector.entryFor(LEVEL)))
 		end,
 		doorState = DoorService.GetState,
 		setDoor = DoorService.SetState,
@@ -411,6 +423,7 @@ end
 local deps: Dependencies = realDependencies()
 
 local geometry: Geometry? = nil
+local geometryRoom: string? = nil -- the housing `geometry` was built for
 local schedule: Schedule = LevelKit.newSchedule()
 local active = false
 local phase: Phase = "Idle"
@@ -430,8 +443,10 @@ local landedAt: { [Player]: number } = {}
 local touchdowns: { [Player]: boolean } = {}
 
 local function geo(): Geometry?
+	local arrival = LevelDirector.entryFor(LEVEL)
+	local room = if arrival then arrival.toRoom else HOUSING_ROOM
 	local cached = geometry
-	if cached then
+	if cached and geometryRoom == room then
 		return cached
 	end
 	local layout = Builder.getLayout(LEVEL)
@@ -439,8 +454,9 @@ local function geo(): Geometry?
 		log.error("no %s layout; the roof cannot run", LEVEL)
 		return nil
 	end
-	local built = Level5.geometry(layout)
+	local built = Level5.geometry(layout, arrival)
 	geometry = built
+	geometryRoom = room
 	return built
 end
 

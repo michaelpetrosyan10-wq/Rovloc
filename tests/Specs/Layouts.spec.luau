@@ -272,8 +272,22 @@ return {
 
 	["entries and exits follow the stairwell chain"] = function(t: Expect)
 		for _, spec in WorldConfig.Stairwells do
-			t.eq(LAYOUTS[spec.from].exit, spec.fromRoom, spec.id .. " leaves from the lower level's exit")
-			t.eq(LAYOUTS[spec.to].entry, spec.toRoom, spec.id .. " arrives in the upper level's entry")
+			if spec.slot == "Middle" then
+				t.eq(LAYOUTS[spec.from].exit, spec.fromRoom, spec.id .. " leaves from the lower level's exit")
+				t.eq(LAYOUTS[spec.to].entry, spec.toRoom, spec.id .. " arrives in the upper level's entry")
+			end
+			local lower, upper = roomOf(LAYOUTS[spec.from], spec.fromRoom), roomOf(LAYOUTS[spec.to], spec.toRoom)
+			t.truthy(lower and lower.kind == "Airlock", spec.id .. " leaves from an airlock vestibule")
+			t.truthy(upper and (upper.kind == "Airlock" or upper.kind == "Stairwell"), spec.id .. " arrives in one")
+		end
+		for pair = 1, 5 do
+			local slots = {}
+			for _, spec in WorldConfig.Stairwells do
+				if spec.pair == pair then
+					table.insert(slots, spec.slot)
+				end
+			end
+			t.eq(#slots, 3, "floor pair " .. pair .. " has three candidate stairwells")
 		end
 		local basementEntry = roomOf(LAYOUTS.Level0_Basement, LAYOUTS.Level0_Basement.entry)
 		t.truthy(basementEntry and basementEntry.rect.x == 0, "the basement spawn room sits on the west wall")
@@ -329,18 +343,29 @@ return {
 
 	["every entry room holds four player spawns"] = function(t: Expect)
 		for id, layout in LAYOUTS do
-			local spawns: { Anchor } = {}
-			for _, a in anchorsOf(layout, "PlayerSpawn") do
-				t.eq(a.room, layout.entry, id .. " spawn " .. a.id .. " is in the entry room")
-				table.insert(spawns, a)
+			-- the layout's entry and every entry vestibule candidate (the stairwells arriving on it)
+			local entries: { [string]: { Anchor } } = { [layout.entry] = {} }
+			for _, spec in WorldConfig.Stairwells do
+				if spec.to == id then
+					entries[spec.toRoom] = {}
+				end
 			end
-			t.eq(#spawns, 4, id .. " has four PlayerSpawn anchors")
-			for i = 1, #spawns do
-				for j = i + 1, #spawns do
-					t.truthy(
-						flatDistance(spawns[i].pos, spawns[j].pos) >= WorldConfig.SpawnSpacing - EPS,
-						id .. " spawns keep SpawnSpacing"
-					)
+			for _, a in anchorsOf(layout, "PlayerSpawn") do
+				local list = entries[a.room]
+				t.truthy(list ~= nil, id .. " spawn " .. a.id .. " is in an entry room")
+				if list then
+					table.insert(list, a)
+				end
+			end
+			for room, spawns in entries do
+				t.eq(#spawns, 4, room .. " has four PlayerSpawn anchors")
+				for i = 1, #spawns do
+					for j = i + 1, #spawns do
+						t.truthy(
+							flatDistance(spawns[i].pos, spawns[j].pos) >= WorldConfig.SpawnSpacing - EPS,
+							room .. " spawns keep SpawnSpacing"
+						)
+					end
 				end
 			end
 		end
@@ -351,6 +376,12 @@ return {
 			local count = #anchorsOf(LAYOUTS[id], "CreatureSpawn")
 			if id == "Level0_Basement" then
 				t.truthy(count <= 1, "the basement holds at most a dormant placement")
+			elseif id == "Level5_Roof" then
+				-- one behind each stair housing's roof door (the run arrives in one of them)
+				t.eq(count, 3, id .. " CreatureSpawn per stair housing")
+				for _, a in anchorsOf(LAYOUTS[id], "CreatureSpawn") do
+					t.eq(string.sub(a.room, 1, 13), "L5_RoofAccess", a.id .. " waits in a housing")
+				end
 			else
 				t.eq(count, 1, id .. " CreatureSpawn")
 			end
@@ -377,12 +408,21 @@ return {
 	["levels stay dark: few lit fixtures, all dim, a flicker group each"] = function(t: Expect)
 		for id, layout in LAYOUTS do
 			local lights = lightsOf(layout)
+			-- the stair vestibules' dim emergency lamps burn whatever route a run takes; they never count as lit
+			local vestibule: { [string]: boolean } = {}
+			for _, r in layout.rooms do
+				if r.kind == "Airlock" or r.kind == "Stairwell" then
+					for _, l in (r.lights or {}) :: { LayoutSchema.Light } do
+						vestibule[l.id] = true
+					end
+				end
+			end
 			local lit = 0
 			local groups: { [string]: boolean } = {}
 			for _, l in lights do
 				t.truthy(l.range <= 60, l.id .. " range <= 60")
 				t.truthy(l.brightness > 0, l.id .. " brightness")
-				if not l.broken then
+				if not l.broken and not vestibule[l.id] then
 					lit += 1
 					if id ~= "Lobby" then
 						t.truthy(l.brightness <= 1.2, l.id .. " is dim")
@@ -575,8 +615,16 @@ return {
 		t.truthy(#anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
 		t.truthy(#triggersOf(layout, "FloorDebris") >= 1, "floor debris")
 		local checkpoints = triggersOf(layout, "Checkpoint")
-		t.eq(#checkpoints, 1, "one checkpoint")
-		t.eq(checkpoints[1].room, "L0_AirlockEast", "checkpoint in the airlock")
+		t.eq(#checkpoints, 3, "one checkpoint per exit vestibule candidate")
+		for _, spec in WorldConfig.stairwellCandidates(layout.id) do
+			local here = 0
+			for _, trigger in checkpoints do
+				if trigger.room == spec.fromRoom then
+					here += 1
+				end
+			end
+			t.eq(here, 1, "a checkpoint in " .. spec.fromRoom)
+		end
 		t.falsy(layout.vents, "no vents in the basement")
 		t.truthy(#(layout.pillars or {}) >= 20, "a pillar grid")
 		t.truthy(#(layout.windows or {}) >= 8, "boarded windows")
@@ -732,7 +780,7 @@ return {
 		t.truthy(#anchorsOf(layout, "SmashedLocker") >= 8, "smashed lockers")
 		t.truthy(#anchorsOf(layout, "DripPipe") >= 4, "dripping pipes")
 		t.truthy(#anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
-		t.truthy(#triggersOf(layout, "Checkpoint") == 1, "exit checkpoint")
+		t.truthy(#triggersOf(layout, "Checkpoint") == 3, "a checkpoint in every exit vestibule candidate")
 	end,
 
 	["the vents connect classrooms on the hallway and science floors"] = function(t: Expect)
@@ -1131,9 +1179,16 @@ return {
 		local roofDoors = doorsWhere(layout, function(d: Door): boolean
 			return d.kind == "RoofDoor"
 		end)
-		t.eq(#roofDoors, 1, "one roof stair door")
-		t.eq(roofDoors[1].scriptedId, "RoofStairDoor", "scripted roof door")
-		t.truthy(table.find(roofDoors[1].rooms, "L5_RoofAccess"), "the roof door opens from the housing")
+		t.eq(#roofDoors, 3, "a roof stair door per stair housing")
+		for _, slot in { "", "North", "South" } do
+			local found = false
+			for _, door in roofDoors do
+				if door.scriptedId == "RoofStairDoor" .. slot then
+					found = table.find(door.rooms, "L5_RoofAccess" .. slot) ~= nil
+				end
+			end
+			t.truthy(found, "the roof door RoofStairDoor" .. slot .. " opens from its housing")
+		end
 		local crates = anchorsOf(layout, "ParachuteCrate")
 		t.eq(#crates, 1, "one parachute crate")
 		t.truthy(crates[1].pos.X <= 30, "the crate is near the west edge")
@@ -1156,7 +1211,7 @@ return {
 			"the jump clears the west stair tower"
 		)
 		t.truthy(#(layout.platforms or {}) >= 3, "HVAC units")
-		t.truthy(#lightsOf(layout) <= 6, "almost no lights")
+		t.truthy(#lightsOf(layout) <= 10, "almost no lights (the three stair housings' lamps and the beacon)")
 	end,
 
 	["lobby: spawns, ready pads and both terminals, no hazards"] = function(t: Expect)

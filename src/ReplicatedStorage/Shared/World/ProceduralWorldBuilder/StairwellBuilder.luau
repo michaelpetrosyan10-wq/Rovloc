@@ -85,8 +85,9 @@ local function upperCeiling(spec: WorldConfig.StairwellSpec, layouts: { [string]
 	return elevation + DEFAULT_TOP_ROOM_HEIGHT
 end
 
-local function towerDims(side: WorldConfig.TowerSide)
-	local tower = WorldConfig.Towers[side]
+local function towerDims(towerId: WorldConfig.TowerId)
+	local tower = WorldConfig.Towers[towerId]
+	local side = tower.side
 	local depth = tower.maxX - tower.minX
 	local halfExt = WorldConfig.ExteriorWallThickness / 2
 	return {
@@ -224,8 +225,8 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 	local openings: { Geometry.Opening } = {}
 	for _, y in { bottom, upper } do
 		table.insert(openings, {
-			u0 = opening.centerZ - opening.width / 2,
-			u1 = opening.centerZ + opening.width / 2,
+			u0 = dims.tower.openingZ - opening.width / 2,
+			u1 = dims.tower.openingZ + opening.width / 2,
 			y0 = y,
 			y1 = y + opening.height,
 		})
@@ -333,7 +334,7 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 	-- fixtures cast shadows (SchoolShellBuilder.buildLight), so the walls keep their glow inside the shaft except
 	-- through the openings.
 	local random = MathUtil.seededRandom(1, spec.id)
-	local centre = Vector3.new(worldX((dims.uInner0 + dims.uInner1) / 2), bottom, opening.centerZ)
+	local centre = Vector3.new(worldX((dims.uInner0 + dims.uInner1) / 2), bottom, dims.tower.openingZ)
 	local nearU = dims.uInner0 + LANDING / 2
 	local index = 0
 	local working = 0
@@ -360,14 +361,14 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 	local function addNearLight(floorY: number, nextLandingUnderside: number)
 		local y = math.min(floorY + opening.height + 1, nextLandingUnderside - NEAR_LIGHT_CLEARANCE)
 		local position = Vector3.new(worldX(nearU), y, dims.vInner0 + WALL_MOUNT)
-		addLight(position, Vector3.new(position.X, y, opening.centerZ))
+		addLight(position, Vector3.new(position.X, y, dims.tower.openingZ))
 	end
 	local nearLandingRise = 2 * flightRise
 	addNearLight(bottom, bottom + nearLandingRise - LANDING_THICKNESS)
 	for k = 1, plan.flights do
 		local arrive = bottom + k * flightRise
 		if k % 2 == 1 then
-			local position = Vector3.new(worldX(dims.uInner1 - WALL_MOUNT), arrive + 7, opening.centerZ)
+			local position = Vector3.new(worldX(dims.uInner1 - WALL_MOUNT), arrive + 7, dims.tower.openingZ)
 			addLight(position, Vector3.new(centre.X, position.Y, centre.Z))
 		else
 			addNearLight(arrive, math.min(arrive + nearLandingRise - LANDING_THICKNESS, top))

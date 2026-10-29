@@ -182,8 +182,9 @@ end
 -- World point of the tower opening a stairwell leaves / enters `layoutId` through (on that level's floor).
 local function towerPortal(spec: WorldConfig.StairwellSpec, layoutId: string): Vector3
 	local tower = WorldConfig.Towers[spec.tower]
-	local x = if tower then (if spec.tower == "East" then tower.minX else tower.maxX) else 0
-	return WorldConfig.levelOrigin(layoutId) + Vector3.new(x, 0, WorldConfig.TowerOpening.centerZ)
+	local x = if tower then (if tower.side == "East" then tower.minX else tower.maxX) else 0
+	local z = if tower then tower.openingZ else WorldConfig.TowerOpening.centerZ
+	return WorldConfig.levelOrigin(layoutId) + Vector3.new(x, 0, z)
 end
 
 -- Builds the graph of every layout in `layouts` (any subset; stairwells join two layouts only when both are given).

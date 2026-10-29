@@ -266,8 +266,6 @@ local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number
 end
 
 -- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
-local TOWER_MIN_Z = WorldConfig.Towers.West.minZ - 2
-local TOWER_MAX_Z = WorldConfig.Towers.West.maxZ + 2
 local function windowRow(
 	roomId: string,
 	side: LayoutSchema.Side,
@@ -283,7 +281,7 @@ local function windowRow(
 	local span = if alongX then rect.w else rect.d
 	for i = 1, count do
 		local at = from + span * (i - 0.5) / count
-		local facesTower = not alongX and at + width / 2 > TOWER_MIN_Z and at - width / 2 < TOWER_MAX_Z
+		local facesTower = not alongX and WorldConfig.facesTower(at - width / 2, at + width / 2, 2)
 		if not facesTower then
 			table.insert(
 				windows,
@@ -395,6 +393,10 @@ room("L1_CrossHall_SE", "Corridor", 186, 87, 14, 33, CORRIDOR)
 
 -- Stair vestibules
 room("L1_AirlockWest", "Airlock", 0, 66, 12, 28, AIRLOCK)
+room("L1_AirlockNorthWest", "Airlock", 0, 0, 12, 26, AIRLOCK)
+room("L1_AirlockSouthWest", "Airlock", 0, 134, 12, 26, AIRLOCK)
+room("L1_AirlockNorthEast", "Airlock", 228, 0, 12, 26, AIRLOCK)
+room("L1_AirlockSouthEast", "Airlock", 228, 134, 12, 26, AIRLOCK)
 room("L1_AirlockEast", "Airlock", 228, 66, 12, 28, AIRLOCK)
 
 -- Between the north hall and the main corridor
@@ -412,14 +414,14 @@ room("L1_Classroom_110", "Classroom", 200, 40, 28, 33, CLASSROOM)
 room("L1_JanitorCloset_E", "Storage", 228, 40, 12, 26, STORAGE)
 
 -- North exterior row
-room("L1_Library", "Classroom", 0, 0, 56, 26, LIBRARY)
+room("L1_Library", "Classroom", 12, 0, 44, 26, LIBRARY)
 room("L1_Classroom_113", "Classroom", 56, 0, 28, 26, CLASSROOM)
 room("L1_Classroom_115", "Classroom", 84, 0, 28, 26, CLASSROOM)
 room("L1_BookStore", "Storage", 112, 0, 8, 26, STORAGE)
 room("L1_RecordsStore", "Storage", 120, 0, 8, 26, STORAGE)
 room("L1_Classroom_120", "Classroom", 128, 0, 28, 26, CLASSROOM)
 room("L1_Classroom_122", "Classroom", 156, 0, 28, 26, CLASSROOM)
-room("L1_MusicRoom", "Classroom", 184, 0, 56, 26, MUSIC)
+room("L1_MusicRoom", "Classroom", 184, 0, 44, 26, MUSIC)
 
 -- Between the main corridor and the south hall
 room("L1_Storage_131A", "Storage", 0, 94, 12, 26, STORAGE)
@@ -433,12 +435,12 @@ room("L1_Classroom_138", "Classroom", 200, 87, 28, 33, CLASSROOM)
 room("L1_Storage_140A", "Storage", 228, 94, 12, 26, STORAGE)
 
 -- South exterior row
-room("L1_Cafeteria", "Classroom", 0, 134, 84, 26, CAFETERIA)
+room("L1_Cafeteria", "Classroom", 12, 134, 72, 26, CAFETERIA)
 room("L1_Kitchen", "Storage", 84, 134, 36, 26, KITCHEN)
 room("L1_MainOffice", "Office", 120, 134, 40, 26, OFFICE)
 room("L1_PrincipalOffice", "Office", 160, 134, 24, 26, OFFICE)
 room("L1_Classroom_142", "Classroom", 184, 134, 28, 26, CLASSROOM)
-room("L1_Restroom_Staff", "Restroom", 212, 134, 28, 26, RESTROOM)
+room("L1_Restroom_Staff", "Restroom", 212, 134, 16, 26, RESTROOM)
 
 --------------------------------------------------------------------------------
 -- Doors
@@ -446,6 +448,11 @@ room("L1_Restroom_Staff", "Restroom", 212, 134, 28, 26, RESTROOM)
 
 door("Airlock", "L1_AirlockEast", "L1_Corridor_East", 80, { id = "L1_Door_AirlockEast" })
 door("Airlock", "L1_Corridor_West", "L1_AirlockWest", 80, { id = "L1_Door_AirlockWest" })
+-- The corner stair vestibules open off the outer halls (the west ones inside the sealed west half)
+door("Airlock", "L1_AirlockNorthEast", "L1_NorthHall_East", 234, { id = "L1_Door_AirlockNorthEast" })
+door("Airlock", "L1_AirlockSouthEast", "L1_SouthHall_East", 234, { id = "L1_Door_AirlockSouthEast" })
+door("Airlock", "L1_NorthHall_West", "L1_AirlockNorthWest", 6, { id = "L1_Door_AirlockNorthWest" })
+door("Airlock", "L1_SouthHall_West", "L1_AirlockSouthWest", 6, { id = "L1_Door_AirlockSouthWest" })
 door(
 	"Gate",
 	"L1_Corridor_East",
@@ -484,7 +491,7 @@ door("Door", "L1_NorthHall_East", "L1_Classroom_110", 214)
 door("Door", "L1_JanitorCloset_E", "L1_NorthHall_East", 234)
 
 -- North exterior row
-door("Doorway", "L1_NorthHall_West", "L1_Library", 14)
+door("Doorway", "L1_NorthHall_West", "L1_Library", 18)
 door("Doorway", "L1_NorthHall_West", "L1_Library", 42)
 door("Door", "L1_NorthHall_West", "L1_Classroom_113", 70)
 door("Door", "L1_NorthHall_West", "L1_Classroom_115", 98)
@@ -493,7 +500,7 @@ door("Door", "L1_NorthHall_East", "L1_RecordsStore", 124)
 door("Door", "L1_NorthHall_East", "L1_Classroom_120", 142)
 door("Door", "L1_NorthHall_East", "L1_Classroom_122", 170)
 door("Door", "L1_NorthHall_East", "L1_MusicRoom", 198)
-door("Door", "L1_NorthHall_East", "L1_MusicRoom", 226)
+door("Door", "L1_NorthHall_East", "L1_MusicRoom", 220)
 
 -- South of the main corridor
 door("Door", "L1_Storage_131A", "L1_SouthHall_West", 6)
@@ -522,7 +529,7 @@ door("Door", "L1_Cafeteria", "L1_Kitchen", 147)
 door("Door", "L1_SouthHall_East", "L1_MainOffice", 140)
 door("Door", "L1_MainOffice", "L1_PrincipalOffice", 147)
 door("Door", "L1_SouthHall_East", "L1_Classroom_142", 198)
-door("Door", "L1_SouthHall_East", "L1_Restroom_Staff", 226)
+door("Door", "L1_SouthHall_East", "L1_Restroom_Staff", 220)
 
 --------------------------------------------------------------------------------
 -- The first wall vent: a service chase in the corridor's north wall, straddling the gate. Both corridor grates are
@@ -674,6 +681,16 @@ light(
 
 light("L1_AirlockEast", "EmergencyRed", 234, HEIGHT - 1, 80, { flicker = "L1_AirlockEast", brightness = 0.35 })
 light("L1_AirlockWest", "EmergencyRed", 6, HEIGHT - 1, 80, { flicker = "L1_AirlockWest", brightness = 0.35 })
+for _, spot in
+	{
+		{ "L1_AirlockNorthWest", 6, 13 },
+		{ "L1_AirlockSouthWest", 6, 147 },
+		{ "L1_AirlockNorthEast", 234, 13 },
+		{ "L1_AirlockSouthEast", 234, 147 },
+	} :: { { any } }
+do
+	light(spot[1], "EmergencyRed", spot[2], HEIGHT - 1, spot[3], { flicker = spot[1], brightness = 0.35 })
+end
 light("L1_Corridor_East", "ExitSign", 226.5, 11, 80)
 light("L1_Corridor_West", "ExitSign", 13.5, 11, 80)
 light("L1_Corridor_West", "EmergencyRed", 24, HEIGHT - 1.5, 74.5, { flicker = "L1_ExitWest", brightness = 0.3 })
@@ -684,6 +701,9 @@ light("L1_Corridor_West", "EmergencyRed", 24, HEIGHT - 1.5, 74.5, { flicker = "L
 
 -- Arrival from Stairwell_0_1
 scatter("PlayerSpawn", 3.5, { { 232, 74, FACE_W }, { 236, 74, FACE_W }, { 232, 86, FACE_W }, { 236, 86, FACE_W } })
+-- Arrival from Stairwell_0_1_North / _South (the corner vestibules)
+scatter("PlayerSpawn", 3.5, { { 232, 5, FACE_S }, { 236, 5, FACE_S }, { 232, 19, FACE_S }, { 236, 19, FACE_S } })
+scatter("PlayerSpawn", 3.5, { { 232, 141, FACE_N }, { 236, 141, FACE_N }, { 232, 155, FACE_N }, { 236, 155, FACE_N } })
 
 -- The scripted classroom: the Creature hunched in the far (north-west) corner, facing into the corner. From the
 -- glass outside the ajar door a westbound squad looks diagonally through the doorway straight at it.
@@ -733,7 +753,7 @@ scatter("MasterKeyCandidate", KEY_HOOK_Y, {
 	{ 11.5, 104, FACE_W }, -- the store by classroom 131
 	{ 119.5, 150, FACE_W }, -- kitchen
 	{ 56.5, 16, FACE_E }, -- classroom 113, by the teacher's desk
-	{ 6, 134.5, FACE_S }, -- cafeteria, inside the hall doors
+	{ 28, 134.5, FACE_S }, -- cafeteria, inside the hall doors
 	{ 119.5, 104, FACE_W }, -- art room, by the supply shelves
 	{ 28, 25.5, FACE_N }, -- library, by the issue desk
 	{ 12.5, 110, FACE_E }, -- classroom 131
@@ -746,12 +766,16 @@ scatter("Locker", 0, {
 	{ 102, 157.95, FACE_N }, -- kitchen
 	{ 13.8, 68, FACE_E }, -- classroom 101, a door away from the stairwell door
 	{ 58.05, 6, FACE_E }, -- classroom 113
-	{ 2.05, 140, FACE_E }, -- cafeteria
+	{ 14.05, 140, FACE_E }, -- cafeteria
 	{ 118.2, 112, FACE_W }, -- art room
 	{ 34, 23.95, FACE_N }, -- library
 	{ 13.8, 100, FACE_E }, -- classroom 131
 })
 anchor("ExitLock", 12.5, 0, 80, FACE_E, "L1_ExitLock")
+anchor("ExitLock", 6, 0, 26.5, FACE_S, "L1_ExitLock_North")
+anchor("ExitLock", 6, 0, 133.5, FACE_N, "L1_ExitLock_South")
+-- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
+scatter("Locker", 0, { { 15, 38.2, FACE_N } })
 
 -- Burst overhead pipes
 scatter("DripPipe", HEIGHT - 1.2, {
@@ -770,11 +794,11 @@ scatter("BatteryCandidate", 0, {
 	{ 16, 44 },
 	{ 224, 44 },
 	{ 150, 44 },
-	{ 4, 22 },
+	{ 16, 22 },
 	{ 124, 156 },
 	{ 116, 156 },
 	{ 234, 44 },
-	{ 236, 4 },
+	{ 224, 4 },
 	{ 182, 116 },
 	{ 6, 116 },
 })
@@ -820,6 +844,8 @@ trigger("L1_Trigger_DebrisWest", "FloorDebris", 60, 75, 6, 10, 4)
 trigger("L1_Trigger_DebrisNorth", "FloorDebris", 150, 28, 6, 10, 4)
 trigger("L1_Trigger_DebrisSouth", "FloorDebris", 70, 122, 6, 10, 4)
 trigger("L1_Trigger_Checkpoint", "Checkpoint", 1, 67, 10, 26, 10)
+trigger("L1_Trigger_CheckpointNorthWest", "Checkpoint", 1, 1, 10, 24, 10)
+trigger("L1_Trigger_CheckpointSouthWest", "Checkpoint", 1, 135, 10, 24, 10)
 
 --------------------------------------------------------------------------------
 -- Boarded windows on the facade
@@ -837,18 +863,14 @@ windowRow("L1_MainOffice", "S", 2, 7, 6, 3.5, true)
 windowRow("L1_PrincipalOffice", "S", 1, 7, 6, 3.5, true)
 windowRow("L1_Classroom_142", "S", 2, 7, 6, 3.5, true)
 windowRow("L1_Restroom_Staff", "S", 1, 4, 3, 7, true)
-windowRow("L1_Library", "W", 1, 7, 6, 3.5, true)
 windowRow("L1_NorthHall_West", "W", 1, 6, 6, 3.5, true)
 windowRow("L1_JanitorCloset_W", "W", 1, 4, 4, 5, true)
-windowRow("L1_Cafeteria", "W", 1, 7, 6, 3.5, true)
 windowRow("L1_SouthHall_West", "W", 1, 6, 6, 3.5, true)
 windowRow("L1_Storage_131A", "W", 1, 4, 4, 5, true)
-windowRow("L1_MusicRoom", "E", 1, 7, 6, 3.5, true)
 windowRow("L1_NorthHall_East", "E", 1, 6, 6, 3.5, true)
 windowRow("L1_JanitorCloset_E", "E", 1, 4, 4, 5, true)
 windowRow("L1_Storage_140A", "E", 1, 4, 4, 5, true)
 windowRow("L1_SouthHall_East", "E", 1, 6, 6, 3.5, true)
-windowRow("L1_Restroom_Staff", "E", 1, 4, 3, 7, true)
 
 --------------------------------------------------------------------------------
 

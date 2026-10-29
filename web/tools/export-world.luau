@@ -307,6 +307,14 @@ for _, spec in ObjectiveConfig.Floors do
 		floor = spec.floor,
 		id = spec.id,
 		entry = { room = layout.entry, pos = toJson(entryPoint) },
+		-- every way in (the entry room and each entry vestibule candidate): entryDistance is walked from the nearest
+		entries = (function()
+			local out = {}
+			for _, entry in ObjectivePlaces.entries(layout) do
+				table.insert(out, { room = entry.room, pos = toJson(entry.pos) })
+			end
+			return out
+		end)(),
 		candidates = candidates,
 		picks = if picks then toJson(picks) else nil,
 		places = places,
@@ -319,6 +327,214 @@ for _, hood in (Instances.runtimeLevel("Level2_ScienceHall", true):FindFirstChil
 		flask:SetAttribute("Planned", false)
 	end
 end
+
+--------------------------------------------------------------------------------
+-- Bear traps: the hardest difficulty's count of trap entities
+--------------------------------------------------------------------------------
+
+-- The run built this seed's Standard traps; the web moves trap entities onto each run's anchors and needs as many as the
+-- largest trapCount (Nightmare), so the Nightmare plan's other traps are built too (attribute Planned = false; the
+-- Standard ones true), then any TrapCandidate in layout order until there are enough.
+local DifficultyConfig = h.require("ReplicatedStorage.Shared.Config.DifficultyConfig")
+do
+	local trapLevel = RunDirector.TrapLevel
+	local parent = Instances.runtimeLevel(trapLevel, true)
+	local wanted = 0
+	for _, name in Enums.Difficulty do
+		local spec = DifficultyConfig[name]
+		if spec then
+			wanted = math.max(wanted, spec.trapCount)
+		end
+	end
+	local built: { [string]: boolean } = {}
+	for _, prop in RunDirector.propsOf(plan, "BearTrap", trapLevel) do
+		built[prop.anchorId] = true
+	end
+	local count = 0
+	for _, child in parent:GetDescendants() do
+		if child:IsA("Model") and child:HasTag("BearTrap") then
+			child:SetAttribute("Planned", true)
+			count += 1
+		end
+	end
+	local extra: { any } = {}
+	local nightmare = RunDirector.plan(RUN_SEED, "Nightmare", layouts, ZoneGraph.build(layouts))
+	for _, prop in RunDirector.propsOf(nightmare, "BearTrap", trapLevel) do
+		if not built[prop.anchorId] then
+			table.insert(extra, prop)
+		end
+	end
+	local trapLayout = Builder.getLayout(trapLevel)
+	for _, anchor in trapLayout.anchors do
+		if anchor.kind == "TrapCandidate" and not built[anchor.id] then
+			table.insert(extra, {
+				kind = "BearTrap",
+				anchorId = anchor.id,
+				levelId = trapLevel,
+				cframe = Builder.anchorCFrame(trapLevel, anchor),
+				variant = 1,
+			})
+		end
+	end
+	for _, prop in extra do
+		if count >= wanted then
+			break
+		end
+		if built[prop.anchorId] then
+			continue
+		end
+		built[prop.anchorId] = true
+		local before: { [Instance]: boolean } = {}
+		for _, child in parent:GetDescendants() do
+			before[child] = true
+		end
+		Builder.BuildProp(prop, parent, MathUtil.seededRandom(plan.seed, "prop:BearTrap:" .. prop.anchorId))
+		for _, child in parent:GetDescendants() do
+			if not before[child] and child:IsA("Model") and child:HasTag("BearTrap") then
+				child:SetAttribute("Planned", false)
+			end
+		end
+		count += 1
+	end
+	print(string.format("bear trap entities: %d (the largest trapCount is %d)", count, wanted))
+end
+
+--------------------------------------------------------------------------------
+-- Routes: every candidate stairwell per floor pair, the jam state, the pick rule
+--------------------------------------------------------------------------------
+
+-- Every stairwell door (fire doors, roof housing doors) carries StairwellId / RouteSlot / RouteRole / Jammed (this
+-- seed's route) and the leaf "Jam" (the collapse behind it). The web picks a route per run, so every Jam leaf is
+-- exported with its geometry shown; the web hides it on the run's used doors and shuts + locks the others.
+local DoorBuilder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.DoorBuilder")
+for _, levelId in Enums.LevelId do
+	for _, child in Instances.runtimeLevel(levelId, true):GetDescendants() do
+		if child:IsA("Model") and child:GetAttribute("StairwellId") ~= nil then
+			DoorBuilder.showJam(child, true)
+		end
+	end
+end
+
+local layoutById = {}
+for _, layout in layouts do
+	layoutById[layout.id] = layout
+end
+local function doorsInto(layout, roomId: string, kinds: { [string]: boolean }): { string }
+	local out = {}
+	for _, door in layout.doors do
+		if kinds[door.kind] and table.find(door.rooms, roomId) then
+			table.insert(out, door.id)
+		end
+	end
+	return out
+end
+local function anchorsIn(layout, kind: string, roomId: string): { string }
+	local out = {}
+	for _, anchor in layout.anchors do
+		if anchor.kind == kind and anchor.room == roomId then
+			table.insert(out, anchor.id)
+		end
+	end
+	table.sort(out)
+	return out
+end
+local function triggerIn(layout, kind: string, roomId: string): string?
+	for _, trigger in layout.triggers do
+		if trigger.kind == kind and trigger.room == roomId then
+			return trigger.id
+		end
+	end
+	return nil
+end
+local LockBuilder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.LockBuilder")
+local function exitLockOf(layout, doorIds: { string }): string?
+	for _, anchor in layout.anchors do
+		if anchor.kind == "ExitLock" then
+			local face = LockBuilder.doorFace(layout, anchor)
+			if face and table.find(doorIds, face.doorId) then
+				return anchor.id
+			end
+		end
+	end
+	return nil
+end
+local round1 = function(x: number): number
+	return if x == math.huge then -1 else math.floor(x * 10 + 0.5) / 10
+end
+
+local routeData = {} -- { [from level] = { candidate } }: the shape worldData.routeCandidates consumes
+local routePairs = {}
+local routeChecks = {}
+local planRoute = plan.route or {}
+for _, from in WorldConfig.LevelOrder do
+	local candidates = WorldConfig.stairwellCandidates(from)
+	local lower = layoutById[from]
+	if #candidates == 0 or not lower then
+		continue
+	end
+	local list = {}
+	local ids = {}
+	for _, spec in candidates do
+		local upper = layoutById[spec.to]
+		local exitDoorIds = doorsInto(lower, spec.fromRoom, { Airlock = true })
+		table.insert(ids, spec.id)
+		table.insert(list, {
+			id = spec.id,
+			stairwellId = spec.id,
+			pair = spec.pair,
+			slot = spec.slot,
+			tower = spec.tower,
+			from = spec.from,
+			to = spec.to,
+			fromRoom = spec.fromRoom,
+			toRoom = spec.toRoom,
+			exitDoorIds = exitDoorIds,
+			entryDoorIds = doorsInto(upper, spec.toRoom, { Airlock = true, RoofDoor = true }),
+			checkpoint = triggerIn(lower, "Checkpoint", spec.fromRoom),
+			spawns = anchorsIn(upper, "PlayerSpawn", spec.toRoom),
+			exitLock = exitLockOf(lower, exitDoorIds),
+			creatureSpawn = (anchorsIn(upper, "CreatureSpawn", spec.toRoom))[1],
+			picked = planRoute[from] == spec.id,
+		})
+	end
+	routeData[from] = list
+	table.insert(routePairs, {
+		pair = candidates[1].pair,
+		from = from,
+		to = candidates[1].to,
+		candidates = ids,
+		picked = planRoute[from],
+	})
+	-- the fairness verdicts for every way in to the floor (its entry room and every entry vestibule candidate)
+	local byEntry = {}
+	for _, entry in ObjectivePlaces.entries(lower) do
+		local checks = {}
+		for _, check in RunDirector.routeChecks(lower, entry.room, layoutById) do
+			table.insert(checks, {
+				stairwellId = check.stairwellId,
+				distance = round1(check.distance),
+				share = math.floor(check.share * 1000 + 0.5) / 1000,
+				creatureSpawns = check.creatureSpawns,
+				fair = check.fair,
+			})
+		end
+		byEntry[entry.room] = checks
+	end
+	routeChecks[from] = byEntry
+end
+local routeRule = {
+	stream = "Route|<from>",
+	order = "candidates in slot order North, Middle, South (meta.routes[from])",
+	draw = "NextInteger(1, #candidates) per draw from seededRandom(seed, 'Route|' .. from)",
+	attempts = RunDirector.RouteAttempts,
+	fallback = "the first fair candidate in slot order, else the Middle one",
+	entry = "Level0 starts at its layout entry; every later floor at the previous pick's toRoom",
+	fairShare = RunDirector.RouteFairShare,
+	creatureBand = toJson(RunDirector.CreatureBand),
+	minCreatureSpawns = RunDirector.MinCreatureSpawns,
+	creatureSpawnLevels = toJson(RunDirector.CreatureSpawnLevels),
+	checks = routeChecks,
+}
 
 --------------------------------------------------------------------------------
 -- Classification
@@ -1030,6 +1246,9 @@ local out = {
 	end)(),
 	worldConfig = toJson(WorldConfig),
 	objectives = objectiveData,
+	routes = routeData,
+	routePairs = routePairs,
+	routeRule = routeRule,
 	lighting = {
 		baseline = toJson(LightingRig.Baseline),
 		properties = lightingProps,
