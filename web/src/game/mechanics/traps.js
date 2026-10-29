@@ -1,7 +1,9 @@
 // traps.js: the Level 0 bear-trap gauntlet (BearTrapService + BearTrapController), single player.
 //
-// The plan's traps start Armed (jaws laid flat); every other exported trap is hidden. At 10 Hz, while the player may
-// spring one (the run live, Alive, not caught, no control lock, on foot: Standing / Sprinting / Crouching, no
+// The plan's traps start Armed (jaws laid flat) on the anchors the run's plan chose (an exported trap is moved to an
+// anchor it was not built on: the guard traps of the run's fuses, the seeded rest); every other trap is hidden. At
+// 10 Hz, while the player may spring one (the run live, Alive, not caught, no control lock, on foot:
+// Standing / Sprinting / Crouching, no
 // teleport in the last 0.35 s) their foot point is tested against each armed trap's pan zone (the 2.2 x 2.2 trigger
 // footprint from 0.5 under the floor up to 0.75 over it), including the segment from the previous sample (a
 // sprinter covers two studs a sample) unless that step is a teleport (> 8 studs).
@@ -118,34 +120,47 @@ export class Traps {
   }
 
   _make(info) {
-    const pivot = cfMatrix(info.pivot);
-    const zone = pivot.clone().multiply(new THREE.Matrix4().makeTranslation(0, TRIGGER_BOTTOM + TRIGGER_SIZE[1] / 2, 0));
-    // pan zone: the trigger footprint from its bottom up to PressHeight over the trap's floor
-    const floorLocalY = -(TRIGGER_BOTTOM + TRIGGER_SIZE[1] / 2);
-    const bottom = -TRIGGER_SIZE[1] / 2;
-    const top = Math.min(TRIGGER_SIZE[1] / 2, Math.max(bottom, floorLocalY + PRESS_HEIGHT));
-    const panFrame = zone.clone().multiply(new THREE.Matrix4().makeTranslation(0, (bottom + top) / 2, 0));
     const a = info.attachments;
-    return {
+    const trap = {
       id: info.id,
       info,
       level: info.level,
-      floor: cfPos(info.pivot),
-      leg: cfPos(a.LegPoint),
-      prompt: info.prompts.find((p) => p.name === 'TrapPry'),
-      rest: {
+      built: cfMatrix(info.pivot),
+      builtRest: {
         JawA: cfMatrix(a.JawARest), JawB: cfMatrix(a.JawBRest), SpringA: cfMatrix(a.SpringARest),
         SpringB: cfMatrix(a.SpringBRest), Pan: cfMatrix(a.PanRest),
       },
-      panInv: panFrame.clone().invert(),
-      panHalf: new THREE.Vector3(TRIGGER_SIZE[0] / 2, (top - bottom) / 2, TRIGGER_SIZE[2] / 2),
-      centre: new THREE.Vector3().setFromMatrixPosition(panFrame),
+      builtLeg: cfPos(a.LegPoint),
+      prompt: info.prompts.find((p) => p.name === 'TrapPry'),
       cull: Math.hypot(TRIGGER_SIZE[0], TRIGGER_SIZE[2]) / 2 + 0.5,
       state: 'Armed',
       live: false,
       motion: null,
       handle: null,
     };
+    this._layout(trap, trap.built);
+    return trap;
+  }
+
+  /**
+   * Lays a trap out at a pivot (its built one, or the anchor the run's plan moved it to): the floor and leg points, the
+   * leaves' rest frames and the pan zone (the trigger footprint from its bottom up to PressHeight over the floor).
+   */
+  _layout(trap, pivot) {
+    const delta = _m.copy(pivot).multiply(_m2.copy(trap.built).invert());
+    const zone = pivot.clone().multiply(new THREE.Matrix4().makeTranslation(0, TRIGGER_BOTTOM + TRIGGER_SIZE[1] / 2, 0));
+    const floorLocalY = -(TRIGGER_BOTTOM + TRIGGER_SIZE[1] / 2);
+    const bottom = -TRIGGER_SIZE[1] / 2;
+    const top = Math.min(TRIGGER_SIZE[1] / 2, Math.max(bottom, floorLocalY + PRESS_HEIGHT));
+    const panFrame = zone.clone().multiply(new THREE.Matrix4().makeTranslation(0, (bottom + top) / 2, 0));
+    trap.pivot = pivot.clone();
+    trap.floor = new THREE.Vector3().setFromMatrixPosition(pivot);
+    trap.leg = trap.builtLeg.clone().applyMatrix4(delta);
+    trap.rest = {};
+    for (const [k, m] of Object.entries(trap.builtRest)) trap.rest[k] = delta.clone().multiply(m);
+    trap.panInv = panFrame.clone().invert();
+    trap.panHalf = new THREE.Vector3(TRIGGER_SIZE[0] / 2, (top - bottom) / 2, TRIGGER_SIZE[2] / 2);
+    trap.centre = new THREE.Vector3().setFromMatrixPosition(panFrame);
   }
 
   // ---------------------------------------------------------------------------------------------------- poses
@@ -177,6 +192,10 @@ export class Traps {
       trap.live = run.plan.props.has(trap.id);
       trap.state = trap.live ? 'Armed' : 'Spent';
       trap.motion = null;
+      // the run's plan may serve another anchor with this trap (worldData.plan placements)
+      const placed = run.plan.placements ? run.plan.placements.get(trap.id) : null;
+      this._layout(trap, placed || trap.built);
+      this.env.setEntityPivot(trap.id, trap.pivot);
       this.env.setEntityVisible(trap.id, trap.live);
       if (trap.live) {
         this._setJaws(trap, 1);
@@ -420,6 +439,7 @@ const _a = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _r = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
 const _off = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _root = new THREE.Vector3();

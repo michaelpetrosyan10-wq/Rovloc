@@ -2,7 +2,8 @@
 // LockerController), for the one player. The only writer of a locker's door pose and its OccupantUserId / DoorOpen.
 //
 // A locker is Free, Entering, Hidden, Exiting or Smashed (its door torn off by the Creature: never usable again this
-// run). The Hide prompt (0.25 s hold) serves every unsmashed locker.
+// run). The Hide prompt (0.25 s hold) serves every unsmashed locker, except one Floor 3's key search holds ajar
+// (setSearchOpen).
 //
 // Getting in (canHide: the run is live, Alive, no control lock, on foot, not hiding already, the locker Free, the
 // Creature not chasing you; Hud.LockerOccupied / Hud.LockerSeen tell the refusals that matter). At once: the Locker
@@ -67,6 +68,7 @@ const DEV_CHECK_SECONDS = 5;
 const ON_FOOT = new Set(['Standing', 'Sprinting', 'Crouching']);
 const CHASES = new Set(['WallChase', 'VentChase']);
 const CLEAR_HALF_WIDTH = 0.9;
+const SEARCH_OPEN = 0.42; // Floor 3's key search (objectives/floor3.js): a searched locker's door stands this far open
 
 // LockerBuilder
 const DOOR_OPEN_ANGLE = (110 * Math.PI) / 180;
@@ -332,6 +334,7 @@ export class Lockers {
     this._clear();
     for (const locker of this.lockers.values()) {
       locker.state = 'Free';
+      locker.searchOpen = false;
       locker.motion = null;
       locker.schedule = null;
       locker.check = null;
@@ -882,6 +885,27 @@ export class Lockers {
     if (this.peeks.length) return true;
     for (const l of this.lockers.values()) if (l.check) return true;
     return false;
+  }
+
+  /** A locker's state ('Free' | 'Entering' | 'Hidden' | 'Exiting' | 'Smashed'), or null. */
+  stateOf(id) {
+    const l = this.lockers.get(id);
+    return l ? l.state : null;
+  }
+
+  /**
+   * Floor 3's key search: swings a free locker's door ajar (SEARCH_OPEN of fully open, the locker creak) or shut again;
+   * its Hide prompt waits while it stands open. False when it is not free or already so.
+   */
+  setSearchOpen(id, open) {
+    const locker = this.lockers.get(id);
+    if (!locker || locker.state !== 'Free' || !!locker.searchOpen === !!open) return false;
+    const now = this.env.now();
+    const from = locker.motion ? valueAt(locker.motion, now)[0] : locker.searchOpen ? SEARCH_OPEN : 0;
+    locker.searchOpen = !!open;
+    this._startDoor(locker, 'Swing', from, open ? SEARCH_OPEN : 0, open ? OpenSeconds : CloseSeconds, now + LEAD);
+    if (locker.handle) locker.handle.setEnabled(!open);
+    return true;
   }
 
   /** The locker the player is in (id), or null (the Creature's lockerOccupied hook). */

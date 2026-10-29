@@ -1,8 +1,8 @@
 // airlock.js: the stairwell airlock checkpoints (CheckpointAirlockService) and their banner (AirlockController).
 //
-// One airlock at a time: the current level's exit vestibule (the stairwell's fromRoom) with that level's Checkpoint
-// volume and the fire door(s) between the vestibule and the level (airlock doors whose FromLevel is the level). The
-// roof has none. At 10 Hz the player counts as inside while their root or the point under their feet is in the
+// One airlock at a time: the current level's exit vestibule on the run's route (game.route: the stairwell it leaves by)
+// with its Checkpoint volume and the fire door(s) between the vestibule and the level. The roof has none. Nothing runs
+// while the floor's objective keeps the exit locked (FloorObjectives.exitOpen). At 10 Hz the player counts as inside while their root or the point under their feet is in the
 // volume. Idle -> Waiting when a playing participant is inside (StragglerDeadline = now + StragglerSeconds on the
 // exit doors); Waiting -> Sealing when every Alive participant is inside (solo: as soon as you are) or at the
 // deadline with someone inside: the doors close Locked in SEAL_SECONDS (never on anyone); Waiting -> Idle at the
@@ -48,9 +48,11 @@ export class Airlock {
     this.phase = 'Idle';
     this.deadline = null;
     this.sealingSince = null;
-    this.volumes = level ? this.game.world.checkpointVolumes(level) : [];
-    this.tower = level ? towerBox(this.game.world.meta, level) : null;
-    this.doors = level ? this.game.doors.exitDoors(level) : [];
+    const route = level ? this.game.route(level) : null;
+    this.route = route;
+    this.volumes = route ? route.checkpointVolumes : [];
+    this.tower = route ? towerBox(this.game.world.meta, route) : null;
+    this.doors = route ? route.exitDoorIds.map((id) => this.game.doors.get(id)).filter(Boolean) : [];
     for (const d of this.doors) d.stragglerDeadline = null;
   }
 
@@ -123,7 +125,12 @@ export class Airlock {
     const game = this.game;
     if (!game.live() || game.phase !== 'InRun') return;
     if (game.level !== this.level) this._reset(game.level);
-    if (!this.level || !game.world.exitRoom(this.level)) return;
+    if (!this.level || !this.route) return;
+    // a floor's exit stays shut until its objective is done: the checkpoint does not run before that
+    if (game.floors && !game.floors.exitOpen(this.level)) {
+      this.inside = false;
+      return;
+    }
     this.clock += dt;
     if (this.clock < POLL) return;
     this.clock = 0;
@@ -207,17 +214,16 @@ class AirlockBanner {
   }
 }
 
-/** The stair tower leaving `level` (its box from the level's floor to the next level's ceiling), or null. */
-function towerBox(meta, level) {
+/** The stair tower of a route (its box from the level's floor to the next level's ceiling), or null. */
+function towerBox(meta, route) {
   const wc = meta.worldConfig || {};
-  const stair = (meta.stairwells || []).find((s) => s.from === level);
-  const tower = stair && wc.Towers ? wc.Towers[stair.tower] : null;
-  const from = meta.levels[level];
-  const to = stair ? meta.levels[stair.to] : null;
+  const tower = route.tower && wc.Towers ? wc.Towers[route.tower] : null;
+  const from = meta.levels[route.level];
+  const to = route.nextLevel ? meta.levels[route.nextLevel] : null;
   if (!tower || !from || !to) return null;
   return {
     minX: tower.minX, maxX: tower.maxX, minZ: tower.minZ, maxZ: tower.maxZ,
-    minY: from.elevation, maxY: to.elevation + (to.height || 14), toRoom: stair.toRoom,
+    minY: from.elevation, maxY: to.elevation + (to.height || 14), toRoom: route.entryRoomOfNextLevel,
   };
 }
 

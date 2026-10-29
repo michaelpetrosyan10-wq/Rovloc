@@ -27,6 +27,7 @@ import { Level2 } from './levels/level2.js';
 import { Level3 } from './levels/level3.js';
 import { Level4 } from './levels/level4.js';
 import { Level5 } from './levels/level5.js';
+import { FloorObjectives } from './objectives/index.js';
 import { Hints } from './ui/hints.js';
 import { Nav } from './ui/nav.js';
 import { Objectives } from './ui/objectives.js';
@@ -68,6 +69,7 @@ export async function start(engine, opts = {}) {
   game.level3 = game.add(new Level3(game));
   game.level4 = game.add(new Level4(game));
   game.level5 = game.add(new Level5(game));
+  game.floors = game.add(new FloorObjectives(game));
   game.lobby = game.add(new Lobby(game));
   game.onboarding = game.add(new Onboarding(game));
   game.objectives = game.add(new Objectives(game));

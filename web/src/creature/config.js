@@ -76,17 +76,17 @@ export const ROOT_HEIGHT = CreatureConfig.Rig.HipHeight + CreatureConfig.Rig.Roo
 export const DifficultyConfig = Object.freeze({
   Standard: Object.freeze({
     creatureSpeedMultiplier: 1,
-    hearingMultiplier: 1,
+    hearingMultiplier: 1.15, // harder Standard: +15 % (objective update)
     sightRangeMultiplier: 1,
-    catchCooldownSeconds: 18,
+    catchCooldownSeconds: 14.4, // harder Standard: -20 %
     maxChaseSeconds: 40,
     postAirlockGraceSeconds: 12,
   }),
   Nightmare: Object.freeze({
     creatureSpeedMultiplier: 1.2,
-    hearingMultiplier: 1.25,
+    hearingMultiplier: 1.4375, // Nightmare x1.25 on top of Standard
     sightRangeMultiplier: 1.15,
-    catchCooldownSeconds: 11,
+    catchCooldownSeconds: 8.8, // Nightmare 11 s, -20 % with Standard
     maxChaseSeconds: 65,
     postAirlockGraceSeconds: 6,
   }),

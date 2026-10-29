@@ -409,7 +409,7 @@ export class Vents {
 
   passable(id) {
     const g = this.grates.get(id);
-    return !!g && (g.state === 'Open' || g.state === 'Kicked');
+    return !!g && !g.blocked && (g.state === 'Open' || g.state === 'Kicked');
   }
 
   /** VentController.panelStop: the ball stops short of a shut grate's panel at the wall's room face. */
@@ -488,7 +488,7 @@ export class Vents {
     if (grate.state === state) return;
     grate.state = state;
     this.env.setEntityAttribute(grate.id, 'GrateState', state);
-    const serves = state === 'Closed' || state === 'Unscrewing' || state === 'Locked';
+    const serves = !grate.blocked && (state === 'Closed' || state === 'Unscrewing' || state === 'Locked');
     for (const p of grate.prompts) {
       p.setEnabled(serves);
       p.setText(p.kind === 'Kick' ? S('Prompt.Kick') : S('Prompt.Unscrew'), S(state === 'Locked' ? 'Prompt.GrateLocked' : 'Prompt.Grate'));
@@ -732,6 +732,18 @@ export class Vents {
   stateOf(id) {
     const g = this.grates.get(id);
     return g ? g.state : 'Closed';
+  }
+
+  /**
+   * Blocks a grate for the player (Floor 4's shut maintenance hatch covers its grate): no prompts, no crawling in or
+   * out, whatever its state. Unblocked, it serves as its state says.
+   */
+  setBlocked(id, blocked) {
+    const g = this.grates.get(id);
+    if (!g) return;
+    g.blocked = !!blocked;
+    const serves = !g.blocked && (g.state === 'Closed' || g.state === 'Unscrewing' || g.state === 'Locked');
+    for (const p of g.prompts) p.setEnabled(serves);
   }
 
   /** Whether the player is crawling. */

@@ -138,7 +138,8 @@ const walk = async (seconds, key = 'KeyW') => {
 
 const shotsTaken = [];
 try {
-  await tab.goto(`file://${page}?dev`);
+  // a pinned run seed: the plan (which traps, where) is the same every smoke run
+  await tab.goto(`file://${page}?dev&seed=1029`);
   await tab.waitForFunction(() => window.__rovloc && (window.__rovloc.ready || window.__rovloc.error), null, { timeout: 180000 });
   check('boot', await tab.evaluate(() => !window.__rovloc.error), await tab.evaluate(() => window.__rovloc.error));
   await tab.waitForTimeout(1500);
@@ -182,7 +183,7 @@ try {
   // ------------------------------------------------------------------------------------------- Level 0: a trap
   const trap = await G((g) => {
     const t = g.traps.traps.find((x) => x.state === 'Armed' && x.level === g.level);
-    g.env.teleport({ position: { x: t.floor.x, y: t.floor.y + 3, z: t.floor.z + 7 }, yaw: 0 });
+    g.env.teleport({ position: { x: t.floor.x, y: t.floor.y + 3, z: t.floor.z + 2.5 }, yaw: 0 });
     g.traps.noteTeleport();
     return t.id;
   });
@@ -203,6 +204,11 @@ try {
   check('looking down and holding E pries the trap open', !s.caught && s.ms !== 'Trapped' && s.ctx === 'OnFoot', s);
 
   // ------------------------------------------------------------------------------------------- the airlock -> Level 1
+  // the exit stays locked until the floor's objective is done (tools/objective-run.mjs plays the objectives for real)
+  s = await G((g) => ({ door: g.doors.get(g.route(g.level).exitDoorIds[0]).state, open: g.floors.exitOpen(g.level) }));
+  check('the basement exit is locked until its objective is done', s.door === 'Locked' && !s.open, s);
+  await G((g, dev) => dev.completeObjective());
+  await ff(3);
   await G((g) => {
     const v = g.airlock.volumes[0] || g.world.checkpointVolumes(g.level)[0];
     g.env.teleport({ position: { x: v.cframe[0] - 14, y: v.cframe[1] + 0.5, z: v.cframe[2] }, yaw: -Math.PI / 2 });

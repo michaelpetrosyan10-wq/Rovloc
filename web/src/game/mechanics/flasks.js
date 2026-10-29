@@ -26,6 +26,8 @@
 // Stun(StunSeconds, the shatter point) and counts Stuns.
 //
 // Downed players keep their flask (and cannot throw it); death, spectating and the end of the run empty the hand.
+// Objective flasks (holdObjective: Floor 2's acid) ride the hand the same way; their break calls their owner instead of
+// clouding, a flight that never breaks tells it the flask is lost. World flasks stand on the anchors the plan chose.
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
@@ -220,7 +222,7 @@ export class Flasks {
       this.env.removeFromScene(this.heldModel.group);
       this.heldModel.dispose();
     }
-    this.heldModel = new FlaskModel(flask.variant);
+    this.heldModel = tinted(new FlaskModel(flask.variant), flask.tint);
     // the flask's Grip in the fist (ChemicalThrowController.heldPivot), in the turned fist's frame
     this.heldModel.group.matrixAutoUpdate = false;
     this.heldModel.group.matrix.copy(FIST_TO_NECK).invert().multiply(HAND_GRIP).multiply(_m.copy(flask.gripOffset).invert());
@@ -288,7 +290,7 @@ export class Flasks {
     this.followStart = null;
     for (const f of this.flasks.values()) {
       f.level = f.info.level;
-      this._place(f, f.rest);
+      this._place(f, (run.plan.placements && run.plan.placements.get(f.id)) || f.rest);
       if (run.plan.props.has(f.id)) this._toWorld(f);
       else this._gone(f);
     }
@@ -385,7 +387,7 @@ export class Flasks {
       t: 0,
       level: game.level,
       axis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
-      model: new FlaskModel(flask.variant),
+      model: tinted(new FlaskModel(flask.variant), flask.tint),
       done: false,
     };
     flight.model.group.matrixAutoUpdate = false;
@@ -447,6 +449,7 @@ export class Flasks {
     flight.done = true;
     this._dropModel(flight);
     flight.flask.state = 'Gone';
+    if (flight.flask.onLost) flight.flask.onLost();
   }
 
   /** The VentGraph node of the duct `point` lies inside, or null (ChemicalProjectileService.ductNode). */
@@ -508,6 +511,12 @@ export class Flasks {
       game.noise(point, 'FlaskShatter', inVent ? { medium: 'Vent', ventNodeId: ventNode } : {});
     }
     game.playAt('FlaskShatter', point);
+    if (flight.flask.objective) {
+      // an objective flask (Floor 2's acid) breaks with its own fumes and no stun cloud; its owner judges the hit
+      this.fx.shatter(point, normal, centre, flight.flask.color, GameConfig.FlaskCloudSeconds, inVent, hit.kind);
+      if (flight.flask.onShatter) flight.flask.onShatter(point, hit);
+      return;
+    }
     const hiss = game.playAt('ChemHiss', centre, { loop: true });
     this.fx.shatter(point, normal, centre, flight.flask.color, GameConfig.FlaskCloudSeconds, inVent, hit.kind);
     const cloud = { point: point.clone(), centre, level: flight.level, ventNode, inVent, expiresAt: now + GameConfig.FlaskCloudSeconds,
@@ -667,6 +676,23 @@ export class Flasks {
 
   // ---------------------------------------------------------------------------------------------------- dev
 
+  /**
+   * An objective flask in a free hand (Floor 2's acid): `flask` carries {id, variant, color, tint, gripOffset,
+   * objective: true, onShatter(point, hit), onLost()}; it is held, aimed and thrown like a chemical flask. False when the
+   * hand is full or the player cannot hold one now.
+   */
+  holdObjective(flask) {
+    if (this.held || !this.game.run || this.game.life.state !== 'Alive') return false;
+    flask.state = 'Held';
+    this._hold(flask);
+    return true;
+  }
+
+  /** Takes the flask out of the hand without throwing it (poured out); returns it, or null. */
+  takeHeld() {
+    return this.held ? this._emptyHand() : null;
+  }
+
   /** Give: puts a flask in a playing player's free hand (dev); false without a spare flask. */
   give() {
     if (this.held || !this.game.run) return false;
@@ -685,6 +711,12 @@ export class Flasks {
     this.lastThrowAt = null;
     return this.throw();
   }
+}
+
+/** A flask model with its liquid recoloured ([r, g, b] 0..1; the acid's sickly yellow-green), or as it is. */
+function tinted(model, tint) {
+  if (tint) model.neon.color.setRGB(tint[0], tint[1], tint[2]);
+  return model;
 }
 
 /** Fewest duct edges between nodes (null when more than maxHops or unknown). */

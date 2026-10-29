@@ -505,7 +505,7 @@ function nightmareLines() {
   const n = DifficultyConfig.Nightmare;
   const pct = (m) => Math.round((m - 1) * 100);
   return [
-    S('Lobby.Nightmare.Speed', pct(n.creatureSpeedMultiplier), pct(n.hearingMultiplier)),
+    S('Lobby.Nightmare.Speed', pct(n.creatureSpeedMultiplier / s.creatureSpeedMultiplier), pct(n.hearingMultiplier / s.hearingMultiplier)),
     S('Lobby.Nightmare.Traps', n.trapCount, s.trapCount),
     S('Lobby.Nightmare.Batteries', n.batteriesPerLevel, s.batteriesPerLevel),
     S('Lobby.Nightmare.Grates', Math.round(n.lockedGrateFraction * 100), Math.round(s.lockedGrateFraction * 100)),

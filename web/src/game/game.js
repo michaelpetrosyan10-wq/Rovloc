@@ -14,7 +14,7 @@ import { Signal } from './util.js';
 
 /**
  * @typedef {'Title'|'Lobby'|'Countdown'|'Deploying'|'InRun'|'RunEnded'|'Results'|'Resetting'} Phase
- * @typedef {{runId: string, difficulty: string, plan: {props: Set<string>, lockedGrates: Set<string>},
+ * @typedef {{runId: string, difficulty: string, plan: import('./worldData.js').Plan, routes: Record<string, import('./worldData.js').Route>,
  *   perks: string[], startedAt: number, seed: number, devRun: boolean}} Run
  */
 
@@ -204,6 +204,11 @@ export class Game {
   /** The player's eye as the levels see it (LevelKit eyes). */
   eye(out = new THREE.Vector3()) {
     return this.env.eye(out);
+  }
+
+  /** The route `level` is left by this run (worldData Route: exit vestibule, doors, checkpoint, lock), or null. */
+  route(level) {
+    return this.world.route(level, this.run ? this.run.routes : null);
   }
 
   /** The zone (room or duct chase) the player's root stands in (ZoneService ZoneId), or null. */

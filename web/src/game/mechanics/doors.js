@@ -1,14 +1,16 @@
 // doors.js: the run's fixture doors (DoorService + DoorMotion + DoorController): the stairwell airlock fire doors, the
-// Level 1 hallway gate and ajar classroom door, the roof stairwell door. The only writer of DoorState and of every
-// leaf pose.
+// Level 1 hallway gate and ajar classroom door, the roof stairwell door, the Level 3 equipment store door. The only
+// writer of DoorState and of every leaf pose.
 //
 // States: Open = the fully open pose; Closed and Locked = the shut pose (Locked refuses requestOpen, scripts may still
 // set it open); Smashed = torn apart, final. Initial: airlock doors Open (built open), the gate Open (rolled up), the
-// classroom door Open at its built ajar pose, the roof door Closed (snapped shut silently).
+// classroom door Open at its built ajar pose, the roof door Closed and the equipment store door Locked (snapped shut
+// silently); the floor objectives lock each exit fire door at the run start (objectives/base.js).
 // Motion: a value (openness 0 shut .. 1 open, or smash progress) from `from` to `to` over `seconds` starting
 // OneShotLead from now, eased (InOut swings, In for the gate dropping, Linear smashes). The leaves are posed every
 // frame from the motion (smooth), the logic steps at 30 Hz: a swing that would touch the player over the next
-// LOOKAHEAD seconds stops short ("held") and finishes once the doorway has been clear for CLEAR_SECONDS.
+// LOOKAHEAD seconds stops short ("held") and finishes once the doorway has been clear for CLEAR_SECONDS; a hinged leaf
+// only checks the side it swings into (a player behind it, pressed against the shut door, never holds it shut).
 // Leaf poses come from the export's per-leaf attachments: <Leaf>Rest, <Leaf>Open, <Leaf>Smashed, <Leaf>Centre.
 // Sounds at the opening's centre: FireDoorSwing + FireDoorLatch (airlocks), DoorCreak + a soft latch (classroom,
 // roof), MetalCreak rising and GateSlam landing (the gate), DoorSmash. The gate and the fire doors slamming shut
@@ -25,6 +27,7 @@ const LOOKAHEAD = 0.25;
 const SWEEP_SAMPLES = 4;
 const SAMPLE_STEP = 0.05;
 const BLOCK_MARGIN = 0.2;
+const SWING_SIDE_SLACK = 0.5; // studs behind the shut leaves' centre that count as behind the swing
 const CLEAR_SECONDS = 0.3;
 const HELD_RECHECK = 0.1;
 const BODY_WIDTH = 3.2;
@@ -52,7 +55,9 @@ export function impactShake(kind, distance) {
 const INITIAL = { Airlock: 'Open', Gate: 'Open', Ajar: 'Open', RoofDoor: 'Closed' };
 const TRAVEL = { Airlock: { open: 1.6, close: 1.6 }, Gate: { open: 2.8, close: 0.35 }, Ajar: { open: 1.2, close: 0.9 },
   RoofDoor: { open: 1.2, close: 0.9 } };
-const FIXTURE_TYPES = ['AirlockDoor', 'HallwayGate', 'ClassroomDoor', 'RoofStairDoor'];
+const FIXTURE_TYPES = ['AirlockDoor', 'HallwayGate', 'ClassroomDoor', 'RoofStairDoor', 'StoreDoor'];
+// the Level 3 equipment store's steel door (DoorKind RoofDoor) starts Locked: the coach's key opens it (floor3.js)
+const INITIAL_BY_TYPE = { StoreDoor: 'Locked' };
 
 /** DoorService.plan */
 export function planFor(current, next) {
@@ -160,7 +165,8 @@ export class Doors {
       toLevel: info.attributes.ToLevel || null,
       leaves,
       centre,
-      state: INITIAL[kind] || 'Open',
+      initial: INITIAL_BY_TYPE[info.type] || INITIAL[kind] || 'Open',
+      state: INITIAL_BY_TYPE[info.type] || INITIAL[kind] || 'Open',
       openness: 0,
       smash: 0,
       smashFrom: 0,
@@ -175,7 +181,31 @@ export class Doors {
       stragglerDeadline: null,
     };
     door.builtOpenness = this._opennessOfBuilt(door);
+    door.swing = door.kind === 'Gate' ? null : this._swingSide(door);
     this.byId.set(door.id, door);
+  }
+
+  /**
+   * Which side of its doorway a hinged door's leaves swing into: {closed: the shut leaves' centre, dir: the horizontal
+   * direction from the shut to the open centres}, or null when it cannot be told.
+   */
+  _swingSide(door) {
+    const shut = new THREE.Vector3();
+    const open = new THREE.Vector3();
+    let n = 0;
+    for (const leaf of door.leaves) {
+      if (!leaf.bounds) continue;
+      const a = this.leafWorld(door, leaf, 'Swing', 0, 0, _leafW);
+      if (!a) continue;
+      shut.add(_v.setFromMatrixPosition(_boxC.multiplyMatrices(a, leaf.bounds.centre)));
+      const b = this.leafWorld(door, leaf, 'Swing', 1, 0, _leafW);
+      open.add(_v.setFromMatrixPosition(_boxC.multiplyMatrices(b, leaf.bounds.centre)));
+      n++;
+    }
+    if (!n) return null;
+    const dir = open.sub(shut).setY(0);
+    if (dir.lengthSq() < 1e-4) return null;
+    return { closed: shut.divideScalar(n), dir: dir.normalize() };
   }
 
   _opennessOfBuilt(door) {
@@ -409,6 +439,9 @@ export class Doors {
 
   _obstructed(door, from, to) {
     if (!this.game.playing()) return false;
+    // a hinged leaf only sweeps the side it swings into: a body behind it (pressed against the shut door, say) is never
+    // in its way, so it opens away from them instead of waiting for them to step back
+    if (door.swing && this.env.rootPosition(_root).sub(door.swing.closed).setY(0).dot(door.swing.dir) < -SWING_SIDE_SLACK) return false;
     this._bodyBox(_bodyC, _bodyS);
     const samples = Math.max(SWEEP_SAMPLES, Math.ceil(Math.abs(to - from) / SAMPLE_STEP));
     for (let i = 0; i <= samples; i++) {
@@ -430,7 +463,7 @@ export class Doors {
   beginRun() {
     for (const door of this.byId.values()) {
       this._cancel(door);
-      door.state = INITIAL[door.kind] || 'Open';
+      door.state = door.initial;
       door.smash = 0;
       door.smashFrom = 0;
       door.stragglerDeadline = null;
@@ -445,7 +478,7 @@ export class Doors {
   endRun() {
     for (const door of this.byId.values()) {
       this._cancel(door);
-      door.state = INITIAL[door.kind] || 'Open';
+      door.state = door.initial;
       door.smash = 0;
       door.smashFrom = 0;
       door.stragglerDeadline = null;

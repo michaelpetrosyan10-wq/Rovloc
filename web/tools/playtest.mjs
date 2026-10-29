@@ -1113,6 +1113,8 @@ async function ventRoute(D, level, goal) {
 /** Walks into the level's exit vestibule and waits for the airlock to seal and the next level to start. */
 async function leaveFloor(D, level) {
   const next = LEVELS[LEVELS.indexOf(level) + 1];
+  // the exit unlocks with the floor objective (tools/objective-run.mjs plays the objectives themselves)
+  await D.G((g, pt, lv) => g.floors && !g.floors.exitOpen(lv) && pt.dev.completeObjective(lv), level);
   const goal = await D.G((g, pt, lv) => {
     const v = g.world.checkpointVolumes(lv)[0];
     return v ? [v.cframe[0], v.cframe[1], v.cframe[2]] : null;
@@ -1402,6 +1404,8 @@ async function poolMoment(D) {
 
 /** Level 5: a pack from the crate, the run to the gap, the jump, the ripcord, the finale, the results. */
 async function roofMoment(D) {
+  // the crate is chained until the roof objective is done (tools/objective-run.mjs cuts it for real)
+  await D.G((g, pt) => g.floors && !g.floors.exitOpen('Level5_Roof') && pt.dev.completeObjective('Level5_Roof'));
   const crate = await D.G((g) => {
     const e = g.world.entities('ParachuteCrate')[0];
     return e ? e.pivot.slice(0, 3) : null;

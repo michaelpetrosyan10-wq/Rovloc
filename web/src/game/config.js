@@ -38,7 +38,7 @@ export const GameConfig = Object.freeze({
   OxygenDrainGrabbed: 5, // slower than a dive while held (was 9): time to struggle free
   OxygenRegen: 30,
   BatteryMax: 100,
-  BatteryDrain: 0.55,
+  BatteryDrain: 0.6325, // +15 % (harder Standard; the flashlight drains the same on every difficulty)
   BatteryPickupCharge: 45,
   WalkSpeed: 11,
   SprintSpeed: 19,
@@ -78,28 +78,28 @@ export const Difficulties = Object.freeze(['Standard', 'Nightmare']);
 export const DifficultyConfig = Object.freeze({
   Standard: Object.freeze({
     creatureSpeedMultiplier: 1,
-    hearingMultiplier: 1,
+    hearingMultiplier: 1.15, // harder Standard: +15 % (objective update)
     sightRangeMultiplier: 1,
     trapCount: 10,
-    batteriesPerLevel: 3,
+    batteriesPerLevel: 2, // harder Standard: one fewer per floor
     flasksScienceHall: 6,
     flasksPool: 2,
     lockedGrateFraction: 0.25,
-    catchCooldownSeconds: 18,
+    catchCooldownSeconds: 14.4, // harder Standard: -20 %
     maxChaseSeconds: 40,
     postAirlockGraceSeconds: 12,
     creditMultiplier: 1,
   }),
   Nightmare: Object.freeze({
     creatureSpeedMultiplier: 1.2,
-    hearingMultiplier: 1.25,
+    hearingMultiplier: 1.4375, // Nightmare x1.25 on top of Standard
     sightRangeMultiplier: 1.15,
     trapCount: 16,
     batteriesPerLevel: 1,
     flasksScienceHall: 4,
     flasksPool: 1,
     lockedGrateFraction: 0.45,
-    catchCooldownSeconds: 11,
+    catchCooldownSeconds: 8.8, // Nightmare 11 s, -20 % with Standard
     maxChaseSeconds: 65,
     postAirlockGraceSeconds: 6,
     creditMultiplier: 1.5,

@@ -202,7 +202,7 @@ export class Life {
   }
 }
 
-/** FlashlightService's pickups: the plan's batteries on every level, Pickup prompt, Charge added. */
+/** FlashlightService's pickups: the plan's batteries on every level (on the anchors it chose), Pickup prompt, Charge added. */
 export class BatteryPickups {
   /** @param {import('./game.js').Game} game */
   constructor(game) {
@@ -216,6 +216,9 @@ export class BatteryPickups {
     for (const info of world.entities('Battery')) {
       const live = run.plan.props.has(info.id);
       env.setEntityVisible(info.id, live);
+      // the run's plan may serve another anchor with this battery (worldData.plan placements)
+      const placed = run.plan.placements ? run.plan.placements.get(info.id) : null;
+      env.setEntityPivot(info.id, placed || info.pivot);
       if (!live) continue;
       const spec = info.prompts.find((p) => p.name === 'Pickup') || info.prompts[0];
       const charge = info.attributes.Charge ?? GameConfig.BatteryPickupCharge;
@@ -231,7 +234,8 @@ export class BatteryPickups {
           if (!this.game.alive()) return;
           const battery = env.meters().battery;
           battery.set(Math.min(battery.max, battery.value + charge));
-          this.game.playAt('Pickup', world.attachmentPos(info.id, 'PromptPoint') || env.rootPosition());
+          const at = env.attachmentWorld(info.id, 'PromptPoint');
+          this.game.playAt('Pickup', at ? new THREE.Vector3().setFromMatrixPosition(at) : env.rootPosition());
           env.setEntityVisible(info.id, false);
           handle.remove();
         },

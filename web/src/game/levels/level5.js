@@ -5,12 +5,14 @@
 // taken while the player cannot see it) and kept hidden in the stair housing. The RoofStairDoor (Closed) swings open
 // OPEN_DELAY after the player reaches the housing.
 //
-// The door smash (Scenes.RoofDoor, from startAt S), once the player is out on the roof (out of the housing and the
-// tower and DOOR_CLEAR from the doorway), or SMASH_TIMEOUT after they first stepped out, or ARRIVAL_TIMEOUT after
-// activation: "L5_DoorSmash". The wind slams the door shut so it lands at Slam (skipped while the player is inside or in
-// the doorway), the hidden Creature is moved in right behind it (Stage), three blows, it is shown behind the door at
-// Reveal (only while that spot is out of sight), the door Smashed at Smash (the DoorSmash action), its cry, and at
-// Release it is let go into WallChase and Hud.RoofRun.
+// The door smash (Scenes.RoofDoor, from startAt S): the Creature waits behind the door for its grace once the player
+// has stepped out of the housing (SpawnTuning.Grace: 20 s Standard, 12 s Nightmare), ended early by a High / Critical
+// noise of the player's on the roof or at once by the crate's chain being cut (crateCut, the roof objective), or
+// ARRIVAL_TIMEOUT after activation: "L5_DoorSmash". The wind slams the door shut so it lands at Slam (skipped while the
+// player is inside or within DOOR_CLEAR of the doorway), the hidden Creature is moved in right behind it (Stage), three
+// blows, it is shown behind the door at Reveal (only while that spot is out of sight), the door Smashed at Smash (the
+// DoorSmash action), its cry, and at Release it is let go: into WallChase when it can see the player from the doorway,
+// else into Patrol (its senses find them, it is never told where they are); Hud.RoofRun once the crate is open.
 //
 // The final sprint: the Creature's pace follows its gap to the player (chaseScale: it runs a straggler down but never
 // quite outruns a sprinter on Standard) and an Alive player on the roof sprints on adrenaline (stamina topped up under
@@ -30,6 +32,7 @@ import { DifficultyConfig, GameConfig } from '../config.js';
 import * as Scenes from '../scenes.js';
 import { Schedule, horizontalDistance, lookAtMatrix } from '../util.js';
 import { edgePoint, outward } from '../mechanics/parachute.js';
+import { SpawnTuning } from '../objectives/config.js';
 
 const LEVEL = 'Level5_Roof';
 const TOKEN = 'L5_RoofFinale';
@@ -41,7 +44,6 @@ const LEAD = GameConfig.OneShotLead;
 const OPEN_DELAY = 1.2;
 const OPEN_SECONDS = 1.4;
 const DOOR_CLEAR = 9;
-const SMASH_TIMEOUT = 20;
 const ARRIVAL_TIMEOUT = 75;
 const BEHIND_DOOR = 3;
 const STAMINA_FLOOR = 55;
@@ -129,9 +131,11 @@ export class Level5 {
     this.schedule = new Schedule();
     this.handle = null;
     this._resetState();
+    game.env.onNoise((e) => this._noise(e));
   }
 
   _resetState() {
+    this.smashNow = false;
     this.active = false;
     this.phase = 'Idle';
     this.activatedAt = 0;
@@ -221,8 +225,10 @@ export class Level5 {
     this.schedule.at(startAt + DOOR.Release, 'release', () => {
       run.released = true;
       if (this.phase === 'Smash') this.phase = 'Chase';
-      this._letGo('WallChase');
-      if (ON_ROOF.has(g.parachute.state)) g.notify('Hud.RoofRun');
+      // it runs down a player it can see from the doorway; one out of sight is left to its senses (it patrols)
+      const sees = g.playing() && this._seen(this.geo.behindPosition);
+      this._letGo(sees ? 'WallChase' : 'Patrol');
+      if (ON_ROOF.has(g.parachute.state) && g.parachute.crateOpen !== false) g.notify('Hud.RoofRun');
     });
   }
 
@@ -238,11 +244,24 @@ export class Level5 {
       if (door && door.state === 'Closed') g.doors.setState(door, 'Open', OPEN_SECONDS);
     }
     const inside = this._inside(root);
-    const out = playing && !inside && horizontalDistance(root, this.geo.doorway) >= DOOR_CLEAR;
     if (playing && !inside && this.firstOutAt === null) this.firstOutAt = now;
-    const due = out || (this.firstOutAt !== null && now >= this.firstOutAt + SMASH_TIMEOUT) || now >= this.activatedAt + ARRIVAL_TIMEOUT;
+    const grace = SpawnTuning.Grace[g.run ? g.run.difficulty : 'Standard'] ?? SpawnTuning.Grace.Standard;
+    const due = this.smashNow || (this.firstOutAt !== null && now >= this.firstOutAt + grace) ||
+      now >= this.activatedAt + ARRIVAL_TIMEOUT;
     if (due) this._startSmash(now);
   }
+
+  /** The crate's chain cut (floor5.js): the door smash at once while the Creature still waits behind the door. */
+  crateCut() {
+    if (this.active && this.phase === 'Arrival') this._startSmash(this.env.now());
+  }
+
+  /** A High / Critical noise of the player's out on the roof ends the wait behind the door (the grace) at once. */
+  _noise(e) {
+    if (!this.active || this.phase !== 'Arrival' || this.firstOutAt === null || e.source !== 'player') return;
+    if (e.level === LEVEL && (e.priority === 'High' || e.priority === 'Critical')) this.smashNow = true;
+  }
+
 
   _seenCreature() {
     const p = this.game.creature.position(new THREE.Vector3());

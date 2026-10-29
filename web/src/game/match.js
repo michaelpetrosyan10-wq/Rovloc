@@ -2,7 +2,8 @@
 // player.
 //
 //   Deploy(difficulty)  from Lobby / Countdown: one stock unit of each equipped perk is consumed (perks without
-//                       stock are dropped), the run's plan is applied to the world (props and grate locks), every
+//                       stock are dropped), a fresh run seed is drawn (runSeed: random, or pinned by ?seed= / nextSeed),
+//                       the run's routes and plan come from it and are applied to the world (props and grate locks), every
 //                       system's beginRun runs, the player spawns at Level 0's first PlayerSpawn slot, Level 0 is
 //                       entered, then InRun activates it.
 //   Outcomes            Pending -> Escaped (Level 5's landing) / Dead (anything else when the run resolves). One
@@ -16,6 +17,7 @@
 
 import { DifficultyConfig, GameConfig } from './config.js';
 import { applyReward, rewardFor } from './profile.js';
+import { normalizeSeed } from './worldData.js';
 
 const ESCAPE_FINALE_SECONDS = 8;
 const RUN_ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -42,6 +44,8 @@ export class Match {
     /** @type {RunSummary|null} */
     this.summary = null;
     this.deploying = false;
+    /** @type {number|null} a fixed seed for the next runs (tests, the dev panel); null: random */
+    this.nextSeed = null;
   }
 
   // ---------------------------------------------------------------------------------------------------- deploy
@@ -54,13 +58,16 @@ export class Match {
     const env = game.env;
     const chosen = DifficultyConfig[difficulty] ? difficulty : 'Standard';
     const perks = game.profile.consumeLoadout();
+    const seed = this.runSeed();
+    const routes = game.world.routes(seed);
     const run = {
       runId: newRunId(),
       difficulty: chosen,
-      plan: game.world.plan(chosen),
+      plan: game.world.plan(chosen, seed, routes),
+      routes,
       perks,
       startedAt: env.now(),
-      seed: game.world.meta.seed || 0,
+      seed,
       devRun: this.devRun,
     };
     this.outcome = 'Pending';
@@ -83,9 +90,22 @@ export class Match {
     return true;
   }
 
-  /** Puts the player at a level's PlayerSpawn slot (CharacterService.SpawnCFrame). */
+  /**
+   * The seed of the run about to start (RunLifecycleService's RunSeed): `nextSeed` when a test or the dev panel set
+   * one (it stays until cleared), else the page's `?seed=N`, else a fresh random one (crypto.getRandomValues), so every
+   * run differs.
+   */
+  runSeed() {
+    const fixed = normalizeSeed(this.nextSeed ?? urlSeed());
+    if (fixed !== null) return fixed;
+    const word = new Uint32Array(1);
+    crypto.getRandomValues(word);
+    return normalizeSeed(word[0]);
+  }
+
+  /** Puts the player at a level's PlayerSpawn slot (CharacterService.SpawnCFrame) in its entry room on the run's routes. */
   spawnAt(level, slot) {
-    const spawns = this.game.world.spawns(level);
+    const spawns = this.game.world.spawns(level, this.game.run ? this.game.run.routes : null);
     const s = spawns[Math.min(slot, spawns.length - 1)];
     if (s) this.game.env.teleport(s.cframe);
   }
@@ -217,5 +237,11 @@ function newRunId() {
   let id = '';
   for (let i = 0; i < 16; i++) id += RUN_ID_ALPHABET[Math.floor(Math.random() * RUN_ID_ALPHABET.length)];
   return `${Date.now().toString(36)}-${id}`;
+}
+
+/** The page's `?seed=N` (tests pin a run with it), or null. */
+function urlSeed() {
+  const m = typeof location !== 'undefined' ? /[?&]seed=(\d+)/.exec(location.search) : null;
+  return m ? Number(m[1]) : null;
 }
 

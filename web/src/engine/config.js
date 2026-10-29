@@ -44,7 +44,7 @@ export const GameConfig = Object.freeze({
   OxygenDrainGrabbed: 5, // slower than a dive while held (was 9): time to struggle free
   OxygenRegen: 30,
   BatteryMax: 100,
-  BatteryDrain: 0.55,
+  BatteryDrain: 0.6325, // +15 % (harder Standard; the flashlight drains the same on every difficulty)
   BatteryPickupCharge: 45,
   WalkSpeed: 11,
   SprintSpeed: 19,
@@ -154,6 +154,11 @@ export const NoiseKinds = Object.freeze({
   DoorSlam: { radius: 130, priority: 'Critical', medium: 'Air', interval: 0 },
   FallingObject: { radius: 24, priority: 'Low', medium: 'Air', interval: 0 },
   Scripted: { radius: 0, priority: 'Low', medium: 'Air', interval: 0 },
+  // floor objectives: a working hold (keys in a lock, the mix, the valve, the cutters) once a second, a loud single
+  // action (the breaker, a lock clunking open, the chain snapping), the generator starting
+  ObjectiveWork: { radius: 34, priority: 'Normal', medium: 'Air', interval: 0 },
+  ObjectiveClunk: { radius: 110, priority: 'High', medium: 'Air', interval: 0 },
+  GeneratorStart: { radius: 170, priority: 'Critical', medium: 'Air', interval: 0 },
 });
 
 export const NoiseConfig = Object.freeze({

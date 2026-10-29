@@ -6,6 +6,7 @@
 //   deploy(difficulty?)    straight into a run
 //   gotoLevel(level)       the level skip: enter the level, stand at its first spawn slot
 //   snapTrap()             spring the nearest armed trap on yourself          seal()  seal the current airlock now
+//   seed(n)                pin the next runs' seed (null: random)          completeObjective(level?) the floor done at once
 //   beat(kind?)            a basement beat now                                 escape() count yourself escaped
 //   signature(level)       the level's signature moment: L0 a trap, L1 the classroom scare, L2 a flask throw,
 //                          L3 a locker check, L4 a pool grab, L5 the door smash and the finale
@@ -75,6 +76,18 @@ export class Dev {
   seal() {
     this._mark();
     return this.game.airlock.seal();
+  }
+
+  /** Pins the seed of the runs that follow (null: a fresh random seed per run again). */
+  seed(n) {
+    this.game.match.nextSeed = n === undefined ? null : n;
+    return true;
+  }
+
+  /** The current floor's objective done at once, through its own unlock (the exit opens). */
+  completeObjective(level) {
+    this._mark();
+    return this.game.floors.devComplete(level || this.game.level);
   }
 
   beat(kind) {

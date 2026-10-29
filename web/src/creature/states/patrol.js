@@ -18,12 +18,12 @@ import { clamp, flat } from '../util.js';
 export const Name = 'Patrol';
 export const CornerDegrees = 50;
 const LOOK_SECONDS = { min: 0.6, max: 1.1 };
-export const HeardTtl = 90;
+export const HeardTtl = 60; // the noises heard in the last minute pull the next loop (was 90 s)
 const ARRIVE = 2;
 const MAX_FAILURES = 3;
 const WITHDRAW_MIN = 35;
 const WITHDRAW_MAX = 140;
-export const SweepChance = Object.freeze({ BuildUp: 0.6, Peak: 0.45, Relax: 0 });
+export const SweepChance = Object.freeze({ BuildUp: 0.75, Peak: 0.6, Relax: 0 }); // harder Standard: was 0.6 / 0.45
 
 /** @type {WeakMap<object, any>} */
 const runs = new WeakMap();

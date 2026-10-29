@@ -3,7 +3,9 @@
 // TutorialConfig.Hints, highest priority first: the stairwell airlock (near its vestibule, or its countdown), a downed
 // teammate (never solo), the first bear trap, flask, vent grate or locker within the hint's radius on the current
 // level, getting into the water, a low battery with the light on. Each shows once ever: its hidden setting
-// (Hint<Id>) is set the moment it shows and saved with the settings. The card: a taped strip below the crosshair with
+// (Hint<Id>) is set the moment it shows and saved with the settings. After the airlock come the floor objective's
+// stations and locks (FloorObjectives.hintSpots: a Hint.Obj.<what> line the first time one is within HintRadius of the
+// eye with a clear line; once ever, saved under ObjectiveHintsSeen). The card: a taped strip below the crosshair with
 // the line and the device's input glyphs, HintSeconds long, HintGap quiet seconds between two; it ends when the floor
 // changes. Never at a bad moment: only Alive in a run with "First-time hints" on, the HUD visible, no onboarding
 // screen, outside the Cutscene / Menu / Struggle / Locker / Trapped / Parachute contexts, under no Cutscene /
@@ -14,6 +16,7 @@ import { TutorialConfig } from '../config.js';
 import { S } from '../strings.js';
 import { cfPos } from '../util.js';
 import { glyphFor } from './nav.js';
+import { ObjectiveTuning } from '../objectives/config.js';
 import { Palette, el } from './style.js';
 
 const T = TutorialConfig.Timing;
@@ -27,6 +30,7 @@ const BLOCKED_LOCKS = new Set(['Cutscene', 'Jumpscare', 'Drag']);
 const WATER_STATES = new Set(['Treading', 'Freestyle', 'Underwater']);
 const GRATE_SHUT = new Set(['Closed', 'Unscrewing', 'Locked']);
 const AIRLOCK_HINT_RADIUS = 22;
+const OBJECTIVE_HINTS = 'ObjectiveHintsSeen';
 
 export class Hints {
   /** @param {import('../game.js').Game} game */
@@ -43,7 +47,7 @@ export class Hints {
     /** @type {Set<string>} */
     this.due = new Set();
     this.positions = new Map();
-    for (const type of ['BearTrap', 'Locker', 'VentGrate']) {
+    for (const type of ['Locker', 'VentGrate']) {
       for (const e of game.world.entities(type)) this.positions.set(e.id, cfPos(e.pivot));
     }
     const root = this.env.uiRoot();
@@ -98,7 +102,7 @@ export class Hints {
     }
     if (!seen.BearTrap && g.traps) {
       for (const t of g.traps.traps) {
-        if (t.state === 'Armed' && t.level === level && this._near(t.id, from, radius('BearTrap'))) {
+        if (t.state === 'Armed' && t.level === level && t.floor.distanceTo(from) <= radius('BearTrap')) {
           this.due.add('BearTrap');
           break;
         }
@@ -136,6 +140,26 @@ export class Hints {
     }
   }
 
+  /** The objective hints already shown (saved: once ever, like the settings' Hint flags). */
+  _objectiveSeen() {
+    const v = this.env.saveGet(OBJECTIVE_HINTS, []);
+    return Array.isArray(v) ? v.slice() : [];
+  }
+
+  /** The first objective station / lock of this floor in reach and in sight whose hint has not shown yet, or null. */
+  _scanObjective() {
+    const g = this.game;
+    if (!g.floors || g.phase !== 'InRun' || g.life.state !== 'Alive' || !g.level) return null;
+    const seen = new Set(this._objectiveSeen());
+    const eye = this.env.eye(_eye);
+    for (const spot of g.floors.hintSpots(g.level)) {
+      if (seen.has(spot.key)) continue;
+      if (spot.point.distanceTo(eye) > (spot.radius || ObjectiveTuning.HintRadius)) continue;
+      if (this.env.lineClear(eye, spot.point, { ignoreEntities: true })) return spot.key;
+    }
+    return null;
+  }
+
   _fill(hint) {
     const env = this.env;
     this.text.textContent = S(hint.text);
@@ -158,6 +182,7 @@ export class Hints {
       this.scannedAt = this.clock;
       if (TutorialConfig.Hints.some((h) => !seen[h.id])) this._scan(seen);
       else this.due.clear();
+      this.objectiveDue = this._scanObjective();
     }
     if (this.showing) {
       // a card belongs to the floor it came up on: the airlock's "step inside" must not ride into the next floor
@@ -167,12 +192,24 @@ export class Hints {
         this.endedAt = this.clock;
       }
     } else if (ok && this.clock - this.endedAt >= T.HintGap) {
-      const next = TutorialConfig.Hints.find((h) => this.due.has(h.id) && !seen[h.id]);
+      // the airlock first, then a station or lock of the floor objective seen for the first time, then the rest
+      let next = TutorialConfig.Hints.find((h) => this.due.has(h.id) && !seen[h.id]);
+      // (still a hint spot now: the step may have been done since the scan)
+      const spots = this.game.floors && this.game.level ? this.game.floors.hintSpots(this.game.level) : [];
+      if (this.objectiveDue && !spots.some((x) => x.key === this.objectiveDue)) this.objectiveDue = null;
+      if (this.objectiveDue && (!next || next.id !== 'Airlock')) {
+        next = { id: this.objectiveDue, text: this.objectiveDue, inputs: [], objective: true };
+      }
       if (next) {
         this.showing = { ...next, level: this.game.level };
         this.shownAt = this.clock;
         this._fill(next);
-        this.env.setSetting(next.setting, true);
+        if (next.objective) {
+          const done = this._objectiveSeen();
+          done.push(next.id);
+          this.env.saveSet(OBJECTIVE_HINTS, done);
+          this.objectiveDue = null;
+        } else this.env.setSetting(next.setting, true);
       }
     }
     const target = this.showing ? 1 : 0;
@@ -184,3 +221,4 @@ export class Hints {
 }
 
 const _from = new THREE.Vector3();
+const _eye = new THREE.Vector3();

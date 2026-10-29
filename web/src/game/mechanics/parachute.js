@@ -3,6 +3,7 @@
 // Packs: the crate's ParachutePack nodes, each with its ParachuteGrab prompt (0.5 s). An Alive player on the live roof
 // who wears no pack takes one (Hud.ParachuteHaveOne refuses a second): the pack vanishes from the crate, the buckles
 // click (PackBuckle), Hud.ParachuteTaken: Packed. A pack goes back into the crate when its wearer dies before jumping.
+// While the roof objective keeps the crate chained (setCrateOpen(false)) no pack can be taken.
 //
 // The jump (advance, at the tick rate while the roof is the live level):
 //   None / Packed  a root off the roof (offRoof: LeaveClear past the exterior wall's outer face, or past the face and
@@ -257,8 +258,14 @@ export class Parachute {
     if (this.state === 'Packed') this.state = 'None';
     if (!pack) return;
     pack.taken = false;
-    if (pack.handle) pack.handle.setEnabled(true);
+    if (pack.handle) pack.handle.setEnabled(this.crateOpen !== false);
     this.env.setEntityVisible(this.crate.id, true, pack.node);
+  }
+
+  /** The roof objective's lock: while the crate is chained (false) no pack can be taken. */
+  setCrateOpen(open) {
+    this.crateOpen = !!open;
+    for (const p of this.packs) if (p.handle) p.handle.setEnabled(this.crateOpen && !p.taken);
   }
 
   /** Dev `chute give`: a pack on (no crate pack taken). */
