@@ -57,11 +57,33 @@ UIKit.TextSize = table.freeze({
 })
 
 UIKit.MinTouchTarget = 44
+-- The smallest glyph label a key cap or pill draws (design px): a long label widens its cap instead of shrinking
+-- under this, so a cap never reads as an empty dark square.
+UIKit.MinGlyphText = 9
 
 local DESIGN_AXIS = 720
 local MIN_SCALE = 0.9
 local MAX_SCALE = 1.3
 local GAMEPAD_PREFIX = "Button"
+local GLYPH_ADVANCE = 0.62 -- average advance of an upper-case Builder Sans Bold glyph, in em (cap width estimate)
+
+-- Labels for keys that type no visible character: the engine's key string for them is blank or a control character
+-- (Tab "\t", Space " ", Enter "\r") and their enum names are long.
+local KEY_LABELS: { [string]: string } = {
+	Tab = "TAB",
+	Space = "SPACE",
+	Return = "ENTER",
+	KeypadEnter = "ENTER",
+	Backspace = "BKSP",
+	Escape = "ESC",
+	LeftShift = "SHIFT",
+	RightShift = "SHIFT",
+	LeftControl = "CTRL",
+	RightControl = "CTRL",
+	LeftAlt = "ALT",
+	RightAlt = "ALT",
+	CapsLock = "CAPS",
+}
 
 local DPAD_ARMS: { [string]: Vector2 } = {
 	DPadUp = Vector2.new(0, -1),
@@ -156,17 +178,43 @@ function UIKit.ringRotations(progress: number): (number, number, boolean, boolea
 	return math.clamp(degrees, 0, 180), math.clamp(degrees, 180, 360), p > 1e-3, p > 0.5
 end
 
--- The short label a key cap shows for a key: gamepad buttons lose their "Button" prefix; keyboard keys use the
--- engine's localized key string when it is short, else the key's name.
+-- The short label a key cap shows for a key: gamepad buttons lose their "Button" prefix; keys that type no visible
+-- character get a fixed label (TAB, SPACE, ENTER, SHIFT ...); other keyboard keys use the engine's localized key
+-- string when it is short and printable, else the key's name. Never blank.
 function UIKit.glyphText(keyCode: Enum.KeyCode, localized: string?): string
 	local name = keyCode.Name
 	if string.sub(name, 1, #GAMEPAD_PREFIX) == GAMEPAD_PREFIX and #name > #GAMEPAD_PREFIX then
 		return string.sub(name, #GAMEPAD_PREFIX + 1)
 	end
-	if localized and localized ~= "" and utf8.len(localized) ~= nil and (utf8.len(localized) :: number) <= 6 then
+	local fixed = KEY_LABELS[name]
+	if fixed then
+		return fixed
+	end
+	local length = if localized then utf8.len(localized) else nil
+	if
+		localized
+		and length ~= nil
+		and length <= 6
+		and string.find(localized, "%S") ~= nil -- something visible
+		and string.find(localized, "%c") == nil -- no control characters
+	then
 		return string.upper(localized)
 	end
 	return name
+end
+
+-- A key cap's label size and cap width (design px) for `label` on a cap `size` px tall: a keyboard key is a rounded
+-- square 0.86 of the size, a gamepad button a full-size disc. A long label keeps at least MinGlyphText and widens the
+-- cap (a wide key, a capsule button) instead of shrinking into an unreadable smudge.
+function UIKit.keyCapLayout(kind: GlyphKind, size: number, label: string): (number, number)
+	local chars = utf8.len(label) or #label
+	local gamepad = kind == "Gamepad"
+	local long = chars > (if gamepad then 1 else 2)
+	local factor = if gamepad then (if long then 0.3 else 0.42) else (if long then 0.26 else 0.4)
+	local textSize = math.max(UIKit.MinGlyphText, math.floor(size * factor))
+	local base = if gamepad then size else size * 0.86
+	local width = math.max(base, chars * textSize * GLYPH_ADVANCE + size * 0.3)
+	return textSize, math.ceil(width - 1e-6)
 end
 
 -- The d-pad direction a key code points (nil for anything that is not a d-pad arm).
@@ -265,6 +313,21 @@ function UIKit.padding(parent: Instance, horizontal: number, vertical: number): 
 	return padding
 end
 
+-- The grain layer UIKit.grain put on each surface (weak: it goes with the surface).
+local grainLayers: { [Instance]: Frame } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Takes the grain off a surface that is about to be laid out (UIKit.list, or a caller's own UIGridLayout). The grain
+-- is a full-size backdrop, not a row: a layout would stack it first, sized to the whole surface, and push every real
+-- row out past the surface's edge, leaving an empty dark panel. A laid-out panel goes without it (on an
+-- automatically sized panel it could never fill the panel anyway).
+function UIKit.dropGrain(surface: Instance)
+	local layer = grainLayers[surface]
+	if layer then
+		grainLayers[surface] = nil
+		layer:Destroy()
+	end
+end
+
 function UIKit.list(
 	parent: Instance,
 	direction: Enum.FillDirection,
@@ -272,6 +335,7 @@ function UIKit.list(
 	horizontal: Enum.HorizontalAlignment,
 	vertical: Enum.VerticalAlignment
 ): UIListLayout
+	UIKit.dropGrain(parent)
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = direction
 	layout.Padding = UDim.new(0, gap)
@@ -338,6 +402,7 @@ function UIKit.grain(parent: GuiObject, seed: number, radius: UDim?): Frame
 	local layer = UIKit.fill(parent, "Grain", UIKit.Palette.Grain, 0.965)
 	layer.ZIndex = 0 -- a texture on the parent's background, under its content
 	layer.Active = false
+	grainLayers[parent] = layer
 	if radius then
 		UIKit.corner(layer, radius)
 	end
@@ -359,7 +424,8 @@ function UIKit.grain(parent: GuiObject, seed: number, radius: UDim?): Frame
 	return layer
 end
 
--- A dark translucent panel with a hairline border, soft corners and grain.
+-- A dark translucent panel with a hairline border, soft corners and grain (dropped if the panel is laid out with
+-- UIKit.list: see dropGrain).
 function UIKit.panel(parent: Instance?, name: string, transparency: number, seed: number): Frame
 	local panel = UIKit.fill(parent, name, UIKit.Palette.Panel, transparency)
 	local radius = UDim.new(0, 6)
@@ -542,7 +608,8 @@ local function localizedKey(keyCode: Enum.KeyCode): string?
 end
 
 -- A control glyph: keyboard key (rounded square + key label), gamepad button (disc + tinted letter), d-pad (a
--- cross with the pressed arm lit) or a touch mark (a dot in a thin ring: "tap here").
+-- cross with the pressed arm lit) or a touch mark (a dot in a thin ring: "tap here"). The root is `size` square; a
+-- long label (TAB, SHIFT, Select) widens it (keyCapLayout), so lay caps out with a list or centre them.
 function UIKit.keyCap(parent: Instance, name: string, size: number): KeyCap
 	local palette = UIKit.Palette
 	local root = UIKit.frame(parent, name)
@@ -611,6 +678,7 @@ function UIKit.keyCap(parent: Instance, name: string, size: number): KeyCap
 		text.Visible = false
 		cross.Visible = false
 		tapRing.Visible = false
+		root.Size = UDim2.fromOffset(size, size)
 		if kind == "Touch" or keyCode == nil then
 			cap.Size = UDim2.fromScale(1, 1)
 			capCorner.CornerRadius = UDim.new(0.5, 0)
@@ -624,19 +692,25 @@ function UIKit.keyCap(parent: Instance, name: string, size: number): KeyCap
 				armFrame.BackgroundColor3 = if armName == litArm then palette.Bone else palette.Smoke
 			end
 		elseif kind == "Gamepad" then
-			cap.Size = UDim2.fromScale(1, 1)
+			local label = UIKit.glyphText(keyCode, nil)
+			local textSize, width = UIKit.keyCapLayout(kind, size, label)
+			cap.Size = UDim2.new(0, width, 1, 0)
 			capCorner.CornerRadius = UDim.new(0.5, 0)
+			root.Size = UDim2.fromOffset(math.max(size, width), size)
 			text.Visible = true
-			text.Text = UIKit.glyphText(keyCode, nil)
+			text.Text = label
 			text.TextColor3 = GAMEPAD_TINTS[keyCode.Name] or palette.Bone
-			text.TextSize = if #text.Text > 1 then math.floor(size * 0.3) else math.floor(size * 0.42)
+			text.TextSize = textSize
 		else
-			cap.Size = UDim2.fromScale(0.86, 0.86)
+			local label = UIKit.glyphText(keyCode, localizedKey(keyCode))
+			local textSize, width = UIKit.keyCapLayout(kind, size, label)
+			cap.Size = UDim2.new(0, width, 0.86, 0)
 			capCorner.CornerRadius = UDim.new(0.18, 0)
+			root.Size = UDim2.fromOffset(math.max(size, width + math.ceil(size * 0.14)), size)
 			text.Visible = true
-			text.Text = UIKit.glyphText(keyCode, localizedKey(keyCode))
+			text.Text = label
 			text.TextColor3 = palette.Bone
-			text.TextSize = if #text.Text > 2 then math.floor(size * 0.26) else math.floor(size * 0.4)
+			text.TextSize = textSize
 		end
 		paint()
 	end

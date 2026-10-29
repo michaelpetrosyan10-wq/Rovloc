@@ -8,7 +8,7 @@
 --     tapping their ProximityPrompt (no button of their own).
 -- Fixed controls without an action (move, look) pass their own text.
 --
--- Pure (tests/Specs/Onboarding.spec.luau): forAction.
+-- Pure (tests/Specs/Onboarding.spec.luau): forAction, pillText.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -55,6 +55,13 @@ function InputGlyphs.forAction(action: string, device: string): Glyph
 	return { kind = "Keyboard", text = Strings.get(UNBOUND_KEY) }
 end
 
+-- The text a pill shows for `glyph`: its own text, or the unbound mark when it has none (or only blanks), so a pill
+-- never draws as an empty dark capsule.
+function InputGlyphs.pillText(glyph: Glyph): string
+	local label = glyph.text
+	return if label and string.find(label, "%S") ~= nil then label else Strings.get(UNBOUND_KEY)
+end
+
 -- A glyph cap `size` design px tall: a UIKit key cap for keys and buttons, a pill of text otherwise.
 function InputGlyphs.cap(parent: Instance, name: string, size: number): Cap
 	local root = UIKit.frame(parent, name)
@@ -70,7 +77,8 @@ function InputGlyphs.cap(parent: Instance, name: string, size: number): Cap
 	UIKit.corner(pill, UDim.new(0.5, 0))
 	local pillStroke = UIKit.stroke(pill, Palette.Bone, 1, 0.45)
 	UIKit.padding(pill, math.floor(size * 0.32), 0)
-	local text = UIKit.label(pill, "Text", UIKit.Fonts.Strong, math.floor(size * 0.4), Palette.Bone)
+	local textSize = math.max(UIKit.MinGlyphText, math.floor(size * 0.4)) -- never an unreadable smudge
+	local text = UIKit.label(pill, "Text", UIKit.Fonts.Strong, textSize, Palette.Bone)
 	text.TextWrapped = false
 	text.AutomaticSize = Enum.AutomaticSize.X
 	text.Size = UDim2.fromScale(0, 1)
@@ -87,7 +95,7 @@ function InputGlyphs.cap(parent: Instance, name: string, size: number): Cap
 		else
 			key.root.Visible = false
 			pill.Visible = true
-			text.Text = glyph.text or Strings.get(UNBOUND_KEY)
+			text.Text = InputGlyphs.pillText(glyph)
 			text.TextColor3 = if glyph.kind == "Touch" then Palette.Amber else Palette.Bone
 		end
 	end

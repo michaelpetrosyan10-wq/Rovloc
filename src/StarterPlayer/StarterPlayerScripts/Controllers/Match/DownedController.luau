@@ -610,6 +610,12 @@ local function step(dt: number)
 		local nextScale = UIKit.scaleFor(camera.ViewportSize)
 		if math.abs(current.scale.Scale - nextScale) > 1e-3 then
 			current.scale.Scale = nextScale
+			-- The UIScale grows the layer from its top-left corner: size it so the scaled layer still fills the screen
+			-- (as the HUD's layer does), or the panel drifts off centre on screens that aren't about 720 px tall.
+			local layer = current.scale.Parent
+			if layer and layer:IsA("GuiObject") then
+				layer.Size = UDim2.fromScale(1 / nextScale, 1 / nextScale)
+			end
 		end
 	end
 	local state = lifeStateOf(player)

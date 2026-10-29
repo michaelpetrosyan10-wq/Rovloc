@@ -319,6 +319,7 @@ local function build(parent: Instance): View
 	stats.LayoutOrder = 7
 	stats.Size = UDim2.new(1, 0, 0, 4 * 30 + 20)
 	UIKit.padding(stats, 18, 10)
+	UIKit.dropGrain(stats) -- the grid would take the grain for its first cell
 	local grid = Instance.new("UIGridLayout")
 	grid.CellSize = UDim2.new(0.5, -6, 0, 28)
 	grid.CellPadding = UDim2.fromOffset(12, 2)
@@ -532,6 +533,12 @@ local function animate(current: View)
 		local nextScale = math.min(UIKit.scaleFor(viewport), if fit > 0 then fit else 1)
 		if math.abs(current.scale.Scale - nextScale) > 1e-3 then
 			current.scale.Scale = nextScale
+			-- The UIScale grows the layer from its top-left corner: size it so the scaled layer still fills the screen
+			-- (as the HUD's layer does), or the panel drifts off centre on screens that aren't about 720 px tall.
+			local layer = current.scale.Parent
+			if layer and layer:IsA("GuiObject") then
+				layer.Size = UDim2.fromScale(1 / nextScale, 1 / nextScale)
+			end
 		end
 	end
 	local eased = alpha * alpha * (3 - 2 * alpha)

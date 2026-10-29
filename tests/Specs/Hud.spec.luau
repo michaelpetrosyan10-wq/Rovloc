@@ -160,11 +160,92 @@ return {
 		t.eq(UIKit.glyphText(Enum.KeyCode.ButtonL1, nil), "L1")
 		t.eq(UIKit.glyphText(Enum.KeyCode.E, "e"), "E")
 		t.eq(UIKit.glyphText(Enum.KeyCode.R, "R"), "R")
-		t.eq(UIKit.glyphText(Enum.KeyCode.LeftShift, ""), "LeftShift", "no localized text: the key's name")
+		t.eq(UIKit.glyphText(Enum.KeyCode.LeftShift, ""), "SHIFT", "a key that types nothing: its fixed label")
 		t.eq(UIKit.glyphText(Enum.KeyCode.G, nil), "G")
+		t.eq(UIKit.glyphText(Enum.KeyCode.Q, ""), "Q", "no localized text: the key's name")
+		-- The engine's string for a key that types no visible character is a blank or a control character: a cap
+		-- showing it would be an empty dark square (the objective tracker's Tab key in the lobby).
+		t.eq(UIKit.glyphText(Enum.KeyCode.Tab, "\t"), "TAB")
+		t.eq(UIKit.glyphText(Enum.KeyCode.Space, " "), "SPACE")
+		t.eq(UIKit.glyphText(Enum.KeyCode.Return, "\r"), "ENTER")
+		t.eq(UIKit.glyphText(Enum.KeyCode.F, "\n"), "F", "a control character is never shown")
+		t.eq(UIKit.glyphText(Enum.KeyCode.F, "  "), "F", "nor only blanks")
+		for _, binding in InputConfig.Bindings do
+			for _, input in binding.keyboard do
+				if typeof(input) == "EnumItem" and input.EnumType == Enum.KeyCode then
+					local keyCode = input :: Enum.KeyCode
+					for _, localized in { "", " ", "\t", "\r", "nil" } do
+						local label = UIKit.glyphText(keyCode, if localized == "nil" then nil else localized)
+						t.truthy(
+							string.find(label, "%S") ~= nil,
+							binding.action .. " " .. keyCode.Name .. " has a label"
+						)
+						t.falsy(string.find(label, "%c"), binding.action .. " " .. keyCode.Name .. " is printable")
+					end
+				end
+			end
+		end
 		t.truthy(UIKit.dpadArm(Enum.KeyCode.DPadDown) == Vector2.new(0, 1))
 		t.truthy(UIKit.dpadArm(Enum.KeyCode.DPadUp) == Vector2.new(0, -1))
 		t.eq(UIKit.dpadArm(Enum.KeyCode.ButtonX), nil)
+	end,
+
+	["a laid-out panel holds only its rows: the grain backdrop never becomes a list row"] = function(t: Expect)
+		-- A full-size grain frame stacked first by the panel's UIListLayout pushed every row out of the panel, leaving an
+		-- empty dark box (the lobby banner, the squad panel, the objective tracker).
+		local stacked = UIKit.panel(nil, "Stacked", 0.2, 1)
+		t.truthy(stacked:FindFirstChild("Grain") ~= nil, "a panel is built with its grain")
+		UIKit.padding(stacked, 12, 9)
+		UIKit.list(stacked, Enum.FillDirection.Vertical, 4, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Top)
+		local row = UIKit.label(stacked, "Row", UIKit.Fonts.Body, UIKit.TextSize.Body, UIKit.Palette.Bone)
+		row.LayoutOrder = 1
+		local frames = 0
+		for _, child in stacked:GetChildren() do
+			if child:IsA("GuiObject") then
+				frames += 1
+			end
+		end
+		t.eq(stacked:FindFirstChild("Grain"), nil, "the grain is gone once the panel is laid out")
+		t.eq(frames, 1, "the only laid-out object is the row")
+		-- A free-standing panel (no layout) keeps its grain; dropping twice is harmless.
+		local sheet = UIKit.panel(nil, "Sheet", 0.04, 2)
+		t.truthy(sheet:FindFirstChild("Grain") ~= nil)
+		UIKit.dropGrain(sheet)
+		UIKit.dropGrain(sheet)
+		t.eq(sheet:FindFirstChild("Grain"), nil)
+		stacked:Destroy()
+		sheet:Destroy()
+	end,
+
+	["key caps keep their label legible: long labels widen the cap instead of shrinking"] = function(t: Expect)
+		-- A single letter on a keyboard cap: the old proportions (0.4 of the size, a 0.86 square).
+		local text, width = UIKit.keyCapLayout("Keyboard", 34, "E")
+		t.eq(text, 13)
+		t.eq(width, math.ceil(34 * 0.86))
+		-- The objective tracker's 18 px Tab cap used to draw "TAB" 4 px tall (an empty-looking dark square).
+		text, width = UIKit.keyCapLayout("Keyboard", 18, "TAB")
+		t.eq(text, UIKit.MinGlyphText)
+		t.truthy(width > 18 * 0.86, "a wide key")
+		t.truthy(width >= 3 * UIKit.MinGlyphText * 0.55, "wide enough for its label")
+		-- Gamepad: a letter on a full-size disc; a long name becomes a capsule.
+		text, width = UIKit.keyCapLayout("Gamepad", 30, "X")
+		t.eq(text, math.floor(30 * 0.42))
+		t.eq(width, 30)
+		text, width = UIKit.keyCapLayout("Gamepad", 22, "Select")
+		t.eq(text, UIKit.MinGlyphText)
+		t.truthy(width > 22, "a capsule")
+		local function sweep(kind: UIKit.GlyphKind, narrowest: number)
+			for _, size in { 18, 20, 22, 28, 30, 34, 54 } do
+				for _, label in { "E", "R1", "TAB", "SHIFT", "SPACE", "LeftControl" } do
+					local textSize, capWidth = UIKit.keyCapLayout(kind, size, label)
+					t.truthy(textSize >= UIKit.MinGlyphText, string.format("%s %d %s legible", kind, size, label))
+					t.truthy(capWidth >= size * narrowest - 1e-6, "never narrower than the plain cap")
+					t.truthy(capWidth == math.floor(capWidth), "whole pixels")
+				end
+			end
+		end
+		sweep("Keyboard", 0.86)
+		sweep("Gamepad", 1)
 	end,
 
 	["prompt audience: Self needs my ownership, Others needs someone else's"] = function(t: Expect)

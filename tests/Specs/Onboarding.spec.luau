@@ -9,6 +9,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayer = game:GetService("StarterPlayer")
 
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local InputConfig = require(ReplicatedStorage.Shared.Config.InputConfig)
 local LobbyBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LobbyBuilder)
 local LobbyLayout = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Lobby)
 local LobbySignage = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LobbySignage)
@@ -161,6 +162,19 @@ spec["controls page: one glyph per row for each device, from the bindings"] = fu
 	t.eq(InputGlyphs.forAction("Flashlight", "Touch").text, Strings.get("Input.Flashlight"), "the touch button's label")
 	t.eq(InputGlyphs.forAction("Interact", "Touch").text, Strings.get("Tutorial.Control.TapPrompt"), "tap the prompt")
 	t.eq(InputGlyphs.forAction("Nonsense", "KeyboardMouse").text, Strings.get("Input.Unbound"))
+	-- A pill never draws empty: no text, or only blanks, reads as the unbound mark.
+	t.eq(InputGlyphs.pillText({ kind = "Touch", text = "GOAL" }), "GOAL")
+	t.eq(InputGlyphs.pillText({ kind = "Keyboard", text = nil }), Strings.get("Input.Unbound"))
+	t.eq(InputGlyphs.pillText({ kind = "Touch", text = "" }), Strings.get("Input.Unbound"))
+	t.eq(InputGlyphs.pillText({ kind = "Gamepad", text = " \t" }), Strings.get("Input.Unbound"))
+	for _, device in DEVICES do
+		for action in InputConfig.Bindings do
+			local glyph = InputGlyphs.forAction(action, device)
+			if glyph.keyCode == nil or glyph.kind == "Touch" then
+				t.eq(InputGlyphs.pillText(glyph), glyph.text, action .. " " .. device .. " pill shows its own text")
+			end
+		end
+	end
 end
 
 spec["title camera: a closed loop through the drift keys, inside the boiler room"] = function(t: Expect)

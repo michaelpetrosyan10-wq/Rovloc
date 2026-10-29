@@ -113,6 +113,7 @@ type Screen = {
 
 type View = {
 	gui: ScreenGui,
+	layer: Frame,
 	scale: UIScale,
 	root: Frame,
 	groups: { CanvasGroup },
@@ -756,6 +757,7 @@ local function build(parent: Instance): View
 	local screen = buildScreen(parent)
 	return {
 		gui = gui,
+		layer = layer,
 		scale = scale,
 		root = root,
 		groups = { bannerGroup, squadGroup },
@@ -1139,6 +1141,9 @@ local function step(dt: number)
 		local nextScale = UIKit.scaleFor(camera.ViewportSize)
 		if math.abs(current.scale.Scale - nextScale) > 1e-3 then
 			current.scale.Scale = nextScale
+			-- The UIScale grows the layer from its top-left corner: size it so the scaled layer still fills the screen
+			-- (as the HUD's layer does), or the banner drifts off centre and the hint off the bottom edge.
+			current.layer.Size = UDim2.fromScale(1 / nextScale, 1 / nextScale)
 		end
 		local screenScale = current.screen.scale
 		if math.abs(screenScale.Scale - nextScale) > 1e-3 then
