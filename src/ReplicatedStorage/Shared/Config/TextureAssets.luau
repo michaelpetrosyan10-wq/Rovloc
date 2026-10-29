@@ -19,7 +19,453 @@ return table.freeze(TextureAssets)
 
 --[==[ upload-log
 {
-	"maps": {},
+	"maps": {
+		"CeilingTile/ColorMap": {
+			"decalId": 92779759260706,
+			"moderation": "Approved",
+			"operation": "operations/c9535453-71a5-4eba-bde1-b801c01eac4e",
+			"reference": [
+				0.84,
+				0.82,
+				0.76
+			],
+			"sha256": "ccc56f0a8e445cc88e3e361eba24504a23fb6ba2af808520eaf2042c8cde4ef6",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:42:44Z"
+		},
+		"CeilingTile/NormalMap": {
+			"decalId": 94116771656646,
+			"moderation": "Approved",
+			"operation": "operations/91838375-ec08-4eeb-a1d4-0b6fd5ae3e7c",
+			"sha256": "a5a5bbca86bb088c75e46f8976d9b720fd6f25c5150907f9fd93b2c2152e5d88",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:42:49Z"
+		},
+		"CeilingTile/RoughnessMap": {
+			"decalId": 104446739449532,
+			"moderation": "Approved",
+			"operation": "operations/13a0f258-797f-445f-a221-f69af52c6d03",
+			"sha256": "aa19a5d3db161e2997cf908ec2e9d13cfe0e1ce0463faeb66401bd1d63590f7a",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:32Z"
+		},
+		"CheckerTile/ColorMap": {
+			"decalId": 101319680024127,
+			"moderation": "Approved",
+			"operation": "operations/bf6da1f9-d52a-4910-8397-7d91ad56c551",
+			"reference": [
+				0.86,
+				0.85,
+				0.81
+			],
+			"sha256": "5c57bfa8830ebb749fdb63c000fce070b90a9a52d56b80e4b3d44f5c9426a681",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:42:18Z"
+		},
+		"CheckerTile/NormalMap": {
+			"decalId": 87579751173230,
+			"moderation": "Approved",
+			"operation": "operations/3bfb78db-17f6-4713-aef9-10d1b93339b0",
+			"sha256": "06098cff9647ba6b59133bc5b756069e7196e0fcdb58ca7ea05e6960eee2ef75",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:42:27Z"
+		},
+		"CheckerTile/RoughnessMap": {
+			"decalId": 84403564656205,
+			"moderation": "Approved",
+			"operation": "operations/ba6db8d0-63ca-44ad-977a-1200a211ff4c",
+			"sha256": "c359663e6a9f60f0d8deebdd1b7fae7082c32ce09ce7932860de17e638b59db2",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:05Z"
+		},
+		"Cracks/ColorMap": {
+			"decalId": 72026879392045,
+			"moderation": "Approved",
+			"operation": "operations/d7cce64f-9ab4-4766-ad1e-7355a698b79c",
+			"reference": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"sha256": "14aec373c7c1d18e12e77375c506d90dff01bf9ae4689b4b4aca888566d0bd6a",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:46:38Z"
+		},
+		"FloorDirt/ColorMap": {
+			"decalId": 99390158483291,
+			"moderation": "Approved",
+			"operation": "operations/e103cafd-9800-45e3-9b3c-f85c802e8a21",
+			"reference": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"sha256": "5eee7e74a2d83eb8baf575965ae76d0f63f1358f7ef6408f64c337eaa363d735",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:46:23Z"
+		},
+		"GalvanizedMetal/ColorMap": {
+			"decalId": 83394439510628,
+			"moderation": "Approved",
+			"operation": "operations/98616829-c055-4720-ade3-a77d06d6636e",
+			"reference": [
+				0.68,
+				0.69,
+				0.7
+			],
+			"sha256": "e4dfb26c9fba89497263f84e0c6eb67a4c6b858fc1727a05ddf79c934877f663",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:44:56Z"
+		},
+		"GalvanizedMetal/MetalnessMap": {
+			"decalId": 105134238650933,
+			"moderation": "Approved",
+			"operation": "operations/acbbbbd6-2665-4267-b090-bb60b34e8d5b",
+			"sha256": "cf3d1dd6f7825519994f110497e7c5227a8444fe7b064375f8591964bc18b931",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:16Z"
+		},
+		"GalvanizedMetal/NormalMap": {
+			"decalId": 99877420378332,
+			"moderation": "Approved",
+			"operation": "operations/27f616d3-3c7b-4cf7-b891-1ee656e9937c",
+			"sha256": "642c4d2dc1bce4344833c23285f7c2ff81724e0594b5d58d9f68c62ca30f9a97",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:05Z"
+		},
+		"GalvanizedMetal/RoughnessMap": {
+			"decalId": 119424742885661,
+			"moderation": "Approved",
+			"operation": "operations/15bf231b-5be3-4bd7-9c3d-855d6a157d2f",
+			"sha256": "643ce5c785cac4fad81559460c7120c62400523905186521e04ffc1a202fde36",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:10Z"
+		},
+		"LabWorktop/ColorMap": {
+			"decalId": 131787016204575,
+			"moderation": "Approved",
+			"operation": "operations/d0b403a8-c8a9-4bca-a47e-1c5617dca801",
+			"reference": [
+				0.5,
+				0.5,
+				0.5
+			],
+			"sha256": "4400ec99384993472c0f7d05ac5e56bebd4e0dbeb856dd7398e7eecfcd136f9c",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:58Z"
+		},
+		"LabWorktop/NormalMap": {
+			"decalId": 84097650195626,
+			"moderation": "Approved",
+			"operation": "operations/1b726f83-d85f-4e40-9dfc-2f29e484b738",
+			"sha256": "9d294705c53427cd3ec40d4da5d44f993a15cadfcd3c010d27b56cec717e8c9b",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:46:03Z"
+		},
+		"LabWorktop/RoughnessMap": {
+			"decalId": 79636384599372,
+			"moderation": "Approved",
+			"operation": "operations/6ce21f25-2c91-494a-9af4-88b968482058",
+			"sha256": "e2d0125daef34eb3e1d7c4c4473db2de10f853c37e5c5d3af57f03170b742479",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:46:08Z"
+		},
+		"PaintedPlaster/ColorMap": {
+			"decalId": 103408010150108,
+			"moderation": "Approved",
+			"operation": "operations/fb91c5cf-af28-4768-984b-a9bbbb69a4af",
+			"reference": [
+				0.8,
+				0.77,
+				0.69
+			],
+			"sha256": "01d57bdd17d3c1b5a6a0066b6b8f91d9d97e2b673ac9a05051c433a021d67c85",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:42:03Z"
+		},
+		"PaintedPlaster/NormalMap": {
+			"decalId": 90610234821728,
+			"moderation": "Approved",
+			"operation": "operations/f31b2a4c-afe8-4594-ba00-e4d0ba5f11a1",
+			"sha256": "872bcc122cc9064e1cd881d966d7af755cac7f343b9f9b092a50bb1ca7f1bd53",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:42:12Z"
+		},
+		"PaintedPlaster/RoughnessMap": {
+			"decalId": 126285304924183,
+			"moderation": "Approved",
+			"operation": "operations/d170c787-1036-4a07-a638-28076011ded8",
+			"sha256": "b43beb182f229ca2e9e69f9127f253a362a5574f7cbc9fec73f80fab86eb3525",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:16Z"
+		},
+		"PoolMosaic/ColorMap": {
+			"decalId": 136440878518748,
+			"moderation": "Approved",
+			"operation": "operations/6091443f-bcc5-4cde-9e76-d6bb46be0204",
+			"reference": [
+				0.84,
+				0.88,
+				0.87
+			],
+			"sha256": "d0af0397614f589a07c0d30bbf4a92eb52a2d9ea970fef771c9548fde1ccc7a4",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:44:35Z"
+		},
+		"PoolMosaic/NormalMap": {
+			"decalId": 107031779838606,
+			"moderation": "Approved",
+			"operation": "operations/98bfbd35-f52b-41e2-9e4d-9300a3ad1c1e",
+			"sha256": "051262cec6272dbe076eb634b1256409d9b9095dc938c369723b75ff98ecaf22",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:44:45Z"
+		},
+		"PoolMosaic/RoughnessMap": {
+			"decalId": 107907365698511,
+			"moderation": "Approved",
+			"operation": "operations/3690aeb4-43f6-4011-8219-d4e602b9ec8d",
+			"sha256": "6cb08254f2e1f886986ea1a5489a9c8dce85e9cd58cea5b26a3cd9060ec9a942",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:44:50Z"
+		},
+		"RoofGravel/ColorMap": {
+			"decalId": 107151753879714,
+			"moderation": "Approved",
+			"operation": "operations/63e4b56b-eac5-49a2-8caa-a7306dedcf17",
+			"reference": [
+				0.56,
+				0.55,
+				0.52
+			],
+			"sha256": "4983c7af9165ed993ec3b393aea78712741641eacefc85c2e575ecf89be30cfc",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:41Z"
+		},
+		"RoofGravel/NormalMap": {
+			"decalId": 140661022910088,
+			"moderation": "Approved",
+			"operation": "operations/e7b29ca2-aa3c-4738-85a8-70f727509374",
+			"sha256": "358c9ec42a19b0b3211f5d2beeca3551c239aa22b9ce4c97ed1d655b674860a8",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:47Z"
+		},
+		"RoofGravel/RoughnessMap": {
+			"decalId": 99209585192825,
+			"moderation": "Approved",
+			"operation": "operations/2376ba15-cc1d-42c1-899a-9d2c38d397de",
+			"sha256": "e697f3f9e21768661a5f8a85a365dfc3602cb1a025664f40bd8f4976ac4b1e82",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:52Z"
+		},
+		"RubberMat/ColorMap": {
+			"decalId": 106334300947817,
+			"moderation": "Approved",
+			"operation": "operations/1a7498dc-b3fd-45f2-b667-4158adf7c972",
+			"reference": [
+				0.5,
+				0.5,
+				0.5
+			],
+			"sha256": "714a8f0bbe7a9835da94d1c8166ee869ee51111b1e0b5934c82e619677dede6e",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:21Z"
+		},
+		"RubberMat/NormalMap": {
+			"decalId": 138789781754776,
+			"moderation": "Approved",
+			"operation": "operations/3dc7ee6e-c942-4469-b9f3-4a8043958481",
+			"sha256": "4a55791c411209cf7a3bae4b8d08498f5d11ad99da12b542315493b51b57b83f",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:30Z"
+		},
+		"RubberMat/RoughnessMap": {
+			"decalId": 96097847947844,
+			"moderation": "Approved",
+			"operation": "operations/5ec07ee4-1aa6-4e70-a3b5-8688cc66e027",
+			"sha256": "2e1a170b1de6cdcf261d1c8c491fe5f838ac46f25052467c5a10b79050e69fa6",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:45:36Z"
+		},
+		"RustStreaks/ColorMap": {
+			"decalId": 139353455264863,
+			"moderation": "Approved",
+			"operation": "operations/59f5bda8-e03b-45b8-933d-0f2dcbdc7d24",
+			"reference": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"sha256": "53f5c274358f06c6ad8ea20f7f7fab2dca7ee2951a3fb0f7178db9d2571a74eb",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:46:28Z"
+		},
+		"RustedMetal/ColorMap": {
+			"decalId": 92004542562158,
+			"moderation": "Approved",
+			"operation": "operations/7c32ae30-edf2-4c9a-b614-fdc5453596af",
+			"reference": [
+				0.74,
+				0.74,
+				0.72
+			],
+			"sha256": "6e5ed851d756f84ca0a969e1366170ed74b5ae9ed10a912708e2a5237dc8faf3",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:42:54Z"
+		},
+		"RustedMetal/MetalnessMap": {
+			"decalId": 105936118011777,
+			"moderation": "Approved",
+			"operation": "operations/68bfa5ae-de69-4384-b888-181bdc36b60d",
+			"sha256": "b293d592a00aac4b80aa8108aa90b7e7e19185871b7e6a07773de8303e91b66e",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:27Z"
+		},
+		"RustedMetal/NormalMap": {
+			"decalId": 102801460694613,
+			"moderation": "Approved",
+			"operation": "operations/22bc91a5-a753-45de-9a3d-e8dcef1e846d",
+			"sha256": "7dca6b36a8ebb119778cdad91c27bd3aad199e95d8eb41e43ac42f6a16d04b8a",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:00Z"
+		},
+		"RustedMetal/RoughnessMap": {
+			"decalId": 111069050212568,
+			"moderation": "Approved",
+			"operation": "operations/59fff4a1-2e2c-4187-8730-1067e68345f2",
+			"sha256": "ecd0724978c47754031e078f9e220ba9e0604ce74020c550df17b985e3512675",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:21Z"
+		},
+		"StainedBrick/ColorMap": {
+			"decalId": 115731578084148,
+			"moderation": "Approved",
+			"operation": "operations/412db07f-42ef-4ab3-9b5d-6e1964b2ccb2",
+			"reference": [
+				0.62,
+				0.38,
+				0.29
+			],
+			"sha256": "41283db62e20ab659140376be4f234bed52a059c7bc8fd006981caf8feb553ea",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:55Z"
+		},
+		"StainedBrick/NormalMap": {
+			"decalId": 73745305394033,
+			"moderation": "Approved",
+			"operation": "operations/4d6c9a79-f1ea-4dc5-a09b-22ed5d479d3a",
+			"sha256": "6aac47efb6aeb417a12d8b4c3fb062064f5a7005317f7e407df74fb34efdc002",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:44:00Z"
+		},
+		"StainedBrick/RoughnessMap": {
+			"decalId": 88027111534689,
+			"moderation": "Approved",
+			"operation": "operations/8f6c691e-5554-4922-93d5-0b2cbfe39fd4",
+			"sha256": "d594d068c07fd46aac3fd028c60abc63c1f678b9e767e6a38b3afafc3cd33c33",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:44:06Z"
+		},
+		"StainedConcrete/ColorMap": {
+			"decalId": 114411793123186,
+			"moderation": "Approved",
+			"operation": "operations/73f0dcb2-6ac5-4a06-b047-dbf224a7d889",
+			"reference": [
+				0.6,
+				0.59,
+				0.56
+			],
+			"sha256": "d54a6d3c53066f6ee40b5a3cdf2c3f4e47be2c1fd7c569b7ef3a9b62b06beba9",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:42:33Z"
+		},
+		"StainedConcrete/NormalMap": {
+			"decalId": 116651675286890,
+			"moderation": "Approved",
+			"operation": "operations/fcac7c2d-9ce1-4307-a522-71637c57c58f",
+			"sha256": "5609d8defb2184153392eaa06a22907a49691a931d514be905ef569473ad330c",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:42:38Z"
+		},
+		"StainedConcrete/RoughnessMap": {
+			"decalId": 136423927433520,
+			"moderation": "Approved",
+			"operation": "operations/4734d80f-018f-4af3-8ee1-4d507097ef79",
+			"sha256": "144e63fd3c97186e1368ab8eecaba8c04bfc6c4eceb2eaaa9b16c72abb7ed5c3",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:10Z"
+		},
+		"VinylTile/ColorMap": {
+			"decalId": 112444425602880,
+			"moderation": "Approved",
+			"operation": "operations/482bceb1-40ee-41c3-8d26-661c7a6e1067",
+			"reference": [
+				0.8,
+				0.78,
+				0.7
+			],
+			"sha256": "d3e55164cf3c5dd1e481f41de03c227e6cbbe129515cd97f40f70138af1adf0c",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:35Z"
+		},
+		"VinylTile/NormalMap": {
+			"decalId": 133380620174389,
+			"moderation": "Approved",
+			"operation": "operations/cf6e18a2-3afa-48a7-91ee-539a4b97bc0f",
+			"sha256": "e68895aa450ef9e8fc2016b1d5946a965ff05357d4142b7dc0c2e041a2079fc8",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:40Z"
+		},
+		"VinylTile/RoughnessMap": {
+			"decalId": 107822029657524,
+			"moderation": "Approved",
+			"operation": "operations/5b757e6b-4f59-40f7-a21e-8e4bcb0cfbe5",
+			"sha256": "ba819400eea6694492367f03d5c5461228dca23375cd25a6a829741f2e206276",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:43:50Z"
+		},
+		"WallGrime/ColorMap": {
+			"decalId": 121447200776912,
+			"moderation": "Approved",
+			"operation": "operations/f0c68f55-9226-47c0-9e41-fba34d2ae540",
+			"reference": [
+				1.0,
+				1.0,
+				1.0
+			],
+			"sha256": "018d34c1bb24cb68407a94e339d0ca3cba68e31728b08f5c5b2f4eb6f77e2348",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:46:14Z"
+		},
+		"WornWood/ColorMap": {
+			"decalId": 135588106497649,
+			"moderation": "Approved",
+			"operation": "operations/99f2fc85-1ae9-414e-8ffd-3de313dc6381",
+			"reference": [
+				0.76,
+				0.58,
+				0.39
+			],
+			"sha256": "d5c5e0394ca376217edf946bfb6c7d006e3462ce6045e108c3c5ad0b0a2177ca",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:44:11Z"
+		},
+		"WornWood/NormalMap": {
+			"decalId": 78791806737830,
+			"moderation": "Approved",
+			"operation": "operations/4c9c8a78-69f0-4798-b72f-7e532fba9ce0",
+			"sha256": "a408d16f12241bde5c35a8c0fed79829cd30d0e5cf4e697bd1fef124a5094a93",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:44:21Z"
+		},
+		"WornWood/RoughnessMap": {
+			"decalId": 109460071623168,
+			"moderation": "Approved",
+			"operation": "operations/819f58fb-cf80-4365-9381-2b070095b1f6",
+			"sha256": "68508f27720a5778760b50412ad535ad7dbc6e86d4f5d582b4aaef789e51a8b8",
+			"state": "unresolved",
+			"uploadedAt": "2026-10-29T03:44:30Z"
+		}
+	},
 	"version": 1
 }
 ]==]
