@@ -255,6 +255,7 @@ export class Traps {
     const g = this.game;
     trap.state = 'Caught';
     this.caught = trap;
+    this._share(trap, 'snap');
     env.setEntityAttribute(trap.id, 'Armed', false);
     // the caught foot onto the leg point, the heading kept
     const yaw = env.look().yaw;
@@ -301,9 +302,41 @@ export class Traps {
     if (event !== 'Release') {
       this._startMotion(trap, 0, PRIED_OPENNESS, PRY_OPEN_SECONDS, 'Out');
       this.game.playAt('MetalCreak', trap.leg);
+      this._share(trap, 'free');
     }
     this._present(false);
     this.graceUntil = this.env.now() + TELEPORT_GRACE;
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------------------------------- co-op
+
+  /** Co-op: this page's player sprang / pried a trap; the squad's pages see it (coop/mechanics.js). */
+  _share(trap, event) {
+    const coop = this.game.coop;
+    if (coop && coop.active) coop.mechanics.trapEvent(trap.id, event);
+  }
+
+  /** Co-op: a teammate sprang this trap on their page: spent here too, the jaws slamming shut on them. */
+  remoteSnap(id) {
+    const trap = this.traps.find((t) => t.id === id);
+    if (!trap || trap.state !== 'Armed') return false;
+    trap.state = 'Spent';
+    this.env.setEntityAttribute(trap.id, 'Armed', false);
+    this._setPan(trap, 1);
+    this._startMotion(trap, 1, 0, SNAP_SECONDS, 'In');
+    this.game.playAt('TrapSnap', trap.floor);
+    // the host's level hears it too (the basement's beats keep their distance from a snap)
+    if (this.game.coop.isHost()) this.game.noise(trap.floor, 'TrapSnap', { source: 'world' });
+    return true;
+  }
+
+  /** Co-op: the teammate in this trap pried it open. */
+  remoteFree(id) {
+    const trap = this.traps.find((t) => t.id === id);
+    if (!trap || trap === this.caught) return false;
+    this._startMotion(trap, 0, PRIED_OPENNESS, PRY_OPEN_SECONDS, 'Out');
+    this.game.playAt('MetalCreak', trap.leg);
     return true;
   }
 

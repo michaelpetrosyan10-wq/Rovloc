@@ -61,6 +61,8 @@ export class Env {
     this.promptGroups = new Map();
     /** @type {Set<string>} */
     this.promptSuppressors = new Set();
+    /** @type {((spec: any, rawSpec: any, entry: any) => any)|null} co-op's prompt policy (coop/actions.js) */
+    this.promptHook = null;
   }
 
   // ---------------------------------------------------------------------------------------------------- clock
@@ -573,6 +575,8 @@ export class Env {
       rawSpec = { ...spec, entity: undefined, attachment: undefined, offset: undefined,
         position: () => this._promptAnchor(spec, entry) };
     }
+    // co-op: the room decides what a press does (game/coop/actions.js); played alone the spec goes through unchanged
+    if (this.promptHook) rawSpec = this.promptHook(spec, rawSpec, entry);
     const raw = this.engine.prompts.add(rawSpec);
     entry.raw = raw;
     this.promptEntries.add(entry);

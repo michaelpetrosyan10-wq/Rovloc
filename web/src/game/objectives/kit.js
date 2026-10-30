@@ -35,6 +35,9 @@ export function entityPrompt(game, entityId, name, opts = {}) {
     action: opts.action,
     requiresLineOfSight: false,
     enabled: opts.enabled ?? false,
+    // co-op: an objective's prompts change the shared world (coop/actions.js), unless one says otherwise
+    net: opts.net ?? 'world',
+    netRemote: opts.netRemote,
     onHoldBegan: opts.onHoldBegan,
     onHoldEnded: opts.onHoldEnded,
     onTriggered: opts.onTriggered || (() => {}),

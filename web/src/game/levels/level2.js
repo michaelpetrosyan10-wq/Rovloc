@@ -86,15 +86,16 @@ export class Level2 {
     if (level === LEVEL) this.active = false;
   }
 
+  /** Every playing player's root (co-op: the whole squad). */
   _roots() {
-    return this.game.playing() ? [this.game.env.rootPosition(new THREE.Vector3())] : [];
+    return this.game.subjects().map((s) => s.root);
   }
 
   _restock(now) {
     const flasks = this.game.flasks;
     if (!restockDue(now, this.lastSpawnAt, flasks.available(LEVEL))) return;
     const occupied = flasks.pickupsOn(LEVEL).map((f) => f.position);
-    const spot = pickSpot(this.candidates, occupied, this._roots(), (p) => this.game.seen(p), this.random);
+    const spot = pickSpot(this.candidates, occupied, this._roots(), (p) => this.game.seenByAnyone(p), this.random);
     if (!spot) return;
     const yaw = this.random.number(0, Math.PI * 2);
     if (flasks.spawnAt(LEVEL, spot.clone().multiply(new THREE.Matrix4().makeRotationY(yaw)))) {

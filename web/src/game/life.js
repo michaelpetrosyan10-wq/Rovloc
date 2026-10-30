@@ -172,6 +172,8 @@ export class Life {
   useSyringe(mode) {
     if (this.syringeCharges < 1 || !this.game.live()) return false;
     if (mode === 'SelfRevive' && this.state !== 'Downed') return false;
+    // self-revive is the solo rule: in a squad a teammate gets you up (coop/run.js)
+    if (mode === 'SelfRevive' && this.game.coop && !this.game.coop.soloRules()) return false;
     if (mode === 'Stamina' && this.state !== 'Alive') return false;
     this.syringeCharges -= 1;
     this.env.setSyringePips(this.syringeCharges);
@@ -230,6 +232,12 @@ export class BatteryPickups {
         holdSeconds: spec ? spec.holdDuration : 0.25,
         distance: spec ? spec.maxDistance : 7,
         requiresLineOfSight: false,
+        // co-op: the first teammate to take it has it; on the other pages it is just gone
+        net: 'claim',
+        netRemote: (member, handle) => {
+          env.setEntityVisible(info.id, false);
+          handle.remove();
+        },
         onTriggered: (handle) => {
           if (!this.game.alive()) return;
           const battery = env.meters().battery;
@@ -333,8 +341,9 @@ export class DownedHud {
     const spent = 1 - fraction;
     this.ring.setProgress(fraction);
     this.time.textContent = String(Math.ceil(left));
-    this.status.textContent = S(life.syringeCharges > 0 ? 'Hud.SelfRevive' : 'Downed.NoTeammates');
-    this.syringe.style.display = life.syringeCharges > 0 ? '' : 'none';
+    const squad = this.game.coop && this.game.coop.active ? this.game.coop.runNet.downedStatus() : null;
+    this.status.textContent = squad || S(life.syringeCharges > 0 ? 'Hud.SelfRevive' : 'Downed.NoTeammates');
+    this.syringe.style.display = life.syringeCharges > 0 && !squad ? '' : 'none';
     this.syringeKey.textContent = glyphFor(env, 'Syringe');
     this.syringeKey.style.display = env.device() === 'Touch' ? 'none' : '';
     if (showing) env.setPanicFloor('Downed', lerp(PANIC_REST, PANIC_PEAK, spent ** 1.2));

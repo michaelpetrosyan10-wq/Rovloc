@@ -67,7 +67,9 @@ export class Floor2 extends FloorObjective {
     }
     if (this.acid) {
       const spec = promptSpec(this.world, this.acid, 'Pickup');
-      this.acidPrompt = this.prompt(this.acid, 'Pickup', { holdSeconds: spec ? spec.holdDuration : 0.4, onTriggered: () => this._takeAcid() });
+      // co-op: the acid is one player's (claimed); the others see it leave the hood in their hand
+      this.acidPrompt = this.prompt(this.acid, 'Pickup', { holdSeconds: spec ? spec.holdDuration : 0.4, net: 'claim',
+        netRemote: (member) => this._acidTakenElsewhere(member), onTriggered: () => this._takeAcid() });
     }
     if (this.lock) {
       this.pour = this.work({
@@ -150,10 +152,40 @@ export class Floor2 extends FloorObjective {
       this.env.hint(S('Hud.FlaskHandsFull'), 3);
       return;
     }
+    this.acidHolder = this.game.coop ? this.game.coop.localId : null;
     this.acidState = 'Held';
     this.env.setEntityVisible(this.acid, false);
     this.game.playAt('Pickup', this.pointOf(this.acid, 'PromptPoint'));
     this.refresh();
+  }
+
+  /** Co-op: a teammate took the acid: it is in their hand (their throw or pour decides, onSharedEvent). */
+  _acidTakenElsewhere(member) {
+    if (this.acidState !== 'Ready') return;
+    this.acidHolder = member ? member.id : null;
+    this.acidState = 'Held';
+    this.env.setEntityVisible(this.acid, false);
+    this.refresh();
+  }
+
+  /** Co-op: the acid's outcome, decided on its holder's page ({hit}: the chain burns, or the flask is lost). */
+  onSharedEvent(name, data) {
+    if (name !== 'acid' || this.burning || this.unlocked) return;
+    if (data.hit) {
+      this.acidState = 'Used';
+      this._burn();
+    } else this._missed();
+  }
+
+  /** Co-op: the acid's holder died or left: it is lost with them (the hood brews another). */
+  carrierGone(owner) {
+    if (this.acidState === 'Held' && this.acidHolder === owner) this._missed();
+  }
+
+  /** Co-op: tells the squad's pages how this page's acid ended. */
+  _shareAcid(hit) {
+    const coop = this.game.coop;
+    if (coop && coop.active) coop.mechanics.share('floor', { level: this.level, name: 'acid', data: { hit } });
   }
 
   _gripOffset() {
@@ -172,8 +204,12 @@ export class Floor2 extends FloorObjective {
   _shattered(point) {
     if (this.lock && !this.burning && point.distanceTo(this.lock.chainCentre(_v)) <= ObjectiveTuning.ChainHitRadius) {
       this.acidState = 'Used';
+      this._shareAcid(true);
       this._burn();
-    } else this._missed();
+    } else {
+      this._shareAcid(false);
+      this._missed();
+    }
     return true;
   }
 
@@ -190,6 +226,7 @@ export class Floor2 extends FloorObjective {
     if (!this._holding()) return;
     flasks.takeHeld();
     this.acidState = 'Used';
+    this._shareAcid(true);
     this._burn();
   }
 

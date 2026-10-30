@@ -8,15 +8,20 @@
 // * The world data is inlined: build/world.json and build/world.bin gzipped (level 9) and base64'd, every
 //   build/textures/*.webp base64'd, each in its own non-executed <script type="application/x-rovloc"> tag that the
 //   engine reads with textContent and inflates with DecompressionStream at boot.
-// * No external URL anywhere: no CDN, no font, no fetch. The page runs from file:// on a school Chromebook offline.
+// * No external request unless the player presses HOST or JOIN (co-op): then only the Supabase project's Realtime
+//   (wss / https on its one host, allowed by the page's Content-Security-Policy connect-src) and the two STUN servers
+//   (WebRTC, outside CSP). No CDN, no font. The page runs from file:// on a school Chromebook offline, co-op included
+//   (nothing depends on the page's origin).
 
 import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
+import { SupabaseProject } from '../src/net/config.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const realtimeHost = new URL(SupabaseProject.url).host;
 const web = path.resolve(here, '..');
 const args = new Set(process.argv.slice(2));
 const sandbox = args.has('--sandbox');
@@ -95,7 +100,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; worker-src blob:; connect-src data: blob:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; worker-src blob:; connect-src data: blob: wss://${realtimeHost} https://${realtimeHost}">
 <title>Rovloc</title>
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#rv-root{position:fixed;inset:0}</style>
 </head>

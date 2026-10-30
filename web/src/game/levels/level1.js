@@ -217,14 +217,15 @@ export class Level1 {
     if (h && parkState) h.release(parkState);
   }
 
+  /** Every playing player's eye (co-op: the squad's, on the host). */
   _eyes() {
-    return this.game.playing() ? [this.game.eye(new THREE.Vector3())] : [];
+    return this.game.subjects().map((s) => s.eye);
   }
 
-  /** Could the player see a Creature whose root is at `root` (its eyes or its chest)? */
+  /** Could anyone see a Creature whose root is at `root` (its eyes or its chest)? */
   _seen(root) {
     _p.copy(root).y += CreatureMetrics.eye.Biped;
-    return this.game.seen(_p) || this.game.seen(root);
+    return this.game.seenByAnyone(_p) || this.game.seenByAnyone(root);
   }
 
   _creatureEyes(out) {
@@ -305,7 +306,8 @@ export class Level1 {
       const h = this.handle;
       const root = this.game.creature.position(_root);
       if (!(h && root)) return;
-      const eye = this.game.playing() ? this.game.eye(_eye) : scene.triggerEye;
+      const subject = this.game.subjects().find((x) => x.id === scene.subjectId);
+      const eye = subject ? subject.eye : scene.triggerEye;
       const target = backTurn(root, eye);
       if (target) h.face(target);
     });
@@ -333,23 +335,31 @@ export class Level1 {
     }
   }
 
-  _startScene(reason, now) {
+  /**
+   * Plays the scene for `subject` (game.subjects(): the player who set it off; co-op, the scene's timeline is theirs:
+   * the stumble and the drag of the view happen on their page).
+   */
+  _startScene(reason, now, subject = this.game.subjects()[0]) {
     const game = this.game;
     const g = this.geo;
     this.done = true;
-    const eye = game.eye(new THREE.Vector3());
-    const feet = game.feet(new THREE.Vector3());
+    const eye = subject ? subject.eye.clone() : game.eye(new THREE.Vector3());
+    const feet = subject ? new THREE.Vector3(subject.root.x, subject.root.y - ROOT_TO_FEET, subject.root.z) : game.feet(new THREE.Vector3());
     const full = this.handle !== null && this.staged;
-    const scene = { startAt: now + LEAD, reason, full, triggerEye: eye, gateLocked: false, lightsKilled: false, relocated: false };
+    const scene = { startAt: now + LEAD, reason, full, triggerEye: eye, gateLocked: false, lightsKilled: false, relocated: false,
+      subjectId: subject ? subject.id : null };
     this.scene = scene;
     game.noise(feet, 'FloorDebris');
+    const local = !subject || subject.local;
+    const coop = game.coop;
+    if (coop) coop.worldNet.sceneSubject = subject ? subject.id : null;
     if (full) {
       const head = this._creatureEyes(new THREE.Vector3()) ||
         g.posePosition.clone().add(_up.set(0, CreatureMetrics.eye.Hunched, 0));
       const glow = g.lights[0];
       const spill = g.lights[1] || glow;
       const args = {
-        [ARGS.Subject]: true,
+        [ARGS.Subject]: local,
         [ARGS.Feet]: feet,
         [ARGS.Head]: head,
         [ARGS.Focus]: game.env.lineClear(eye, head),
@@ -359,32 +369,36 @@ export class Level1 {
       game.seq.play(CLASSROOM.Id, scene.startAt, args);
       this._scheduleFull(scene);
     } else {
-      game.seq.play(CLASSROOM.SkippedId, scene.startAt, { [ARGS.Subject]: true, [ARGS.Feet]: feet });
+      game.seq.play(CLASSROOM.SkippedId, scene.startAt, { [ARGS.Subject]: local, [ARGS.Feet]: feet });
       this._scheduleSkipped(scene);
     }
+    if (coop) coop.worldNet.sceneSubject = null;
   }
 
-  /** Why the player sets the scare off this tick, or null. */
+  /** Why someone in play sets the scare off this tick ({reason, subject}), or null. */
   _findTrigger() {
     const game = this.game;
-    if (!game.playing()) return null;
     const g = this.geo;
     const env = game.env;
-    const eye = game.eye(_eye);
-    const root = env.rootPosition(_root);
     const head = this.staged ? this._creatureEyes(_head) : null;
-    _feet.set(root.x, root.y - ROOT_TO_FEET, root.z);
-    const inVent = game.vents.inVent();
-    const sample = {
-      onGlass: !!g.glassVolume && (game.world.inTrigger(g.glassVolume, root) || game.world.inTrigger(g.glassVolume, _feet)),
-      zone: game.zoneId(),
-      localX: eye.x - g.origin.x,
-      inVent,
-      distance: head ? eye.distanceTo(head) : null,
-      sightline: false,
-    };
-    if (head && sample.distance !== null && sample.distance <= NEAR_DISTANCE && !inVent) sample.sightline = env.lineClear(eye, head);
-    return triggerReason(sample, g);
+    for (const subject of game.subjects()) {
+      const eye = subject.eye;
+      const root = subject.root;
+      _feet.set(root.x, root.y - ROOT_TO_FEET, root.z);
+      const inVent = subject.inVent;
+      const sample = {
+        onGlass: !!g.glassVolume && (game.world.inTrigger(g.glassVolume, root) || game.world.inTrigger(g.glassVolume, _feet)),
+        zone: subject.zone,
+        localX: eye.x - g.origin.x,
+        inVent,
+        distance: head ? eye.distanceTo(head) : null,
+        sightline: false,
+      };
+      if (head && sample.distance !== null && sample.distance <= NEAR_DISTANCE && !inVent) sample.sightline = env.lineClear(eye, head);
+      const reason = triggerReason(sample, g);
+      if (reason) return { reason, subject };
+    }
+    return null;
   }
 
   /** Ends whatever is in flight; with `finish` a scene cut short leaves the gate shut and the bulbs dead. */
@@ -438,8 +452,8 @@ export class Level1 {
     if (!this.active || this.done || now < this.nextTickAt || this.game.phase !== 'InRun') return;
     this.nextTickAt = now + TICK;
     this._ensureStaged(now);
-    const reason = this._findTrigger();
-    if (reason) this._startScene(reason, now);
+    const trigger = this._findTrigger();
+    if (trigger) this._startScene(trigger.reason, now, trigger.subject);
   }
 
   // ---------------------------------------------------------------------------------------------------- dev
@@ -467,7 +481,6 @@ export class Level1 {
 const _p = new THREE.Vector3();
 const _up = new THREE.Vector3();
 const _root = new THREE.Vector3();
-const _eye = new THREE.Vector3();
 const _head = new THREE.Vector3();
 const _feet = new THREE.Vector3();
 const _look = new THREE.Vector3();

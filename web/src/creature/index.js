@@ -102,12 +102,16 @@ export function createCreature(engine, opts = {}) {
   });
 
   // single-player shapes of the events (W4's adapter reads `events` first): caught(kind),
-  // jumpscareFinished(kind, outcome)
+  // jumpscareFinished(kind, outcome), for the local player's catches (a co-op host's remote catches stay on `service`)
   const events = { stateChanged: new Signal(), caught: new Signal(), jumpscareFinished: new Signal(), lungeTelegraph: new Signal() };
   service.stateChanged.connect((next, previous) => events.stateChanged.fire(next, previous));
   service.lungeTelegraph.connect((origin, seconds) => events.lungeTelegraph.fire(origin, seconds));
-  service.caught.connect((_player, kind) => events.caught.fire(kind));
-  service.jumpscareFinished.connect((_player, kind, outcome) => events.jumpscareFinished.fire(kind, outcome));
+  service.caught.connect((player, kind) => {
+    if (player === PLAYER) events.caught.fire(kind);
+  });
+  service.jumpscareFinished.connect((player, kind, outcome) => {
+    if (player === PLAYER) events.jumpscareFinished.fire(kind, outcome);
+  });
 
   return {
     PLAYER,
@@ -116,7 +120,7 @@ export function createCreature(engine, opts = {}) {
     view,
     env,
     getState: () => service.getState(),
-    getTarget: () => service.getTarget(),
+    getTarget: () => (service.getTarget() === PLAYER ? PLAYER : null),
     stun: (seconds, from) => service.stun(seconds, from),
     alert: (position, priority) => service.alert(position, priority),
     acquireScripted: (token) => service.acquireScripted(token),

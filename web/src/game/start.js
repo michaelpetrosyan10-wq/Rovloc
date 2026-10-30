@@ -1,6 +1,7 @@
 // start.js: builds the game on a running engine (the web ClientMain + ServerMain bootstrap) and opens the title.
 // main.js calls start(engine) through index.js once the engine is up.
 
+import { Coop } from './coop/index.js';
 import { createCreatureApi } from './creatureApi.js';
 import { Dev } from './dev.js';
 import { Env } from './env.js';
@@ -76,6 +77,9 @@ export async function start(engine, opts = {}) {
   game.hints = game.add(new Hints(game));
   game.downed = game.add(new DownedHud(game));
   game.results = game.add(new Results(game));
+  // co-op (game/coop): first in the tick order, so the room's messages are applied before the systems tick; inert alone
+  game.coop = new Coop(game);
+  game.systems.unshift(game.coop);
   const dev = new Dev(game);
   game.menu = game.add(new Menu(game, /[?&]dev\b/.test(location.search) ? dev : null));
   registerSceneTracks(game);

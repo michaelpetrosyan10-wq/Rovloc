@@ -190,8 +190,52 @@ export class Flasks {
       holdSeconds: PICKUP_HOLD,
       distance: spec ? spec.maxDistance : 7,
       requiresLineOfSight: false,
+      // co-op: the first teammate to take it has it; elsewhere it leaves the counter in their hand
+      net: 'claim',
+      netRemote: (member) => this._taken(flask, member),
       onTriggered: () => this._pickup(flask),
     });
+  }
+
+  /** Co-op: a teammate took this flask (it is in their hand, not in the world, not free for the restock). */
+  _taken(flask, member) {
+    this._gone(flask);
+    flask.state = 'Taken';
+    flask.takenBy = member ? member.id : null;
+  }
+
+  /** Co-op: a teammate threw a flask on their page: its flight is drawn here and breaks where it hits (no cloud). */
+  remoteThrow(d) {
+    if (!this.game.run || !Array.isArray(d.o) || !Array.isArray(d.v)) return;
+    const flask = this.flasks.get(d.id);
+    if (flask && flask.state !== 'World') flask.state = 'Gone';
+    else if (flask) this._gone(flask);
+    const variant = flask ? flask.variant : 0;
+    const ghost = { id: d.id, variant, tint: d.tint || null, color: d.tint ? new THREE.Color(...d.tint) : liquidColor(variant),
+      objective: !!d.objective, state: 'Flying' };
+    const flight = {
+      flask: ghost,
+      ghost: true,
+      origin: new THREE.Vector3(...d.o),
+      velocity: new THREE.Vector3(...d.v),
+      gravity: Ballistics.Gravity,
+      startAt: this.env.now(),
+      t: 0,
+      level: d.level,
+      axis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
+      model: tinted(new FlaskModel(variant), ghost.tint),
+      done: false,
+    };
+    flight.model.group.matrixAutoUpdate = false;
+    this.env.addToScene(flight.model.group);
+    this.flights.push(flight);
+  }
+
+  /** Co-op: a teammate's flask is lost with them (died or left): free for the restock again. */
+  memberGone(memberId) {
+    for (const f of this.flasks.values()) {
+      if (f.state === 'Taken' && f.takenBy === memberId) f.state = 'Gone';
+    }
   }
 
   _gone(flask) {
@@ -265,17 +309,24 @@ export class Flasks {
    * SpawnFlask: an untaken world flask resting on `cframe` (a CFrame array or Matrix4) on `level` (Level 2's restock): a spent
    * flask is set back on the worktop. False when every flask is in play.
    */
-  spawnAt(level, cframe) {
+  spawnAt(level, cframe, id) {
     if (!this.game.run) return false;
     let pick = null;
-    for (const f of this.flasks.values()) {
-      if (f.state !== 'Gone') continue;
-      if (!pick || (f.level === level && pick.level !== level)) pick = f;
+    if (id) pick = this.flasks.get(id) || null;
+    else {
+      for (const f of this.flasks.values()) {
+        if (f.state !== 'Gone') continue;
+        if (!pick || (f.level === level && pick.level !== level)) pick = f;
+      }
     }
     if (!pick) return false;
     pick.level = level;
-    this._place(pick, Array.isArray(cframe) ? cfMatrix(cframe, _m) : _m.copy(cframe));
+    this._place(pick, Array.isArray(cframe) && cframe.length === 16 ? _m.fromArray(cframe)
+      : Array.isArray(cframe) ? cfMatrix(cframe, _m) : _m.copy(cframe));
     this._toWorld(pick);
+    // co-op: the host's restock sets the same flask out on every page
+    const coop = this.game.coop;
+    if (coop && coop.isHost()) coop.mechanics.share('flask', { ev: 'restock', level, m: Array.from(pick.pivot.elements), id: pick.id });
     return true;
   }
 
@@ -393,6 +444,11 @@ export class Flasks {
     flight.model.group.matrixAutoUpdate = false;
     this.env.addToScene(flight.model.group);
     this.flights.push(flight);
+    const coop = game.coop;
+    if (coop && coop.active) {
+      coop.mechanics.share('flask', { ev: 'throw', id: flask.id, o: origin.toArray(), v: flight.velocity.toArray(),
+        level: flight.level, tint: flask.tint || null, objective: !!flask.objective });
+    }
     return true;
   }
 
@@ -449,7 +505,7 @@ export class Flasks {
     flight.done = true;
     this._dropModel(flight);
     flight.flask.state = 'Gone';
-    if (flight.flask.onLost) flight.flask.onLost();
+    if (!flight.ghost && flight.flask.onLost) flight.flask.onLost();
   }
 
   /** The VentGraph node of the duct `point` lies inside, or null (ChemicalProjectileService.ductNode). */
@@ -507,6 +563,13 @@ export class Flasks {
     const inVent = ventNode !== null;
     const centre = point.clone().addScaledVector(normal, CLOUD_LIFT);
     const now = env.now();
+    if (flight.ghost) {
+      // a teammate's throw: the break as it looks and sounds here; their own page clouds, stuns and judges it
+      game.playAt('FlaskShatter', point);
+      this.fx.shatter(point, normal, centre, flight.flask.color, GameConfig.FlaskCloudSeconds, inVent, hit.kind);
+      if (!flight.flask.objective && this.game.pool) this.game.pool.noteShatter(point);
+      return;
+    }
     if (game.live()) {
       game.noise(point, 'FlaskShatter', inVent ? { medium: 'Vent', ventNodeId: ventNode } : {});
     }

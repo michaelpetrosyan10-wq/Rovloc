@@ -515,10 +515,10 @@ export class Vents {
 
   _unscrewBegan(grate) {
     if (grate.state === 'Locked') {
-      this.env.hint(S('Prompt.GrateLocked'), 2.5);
+      if (this.game.actorIsLocal()) this.env.hint(S('Prompt.GrateLocked'), 2.5);
       return;
     }
-    if (grate.state !== 'Closed' || this.game.life.state !== 'Alive') return;
+    if (grate.state !== 'Closed' || !this.game.alive()) return;
     grate.holdSince = this.env.now();
     grate.screwMotion = null;
     grate.noiseAt = 0;
@@ -551,10 +551,10 @@ export class Vents {
 
   _kick(grate, byPlayer) {
     if (grate.state === 'Locked') {
-      if (byPlayer) this.env.hint(S('Prompt.GrateLocked'), 2.5);
+      if (byPlayer && this.game.actorIsLocal()) this.env.hint(S('Prompt.GrateLocked'), 2.5);
       return false;
     }
-    if (byPlayer && (grate.state !== 'Closed' || this.game.life.state !== 'Alive')) return false;
+    if (byPlayer && (grate.state !== 'Closed' || !this.game.alive())) return false;
     grate.kickMotion = { from: 0, to: 1, startAt: this.env.now() + LEAD, seconds: KICK_SECONDS };
     this._setState(grate, 'Kicked');
     this.game.noise(grate.centre, 'GrateKick', { medium: byPlayer && this.crawl ? 'Vent' : undefined,
@@ -586,6 +586,7 @@ export class Vents {
         holdSeconds: locked ? 0 : unscrewHold,
         distance: grate.unscrewSpec ? grate.unscrewSpec.maxDistance : 7,
         requiresLineOfSight: false,
+        net: 'world',
         onHoldBegan: () => this._unscrewBegan(grate),
         onHoldEnded: () => {
           if (grate.state === 'Unscrewing' && grate.holdSince !== null) this._cancelUnscrew(grate, false);
@@ -604,6 +605,7 @@ export class Vents {
         holdSeconds: 0,
         distance: grate.kickSpec ? grate.kickSpec.maxDistance : 7,
         requiresLineOfSight: false,
+        net: 'world',
         onTriggered: () => this._kick(grate, true),
       });
       kick.kind = 'Kick';

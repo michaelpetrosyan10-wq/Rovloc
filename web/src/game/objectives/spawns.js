@@ -171,6 +171,11 @@ export class CreatureSpawns {
     return (this.handle !== null || this.pending !== null) && this.level === level;
   }
 
+  /** Co-op (host): a teammate's noise ({position, kind, radius, priority, level}) ends the grace like the player's. */
+  hearRemote(e) {
+    this._noise({ ...e, source: 'player' });
+  }
+
   _noise(e) {
     if (!this.holding(e.level) || e.source !== 'player' || !LOUD.has(e.priority)) return;
     const c = this.game.creature.position(_c);
@@ -200,21 +205,21 @@ export class CreatureSpawns {
       this._letGo('Grace');
       return;
     }
-    if (!this.game.playing()) return;
+    const subjects = this.game.subjects();
+    if (!subjects.length) return;
     const c = this.game.creature.position(_c);
     if (!c) return;
-    const root = this.env.rootPosition(_r);
-    if (c.distanceTo(root) <= SpawnTuning.ReleaseNear) {
+    // anyone in play (co-op: the whole squad) coming near or seeing its head lets it go
+    if (subjects.some((s) => c.distanceTo(s.root) <= SpawnTuning.ReleaseNear)) {
       this._letGo('Near');
       return;
     }
     _h.copy(c).y += CreatureMetrics.eye.Biped;
-    if (this.game.seen(_h, SpawnTuning.ReleaseSight)) this._letGo('Seen');
+    if (this.game.seenByAnyone(_h, SpawnTuning.ReleaseSight)) this._letGo('Seen');
   }
 }
 
 const _p = new THREE.Vector3();
 const _c = new THREE.Vector3();
-const _r = new THREE.Vector3();
 const _h = new THREE.Vector3();
 const _ahead = new THREE.Vector3(0, 0, -1);

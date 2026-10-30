@@ -124,9 +124,16 @@ export class Lobby {
     return Math.abs(along) <= b.length / 2 && across <= b.width / 2;
   }
 
-  /** The voted difficulty (LobbyService.tally for a squad of one). */
+  /** The voted difficulty (LobbyService.tally for a squad of one; co-op: the squad's tally, coop/lobby.js). */
   difficulty() {
+    if (this._net()) return this._net().difficulty();
     return this.vote === 'Nightmare' ? 'Nightmare' : 'Standard';
+  }
+
+  /** The co-op room's lobby (null when played alone). */
+  _net() {
+    const coop = this.game.coop;
+    return coop && coop.active ? coop.lobbyNet : null;
   }
 
   // ---------------------------------------------------------------------------------------------------- arrive
@@ -178,7 +185,9 @@ export class Lobby {
     if (phase !== 'Lobby' && phase !== 'Countdown') return false;
     if (this.ready === value) return true;
     this.ready = value;
-    this._evaluate();
+    // co-op: the host counts the squad down (coop/lobby.js)
+    if (this._net()) this._net().localReady(value);
+    else this._evaluate();
     return true;
   }
 
@@ -200,14 +209,19 @@ export class Lobby {
   }
 
   async _deploy() {
-    const difficulty = this.difficulty();
+    return this.deployWith(this.difficulty());
+  }
+
+  /** Leaves the lobby into a run (co-op: the host's seed and run id, this page's spawn slot, in `spec`). */
+  async deployWith(difficulty, spec) {
     this.countdownEndsAt = null;
     this.closeTerminal(true);
     this._terminalPrompts(false);
     this.ready = false;
     this._lights(false);
-    const ok = await this.game.match.deploy(difficulty);
+    const ok = await this.game.match.deploy(difficulty, spec);
     if (!ok && this.game.phase === 'Countdown') this.game.setPhase('Lobby');
+    return ok;
   }
 
   // ---------------------------------------------------------------------------------------------------- terminals
@@ -245,6 +259,7 @@ export class Lobby {
 
   _castVote(difficulty) {
     this.vote = difficulty;
+    if (this._net()) this._net().localVote(difficulty);
     this.env.play('UiConfirm');
     this._refreshScreen();
   }
@@ -386,7 +401,7 @@ export class Lobby {
   _refreshScreen() {
     for (const d of ['Standard', 'Nightmare']) {
       const c = this.cards[d];
-      c.votes.textContent = S('Lobby.Votes', this.vote === d ? 1 : 0);
+      c.votes.textContent = S('Lobby.Votes', this._net() ? this._net().votesFor(d) : this.vote === d ? 1 : 0);
       c.mine.style.display = this.vote === d ? '' : 'none';
       c.card.style.borderColor = this.difficulty() === d ? (d === 'Nightmare' ? Palette.Ember : Palette.Moss) : '';
     }
@@ -458,7 +473,7 @@ export class Lobby {
       const remaining = Math.max(0, this.countdownEndsAt - now);
       if (this.lastRemaining !== null && Math.ceil(remaining) < Math.ceil(this.lastRemaining)) this.env.play('UiClick');
       this.lastRemaining = remaining;
-      if (remaining <= 0.05 && this.ready) this._deploy();
+      if (remaining <= 0.05 && this.ready && !this._net()) this._deploy();
     } else {
       this.lastRemaining = null;
     }
@@ -480,7 +495,8 @@ export class Lobby {
       this.bar.set(remaining / GameConfig.CountdownSeconds);
       this.bar.root.style.display = '';
     } else {
-      this.bannerText.textContent = S('Lobby.WaitingForSquad', this.ready ? 1 : 0, GameConfig.MinSquad);
+      const [readyCount, squadSize] = this._net() ? this._net().readyCount() : [this.ready ? 1 : 0, GameConfig.MinSquad];
+      this.bannerText.textContent = S('Lobby.WaitingForSquad', readyCount, squadSize);
       this.bar.root.style.display = 'none';
     }
     this.readyTag.textContent = S(this.ready ? 'Lobby.Ready' : 'Lobby.Unready');

@@ -339,6 +339,8 @@ export class Lockers {
       locker.schedule = null;
       locker.check = null;
       locker.ripShakeAt = null;
+      locker.remote = null;
+      locker.remoteCloseAt = null;
       this._pose(locker, 'Swing', 0);
       this.env.setEntityAttribute(locker.id, 'DoorOpen', false);
       this.env.setEntityAttribute(locker.id, 'OccupantUserId', 0);
@@ -351,6 +353,10 @@ export class Lockers {
         holdSeconds: spec ? spec.holdDuration : 0.25,
         distance: spec ? spec.maxDistance : 7,
         requiresLineOfSight: false,
+        // co-op: one hider per locker (the host grants it); the others see its door open and shut on a teammate
+        net: 'claim',
+        netRemote: (member) => this.remoteOccupy(locker, member),
+        netRelease: (member) => this.remoteVacate(locker, member),
         onTriggered: () => this.hide(locker),
       });
     }
@@ -397,6 +403,9 @@ export class Lockers {
     const [ok, reason] = canHide(this._hideCheck(locker));
     if (!ok) {
       if (reason === 'Hud.LockerOccupied' || reason === 'Hud.LockerSeen') this.env.hint(S(reason), 3);
+      // co-op: a locker granted but not entered goes back to the squad
+      const coop = this.game.coop;
+      if (coop && coop.active && locker.handle && this.occupied !== locker) coop.actions.release(locker.handle.id);
       return false;
     }
     this._enter(locker);
@@ -468,6 +477,9 @@ export class Lockers {
     env.setEntityAttribute(locker.id, 'OccupantUserId', 0);
     env.popOverride('Locker');
     this.game.unlock('Locker');
+    // co-op: the locker is free for the squad again
+    const coop = this.game.coop;
+    if (coop && coop.active && locker.handle) coop.actions.release(locker.handle.id);
   }
 
   /** Lets the occupant go at once: out to a clear spot when `outside`, else where they are. */
@@ -636,9 +648,53 @@ export class Lockers {
     locker.check = null;
     this._startDoor(locker, 'Smash', 0, 1, RipSeconds, now + LEAD);
     if (locker.handle) locker.handle.setEnabled(false);
+    const coop = this.game.coop;
+    if (coop && coop.active) coop.mechanics.share('locker', { ev: 'rip', id: locker.id });
     this._vacate(locker);
     this._endSession();
     this.taken = locker;
+  }
+
+  // ---------------------------------------------------------------------------------------------------- co-op
+
+  /** Co-op: a teammate climbs into `locker` on their page: its door swings open and shut on them here. */
+  remoteOccupy(locker, member) {
+    if (locker.state === 'Smashed') return;
+    const now = this.env.now();
+    locker.state = 'Hidden';
+    locker.remote = member ? member.id : true;
+    if (member) member.lockerId = locker.id;
+    this.env.setEntityAttribute(locker.id, 'OccupantUserId', member ? member.slot + 1 : 2);
+    this._startDoor(locker, 'Swing', 0, 1, OpenSeconds, now + LEAD);
+    locker.remoteCloseAt = now + LEAD + OpenSeconds + StepInSeconds;
+    if (locker.handle) locker.handle.setEnabled(false);
+  }
+
+  /** Co-op: the teammate stepped out (or was let go): the door swings for them and the locker is free. */
+  remoteVacate(locker, member) {
+    if (member && member.lockerId === locker.id) member.lockerId = null;
+    if (!locker.remote || locker.state === 'Smashed') return;
+    const now = this.env.now();
+    locker.remote = null;
+    locker.state = 'Free';
+    this.env.setEntityAttribute(locker.id, 'OccupantUserId', 0);
+    const from = locker.motion ? valueAt(locker.motion, now)[0] : 0;
+    this._startDoor(locker, 'Swing', from, 1, OpenSeconds * (1 - from), now + LEAD);
+    locker.remoteCloseAt = now + LEAD + OpenSeconds + StepOutSeconds;
+    if (locker.handle) locker.handle.setEnabled(true);
+  }
+
+  /** Co-op: the Creature tore this locker open on its occupant's page: smashed here too. */
+  remoteRip(id) {
+    const locker = this.lockers.get(id);
+    if (!locker || locker.state === 'Smashed') return;
+    const now = this.env.now();
+    locker.state = 'Smashed';
+    locker.remote = null;
+    locker.remoteCloseAt = null;
+    this._startDoor(locker, 'Smash', 0, 1, RipSeconds, now + LEAD);
+    if (locker.handle) locker.handle.setEnabled(false);
+    for (const m of this.game.coop.squad.list()) if (m.lockerId === id) m.lockerId = null;
   }
 
   /** The Locker catch ended: a victim still playing is put down outside the torn locker. */
@@ -698,6 +754,10 @@ export class Lockers {
     for (const locker of this.lockers.values()) {
       this._stepDoor(locker, now);
       this._stepSchedule(locker, now);
+      if (locker.remoteCloseAt && now >= locker.remoteCloseAt) {
+        locker.remoteCloseAt = null;
+        if (locker.state !== 'Smashed') this._startDoor(locker, 'Swing', 1, 0, CloseSeconds, now);
+      }
       if (locker.ripShakeAt !== null && locker.ripShakeAt !== undefined && now >= locker.ripShakeAt) {
         locker.ripShakeAt = null;
         const d = this.env.eye(_a).distanceTo(_b.setFromMatrixPosition(locker.base));

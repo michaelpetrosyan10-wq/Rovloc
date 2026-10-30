@@ -13,10 +13,12 @@
     "check": "node tools/build.mjs && node tools/check.mjs"
   },
   "dependencies": {
+    "@supabase/realtime-js": "2.117.3",
     "three": "0.186.1",
     "three-mesh-bvh": "0.9.17"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "ws": "8.22.0"
   }
 }

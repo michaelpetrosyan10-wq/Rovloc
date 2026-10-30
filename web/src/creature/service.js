@@ -1,4 +1,7 @@
-// MonsterAIService (MonsterAIService/init.luau): the Creature's brain, for the single player of the web game.
+// MonsterAIService (MonsterAIService/init.luau): the Creature's brain. The local player is PLAYER; in a co-op run the
+// host's game adds the remote players through setRoster (handles with the same reads: root, eye, MoveState, life,
+// duct crawl, torch, locker), so it sees, hears, chases and catches every one of them, choosing among them as the
+// Roblox brain does among a server's players. A remote catch runs here; its victim's own page plays the moment.
 //
 // Brain, at GameConfig.ServerTickHz (10 Hz) during a run:
 //   perceive  Perception.scan over the player (unless ignored), every noise pulse since the last tick through
@@ -83,8 +86,34 @@ const SWIM_STATES = new Set(['Treading', 'Freestyle', 'Underwater', 'Grabbed']);
 const LEVEL_ORDER = ['Level0_Basement', 'Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium', 'Level4_FloodedPool', 'Level5_Roof'];
 const RANDOM_SEED = 20251029;
 
-/** The one participant of the web game (Roblox's Player). */
+/** The local participant (Roblox's Player); a co-op host's remote players are RemotePlayer handles (setRoster). */
 export const PLAYER = Object.freeze({ userId: 1, name: 'Player' });
+const LOCAL_ONLY = Object.freeze([PLAYER]);
+const NO_REMOTES = Object.freeze([]);
+
+/**
+ * A remote player as the co-op host's game presents one to the brain (userId 2 and up).
+ * @typedef {Object} RemotePlayer
+ * @property {number} userId
+ * @property {string} name
+ * @property {() => THREE.Vector3|null} root the root centre (null when not in play)
+ * @property {() => CFrame|null} rootCFrame facing their look
+ * @property {() => string} lifeState
+ * @property {() => number} downedCount
+ * @property {() => string} moveState
+ * @property {() => string} mode 'OnFoot' | 'Vent' | 'Swim'
+ * @property {() => boolean} inVent
+ * @property {() => boolean} flashlightOn
+ * @property {() => string|null} lockerId the locker they hide in
+ * @property {(reason: string) => boolean} hasLock
+ * @property {() => string} controlLock
+ * @property {(kind: string) => boolean} canCatch
+ * @property {(on: boolean) => void} setCaught a catch holds them (their page locks the body)
+ * @property {(cframe: CFrame) => void} turn their root turned to face the Creature
+ * @property {(cue: {kind: string, startAt: number, endsAt: number, face: THREE.Vector3}) => void} catchCue
+ * @property {(kind: string) => void} catchAbort
+ * @property {(outcome: 'Down'|'Execute', cause: string) => void} catchOutcome
+ */
 
 /** 1-based run order of a LevelId (Enums.levelIndex), or 0. */
 export function levelIndex(levelId) {
@@ -203,33 +232,46 @@ export class MonsterAI {
     this.accumulated = 0;
     this.lockerInspector = null;
     this.poolGrabber = null;
+    /** @type {() => RemotePlayer[]} the co-op host's remote players (none when played alone) */
+    this.roster = () => NO_REMOTES;
+    /** @type {Map<any, boolean>} whether each remote player was in a duct at the last motion tick */
+    this.ventSeen = new Map();
 
+    const local = (p) => p === PLAYER || p === null || p === undefined;
     this.jumpscare = new JumpscareHandler({
       now: () => this.now(),
-      lifeState: () => env.playerLifeState(),
-      downedCount: () => env.playerDownedCount(),
-      down: (_player, cause) => env.downPlayer(cause),
-      execute: (_player, cause) => env.executePlayer(cause),
-      playerRoot: () => env.playerRootCFrame(),
-      caughtLock: () => env.playerHasLock('Jumpscare'),
-      controlLock: () => (env.playerHasLock('Cutscene') ? 'Cutscene' : env.playerHasLock('Jumpscare') ? 'Jumpscare' : 'None'),
-      lock: () => env.lockPlayer('Jumpscare'),
-      unlock: () => env.unlockPlayer('Jumpscare'),
-      turnPlayer: (_player, cframe) => env.turnPlayer(cframe),
+      lifeState: (p) => this._lifeOf(local(p) ? PLAYER : p),
+      downedCount: (p) => (local(p) ? env.playerDownedCount() : p.downedCount()),
+      down: (p, cause) => (local(p) ? env.downPlayer(cause) : p.catchOutcome('Down', cause)),
+      execute: (p, cause) => (local(p) ? env.executePlayer(cause) : p.catchOutcome('Execute', cause)),
+      playerRoot: (p) => (local(p) ? env.playerRootCFrame() : p.rootCFrame()),
+      caughtLock: (p) => (local(p) ? env.playerHasLock('Jumpscare') : p.hasLock('Jumpscare')),
+      controlLock: (p) => {
+        if (!local(p)) return p.controlLock();
+        return env.playerHasLock('Cutscene') ? 'Cutscene' : env.playerHasLock('Jumpscare') ? 'Jumpscare' : 'None';
+      },
+      lock: (p) => (local(p) ? env.lockPlayer('Jumpscare') : p.setCaught(true)),
+      unlock: (p) => (local(p) ? env.unlockPlayer('Jumpscare') : p.setCaught(false)),
+      turnPlayer: (p, cframe) => (local(p) ? env.turnPlayer(cframe) : p.turn(cframe)),
       creature: () => (this.ctx ? { body: this.body, state: this.state } : null),
       faceWorld: () => (this.view ? this.view.faceWorld() : null),
       playLunge: (_kind, startAt) => {
         if (this.view) this.view.playAction('Lunge', startAt);
       },
       victimCue: (cue) => {
-        if (this.jumpscareView) this.jumpscareView.start(cue);
+        const victim = this.jumpscare.getVictim();
+        if (!local(victim)) victim.catchCue(cue);
+        else if (this.jumpscareView) this.jumpscareView.start(cue);
       },
-      abortCue: () => {
-        if (this.jumpscareView) this.jumpscareView.abort();
+      abortCue: (kind) => {
+        const victim = this.jumpscare.getVictim();
+        if (!local(victim)) victim.catchAbort(kind);
+        else if (this.jumpscareView) this.jumpscareView.abort();
       },
-      play: (name, opts) => env.play(name, opts),
-      allowed: (kind) => env.catchAllowed(kind),
-      outcome: (kind) => env.catchOutcome(kind),
+      // the sting is the victim's own: a remote victim's page plays it
+      play: (name, opts) => (name === 'JumpscareSting' && !local(this.jumpscare.getVictim()) ? null : env.play(name, opts)),
+      allowed: (kind, p) => (local(p) ? env.catchAllowed(kind) : p.canCatch(kind)),
+      outcome: (kind, p) => (local(p) ? env.catchOutcome(kind) : null),
     });
     this.jumpscare.finished.connect((victim, kind, outcome) => {
       if (this.catching && this.catching.player === victim) this._settleCatch(outcome);
@@ -244,6 +286,60 @@ export class MonsterAI {
     env.onSplashCrossed(() => {
       if (this.running) this.splashArmed.set(PLAYER, this.now());
     });
+  }
+
+  // ------------------------------------------------------------------ co-op roster
+
+  /** The co-op host's remote players (a function returning RemotePlayer handles; null: none). */
+  setRoster(fn) {
+    this.roster = typeof fn === 'function' ? fn : () => NO_REMOTES;
+  }
+
+  /** Every player the brain knows: the local one, then the remote ones. */
+  _players() {
+    const remotes = this.roster();
+    return remotes.length ? [PLAYER, ...remotes] : LOCAL_ONLY;
+  }
+
+  /** The player with a noise's sourceUserId (PLAYER is 1), or null. */
+  _playerByUserId(userId) {
+    if (userId === null || userId === undefined) return null;
+    if (userId === PLAYER.userId) return PLAYER;
+    return this.roster().find((p) => p.userId === userId) || null;
+  }
+
+  _lifeOf(player) {
+    if (player === PLAYER) return this.env.playerLifeState();
+    return player && player.lifeState ? player.lifeState() : 'Lobby';
+  }
+
+  _moveStateOf(player) {
+    if (player === PLAYER) return this.env.playerMoveState();
+    return player && player.moveState ? player.moveState() : 'Standing';
+  }
+
+  /** A remote player's noise (their page heard it from their own body): queued like a local one. */
+  hearRemote(event) {
+    this._onNoise(event);
+  }
+
+  /** A remote swimmer's splashing crossed the grab threshold (the local one comes through onSplashCrossed). */
+  noteSplash(player) {
+    if (this.running && player) this.splashArmed.set(player, this.now());
+  }
+
+  /** Drops everything remembered about a player who left the run (target, sightings, duct spots, a catch). */
+  forgetPlayer(player) {
+    const c = this.ctx;
+    if (c) {
+      if (c.target === player) this._setTarget(null);
+      if (c.memory && c.memory.player === player) c.memory = null;
+      c.sightings = c.sightings.filter((s) => s.player !== player);
+    }
+    if (this.swimmerPlayer === player) this.swimmerPlayer = null;
+    if (this.grabbed === player) this.grabbed = null;
+    for (const map of [this.lastSeen, this.spotted, this.exitGrates, this.splashArmed, this.ventSeen]) map.delete(player);
+    if (this.jumpscare.getVictim() === player) this.jumpscare.abort('Left');
   }
 
   now() {
@@ -283,15 +379,14 @@ export class MonsterAI {
   }
 
   _rootOf(player) {
-    if (player !== PLAYER) return null;
-    return this.env.playerRoot();
+    if (player === PLAYER) return this.env.playerRoot();
+    return player && player.root ? player.root() : null;
   }
 
   /** Alive or Downed with a character. */
   _playing(player) {
-    if (player !== PLAYER) return false;
-    const s = this.env.playerLifeState();
-    return (s === 'Alive' || s === 'Downed') && this.env.playerRoot() !== null;
+    const s = this._lifeOf(player);
+    return (s === 'Alive' || s === 'Downed') && this._rootOf(player) !== null;
   }
 
   _huntable(player) {
@@ -299,31 +394,50 @@ export class MonsterAI {
   }
 
   _huntablePlayers() {
-    return this._huntable(PLAYER) ? [PLAYER] : [];
+    return this._players().filter((p) => this._huntable(p));
   }
 
   _playingPlayers() {
-    return this._playing(PLAYER) ? [PLAYER] : [];
+    return this._players().filter((p) => this._playing(p));
   }
 
   _swimming(player) {
-    return player === PLAYER && (this.env.playerMode() === 'Swim' || SWIM_STATES.has(this.env.playerMoveState()));
+    if (player === PLAYER) return this.env.playerMode() === 'Swim' || SWIM_STATES.has(this.env.playerMoveState());
+    return !!player && !!player.mode && (player.mode() === 'Swim' || SWIM_STATES.has(player.moveState()));
   }
 
   _inVent(player) {
-    return player === PLAYER && this.env.playerInVent();
+    if (player === PLAYER) return this.env.playerInVent();
+    return !!player && !!player.inVent && player.inVent();
   }
 
   _railPointOf(player) {
-    if (player !== PLAYER || !this._inVent(player)) return null;
+    if (!player || !this._inVent(player)) return null;
     const graph = this.ctx ? this.ctx.graph : null;
-    return graph ? this.env.playerRailPoint(graph) : null;
+    if (!graph) return null;
+    if (player === PLAYER) return this.env.playerRailPoint(graph);
+    const root = this._rootOf(player);
+    return root ? railNearest(graph, root) : null;
   }
 
   _playerEye(player) {
     const root = this._rootOf(player);
     if (!root) return null;
-    return Perception.playerEyeAt(root, this.env.playerMoveState());
+    return Perception.playerEyeAt(root, this._moveStateOf(player));
+  }
+
+  /** The root of the playing player nearest `here`, or null. */
+  _nearestRoot(here) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const p of this._playingPlayers()) {
+      const r = this._rootOf(p);
+      if (r && r.distanceTo(here) < bestDistance) {
+        best = r;
+        bestDistance = r.distanceTo(here);
+      }
+    }
+    return best;
   }
 
   _creatureEye() {
@@ -479,9 +593,10 @@ export class MonsterAI {
     return this._swimming(player) || this._inPoolRoomAt(this._rootOf(player));
   }
 
-  /** The pool grace starts the first time the player stands in a pool room on this level. */
+  /** The pool grace starts the first time a player stands in a pool room on this level. */
   _updatePoolGrace(t) {
-    if (this.poolEnteredAt === null && this._playing(PLAYER) && this._inPoolRoom(PLAYER)) this.poolEnteredAt = t;
+    if (this.poolEnteredAt !== null) return;
+    if (this._playingPlayers().some((p) => this._inPoolRoom(p))) this.poolEnteredAt = t;
   }
 
   /** The grace after first entering the pool room, or the retreat after a grab: it leaves the pool room alone. */
@@ -497,7 +612,7 @@ export class MonsterAI {
     const here = this.body.getPosition();
     const basin = m.basinAt(here);
     if (!basin) return null;
-    const from = this._rootOf(PLAYER) || here;
+    const from = this._nearestRoot(here) || here;
     let best = null;
     let bestDistance = -1;
     for (const x of [basin.minX, (basin.minX + basin.maxX) / 2, basin.maxX]) {
@@ -566,7 +681,7 @@ export class MonsterAI {
       targetSwimming: this._swimming(player),
       lineClear: this._lineClear(this._creatureEye(), eye),
       playing: this._huntable(player),
-      hiding: this.env.playerMoveState() === 'Hiding',
+      hiding: this._moveStateOf(player) === 'Hiding',
       canHunt: this._canHuntNow(),
       busy: this.catching !== null || this.jumpscare.isBusy(),
       hidden: this.body.hidden,
@@ -692,7 +807,7 @@ export class MonsterAI {
     const c = this.ctx;
     if (!c) return best;
     if (noise.zoneId) c.heardZones[noise.zoneId] = { at: t, rank: noise.rank, position: noise.position.clone() };
-    const source = noise.sourceUserId === PLAYER.userId ? PLAYER : null;
+    const source = this._playerByUserId(noise.sourceUserId);
     if (source && this._huntable(source)) {
       if (noise.medium === 'Vent' && noise.rank >= EXACT_RANK && this._inVent(source)) this.spotted.set(source, t);
       if (noise.medium === 'Water' && this._swimming(source)) {
@@ -733,14 +848,14 @@ export class MonsterAI {
       const eye = this._playerEye(player);
       if (!eye) continue;
       const pv = this._inVent(player);
-      const life = this.env.playerLifeState();
+      const life = this._lifeOf(player);
       observations.push({
         player,
         eye,
         playing: life === 'Alive' || life === 'Downed',
         downed: life === 'Downed',
-        moveState: this.env.playerMoveState(),
-        lit: this.env.playerFlashlightOn(),
+        moveState: this._moveStateOf(player),
+        lit: player === PLAYER ? this.env.playerFlashlightOn() : player.flashlightOn(),
         inVent: pv,
         rail: pv ? this._railPointOf(player) : null,
       });
@@ -775,7 +890,7 @@ export class MonsterAI {
     const events = this.noiseQueue;
     this.noiseQueue = [];
     for (const event of events) {
-      if (event.sourceUserId === PLAYER.userId && this.ignored) continue;
+      if (this.ignored && this._playerByUserId(event.sourceUserId)) continue;
       if (quiet && (event.medium === 'Water' || this._inPoolRoomAt(event.position))) continue;
       const heard = Hearing.perceive(event, listener);
       if (!heard) continue;
@@ -884,9 +999,9 @@ export class MonsterAI {
     const c = this.ctx;
     const p = this.pacing;
     if (!victim || !c || !p) return;
-    const holding = this.env.playerMoveState() === 'Grabbed';
+    const holding = this._moveStateOf(victim) === 'Grabbed';
     if (holding) this.grabbedHeldAt = t;
-    const life = this.env.playerLifeState();
+    const life = this._lifeOf(victim);
     if (!(life === 'Alive' || life === 'Downed') || (!holding && t - this.grabbedHeldAt > GRAB_GRACE)) {
       this.grabbed = null;
       p.noteCatch(t);
@@ -909,7 +1024,7 @@ export class MonsterAI {
       if (this._relocateUnseen(landOnly)) this.current.enter(c, this.state);
       else if (landOnly && status === 'Failed') {
         // watched in the mouth of the pool's duct: back off along it, out of sight, and move on from there
-        const from = this._rootOf(PLAYER) || this.body.getPosition();
+        const from = this._nearestRoot(this.body.getPosition()) || this.body.getPosition();
         m.reset('Vent');
         m.retreat(from, 4);
       } else m.reset(m.getMedium());
@@ -935,13 +1050,21 @@ export class MonsterAI {
 
   // ------------------------------------------------------------------ brain tick + motion
 
-  /** Upkeep the game needs every motion tick: vent entry / exit of the player (VentNetworkService.Entered / Exited). */
+  /** Upkeep the game needs every motion tick: vent entry / exit of every player (VentNetworkService.Entered / Exited). */
   _watchVents() {
-    const inVent = this.env.playerInVent();
-    if (inVent === this.wasInVent) return;
-    this.wasInVent = inVent;
+    for (const player of this._players()) {
+      const inVent = this._inVent(player);
+      const was = player === PLAYER ? this.wasInVent : this.ventSeen.get(player) === true;
+      if (inVent === was) continue;
+      if (player === PLAYER) this.wasInVent = inVent;
+      else this.ventSeen.set(player, inVent);
+      this._ventCrossed(player, inVent);
+    }
+  }
+
+  _ventCrossed(player, inVent) {
     const graph = this.ctx ? this.ctx.graph : null;
-    const root = this.env.playerRoot();
+    const root = this._rootOf(player);
     let grateId = null;
     if (graph && root) {
       let bestDistance = Infinity;
@@ -954,12 +1077,12 @@ export class MonsterAI {
       }
     }
     if (inVent) {
-      const seen = this.lastSeen.get(PLAYER);
-      if (this.running && seen !== undefined && this.now() - seen <= SEEN_ENTER_WINDOW && this._huntable(PLAYER)) {
-        this.spotted.set(PLAYER, this.now());
+      const seen = this.lastSeen.get(player);
+      if (this.running && seen !== undefined && this.now() - seen <= SEEN_ENTER_WINDOW && this._huntable(player)) {
+        this.spotted.set(player, this.now());
       }
     } else if (grateId) {
-      this.exitGrates.set(PLAYER, grateId);
+      this.exitGrates.set(player, grateId);
     }
   }
 
@@ -1090,14 +1213,17 @@ export class MonsterAI {
       inVent: (player) => this._inVent(player),
       railPointOf: (player) => this._railPointOf(player),
       exitGrateOf: (player) => this.exitGrates.get(player) || null,
-      ventOccupants: () => (this._huntable(PLAYER) && this._inVent(PLAYER) ? [PLAYER] : []),
+      ventOccupants: () => this._huntablePlayers().filter((p) => this._inVent(p)),
       grateState: (id) => env.grateState(id),
       standPoint: (grate) => this._grateStandPoint(grate),
       swimming: (player) => this._swimming(player),
       rootOf: (player) => this._rootOf(player),
       lineClear: (a, b) => this._lineClear(a, b),
       lockersIn: (levelId, zoneId) => env.lockersIn(levelId, zoneId),
-      lockerOccupant: (locker) => (env.lockerOccupied(locker) ? PLAYER : null),
+      lockerOccupant: (locker) => {
+        if (env.lockerOccupied(locker)) return PLAYER;
+        return this.roster().find((p) => p.lockerId() === locker) || null;
+      },
       lockerFront: (locker) => env.lockerFront(locker),
       creatureEye: () => this._creatureEye(),
       playerEye: (player) => this._playerEye(player),
@@ -1154,6 +1280,7 @@ export class MonsterAI {
     this.scripted = null;
     this.exitGrates.clear();
     this.splashArmed.clear();
+    this.ventSeen.clear();
     this.wasInVent = this.env.playerInVent();
     this.accumulated = 0;
     this._attach(opts.level || null);
@@ -1363,7 +1490,8 @@ export class MonsterAI {
   setScriptedTarget(token, target) {
     const hold = this.scripted;
     if (!(this.running && this.ctx && hold && hold.token === token)) return false;
-    const player = target === PLAYER || target === true ? PLAYER : null;
+    let player = target === PLAYER || target === true ? PLAYER : null;
+    if (player === null && target && this.roster().includes(target)) player = target;
     if (target !== null && target !== undefined && player === null) return false;
     this._setTarget(player);
     return true;
@@ -1432,6 +1560,7 @@ export class MonsterAI {
       hidden: this.body.hidden,
       levelId: this.creatureLevel,
       targetingPlayer: !!c && c.target === PLAYER,
+      targetUserId: c && c.target ? c.target.userId : null,
       grabbed: this.grabbed !== null,
       awake: this.awake,
       catching: this.catching !== null,

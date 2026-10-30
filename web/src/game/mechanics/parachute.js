@@ -235,11 +235,40 @@ export class Parachute {
 
   // ---------------------------------------------------------------------------------------------------- packs
 
+  /** Whether this page's player wears a pack (packed, falling with it or under the canopy). */
+  hasPack() {
+    return this.state === 'Packed' || this.state === 'Freefall' || this.state === 'Canopy';
+  }
+
+  /** Co-op: a teammate took this pack on their page. */
+  _takenElsewhere(pack) {
+    pack.taken = true;
+    if (pack.handle) pack.handle.setEnabled(false);
+    if (this.crate) this.env.setEntityVisible(this.crate.id, false, pack.node);
+  }
+
+  /** Co-op: the teammate's pack went back into the crate. */
+  _returnedElsewhere(pack) {
+    pack.taken = false;
+    if (pack.handle) pack.handle.setEnabled(this.crateOpen !== false);
+    if (this.crate) this.env.setEntityVisible(this.crate.id, true, pack.node);
+  }
+
+  /** Co-op: hands a claimed pack back to the squad. */
+  _release(pack) {
+    const coop = this.game.coop;
+    if (coop && coop.active && pack.handle) coop.actions.release(pack.handle.id);
+  }
+
   _take(pack) {
     const g = this.game;
-    if (pack.taken || !g.live() || g.level !== LEVEL || g.life.state !== 'Alive') return;
+    if (pack.taken || !g.live() || g.level !== LEVEL || g.life.state !== 'Alive') {
+      this._release(pack);
+      return;
+    }
     if (this.pack || this.state !== 'None') {
       this.env.hint(S('Hud.ParachuteHaveOne'), 3);
+      this._release(pack);
       return;
     }
     pack.taken = true;
@@ -260,6 +289,7 @@ export class Parachute {
     pack.taken = false;
     if (pack.handle) pack.handle.setEnabled(this.crateOpen !== false);
     this.env.setEntityVisible(this.crate.id, true, pack.node);
+    this._release(pack);
   }
 
   /** The roof objective's lock: while the crate is chained (false) no pack can be taken. */
@@ -441,6 +471,11 @@ export class Parachute {
         holdSeconds: spec ? spec.holdDuration : PACK_HOLD,
         distance: spec ? spec.maxDistance : 7,
         requiresLineOfSight: false,
+        // co-op: one pack per teammate (the host grants it); it leaves the crate on every page, and comes back when
+        // its wearer dies or leaves before jumping
+        net: 'claim',
+        netRemote: () => this._takenElsewhere(p),
+        netRelease: () => this._returnedElsewhere(p),
         onTriggered: () => this._take(p),
       });
     }

@@ -192,8 +192,8 @@ export class Level5 {
   }
 
   _seen(root) {
-    return this.game.seen(_a.copy(root).add(_b.set(0, CreatureMetrics.eye.Biped, 0))) ||
-      this.game.seen(_a.copy(root).add(_b.set(0, CHEST_HEIGHT, 0)));
+    return this.game.seenByAnyone(_a.copy(root).add(_b.set(0, CreatureMetrics.eye.Biped, 0))) ||
+      this.game.seenByAnyone(_a.copy(root).add(_b.set(0, CHEST_HEIGHT, 0)));
   }
 
   _setScale(scale) {
@@ -238,8 +238,8 @@ export class Level5 {
     const startAt = now + LEAD;
     const run = { startAt, slammed: false, revealed: false, released: false };
     this.smash = run;
-    const root = this.env.rootPosition(new THREE.Vector3());
-    const blocked = g.playing() && (this._inside(root) || horizontalDistance(root, this.geo.doorway) < DOOR_CLEAR);
+    // never slammed on anyone: the whole squad counts (co-op, on the host), not just this page's player
+    const blocked = g.subjects().some((s) => this._inside(s.root) || horizontalDistance(s.root, this.geo.doorway) < DOOR_CLEAR);
     g.seq.play(DOOR.Id, startAt, { [ROOF_ARGS.Door]: this.geo.cue });
     const door = this._door();
     if (door && !blocked && door.state === 'Open') run.slammed = g.doors.setState(door, 'Closed', DOOR.SlamSeconds) !== false;
@@ -312,9 +312,17 @@ export class Level5 {
     const creature = c.position(new THREE.Vector3());
     const gap = creature && c.hasTarget() && g.playing() ? horizontalDistance(creature, this.env.rootPosition(_a)) : null;
     this._setScale(chaseScale(gap, g.run ? g.run.difficulty : 'Standard'));
-    if (ON_ROOF.has(g.parachute.state) && g.life.state === 'Alive' && this.env.meters().stamina.value < STAMINA_FLOOR) {
-      this.env.refillStamina();
-    }
+  }
+
+  /**
+   * Adrenaline: once the roof door is smashed, an Alive player still on the roof sprints on a topped-up stamina. Each
+   * page does it for its own player (in co-op the scene runs on the host only, the smashed door reaches everyone).
+   */
+  _adrenaline() {
+    const g = this.game;
+    if (g.phase !== 'InRun' || g.level !== LEVEL || !ON_ROOF.has(g.parachute.state) || g.life.state !== 'Alive') return;
+    const door = this._door();
+    if (door && door.state === 'Smashed' && this.env.meters().stamina.value < STAMINA_FLOOR) this.env.refillStamina();
   }
 
   // ---------------------------------------------------------------------------------------------------- the finale
@@ -502,6 +510,7 @@ export class Level5 {
 
   /** The dev finale's cord: pulled the frame the jumper is falling. */
   frame() {
+    this._adrenaline();
     if (this.devPull && this.game.parachute.state === 'Freefall') {
       this.devPull = false;
       this.game.parachute.pull();

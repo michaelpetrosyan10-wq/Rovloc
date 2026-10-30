@@ -15,7 +15,10 @@ import { S } from '../strings.js';
 import { ObjectiveTuning, roomName, stepOf } from './config.js';
 import { LockFixture } from './locks.js';
 import { Tweens, WorkHold, entityPrompt } from './kit.js';
-import { cfPos } from '../util.js';
+import { cfMatrix, cfPos } from '../util.js';
+
+/** How far over the floor point a dropped item is set down (co-op). */
+const DROP_LIFT = 0.35;
 
 export class FloorObjective {
   /**
@@ -153,7 +156,7 @@ export class FloorObjective {
         const door = this.game.doors.get(id);
         if (door) this.game.doors.setState(door, 'Locked', 0);
       }
-      this.lockedPrompt = this.prompt(lockId, 'Locked', { holdSeconds: 0, onTriggered: () => this.lock.rattle() });
+      this.lockedPrompt = this.prompt(lockId, 'Locked', { holdSeconds: 0, net: 'local', onTriggered: () => this.lock.rattle() });
     }
     this.setup(run);
     this.refresh();
@@ -222,12 +225,29 @@ export class FloorObjective {
       onTriggered: () => {
         if (!this.game.alive() || !this.picked(entity.id) || this.taken.has(entity.id)) return;
         if (take(entity, p) === false) return;
+        this.carry.noteEntity(entity.id);
         this.taken.add(entity.id);
         this.refresh();
       },
     });
     this.itemPrompts.set(entity.id, p);
     return p;
+  }
+
+  /**
+   * Co-op: a carried item put back in the world where its carrier died or left (`at`: a floor point); anyone can take
+   * it again with its Pickup prompt. Items that are not this floor's are left alone (false).
+   */
+  dropItem(entityId, at) {
+    const info = this.items.find((e) => e.id === entityId);
+    if (!info || !this.taken.has(entityId)) return false;
+    this.taken.delete(entityId);
+    const pivot = cfMatrix(info.pivot, _m);
+    pivot.setPosition(at.x, at.y + DROP_LIFT, at.z);
+    this.env.setEntityPivot(entityId, pivot);
+    this.env.setEntityVisible(entityId, true);
+    this.refresh();
+    return true;
   }
 
   /** Whether a picked item can be taken now: not taken yet and showing (Floor 3's key only once its locker is open). */

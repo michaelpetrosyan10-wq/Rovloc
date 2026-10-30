@@ -126,6 +126,21 @@ export class FloorObjectives {
     return f && f.active ? f.hintSpots() : [];
   }
 
+  /** Co-op: everything a player carried is set down at `at` (they died or left); returns how many items dropped. */
+  dropCarried(owner, at) {
+    let dropped = 0;
+    for (const { id } of this.carry.dropAll(owner)) {
+      for (const f of this.floors.values()) {
+        if (f.dropItem(id, at)) {
+          dropped++;
+          break;
+        }
+      }
+    }
+    for (const f of this.floors.values()) if (f.carrierGone) f.carrierGone(owner);
+    return dropped;
+  }
+
   // ---------------------------------------------------------------------------------------------------- dev
 
   /** Dev / the smoke run: completes a floor's objective at once (marks the run a dev run). */

@@ -77,6 +77,10 @@ export class Game {
     this.creatureHandle = null;
     /** @type {Set<string>} lights a level keeps lit past their scene (the pool floodlights) */
     this.lightsKeptLit = new Set();
+    /** @type {import('./coop/index.js').Coop|null} the co-op room (start.js); inactive when played alone */
+    this.coop = null;
+    /** the system whose tick / handler is running (co-op mirrors the host's level scenes by it) */
+    this.current = null;
   }
 
   /** Registers a system (in dependency order). */
@@ -138,7 +142,7 @@ export class Game {
     if (this.levelActive || !this.level) return;
     this.levelActive = true;
     const level = this.level;
-    for (const s of this.systems) if (s.levelActivated) safe(() => s.levelActivated(level), s);
+    for (const s of this.systems) if (s.levelActivated && !this._follows(s)) safe(() => s.levelActivated(level), s, this);
     this.levelActivated.fire(level);
   }
 
@@ -149,7 +153,7 @@ export class Game {
     }
     const level = this.level;
     this.levelActive = false;
-    for (const s of this.systems) if (s.levelDeactivated) safe(() => s.levelDeactivated(level), s);
+    for (const s of this.systems) if (s.levelDeactivated && !this._follows(s)) safe(() => s.levelDeactivated(level), s, this);
     this.levelDeactivated.fire(level);
   }
 
@@ -236,33 +240,65 @@ export class Game {
     return this.live() && (s === 'Alive' || s === 'Downed');
   }
 
-  /** Alive in a live run. */
+  /** Alive in a live run (co-op: the player whose action is being applied, coop.actor). */
   alive() {
+    if (this.coop && this.coop.actor) return this.live() && this.coop.actorLife() === 'Alive';
     return this.live() && this.life && this.life.state === 'Alive';
+  }
+
+  /** Whether the action being applied is this page's own player's (co-op replays a teammate's on every page). */
+  actorIsLocal() {
+    return !this.coop || this.coop.actorIsLocal();
+  }
+
+  /**
+   * The players a level's scene can happen to: [{id, local, eye, root, zone, inVent}] for everyone in play (co-op, on
+   * the host: the whole squad; alone: the player, while playing).
+   */
+  subjects() {
+    if (this.coop) return this.coop.runNet.subjects();
+    if (!this.playing()) return [];
+    return [{ id: null, local: true, eye: this.eye(new THREE.Vector3()), root: this.env.rootPosition(new THREE.Vector3()),
+      zone: this.zoneId(), inVent: !!(this.vents && this.vents.inVent()) }];
+  }
+
+  /** Could anyone in play see `point` (co-op: every player, on the host; alone: seen())? */
+  seenByAnyone(point, range = 250) {
+    if (this.coop && this.coop.active) return this.coop.runNet.seenByAnyone(point, range);
+    return this.seen(point, range);
   }
 
   // ---------------------------------------------------------------------------------------------------- drive
 
   tick(dt) {
     const now = this.env.now();
-    for (const s of this.systems) if (s.tick) safe(() => s.tick(dt, now), s);
+    for (const s of this.systems) if (s.tick && !this._follows(s)) safe(() => s.tick(dt, now), s, this);
     this.seq.update(now);
   }
 
   frame(dt) {
     const now = this.env.now();
     this.nav.update(dt);
-    for (const s of this.systems) if (s.frame) safe(() => s.frame(dt, now), s);
+    for (const s of this.systems) if (s.frame) safe(() => s.frame(dt, now), s, this);
+  }
+
+  /** Co-op: on a client a host-run system (the level scenes) does not decide anything itself; the host's results come. */
+  _follows(system) {
+    return !!system.hostOnly && !!this.coop && this.coop.isClient();
   }
 }
 
 const _eye = new THREE.Vector3();
 const _root = new THREE.Vector3();
 
-function safe(fn, system) {
+function safe(fn, system, game) {
+  const before = game ? game.current : null;
+  if (game) game.current = system;
   try {
     fn();
   } catch (err) {
     console.error(`[game] ${system && system.name ? system.name : 'system'} failed`, err);
+  } finally {
+    if (game) game.current = before;
   }
 }

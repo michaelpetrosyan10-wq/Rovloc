@@ -62,7 +62,7 @@ export class Floor3 extends FloorObjective {
       const p = this.env.addPrompt({
         entity: locker.id, attachment: spec ? spec.host : 'HidePrompt', action: 'Kick', text: S('Obj.Prompt.Search'),
         objectText: S('Prompt.Locker'), holdSeconds: ObjectiveTuning.SearchHold, distance: spec ? spec.maxDistance : 7,
-        requiresLineOfSight: false, enabled: false,
+        requiresLineOfSight: false, enabled: false, net: 'world',
         onHoldBegan: () => this.game.playAt('ObjLockerSearch', this.pointOf(locker.id, spec ? spec.host : null)),
         onTriggered: () => this._search(locker.id),
       });
@@ -73,7 +73,8 @@ export class Floor3 extends FloorObjective {
     if (this.storeLockId) {
       this.storeLock = new LockFixture(this.game, this.storeLockId, this.tweens, this.fx);
       this.storeLock.reset();
-      this.storeLocked = this.prompt(this.storeLockId, 'Locked', { holdSeconds: 0, onTriggered: () => this.storeLock.rattle() });
+      this.storeLocked = this.prompt(this.storeLockId, 'Locked', { holdSeconds: 0, net: 'local',
+        onTriggered: () => this.storeLock.rattle() });
       this.storeUnlock = this.prompt(this.storeLockId, 'Unlock', {
         holdSeconds: holdOf(this.spec, 'Unlock'),
         onHoldBegan: () => this.game.playAt('ObjKeyJingle', this.storeLock.promptPoint(), { volume: 0.7 }),

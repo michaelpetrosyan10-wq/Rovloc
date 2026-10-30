@@ -28,7 +28,7 @@ export class Floor5 extends FloorObjective {
     if (!this.chainId) return;
     this.crate = new LockFixture(this.game, this.chainId, this.tweens, this.fx);
     this.crate.reset();
-    this.crateLocked = this.prompt(this.chainId, 'Locked', { holdSeconds: 0, onTriggered: () => this.crate.rattle() });
+    this.crateLocked = this.prompt(this.chainId, 'Locked', { holdSeconds: 0, net: 'local', onTriggered: () => this.crate.rattle() });
     this.cut = this.work({
       prompt: null, seconds: holdOf(this.spec, 'CutChain'), at: () => this.crate.chainCentre(), noise: true,
       onBegin: () => this.game.playAt('ObjLockRattle', this.crate.chainCentre()),

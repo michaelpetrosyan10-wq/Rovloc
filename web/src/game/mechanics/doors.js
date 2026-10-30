@@ -515,6 +515,8 @@ export class Doors {
     const prompt = entityPrompt(this.game, door.id, 'Locked', {
       holdSeconds: 0,
       enabled: true,
+      // the thud is for whoever tried the door; nothing in the shared world changes
+      net: 'local',
       onTriggered: () => this.game.playAt('FireDoorLatch', door.centre, { volume: JAM_THUD_VOLUME }),
     });
     this.jamPrompts.push(prompt);

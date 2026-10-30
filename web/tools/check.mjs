@@ -4,7 +4,10 @@
 //
 // 1. The deliverable (dist/Rovloc.html): loads from file:// with no request leaving the page (anything but file:,
 //    data:, blob: fails), no console error or page error, boots within the time limit, and renders a non-black
-//    image (pixels read back from the canvas).
+//    image (pixels read back from the canvas). Co-op's rule: no request at all until the player presses HOST or
+//    JOIN, then only the Supabase project's host (the page's CSP allows no other) and the STUN servers (WebRTC, outside
+//    CSP and request events); pressing HOST without that network shows "Multiplayer can't connect on this network"
+//    and single-player still plays.
 // 2. The engine walk (a sandbox build of the same engine, build/cache/check-sandbox.html, so the game's own flow
 //    cannot hold the player): spawn in the Level 1 corridor; walking W moves the body along the floor (it neither
 //    falls through nor floats), a wall stops it, Shift sprints and drains stamina, C crouches, F toggles the torch,
@@ -111,6 +114,48 @@ async function main() {
     report(guard.external.length === 0, 'deliverable makes no external request', guard.external.slice(0, 5).join(' '));
     report(guard.errors.length === 0, 'deliverable has no console errors', guard.errors.slice(0, 5).join(' | '));
     await page.screenshot({ path: path.join(shotsDir, 'deliverable.png'), timeout: 180000 });
+    await page.close();
+  }
+
+  // ------------------------------------------------------------------ 1b. co-op's network rule
+  // No request at all until HOST / JOIN; then only the Supabase project's host (this sandbox cannot reach it, as a
+  // school filter would not: the friends sheet says multiplayer cannot connect and single-player still works).
+  {
+    const html = fs.readFileSync(deliverable, 'utf8');
+    const csp = (/http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html) || [])[1] || '';
+    const connect = (/connect-src ([^;]+)/.exec(csp) || [])[1] || '';
+    const hosts = connect.split(/\s+/).filter((s) => /^(wss|https):/.test(s)).map((s) => new URL(s).host);
+    report(hosts.length === 2 && new Set(hosts).size === 1 && /\.supabase\.co$/.test(hosts[0]),
+      'the page may connect to one host only (the Supabase project), by its CSP', connect);
+    const { page, guard, bootError } = await open(browser, deliverable);
+    const sockets = [];
+    page.on('websocket', (ws) => sockets.push(ws.url()));
+    await page.waitForTimeout(1500);
+    report(!bootError && guard.external.length === 0 && sockets.length === 0, 'co-op: nothing is requested before HOST',
+      [...guard.external, ...sockets].slice(0, 3).join(' '));
+    await page.evaluate(() => {
+      const g = window.__rovlocGame.game;
+      g.onboarding.friendsBtn.click();
+      g.coop.ui.hostBtn.click();
+    });
+    const said = await page.waitForFunction(() => {
+      const t = window.__rovlocGame.game.coop.ui.status.textContent;
+      return /can't connect/.test(t) ? t : null;
+    }, null, { timeout: 60000 }).then((h) => h.jsonValue(), () => null);
+    report(!!said, 'co-op without the network: the friends sheet says multiplayer cannot connect here', said || '');
+    const others = [...guard.external, ...sockets].filter((u) => !hosts.some((h) => new URL(u).host === h));
+    report(others.length === 0 && sockets.length > 0, 'co-op: HOST reaches for the Supabase host and nothing else',
+      [...new Set([...guard.external, ...sockets].map((u) => new URL(u).host))].join(' '));
+    const solo = await page.evaluate(async () => {
+      const g = window.__rovlocGame.game;
+      g.coop.ui.backBtn.click();
+      g.env.setSetting('TutorialDone', true);
+      g.onboarding.playBtn.click();
+      await new Promise((r) => setTimeout(r, 300));
+      return { active: g.coop.active, title: g.onboarding.mode, phase: g.phase };
+    });
+    report(!solo.active && solo.title === 'Hidden' && solo.phase === 'Lobby', 'co-op failing leaves single-player playable',
+      JSON.stringify(solo));
     await page.close();
   }
 

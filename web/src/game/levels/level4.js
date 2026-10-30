@@ -149,6 +149,8 @@ export class Level4 {
     const env = this.env;
     const now = env.now();
     this.flipped = true;
+    // co-op: the switch is thrown on every page (coop/actions.js); the stun is counted for whoever threw it
+    this.flippedHere = g.actorIsLocal();
     this.lastQuietAt = Math.max(this.lastQuietAt, now);
     env.setEntityAttribute(this.switch.id, 'On', true);
     if (this.handle) this.handle.setEnabled(false);
@@ -177,7 +179,9 @@ export class Level4 {
     const centre = this.box.low.clone().add(this.box.high).multiplyScalar(0.5);
     g.playAt('FloodlightStrike', centre, { volume: 1.2 });
     const freed = g.pool.releaseGrab('Floodlight');
-    if (!freed) {
+    // co-op: the Creature is the host's to stun (a client's copy of the switch only frees its own swimmer)
+    const follower = !!g.coop && g.coop.isClient();
+    if (!freed && !follower) {
       const snap = g.creature.snapshot();
       const position = snap && snap.running && snap.levelId === LEVEL ? snap.position : null;
       if (blinds(position, snap ? snap.state : 'Dormant', this.box.low, this.box.high)) {
@@ -193,7 +197,7 @@ export class Level4 {
           }
         }
         g.creature.stun(GameConfig.StunSeconds, from);
-        g.stats.increment('Stuns');
+        if (this.flippedHere) g.stats.increment('Stuns');
       }
     }
     g.notify('Hud.FloodlightsOn');
@@ -214,7 +218,9 @@ export class Level4 {
 
   _stepPool(now) {
     const g = this.game;
-    const on = g.pool.swimming();
+    // co-op (host): a teammate in the water counts as a swimmer too
+    const remote = g.coop && g.coop.active ? g.coop.runNet.remoteSwimmerRoot() : null;
+    const on = g.pool.swimming() || !!remote;
     if (on && !this.swimming) {
       this.alerted = false;
       this.alertAt = now + this.random.number(ALERT_MIN, ALERT_MAX);
@@ -226,7 +232,7 @@ export class Level4 {
       cooldownUntil: this.cooldownUntil, now, state: g.creature.getState() });
     if (decision === 'Done' && this.swimming) this.alerted = true;
     else if (decision === 'Alert') {
-      g.creature.alert(this.env.rootPosition(new THREE.Vector3()), 'Normal');
+      g.creature.alert(g.pool.swimming() || !remote ? this.env.rootPosition(new THREE.Vector3()) : remote, 'Normal');
       this.alerted = true;
       this.cooldownUntil = now + ALERT_COOLDOWN;
     }
@@ -243,7 +249,7 @@ export class Level4 {
       if (!kind) return false;
       const points = (kind === 'Groan' ? this.candidates.ceiling : this.candidates.water).filter((p) => {
         const d = horizontalDistance(p, root);
-        return d >= BAND_MIN && d <= BAND_MAX && !this.game.seen(p);
+        return d >= BAND_MIN && d <= BAND_MAX && !this.game.seenByAnyone(p);
       });
       if (points.length) {
         this.game.playAt(BEAT_PRESETS[kind], points[this.random.integer(0, points.length - 1)], { volume: BEAT_VOLUME[kind] });
@@ -294,6 +300,7 @@ export class Level4 {
       holdSeconds: spec ? spec.holdDuration : 1,
       distance: spec ? spec.maxDistance : 7,
       requiresLineOfSight: false,
+      net: 'world',
       onTriggered: () => this.flip(),
     });
   }
@@ -336,8 +343,12 @@ export class Level4 {
     const grabbed = !!this.game.pool.grab;
     if (grabbed !== this.wasGrabbed) this.noteDisturbance(now);
     this.wasGrabbed = grabbed;
+    // co-op: the pool's calls and beats are the host's (its beats heard on every page); a client only animates
+    const coop = this.game.coop;
+    if (coop && coop.isClient()) return;
     this._stepPool(now);
-    this._stepBeats(now);
+    if (coop && coop.active) coop.worldNet.mirror(() => this._stepBeats(now));
+    else this._stepBeats(now);
   }
 
   /** Dev `floodlights` (Level 4's lights): throws the switch now. */

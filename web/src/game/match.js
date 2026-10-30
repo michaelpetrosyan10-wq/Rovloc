@@ -50,18 +50,24 @@ export class Match {
 
   // ---------------------------------------------------------------------------------------------------- deploy
 
-  /** MatchAndDataService.Deploy. Returns false when a run exists or away from the lobby phases. */
-  async deploy(difficulty) {
+  /**
+   * MatchAndDataService.Deploy. Returns false when a run exists or away from the lobby phases. Co-op (`spec`, from the
+   * host): the run's seed and id, this page's spawn slot; a late joiner's spec also names the level the squad is on and
+   * the levels already cleared (they watch until the next airlock).
+   * @param {string} difficulty
+   * @param {{seed: number, runId: string, slot: number, level?: string, cleared?: string[], spectate?: boolean}} [spec]
+   */
+  async deploy(difficulty, spec) {
     const game = this.game;
     if (this.deploying || game.run || (game.phase !== 'Lobby' && game.phase !== 'Countdown')) return false;
     this.deploying = true;
     const env = game.env;
     const chosen = DifficultyConfig[difficulty] ? difficulty : 'Standard';
     const perks = game.profile.consumeLoadout();
-    const seed = this.runSeed();
+    const seed = spec ? normalizeSeed(spec.seed) : this.runSeed();
     const routes = game.world.routes(seed);
     const run = {
-      runId: newRunId(),
+      runId: spec && spec.runId ? spec.runId : newRunId(),
       difficulty: chosen,
       plan: game.world.plan(chosen, seed, routes),
       routes,
@@ -80,8 +86,10 @@ export class Match {
     await env.fade(1, 0.6);
     env.resetLighting();
     game.beginRun(run);
-    this.spawnAt('Level0_Basement', 0);
-    game.enterLevel('Level0_Basement');
+    const level = spec && spec.level ? spec.level : 'Level0_Basement';
+    if (spec && Array.isArray(spec.cleared)) for (const l of spec.cleared) game.cleared.add(l);
+    this.spawnAt(level, spec ? spec.slot : 0);
+    game.enterLevel(level);
     run.startedAt = env.now();
     game.setPhase('InRun');
     game.activateLevel();
@@ -118,8 +126,22 @@ export class Match {
     if (!game.run || this.resolved || game.phase !== 'InRun' || this.outcome !== 'Pending') return false;
     this.outcome = 'Escaped';
     this.escapedAt = game.env.now();
+    if (this._coop()) this._coop().runNet.localEscaped();
     this.requestEvaluation();
     return true;
+  }
+
+  /** How many escaped (co-op: the squad's escapees; alone: you or nobody). */
+  _squadEscapees(escaped) {
+    const coop = this._coop();
+    if (!coop) return escaped ? 1 : 0;
+    return coop.participants().filter((m) => m.outcome === 'Escaped').length;
+  }
+
+  /** The co-op room when one is open (null alone). */
+  _coop() {
+    const coop = this.game.coop;
+    return coop && coop.active ? coop : null;
   }
 
   /** RunOutcomeEvaluator, coalesced to the next tick. */
@@ -128,8 +150,10 @@ export class Match {
     this.evaluateQueued = true;
   }
 
-  /** MatchAndDataService.verdict for the one participant. */
+  /** MatchAndDataService.verdict (co-op: over the squad, coop/run.js; one participant: the solo rule). */
   verdict() {
+    const squad = this._coop() ? this._coop().runNet.verdict() : null;
+    if (squad) return squad;
     const life = this.game.life;
     if (this.outcome === 'Escaped') return 'Escape';
     if (life.state === 'Alive') return 'Continue';
@@ -141,11 +165,34 @@ export class Match {
     this.evaluateQueued = false;
     const game = this.game;
     if (this.resolved || !game.run || game.phase !== 'InRun') return;
+    // co-op: the host judges the squad; a client resolves when it says so (resolveFromHost)
+    if (this._coop() && this._coop().isClient()) return;
     const v = this.verdict();
-    if (v !== 'Continue') this._resolve(v);
+    if (v === 'Continue') return;
+    this._resolve(v);
+    if (this._coop()) this._coop().runNet.resolved(v);
   }
 
-  _resolve(verdict) {
+  /** Co-op client: the host resolved the run; this page pays its own player by their own outcome. */
+  resolveFromHost(verdict, squad) {
+    const game = this.game;
+    if (this.resolved || !game.run) return;
+    if (game.phase !== 'InRun' && game.phase !== 'Deploying') return;
+    this._resolve(verdict, squad);
+  }
+
+  /** Co-op: the host ended Results (or the room closed: `drop` leaves the run without results). */
+  resetFromHost(drop = false) {
+    const game = this.game;
+    if (drop && game.phase === 'Lobby' && !game.run) return;
+    if (drop && (game.phase === 'Lobby' || game.phase === 'Countdown')) {
+      game.setPhase('Lobby');
+      return;
+    }
+    this.reset(true);
+  }
+
+  _resolve(verdict, squad = null) {
     const game = this.game;
     const run = game.run;
     this.resolved = true;
@@ -184,8 +231,8 @@ export class Match {
       stats: { ...game.stats.values },
       levelsCleared: floors,
       difficulty: run.difficulty,
-      escapees: escaped ? 1 : 0,
-      squadSize: 1,
+      escapees: squad ? squad.escapees : this._squadEscapees(escaped),
+      squadSize: squad ? squad.squadSize : this._coop() ? Math.max(1, this._coop().participants().length) : 1,
       newBest,
       saved,
       verdict,
@@ -195,16 +242,24 @@ export class Match {
     game.setPhase('Results');
   }
 
-  /** The results screen's Play Again. */
+  /** The results screen's Play Again (co-op: the squad goes back together, coop/run.js). */
   pressPlayAgain() {
     if (this.game.phase !== 'Results') return;
     this.playAgain = true;
+    if (this._coop()) {
+      this._coop().runNet.playAgain();
+      return;
+    }
     this.reset();
   }
 
-  /** Results -> Resetting -> Lobby (MatchResetService). */
-  reset() {
+  /** Results -> Resetting -> Lobby (MatchResetService). Co-op: the host's word only (`fromHost`). */
+  reset(fromHost = false) {
     const game = this.game;
+    if (this._coop() && !fromHost) {
+      if (this._coop().isHost()) this._coop().runNet.resetAll();
+      return;
+    }
     if (game.phase !== 'Results' && game.phase !== 'RunEnded' && game.phase !== 'InRun' && game.phase !== 'Deploying') {
       return;
     }
@@ -228,7 +283,7 @@ export class Match {
   tick(dt, now) {
     if (this.evaluateQueued) this._evaluate();
     if (this.game.phase === 'Results' && this.resultsEndsAt !== null && now >= this.resultsEndsAt) {
-      this.reset();
+      if (!(this._coop() && this._coop().isClient())) this.reset();
     }
   }
 }

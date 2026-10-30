@@ -90,7 +90,7 @@ export class Level0 {
     const eligible = [];
     for (const point of this._pool(kind)) {
       const d = horizontalDistance(point, listener);
-      if (d >= BAND_MIN && d <= BAND_MAX && !this.game.seen(point)) eligible.push(point);
+      if (d >= BAND_MIN && d <= BAND_MAX && !this.game.seenByAnyone(point)) eligible.push(point);
     }
     if (!eligible.length) return null;
     const from = eligible[this.random.integer(0, eligible.length - 1)];
@@ -134,10 +134,11 @@ export class Level0 {
     this.played++;
   }
 
-  /** Plays one beat now around the player (also the dev `beat` command); false when none could be placed. */
+  /** Plays one beat now around a player (co-op: a random one of the squad; also the dev `beat` command). */
   tryBeat(now, only) {
-    if (!this.game.playing()) return false;
-    const listener = this.game.env.rootPosition(_listener);
+    const subjects = this.game.subjects();
+    if (!subjects.length) return false;
+    const listener = _listener.copy(subjects[subjects.length > 1 ? this.random.integer(0, subjects.length - 1) : 0].root);
     let remaining = only ? [only] : Scenes.BeatKinds.slice();
     while (remaining.length) {
       const kind = only || this._pick(remaining);
@@ -187,7 +188,7 @@ export class Level0 {
       this.nextAt = due;
       return;
     }
-    if (!this.game.playing()) {
+    if (!this.game.subjects().length) {
       this.nextAt = now + RETRY;
       return;
     }

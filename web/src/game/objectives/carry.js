@@ -17,8 +17,12 @@ export class Carry {
   constructor(game) {
     this.game = game;
     this.env = game.env;
-    /** @type {Map<string, number>} kind -> count, in the order first carried */
-    this.items = new Map();
+    /**
+     * Co-op: each player carries their own (keyed by member id; '' played alone). The carrier is the player whose
+     * action is being applied (coop.actor), else this page's own player.
+     * @type {Map<string, {items: Map<string, number>, ids: Array<{kind: string, id: string}>, last: string|null}>}
+     */
+    this.bags = new Map();
     this.alpha = 0;
     this.shownKey = '';
     this.root = el('div', '', this.env.uiRoot());
@@ -26,17 +30,51 @@ export class Carry {
       flexDirection: 'column', alignItems: 'flex-start', gap: '4px', pointerEvents: 'none', zIndex: '9' });
   }
 
+  /** Whose carry the calls below read and write. */
+  _owner() {
+    const coop = this.game.coop;
+    if (!coop || !coop.active) return '';
+    return coop.actor || coop.localId || '';
+  }
+
+  _bag(owner = this._owner()) {
+    let bag = this.bags.get(owner);
+    if (!bag) {
+      bag = { items: new Map(), ids: [], last: null };
+      this.bags.set(owner, bag);
+    }
+    return bag;
+  }
+
+  /** @type {Map<string, number>} kind -> count, in the order first carried (the current carrier's) */
+  get items() {
+    return this._bag().items;
+  }
+
   /** Carries `n` more of a kind (Carry.<kind> names it). */
   add(kind, n = 1) {
-    this.items.set(kind, (this.items.get(kind) || 0) + n);
+    const bag = this._bag();
+    bag.items.set(kind, (bag.items.get(kind) || 0) + n);
+    bag.last = kind;
+  }
+
+  /** The item entity just added (the one picked up): it drops where its carrier dies or leaves. */
+  noteEntity(entityId) {
+    const bag = this._bag();
+    if (bag.last && entityId) bag.ids.push({ kind: bag.last, id: entityId });
   }
 
   /** Uses `n` of a kind; false (nothing taken) when there are not that many. */
   take(kind, n = 1) {
-    const have = this.items.get(kind) || 0;
+    const bag = this._bag();
+    const have = bag.items.get(kind) || 0;
     if (have < n) return false;
-    if (have === n) this.items.delete(kind);
-    else this.items.set(kind, have - n);
+    if (have === n) bag.items.delete(kind);
+    else bag.items.set(kind, have - n);
+    for (let k = 0; k < n; k++) {
+      const i = bag.ids.findIndex((e) => e.kind === kind);
+      if (i >= 0) bag.ids.splice(i, 1);
+    }
     return true;
   }
 
@@ -49,7 +87,21 @@ export class Carry {
   }
 
   clear() {
-    this.items.clear();
+    this.bags.clear();
+  }
+
+  /** Empties a carrier's bag: the item entities they held ([{kind, id}]) to be dropped. */
+  dropAll(owner) {
+    const bag = this.bags.get(owner);
+    if (!bag) return [];
+    this.bags.delete(owner);
+    return bag.ids;
+  }
+
+  /** What a carrier holds (kind -> count). */
+  of(owner) {
+    const bag = this.bags.get(owner);
+    return bag ? bag.items : new Map();
   }
 
   /** The chips' text lines (the HUD and the checks). */

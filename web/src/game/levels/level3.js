@@ -154,7 +154,7 @@ export class Level3 {
     const band = BANDS[kind];
     const eligible = this._pool(kind).filter((p) => {
       const d = horizontalDistance(p, listener);
-      return d >= band.min && d <= band.max && !this.game.seen(p);
+      return d >= band.min && d <= band.max && !this.game.seenByAnyone(p);
     });
     return eligible.length ? eligible[this.random.integer(0, eligible.length - 1)] : null;
   }
@@ -169,10 +169,11 @@ export class Level3 {
     this.played++;
   }
 
-  /** One beat now around the player (also the dev `gymbeat`); false when none could be placed. */
+  /** One beat now around a player (co-op: one of the squad; also the dev `gymbeat`); false when none could be placed. */
   tryBeat(now, only) {
-    if (!this.game.playing()) return false;
-    const root = this.game.env.rootPosition(new THREE.Vector3());
+    const subjects = this.game.subjects();
+    if (!subjects.length) return false;
+    const root = subjects[subjects.length > 1 ? this.random.integer(0, subjects.length - 1) : 0].root;
     let remaining = only ? [only] : Scenes.GymBeatKinds.slice();
     while (remaining.length) {
       const pool = remaining.filter((k) => k !== this.previous);
@@ -199,7 +200,7 @@ export class Level3 {
 
   _stepBeats(now, checking) {
     if (now < this.nextAt) return;
-    if (checking || now - this.lastCheckAt < CHECK_GAP || !this.game.playing()) {
+    if (checking || now - this.lastCheckAt < CHECK_GAP || !this.game.subjects().length) {
       this.nextAt = now + RETRY;
       return;
     }
@@ -212,10 +213,10 @@ export class Level3 {
     const g = this.game;
     const present = new Set();
     let anyoneInGym = false;
-    if (g.playing()) {
-      const zone = g.zoneId();
-      if (zone && this.lockerRooms.has(zone)) present.add(zone);
-      anyoneInGym = this._inGym(g.env.rootPosition(new THREE.Vector3()));
+    // every player in play (co-op: the whole squad) counts: a locker room someone lingers in, someone on the court
+    for (const s of g.subjects()) {
+      if (s.zone && this.lockerRooms.has(s.zone)) present.add(s.zone);
+      if (this._inGym(s.root)) anyoneInGym = true;
     }
     for (const room of [...this.roomSince.keys()]) if (!present.has(room)) this.roomSince.delete(room);
     for (const room of present) if (!this.roomSince.has(room)) this.roomSince.set(room, now);
@@ -280,7 +281,8 @@ export class Level3 {
   tick(dt, now) {
     this.schedule.run(now);
     if (!this.active || this.game.phase !== 'InRun') return;
-    const checking = this.game.lockers.isChecking();
+    const coop = this.game.coop;
+    const checking = this.game.lockers.isChecking() || (!!coop && coop.creatureNet.checking());
     if (checking) this.lastCheckAt = now;
     this._stepSpeed(now);
     this._stepBeats(now, checking);

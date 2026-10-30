@@ -6,6 +6,7 @@
 
 import { LevelOrder } from './config.js';
 import { S } from './strings.js';
+import { C } from './coop/strings.js';
 
 export class Menu {
   /** @param {import('./game.js').Game} game @param {import('./dev.js').Dev|null} dev */
@@ -33,6 +34,12 @@ export class Menu {
       buttons.push({ label: S('Menu.Abandon'), onClick: () => {
         close();
         game.match.abandon();
+      } });
+    }
+    if (game.coop && game.coop.active) {
+      buttons.push({ label: C('Coop.Leave'), onClick: () => {
+        close();
+        game.coop.leave(true);
       } });
     }
     if (this.dev) {
@@ -63,7 +70,8 @@ export class Menu {
   }
 
   frame() {
-    const open = this.game.env.menuOpen();
+    // co-op: a shared run never stops for one player's menu (the Roblox menu cannot stop the server either)
+    const open = this.game.env.menuOpen() && !(this.game.coop && this.game.coop.active);
     if (open !== this.paused) {
       this.paused = open;
       this.game.env.setPaused(open);

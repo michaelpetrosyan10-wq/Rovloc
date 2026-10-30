@@ -64,10 +64,10 @@ export class Airlock {
     this._reset(null);
   }
 
-  /** Whether the player's root or feet stand in the level's checkpoint volume. */
-  isInside() {
+  /** Whether the player's root (or a co-op teammate's, `at`) or feet stand in the level's checkpoint volume. */
+  isInside(at) {
     const env = this.game.env;
-    const root = env.rootPosition(_p);
+    const root = at ? _p.copy(at) : env.rootPosition(_p);
     _f.set(root.x, root.y - ROOT_TO_FEET, root.z);
     for (const v of this.volumes) {
       if (this.game.world.inTrigger(v, root) || this.game.world.inTrigger(v, _f)) return true;
@@ -103,6 +103,11 @@ export class Airlock {
 
   _finalize() {
     const game = this.game;
+    // co-op: the squad's seal (who made it, who is left, who gets up) and every page moves on (coop/run.js)
+    if (game.coop && game.coop.active) {
+      game.coop.runNet.finalizeAirlock(this);
+      return;
+    }
     const from = this.level;
     const survivor = game.life.playing() && this.isInside();
     if (game.life.playing() && !survivor) {
@@ -135,27 +140,35 @@ export class Airlock {
     if (this.clock < POLL) return;
     this.clock = 0;
     this.inside = this.isInside();
-    const playing = game.life.playing();
+    // co-op: a client's banner follows the host's airlock; the host counts the whole squad (coop/run.js)
+    const coop = game.coop && game.coop.active ? game.coop : null;
+    if (coop && coop.isClient()) return;
+    const squad = coop ? coop.runNet.airlockSquad(this) : null;
+    const playing = squad ? squad.anyPlaying : game.life.playing();
+    const before = this.phase;
     if (this.phase === 'Idle') {
-      if (this.inside && playing) {
+      if (squad ? squad.anyInside : this.inside && playing) {
         this.phase = 'Waiting';
-        // (the Roblox squad hears "Hud.Straggler" here; played alone everyone is already in, so the doors start
-        // sealing on this same poll and there is nobody to warn)
+        // the squad hears "Hud.Straggler" here; played alone everyone is already in, so the doors start sealing on
+        // this same poll and there is nobody to warn
         this._setDeadline(now + GameConfig.StragglerSeconds);
+        if (squad && !squad.allAliveInside) coop.runNet.airlockChanged(this, true);
       } else return;
     }
     if (this.phase === 'Waiting') {
-      const anyInside = this.inside && playing;
-      const allAliveInside = !(game.life.state === 'Alive' && !this.inside);
+      const anyInside = squad ? squad.anyInside : this.inside && playing;
+      const allAliveInside = squad ? squad.allAliveInside : !(game.life.state === 'Alive' && !this.inside);
       if (!anyInside) {
         if (now >= this.deadline) {
           this._setDeadline(null);
           this.phase = 'Idle';
+          if (coop) coop.runNet.airlockChanged(this, false);
         }
         return;
       }
       if (allAliveInside || now >= this.deadline) this._seal();
       else return;
+      if (coop && before !== this.phase) coop.runNet.airlockChanged(this, false);
     }
     if (this.phase === 'Sealing') {
       if (this._doorsShut() || now - this.sealingSince >= SEAL_TIMEOUT) this._finalize();

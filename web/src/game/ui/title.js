@@ -14,6 +14,7 @@ import { TutorialConfig } from '../config.js';
 import { S } from '../strings.js';
 import { lookAtMatrix } from '../util.js';
 import { FocusGroup, glyphFor } from './nav.js';
+import { C } from '../coop/strings.js';
 import { Fonts, Palette, el } from './style.js';
 
 const CAMERA_FOV = 60;
@@ -95,7 +96,11 @@ export class Onboarding {
     premise.style.maxWidth = '430px';
     el('div', '', col).style.height = '6px';
     this.group = new FocusGroup({});
-    this.playBtn = this._button(col, S('Title.Play'), true, () => this.pressPlay());
+    this.playBtn = this._button(col, C('Title.PlaySolo'), true, () => this.pressPlay());
+    // co-op: host or join a room (game/coop/ui.js)
+    this.friendsBtn = this._button(col, C('Title.PlayFriends'), false, () => {
+      if (this.game.coop) this.game.coop.ui.openFriends();
+    });
     this.firstTime = el('div', 'rg-body', col, S('Title.FirstTime'));
     Object.assign(this.firstTime.style, { color: Palette.Amber, fontSize: '13px' });
     this.howBtn = this._button(col, S('Title.HowToPlay'), false, () => this.openWalkthrough('Title'));
@@ -193,6 +198,14 @@ export class Onboarding {
       this.openWalkthrough('Lobby');
       return;
     }
+    this._closeAll();
+    if (this.onPlay) this.onPlay();
+  }
+
+  /** Co-op: the squad's run is starting (or underway): any title screen or walkthrough here gives way at once. */
+  closeForCoop() {
+    if (this.mode === 'Hidden') return;
+    if (this.mode === 'Walkthrough') this.env.setSetting(TutorialConfig.TutorialSetting, true);
     this._closeAll();
     if (this.onPlay) this.onPlay();
   }
