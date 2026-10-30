@@ -309,6 +309,7 @@ local STRINGS: { [string]: string } = {
 	["Settings.BaseFov"] = "Field of view",
 	["Settings.MotionScale"] = "Camera motion",
 	["Settings.FlashScale"] = "Flash intensity",
+	["Settings.Brightness"] = "Brightness",
 	["Settings.MasterVolume"] = "Master volume",
 	["Settings.AmbienceVolume"] = "Ambience",
 	["Settings.WorldVolume"] = "World sounds",
@@ -447,6 +448,17 @@ local STRINGS: { [string]: string } = {
 	["LobbySign.SupplySub"] = "spend your credits",
 	["Lobby.Help"] = "HOW TO PLAY",
 	["Lobby.HelpMark"] = "?",
+
+	-- Squad panel (SquadPanel): the run's participants and how each is doing
+	["Squad.Title"] = "SQUAD",
+	["Squad.You"] = "%s (you)",
+	["Squad.Status.Alive"] = "ALIVE",
+	["Squad.Status.Downed"] = "DOWN",
+	["Squad.Status.Dead"] = "DEAD",
+	["Squad.Status.Spectating"] = "WATCHING",
+	["Squad.Status.Lobby"] = "IN THE LOBBY",
+	["Squad.Status.Airlock"] = "IN THE STAIRWELL",
+	["Squad.Status.Escaped"] = "ESCAPED",
 
 	-- Objective tracker (ObjectiveTracker)
 	["Objective.Header"] = "OBJECTIVE",

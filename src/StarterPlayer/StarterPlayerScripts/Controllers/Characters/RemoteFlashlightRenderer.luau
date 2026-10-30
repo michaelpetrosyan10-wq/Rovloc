@@ -13,7 +13,8 @@
 -- sample the beam follows their root's facing (which tracks their camera yaw) at level pitch. Brightness follows the
 -- same rules as the local light (FirstPersonController.FlashlightLevel): their Battery meter dims and warms it below
 -- 15 %, and EMF interference at their head (FirstPersonController.EmfIntensityAt with their ZoneId) makes it
--- flicker, on server time, so everyone sees the same flicker.
+-- flicker, on server time, so everyone sees the same flicker. Like the local torch it burns at the camera level's
+-- torch gain (LightingController.GetRender().torch).
 --
 -- Focus (P8 spectating). SetFocus(player, view) makes one teammate's torch the one seen from inside their eyes: it
 -- always has a beam (outside the budget cap), placed at view() (the spectator camera) plus the torch's look-space
@@ -32,6 +33,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
 
+local LightingController = require(script.Parent.Parent.Core.LightingController)
 local RenderBudgetController = require(script.Parent.Parent.Core.RenderBudgetController)
 local FirstPersonController = require(script.Parent.Parent.FirstPerson.FirstPersonController)
 
@@ -300,13 +302,14 @@ local function onRender(dt: number)
 			beam.inner.Enabled = innerOn
 		end
 		if on then
-			beam.light.Brightness = (if isFocus then cones.outerBrightness else BRIGHTNESS) * level
+			local gain = LightingController.GetRender().torch
+			beam.light.Brightness = (if isFocus then cones.outerBrightness else BRIGHTNESS) * level * gain
 			local color = FirstPersonController.BeamColor(fraction)
 			if beam.light.Color ~= color then
 				beam.light.Color = color
 			end
 			if innerOn then
-				beam.inner.Brightness = cones.innerBrightness * level
+				beam.inner.Brightness = cones.innerBrightness * level * gain
 				if beam.inner.Color ~= color then
 					beam.inner.Color = color
 				end

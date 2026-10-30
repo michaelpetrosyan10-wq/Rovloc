@@ -84,7 +84,7 @@ Rovloc/
     │       │   ├── PerkConfig.luau         [P1] Rusty Screwdriver 1.2s · Lithium Cell +50% · Adrenaline Syringe (2 modes)
     │       │   ├── WorldConfig.luau        [P1] Floor heights, 3.5×3.5 bore, doors ≥6×10, walls ≥1 stud, avatar normalization
     │       │   ├── InputConfig.luau        [P1] Action → keyboard / gamepad / touch binding + tap/hold/mash kind
-    │       │   └── SettingsSchema.luau     [P1] Sensitivity, base FOV, bus volumes, motion & flash scale, captions
+    │       │   └── SettingsSchema.luau     [P1] Sensitivity, base FOV, bus volumes, motion & flash scale, brightness, captions
     │       ├── Types.luau                  [P1] Service/Controller lifecycle, RunContext, NoiseEvent, DataSchema, hook interfaces
     │       ├── Enums.luau                  [P1] MoveState, CameraState, LifeState, ControlLock, MonsterState (+Scripted), PoseMode,
     │       │                                    MatchPhase, LevelId, LevelPhase, NoiseKind, OneShotKind, JumpscareKind,
@@ -148,7 +148,8 @@ Rovloc/
     │       │       ├── LayoutSchema.luau   [P1] Blueprint types, shared geometry helpers, validator (tiling, doors, ducts, solvability)
     │       │       ├── ZoneGraph.luau      [P1] Rooms + portals (doors, grates, duct segments): solvability, hearing, EMF adjacency
     │       │       ├── LightingRig.luau    [P1] Baseline Atmosphere, ColorCorrection, Bloom, Terrain clouds
-    │       │       ├── LightingMood.luau   Which fixtures burn, how bright, flicker groups; each wing's colour cast + grade
+    │       │       ├── LightingMood.luau   Which fixtures burn, how bright, flicker groups; each wing's colour cast + grade;
+    │       │       │                            each level's Roblox render fitted to the web build (docs/LIGHTING-PARITY.md)
     │       │       ├── FixtureGlow.luau    Glow surfaces of a fixture (Neon tubes, lenses, self-lit exit letters) and the
     │       │       │                       curve the client dims them along with their light
     │       │       ├── SurfaceArt.luau     SurfaceGui paint kit: checkers, seams, hazard stripes, stains, grime, print
@@ -340,7 +341,8 @@ Rovloc/
                 │   │   │                                fixture glow (tubes dim, flicker and die with their light), area grade;
                 │   │   │                                BaseBrightness re-read live (the server kills burst bulbs for the run);
                 │   │   │                                nearest-N shadow budget, effects budget
-                │   │   ├── Film.luau               Per-level film grade: Atmosphere, grade, Bloom, SunRays, exposure easing
+                │   │   ├── Film.luau               Per-level film grade: Atmosphere, grade, Bloom, SunRays, exposure and
+                │   │   │                                ambient fills easing (the level's Roblox render + the Brightness setting)
                 │   │   └── Volumetrics.luau        Client-local moonlight through windows, light shafts (Beams), dust motes
                 │   ├── CosmeticWorldController.luau [P1] Skyline + non-interactive dressing from RunSeed
                 │   ├── DevToolsController.luau     [P1] Noise rings, ZoneGraph / VentGraph overlays, Creature billboard
@@ -373,7 +375,9 @@ Rovloc/
                 │   ├── PromptRenderer.luau         [P3] Custom prompt style, local per-perk durations, audience hiding, rings
                 │   ├── MobileControls.luau         [P3] Touch buttons rendered from InputConfig per context
                 │   ├── Captions.luau               [P3]
-                │   └── SettingsMenu.luau           [P3]
+                │   ├── SettingsMenu.luau           [P3]
+                │   └── SquadPanel.luau             Teammates top-right (name + ALIVE / DOWN / DEAD / WATCHING / IN THE
+                │                                       STAIRWELL / ESCAPED), dim when idle; the core player list is off
                 ├── Gameplay/
                 │   ├── VentController.luau         [P4] Entry / exit transitions, rail crawl input, duct audio bus
                 │   ├── JumpscareController.luau    [P5] Face lock, lunge, screech, flash

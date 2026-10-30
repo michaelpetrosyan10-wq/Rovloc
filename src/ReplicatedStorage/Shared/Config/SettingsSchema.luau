@@ -1,5 +1,6 @@
 --!strict
 -- Player settings: keys, ranges and defaults. SettingsController applies them; PlayerDataStore persists them.
+-- Brightness (-2..+2 around the graded default) goes to LightingController.SetBrightness.
 --
 -- Hidden entries (hidden = true) are saved and sanitized like every other setting but never drawn by SettingsMenu: the
 -- onboarding's progress (TutorialConfig.TutorialSetting: the walkthrough was finished or skipped; one Hint<Id> flag per
@@ -70,6 +71,9 @@ SettingsSchema.List = table.freeze({
 		default = 1,
 	},
 	{ key = "FlashScale", kind = "Number", label = "Settings.FlashScale", min = 0, max = 1, step = 0.05, default = 1 },
+	-- Steps around the lighting the game is graded to (0): each lifts or lowers the exposure and the ambient fill a
+	-- little (LightingMood.BrightnessStep), for dark or bright monitors.
+	{ key = "Brightness", kind = "Number", label = "Settings.Brightness", min = -2, max = 2, step = 1, default = 0 },
 	{
 		key = "MasterVolume",
 		kind = "Number",

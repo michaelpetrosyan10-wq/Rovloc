@@ -7,6 +7,8 @@
 -- a torch, a little right of and below the eye; its orientation chases the player's look with a slight lag (a
 -- damped slerp), pitched down a little while the torch is lowered for sprinting. The beam is filmic: a slightly warm
 -- white, a hot narrow core that falls off into the wide dim spill (the bloom catches the core where it lands close),
+-- both cones scaled by the camera level's torch gain (LightingController.GetRender().torch: Roblox's steeper falloff
+-- fitted to the browser build's beam, docs/LIGHTING-PARITY.md),
 -- and, when the render budget allows it, a faint visible cone in the haze: two layered camera-facing Beams with no
 -- texture, transparent at the lens, thinning out ahead, as bright as the light and the level's air
 -- (LightingController.GetFilm().shafts) allow.
@@ -35,6 +37,7 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Instances = require(ReplicatedStorage.Shared.Instances)
+local LightingMood = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingMood)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -98,7 +101,7 @@ local INNER_ANGLE = 38
 local INNER_RANGE = 60 -- SpotLight.Range maximum
 local INNER_BRIGHTNESS = 9
 local OUTER_ANGLE = 80
-local OUTER_RANGE = 48
+local OUTER_RANGE = LightingMood.TorchOuterRange -- the web's 48-stud cone under Roblox's steeper falloff
 local OUTER_BRIGHTNESS = 2.2
 -- Presence glow: a dim, short, unshadowed light around the player (on whether or not the torch is), so whatever is
 -- within arm's reach always reads in the dark without lighting up the room.
@@ -556,8 +559,9 @@ function Flashlight.new(player: Player): Light
 			local color = Flashlight.beamColor(batteryFraction)
 			inner.Enabled = output > 0.01
 			outer.Enabled = output > 0.01
-			inner.Brightness = INNER_BRIGHTNESS * output
-			outer.Brightness = OUTER_BRIGHTNESS * output
+			local gain = LightingController.GetRender().torch
+			inner.Brightness = INNER_BRIGHTNESS * output * gain
+			outer.Brightness = OUTER_BRIGHTNESS * output * gain
 			if inner.Color ~= color then
 				inner.Color = color
 				outer.Color = color

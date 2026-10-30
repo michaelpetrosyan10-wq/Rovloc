@@ -320,6 +320,22 @@ return {
 		t.truthy(LightingFilm.distance(frozen, from) < 1e-6, "no time, no change")
 	end,
 
+	["each level's Roblox render eases with the film and settles on it"] = function(t: Expect)
+		local from = LightingMood.render("Lobby")
+		local to = LightingMood.render("Level4_FloodedPool")
+		t.truthy(LightingFilm.renderDistance(from, to) > 0.05, "the lobby and the pool render apart")
+		t.eq(LightingFilm.renderDistance(to, to), 0)
+		local step = LightingFilm.stepRender(from, to, 1 / 60)
+		t.truthy(step.exposure < from.exposure and step.exposure > to.exposure, "a frame moves part of the way")
+		local current = from
+		for _ = 1, 60 * 12 do
+			current = LightingFilm.stepRender(current, to, 1 / 60)
+		end
+		t.truthy(LightingFilm.renderDistance(current, to) < 0.0015, "twelve seconds later it has settled")
+		local frozen = LightingFilm.stepRender(from, to, 0)
+		t.truthy(LightingFilm.renderDistance(frozen, from) < 1e-6, "no time, no change")
+	end,
+
 	["moonlight falls in and down through every window above grade"] = function(t: Expect)
 		for _, inward in { Vector3.new(0, 0, 1), Vector3.new(0, 0, -1), Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0) } do
 			local direction = Volumetrics.moonDirection(inward)

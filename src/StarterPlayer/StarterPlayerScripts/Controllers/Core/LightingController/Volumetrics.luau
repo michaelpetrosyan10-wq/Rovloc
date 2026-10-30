@@ -6,7 +6,8 @@
 --     SpotLight just outside the opening, aimed in and down along the moon. Only the nearest `windowLights` windows
 --     of the levels in focus burn, and only on levels whose film lets the moon in; the nearest `windowShadows` of
 --     those are shadowed, so the planks stripe the floor; an unshadowed spill (it lights its whole cone) burns at the
---     planks' open share instead. Spills fade in and out, and lightning surges through them.
+--     planks' open share instead, and every spill burns at its level's fixture gain (LightingMood.render), like the
+--     fixtures. Spills fade in and out, and lightning surges through them.
 --   * Shafts. The nearest `shafts` light sources (burning fixtures whose kind has a FixtureGlow cone, and lit
 --     windows) show a visible shaft: layered camera-facing Beams with no texture (a brighter core inside a fainter
 --     sheath, so the edge is soft) that fade in at the source and out toward the floor. A fixture's cone follows its
@@ -881,7 +882,9 @@ function Volumetrics.Step(dt: number, grade: LightingMood.Film, flash: number)
 		rig.alpha = MathUtil.approach(rig.alpha, if rig.want then 1 else 0, fade)
 		local light = rig.light
 		local moon = LightingMood.film(rig.spec.layoutId).moon
-		local brightness = rig.alpha * Volumetrics.moonBrightness(rig.shadowed, moon, flash)
+		-- the spill is one of the level's lights to the parity fit (LightingMood.render): it burns at the same gain
+		local gain = LightingMood.render(rig.spec.layoutId).fixtureGain
+		local brightness = rig.alpha * gain * Volumetrics.moonBrightness(rig.shadowed, moon, flash)
 		if light then
 			local on = brightness > WRITE_EPSILON
 			if light.Enabled ~= on then

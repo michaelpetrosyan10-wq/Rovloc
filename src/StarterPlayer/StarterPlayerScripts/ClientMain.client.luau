@@ -223,6 +223,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "SquadPanel",
+		load = function(): any
+			return require(script.Parent.Controllers.HUD.SquadPanel)
+		end,
+	},
+	{
 		name = "FirstTimeHints",
 		load = function(): any
 			return require(script.Parent.Controllers.HUD.FirstTimeHints)

@@ -95,11 +95,15 @@ function SettingsMenu.stepped(setting: SettingsSchema.NumberSetting, value: numb
 	return math.clamp(snapped + direction * setting.step, setting.min, setting.max)
 end
 
--- The value readout: as many decimals as the step needs.
+-- The value readout: as many decimals as the step needs; a setting centred on zero (Brightness) signs its steps.
 function SettingsMenu.format(setting: SettingsSchema.NumberSetting, value: number): string
 	local step = setting.step
 	if step >= 1 then
-		return string.format("%d", math.round(value))
+		local whole = math.round(value)
+		if setting.min < 0 and whole > 0 then
+			return string.format("+%d", whole)
+		end
+		return string.format("%d", whole)
 	elseif step >= 0.1 then
 		return string.format("%.1f", value)
 	end

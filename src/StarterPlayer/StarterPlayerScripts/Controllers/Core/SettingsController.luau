@@ -6,8 +6,8 @@
 --     against the schema (unknown keys, wrong types and NaN dropped; numbers clamped and snapped to their step). Keys
 --     the player already changed this session keep the local value.
 --   * Applying: bus volumes go to AudioBuses.setVolume (Body follows the Player volume), FlashScale to
---     LightingController.SetFlashScale; everything else (sensitivities, InvertY, BaseFov, MotionScale, Captions) is
---     read by its consumer through Get* and Changed.
+--     LightingController.SetFlashScale, Brightness to LightingController.SetBrightness; everything else
+--     (sensitivities, InvertY, BaseFov, MotionScale, Captions) is read by its consumer through Get* and Changed.
 --   * Set clamps / snaps per the schema, applies, fires Changed, and saves through SettingsSave 2 s after the last
 --     change (a slider drag sends one message, not hundreds).
 
@@ -119,6 +119,8 @@ local function apply(key: string, value: Value)
 		AudioBuses.setVolume(bus, value)
 	elseif key == "FlashScale" and type(value) == "number" then
 		LightingController.SetFlashScale(value)
+	elseif key == "Brightness" and type(value) == "number" then
+		LightingController.SetBrightness(value)
 	end
 end
 

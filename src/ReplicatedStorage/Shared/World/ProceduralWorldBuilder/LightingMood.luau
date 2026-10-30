@@ -27,11 +27,20 @@
 -- windows let in. The client eases every value toward the film of the level the camera is on (LightingController).
 -- Pure and deterministic (seeded by layout and light id), so every server builds the same school and the specs can
 -- check the result without building anything.
+--
+-- The browser build (web/) renders all of the above (the layouts, `resolve`, every film, LightingRig.Baseline: its
+-- export reads them) and is the look the game is graded to. Roblox draws the same data darker: its ColorCorrection
+-- contrast pivots at mid-grey where the web's pivots in the dark frame, its Future falloff is steeper, the web trims
+-- its exposure up and fills the gaps between pools with a stronger ambient. So each level also has a Roblox render
+-- (`render`): the exposure, grade, ambient, haze, fixture and flashlight gains that reproduce the web's frame on
+-- Roblox. The client writes those instead of the raw film and rig values (LightingController/Film); the shared data
+-- above stays the web export's source. Derivation and the numbers per level: docs/LIGHTING-PARITY.md.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local LightingRig = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingRig)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 
 export type LevelMood = {
@@ -76,6 +85,34 @@ export type Film = {
 	shafts: number, -- visible light-shaft strength in this air (fixture haze cones, window rays, the torch cone)
 	dust: number, -- dust-mote density multiplier
 	moon: number, -- moonlight through the boarded windows (multiplier)
+}
+
+-- One level's Roblox render: the values the client writes so the frame matches the web build's (see the header).
+export type Render = {
+	exposure: number, -- Lighting.ExposureCompensation (absolute EV): the web's rig + film + its exposure trim
+	contrast: number, -- BaseColorCorrection.Contrast: Roblox's mid-grey contrast fitted to the web's S-curve
+	brightness: number, -- BaseColorCorrection.Brightness: the offset that completes that fit (the film's lift in it)
+	tint: Color3, -- BaseColorCorrection.TintColor: white, the level's colour is the area grade's alone (as on the web)
+	ambient: Color3, -- Lighting.Ambient: the web's ambient fill under its mean ambient occlusion
+	outdoorAmbient: Color3, -- Lighting.OutdoorAmbient: the web's outdoor fill plus the ambient on open ground
+	haze: number, -- Atmosphere.Haze (the web's fog has no haze layer; Density stays the film's, ported 1:1)
+	fixtureGain: number, -- Brightness multiplier of every fixture and moonlight spill of the level (falloff fit)
+	fixtureRange: number, -- Range multiplier of every fixture of the level (falloff fit, still capped at MAX_RANGE)
+	torch: number, -- Brightness multiplier of the flashlight cones while the camera is on the level
+}
+
+-- A level's departures from the base render (every field optional).
+type RenderPatch = {
+	exposure: number?,
+	contrast: number?,
+	brightness: number?,
+	tint: Color3?,
+	ambient: Color3?,
+	outdoorAmbient: Color3?,
+	haze: number?,
+	fixtureGain: number?,
+	fixtureRange: number?,
+	torch: number?,
 }
 
 -- A level's departures from the base film (every field optional).
@@ -384,6 +421,97 @@ end
 -- Outside every building (the street, the sky, the parachute drop) the camera sees the roof's storm.
 local OUTDOOR_FILM: Film = FILMS.Level5_Roof
 
+-- The web's exposure on top of the rig and film (web/src/engine/lighting.js ExposureTrim): +0.25 EV everywhere and
+-- +0.8 EV more in the lobby. Its torch is not trimmed (it keeps the brightness it was tuned with).
+local WEB_EXPOSURE_TRIM: { [string]: number } = { base = 0.25, Lobby = 0.8 }
+-- The web's contrast pivot (web/src/engine/renderer.js): the S-curve turns where this dark frame's lit surfaces are.
+local WEB_CONTRAST_PIVOT = 0.16
+
+-- The Roblox render of the base film. Every number is fitted to the web build (docs/LIGHTING-PARITY.md):
+--   exposure      0.3 rig + film exposure + the web's trim;
+--   contrast /    a least-squares fit of Roblox's linear contrast about 0.5 plus its additive Brightness to the
+--   brightness    web's lift + S-curve about 0.16, over the night frame's display range 0..0.5 (worst error under
+--                 3/255); the old 0.2 about mid-grey sent everything under ~0.07 to pure black;
+--   ambient       the web's fill (4.5x the rig's Ambient in linear light) under its mean ambient occlusion (0.8):
+--                 Roblox has no AO, so the flat fill sits at the web's average;
+--   outdoor       the web's outdoor fill (2.2x the rig's OutdoorAmbient) plus its ambient on open ground (AO 0.85);
+--   haze          0.4x the film's: the web's fog is the film's Density alone, Roblox's Haze adds a night-dark layer;
+--   fixtures      Brightness and Range factors that fit Roblox's steeper falloff to the web's pools on each level's
+--                 floors (mean, p10, p50 and p90 within 3/255 of the web in the parity model);
+--   torch         the cones' Brightness fitted to the web's beam from 4 to 40 studs (the web's softer falloff throws
+--                 further; the hotspot clips on both).
+local BASE_RENDER: Render = table.freeze({
+	exposure = 0.63,
+	contrast = 0.145,
+	brightness = 0.069,
+	tint = rgb(255, 255, 255),
+	ambient = rgb(51, 56, 70),
+	outdoorAmbient = rgb(85, 93, 115),
+	haze = 0.76,
+	fixtureGain = 1.6,
+	fixtureRange = 1.05,
+	torch = 1.7,
+})
+
+local RENDER_PATCHES: { [string]: RenderPatch } = {
+	-- The web lifts the safe lobby a further 0.8 EV and leaves its torch untrimmed, so the beam scales back here.
+	Lobby = {
+		exposure = 1.45,
+		contrast = 0.1,
+		brightness = 0.053,
+		haze = 0.56,
+		fixtureGain = 1.3,
+		fixtureRange = 1.1,
+		torch = 1.05,
+	},
+	-- Low bulbs and boilers close to the floor: the falloffs differ least, so the smallest gain.
+	Level0_Basement = { exposure = 0.6, haze = 0.96, fixtureGain = 1.25, fixtureRange = 1.1 },
+	Level1_Hallways = { exposure = 0.63, fixtureGain = 1.65 },
+	Level2_ScienceHall = { exposure = 0.65, haze = 0.68, fixtureGain = 1.65 },
+	-- The gym's high ceiling: longer throws, so more of the gain goes into reach.
+	Level3_Gymnasium = { exposure = 0.63, haze = 0.84, fixtureGain = 1.5, fixtureRange = 1.1 },
+	Level4_FloodedPool = { exposure = 0.67, contrast = 0.155, brightness = 0.074, haze = 1.04, fixtureGain = 1.65 },
+	-- Open sky: the outdoor fill does the work; the few lamps need the most gain over their short reach.
+	Level5_Roof = {
+		exposure = 0.75,
+		contrast = 0.115,
+		brightness = 0.058,
+		haze = 0.88,
+		fixtureGain = 1.75,
+		fixtureRange = 1,
+	},
+}
+
+local function patchedRender(patch: RenderPatch): Render
+	local base = BASE_RENDER
+	return table.freeze({
+		exposure = patch.exposure or base.exposure,
+		contrast = patch.contrast or base.contrast,
+		brightness = patch.brightness or base.brightness,
+		tint = patch.tint or base.tint,
+		ambient = patch.ambient or base.ambient,
+		outdoorAmbient = patch.outdoorAmbient or base.outdoorAmbient,
+		haze = patch.haze or base.haze,
+		fixtureGain = patch.fixtureGain or base.fixtureGain,
+		fixtureRange = patch.fixtureRange or base.fixtureRange,
+		torch = patch.torch or base.torch,
+	})
+end
+
+local RENDERS: { [string]: Render } = {}
+for layoutId, patch in RENDER_PATCHES do
+	RENDERS[layoutId] = patchedRender(patch)
+end
+local OUTDOOR_RENDER: Render = RENDERS.Level5_Roof
+
+-- The Brightness setting (SettingsSchema, -2..+2 steps around the render): per step, this much exposure (EV) and this
+-- share of the ambient fill, so a dark monitor can lift the shadows without flattening the pools.
+local BRIGHTNESS_STEP = table.freeze({ exposure = 0.2, ambient = 0.15 })
+
+-- The flashlight's wide cone reaches the SpotLight maximum on Roblox (the web's 48 studs carry further under its
+-- softer falloff; the fit puts the outer cone at 60 on every level).
+local TORCH_OUTER_RANGE = MAX_RANGE
+
 local LightingMood = {}
 
 LightingMood.Levels = LEVELS
@@ -473,6 +601,61 @@ function LightingMood.film(layoutId: string?): Film
 		return OUTDOOR_FILM
 	end
 	return FILMS[layoutId] or BASE_FILM
+end
+
+LightingMood.BaseRender = BASE_RENDER
+LightingMood.OutdoorRender = OUTDOOR_RENDER
+LightingMood.WebExposureTrim = table.freeze(WEB_EXPOSURE_TRIM)
+LightingMood.WebContrastPivot = WEB_CONTRAST_PIVOT
+LightingMood.BrightnessStep = BRIGHTNESS_STEP
+LightingMood.TorchOuterRange = TORCH_OUTER_RANGE
+LightingMood.MaxRange = MAX_RANGE
+
+-- The Roblox render for a camera on `layoutId` (the outdoor storm's outside every building; the base render for a
+-- layout without its own film).
+function LightingMood.render(layoutId: string?): Render
+	if not layoutId then
+		return OUTDOOR_RENDER
+	end
+	return RENDERS[layoutId] or BASE_RENDER
+end
+
+-- The exposure (EV) the web renders `layoutId` at: the rig's, the film's trim and the web's own trim.
+function LightingMood.webExposure(layoutId: string?): number
+	local trim = WEB_EXPOSURE_TRIM.base + (if layoutId then WEB_EXPOSURE_TRIM[layoutId] or 0 else 0)
+	return LightingRig.Baseline.ExposureCompensation + LightingMood.film(layoutId).exposure + trim
+end
+
+-- The web's grade of a display value `x` (0..1): the film's lift, then contrast as two power curves meeting at the
+-- pivot with slope 1 + contrast (web/src/engine/renderer.js).
+function LightingMood.webGrade(x: number, film: Film): number
+	local c = math.clamp(x + film.lift, 0, 1)
+	local k = math.max(0.2, 1 + film.contrast)
+	local pivot = WEB_CONTRAST_PIVOT
+	if c < pivot then
+		return pivot * (c / pivot) ^ k
+	end
+	return 1 - (1 - pivot) * ((1 - c) / (1 - pivot)) ^ k
+end
+
+-- Roblox's ColorCorrectionEffect on a display value `x`: contrast about mid-grey, then the additive brightness.
+function LightingMood.robloxGrade(x: number, contrast: number, brightness: number): number
+	return math.clamp((x - 0.5) * (1 + contrast) + 0.5 + brightness, 0, 1)
+end
+
+-- The Brightness setting's `step` as an exposure offset (EV) and an ambient multiplier.
+function LightingMood.brightnessAdjust(step: number): (number, number)
+	local value = if step == step then step else 0
+	return value * BRIGHTNESS_STEP.exposure, math.max(0, 1 + value * BRIGHTNESS_STEP.ambient)
+end
+
+-- `color` (an ambient fill) with its light scaled by `scale` (in linear light, kept in range).
+function LightingMood.scaleFill(color: Color3, scale: number): Color3
+	if scale == 1 then
+		return color
+	end
+	local k = math.max(0, scale) ^ (1 / 2.2)
+	return Color3.new(math.min(1, color.R * k), math.min(1, color.G * k), math.min(1, color.B * k))
 end
 
 -- Moonlight through the boarded windows (a level's `film.moon` scales its brightness).

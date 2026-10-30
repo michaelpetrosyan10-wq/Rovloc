@@ -2,12 +2,16 @@
 -- LightingMood: the built lighting is dark but readable — a real share of each level's fixtures burn, the story's
 -- dark rooms and scripted lights keep their layout marks, wayfinding lights always burn, every wing casts its own
 -- colour (green-teal school floors, amber basement, cyan pool) with a gentle grade to match, and it's deterministic.
+-- Each level's Roblox render reproduces the browser build's frame (docs/LIGHTING-PARITY.md): its exposure, its
+-- dark-frame contrast curve, a fill that keeps the gaps readable, and the Brightness setting's steps around it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local LightingMood = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingMood)
+local LightingRig = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingRig)
+local SettingsSchema = require(ReplicatedStorage.Shared.Config.SettingsSchema)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
 type Expect = SpecRunner.Expect
@@ -151,6 +155,80 @@ return {
 			t.truthy(basement.dust > lobby.dust, "the basement is the dustiest")
 			t.eq(basement.moon, 0, "no moonlight in the basement")
 		end
+	end,
+
+	["each level's Roblox render is the web's exposure and grade"] = function(t: Expect)
+		local places: { { id: string? } } = { { id = nil } }
+		for _, layout in Builder.layouts() do
+			local id: string = layout.id
+			table.insert(places, { id = id })
+		end
+		for _, place in places do
+			local id = place.id
+			local label = id or "outdoors"
+			local film = LightingMood.film(id)
+			local render = LightingMood.render(id)
+			t.near(render.exposure, LightingMood.webExposure(id), 1e-6, label .. ": the web's exposure, trim included")
+			t.truthy(render.exposure > LightingRig.Baseline.ExposureCompensation + film.exposure, label .. ": brighter")
+			local worst = 0
+			for step = 1, 50 do
+				local x = step / 100
+				local web = LightingMood.webGrade(x, film)
+				local roblox = LightingMood.robloxGrade(x, render.contrast, render.brightness)
+				worst = math.max(worst, math.abs(web - roblox))
+			end
+			t.truthy(worst < 0.015, string.format("%s: grade within 4/255 of the web's (worst %.4f)", label, worst))
+			-- the cause: the film's own contrast about mid-grey sends the dark frame to black on Roblox
+			t.eq(LightingMood.robloxGrade(0.04, film.contrast, film.lift), 0, label .. ": the old grade crushed 0.04")
+			t.truthy(LightingMood.webGrade(0.04, film) > 0.03, label .. ": the web keeps it")
+			t.truthy(LightingMood.robloxGrade(0.04, render.contrast, render.brightness) > 0.03, label .. ": now kept")
+			t.eq(render.tint, Color3.new(1, 1, 1), label .. ": the area grade carries the colour, as on the web")
+			t.truthy(render.haze > 0 and render.haze < film.haze, label .. ": less night-dark haze than the film")
+			t.truthy(render.fixtureGain >= 1 and render.fixtureGain <= 2, label .. ": fixture gain")
+			t.truthy(render.fixtureRange >= 1 and render.fixtureRange <= 1.2, label .. ": fixture reach")
+			t.truthy(render.torch >= 0.8 and render.torch <= 2, label .. ": torch gain")
+		end
+		t.eq(LightingMood.render(nil), LightingMood.OutdoorRender, "outdoors is the storm's render")
+		t.eq(LightingMood.render("NoSuchLevel"), LightingMood.BaseRender, "an unknown layout takes the base render")
+		t.truthy(LightingMood.render("Lobby").torch < LightingMood.render("Level1_Hallways").torch, "untrimmed torch")
+		t.truthy(LightingMood.TorchOuterRange <= LightingMood.MaxRange, "the torch stays within a SpotLight's reach")
+	end,
+
+	["the fills keep the gaps between pools readable, not flat"] = function(t: Expect)
+		local base = LightingRig.Baseline
+		for _, render in { LightingMood.BaseRender, LightingMood.OutdoorRender, LightingMood.render("Lobby") } do
+			local fill = render.ambient
+			t.truthy(fill.R > base.Ambient.R and fill.G > base.Ambient.G and fill.B > base.Ambient.B, "lifted")
+			t.truthy(math.max(fill.R, fill.G, fill.B) < 0.35, "still a night fill")
+			t.truthy(fill.B > fill.R, "cold, like the rig's")
+			local outdoor = render.outdoorAmbient
+			t.truthy(outdoor.R >= fill.R and outdoor.G >= fill.G and outdoor.B >= fill.B, "open sky reads lighter")
+		end
+	end,
+
+	["the Brightness setting steps the exposure and the fill around the render"] = function(t: Expect)
+		local setting = SettingsSchema.get("Brightness")
+		t.truthy(setting and setting.kind == "Number", "a number setting")
+		if setting and setting.kind == "Number" then
+			t.eq(setting.default, 0, "the graded look by default")
+			t.eq(setting.min, -2)
+			t.eq(setting.max, 2)
+			t.eq(setting.step, 1)
+		end
+		local exposure, fill = LightingMood.brightnessAdjust(0)
+		t.eq(exposure, 0)
+		t.eq(fill, 1)
+		local previousExposure, previousFill = -math.huge, -math.huge
+		for step = -2, 2 do
+			local e, f = LightingMood.brightnessAdjust(step)
+			t.truthy(e > previousExposure and f > previousFill, "every step brighter than the last")
+			t.truthy(math.abs(e) <= 0.5 and f > 0.5 and f < 1.5, "small steps")
+			previousExposure, previousFill = e, f
+		end
+		local color = Color3.fromRGB(51, 56, 70)
+		t.eq(LightingMood.scaleFill(color, 1), color)
+		t.truthy(LightingMood.scaleFill(color, 1.3).B > color.B and LightingMood.scaleFill(color, 0.7).B < color.B)
+		t.truthy(LightingMood.scaleFill(Color3.new(0.9, 0.9, 0.9), 4).R <= 1, "kept in range")
 	end,
 
 	["key lights burn hard in tight pools"] = function(t: Expect)

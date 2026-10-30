@@ -38,10 +38,16 @@
 --     the light budget still glow in the distance.
 --   * Area grade. A client-local ColorCorrectionEffect eases toward the tint of the level the camera is on
 --     (LightingMood.grade: green-teal on the school floors, amber in the basement, cyan at the pool).
---   * Film (LightingController/Film). The server's Atmosphere, base grade, bloom, sun rays and the exposure ease
---     toward the film of the level the camera is on (LightingMood.film: haze, bloom, contrast, lift, exposure trim);
---     GetFilm hands the grade on screen to PanicVFX (its resting far-focus depth of field and vignette) and the torch
---     (how much its haze cone shows).
+--   * Film (LightingController/Film). The server's Atmosphere, base grade, bloom, sun rays, the exposure and the
+--     ambient fills ease toward the level the camera is on: its film (LightingMood.film: haze, bloom, saturation) as
+--     Roblox renders it to match the browser build (LightingMood.render: exposure, contrast and brightness, fills,
+--     haze; docs/LIGHTING-PARITY.md), offset by the player's Brightness setting (SetBrightness). GetFilm hands the
+--     grade on screen to PanicVFX (its resting far-focus depth of field and vignette) and the torch (how much its haze
+--     cone shows); GetRender hands the torch its gain.
+--   * Parity gains. Every fixture burns at its level's LightingMood.render fixtureGain on top of everything above
+--     (flicker, power, overrides and bursts keep their ratios: the gain multiplies the written Brightness only, never
+--     the glow level) and reaches fixtureRange times its built Range (capped at 60), so Roblox's steeper falloff
+--     lights the same pools as the web's bake.
 --   * Volumetrics (LightingController/Volumetrics). Moonlight spills through the nearest windows (lightning surges
 --     through them), visible light shafts under the nearest burning fixtures and through the lit windows, and dust
 --     motes in the nearest shafts, every count from SetEffectsBudget.
@@ -149,6 +155,8 @@ type Entry = {
 	color: Color3,
 	childConnection: RBXScriptConnection?,
 	baseConnection: RBXScriptConnection?,
+	gain: number, -- LightingMood.render(layoutId).fixtureGain: the written Brightness's multiplier
+	reach: number, -- LightingMood.render(layoutId).fixtureRange: the built Range's multiplier
 	glows: { BasePart }, -- FixtureGlow surfaces
 	guis: { SurfaceGui }, -- FixtureGlow self-lit faces
 	lit: Color3?, -- the glow's full colour (from the primary light)
@@ -241,6 +249,7 @@ local entryList: { Entry } = {}
 local byId: { [string]: Entry } = {}
 local originalRatio: { [Light]: number } = setmetatable({}, { __mode = "k" }) :: any
 local originalShadows: { [Light]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+local originalRange: { [Light]: number } = setmetatable({}, { __mode = "k" }) :: any
 
 -- Active set
 local activeList: { Entry } = {}
@@ -792,7 +801,7 @@ end
 local function updateEntry(entry: Entry, t: number, now: number)
 	local brightness = entryBrightness(entry, t, now)
 	for _, rec in entry.lights do
-		writeRec(rec, brightness * rec.ratio)
+		writeRec(rec, brightness * rec.ratio * entry.gain)
 	end
 	local level = FixtureGlow.level(brightness, entry.base)
 	writeGlow(entry, level)
@@ -915,6 +924,32 @@ end
 -- Registry
 --------------------------------------------------------------------------------
 
+-- A Light's Range (every lighting class has one; the base class does not declare it).
+local function lightRange(light: Light): number?
+	if light:IsA("PointLight") then
+		return (light :: PointLight).Range
+	elseif light:IsA("SpotLight") then
+		return (light :: SpotLight).Range
+	elseif light:IsA("SurfaceLight") then
+		return (light :: SurfaceLight).Range
+	end
+	return nil
+end
+
+local function setLightRange(light: Light, range: number)
+	local current = lightRange(light)
+	if current == nil or math.abs(current - range) <= 1e-3 then
+		return
+	end
+	if light:IsA("PointLight") then
+		(light :: PointLight).Range = range
+	elseif light:IsA("SpotLight") then
+		(light :: SpotLight).Range = range
+	elseif light:IsA("SurfaceLight") then
+		(light :: SurfaceLight).Range = range
+	end
+end
+
 local function addLight(entry: Entry, light: Light)
 	for _, rec in entry.lights do
 		if rec.light == light then
@@ -939,6 +974,16 @@ local function addLight(entry: Entry, light: Light)
 	if shadows == nil then
 		shadows = light.Shadows
 		originalShadows[light] = shadows
+	end
+	local built: number? = originalRange[light]
+	if built == nil then
+		built = lightRange(light)
+		if built then
+			originalRange[light] = built
+		end
+	end
+	if built then
+		setLightRange(light, math.min(LightingMood.MaxRange, built * entry.reach))
 	end
 	local rec: LightRec = {
 		light = light,
@@ -1008,12 +1053,14 @@ local function register(instance: Instance)
 		toLevel = if to ~= "" then to else nil
 	end
 	local group = Attributes.getString(instance, W.FlickerGroup, "")
+	local layoutId = Attributes.getString(instance, W.LevelId, "")
+	local render = LightingMood.render(layoutId)
 	local entry: Entry = {
 		fixture = instance,
 		id = instance.Name,
 		kind = Attributes.getString(instance, W.LightKind, ""),
 		position = instance.CFrame.Position,
-		layoutId = Attributes.getString(instance, W.LevelId, ""),
+		layoutId = layoutId,
 		fromLevel = fromLevel,
 		toLevel = toLevel,
 		group = if group ~= "" then group else nil,
@@ -1025,6 +1072,8 @@ local function register(instance: Instance)
 		color = instance.Color,
 		childConnection = nil,
 		baseConnection = nil,
+		gain = render.fixtureGain,
+		reach = render.fixtureRange,
 		glows = {},
 		guis = {},
 		lit = nil,
@@ -1587,6 +1636,19 @@ end
 -- The film grade on screen right now (LightingMood.film of the camera's level, mid-ease when it just changed).
 function LightingController.GetFilm(): LightingMood.Film
 	return Film.Current()
+end
+
+-- The Roblox render on screen right now (LightingMood.render of the camera's level, mid-ease when it just changed).
+function LightingController.GetRender(): LightingMood.Render
+	return Film.CurrentRender()
+end
+
+-- The Brightness setting (P3 settings): -2..+2 steps of exposure and ambient fill around the render.
+function LightingController.SetBrightness(step: number)
+	if type(step) ~= "number" or not MathUtil.isFinite(step) then
+		return
+	end
+	Film.SetBrightness(step)
 end
 
 -- Pins a fixture (by its light id = fixture name) to `brightness` (the primary light's value; fills keep their

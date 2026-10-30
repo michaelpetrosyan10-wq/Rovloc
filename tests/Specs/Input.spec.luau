@@ -1,7 +1,7 @@
 --!strict
 -- Input rules: the context stack (resolveContext + push / pop by token), InputConfig's binding tables per context,
--- which bindings sink the default controls' keys, device detection, action phases (Hold / Tap, injected touch
--- presses, release on a context change) and the cursor's ref-counted free requests.
+-- which bindings sink the default controls' keys, Tab reaching the Objective action, device detection, action phases
+-- (Hold / Tap, injected touch presses, release on a context change) and the cursor's ref-counted free requests.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterPlayer = game:GetService("StarterPlayer")
@@ -13,6 +13,7 @@ local SpecRunner = require(script.Parent.Parent.SpecRunner)
 local Core = StarterPlayer.StarterPlayerScripts.Controllers.Core
 local CursorController = require(Core.CursorController)
 local InputController = require(Core.InputController)
+local HUD = require(StarterPlayer.StarterPlayerScripts.Controllers.HUD)
 
 type Expect = SpecRunner.Expect
 
@@ -110,6 +111,29 @@ return {
 		do
 			t.falsy(InputController.sinks(InputConfig.Bindings[action]), action .. " passes")
 		end
+	end,
+
+	["Tab and d-pad right reach the Objective action, not the core player list"] = function(t: Expect)
+		local objective = InputConfig.Bindings.Objective
+		t.truthy(objective and table.find(objective.keyboard, Enum.KeyCode.Tab) ~= nil, "Tab is bound to Objective")
+		t.truthy(objective and table.find(objective.gamepad, Enum.KeyCode.DPadRight) ~= nil, "so is d-pad right")
+		t.truthy(objective and #objective.contexts >= 3, "on foot, in vents and swimming")
+		local live: { Enums.InputContext } = if objective then objective.contexts else {}
+		for _, context: Enums.InputContext in live do
+			t.truthy(InputController.isLive("Objective", context), "live " .. context)
+			for action, binding in InputConfig.Bindings do
+				if action ~= "Objective" and table.find(binding.contexts, context) ~= nil then
+					t.falsy(table.find(binding.keyboard, Enum.KeyCode.Tab) ~= nil, action .. " also takes Tab")
+				end
+			end
+		end
+		t.truthy(InputConfig.ActionPriority > Enum.ContextActionPriority.High.Value, "above the default controls")
+		t.truthy(
+			table.find(HUD.DisabledCoreGuis, Enum.CoreGuiType.PlayerList) ~= nil,
+			"the player list (the core owner of Tab) is turned off"
+		)
+		t.truthy(table.find(HUD.DisabledCoreGuis, Enum.CoreGuiType.Health) ~= nil, "health bar still off")
+		t.truthy(table.find(HUD.DisabledCoreGuis, Enum.CoreGuiType.Backpack) ~= nil, "backpack still off")
 	end,
 
 	["the last input type decides the device"] = function(t: Expect)

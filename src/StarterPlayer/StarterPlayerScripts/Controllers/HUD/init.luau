@@ -4,7 +4,9 @@
 --   * Screens. "HUD" (core-UI safe area) holds the content; "HUDOverlay" (full screen, under it) holds the edge
 --     vignette of the downed state. Text and panels sit on a scaled layer (UIKit.scaleFor the viewport); the touch
 --     buttons are laid out in screen pixels by MobileControls.
---   * Core UI. The Roblox health bar and backpack are disabled (retried until the core scripts accept it).
+--   * Core UI. The Roblox health bar, backpack and player list are disabled (retried until the core scripts accept
+--     it). The player list owned Tab, which is the Objective action here (the nudge toward the goal); the squad's
+--     names and states are on SquadPanel instead.
 --   * Toasts. Notify messages from the server (claimed from DevToolsController through SetNotifyHandler) and
 --     HUD.Toast calls appear top-centre on a dark strip that fades at its ends; at most three, repeats refresh.
 --   * Hint. HUD.ShowHint(key, seconds?, ...) shows one centred narrative line (Hud.* keys) above the captions; a new
@@ -92,11 +94,14 @@ local DOWNED_FADE_OUT = 1.2
 local CENTRE_BOTTOM = 96 -- design px between the safe area's bottom and the hint / caption column
 local TOP_MARGIN = 10
 
-local CORE_GUIS: { Enum.CoreGuiType } = { Enum.CoreGuiType.Health, Enum.CoreGuiType.Backpack }
+local CORE_GUIS: { Enum.CoreGuiType } =
+	{ Enum.CoreGuiType.Health, Enum.CoreGuiType.Backpack, Enum.CoreGuiType.PlayerList }
 
 local HUD = {}
 
 HUD.Name = "HUD"
+-- The core GUIs Start turns off (specs check Tab is free for the Objective action).
+HUD.DisabledCoreGuis = table.freeze(table.clone(CORE_GUIS))
 
 local serviceTrove = Trove.new()
 local localPlayer: Player? = Players.LocalPlayer

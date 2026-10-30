@@ -218,16 +218,12 @@ local function readDoors(): (number?, boolean)
 	return deadline, sealing
 end
 
--- Inside the vestibule's volume; a player without a body (spectating) waits with the squad.
-local function localInside(): boolean
-	local player = localPlayer
-	if not player then
-		return true
-	end
+-- Whether `player`'s living body stands in the current level's exit vestibule (nil: no body to place).
+local function bodyInside(player: Player): boolean?
 	local root = Instances.characterRoot(player)
 	local humanoid = Instances.characterHumanoid(player)
 	if not root or not humanoid or humanoid.Health <= 0 then
-		return true
+		return nil
 	end
 	local position = root.CFrame.Position
 	local feet = position - Vector3.new(0, humanoid.HipHeight + root.Size.Y * 0.5, 0)
@@ -237,6 +233,16 @@ local function localInside(): boolean
 		end
 	end
 	return false
+end
+
+-- Inside the vestibule's volume; a player without a body (spectating) waits with the squad.
+local function localInside(): boolean
+	local player = localPlayer
+	if not player then
+		return true
+	end
+	local inside = bodyInside(player)
+	return inside == nil or inside
 end
 
 --------------------------------------------------------------------------------
@@ -342,6 +348,16 @@ local function step(dt: number)
 	current.bar.root.Visible = state == "Waiting"
 	current.bar:SetColor(if inside then Palette.Amber else Palette.Ember)
 	current.bar:SetFraction(AirlockController.remainingFraction(remaining))
+end
+
+--------------------------------------------------------------------------------
+-- Public API
+--------------------------------------------------------------------------------
+
+-- True when `player`'s body stands in the current level's exit vestibule (SquadPanel's "in the stairwell"); false
+-- without a body or outside a run's exit.
+function AirlockController.InVestibule(player: Player): boolean
+	return bodyInside(player) == true
 end
 
 --------------------------------------------------------------------------------

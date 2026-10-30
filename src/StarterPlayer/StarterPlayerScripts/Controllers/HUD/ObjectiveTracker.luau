@@ -37,6 +37,8 @@
 -- Cutscene / Jumpscare control lock, while the onboarding screens are up, and while this player is not playing
 -- (downed: DownedController owns the screen; spectating; dead).
 --
+-- GetTrackerAlpha tells SquadPanel how much of the sheet shows (they share the top-right corner on touch).
+--
 -- Pure (tests/Specs/Onboarding.spec.luau): levelObjective, lobbyObjective, trackerAlpha, direction, bearing, beyond,
 -- floorCard, floorCardAlpha, meters, nearest.
 
@@ -1171,6 +1173,16 @@ local function step(dt: number)
 			stroke.Transparency = UIKit.fade(0, markerAlpha)
 		end
 	end
+end
+
+--------------------------------------------------------------------------------
+-- Public API
+--------------------------------------------------------------------------------
+
+-- How much of the tracker sheet shows (0 hidden .. 1 shown) and whether it sits top-right (touch): SquadPanel shares
+-- that corner on touch and keeps out of the sheet's way.
+function ObjectiveTracker.GetTrackerAlpha(): (number, boolean)
+	return trackerAlpha, InputController.GetDevice() == "Touch"
 end
 
 --------------------------------------------------------------------------------
