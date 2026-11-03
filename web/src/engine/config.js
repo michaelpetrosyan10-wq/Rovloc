@@ -257,9 +257,11 @@ export const SettingsList = Object.freeze([
   { key: 'HintAirlock', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
 ]);
 
-/** WorldConfig.luau (the parts the engine needs; the full layout comes with the world data). */
+/**
+ * WorldConfig.luau (the parts the engine needs; the full layout, the footprint included, comes with the world data in
+ * world.json's `worldConfig`).
+ */
 export const WorldConfig = Object.freeze({
-  FootprintSize: [240, 160],
   SlabThickness: 2,
   GroundY: 18,
   Levels: Object.freeze({

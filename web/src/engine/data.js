@@ -11,7 +11,8 @@
 //   chunk.attributes.uv         Float32Array  uv         studs along the face (texture repeat = uv / studsPerTile)
 //   chunk.attributes.color      Uint8Array    rgb        normalized sRGB part colour (albedo tint)
 //   chunk.attributes.bakedLight Uint16Array   rgb        normalized: linear baked light / LIGHT_SCALE (x4 in GLSL)
-//   chunk.attributes.flicker    Uint8Array    (g, s)     NOT normalized: flicker group id (0 = steady), share 0..255
+//   chunk.attributes.flicker    Uint16Array   (g, s)     NOT normalized: flicker group id (0 = steady, world-wide,
+//                                                     up to FLICKER_GROUP_LIMIT), that group's share 0..255
 //   chunk.attributes.alpha      Uint8Array    a          transparent chunks only: 1 - Transparency (normalized)
 //   chunk.index                 Uint16Array              triangle list
 //
@@ -19,8 +20,14 @@
 // a.normalized)` builds it. Baked light on disk is sqrt-encoded bytes (dark tones keep their precision); the decoder
 // expands it to 16-bit linear so shaders read `bakedLight * 4.0`.
 
-/** Format version written by bake.mjs and checked by decodeWorld. */
-export const FORMAT_VERSION = 2;
+/** Format version written by bake.mjs and checked by decodeWorld (3: 16-bit flicker group ids). */
+export const FORMAT_VERSION = 3;
+
+/**
+ * The highest flicker group id: ids are numbered world-wide (0 = steady) and a vertex stores its group in 16 bits, so
+ * every floor shares one namespace of 65535 groups (the engine's flicker texture holds them in rows of 256).
+ */
+export const FLICKER_GROUP_LIMIT = 65535;
 
 /** Baked light range: stored value 1.0 means LIGHT_SCALE Roblox light units. */
 export const LIGHT_SCALE = 4;
@@ -35,7 +42,8 @@ export const STREAM_TYPES = {
   uv: 'i16', // delta-coded per chunk and component (as u16 wrap-around)
   col: 'u8',
   lit: 'u8', // sqrt-encoded baked light: byte = 255 * sqrt(L / LIGHT_SCALE), delta-coded per chunk (u8 wrap)
-  flk: 'u8', // (group, share) pairs
+  flk: 'u16', // flicker group id per vertex (0 = steady)
+  fsh: 'u8', // that group's share of the vertex's light (0..255)
   idx: 'u16', // triangle-delta coded per chunk: (a - previous a, b - a, c - a), u16 wrap-around
   cpos: 'u16', // collision positions (per level quant), delta-coded
   cidx: 'u32', // triangle-delta coded per level (u32 wrap-around)
@@ -187,7 +195,7 @@ const ARRAY_TYPES = {
  * @property {boolean} shadows
  * @property {boolean} broken     dark at the start of a run
  * @property {boolean} baked      included in the vertex light
- * @property {number} group       flicker group id (0 = steady)
+ * @property {number} group       flicker group id (0 = steady): meta.flickerGroups[group]
  * @property {string|null} level  LevelId / Lobby
  * @property {string|null} room   ZoneId
  * @property {number|null} entity entity index when the light belongs to an entity
@@ -199,6 +207,9 @@ const ARRAY_TYPES = {
  * @property {string|null} name   the Roblox FlickerGroup (flicker is a pure function of (seed, name, time)), or
  *                                "Scripted:<owner>" for lights a scene drives (Floodlights, ClassroomGlow)
  * @property {'steady'|'flicker'|'scripted'} kind
+ * @property {string|null} level  the LevelId of its fixtures
+ * @property {string|null} family a tunnel floor's power family (its LevelId) for "Mains:" / "Circuit:" groups: the
+ *                                bake pools the family's light per vertex and per probe, else null
  * @property {number} initial     level at the start of a run (0: the pool floodlights before the switch)
  * @property {number[]} lights    indices into meta.lights
  */
@@ -251,6 +262,16 @@ const LIGHT_LUT = (() => {
   return lut;
 })();
 
+/** One chunk's (group, share) pairs: the vertex attribute `flicker` from the `flk` and `fsh` streams. */
+function flickerPairs(s, v0, n) {
+  const out = new Uint16Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    out[i * 2] = s.flk[v0 + i];
+    out[i * 2 + 1] = s.fsh[v0 + i];
+  }
+  return out;
+}
+
 /**
  * Decodes one chunk's streams into GPU-ready typed arrays.
  * @param {ChunkMeta} c
@@ -283,7 +304,7 @@ export function decodeChunk(c, s) {
     uv: { array: uv, itemSize: 2, normalized: false },
     color: { array: s.col.subarray(v0 * 3, (v0 + n) * 3), itemSize: 3, normalized: true },
     bakedLight: { array: bakedLight, itemSize: 3, normalized: true },
-    flicker: { array: s.flk.subarray(v0 * 2, (v0 + n) * 2), itemSize: 2, normalized: false },
+    flicker: { array: flickerPairs(s, v0, n), itemSize: 2, normalized: false },
   };
   if (c.alphaOffset !== undefined && s.alpha) {
     attributes.alpha = { array: s.alpha.subarray(c.alphaOffset, c.alphaOffset + n), itemSize: 1, normalized: true };

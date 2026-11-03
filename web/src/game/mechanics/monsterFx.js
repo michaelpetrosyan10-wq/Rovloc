@@ -2,9 +2,10 @@
 // on every page, and the game state its brain asks about.
 //
 //   * Teleport warnings (DOORS / Pressure): WarningSeconds before it forms at a spot, the lights within FlickerRadius
-//     of it stutter through the lighting's flicker groups (setGroupFactor; scripted groups and lights a level keeps lit
-//     are left alone), a static hiss rises there (TeleportHiss) and, for its target, the torch stutters (the
-//     Creature's EMF, index.js warnLocal).
+//     of it stutter through the lighting's flicker groups (setGroupStutter: a group the power cut holds dark stays
+//     dark; scripted groups and lights a level keeps lit are left alone), a static hiss rises there (TeleportHiss)
+//     and, for its target, the torch stutters (the Creature's EMF, index.js warnLocal). Group ids are world-wide
+//     (meta.flickerGroups), so a light's `group` is all it needs.
 //   * The chase music: while it chases this page's player, a pulse layer (ChasePulse) under a sting at its start
 //     (ChaseSting); a held stare that started it stings (StareSting).
 //   * A chase that gives up: the reverse swell for the one it chased (GiveUpSwell); every FadeOut, the rush of air
@@ -135,7 +136,7 @@ export class MonsterFx {
   }
 
   _endFlickers() {
-    for (const f of this.flickers) this.env.setGroupFactor(f.group, null);
+    for (const f of this.flickers) this.env.setGroupStutter(f.group, null);
     this.flickers = [];
   }
 
@@ -151,14 +152,14 @@ export class MonsterFx {
       const f = this.flickers[i];
       const t = now - f.from;
       if (now >= f.until || t < 0) {
-        env.setGroupFactor(f.group, null);
+        env.setGroupStutter(f.group, null);
         this.flickers.splice(i, 1);
         continue;
       }
       const left = f.until - now;
       const beat = Math.floor((t + f.seed) * 11 + Math.sin((t + f.seed) * 7.3) * 1.6);
       const factor = left < 0.25 ? 0 : beat % 3 === 0 ? 0.9 : beat % 3 === 1 ? 0.05 : 0.25;
-      env.setGroupFactor(f.group, factor);
+      env.setGroupStutter(f.group, factor);
     }
   }
 

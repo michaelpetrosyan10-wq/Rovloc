@@ -131,6 +131,7 @@ export function buildMeta(raw, r) {
     name: g.name,
     kind: g.kind,
     level: g.level || null,
+    family: g.family || null,
     initial: g.initial,
     lights: g.lights.map((i) => lightIndexOfRaw.get(i)),
   }));

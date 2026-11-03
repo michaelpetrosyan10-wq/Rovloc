@@ -21,8 +21,8 @@
 //   engine.prompts    add(spec) -> handle, clear()
 //   engine.entities   get, list, setPivot, setNodePivot, setNodeTransform, nodeWorld, attachmentWorld, setVisible,
 //                     setCollides, setAttribute, resetAll
-//   engine.lighting   setOverride(lightId, brightness), setGroupFactor(groupId, factor), burst(lightId),
-//                     lightning({intensity, stages}), setStormEnabled, resetForRun, addLight
+//   engine.lighting   setOverride(lightId, brightness), setGroupFactor(groupId, factor), setGroupStutter(groupId,
+//                     factor), burst(lightId), lightning({intensity, stages}), setStormEnabled, resetForRun, addLight
 //   engine.save / engine.settings   localStorage blob (get / set / update / flush / persistent) and the settings
 //   engine            setCurrentLevel, setAmbienceEnabled, menuEnabled, syringes, renderer.camera / height, spawnPoints
 
@@ -710,9 +710,14 @@ export class Env {
     this.engine.lighting.setOverride(lightId, brightness);
   }
 
-  /** A flicker group's factor (Scripted:Floodlights is group 13 in the export); null releases. */
+  /** Holds a flicker group (an id from meta.flickerGroups) at a factor: the power cut, the floodlights; null releases. */
   setGroupFactor(groupId, factor) {
     this.engine.lighting.setGroupFactor(groupId, factor);
+  }
+
+  /** A passing stutter of a flicker group (the teleport warning): it never lifts a held group; null releases. */
+  setGroupStutter(groupId, factor) {
+    this.engine.lighting.setGroupStutter(groupId, factor);
   }
 
   /** LightBurst: the bulb surges, stutters and dies for the run. */

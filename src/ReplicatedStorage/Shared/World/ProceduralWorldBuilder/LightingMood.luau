@@ -34,8 +34,7 @@
 -- its exposure up and fills the gaps between pools with a stronger ambient. So each level also has a Roblox render
 -- (`render`): the exposure, grade, ambient, haze, fixture and flashlight gains that reproduce the web's frame on
 -- Roblox. The client writes those instead of the raw film and rig values (LightingController/Film); the shared data
--- above stays the web export's source. The derivation and the numbers per level were in docs/LIGHTING-PARITY.md
--- (removed with the Roblox runtime; git history keeps it).
+-- above stays the web export's source. The derivation and the numbers per level are in docs/LIGHTING-PARITY.md.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 

@@ -498,6 +498,8 @@ Emitted at the start of the Warning phase with the spot's floor point.
     vertically are skipped.
   - The factor each frame: `b = floor((t + seed) × 11 + 1.6 × sin((t + seed) × 7.3)) mod 3` → 0.9 / 0.05 / 0.25.
   - The factor is 0 in the last 0.25 s; the override is released at the end.
+  - A group the floor holds (the basement's power cut, its switch-on) takes the lower of the hold and the stutter: a
+    dark circuit stays dark, and the release hands it back to the hold.
 - **The hiss:** TeleportHiss at the spot + 4 (3D).
 - **The torch:** on the target's screen only, the flashlight's static stutters (1 or 0.35 at about 9 Hz) for 1.6 s,
   with TorchStutter.

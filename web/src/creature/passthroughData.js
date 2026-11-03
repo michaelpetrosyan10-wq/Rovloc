@@ -12,51 +12,47 @@ export const PASSTHROUGH = {
       ],
     },
     "Exterior": {
-      vertexCount: 502, indexCount: 2664, fingerprint: 3072612579,
+      vertexCount: 558, indexCount: 3024, fingerprint: 4241910975,
       runs: [
       ],
     },
     "Level5_Roof": {
-      vertexCount: 622, indexCount: 5004, fingerprint: 3747141309,
+      vertexCount: 568, indexCount: 4572, fingerprint: 3447430781,
       runs: [
       ],
     },
     "Level4_FloodedPool": {
-      vertexCount: 6126, indexCount: 39240, fingerprint: 3193813059,
+      vertexCount: 5930, indexCount: 37764, fingerprint: 3125273305,
       runs: [
-        1228, 56, 80, 196, 72, 448, 2084, 1822,
+        1188, 56, 80, 196, 72, 448, 1928, 1822,
       ],
     },
     "Level3_Gymnasium": {
-      vertexCount: 7529, indexCount: 49056, fingerprint: 1448918033,
+      vertexCount: 7277, indexCount: 47472, fingerprint: 2737503253,
       runs: [
-        1596, 756, 3092, 1701,
+        1484, 756, 2952, 1701,
       ],
     },
     "Level2_ScienceHall": {
-      vertexCount: 13706, indexCount: 85680, fingerprint: 3238034255,
+      vertexCount: 13278, indexCount: 82944, fingerprint: 3333528013,
       runs: [
-        1728, 1428, 4071, 5605,
+        1504, 1428, 3867, 5605,
       ],
     },
     "Level1_Hallways": {
-      vertexCount: 13530, indexCount: 81708, fingerprint: 1910127703,
+      vertexCount: 13206, indexCount: 79440, fingerprint: 1710941014,
       runs: [
-        1664, 1624, 3757, 6195,
+        1480, 1624, 3553, 6259,
       ],
     },
     "Level0_Basement": {
-      vertexCount: 5379, indexCount: 31068, fingerprint: 2526305090,
+      vertexCount: 17701, indexCount: 109620, fingerprint: 2690134903,
       runs: [
-        132, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16,
-        8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16,
-        8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16,
-        8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16, 8, 16,
-        8, 16, 8, 16, 8, 16, 8, 16, 888, 588, 1386, 1145,
+        136, 5990, 10372, 1203,
       ],
     },
     "Stairwells": {
-      vertexCount: 3939, indexCount: 19548, fingerprint: 167894295,
+      vertexCount: 3939, indexCount: 19548, fingerprint: 1574384231,
       runs: [
       ],
     },

@@ -9,6 +9,7 @@
 
 import { cfPoint, cfVector } from './mesh.mjs';
 import { hash01 } from './trace.mjs';
+import { FLICKER_GROUP_LIMIT } from '../../src/engine/data.js';
 
 export const FALLOFF_K = 0.004;
 
@@ -62,7 +63,7 @@ export function collectLights(raw) {
     let g = groupIndex.get(name);
     if (g === undefined) {
       g = groups.length;
-      if (g > 255) throw new Error('more than 255 flicker groups');
+      if (g > FLICKER_GROUP_LIMIT) throw new Error(`more than ${FLICKER_GROUP_LIMIT} flicker groups`);
       groups.push({ id: g, name, kind, level, initial, lights: [] });
       groupIndex.set(name, g);
     }
@@ -141,6 +142,54 @@ export function collectLights(raw) {
     }
   }
   return { lights, groups };
+}
+
+/** A tunnel floor's power circuits (TunnelPlanner): steady "Mains:<...>" and flickering "Circuit:<...>" groups. */
+export const POWER_CIRCUIT = /^(Mains|Circuit):/;
+
+/**
+ * The power family of a group: its level for a power circuit (every Mains: / Circuit: group of one level is one
+ * family), else null.
+ * @param {{ name: string|null, level?: string|null }} g
+ */
+export function powerFamily(g) {
+  return g && g.name && POWER_CIRCUIT.test(g.name) ? g.level || null : null;
+}
+
+/**
+ * The flicker group a point carries and that group's share of its light (bake worker, data-test). The group is the
+ * dominant non-steady one (scripted groups weigh 1.5x: their light switches fully on or off); when it belongs to a
+ * power family, every member's light pools into its share, so a switched-off floor is dark between its circuits too.
+ *
+ * @param {Float64Array | number[]} acc luminance per group at the point (index = group id; 0 = steady)
+ * @param {number} total the point's whole light (r + g + b)
+ * @param {string[]} kinds kind per group id
+ * @param {number[] | null} family family id per group id (null: no families)
+ * @param {number[][]} members the group ids of each family
+ * @param {number[]} out [group, share] written here (share 0..1; [0, 0] when no group lights the point)
+ */
+export function dominantGroup(acc, total, kinds, family, members, out) {
+  let best = 0;
+  let bestW = 0;
+  for (let g = 1; g < kinds.length; g++) {
+    const w = acc[g] * (kinds[g] === 'scripted' ? 1.5 : 1);
+    if (w > bestW) {
+      bestW = w;
+      best = g;
+    }
+  }
+  out[0] = 0;
+  out[1] = 0;
+  if (!best || !(total > 1e-6)) return out;
+  let pooled = acc[best];
+  const pool = family ? members[family[best]] : null;
+  if (pool && pool.length > 1) {
+    pooled = 0;
+    for (const g of pool) pooled += acc[g];
+  }
+  out[0] = best;
+  out[1] = Math.min(1, pooled / total);
+  return out;
 }
 
 function buildDescriptor(l, brightness) {

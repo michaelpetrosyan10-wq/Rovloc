@@ -313,7 +313,10 @@ export class Level4 {
     this.nextBeatAt = Infinity;
     this.lever = null;
     this.game.lightsKeptLit.clear();
-    for (const f of this.floodlights) this.env.setLightOverride(f.id, null);
+    for (const f of this.floodlights) {
+      this.env.setLightOverride(f.id, null);
+      if (f.group) this.env.setGroupFactor(f.group, null);
+    }
     if (this.handle) this.handle.remove();
     this.handle = null;
     if (this.indicator) this.indicator.remove();

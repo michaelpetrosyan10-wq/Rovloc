@@ -3,11 +3,17 @@
 //
 //   * Flicker. Fixtures sharing a flicker group flicker together: smooth value noise, sharp dropouts and seeded
 //     blackouts with a stuttering recovery, scheduled in fixed time slots; a pure function of (RunSeed, group, time).
-//     The factor of every group is written into the shared 256-texel flicker texture each frame, which scales each
-//     vertex's baked share of that group (and the Neon glow of its tubes).
-//   * Overrides. setOverride(lightId, brightness|null) pins a light (Timeline tracks, the pool floodlights, the
-//     classroom glow): a baked light's group factor becomes brightness / base; a dynamic light burns at that
-//     brightness. burst(lightId) surges a bulb to 4x, stutters and kills it for the run.
+//     The factor of every group (ids are world-wide) is written into the shared flicker table and texture each frame,
+//     which scales each vertex's baked share of that group (and the Neon glow of its tubes).
+//   * Overrides, three layers per group, so none releases another's:
+//       - setOverride(lightId, brightness|null) pins a light (Timeline tracks, the boiler surge, the pool
+//         floodlights, the classroom glow): a baked light's group factor becomes brightness / base (above every
+//         other layer, as a Roblox light override is above the power cut); a dynamic light burns at that brightness;
+//       - setGroupFactor(groupId, factor|null) holds a whole group (the basement's power cut and its switch-on, the
+//         pool floodlights' switch) in place of its own flicker;
+//       - setGroupStutter(groupId, factor|null) is a passing stutter (the Creature's teleport warning): it replaces
+//         the group's own flicker, but a held group it can only dim (a cut circuit stays dark).
+//     burst(lightId) surges a bulb to 4x, stutters and kills it for the run.
 //   * Dynamic lights. Scripted / unbaked lights and lights the game adds (addLight: the creature's eyes, a flare)
 //     compete for the tier's point-light slots by distance to the camera.
 //   * Film. The level film (data.film, else LightingMood's table) eases at 0.9/s toward the level the camera is on:
@@ -144,7 +150,7 @@ export class Lighting {
     this.shared = engine.shared;
     const meta = engine.world.meta;
     this.seed = meta.seed || 1;
-    /** @type {Map<number, {id: number, name: string, kind: string, initial: number, profile: any, blackout: any, override: number|null, burstAt: number|null, dead: boolean}>} */
+    /** @type {Map<number, {id: number, name: string, kind: string, initial: number, profile: any, blackout: any, override: number|null, hold: number|null, stutter: number|null, burstAt: number|null, dead: boolean}>} */
     this.groups = new Map();
     for (const g of meta.flickerGroups || []) {
       if (g.id === 0) continue;
@@ -156,6 +162,8 @@ export class Lighting {
         profile: g.kind === 'flicker' ? flickerProfile(this.seed, g.name || `G${g.id}`) : null,
         blackout: { slot: -Infinity, startsAt: -1, endsAt: -1 },
         override: null,
+        hold: null,
+        stutter: null,
         burstAt: null,
         dead: false,
       });
@@ -249,13 +257,25 @@ export class Lighting {
     dyn.override = brightness;
   }
 
-  /** Factor override for a whole flicker group (null releases): Scripted:Floodlights 1 at the L4 switch. */
+  /**
+   * Holds a whole flicker group at `factor` in place of its own flicker (null releases): the basement's power cut and
+   * its switch-on, Scripted:Floodlights 1 at the L4 switch.
+   */
   setGroupFactor(groupId, factor) {
     const g = this.groups.get(groupId);
-    if (g) g.override = factor === null || factor === undefined ? null : factor;
+    if (g) g.hold = factor === null || factor === undefined ? null : factor;
   }
 
-  /** The id of a flicker group by its name ("Scripted:Floodlights"), or 0. */
+  /**
+   * A passing stutter of a whole group (null releases): the Creature's teleport warning. It replaces the group's own
+   * flicker; a held group (the power cut) it can only dim, and a light override stays above it.
+   */
+  setGroupStutter(groupId, factor) {
+    const g = this.groups.get(groupId);
+    if (g) g.stutter = factor === null || factor === undefined ? null : factor;
+  }
+
+  /** The id of a flicker group by its name ("Scripted:Floodlights"; names are unique world-wide), or 0. */
   groupId(name) {
     for (const g of this.groups.values()) if (g.name === name) return g.id;
     return 0;
@@ -282,6 +302,8 @@ export class Lighting {
   resetForRun() {
     for (const g of this.groups.values()) {
       g.override = null;
+      g.hold = null;
+      g.stutter = null;
       g.burstAt = null;
       g.dead = false;
     }
@@ -359,6 +381,8 @@ export class Lighting {
           f = flickerFactor(g.profile, g.blackout, t);
           f = 1 - (1 - f) * flashScale;
         } else f = g.initial;
+        if (g.stutter !== null) f = g.stutter;
+        if (g.hold !== null) f = g.stutter !== null ? Math.min(g.hold, g.stutter) : g.hold;
         if (g.override !== null) f = g.override;
         if (g.burstAt !== null) {
           const m = burstMultiplier(t - g.burstAt);

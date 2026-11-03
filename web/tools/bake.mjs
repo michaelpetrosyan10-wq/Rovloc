@@ -11,8 +11,9 @@
 // 2. Light. Every vertex gets baked light (light.mjs): direct light from every burning Light (and the moonlight
 //    window spills) with soft BVH shadow rays, soft AO on the ambient fill, sky openness for the outdoor ambient and
 //    the moon; plus its dominant flicker group and that group's share. Probes: a 4-stud irradiance grid per level.
-// 3. Pack. Quantised streams (positions u16 per chunk, normals i8, uv i16, colour u8, sqrt light u8, flicker u8x2,
-//    indices u16), per-level collision (coarse triangles of colliding parts), probes; metadata in world.json.
+// 3. Pack. Quantised streams (positions u16 per chunk, normals i8, uv i16, colour u8, sqrt light u8, flicker group
+//    u16 (ids are world-wide) and share u8, indices u16), per-level collision (coarse triangles of colliding parts),
+//    probes; metadata in world.json.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -24,7 +25,7 @@ import { FORMAT_VERSION, LIGHT_SCALE, UV_SCALE, deltaEncode, encodeLightByte, tr
 import { SolidIndex, coarseTriangles, decalFace, partAabb, tessellatePart } from './bake/mesh.mjs';
 import { bakeDecals, bakeWear } from './bake/decals.mjs';
 import { buildTracer } from './bake/trace.mjs';
-import { LightGrid, asArray, collectLights, directEstimate, srgbToLinear } from './bake/light.mjs';
+import { LightGrid, asArray, collectLights, directEstimate, powerFamily, srgbToLinear } from './bake/light.mjs';
 import { buildMeta } from './bake/meta.mjs';
 import { computeVisibility } from './bake/pvs.mjs';
 
@@ -185,8 +186,8 @@ const { lights, groups } = collectLights(raw);
 // flickering "Circuit:<...>", all held down by the power switch. Every such group of one level is one family: a
 // vertex lit by several takes its dominant one at their pooled share (so a switched-off floor goes dark between
 // circuits too, and a flicker stays near its own bulbs), and the probes keep a family's light in one grid.
-const POWER_CIRCUIT = /^(Mains|Circuit):/;
-const familyKeys = groups.map((g, i) => (i > 0 && POWER_CIRCUIT.test(g.name || '') ? `power:${g.level}` : `group:${i}`));
+for (const g of groups) g.family = g.id > 0 ? powerFamily(g) : null;
+const familyKeys = groups.map((g, i) => (g.family ? `power:${g.family}` : `group:${i}`));
 const familyIds = new Map();
 const groupFamily = familyKeys.map((k) => {
   if (!familyIds.has(k)) familyIds.set(k, familyIds.size);
@@ -215,6 +216,11 @@ const probeSlots = [];
   });
 }
 log(`flicker groups: ${groups.length - 1} (${probeSlots.length} probe slots, ${familyKeys.filter((k) => k.startsWith('power:')).length} in power families)`);
+{
+  const perLevel = {};
+  for (const g of groups) if (g.id > 0) perLevel[g.level || '-'] = (perLevel[g.level || '-'] || 0) + 1;
+  log(`flicker groups per level: ${Object.entries(perLevel).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+}
 log(`lights: ${lights.length} baked (${lights.filter((l) => l.kind === 'Moonlight').length} moonlight spills), ${groups.length - 1} flicker groups`);
 const lightGrid = new LightGrid(lights);
 
@@ -788,7 +794,7 @@ log(`bake done in ${bakeSeconds.toFixed(1)}s, ${(rays / 1e6).toFixed(1)}M rays`)
 
 for (const b of builderList) {
   b.lit = new Uint8Array(b.count * 3);
-  b.flk = new Uint8Array(b.count * 2);
+  b.flk = new Uint16Array(b.count * 2); // (group, share 0..255) pairs
 }
 vertexJobs.forEach((_, j) => {
   const { b, start, n } = jobOwners[j];
@@ -952,7 +958,15 @@ for (const b of builderList) {
   writer.push('uv', Int16Array, new Int16Array(deltaEncode(new Uint16Array(uv.buffer), 2, 0xffff).buffer));
   writer.push('col', Uint8Array, col);
   writer.push('lit', Uint8Array, deltaEncode(b.lit.slice(), 3, 0xff));
-  writer.push('flk', Uint8Array, b.flk);
+  // the flicker pairs go out as two streams (the groups and the shares each compress better alone)
+  const flkGroup = new Uint16Array(n);
+  const flkShare = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    flkGroup[i] = b.flk[i * 2];
+    flkShare[i] = b.flk[i * 2 + 1];
+  }
+  writer.push('flk', Uint16Array, flkGroup);
+  writer.push('fsh', Uint8Array, flkShare);
   writer.push('idx', Uint16Array, triEncode(Uint16Array.from(b.idx), 0xffff));
   const info = b.info;
   const chunk = {

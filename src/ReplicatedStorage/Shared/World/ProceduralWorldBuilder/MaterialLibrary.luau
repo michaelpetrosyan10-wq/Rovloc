@@ -1,14 +1,14 @@
 --!strict
 -- MaterialLibrary: the generated PBR textures in game.
 --
--- tools/textures generates seamless colour / normal / roughness / metalness maps; the Textures workflow (retired)
--- uploaded them to the owner's Roblox account and wrote two files, now frozen: Config/TextureAssets (the image ids
--- per texture and map) and src/MaterialService/RovlocTextures.model.json, which Rojo builds into MaterialService as
--- one MaterialVariant per texture and base material (variant maps can only be set by Studio / Rojo, never by a game
--- script, so the variants ship in the place and this module only picks them). A texture is live when TextureAssets
--- holds its ColorMap AND its variant for the part's material is in MaterialService; anything else answers nil and
--- the surface keeps its plain material, which is how the game looked before textures (and looks with TextureAssets
--- empty). The web export reads the same answer for every part.
+-- tools/textures generates seamless colour / normal / roughness / metalness maps; the Textures workflow
+-- (.github/workflows/textures.yml) uploads them to the owner's Roblox account and commits two files:
+-- Config/TextureAssets (the image ids per texture and map) and src/MaterialService/RovlocTextures.model.json, which
+-- Rojo builds into MaterialService as one MaterialVariant per texture and base material (variant maps can only be set
+-- by Studio / Rojo, never by a game script, so the variants ship in the place and this module only picks them). A
+-- texture is live when TextureAssets holds its ColorMap AND its variant for the part's material is in
+-- MaterialService; anything else answers nil and the surface keeps its plain material, which is how the game looked
+-- before textures (and looks with TextureAssets empty). The web export reads the same answer for every part.
 --
 -- The colour map multiplies the part's Color. Every map is authored around a light base layer (`reference` in
 -- TextureAssets), so `tint` divides a palette colour by it: the base layer lands on the palette's grade and the

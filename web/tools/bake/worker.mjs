@@ -3,15 +3,16 @@
 // init message: { tracer: { positions, index, nodes }, lights, settings, ambient, outdoor, moonDir, moonColor,
 //                 groupKinds, groupFamily (family id per group: power circuits pool), probeSlots (groups per slot) }
 // job message:  { id, points: Float32Array (xyz), normals: Float32Array (xyz, or empty for probes), seeds: Uint32Array }
-// reply:        { id, rgb: Float32Array (3n), group: Uint8Array (n), share: Float32Array (n), ao: Float32Array (n),
+// reply:        { id, rgb: Float32Array (3n), group: Uint16Array (n), share: Float32Array (n), ao: Float32Array (n),
 //                 sky: Float32Array (n), extra: Float32Array (probes: n x probe slots x 3, taken out of rgb), rays }
 
 import { parentPort } from 'node:worker_threads';
 import { Tracer } from './trace.mjs';
-import { LightGrid, shadePoint } from './light.mjs';
+import { LightGrid, dominantGroup, shadePoint } from './light.mjs';
 
 let ctx = null;
 let groupCount = 1;
+const picked = [0, 0];
 
 /** The groups of each family (index = family id). */
 function membersOf(groupFamily) {
@@ -50,7 +51,7 @@ parentPort.on('message', (msg) => {
     const { id, points, normals, seeds } = msg;
     const n = points.length / 3;
     const rgb = new Float32Array(n * 3);
-    const group = new Uint8Array(n);
+    const group = new Uint16Array(n);
     const share = new Float32Array(n);
     const ao = new Float32Array(n);
     const sky = new Float32Array(n);
@@ -83,30 +84,10 @@ parentPort.on('message', (msg) => {
       }
       ao[i] = res.ao;
       sky[i] = res.sky;
-      // dominant non-steady group (scripted groups win ties: their light switches fully on or off)
-      const total = res.r + res.g + res.b;
-      let best = 0;
-      let bestW = 0;
-      for (let g = 1; g < groupCount; g++) {
-        const w = acc[g] * (ctx.groupKinds[g] === 'scripted' ? 1.5 : 1);
-        if (w > bestW) {
-          bestW = w;
-          best = g;
-        }
-      }
-      if (best && total > 1e-6) {
-        // a power family's light is pooled into its dominant member
-        let pooled = acc[best];
-        if (family) {
-          const members = ctx.familyMembers[family[best]];
-          if (members.length > 1) {
-            pooled = 0;
-            for (const g of members) pooled += acc[g];
-          }
-        }
-        group[i] = best;
-        share[i] = Math.min(1, pooled / total);
-      }
+      // the dominant non-steady group and its share (a power family's light pooled into it)
+      dominantGroup(acc, res.r + res.g + res.b, ctx.groupKinds, family, ctx.familyMembers, picked);
+      group[i] = picked[0];
+      share[i] = picked[1];
     }
     parentPort.postMessage({ type: 'done', id, rgb, group, share, ao, sky, extra, rays: ctx.tracer.rays - before }, [
       rgb.buffer,

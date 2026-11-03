@@ -11,7 +11,8 @@
 //
 // Scenarios:
 //   patrol        Level 1 wakes; the Creature stalks its patrol loops at the Stalk pace.
-//   basement      Level 0 is hunted now: it wakes and stalks the loops derived from the rooms.
+//   basement      Level 0 is hunted now: it wakes and stalks its patrol loops (the tunnel planner's PatrolWaypoints;
+//                 a floor without any gets loops derived from its rooms).
 //   investigate   a FloorDebris noise in another room: it goes there (InvestigateNoise) and searches.
 //   catch         a lit player in sight down a corridor: WallChase, a Hallway catch that downs; a second executes.
 //   lose hidden   seen, then hidden (no spot): the chase ends in a Search, no catch.
@@ -194,7 +195,7 @@ class SimPlayer {
 }
 
 function makeEngine(fps = null) {
-  const shared = createSharedUniforms();
+  const shared = createSharedUniforms((decoded.meta.flickerGroups || []).length);
   const quality = { budget: { normalMaps: false, anisotropy: 1, flashlightShadow: false }, changed: { connect() {} } };
   const world = new World(decoded, {}, { shared, quality });
   const engine = { world, shared, loop: new SimLoop(fps), currentLevel: null };
@@ -503,8 +504,8 @@ report(p1.reached >= 5 && p1.travelled >= 200 && p1.travelled <= 60 * CreatureCo
   const b = scenarioPatrol('Level0_Basement');
   const info = b.s.creature.service._levelInfo('Level0_Basement');
   summary.basement = { awake: b.awake, reached: b.reached, travelled: +b.travelled.toFixed(1), loops: info.loops.length, derived: info.derived };
-  report(b.awake === 'Patrol' && info.derived && b.reached >= 4 && b.travelled >= 150,
-    'basement: Level 0 wakes and stalks the loops derived from its rooms', JSON.stringify(summary.basement));
+  report(b.awake === 'Patrol' && info.loops.length > 0 && b.reached >= 4 && b.travelled >= 150,
+    'basement: Level 0 wakes and stalks its patrol loops', JSON.stringify(summary.basement));
 }
 
 // 3. investigate a noise (the airlock grace is long over)

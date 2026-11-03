@@ -780,9 +780,11 @@ return {
 		local glows = 0
 		local airlocks = {}
 		for _, room in layout.rooms do
-			for _, light in room.lights or {} do
-				if light.kind == "BoilerGlow" then
-					glows += 1
+			if room.lights then
+				for _, light in room.lights do
+					if light.kind == "BoilerGlow" then
+						glows += 1
+					end
 				end
 			end
 			if room.kind == "Airlock" then

@@ -150,7 +150,7 @@ export class Engine {
     this.settings = new Settings(this.save);
     this.quality = new Quality(this.settings, this.save);
     this.loop = new Loop();
-    this.shared = createSharedUniforms();
+    this.shared = createSharedUniforms((decoded.meta.flickerGroups || []).length);
 
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'rv-canvas';

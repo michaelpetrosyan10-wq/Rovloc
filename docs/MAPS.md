@@ -103,7 +103,11 @@ drums, the few cabinets against a wide run's wall, the vestibule cabinets) step 
 - The floor's power switch holds every bulb and fluorescent group down until the breaker is thrown (web
   `objectives/floor0.js`); the emergency reds, boiler glows and exit signs carry no group and always burn.
 - The bake pools a level's `Mains:` / `Circuit:` light per vertex and per probe (see web/DATA.md), so a dark floor is
-  dark between circuits too. The world may hold at most 255 groups (Level 0 uses about 125).
+  dark between circuits too. Group ids are world-wide and 16-bit (up to 65535 groups in all, so every tunnel floor
+  can wire its own hundred-odd circuits; Level 0 has 118 groups); keep the floor prefix in the names, which must be
+  unique world-wide.
+- On the web the power cut is a hold on each mains group: a teleport warning's stutter only dims a held group, and a
+  scene's light override (the boiler surge) hands it back to the hold when it ends, so a cut circuit stays dark.
 
 ## 6. Dressing and Detail
 

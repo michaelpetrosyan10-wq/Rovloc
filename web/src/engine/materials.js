@@ -3,8 +3,9 @@
 // uniform objects for the dynamic lights, flicker table, fog and grade, so one write per frame updates them all.
 //
 //   * Baked: per-vertex RGB irradiance from W1's bake (encoded / 4), modulated by its flicker group: a vertex lit
-//     `share` by group g gets baked x (1 - share + share x factor[g]); factor lives in a 256-texel float texture the
-//     lighting system rewrites each frame (group 0 is steady).
+//     `share` by group g gets baked x (1 - share + share x factor[g]); factor lives in a float texture of
+//     FLICKER_ROW-texel rows (group g at texel (g % 256, g / 256): ids are world-wide, 16 bits) that the lighting
+//     system rewrites each frame (group 0 is steady). Static chunks and node-batched entity chunks read it alike.
 //   * Probe: entities and dynamic things (doors, props, hands, the creature) get one probe irradiance uniform,
 //     trilinearly sampled from the level's probe grid where they stand.
 //   * Dynamic: the flashlight (two spot cones like Flashlight.luau, optional shadow map), the presence glow around
@@ -17,12 +18,18 @@
 import * as THREE from 'three';
 
 export const MAX_POINT = 4;
-export const FLICKER_GROUPS = 256;
+/** Flicker groups per row of the flicker texture (the shader's `g & 255`, `g >> 8`). */
+export const FLICKER_ROW = 256;
 
-/** Uniforms shared by every world material (written by the lighting system, the flashlight and the renderer). */
-export function createSharedUniforms() {
-  const flickerData = new Float32Array(FLICKER_GROUPS).fill(1);
-  const flickerTex = new THREE.DataTexture(flickerData, FLICKER_GROUPS, 1, THREE.RedFormat, THREE.FloatType);
+/**
+ * Uniforms shared by every world material (written by the lighting system, the flashlight and the renderer).
+ * @param {number} [groupCount] flicker groups in the world (meta.flickerGroups.length, group 0 included): the flicker
+ *   table `uFlickerData[id]` and its texture hold every id below it
+ */
+export function createSharedUniforms(groupCount = FLICKER_ROW) {
+  const rows = Math.max(1, Math.ceil(groupCount / FLICKER_ROW));
+  const flickerData = new Float32Array(FLICKER_ROW * rows).fill(1);
+  const flickerTex = new THREE.DataTexture(flickerData, FLICKER_ROW, rows, THREE.RedFormat, THREE.FloatType);
   flickerTex.minFilter = flickerTex.magFilter = THREE.NearestFilter;
   flickerTex.needsUpdate = true;
   const plPos = [];
@@ -113,7 +120,8 @@ void main() {
   vUv = uv;
   vColor = pow(color, vec3(2.2));
 #ifdef BAKED
-  float f = texelFetch(uFlickerTex, ivec2(int(flicker.x + 0.5), 0), 0).r;
+  int fg = int(flicker.x + 0.5);
+  float f = texelFetch(uFlickerTex, ivec2(fg & 255, fg >> 8), 0).r;
   float mod_ = mix(1.0, f, flicker.y / 255.0);
   vBaked = bakedLight * 4.0 * mod_;
   vGlow = mod_;

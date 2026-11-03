@@ -6,6 +6,9 @@
 //    bytes, flicker pairs and indices exact. Then structural checks over everything: indices in range, positions
 //    inside their chunk's bounds, unit normals, flicker groups that exist, entity ranges that tile their chunks,
 //    creature bone indices, collision and probe tables, every texture and material the chunks name.
+// 3. Flicker groups: world-wide 16-bit ids within the namespace and the engine's flicker texture, every light's group
+//    resolving (its FlickerGroup, its level), and each tunnel floor's power circuits (Mains: / Circuit:) pooling as
+//    one family: the bake's pooling rule, the family in world.json, one probe grid per family.
 // Exits non-zero on the first category with failures (all failures are listed).
 
 import fs from 'node:fs';
@@ -13,6 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  FLICKER_GROUP_LIMIT,
   FORMAT_VERSION,
   LIGHT_SCALE,
   UV_SCALE,
@@ -27,6 +31,8 @@ import {
   triDecode,
   triEncode,
 } from '../src/engine/data.js';
+import { createSharedUniforms } from '../src/engine/materials.js';
+import { POWER_CIRCUIT, dominantGroup } from './bake/light.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.resolve(process.argv[2] || path.join(here, '..', 'build'));
@@ -452,9 +458,88 @@ for (const [level, g] of Object.entries(world.probes)) {
     check(meta.flickerGroups[gr.group] && meta.flickerGroups[gr.group].kind === 'scripted', `probes ${level} group ${gr.group} is scripted`);
   }
 }
-// flicker groups name their lights
-for (const g of meta.flickerGroups) for (const li of g.lights) check(meta.lights[li] && meta.lights[li].group === g.id, `flicker group ${g.id} light ${li}`);
 console.log(`  ok   entities ${meta.entities.length}, collision ${Object.keys(world.collision).length}, probes ${Object.keys(world.probes).length}, groups ${groups}`);
+
+// ------------------------------------------------------------------------------------------------------------
+console.log('== flicker groups');
+{
+  const fg = meta.flickerGroups;
+  const before = failures;
+  // the namespace: ids are world-wide (every level draws on the same 16-bit range), dense, named once
+  check(fg.length > 0 && fg[0].id === 0 && fg[0].kind === 'steady' && !fg[0].name && !fg[0].family, 'group 0 is the steady one');
+  check(fg.every((g, i) => g.id === i), 'group ids are their index');
+  check(fg.length - 1 <= FLICKER_GROUP_LIMIT, `${fg.length - 1} groups within the ${FLICKER_GROUP_LIMIT} ids a vertex holds`);
+  const shared = createSharedUniforms(fg.length);
+  const img = shared.uFlickerTex.value.image;
+  check(shared.uFlickerData.length >= fg.length && img.width * img.height === shared.uFlickerData.length,
+    `the flicker texture (${img.width} x ${img.height}) holds every group`);
+  const names = new Set();
+  for (const g of fg.slice(1)) {
+    check(!!g.name && !names.has(g.name), `group ${g.id} named once (${g.name})`);
+    names.add(g.name);
+  }
+  const perLevel = {};
+  for (const g of fg.slice(1)) perLevel[g.level || '-'] = (perLevel[g.level || '-'] || 0) + 1;
+
+  // every light's group resolves: the group lists it, sits on its level and is its FlickerGroup (or the scripted
+  // owner that takes it over); a baked light with a FlickerGroup never loses it
+  let resolved = 0;
+  meta.lights.forEach((l, li) => {
+    if (l.group > 0) {
+      const g = fg[l.group];
+      check(!!g && g.lights.includes(li), `light ${l.id}: group ${l.group} exists and lists it`);
+      if (!g) return;
+      check(!l.level || g.level === l.level, `light ${l.id} (${l.level}): group ${g.name} on its level (${g.level})`);
+      check(!l.flickerGroup || g.name === l.flickerGroup || g.name.startsWith('Scripted:'),
+        `light ${l.id}: group ${g.name} is its FlickerGroup ${l.flickerGroup}`);
+      resolved++;
+    } else {
+      check(l.group === 0, `light ${l.id}: group ${l.group}`);
+      check(!(l.baked && l.flickerGroup), `light ${l.id}: baked without its FlickerGroup ${l.flickerGroup}`);
+    }
+  });
+  for (const g of fg) for (const li of g.lights) check(meta.lights[li] && meta.lights[li].group === g.id, `group ${g.id} light ${li} points back`);
+
+  // power families: the pooling rule the bake's workers run (bake/light.mjs dominantGroup) on a synthetic point.
+  // Groups 1, 2: one floor's Mains / Circuit (family 1); 3: another floor's Mains (family 2); 4: a lone flicker group.
+  {
+    const kinds = ['steady', 'scripted', 'flicker', 'scripted', 'flicker'];
+    const family = [0, 1, 1, 2, 3];
+    const members = [[], [1, 2], [3], [4]];
+    const out = [0, 0];
+    const is = (acc, total, group, share, what) => {
+      dominantGroup(acc, total, kinds, family, members, out);
+      check(out[0] === group && Math.abs(out[1] - share) < 1e-9, `pooling: ${what} (got group ${out[0]} share ${out[1]})`);
+    };
+    is([0, 0.4, 0.4, 0, 0], 1, 1, 0.8, "a point between two circuits of a floor carries both circuits' light");
+    is([0, 0.2, 0.5, 0, 0], 1, 2, 0.7, 'the brighter circuit leads and pools the steady one');
+    is([0, 0.5, 0, 0.3, 0], 1, 1, 0.5, "another floor's circuits stay out of the pool");
+    is([0, 0, 0.2, 0, 0.6], 1, 4, 0.6, 'a group outside the families keeps its own share');
+    is([0, 0.7, 0.6, 0, 0], 1, 1, 1, 'a pooled share is at most 1');
+    is([0, 0, 0, 0, 0], 0, 0, 0, 'an unlit point carries no group');
+  }
+  // ... the family each group belongs to in world.json, the lights on the family's floor, one probe grid per family
+  const families = new Map();
+  for (const g of fg.slice(1)) {
+    const want = POWER_CIRCUIT.test(g.name || '') ? g.level : null;
+    check((g.family ?? null) === want, `group ${g.name}: family ${g.family} (expected ${want})`);
+    if (g.family) (families.get(g.family) || families.set(g.family, []).get(g.family)).push(g.id);
+  }
+  for (const [level, members] of families) {
+    for (const id of members) for (const li of fg[id].lights) check(meta.lights[li].level === level, `power group ${fg[id].name}: light ${meta.lights[li].id} on ${level}`);
+    const rep = members.find((id) => fg[id].kind === 'scripted') ?? members[0];
+    for (const [plevel, p] of Object.entries(meta.probes)) {
+      const grids = p.groups.filter((gr) => fg[gr.group] && fg[gr.group].family === level);
+      check(grids.length <= 1 && grids.every((gr) => gr.group === rep), `probes ${plevel}: the ${level} power family in one grid (group ${rep})`);
+      if (plevel === level) check(grids.length === 1, `probes ${level}: its power family's grid`);
+    }
+  }
+  if (failures === before) {
+    const counts = Object.entries(perLevel).map(([k, v]) => `${k} ${v}`).join(', ');
+    const fams = [...families].map(([k, v]) => `${k} ${v.length}`).join(', ');
+    console.log(`  ok   ${fg.length - 1} groups (${counts}); ${resolved} lights resolve; power families: ${fams || 'none'}`);
+  }
+}
 
 console.log(failures ? `FAILED: ${failures} of ${checks} checks` : `PASSED: ${checks} checks`);
 process.exit(failures ? 1 : 0);

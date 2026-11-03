@@ -48,7 +48,8 @@ build.mjs inlines `world.json`, `world.bin` (gzip, then base64; inflate with Dec
 | `uv` | i16 ×2 | vertex | uv × `chunk.uvScale` (default 64 = 1/64 stud; decals and wear 8192), delta-coded (u16 wrap) |
 | `col` | u8 ×3 | vertex | part colour (sRGB) |
 | `lit` | u8 ×3 | vertex | baked light, `255 * sqrt(L / 4)`, delta-coded (u8 wrap) |
-| `flk` | u8 ×2 | vertex | flicker group id, that group's share of the vertex's light (0..255) |
+| `flk` | u16 | vertex | flicker group id (0 = steady; ids are world-wide, up to `FLICKER_GROUP_LIMIT` 65535) |
+| `fsh` | u8 | vertex | that group's share of the vertex's light (0..255) |
 | `idx` | u16 | index | per chunk, triangles coded as (a − previous a, b − a, c − a), u16 wrap |
 | `bone` | u8 | vertex | creature chunks only: bone index (`chunk.boneOffset`) |
 | `cpos` | u16 ×3 | collision vertex | per level quant (`collision[level].quant`), delta-coded |
@@ -59,8 +60,9 @@ build.mjs inlines `world.json`, `world.bin` (gzip, then base64; inflate with Dec
 `decodeWorld(meta, bin)` undoes all of this. It returns `{ meta, chunks, collision, probes }`, where:
 
 - each chunk's `attributes` hold `position` (f32), `normal` (i8 normalized), `uv` (f32), `color` (u8 normalized),
-  `bakedLight` (u16 normalized = linear light ÷ 4, so the shader computes `bakedLight * 4.0`), `flicker` (u8 pair,
-  not normalized) and, where they apply, `alpha` (u8 normalized), `skinIndex` and `skinWeight`;
+  `bakedLight` (u16 normalized = linear light ÷ 4, so the shader computes `bakedLight * 4.0`), `flicker` (u16
+  (group, share) pairs from `flk` and `fsh`, not normalized) and, where they apply, `alpha` (u8 normalized),
+  `skinIndex` and `skinWeight`;
 - `chunk.index` is u16;
 - each attribute is `{ array, itemSize, normalized }`, ready for `THREE.BufferAttribute`.
 
@@ -150,7 +152,7 @@ The atlases `Decals<N>` and `Wear<N>` have `atlas: true` and `studsPerTile` 1.
     `dir`, `angle`, `color`, `brightness`, `range`, `shadows`;
   - state: `broken`, `baked`;
   - grouping: `group`, `flickerGroup` (Roblox name), `level`, `room`, `entity`.
-- **Flicker groups (`meta.flickerGroups[id]`):** `{ name, kind, initial, lights }`.
+- **Flicker groups (`meta.flickerGroups[id]`):** `{ id, name, kind, level, family, initial, lights }`, indexed by id.
   - `kind` `flicker`: the Roblox FlickerGroup. The level is a pure function of (RunSeed or 1, name, server time),
     as in LightingController.
   - `kind` `scripted`: `Scripted:Floodlights` (L4 pool, `initial` 0, on at the switch) and
@@ -162,8 +164,14 @@ The atlases `Decals<N>` and `Wear<N>` have `atlas: true` and `studsPerTile` 1.
     warning's flicker therefore touches only the bulbs near it, and the floor's power switch (floor0.js: every group of
     the level whose lights are all bulbs or fluorescents) holds them all down. All `Mains:` / `Circuit:` groups of one
     level form a family: a vertex lit by several carries its dominant one at their pooled share (so a dark floor is
-    dark between circuits too), and the probes keep a family's light in one grid.
-  - At most 255 groups in all (the vertex stores the group in a byte); the world has about 240.
+    dark between circuits too), and the probes keep a family's light in one grid. Such a group's `family` is its
+    level (else null).
+  - **Ids are world-wide and 16-bit.** Every floor numbers its groups in one namespace of 65535
+    (`FLICKER_GROUP_LIMIT`), so a light's or a vertex's `group` is all a reader needs: no (level, id) pairs, and a
+    stairwell chunk lit by every floor's stairwell groups (or a floor lit through a door by the one below) needs no
+    aliases. Names are unique world-wide (TunnelPlanner prefixes its circuits with the floor, `L0_`). The engine's
+    flicker table `uFlickerData[id]` and texture (rows of 256: group `g` at texel `(g & 255, g >> 8)`) are sized from
+    `flickerGroups.length`. The world has about 240 groups (Level 0: 118); data-test checks that they fit.
   - A vertex's light is `baked × (1 − share + share × level[group])`. Neon glow parts and self-lit decals have share
     255.
 - **Probes (`world.probes[level]`):** `{ origin, dims, spacing: 4, data, groups }`, linear RGB irradiance, lit
