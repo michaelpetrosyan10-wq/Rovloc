@@ -1,5 +1,5 @@
 // The light model of the bake: every Light the builders create (after LightingMood.resolve), the client's moonlight
-// window spills (LightingController/Volumetrics), the ambient fills (LightingRig) and the night sky, evaluated at a
+// window spills (Volumetrics.windowSpecs), the ambient fills (LightingRig) and the night sky, evaluated at a
 // point with soft shadows (BVH rays towards jittered points of the light's emitter) and soft ambient occlusion.
 //
 // Units: "Roblox light units" in linear RGB, the same units the web engine's dynamic lights use: a white light of

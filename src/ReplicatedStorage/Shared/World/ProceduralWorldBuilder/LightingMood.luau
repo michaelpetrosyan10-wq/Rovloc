@@ -34,7 +34,8 @@
 -- its exposure up and fills the gaps between pools with a stronger ambient. So each level also has a Roblox render
 -- (`render`): the exposure, grade, ambient, haze, fixture and flashlight gains that reproduce the web's frame on
 -- Roblox. The client writes those instead of the raw film and rig values (LightingController/Film); the shared data
--- above stays the web export's source. Derivation and the numbers per level: docs/LIGHTING-PARITY.md.
+-- above stays the web export's source. The derivation and the numbers per level were in docs/LIGHTING-PARITY.md
+-- (removed with the Roblox runtime; git history keeps it).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -427,7 +428,7 @@ local WEB_EXPOSURE_TRIM: { [string]: number } = { base = 0.25, Lobby = 0.8 }
 -- The web's contrast pivot (web/src/engine/renderer.js): the S-curve turns where this dark frame's lit surfaces are.
 local WEB_CONTRAST_PIVOT = 0.16
 
--- The Roblox render of the base film. Every number is fitted to the web build (docs/LIGHTING-PARITY.md):
+-- The Roblox render of the base film. Every number is fitted to the web build:
 --   exposure      0.3 rig + film exposure + the web's trim;
 --   contrast /    a least-squares fit of Roblox's linear contrast about 0.5 plus its additive Brightness to the
 --   brightness    web's lift + S-curve about 0.16, over the night frame's display range 0..0.5 (worst error under

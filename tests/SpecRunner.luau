@@ -1,7 +1,7 @@
 --!strict
--- Dependency-free spec runner shared by the Studio runner (Runner.server.luau) and the Lune CLI
--- (tools/lune/check.luau specs). A spec is a ModuleScript named "<Name>.spec" returning
--- { [testName]: (t: Expect) -> () }. Tests run in name order; a throwing test fails without stopping the rest.
+-- Dependency-free spec runner for the Lune CLI (tools/lune/check.luau specs). A spec is a ModuleScript named
+-- "<Name>.spec" returning { [testName]: (t: Expect) -> () }. Tests run in name order; a throwing test fails without
+-- stopping the rest.
 
 export type Expect = {
 	eq: (actual: any, expected: any, message: string?) -> (),

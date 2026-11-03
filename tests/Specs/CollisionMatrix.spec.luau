@@ -1,5 +1,6 @@
 --!strict
--- The collision matrix must keep the vent and doorway guarantees from docs/ARCHITECTURE.md §4.
+-- The collision matrix (CollisionGroups) must keep its vent and doorway guarantees: the export writes each part's
+-- group, and the web's player and Creature collision follow it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 

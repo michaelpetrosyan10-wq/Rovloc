@@ -5,7 +5,6 @@
 -- unsolvable roll is re-rolled and, failing that, unlocked.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local DifficultyConfig = require(ReplicatedStorage.Shared.Config.DifficultyConfig)
@@ -15,7 +14,7 @@ local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local ZoneGraph = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph)
-local RunDirector = require(ServerScriptService.Services.Core.NoiseAndDirectorService.RunDirector)
+local RunDirector = require(ReplicatedStorage.Shared.World.RunDirector)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
 type Expect = SpecRunner.Expect

@@ -7,7 +7,6 @@
 -- part budgets, collision presets, determinism).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local DifficultyConfig = require(ReplicatedStorage.Shared.Config.DifficultyConfig)
@@ -28,7 +27,7 @@ local ObjectiveItemBuilder = require(ReplicatedStorage.Shared.World.ProceduralWo
 local ObjectivePlaces = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces)
 local PickupBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PickupBuilder)
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
-local RunDirector = require(ServerScriptService.Services.Core.NoiseAndDirectorService.RunDirector)
+local RunDirector = require(ReplicatedStorage.Shared.World.RunDirector)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 local ZoneGraph = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph)
 

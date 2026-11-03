@@ -2,8 +2,8 @@
 -- LightingMood: the built lighting is dark but readable — a real share of each level's fixtures burn, the story's
 -- dark rooms and scripted lights keep their layout marks, wayfinding lights always burn, every wing casts its own
 -- colour (green-teal school floors, amber basement, cyan pool) with a gentle grade to match, and it's deterministic.
--- Each level's Roblox render reproduces the browser build's frame (docs/LIGHTING-PARITY.md): its exposure, its
--- dark-frame contrast curve, a fill that keeps the gaps readable, and the Brightness setting's steps around it.
+-- Each level's Roblox render reproduces the browser build's frame: its exposure, its dark-frame contrast curve, a fill
+-- that keeps the gaps readable, and the Brightness setting's steps (-2..+2) around it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -11,7 +11,6 @@ local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local LightingMood = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingMood)
 local LightingRig = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingRig)
-local SettingsSchema = require(ReplicatedStorage.Shared.Config.SettingsSchema)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
 type Expect = SpecRunner.Expect
@@ -207,14 +206,6 @@ return {
 	end,
 
 	["the Brightness setting steps the exposure and the fill around the render"] = function(t: Expect)
-		local setting = SettingsSchema.get("Brightness")
-		t.truthy(setting and setting.kind == "Number", "a number setting")
-		if setting and setting.kind == "Number" then
-			t.eq(setting.default, 0, "the graded look by default")
-			t.eq(setting.min, -2)
-			t.eq(setting.max, 2)
-			t.eq(setting.step, 1)
-		end
 		local exposure, fill = LightingMood.brightnessAdjust(0)
 		t.eq(exposure, 0)
 		t.eq(fill, 1)

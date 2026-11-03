@@ -61,8 +61,8 @@ local WorldConfig = h.require("ReplicatedStorage.Shared.Config.WorldConfig")
 local ZoneGraph = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph")
 local VentGraph = h.require("ReplicatedStorage.Shared.Vents.VentGraph")
 local CreatureConfig = h.require("ReplicatedStorage.Shared.Config.CreatureConfig")
-local RunDirector = h.require("ServerScriptService.Services.Core.NoiseAndDirectorService.RunDirector")
-local Volumetrics = h.require("StarterPlayer.StarterPlayerScripts.Controllers.Core.LightingController.Volumetrics")
+local RunDirector = h.require("ReplicatedStorage.Shared.World.RunDirector")
+local Volumetrics = h.require("ReplicatedStorage.Shared.World.Volumetrics")
 
 --------------------------------------------------------------------------------
 -- Build exactly what a run builds

@@ -7,7 +7,7 @@
 
 Output (default tools/textures/out, git-ignored): <Id>_<Map>.png (1024 x 1024; colour RGB, or RGBA for overlays;
 normal RGB in the OpenGL tangent-space convention Roblox uses; roughness / metalness 8-bit grey), meta.json (the
-sha256 of every map and each texture's reference albedo, read by upload.py), preview.png (every surface lit at game
+sha256 of every map and each texture's reference albedo), preview.png (every surface lit at game
 scale, tinted with its palette colour) and with --detail preview_<Id>.png (the maps side by side, 1:1 crops).
 Every recipe is seeded from the manifest, so the same inputs give the same pixels.
 """
