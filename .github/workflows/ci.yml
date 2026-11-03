@@ -1,5 +1,6 @@
-# Every push: the map tool's gates (tools/verify.sh): rojo build + sourcemap, luau-lsp strict, selene, stylua and the
-# Lune world checks (layouts, world build, world specs).
+# Every push: the full Luau gate (tools/verify.sh): the project files and engine pins, rojo build + sourcemap,
+# luau-lsp strict, selene, stylua, capscan and the Lune checks (layouts, world build, every spec, the server
+# lifecycle), plus a downloadable Rovloc.rbxl for Studio-only users.
 name: CI
 
 on:
@@ -26,8 +27,16 @@ jobs:
       - name: Install pinned tools
         run: rokit install --no-trust-check
 
-      - name: Luau type definitions
-        run: curl -sSfL -o globalTypes.d.luau https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/1.70.1/scripts/globalTypes.None.d.luau
+      - name: Luau type definitions and the Roblox API dump
+        run: |
+          curl -sSfL -o globalTypes.d.luau https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/1.70.1/scripts/globalTypes.None.d.luau
+          curl -sSfL -o API-Dump.json https://raw.githubusercontent.com/MaximumADHD/Roblox-Client-Tracker/roblox/API-Dump.json
 
       - name: Gates
-        run: bash tools/verify.sh
+        run: RBXL_OUT=Rovloc.rbxl bash tools/verify.sh
+
+      - name: Upload place file
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rovloc.rbxl
+          path: Rovloc.rbxl

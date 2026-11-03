@@ -1,0 +1,66 @@
+# Publishes the place to Roblox through the Open Cloud Place Publishing API, so the game can be shipped
+# without Studio. Needs three repository secrets (Settings -> Secrets and variables -> Actions):
+#   ROBLOX_API_KEY      Open Cloud key with universe-places: Write for the experience
+#   ROBLOX_UNIVERSE_ID  the experience (universe) id
+#   ROBLOX_PLACE_ID     the start place id
+# Runs manually (Actions -> Publish to Roblox -> Run workflow) or on every push to main.
+name: Publish to Roblox
+
+on:
+  workflow_dispatch:
+    inputs:
+      versionType:
+        description: "Saved (private draft) or Published (live)"
+        required: true
+        default: Saved
+        type: choice
+        options: [Saved, Published]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+      ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_UNIVERSE_ID }}
+      ROBLOX_PLACE_ID: ${{ secrets.ROBLOX_PLACE_ID }}
+      VERSION_TYPE: ${{ github.event.inputs.versionType || 'Published' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets
+        id: secrets
+        run: |
+          if [ -z "$ROBLOX_API_KEY" ] || [ -z "$ROBLOX_UNIVERSE_ID" ] || [ -z "$ROBLOX_PLACE_ID" ]; then
+            echo "Publishing skipped: add ROBLOX_API_KEY, ROBLOX_UNIVERSE_ID and ROBLOX_PLACE_ID repository secrets."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Rokit and tools
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          curl -sSf https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
+          echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"
+          "$HOME/.rokit/bin/rokit" install --no-trust-check
+
+      - name: Build place
+        if: steps.secrets.outputs.ready == 'true'
+        run: rojo build default.project.json -o Rovloc.rbxl
+
+      - name: Upload to Roblox
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          status=$(curl -sS -o response.json -w "%{http_code}" -X POST \
+            "https://apis.roblox.com/universes/v1/${ROBLOX_UNIVERSE_ID}/places/${ROBLOX_PLACE_ID}/versions?versionType=${VERSION_TYPE}" \
+            -H "x-api-key: ${ROBLOX_API_KEY}" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @Rovloc.rbxl)
+          cat response.json; echo
+          if [ "$status" != "200" ]; then echo "Publish failed with HTTP $status"; exit 1; fi

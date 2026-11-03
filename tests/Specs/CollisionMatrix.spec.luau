@@ -1,6 +1,6 @@
 --!strict
--- The collision matrix (CollisionGroups) must keep its vent and doorway guarantees: the export writes each part's
--- group, and the web's player and Creature collision follow it.
+-- The collision matrix (CollisionGroups) must keep its vent and doorway guarantees on both platforms: CollisionService
+-- applies it on Roblox, and the export writes each part's group, which the web's player and Creature collision follow.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 

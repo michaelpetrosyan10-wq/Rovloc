@@ -304,6 +304,17 @@ local STRINGS: { [string]: string } = {
 
 	-- Settings
 	["Settings.Title"] = "SETTINGS",
+	["Settings.Graphics"] = "Graphics",
+	["Settings.Graphics.Max"] = "Max",
+	["Settings.Graphics.Max.Info"] = "Everything on: every shadow, light shaft, particle and texture.",
+	["Settings.Graphics.High"] = "High",
+	["Settings.Graphics.High.Info"] = "Full textures and effects, with fewer shadowed lights and light shafts.",
+	["Settings.Graphics.Medium"] = "Medium",
+	["Settings.Graphics.Medium.Info"] = "Shadows near you, fewer particles, a shorter view through the haze.",
+	["Settings.Graphics.Low"] = "Low",
+	["Settings.Graphics.Low.Info"] = "Only your torch casts shadows. Plain surfaces, no bloom or light shafts.",
+	["Settings.Graphics.Potato"] = "Potato",
+	["Settings.Graphics.Potato.Info"] = "For school Chromebooks: no shadows or particles, a flat grade, a short view.",
 	["Settings.MouseSensitivity"] = "Mouse sensitivity",
 	["Settings.GamepadSensitivity"] = "Gamepad sensitivity",
 	["Settings.TouchSensitivity"] = "Touch sensitivity",

@@ -1,22 +1,39 @@
 # Rovloc
 
-A first-person survival horror game for 1–4 players in a pitch-black, post-apocalyptic school. It runs in the browser
-(**[rovloc.vercel.app](https://rovloc.vercel.app)**) as one self-contained HTML file, so it works on school
-Chromebooks. Co-op uses room codes.
+A first-person survival horror game for 1–4 players in a pitch-black, post-apocalyptic school. It ships natively on
+two platforms, the same game with every feature on both:
 
-Everything is generated in code: the building, the Creature, the light, the audio and the UI. A Luau world builder
-generates the school. It runs offline in Lune, and its export is baked into the web build. Rovloc began as a Roblox
-game; that runtime is retired, and git history keeps it.
+- **the website**, **[rovloc.vercel.app](https://rovloc.vercel.app)**: one HTML file, with co-op over room codes;
+- **a Roblox game**, built from this repository with Rojo.
 
-- **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) covers the web runtime, the map pipeline and the
-  gates.
+Everything is generated in code: the building, the Creature, the light, the audio and the UI. One Luau world builder
+makes the school for both: Roblox builds it live, and the web bakes its export. Each platform runs its own native
+gameplay code: Luau services and controllers on Roblox, a JavaScript engine on the web. Both follow the same shared
+configs and specs. A Graphics setting goes from Max (the default) down to Potato, for school Chromebooks.
+
+- **Architecture:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) covers what is shared, both runtimes, the
+  Graphics tiers, the map pipeline and the gates.
+- **Roblox place setup and publishing:** [`docs/PLACE_SETUP.md`](docs/PLACE_SETUP.md).
+- **Roblox lighting matched to the web:** [`docs/LIGHTING-PARITY.md`](docs/LIGHTING-PARITY.md).
 - **World data format:** [`web/DATA.md`](web/DATA.md).
 - **Checks and tools:** [`tools/README.md`](tools/README.md).
 
-## Quick start
+## Quick start: Roblox
 
-You need Node 22, Python 3 with numpy and Pillow, Playwright's Chromium, and the tools pinned in `rokit.toml` (installed
-with `rokit install`).
+You need the tools pinned in `rokit.toml` (`rokit install`).
+
+```sh
+rojo build -o Rovloc.rbxl         # build the place once (applies every engine setting)
+# open Rovloc.rbxl in Studio and publish it, then:
+rojo serve                        # live-sync code into that place
+```
+
+CI uploads a ready-to-open `Rovloc.rbxl` on every push, for Studio-only users.
+
+## Quick start: web
+
+You need Node 22, Python 3 with numpy and Pillow, Playwright's Chromium, and the same rokit tools (the export runs the
+world builder in Lune).
 
 ```sh
 cd web
@@ -30,6 +47,6 @@ Open `web/dist/Rovloc.html` to play. To deploy, copy it to `site/index.html` and
 ## Checks
 
 ```sh
-tools/verify.sh                                         # map tool: rojo, luau-lsp strict, selene, stylua, Lune checks
+tools/verify.sh       # Luau: project files, rojo, luau-lsp strict, selene, stylua, capscan, layouts, world, every spec, server lifecycle
 cd web && node tools/data-test.mjs && npm run check && node tools/game-smoke.mjs   # web game
 ```

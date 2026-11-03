@@ -294,8 +294,8 @@ local function inject()
 	end, function(self, handler)
 		current.invokeHandlers[self.Name] = handler
 	end)
-	-- BindableEvent with Deferred signal behaviour (handlers run after the firing thread yields), as Roblox's
-	-- Workspace.SignalBehavior = Deferred.
+	-- BindableEvent with Deferred signal behaviour (handlers run after the firing thread yields), matching the
+	-- Workspace.SignalBehavior pin that ServerMain's place audit probes.
 	roblox.implementProperty("BindableEvent", "Event", function(self)
 		return instanceSignal(self, "bindable", true)
 	end)
@@ -478,7 +478,7 @@ function Harness.load(placePath, options)
 	-- The instance-based require the game code itself uses (for runners that walk folders).
 	h.requireInstance = requireModule
 
-	-- Runs a Script / LocalScript with the same environment modules get.
+	-- Runs a Script / LocalScript (e.g. ServerMain) with the same environment modules get.
 	function h.runScript(path)
 		local instance = h.path(path)
 		assert(instance:IsA("BaseScript"), path .. " is not a script")
