@@ -308,9 +308,9 @@ export class CreatureApi {
 
 const EYE_LIFT = new THREE.Vector3(0, 3.2, 0);
 const HITBOX_LAYOUTS = {
-  Biped: { floor: true, forward: 0 },
-  Hunched: { floor: true, forward: 0.6 },
+  Biped: { floor: true, forward: 0.35 },
+  Hunched: { floor: true, forward: 1.3 },
   Quadruped: { floor: false, forward: 0.9 },
-  Swim: { floor: false, forward: 0.8 },
+  Swim: { floor: false, forward: 0.5 },
 };
 const _offset = new THREE.Matrix4();

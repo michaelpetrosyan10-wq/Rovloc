@@ -8,22 +8,24 @@
 
 /** CreatureConfig */
 export const CreatureConfig = Object.freeze({
+  // The Tall Man (CreatureRigBuilder): 11 studs standing, 9 hunched, long arms and fingers, no claws.
   Rig: Object.freeze({
-    Height: 8.5,
+    Height: 11,
+    HunchedHeight: 9,
     RootSize: Object.freeze([2.6, 2.6, 1.4]),
     HipHeight: 3.4, // root centre sits HipHeight + RootSize.Y / 2 above the floor
-    ArmLength: 4.6,
-    ClawLength: 0.5,
+    ArmLength: 6.3,
+    FingerLength: 1.3,
   }),
   Hitbox: Object.freeze({
-    Biped: Object.freeze([3, 8, 2]),
-    Hunched: Object.freeze([3, 6, 3]),
+    Biped: Object.freeze([2.6, 11, 2.7]),
+    Hunched: Object.freeze([2.6, 9, 4.2]),
     Quadruped: Object.freeze([2.8, 2.8, 6]),
-    Swim: Object.freeze([3, 3, 7]),
+    Swim: Object.freeze([3, 3, 10]),
   }),
-  // Eye position above the root centre, per PoseMode (Perception and the jumpscare camera); creatureMetrics replaces
-  // Biped / Hunched from meta.creature.eyeHeight when the rig export carries it.
-  EyeHeightAboveRoot: Object.freeze({ Biped: 3.1, Hunched: 1.6, Quadruped: 0.5, Swim: 0.4, Stunned: 2.4 }),
+  // Eye position above the root centre, per PoseMode (Perception and the jumpscare camera); creatureMetrics takes
+  // meta.creature.eyeHeightAboveRoot (the rig export) over these when present.
+  EyeHeightAboveRoot: Object.freeze({ Biped: 5.64, Hunched: 3.6, Quadruped: 0.5, Swim: 0.4, Stunned: 4.6 }),
   Speeds: Object.freeze({
     Dormant: 0,
     Patrol: 7, // Stalk: slower than a walking player (11)
@@ -155,7 +157,12 @@ export function creatureMetrics(meta) {
   const hunchedHeight = num(c.hunchedHeight, MetricDefaults.hunchedHeight);
   const reach = num(c.reach, MetricDefaults.reach);
   const eyeHeights = { ...CreatureConfig.EyeHeightAboveRoot };
-  if (Number.isFinite(c.eyeHeight) && c.eyeHeight > ROOT_HEIGHT) {
+  const exported = c.eyeHeightAboveRoot;
+  if (exported && typeof exported === 'object') {
+    for (const pose of Object.keys(eyeHeights)) {
+      if (Number.isFinite(exported[pose]) && exported[pose] > 0) eyeHeights[pose] = exported[pose];
+    }
+  } else if (Number.isFinite(c.eyeHeight) && c.eyeHeight > ROOT_HEIGHT) {
     eyeHeights.Biped = c.eyeHeight - ROOT_HEIGHT;
     eyeHeights.Hunched = Math.max(0.5, c.eyeHeight * (hunchedHeight / height) - ROOT_HEIGHT);
     eyeHeights.Stunned = eyeHeights.Hunched;

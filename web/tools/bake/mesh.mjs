@@ -285,7 +285,8 @@ function triFace(c, f, opt, sink) {
 function cylinder(c, length, r, opt, sink) {
   if (r < 1e-4 || length < 1e-4) return;
   const circ = 2 * Math.PI * r;
-  const segs = Math.max(6, Math.min(24, Math.round(circ / 0.9)));
+  // opt.arc (studs per segment) and opt.maxSegments refine curved parts (the creature's); the world keeps 0.9 / 24
+  const segs = Math.max(opt.arc ? 8 : 6, Math.min(opt.maxSegments || 24, Math.round(circ / (opt.arc || 0.9))));
   const nl = Math.max(1, Math.ceil(length / opt.maxEdge - 1e-6));
   // side
   const verts = [];
@@ -344,7 +345,7 @@ function cylinder(c, length, r, opt, sink) {
 function ball(c, r, opt, sink) {
   if (r < 1e-4) return;
   const circ = 2 * Math.PI * r;
-  const lon = Math.max(8, Math.min(20, Math.round(circ / 0.9)));
+  const lon = Math.max(opt.arc ? 10 : 8, Math.min(opt.maxSegments || 20, Math.round(circ / (opt.arc || 0.9))));
   const lat = Math.max(4, Math.round(lon / 2));
   const verts = [];
   for (let j = 0; j <= lat; j++) {

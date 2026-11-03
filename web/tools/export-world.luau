@@ -61,6 +61,7 @@ local WorldConfig = h.require("ReplicatedStorage.Shared.Config.WorldConfig")
 local ZoneGraph = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph")
 local VentGraph = h.require("ReplicatedStorage.Shared.Vents.VentGraph")
 local CreatureConfig = h.require("ReplicatedStorage.Shared.Config.CreatureConfig")
+local CreatureRigBuilder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.CreatureRigBuilder")
 local RunDirector = h.require("ReplicatedStorage.Shared.World.RunDirector")
 local Volumetrics = h.require("ReplicatedStorage.Shared.World.Volumetrics")
 
@@ -1283,6 +1284,19 @@ if creatureRig then
 		lights = rigLights,
 		attachments = rigAttachments,
 		config = toJson(CreatureConfig),
+		-- the rig's measures for the web's behaviour (CreatureRigBuilder.Metrics; the bake lifts them into
+		-- meta.creature): heights standing / hunched, eye heights per PoseMode, the catch reach, hitboxes per PoseMode
+		metrics = {
+			height = CreatureRigBuilder.Metrics.Height,
+			hunchedHeight = CreatureRigBuilder.Metrics.HunchedHeight,
+			eyeHeight = r6(CreatureRigBuilder.Metrics.EyeHeight.Biped),
+			eyeHeights = toJson(CreatureRigBuilder.Metrics.EyeHeight),
+			eyeHeightAboveRoot = toJson(CreatureRigBuilder.Metrics.EyeHeightAboveRoot),
+			reach = CreatureRigBuilder.Metrics.Reach,
+			rootHeight = r6(CreatureRigBuilder.Metrics.RootHeight),
+			armLength = CreatureRigBuilder.Metrics.ArmLength,
+			hitboxes = toJson(CreatureRigBuilder.Metrics.Hitboxes),
+		},
 	}
 end
 

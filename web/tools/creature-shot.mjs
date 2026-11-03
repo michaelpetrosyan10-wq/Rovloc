@@ -1,7 +1,8 @@
 // Screenshots of the Creature in the real engine (headless Playwright Chromium, SwiftShader WebGL).
 //
 //   node tools/creature-shot.mjs [--out <dir> (default: <os tmp>/rovloc-creature-shots)] [--stages idle,walk,...]
-//                                [--width 1280 --height 720]
+//                                [--width 1280 --height 720] [--tier Low|Medium|High (default High)] [--perf]
+// --perf instead times the rig per frame (CreatureView.frame + JumpscareView.step) at 4x CPU throttle on each tier.
 //
 // Builds a single-file page with build.mjs --entry tools/creature-shot-entry.js (the engine, the world data and the
 // Creature; the entry stands in for the game), opens it from file://, then for every stage: poses the Creature
@@ -25,6 +26,7 @@ const opt = (name, fallback) => {
 const outDir = path.resolve(opt('--out', path.join(os.tmpdir(), 'rovloc-creature-shots')));
 const width = Number(opt('--width', 1280));
 const height = Number(opt('--height', 720));
+const tier = opt('--tier', 'High');
 const page = path.join(outDir, 'creature-shot.html');
 
 function loadPlaywright() {
@@ -60,15 +62,28 @@ async function main() {
   await tab.waitForFunction(() => window.__rovloc && (window.__rovloc.ready || window.__rovloc.error), null, { timeout: 240000 });
   const bootError = await tab.evaluate(() => window.__rovloc.error);
   if (bootError) throw new Error(`boot failed: ${bootError} ${errors.join(' | ')}`);
-  const place = await tab.evaluate(() => {
+  const place = await tab.evaluate((t) => {
     const e = window.__rovloc.engine;
     e.loop.stop();
     e.quality.adapt = false;
     e.quality.probing = null;
-    e.quality.setTier('High');
+    e.quality.setTier(t);
     return window.__shot.place;
-  });
+  }, tier);
   console.log(`[creature-shot] ${place.level} ${place.room}: Creature at ${place.at.map((v) => v.toFixed(1)).join(', ')}, probe ${place.probe.toFixed(3)}`);
+  if (argv.includes('--perf')) {
+    // the rig's main-thread cost per frame (CreatureView.frame: animation, bones, look, smoke; plus the jumpscare
+    // view's step) with the CPU throttled 4x, per tier, the Creature stalking toward the camera within 20 studs
+    const cdp = await tab.context().newCDPSession(tab);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+    for (const t of ['Low', 'Medium', 'High']) {
+      const ms = await tab.evaluate((tierName) => window.__shot.perf(tierName, 150), t);
+      console.log(`PERF  ${t.padEnd(6)} rig ${ms.rig.toFixed(3)} ms/frame (median ${ms.median.toFixed(3)}, p95 ${ms.p95.toFixed(3)}), frame ${ms.frame.toFixed(1)} ms, ${ms.calls} draw calls  ${JSON.stringify(ms.parts)}`);
+    }
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    await browser.close();
+    process.exit(errors.length > 0 ? 1 : 0);
+  }
   const all = await tab.evaluate(() => window.__shot.stages);
   const wanted = opt('--stages', '') ? opt('--stages', '').split(',') : all;
   const saved = [];
@@ -90,7 +105,7 @@ async function main() {
     const ok = !!m && m.mean > 1;
     if (!ok) failed = true;
     const s = result.snapshot;
-    console.log(`${ok ? 'SHOT' : 'DARK'}  ${stage.padEnd(10)} ${s.state}/${s.pose}${s.hidden ? ' hidden' : ''}  mean ${m ? m.mean.toFixed(1) : '-'}  ${path.relative(web, file)}`);
+    console.log(`${ok ? "SHOT" : "DARK"}  ${stage.padEnd(10)} ${s.state}/${s.pose}${s.hidden ? " hidden" : ""} fade ${Number(s.fade).toFixed(3)} ${JSON.stringify(s.contract)} now ${Number(s.now).toFixed(2)} mean ${m ? m.mean.toFixed(1) : "-"}`);
   }
   await browser.close();
   if (errors.length > 0) {

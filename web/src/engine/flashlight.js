@@ -120,6 +120,8 @@ export class Flashlight {
     this.staticVoice = null;
     this.staticVolume = 0;
     this.allowed = true;
+    /** A scripted multiplier on the beam (1: none): the Creature's reveal stutters the torch through it. */
+    this.stutter = 1;
     this.haze = this._buildHaze();
     deps.scene.add(this.haze);
     this.filmShafts = 1;
@@ -186,7 +188,7 @@ export class Flashlight {
     }
     const flashScale = clamp01(this.settings.get('FlashScale'));
     const flicker = 1 - (1 - flickerFactor(this.emf, ctx.time, this.seed)) * flashScale;
-    this.output = batteryFactor(fraction) * sputter(fraction, ctx.time, this.seed) * flicker;
+    this.output = batteryFactor(fraction) * sputter(fraction, ctx.time, this.seed) * flicker * clamp01(this.stutter ?? 1);
     beamColor(fraction, this.color);
     const gain = BRIGHTNESS_UNIT * (s.torchGain ?? 1); // lighting's exposure trim, undone for the torch
     s.uFlInner.value.set(this.color.r, this.color.g, this.color.b)

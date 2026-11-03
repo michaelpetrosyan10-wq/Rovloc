@@ -293,6 +293,9 @@ export function buildMeta(raw, r) {
         attachments: raw.creature.attachments,
         chunks: r.chunks.filter((c) => c.kind === 'creature').map((c) => c.id),
         config: raw.creature.config,
+        // the rig's measures (export-world.luau: CreatureRigBuilder.Metrics): height, hunchedHeight, eyeHeight,
+        // eyeHeights, eyeHeightAboveRoot, reach, rootHeight, armLength, hitboxes {pose: {size, offset}}
+        ...(raw.creature.metrics || {}),
       }
     : null;
 

@@ -53,6 +53,9 @@ if (!settings) throw new Error(`unknown quality ${QUALITY}`);
 
 // Subdivision (max edge, studs) per level key: interiors fine enough for pools, outside coarse.
 const MAX_EDGE = { Exterior: 8, Skyline: 16, default: 2.4, entity: 2.5, creature: 1e9 };
+// The creature's curved parts are finer than the world's: the mask fills the screen in a jumpscare.
+const CREATURE_ARC = 0.07;
+const CREATURE_MAX_SEGMENTS = 40;
 // Faces that no light reaches (ceilings over downlights, dark rooms) or that it lights evenly are split coarser.
 const EDGE_DARK = 8;
 const EDGE_EVEN = 5;
@@ -465,6 +468,7 @@ for (const cp of creature ? creature.parts : []) {
   addPart(p, {
     maxEdge: MAX_EDGE.creature,
     cull: false,
+    generate: (sink) => tessellatePart(p, { maxEdge: MAX_EDGE.creature, cull: null, arc: CREATURE_ARC, maxSegments: CREATURE_MAX_SEGMENTS }, sink),
     bake: false,
     alpha: opacity,
     info: { kind: 'creature', level: 'Creature', bucket, material },

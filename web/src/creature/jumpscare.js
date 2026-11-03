@@ -6,8 +6,9 @@
 // within MaxReach). Then:
 //   1. Lock: the victim is held (player.lock "Jumpscare": anchored, look frozen).
 //   2. Face to face (facePair): the victim's root turns in place to face the Creature; the Creature's root is anchored
-//      for the moment and set on the line between them at the kind's spacing, facing the victim, at its own height.
-//      It only ever closes in, unless closer than the kind's minimum, where it is eased back out to it.
+//      for the moment and set on the line between them at the kind's spacing (SPACING: far enough back for its bow to
+//      bring the mask level with the victim's eye), facing the victim, at its own height. It only ever closes in,
+//      unless closer than the kind's minimum, where it is eased back out to it.
 //   3. The moment at startAt = now + OneShotLead: the Lunge action on the rig, the victim's camera session
 //      (JumpscareView: face lock, lunge, shake, flashes, cut to black) until resolveAt, the Screech at the Creature's
 //      face and the JumpscareSting for the victim.
@@ -32,9 +33,12 @@ const MIN_DIRECTION = 1e-3;
 /** @typedef {'Downed'|'Executed'|'Aborted'} Outcome */
 /** @typedef {{startAt: number, lungeEndsAt: number, resolveAt: number}} Schedule */
 
+// Root to root. On its feet it bows to the victim: the chest folds far forward and the long neck reaches down until
+// the mask hangs level with their eye about 1.3 studs off (profile.js, the Lunge), so it stands well back, stepping
+// back off its root if it is closer than that. In a duct (Vent) and in the water it lunges straight in.
 const SPACING = {
-  Hallway: { distance: J.FaceDistance + 0.8, minimum: J.FaceDistance + 0.3 },
-  Locker: { distance: J.FaceDistance + 1.4, minimum: J.FaceDistance + 0.8 },
+  Hallway: { distance: 4.2, minimum: 3.4 },
+  Locker: { distance: 4.4, minimum: 3.6 },
   Vent: { distance: J.FaceDistance + 1.2, minimum: J.FaceDistance + 0.7 },
   Underwater: { distance: J.FaceDistance + 1.0, minimum: J.FaceDistance + 0.4 },
 };

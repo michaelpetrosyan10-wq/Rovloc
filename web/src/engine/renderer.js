@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { createDepthMaterial } from './materials.js';
+import { SCREEN_FX_DECL, SCREEN_FX_FINISH, SCREEN_FX_SAMPLE, screenFxUniforms } from './screenfx.js';
 
 const POST_VERT = /* glsl */ `
 precision highp float;
@@ -35,7 +36,7 @@ uniform float uTime;
 uniform vec4 uOverlay; // rgb colour, a amount (underwater murk, flashes)
 uniform float uBlur;   // 0..1 cheap radial softening (panic depth of field stand-in)
 uniform vec2 uTexel;
-
+${SCREEN_FX_DECL}
 const float CONTRAST_PIVOT = 0.16;
 
 float edgeAlpha(float x, float depth) {
@@ -46,7 +47,7 @@ float edgeAlpha(float x, float depth) {
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
 void main() {
-  vec3 c = texture(tScene, vUv).rgb;
+${SCREEN_FX_SAMPLE}
   if (uBlur > 0.001) {
     vec2 d = (vUv - 0.5);
     float r = dot(d, d) * 4.0 * uBlur;
@@ -78,6 +79,7 @@ void main() {
   c *= keep;
   float n = hash(vUv * vec2(1931.0, 1213.0) + fract(uTime * 7.31)) - 0.5;
   c += n * uGrain;
+${SCREEN_FX_FINISH}
   fragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
 `;
@@ -178,6 +180,7 @@ export class Renderer {
       uOverlay: { value: new THREE.Vector4(0, 0, 0, 0) },
       uBlur: { value: 0 },
       uTexel: { value: new THREE.Vector2(1 / 1280, 1 / 720) },
+      ...screenFxUniforms(),
     });
     this.bright = fullscreen(BRIGHT_FRAG, { tScene: { value: this.target.texture }, uThreshold: { value: 0.72 } });
     this.blur = fullscreen(BLUR_FRAG, { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } });

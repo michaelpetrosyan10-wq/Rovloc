@@ -1,9 +1,13 @@
 --!strict
 -- CreatureRigBuilder contracts on a Creature built at a raised, turned spawn point: its size against
--- CreatureConfig.Rig (8.5 tall, feet on the floor, eyes EyeHeightAboveRoot.Biped above the root, 6-inch claws, arm
--- reach), the R15 + Jaw + hair joint tree (every Motor6D consistent with its parts at rest, joint frames aligned
--- with the facing, everything hanging off the root, details welded to their limb), the physics presets (only the
--- root has mass and collides; limbs NoCollide; the CreatureHitbox queryable and resized per PoseMode by
+-- CreatureConfig.Rig (11 tall, feet on the floor, eyes EyeHeightAboveRoot.Biped above the root, hands hanging below
+-- the knees on long tapering clawless fingers, arm reach), the ivory porcelain mask (upper half on the Head, the
+-- chin on the hinged Jaw, the sculpt's and the painted detail's attributes, the relief, cracks, streaks, chip, shards
+-- and grime Roblox draws, nothing white inside the open split), the near-black shadow body, the smoke anchors and the
+-- shroud, the exported Metrics, the R15 + Jaw + finger + tatter joint tree (every Motor6D consistent with its parts at
+-- rest, joint frames aligned with the facing, everything hanging off the root, details welded to their limb), the
+-- physics presets (only
+-- the root has mass and collides; limbs NoCollide; the CreatureHitbox queryable and resized per PoseMode by
 -- setHitbox), the Humanoid settings, the PoseMode attribute, the part budget and deterministic output.
 -- The Lune harness has no joint solver: rest-pose consistency is checked as Part1 == Part0 * C0 * C1^-1.
 
@@ -125,9 +129,9 @@ local function findPart(model: Model, name: string): BasePart
 	error("the Creature has no part " .. name)
 end
 
-local function baseParts(model: Model): { BasePart }
+local function baseParts(root: Instance): { BasePart }
 	local list: { BasePart } = {}
-	for _, descendant in model:GetDescendants() do
+	for _, descendant in root:GetDescendants() do
 		if descendant:IsA("BasePart") then
 			table.insert(list, descendant)
 		end
@@ -275,20 +279,45 @@ return {
 		end
 	end,
 
-	["size: 8.5 studs to the top of the head, soles, heels and toes on the floor"] = function(t: Expect)
+	["size: 11 studs to the crown, soles and toes on the floor, hands below the knees"] = function(t: Expect)
 		local model = rest().model
 		local top, bottom = verticalSpan(model)
-		t.near(top, RIG.Height, 0.25, "top of the head above the floor")
+		t.near(top, RIG.Height, 0.05, "top of the head above the floor")
 		t.near(bottom, 0, 0.02, "lowest point of the body (nothing sinks into the floor)")
 		for _, name in { NAMES.LeftFoot, NAMES.RightFoot } do
 			local foot = findPart(model, name)
 			t.near(-reach(foot, -UP) - FLOOR, 0, 0.01, name .. " sole on the floor")
 		end
-		-- the hair cap is the crown: nothing pokes out above it
-		t.near(reach(findPart(model, "Scalp"), UP) - FLOOR, top, 0.01, "the scalp is the highest point")
+		-- the crown of the skull is the top: nothing pokes out above it
+		t.near(reach(findPart(model, NAMES.Crown), UP) - FLOOR, top, 0.01, "the crown is the highest point")
+		t.truthy(RIG.HunchedHeight < RIG.Height, "hunched is shorter than standing")
+		-- the arms hang so long that the fingertips are below the knees
+		for _, side in { "Left", "Right" } do
+			local knee = model:FindFirstChild(side .. "Knee", true)
+			local kneePart0 = if knee and knee:IsA("Motor6D") then knee.Part0 else nil
+			if not (knee and knee:IsA("Motor6D") and kneePart0) then
+				t.fail("no " .. side .. "Knee")
+				continue
+			end
+			local kneeHeight = (kneePart0.CFrame * knee.C0).Position:Dot(UP) - FLOOR
+			local lowest = math.huge
+			for _, finger in NAMES.Fingers[side] do
+				local part = findPart(model, finger)
+				lowest = math.min(lowest, -reach(part, -UP) - FLOOR)
+				for _, piece in baseParts(part) do
+					lowest = math.min(lowest, -reach(piece, -UP) - FLOOR)
+				end
+			end
+			t.truthy(
+				lowest < kneeHeight - 0.3,
+				string.format("%s fingertips %.2f below the knee %.2f", side, lowest, kneeHeight)
+			)
+		end
 	end,
 
-	["eyes: pinprick pupils EyeHeightAboveRoot.Biped above the root, deep in black sockets"] = function(t: Expect)
+	["eyes: pinprick pupils EyeHeightAboveRoot.Biped above the root, on the mask at the eye holes"] = function(
+		t: Expect
+	)
 		local built = rest()
 		local model = built.model
 		local left = findPart(model, NAMES.LeftPupil)
@@ -297,7 +326,7 @@ return {
 		local fromRoot = eyes - built.root.CFrame.Position
 		t.near(fromRoot:Dot(UP), CreatureConfig.EyeHeightAboveRoot.Biped, 0.01, "eye height above the root centre")
 		local ahead = fromRoot:Dot(BASE.LookVector)
-		t.truthy(ahead >= 0 and ahead <= 1, "the hunched face leans at most a stud ahead of the root: " .. ahead)
+		t.truthy(ahead >= 0 and ahead <= 1.7, "the face juts ahead of the root on the neck: " .. ahead)
 		t.near(fromRoot:Dot(BASE.RightVector), 0, POSITION_EPS, "eyes centred on the body")
 		t.truthy(left.CFrame.Position:Dot(BASE.RightVector) < right.CFrame.Position:Dot(BASE.RightVector), "sides")
 
@@ -312,22 +341,24 @@ return {
 		sameVector(t, faceFrame.Position, eyes, POSITION_EPS, "face attachment at the pupils' midpoint")
 		t.truthy(faceFrame.LookVector:Dot(BASE.LookVector) > 0.95, "the face attachment looks where the Creature faces")
 
+		-- the eye holes are painted on the mask around the pupils (the Mask part's attributes, in the face frame)
+		local mask = findPart(model, NAMES.Mask)
+		local eyeX = mask:GetAttribute("EyeX")
+		if type(eyeX) ~= "number" then
+			t.fail("Mask carries no EyeX")
+			return
+		end
 		for _, pupil in { left, right } do
 			t.eq(pupil.Material, Enum.Material.Neon, pupil.Name .. " material")
 			t.eq(pupil.Color, RIG.PupilColor, pupil.Name .. " colour")
 			t.truthy(pupil.Size.X <= 0.06, pupil.Name .. " is a pinprick")
-			local side = string.sub(pupil.Name, 1, #pupil.Name - #"Pupil")
-			local socket = findPart(model, side .. "EyeSocket")
-			t.eq(socket.Color, RIG.EyeSocketColor, socket.Name .. " colour")
-			t.truthy(socket.Size.X > pupil.Size.X * 4, socket.Name .. " dwarfs its pupil")
-			-- the pinprick lies on the black back wall of the socket, where it can be seen ...
-			local offset = pupil.CFrame.Position - socket.CFrame.Position
-			t.near(offset.Magnitude, socket.Size.X / 2, pupil.Size.X / 2, pupil.Name .. " sits on its socket's wall")
-			t.truthy(offset:Dot(BASE.LookVector) > 0, pupil.Name .. " faces out of the socket")
-			-- ... sunk behind the brow, so the socket reads as a hollow
-			local pupilFront = pupil.CFrame.Position:Dot(BASE.LookVector)
-			local browFront = reach(findPart(model, side .. "Brow"), BASE.LookVector)
-			t.truthy(browFront > pupilFront + 0.05, side .. " brow overhangs the socket")
+			t.eq(pupil.Parent, head, pupil.Name .. " rides the Head")
+			local inFace = faceFrame:PointToObjectSpace(pupil.CFrame.Position)
+			t.near(math.abs(inFace.X), eyeX, POSITION_EPS, pupil.Name .. " at its eye hole's centre")
+			-- it sits on the porcelain surface of the upper mask's cylinder
+			local onAxis = mask.CFrame:PointToObjectSpace(pupil.CFrame.Position)
+			local radial = math.sqrt(onAxis.Y ^ 2 + onAxis.Z ^ 2)
+			t.near(radial, mask.Size.Y / 2, 0.01, pupil.Name .. " on the mask's surface")
 		end
 	end,
 
@@ -557,86 +588,254 @@ return {
 		built.folder:Destroy()
 	end,
 
-	["hands: elongated arms ending in four clawed fingers and a clawed thumb"] = function(t: Expect)
+	["hands: long arms ending in four long tapering fingers and a thumb, no claws"] = function(t: Expect)
 		local model = rest().model
-		local claws: { [string]: number } = {}
-		local total = 0
 		for _, part in baseParts(model) do
-			if string.sub(part.Name, -4) ~= "Claw" then
-				continue
-			end
-			total += 1
-			t.truthy(part:IsA("WedgePart"), part.Name .. " is a tapering wedge")
-			t.near(part.Size.Z, RIG.ClawLength, 1e-3, part.Name .. " length")
-			t.truthy(part.Size.X < 0.1 and part.Size.Y < 0.1, part.Name .. " is a slender blade")
-			local hand = part.Parent
-			local handName = if hand then hand.Name else "nil"
-			claws[handName] = (claws[handName] or 0) + 1
-			t.truthy(part.Color ~= RIG.SkinColor and part.Color ~= RIG.ToothColor, part.Name .. " is stained")
+			t.falsy(string.find(part.Name, "Claw"), part.Name .. ": the hands have no claws")
 		end
-		t.eq(total, 10, "ten claws")
-		t.eq(claws[NAMES.LeftHand], 5, "five claws on the left hand")
-		t.eq(claws[NAMES.RightHand], 5, "five claws on the right hand")
-
+		local black = RIG.ShadowColor.R + RIG.ShadowColor.G + RIG.ShadowColor.B
 		for _, side in { "Left", "Right" } do
+			local chain = NAMES.Fingers[side]
+			t.eq(#chain, 5, side .. " has four fingers and a thumb")
+			local hand = findPart(model, side .. "Hand")
+			for _, name in chain do
+				local finger = findPart(model, name)
+				t.eq(finger.Parent, model, name .. " is a jointed rig part")
+				local motor = finger:FindFirstChild(name)
+				local motorPart0 = if motor and motor:IsA("Motor6D") then motor.Part0 else nil
+				t.eq(motorPart0, hand, name .. " is jointed to " .. hand.Name)
+				-- the finger tapers: every welded segment is thinner than the jointed one, ending in a slim point
+				local pointed = false
+				local thickness = math.min(finger.Size.Y, finger.Size.Z)
+				for _, piece in baseParts(finger) do
+					if string.find(piece.Name, "Knuckle$") then
+						continue
+					end
+					t.truthy(math.min(piece.Size.X, piece.Size.Y, piece.Size.Z) < thickness, piece.Name .. " tapers")
+					pointed = pointed or (piece:IsA("WedgePart") and string.find(piece.Name, "Point$") ~= nil)
+				end
+				t.truthy(pointed, name .. " ends in a point")
+				t.near(finger.Color.R + finger.Color.G + finger.Color.B, black, 0.02, name .. " is black")
+			end
 			local shoulder = model:FindFirstChild(side .. "Shoulder", true)
-			if not (shoulder and shoulder:IsA("Motor6D")) then
+			local part0 = if shoulder and shoulder:IsA("Motor6D") then shoulder.Part0 else nil
+			if not (shoulder and shoulder:IsA("Motor6D") and part0) then
 				t.fail("no " .. side .. "Shoulder")
 				continue
 			end
-			local part0 = shoulder.Part0
-			if not part0 then
-				t.fail(side .. "Shoulder has no Part0")
-				continue
-			end
 			local pivot = (part0.CFrame * shoulder.C0).Position
-			local hand = findPart(model, side .. "Hand")
 			local furthest = 0
-			for _, piece in hand:GetChildren() do
-				if piece:IsA("BasePart") then
-					local direction = (piece.CFrame.Position - pivot).Unit
-					furthest = math.max(furthest, reach(piece, direction) - pivot:Dot(direction))
-				end
+			local middle = findPart(model, side .. "Middle")
+			for _, piece in baseParts(middle) do
+				local direction = (piece.CFrame.Position - pivot).Unit
+				furthest = math.max(furthest, reach(piece, direction) - pivot:Dot(direction))
 			end
 			t.truthy(
-				furthest >= RIG.ArmLength * 0.95 and furthest <= RIG.ArmLength + RIG.ClawLength,
-				string.format("%s shoulder-to-claw reach %.2f against ArmLength %.2f", side, furthest, RIG.ArmLength)
+				furthest >= RIG.ArmLength * 0.93 and furthest <= RIG.ArmLength * 1.03,
+				string.format(
+					"%s shoulder-to-fingertip reach %.2f against ArmLength %.2f",
+					side,
+					furthest,
+					RIG.ArmLength
+				)
 			)
 		end
 	end,
 
-	["face: a separate Jaw that drops open on its Motor6D, bared teeth above and below"] = function(t: Expect)
+	["mask: ivory porcelain over the face, the chin a separate Jaw that drops the slit open"] = function(t: Expect)
 		local model = rest().model
+		local head = findPart(model, NAMES.Head)
+		local mask = findPart(model, NAMES.Mask)
 		local jaw = findPart(model, NAMES.Jaw)
+		t.eq(mask.Parent, head, "the upper mask rides the Head")
+		for _, part in { mask, findPart(model, "MaskBrow"), jaw, findPart(model, "Chin") } do
+			t.eq(part.Material, Enum.Material.Marble, part.Name .. " is porcelain")
+			t.eq(part.Color, RIG.MaskColor, part.Name .. " colour")
+			local average = (part.Color.R + part.Color.G + part.Color.B) / 3
+			t.truthy(average > 0.68 and average < 0.8, part.Name .. " is ivory, not white")
+			t.truthy(part.Color.B < part.Color.R, part.Name .. " is warm")
+			t.truthy(part.Reflectance > 0 and part.Reflectance <= 0.2, part.Name .. " has a slight sheen")
+		end
+		for name, value in CreatureRigBuilder.MaskAttributes do
+			t.eq(mask:GetAttribute(name), value, "Mask attribute " .. name)
+		end
+		for _, name in
+			{ "EyeX", "EyeHoleWidth", "EyeHoleHeight", "EyeHoleDepth", "SlitY", "SlitHalfWidth", "SlitUpturn" }
+		do
+			t.truthy(type(mask:GetAttribute(name)) == "number", "Mask carries " .. name)
+		end
+		-- the sculpt both platforms draw: the outline, the profile and the relief as rows of numbers, and the chip
+		local shape = CreatureRigBuilder.MaskShape
+		t.eq(mask:GetAttribute("MaskOutline"), shape.MaskOutline, "MaskOutline")
+		t.eq(mask:GetAttribute("MaskProfile"), shape.MaskProfile, "MaskProfile")
+		t.eq(mask:GetAttribute("MaskRelief"), shape.MaskRelief, "MaskRelief")
+		t.eq(mask:GetAttribute("ChipCentre"), shape.ChipCentre, "ChipCentre")
+		t.eq(mask:GetAttribute("ChipRadius"), shape.ChipRadius, "ChipRadius")
+		local outline: { { number } } = {}
+		for row in string.gmatch(shape.MaskOutline, "[^;]+") do
+			local cells: { number } = {}
+			for cell in string.gmatch(row, "[^:]+") do
+				table.insert(cells, tonumber(cell) or 0)
+			end
+			t.eq(#cells, 3, "an outline knot is y:left:right")
+			table.insert(outline, cells)
+		end
+		t.truthy(#outline >= 8, "the outline has knots")
+		local top, chin = outline[1], outline[#outline]
+		local widest, lopsided = 0, false
+		for i, knot in outline do
+			widest = math.max(widest, knot[2] + knot[3])
+			lopsided = lopsided or math.abs(knot[2] - knot[3]) > 0.004
+			if i > 1 then
+				t.truthy(knot[1] < outline[i - 1][1], "the outline runs top down")
+			end
+		end
+		t.truthy((top[1] - chin[1]) / widest > 1.6, "an elongated oval, a little too long")
+		t.truthy(lopsided, "a touch asymmetric")
+		t.eq(chin[2] + chin[3], 0, "the chin comes to a point")
+		local reliefs = 0
+		local hollows = 0
+		for row in string.gmatch(shape.MaskRelief, "[^;]+") do
+			local cells: { string } = {}
+			for cell in string.gmatch(row, "[^:]+") do
+				table.insert(cells, cell)
+			end
+			t.eq(#cells, 7, "a relief row is Name:x:y:rx:ry:height:tilt")
+			reliefs += 1
+			if (tonumber(cells[6]) or 0) < 0 then
+				hollows += 1
+			end
+		end
+		t.truthy(
+			reliefs >= 10 and hollows >= 4,
+			"a sculpted relief with hollows (" .. reliefs .. ", " .. hollows .. ")"
+		)
+		-- the chin hangs from the Head on its own hinge, under the slit; a negative pitch drops it open
 		local motor = jaw:FindFirstChild("Jaw")
 		if not (motor and motor:IsA("Motor6D")) then
 			t.fail("no Jaw Motor6D")
 			return
 		end
-		local head = motor.Part0
-		t.eq(head and head.Name, NAMES.Head, "the jaw hangs from the Head")
-		if not head then
+		t.eq(motor.Part0, head, "the chin hangs from the Head")
+		local face = model:FindFirstChild(NAMES.FaceAttachment, true)
+		local slit = mask:GetAttribute("SlitY")
+		if not (face and face:IsA("Attachment") and type(slit) == "number") then
+			t.fail("no face attachment or SlitY")
 			return
 		end
+		local faceFrame = head.CFrame * face.CFrame
+		t.truthy(faceFrame:PointToObjectSpace(jaw.CFrame.Position).Y < slit, "the chin's centre lies under the slit")
+		local chinTip = findPart(model, "Chin")
+		t.eq(chinTip.Parent, jaw, "the pointed chin rides the Jaw")
+		local hinge = faceFrame:PointToObjectSpace((head.CFrame * motor.C0).Position)
+		t.truthy(hinge.Z > 0, "the hinge sits behind the mask's face")
 		local open = head.CFrame * motor.C0 * CFrame.Angles(-math.rad(35), 0, 0) * motor.C1:Inverse()
-		t.truthy(open.Position:Dot(UP) < jaw.CFrame.Position:Dot(UP) - 0.05, "a negative pitch drops the jaw")
-		local upper, lower = 0, 0
+		t.truthy(open.Position:Dot(UP) < jaw.CFrame.Position:Dot(UP) - 0.05, "a negative pitch drops the chin")
+		-- the detail drawn in parts for Roblox (the web paints its own): black almond eye holes round the pinpricks,
+		-- the slit in strips along the seam, black over the faces the split opens
+		for _, name in
+			{ "LeftEyeHole", "RightEyeHole", "MouthSlit1", "MouthSlit2", "MouthSlit3", "MouthSlit4", "MouthVoidUpper" }
+		do
+			local part = findPart(model, name)
+			t.eq(part.Parent, head, name .. " rides the Head")
+			t.eq(part.Material, Enum.Material.Fabric, name .. " is drawn detail (Fabric)")
+			t.truthy((part.Color.R + part.Color.G + part.Color.B) / 3 < 0.05, name .. " is black")
+		end
+		-- no porcelain shows inside the open split: the jaw ball's cap above the seam stays inside the black sleeve on
+		-- the Jaw, and the sleeve inside the upper mask while it is shut
+		local sleeve = findPart(model, "MouthVoidLower")
+		t.eq(sleeve.Parent, jaw, "the black sleeve rides the Jaw")
+		local jawRadius = math.min(jaw.Size.X, jaw.Size.Y, jaw.Size.Z) / 2
+		local jawInFace = faceFrame:PointToObjectSpace(jaw.CFrame.Position)
+		local sleeveInFace = faceFrame:PointToObjectSpace(sleeve.CFrame.Position)
+		local maskInFace = faceFrame:PointToObjectSpace(mask.CFrame.Position)
+		local sleeveRadius = math.min(sleeve.Size.Y, sleeve.Size.Z) / 2
+		local capAtSeam = math.sqrt(math.max(jawRadius ^ 2 - (slit - jawInFace.Y) ^ 2, 0))
+		local offset = Vector2.new(jawInFace.X - sleeveInFace.X, jawInFace.Z - sleeveInFace.Z).Magnitude
+		t.truthy(offset + capAtSeam < sleeveRadius, "the jaw's cap above the seam is inside the sleeve")
+		t.truthy(sleeveInFace.Y + sleeve.Size.X / 2 >= jawInFace.Y + jawRadius, "the sleeve reaches over the cap's top")
+		local sleeveOffset = Vector2.new(sleeveInFace.X - maskInFace.X, sleeveInFace.Z - maskInFace.Z).Magnitude
+		t.truthy(sleeveOffset + sleeveRadius < mask.Size.Y / 2, "the sleeve hides inside the upper mask while shut")
 		for _, part in baseParts(model) do
-			if string.find(part.Name, "^UpperTooth") then
-				upper += 1
-				t.eq(part.Parent, head, part.Name .. " rides the Head")
-			elseif string.find(part.Name, "^LowerTooth") then
-				lower += 1
-				t.eq(part.Parent, jaw, part.Name .. " rides the Jaw")
+			if
+				part.Material == Enum.Material.Marble
+				and part.Parent == jaw
+				and part ~= chinTip
+				and not string.find(part.Name, "^MawShard")
+			then
+				local inFace = faceFrame:PointToObjectSpace(part.CFrame.Position)
+				t.truthy(inFace.Y < slit, part.Name .. " (porcelain on the Jaw) hangs under the slit")
 			end
 		end
-		t.truthy(upper >= 8 and lower >= 8, "rows of teeth above (" .. upper .. ") and below (" .. lower .. ")")
-		t.eq(findPart(model, "MouthCavity").Color, RIG.GrinColor, "dark mouth cavity")
+		-- the relief, sunk into the shell: brow ridges, nose, cheekbones, lips, chin
+		for _, name in
+			{ "BrowLeft", "BrowRight", "Nose", "NoseTip", "CheekLeft", "CheekRight", "LipUpper", "LipLower", "Chin" }
+		do
+			local part = findPart(model, "Relief" .. name)
+			t.eq(part.Material, Enum.Material.Marble, part.Name .. " is porcelain")
+			t.truthy(part.Parent == head or part.Parent == jaw, part.Name .. " rides the mask")
+		end
+		local cracks, streaks, shards, widestCrack = 0, 0, 0, 0
+		for _, part in baseParts(model) do
+			if string.find(part.Name, "^MaskCrack") then
+				cracks += 1
+				t.eq(part.Material, Enum.Material.Fabric, part.Name .. " is drawn detail")
+				t.truthy(typeof(part:GetAttribute("CrackFrom")) == "Vector2", part.Name .. " CrackFrom")
+				t.truthy(typeof(part:GetAttribute("CrackTo")) == "Vector2", part.Name .. " CrackTo")
+				local width = part:GetAttribute("CrackWidth")
+				t.truthy(type(width) == "number" and width > 0, part.Name .. " CrackWidth")
+				widestCrack = math.max(widestCrack, if type(width) == "number" then width else 0)
+				t.truthy(part.Parent == head or part.Parent == jaw, part.Name .. " rides the mask")
+			elseif string.find(part.Name, "^MaskStreak") then
+				streaks += 1
+				t.eq(part.Material, Enum.Material.Fabric, part.Name .. " is drawn detail")
+				t.truthy(typeof(part:GetAttribute("StreakFrom")) == "Vector2", part.Name .. " StreakFrom")
+				t.truthy(typeof(part:GetAttribute("StreakTo")) == "Vector2", part.Name .. " StreakTo")
+				t.truthy(type(part:GetAttribute("StreakWidth")) == "number", part.Name .. " StreakWidth")
+			elseif string.find(part.Name, "^MawShard") then
+				shards += 1
+				t.eq(part.Material, Enum.Material.Marble, part.Name .. " is porcelain")
+				t.truthy(part:IsA("WedgePart"), part.Name .. " is a jagged wedge")
+			end
+		end
+		t.truthy(cracks >= 12, "the major crack and its hairlines (" .. cracks .. ")")
+		t.truthy(widestCrack >= 0.007, "one major crack")
+		t.truthy(streaks >= 4, "weeping streaks under both eyes (" .. streaks .. ")")
+		t.truthy(shards >= 4, "jagged shards in the split (" .. shards .. ")")
+		t.eq(findPart(model, "MaskChip1").Material, Enum.Material.Fabric, "the chipped edge shows the black behind")
+		-- the grime: a SurfaceGui decal on an invisible card over each half of the face, within Roblox's texture cap
+		for _, side in { "Left", "Right" } do
+			local card = findPart(model, "MaskGrime" .. side)
+			t.eq(card.Transparency, 1, card.Name .. " is invisible")
+			local gui = card:FindFirstChildOfClass("SurfaceGui")
+			if not gui then
+				t.fail(card.Name .. " has no SurfaceGui")
+				continue
+			end
+			t.truthy(#gui:GetDescendants() >= 4, card.Name .. " draws grime")
+			t.truthy(
+				math.max(card.Size.X, card.Size.Y) * gui.PixelsPerStud <= 1024,
+				card.Name .. " stays within the 1024-pixel texture cap"
+			)
+		end
+		-- the pinpricks: tiny, one larger than the other
+		local left, right = findPart(model, NAMES.LeftPupil), findPart(model, NAMES.RightPupil)
+		t.truthy(right.Size.X > left.Size.X * 1.2, "one pinprick is larger than the other")
+		-- the mask is the palest thing on the Creature
+		for _, part in baseParts(model) do
+			local lit = part.Material == Enum.Material.Neon or part.Material == Enum.Material.Marble
+			if part.Transparency < 1 and not lit then
+				t.truthy(
+					(part.Color.R + part.Color.G + part.Color.B) / 3 < 0.15,
+					part.Name .. " is darker than the mask"
+				)
+			end
+		end
 	end,
 
-	["budget: at most 220 BaseParts of the allowed classes"] = function(t: Expect)
+	["budget: at most 240 BaseParts of the allowed classes"] = function(t: Expect)
 		local parts = baseParts(rest().model)
-		t.truthy(CreatureRigBuilder.PartBudget <= 220, "budget constant")
+		t.truthy(CreatureRigBuilder.PartBudget <= 240, "budget constant")
 		t.truthy(#parts <= CreatureRigBuilder.PartBudget, #parts .. " BaseParts")
 		for _, part in parts do
 			t.truthy(
@@ -671,11 +870,23 @@ return {
 			NAMES.LeftPupil,
 			NAMES.RightPupil,
 			NAMES.Hitbox,
+			NAMES.Mask,
+			NAMES.Crown,
 		}
 		for _, chain in NAMES.Hair do
 			t.truthy(table.isfrozen(chain), "hair chain is frozen")
 			for _, name in chain do
 				table.insert(partNames, name)
+			end
+		end
+		t.truthy(table.isfrozen(NAMES.Fingers), "PartNames.Fingers is frozen")
+		for _, side in { "Left", "Right" } do
+			local chain = NAMES.Fingers[side]
+			t.truthy(chain and table.isfrozen(chain), side .. " fingers are frozen")
+			if chain then
+				for _, name in chain do
+					table.insert(partNames, name)
+				end
 			end
 		end
 		for _, name in partNames do
@@ -731,24 +942,85 @@ return {
 		t.eq(rigs.Creature, CreatureRigBuilder.build, "the Creature rig builder")
 		t.eq(others, 0, "the rig registers nothing else")
 	end,
-	["skin: dark, wet and glossy; the pupils the brightest thing on it"] = function(t: Expect)
+	["shadow: the body is matte near-black with a faint sheen; the pupils glow"] = function(t: Expect)
 		local built = rest()
-		local skin = 0
+		local body = 0
 		for _, part in baseParts(built.model) do
-			if part.Transparency >= 1 then
+			if part.Transparency >= 1 or part.Material ~= Enum.Material.SmoothPlastic then
 				continue
 			end
-			if part.Material == Enum.Material.SmoothPlastic and part.Reflectance > 0 then
-				skin += 1
-				t.truthy(part.Reflectance <= 0.25, part.Name .. " is wet, not chrome")
-			end
+			body += 1
+			local color = part.Color
+			t.truthy((color.R + color.G + color.B) / 3 < 0.1, part.Name .. " is near-black")
+			t.truthy(part.Reflectance > 0 and part.Reflectance <= 0.08, part.Name .. " has only a faint sheen")
 		end
-		t.truthy(skin >= 40, string.format("the body glistens (%d glossy parts)", skin))
-		local upper = findPart(built.model, "UpperTorso")
-		local color = upper.Color
-		t.truthy((color.R + color.G + color.B) / 3 < 0.4, "the skin is dark")
-		t.truthy(upper.Reflectance >= 0.1, "the torso is wet")
+		t.truthy(body >= 60, string.format("the shadow body is detailed (%d parts)", body))
 		local pupil = findPart(built.model, NAMES.LeftPupil)
 		t.eq(pupil.Material, Enum.Material.Neon, "the eyes glow")
+	end,
+
+	["smoke: anchors at the shoulders, elbows, fingertips, the back and the skull"] = function(t: Expect)
+		local model = rest().model
+		t.truthy(table.isfrozen(NAMES.SmokeAnchors), "SmokeAnchors is frozen")
+		local found: { [string]: Attachment } = {}
+		for _, name in NAMES.SmokeAnchors do
+			local attachment = model:FindFirstChild(name, true)
+			if not (attachment and attachment:IsA("Attachment")) then
+				t.fail("no smoke anchor " .. name)
+				continue
+			end
+			found[name] = attachment
+			local weight = attachment:GetAttribute("SmokeWeight")
+			t.truthy(type(weight) == "number" and weight > 0, name .. " has a SmokeWeight")
+			local parent = attachment.Parent
+			t.truthy(parent and parent:IsA("BasePart") and parent.Parent == model, name .. " rides a jointed rig part")
+		end
+		for _, side in { "Left", "Right" } do
+			t.truthy(found["Smoke" .. side .. "Shoulder"], side .. " shoulder")
+			t.truthy(found["Smoke" .. side .. "Elbow"], side .. " elbow")
+			for _, finger in { "Index", "Middle", "Ring", "Pinky" } do
+				local tip = found["Smoke" .. side .. finger .. "Tip"]
+				t.truthy(tip, side .. " " .. finger .. " tip")
+				local tipParent = if tip then tip.Parent else nil
+				t.eq(tipParent and tipParent.Name, side .. finger, "the tip anchor rides its finger")
+			end
+		end
+		t.truthy(found.SmokeBack, "the back")
+		t.truthy(found.SmokeHead, "the skull")
+		-- the shroud: heavy smoke from the shoulders down
+		local shroud = 0
+		for name, attachment in found do
+			if attachment:GetAttribute("SmokeShroud") == true then
+				shroud += 1
+				local holder = attachment.Parent
+				local world = if holder and holder:IsA("BasePart")
+					then (holder.CFrame * attachment.CFrame).Position
+					else Vector3.zero
+				local position = world:Dot(UP) - FLOOR
+				t.truthy(position > 3 and position < 9, name .. " hangs between the shoulders and the knees")
+			end
+		end
+		t.truthy(shroud >= 5, "the shroud's anchors (" .. shroud .. ")")
+	end,
+
+	["metrics: heights, eyes, reach and hitboxes for the web's behaviour"] = function(t: Expect)
+		local metrics = CreatureRigBuilder.Metrics
+		t.truthy(table.isfrozen(metrics), "Metrics is frozen")
+		t.eq(metrics.Height, 11, "standing height")
+		t.eq(metrics.HunchedHeight, 9, "hunched height")
+		t.eq(metrics.Reach, 4, "catch reach")
+		t.near(metrics.RootHeight, ROOT_HEIGHT, 1e-6, "root height")
+		for mode, above in CreatureConfig.EyeHeightAboveRoot do
+			t.near(metrics.EyeHeight[mode], ROOT_HEIGHT + above, 1e-6, mode .. " eye height")
+		end
+		t.truthy(metrics.EyeHeight.Hunched < metrics.HunchedHeight, "hunched eyes under the hunched crown")
+		t.truthy(metrics.EyeHeight.Biped < metrics.Height, "standing eyes under the crown")
+		local built = build(BASE)
+		for mode, box in metrics.Hitboxes do
+			CreatureRigBuilder.setHitbox(built.model, mode)
+			sameVector(t, built.hitbox.Size, box.size, SIZE_EPS, mode .. " hitbox size")
+			sameFrame(t, built.hitbox.CFrame, built.root.CFrame * box.offset, mode .. " hitbox offset")
+		end
+		built.folder:Destroy()
 	end,
 }

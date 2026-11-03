@@ -362,17 +362,56 @@ lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones f
 
 ## Creature (`meta.creature`)
 
+The Tall Man (CreatureRigBuilder): an 11-stud shadow figure with a porcelain mask.
+
 - **Bones:** `bones[i] = { name, parent, motor, rest, size }`. Bone i is `skinIndex` i. `rest` is the bone part's
   CFrame in model space; the rig is built at the origin facing −Z, HumanoidRootPart at y 4.7.
+  - 41 bones: the R15 set plus `Jaw` (the mask's hinged chin), the jointed fingers `<Side>Index`, `Middle`, `Ring`,
+    `Pinky`, `Thumb` (each a Motor6D from its Hand), and the tatter chains `Hair<N>_<M>` hanging from the Head.
+  - The `Neck` pivot is the top of the long neck: the skull turns on it. The neck column rides the UpperTorso.
 - **Joints:** `joints` are the Motor6Ds: `{ name, part0, part1, c0, c1 }`. A joint's transform applies as
   `part1 = part0 * C0 * T * C1⁻¹`.
-- **Geometry:** `chunks` are the creature chunks (skinned).
+- **Geometry:** `chunks` are the creature chunks (skinned), one per material:
+  - `SmoothPlastic`: the shadow body (near-black, faint sheen), skull, tatters and fingers;
+  - `Marble`: Roblox's porcelain mask: the shell (`Mask` and `MaskBrow` on the Head, the `Jaw` ball and its `Chin`),
+    the relief parts (`Relief<Name>`) and the jagged `MawShard<N>` hidden inside the shell;
+  - `Neon`: the two pinprick pupils on the mask's surface;
+  - `Fabric`: the mask's detail drawn in parts for Roblox (eye-hole discs, slit strips, split caps and the black
+    sleeve, the chip, crack strips `MaskCrack<N>` with attributes `CrackFrom` / `CrackTo` / `CrackWidth`, streak strips
+    `MaskStreak<N>` with `StreakFrom` / `StreakTo` / `StreakWidth`: their face-frame ends and widths).
+  - The website hides the Marble, Fabric and Neon chunks and draws its own sculpt of the mask (look.js / mask.js: a
+    dense two-piece mesh on the Head and Jaw bones, built at load from the Mask part's attributes) and paints the same
+    detail on it (the cracks and streaks from those attributes). The invisible grime cards (`MaskGrimeLeft/Right`,
+    Transparency 1, with a SurfaceGui Roblox draws) are not baked.
+  - See `docs/MONSTER-LOOK.md` for the joints, actions, timings and tiers both platforms share.
+  - The bake tessellates the creature's balls and cylinders finer than the world's (about 0.07 studs per segment,
+    up to 40), since the mask fills the screen in a jumpscare.
+- **Metrics** (CreatureRigBuilder.Metrics; what the behaviour reads):
+  - `height` (11): standing, floor to the crown;
+  - `hunchedHeight` (9): bent under a 10-11 stud ceiling;
+  - `eyeHeight` (10.34): the standing eyes over the floor; `eyeHeights` per PoseMode over the floor (`Biped`,
+    `Hunched`, `Quadruped`, `Swim`); `eyeHeightAboveRoot` per PoseMode over the root centre;
+  - `reach` (4): how far from its root a catch reaches;
+  - `rootHeight` (4.7), `armLength` (6.3);
+  - `hitboxes[poseMode] = { size, offset }`: the CreatureHitbox per PoseMode, `offset` its CFrame relative to the
+    root (Biped 2.6 × 11 × 2.7, Hunched 2.6 × 9 × 4.2, both standing on the floor and pushed forward over the jutting
+    head).
+- **Mask:** the `Mask` part's `attributes` hold the mask both platforms draw, in the face frame (FaceFrontAttachment:
+  x right, y up, z back, origin between the pupils, studs): `EyeX`, `EyeHoleWidth`, `EyeHoleHeight`, `EyeHoleDepth`
+  (the bores), `PupilGlowRadius`, `PupilScaleRight`, `SlitY`, `SlitHalfWidth`, `SlitUpturn`, `MaskTop`, `ChinY`,
+  `MaskDepth`, `ChipAngle`, Roblox's shell sizes `MaskRadius`, `MaskAxisZ`, `ChinRadius`, and the sculpt as strings
+  and vectors (CreatureRigBuilder.MaskShape): `MaskOutline` "y:left:right;..." (the outline's half-widths, top down),
+  `MaskProfile` "y:z;..." (the centreline's depth), `MaskRelief` "Name:x:y:rx:ry:height:tilt;..." (the relief's bumps,
+  studs toward the viewer, negative hollowed), `ChipCentre` / `ChipRadius` (Vector2: the broken-off piece of the rim).
+- **Smoke anchors:** `attachments` named `Smoke*` (the shoulders, elbows, every fingertip but the thumbs, the back,
+  the back of the skull, and the shroud's: the chest, the flanks, the hips, the thighs), each on a jointed part, with
+  attribute `SmokeWeight` (its share of the wisps); the shroud's also carry `SmokeShroud` true (heavy, sinking smoke).
 - **Other data:**
   - `parts`: every rig part, with its bone, size and attributes (the hitbox and HumanoidRootPart included);
-  - `lights`: eye glow;
-  - `attachments`;
+  - `lights`: none;
+  - `attachments`: the FaceFrontAttachment and the smoke anchors;
   - `hipHeight`;
-  - `config`: CreatureConfig (speeds, senses, hitbox sizes per PoseMode, eye offsets).
+  - `config`: CreatureConfig (the rig block, speeds, senses, hitbox sizes per PoseMode, eye offsets).
 
 ## World layout data
 

@@ -1,21 +1,28 @@
-// Creature (Shared/Animation/ProceduralAnimator/Profiles/Creature.luau): the Creature's animation profile and its
-// one-shot action layers, ported line for line.
+// Creature (Shared/Animation/ProceduralAnimator/Profiles/Creature.luau, ported and grown for the Tall Man): the
+// Creature's animation profile and its one-shot / held action layers.
 //
-// Every length comes from the rig's JointMap (bone lengths, pivots, the floor, how far the claws and toes reach from
-// the welded detail parts), so the profile follows the rig. Rig axes: X right, Y up, -Z forward, origin at the root.
+// Every length comes from the rig's JointMap (bone lengths, pivots, the floor, how far the fingers and toes reach from
+// the welded detail parts), so the profile follows the rig: the 11-stud shadow figure with the porcelain mask, long
+// legs, arms to below the knees and long jointed fingers. Rig axes: X right, Y up, -Z forward, origin at the root.
 //
 // The body moves wrong on purpose. Its head never bobs with the body: it holds still, then snaps to a new direction
 // in a few frames (a saccade tracker; with a target it waits until the target has drifted, then catches up in one
 // jerk), cocked at a tilt. Idle bodies stay dead still apart from a slow breath, broken by seeded twitches that are a
-// pure function of time. Swinging feet dart off the floor and hang before they land; the elbows sit past straight.
+// pure function of time. Swinging feet hang before they land; the fingers trail.
 //
-// States: Dormant (hunched deep, head hanging, a slow shoulder-heave breath), Patrol (the stalk: long bent-kneed
-// strides that hover before they plant, arms hanging to the knees), Investigate (lower, neck craned, sniffing pecks,
-// one hand feeling the air), Chase (a loping sprint with a flight phase, a hard lean, both arms reaching and clawing,
-// the head dead level on its target), VentCrawl (the spider crawl inside the 3.5-stud bore), VentRetreat (stunned in
-// a duct: the crawl backwards in stutters, a hand clawing at the face), Stunned (both hands raking at the face,
-// staggering on buckling knees), Swim (an eel's wave head to toe), Scripted (neutral, staring at its target).
-// Actions: NeckSnap, Lunge, LockerRip, DoorSmash, Vanish, Reveal.
+// States: Dormant (hunched deep, head hanging, a slow shoulder-heave breath), Patrol (the stalk: long, slow,
+// bent-kneed strides that hover before they plant, the head tilting, the arms hanging below the knees with the fingers
+// trailing), Investigate (lower, neck craned, sniffing pecks, one hand feeling the air), Chase (the lope: long strides
+// with a flight phase, a hard lean, the arms swinging low, the head dead level on its target), VentCrawl /
+// VentRetreat (the old duct crawl, kept for the legacy vent states), Stunned (both hands raking at the mask,
+// staggering on buckling knees), Swim (an eel's wave head to toe), Scripted (neutral, staring at its target). Any
+// upright state hunches under a low ceiling (setHunch: PoseMode Hunched) to about Rig.HunchedHeight.
+// Actions: NeckSnap, Lunge (= Jumpscare: it bows to the victim, the long neck reaching down until the mask hangs level
+// with their eye about 1.4 studs off, cocked over; the hands come up around their head; the hinge parts a little as the
+// mask's slit tears into its maw), LockerRip, DoorSmash, Vanish, Reveal, FadeOut / FadeIn (the teleport's dissolve poses),
+// the hinge only ever parting a few degrees (the mask's jagged maw is what shows; mask.js),
+// and the held layers Stare (frozen, the head cocking over), LookAway (the head turned down the tunnel) and ReachIn (the
+// long arm into a gap toward the look target, fingers splayed, then curling), which run until released.
 
 import * as THREE from 'three';
 import { CFrame, IDENTITY } from './cframe.js';
@@ -39,6 +46,7 @@ const LEG = names('Leg');
 const ARM = names('Arm');
 const FOOT_PART = names('Foot');
 const HAND_PART = names('Hand');
+const FINGER_NAMES = ['Index', 'Middle', 'Ring', 'Pinky', 'Thumb'];
 const CLAWS = names('Hand');
 
 const ROOT = 'Root';
@@ -52,7 +60,8 @@ export const REQUIRED = ['Root', 'Waist', 'Neck', 'Jaw', 'LeftShoulder', 'LeftEl
   'RightElbow', 'RightWrist', 'LeftHip', 'LeftKnee', 'LeftAnkle', 'RightHip', 'RightKnee', 'RightAnkle'];
 
 export const States = Object.freeze(['Dormant', 'Patrol', 'Investigate', 'Chase', 'VentCrawl', 'VentRetreat', 'Stunned', 'Swim', 'Scripted']);
-export const Actions = Object.freeze(['NeckSnap', 'Lunge', 'LockerRip', 'DoorSmash', 'Vanish', 'Reveal']);
+export const Actions = Object.freeze(['NeckSnap', 'Lunge', 'LockerRip', 'DoorSmash', 'Vanish', 'Reveal', 'Stare', 'ReachIn',
+  'LookAway', 'FadeOut', 'FadeIn', 'Jumpscare']);
 
 const FORWARD = new THREE.Vector3(0, 0, -1);
 const DOWN = new THREE.Vector3(0, -1, 0);
@@ -62,8 +71,10 @@ const BORE_MARGIN = 0.08;
 const FLOOR_PAD = 0.05;
 const HAND_FLOOR = 0.1;
 const NOISE_PERIOD = 4096;
-const HUNCH_DROP = 1.3;
-const HUNCH_PITCH = rad(38);
+const HUNCH_DROP = 0.55;
+const HUNCH_PITCH = rad(20);
+const HUNCH_NECK = rad(12);
+const HEAD_REST_PITCH = rad(8); // the mask looks this far down at rest (CreatureRigBuilder HEAD_PITCH)
 const HUNCH_SPEED = 3.5;
 const HAIR_DAMP = 9;
 const HAIR_STALE = 0.5;
@@ -80,23 +91,42 @@ const SNAP_RELEASE = 1.3;
 const SNAP_WAIST = rad(75);
 const LUNGE = CreatureConfig.Jumpscare.LungeSeconds;
 const LUNGE_HOLD = CreatureConfig.Jumpscare.HoldSeconds;
-const LUNGE_WIND = 0.1;
+const LUNGE_WIND = 0.05; // the flinch back before it strikes ...
+const LUNGE_THRUST = 0.2; // ... and the strike: bowed and level with the eye this soon
 const LUNGE_RELEASE = 0.5;
-const LUNGE_REACH = CreatureConfig.Jumpscare.FaceDistance * 0.4;
 const RIP = 1.35;
 const SMASH = 0.95;
 const VANISH = 0.36;
 const REVEAL = 0.75;
+export const FADE_OUT = 0.6;
+export const FADE_IN = 0.8;
+const LOOM_DISTANCE = 1.6; // the jumpscare brings the mask this far from the victim's eye ...
+const LOOM_ELEVATION = rad(2); // ... level with it, staring straight into it: it bows, the long neck reaching down
+const LOOM_BACK = 2.6; // how far the body may step back off its root to get there
+const LOOM_PITCH = rad(8); // the search's steps: the chest bends forward up to LOOM_PITCH x 12 ...
+const LOOM_DROP = 0.045; // ... the knees fold up to LOOM_DROP x 10 legs
+const LOOM_RESOLVE = 0.25;
+const LOOM_TILT = rad(24); // the head cocks over as it snaps in, settling to LOOM_TILT_HOLD
+const LOOM_TILT_HOLD = rad(13);
+const LUNGE_JAW = rad(1.2); // the hinge parts a little as the slit tears (the tear itself is the mask's: mask.js)
 
 export const ActionDurations = Object.freeze({
   NeckSnap: SNAP_SETTLE + SNAP_HOLD + SNAP_RELEASE,
   Lunge: LUNGE + LUNGE_HOLD + LUNGE_RELEASE,
+  Jumpscare: LUNGE + LUNGE_HOLD + LUNGE_RELEASE,
   LockerRip: RIP,
   DoorSmash: SMASH,
   Vanish: VANISH + 0.05,
   Reveal: REVEAL,
+  FadeOut: FADE_OUT + 0.1,
+  FadeIn: FADE_IN + 0.1,
+  Stare: Infinity,
+  LookAway: Infinity,
+  ReachIn: Infinity,
 });
 const DURATIONS = ActionDurations;
+/** Held actions run until released; this is how long each takes to let go. */
+export const HeldRelease = Object.freeze({ Stare: 0.4, LookAway: 0.32, ReachIn: 0.6 });
 
 export const NeckSnapTiming = Object.freeze({ turn: SNAP_TURN, settle: SNAP_SETTLE, hold: SNAP_HOLD, release: SNAP_RELEASE });
 
@@ -176,6 +206,35 @@ function hairChains(map) {
   return chains;
 }
 
+/**
+ * The jointed fingers of each hand: their joint, the curl axis (rotating the finger toward the palm) and the spread
+ * axis (fanning it across the palm), both in rig axes at rest.
+ */
+function fingerData(map) {
+  const out = { Left: [], Right: [] };
+  for (const side of SIDES) {
+    const hand = map.rest[HAND_PART[side]];
+    if (!hand) continue;
+    const s = SIGN[side];
+    const inward = V(-s, 0, 0);
+    for (const name of FINGER_NAMES) {
+      const joint = map.joints[side + name];
+      if (!joint) continue;
+      const part = map.rest[joint.part1Name].position;
+      const along = part.clone().sub(joint.pivot);
+      if (along.length() < 1e-4) continue;
+      along.normalize();
+      const curlAxis = along.clone().cross(inward);
+      if (curlAxis.length() < 1e-4) continue;
+      curlAxis.normalize();
+      const spreadAxis = along.clone().cross(curlAxis).normalize();
+      const index = FINGER_NAMES.indexOf(name);
+      out[side].push({ joint: joint.name, part: joint.part1Name, curlAxis, spreadAxis, fan: index - 1.5, phase: index * 1.3 + s });
+    }
+  }
+  return out;
+}
+
 /** The rig measurements the profile works from. @param {import('./rig.js').JointMap} map */
 export function measure(map) {
   const cached = measured.get(map);
@@ -208,6 +267,7 @@ export function measure(map) {
   }
   const face = map.attachments.FaceFrontAttachment;
   const result = {
+    fingers: fingerData(map),
     ground: map.groundY,
     leg: thigh + shin,
     thigh,
@@ -339,6 +399,8 @@ function runtimeOf(map) {
     },
     hair: {},
     serial: 0,
+    /** @type {THREE.Vector3|null} rig-space point the Jumpscare / ReachIn aim at (the view's look target) */
+    target: null,
   };
   runtimes.set(map, r);
   return r;
@@ -410,7 +472,8 @@ function stepRuntime(runtime, ctx) {
     const run = runtime.actions[i];
     if (run.startAt === null) run.startAt = ctx.time;
     if (run.sign === 0) run.sign = ctx.lookYaw < -0.2 ? -1 : 1;
-    if (ctx.time - run.startAt > DURATIONS[run.name]) runtime.actions.splice(i, 1);
+    const released = run.releaseAt !== null && run.releaseAt !== undefined && ctx.time - run.releaseAt > (HeldRelease[run.name] ?? 0);
+    if (ctx.time - run.startAt > DURATIONS[run.name] || released) runtime.actions.splice(i, 1);
   }
 }
 
@@ -535,9 +598,29 @@ function hair(ctx, pose, m, style, floor) {
 // Limbs
 // ---------------------------------------------------------------------------------------------------------------
 
+/** The lowest point of a hand with its fingers under the pose. */
+function handLowest(pose, m, side) {
+  let lowest = lowestUnder(pose, m, HAND_PART[side]);
+  for (const f of m.fingers[side]) if (m.bounds[f.part]) lowest = Math.min(lowest, lowestUnder(pose, m, f.part));
+  return lowest;
+}
+
+/**
+ * Poses one hand's fingers: `curl` toward the palm (negative opens them back), `spread` fanning them apart, `wave` a
+ * slow ripple running across them (seconds `t`), the thumb following at half.
+ */
+function fingers(pose, m, side, curl, spread, wave = 0, t = 0) {
+  for (const f of m.fingers[side]) {
+    const thumb = f.fan > 2;
+    const c = (thumb ? 0.5 : 1) * curl + wave * Math.sin(t * 2.3 + f.phase);
+    const a = thumb ? spread * 0.5 : spread * f.fan * 0.5;
+    pose.set(f.joint, CFrame.fromAxisAngle(f.curlAxis, c).mul(CFrame.fromAxisAngle(f.spreadAxis, a)));
+  }
+}
+
 function clawsAbove(pose, m, side, floor) {
   for (let i = 0; i < 4; i++) {
-    const deficit = floor + HAND_FLOOR - lowestUnder(pose, m, HAND_PART[side]);
+    const deficit = floor + HAND_FLOOR - handLowest(pose, m, side);
     if (deficit <= 0) return;
     const bend = Math.min(rad(40), (deficit / Math.max(0.5, m.forearm)) * 1.15);
     pose.set(ELBOW[side], euler(bend, 0, 0).mul(pose.get(ELBOW[side])));
@@ -658,11 +741,11 @@ function constant(value) {
 }
 
 const STALK = {
-  idleDrop: 0.12, idleWidth: 1.15, idleStagger: 0.1, duty: curve(2, 10, 0.66, 0.56), drop: curve(2, 10, 0.12, 0.2),
-  stride: curve(0, 10, 0.55, 1.25), lift: curve(0, 10, 0.1, 0.17), lean: curve(0, 10, rad(2), rad(8)), bias: 0.03,
-  bob: 0.012, sway: 0.022, pelvisYaw: rad(6), pelvisRoll: rad(3), chestYaw: rad(5), width: 1.05, strike: rad(4),
-  toeOff: rad(-34), liftPeak: 0.3, toeOut: rad(9), kneeOut: 0.45, hover: 0.85, hunch: rad(14), idleHunch: rad(12),
-  breath: rad(1.1),
+  idleDrop: 0.02, idleWidth: 1.1, idleStagger: 0.08, duty: curve(2, 10, 0.7, 0.6), drop: curve(2, 10, 0.1, 0.16),
+  stride: curve(0, 10, 0.55, 1.0), lift: curve(0, 10, 0.05, 0.08), lean: curve(0, 10, rad(2), rad(6)), bias: 0.02,
+  bob: 0.006, sway: 0.014, pelvisYaw: rad(5), pelvisRoll: rad(3), chestYaw: rad(4), width: 1.0, strike: rad(4),
+  toeOff: rad(-30), liftPeak: 0.3, toeOut: rad(7), kneeOut: 0.4, hover: 0.92, hunch: rad(8), idleHunch: rad(6),
+  breath: rad(0.8),
 };
 
 const CREEP = {
@@ -671,10 +754,10 @@ const CREEP = {
 };
 
 const CHASE = {
-  idleDrop: 0.12, idleWidth: 1.1, idleStagger: 0.12, duty: curve(10, 22, 0.4, 0.3), drop: curve(10, 22, 0.17, 0.24),
-  stride: constant(1.7), lift: curve(10, 22, 0.2, 0.3), lean: curve(6, 22, rad(18), rad(36)), bias: -0.06, bob: 0.03,
-  sway: 0.012, pelvisYaw: rad(11), pelvisRoll: rad(4), chestYaw: rad(14), width: 0.85, strike: rad(6), toeOff: rad(-45),
-  liftPeak: 0.32, toeOut: rad(6), kneeOut: 0.35, hover: 0.25, hunch: rad(10), idleHunch: rad(12), breath: rad(2.4),
+  idleDrop: 0.1, idleWidth: 1.05, idleStagger: 0.12, duty: curve(8, 20, 0.4, 0.32), drop: curve(8, 20, 0.17, 0.21),
+  stride: constant(1.6), lift: curve(8, 20, 0.12, 0.18), lean: curve(6, 20, rad(14), rad(26)), bias: -0.04, bob: 0.028,
+  sway: 0.01, pelvisYaw: rad(10), pelvisRoll: rad(4), chestYaw: rad(12), width: 0.85, strike: rad(6), toeOff: rad(-45),
+  liftPeak: 0.34, toeOut: rad(5), kneeOut: 0.3, hover: 0.3, hunch: rad(8), idleHunch: rad(10), breath: rad(2),
 };
 
 const STAGGER = {
@@ -695,7 +778,10 @@ const NEUTRAL = {
 // Arms (upright)
 // ---------------------------------------------------------------------------------------------------------------
 
-const HANG = { hang: rad(6), swing: rad(13), pitch: rad(8), elbow: rad(-9), elbowSwing: 0.25, out: rad(9), sway: rad(2.5), wrist: rad(6) };
+const HANG = {
+  hang: rad(-3), swing: rad(9), pitch: rad(-2), elbow: rad(-6), elbowSwing: 0.2, out: rad(6), sway: rad(2), wrist: rad(-4),
+  curl: rad(6), trail: rad(-12), spread: rad(5),
+};
 const STILL_ARMS = { ...HANG, sway: 0, elbow: rad(-6) };
 
 function plumb(body) {
@@ -715,6 +801,9 @@ function hangArms(ctx, pose, m, style, body) {
     pose.set(SHOULDER[side], euler(pitch, s * rad(4), s * (style.out + idle * rad(1.5) * ctx.breath)));
     pose.set(ELBOW[side], euler(style.elbow + style.elbowSwing * Math.max(0, swing), 0, 0));
     pose.set(WRIST[side], euler(style.wrist + rad(10) * drag, 0, -s * rad(6)));
+    // the long fingers trail: opened back as the hand swings forward, a slow ripple through them at rest
+    const trail = (style.trail ?? 0) * move * Math.max(0, -legForward);
+    fingers(pose, m, side, (style.curl ?? rad(8)) + trail, style.spread ?? rad(4), rad(4) * idle, ctx.time + s);
     clawsAbove(pose, m, side, m.ground);
   }
 }
@@ -734,6 +823,11 @@ function hunchExtra(ctx) {
   const hunch = runtimeOf(ctx.map).hunch;
   if (hunch <= 1e-3) return NO_EXTRA;
   return { drop: HUNCH_DROP * hunch, pitch: HUNCH_PITCH * hunch, root: null, waist: null };
+}
+
+/** Under a low ceiling the head hangs lower on the neck (the gaze still finds its target). */
+function hunchHead(ctx) {
+  return -HUNCH_NECK * runtimeOf(ctx.map).hunch;
 }
 
 function waistFollow(ctx, pose, share) {
@@ -766,7 +860,8 @@ function dormant(ctx, pose) {
   }
   const jerk = kind <= 0.33 ? twitch : twitch * 0.25;
   headTo(pose, lookRotation(sign * rad(18) * jerk, -rad(52) + rad(3) * breath, rad(9) + sign * rad(26) * jerk));
-  setJaw(pose, rad(3) + rad(2) * heave);
+  setJaw(pose, 0);
+  for (const side of SIDES) fingers(pose, m, side, rad(20) + rad(10) * heave, rad(6), rad(3), t);
   finishUpright(ctx, pose, m);
 }
 
@@ -780,8 +875,10 @@ function patrol(ctx, pose) {
     const side = sign > 0 ? 'Right' : 'Left';
     pose.set(SHOULDER[side], new CFrame(0, 0.1 * twitch, 0).mul(pose.get(SHOULDER[side])));
   }
-  trackHead(ctx, pose, 0, kind <= 0.5 ? sign * rad(24) * twitch : 0);
-  setJaw(pose, rad(4) + rad(1.5) * (ctx.breath + 1));
+  // the stalk: the head rolls slowly over to one side and back as it walks
+  const tilt = rad(17) * Math.sin(TAU * wrapTime(ctx.time) / 6.5 + ctx.seed * 4) * (0.4 + 0.6 * body.move);
+  trackHead(ctx, pose, hunchHead(ctx), tilt + (kind <= 0.5 ? sign * rad(24) * twitch : 0));
+  setJaw(pose, 0);
   finishUpright(ctx, pose, m);
 }
 
@@ -798,9 +895,10 @@ function investigate(ctx, pose) {
   clawsAbove(pose, m, 'Right', m.ground);
   const burst = Math.max(0, Math.sin((TAU * wrapTime(t)) / 2.3 + ctx.seed));
   const peck = burst * Math.max(0, Math.sin(TAU * 5.5 * wrapTime(t))) ** 2;
+  fingers(pose, m, 'Right', rad(-6) + rad(30) * Math.max(0, noise(t * 0.9, 7)), rad(10), rad(9), t);
   pose.set(NECK, new CFrame(0, -0.02, -0.22 - 0.07 * peck));
-  trackHead(ctx, pose, -rad(24) + rad(6) * peck, rad(8) * Math.sin((TAU * wrapTime(t)) / 3.1));
-  setJaw(pose, rad(7) + rad(5) * peck);
+  trackHead(ctx, pose, -rad(24) + rad(6) * peck + hunchHead(ctx), rad(8) * Math.sin((TAU * wrapTime(t)) / 3.1));
+  setJaw(pose, 0);
   finishUpright(ctx, pose, m);
 }
 
@@ -812,18 +910,18 @@ function chase(ctx, pose) {
   const move = body.move;
   for (const side of SIDES) {
     const s = SIGN[side];
+    // the arms swing low and long against the legs, hanging forward of the body with the lean
     const legForward = Math.cos(TAU * (ctx.phase - PLANT[side]));
-    const claw = noise(t * 3.1, ctx.seed * 11 + s * 3);
-    const reach = lerp(rad(30), rad(72), move) + rad(24) * legForward * move + rad(14) * claw;
-    pose.set(SHOULDER[side], euler(reach + plumb(body) * 0.6, -s * rad(8), s * (rad(14) + rad(10) * claw)));
-    const grab = Math.max(0, noise(t * 4.3, ctx.seed * 13 + s));
-    pose.set(ELBOW[side], euler(rad(18) + rad(46) * grab + rad(12) * (1 - move), 0, 0));
-    pose.set(WRIST[side], euler(rad(-26) + rad(40) * grab, 0, -s * rad(10)));
+    const jitter = noise(t * 2.7, ctx.seed * 11 + s * 3);
+    const swing = -rad(34) * legForward * move;
+    pose.set(SHOULDER[side], euler(plumb(body) * 0.85 + rad(8) * move + swing + rad(5) * jitter, s * rad(4), s * (rad(10) + rad(4) * jitter)));
+    pose.set(ELBOW[side], euler(rad(14) + rad(16) * Math.max(0, -legForward) * move, 0, 0));
+    pose.set(WRIST[side], euler(rad(-14) * move + rad(8) * jitter, 0, -s * rad(8)));
+    fingers(pose, m, side, rad(-10) + rad(22) * Math.max(0, legForward) * move, rad(14), rad(6), t * 2 + s);
     clawsAbove(pose, m, side, m.ground);
   }
-  trackHead(ctx, pose, rad(4) * move, 0);
-  const snap = Math.max(0, noise(t * 2.2, ctx.seed * 17));
-  setJaw(pose, rad(22) + rad(18) * snap * move + rad(4) * Math.sin(TAU * 2 * ctx.phase));
+  trackHead(ctx, pose, rad(2) * move + hunchHead(ctx), 0);
+  setJaw(pose, 0);
   finishUpright(ctx, pose, m);
 }
 
@@ -854,7 +952,8 @@ function stunned(ctx, pose) {
     pose.limb(ARM[side], face.pointToWorld(offset), face.vectorToWorld(V(s, -0.6, 0.35)), null);
     pose.set(WRIST[side], euler(rad(30) + rad(30) * down, 0, 0).mul(pose.get(WRIST[side])));
   }
-  setJaw(pose, rad(38) + rad(20) * thrash(4, 13));
+  setJaw(pose, rad(2) + rad(3) * Math.max(0, thrash(4, 13)));
+  for (const side of SIDES) fingers(pose, m, side, rad(35) + rad(25) * thrash(3.3, 14 + SIGN[side]), rad(18), 0, 0);
   finishUpright(ctx, pose, m);
 }
 
@@ -863,8 +962,8 @@ function scripted(ctx, pose) {
   const body = upright(ctx, pose, m, NEUTRAL, hunchExtra(ctx));
   waistFollow(ctx, pose, 0.2);
   hangArms(ctx, pose, m, STILL_ARMS, body);
-  trackHead(ctx, pose, 0, 0);
-  setJaw(pose, rad(3));
+  trackHead(ctx, pose, hunchHead(ctx), 0);
+  setJaw(pose, 0);
   finishUpright(ctx, pose, m);
 }
 
@@ -990,7 +1089,7 @@ function crawl(ctx, pose, style, thrash) {
     limbInBore(pose, LEG[side], HIP[side], m.thigh, m.shin, ankle, LEG_POLES[side], 0.3, foot);
     pose.plant(side, cycle.stance);
   }
-  setJaw(pose, rad(10) + rad(6) * Math.max(0, oscillation) * move + thrash * rad(25));
+  setJaw(pose, rad(2.5) + rad(2) * Math.max(0, oscillation) * move + thrash * rad(5));
   applyActions(ctx, pose, m);
   headInBore(pose, m, ceiling);
   hair(ctx, pose, m, BORE_HAIR, floor);
@@ -1032,7 +1131,7 @@ function swim(ctx, pose) {
   pose.set(ROOT, prone(-Math.PI / 2 + rad(4), pelvis, ctx.leanRoll * 0.5));
   pose.set(WAIST, euler(rad(14) + ctx.breath * rad(1), 0, -(chest - pelvis)));
   const neckNow = pose.pivot(NECK);
-  shiftBody(pose, V(0, -0.15 - neckNow.y, -1.9 - neckNow.z));
+  shiftBody(pose, V(0, -0.15 - neckNow.y, -3.6 - neckNow.z));
   const g = runtimeOf(ctx.map).gaze;
   headTo(pose, lookRotation(g.yaw * 0.6 + head, rad(-30) + g.pitch * 0.5, g.roll * 0.5), true);
   for (const side of SIDES) {
@@ -1045,7 +1144,8 @@ function swim(ctx, pose) {
     pose.set(KNEE[side], euler(-rad(6), 0, -(shins - thighs)));
     pose.set(ANKLE[side], euler(-rad(55), 0, 0));
   }
-  setJaw(pose, rad(6) + rad(4) * Math.sin(TAU * phase));
+  setJaw(pose, 0);
+  for (const side of SIDES) fingers(pose, m, side, rad(-8), rad(4), rad(8), ctx.time * 1.5);
   applyActions(ctx, pose, m);
   hair(ctx, pose, m, SWIM_HAIR, SWIM_FLOOR);
 }
@@ -1084,7 +1184,7 @@ function neckSnap(ctx, pose, _m, elapsed, run) {
   }
   const hold = smoothstep(SNAP_TURN, SNAP_SETTLE + 0.4, elapsed) * s;
   headTo(pose, euler(lerp(rx, rad(-4), s), lerp(ry, sign * Math.PI, s) + shudder, lerp(rz, sign * rad(11), hold)), true);
-  setJaw(pose, lerp(jawOpen(pose), rad(9), hold));
+  setJaw(pose, lerp(jawOpen(pose), rad(3), hold));
 }
 
 function blendJoints(pose, joints, weight, solve) {
@@ -1101,42 +1201,253 @@ const ARM_JOINTS = {
   Right: [SHOULDER.Right, ELBOW.Right, WRIST.Right],
 };
 
+/** The look target in rig space (the victim's eye for a jumpscare), else a point ahead at standing eye height. */
+function targetPoint(ctx, m, fallbackAhead) {
+  const t = runtimeOf(ctx.map).target;
+  if (t) return t;
+  return V(0, m.ground + 4.6, -fallbackAhead);
+}
+
+/** Drops the pelvis by `drop` with the feet kept where they are (the knees bend). */
+function crouch(pose, m, drop) {
+  if (drop <= 1e-3) return;
+  const feet = {};
+  for (const side of SIDES) feet[side] = { at: pose.pivot(ANKLE[side]), turn: pose.delta(FOOT_PART[side]) };
+  shiftBody(pose, V(0, -drop, 0));
+  for (const side of SIDES) {
+    const s = SIGN[side];
+    pose.limb(LEG[side], feet[side].at, V(s * 0.35, 0, -1), feet[side].turn);
+  }
+}
+
+/** Aims the head (the face frame's look) at a rig-space point, past the neck limits. */
+function aimHead(pose, m, point, roll) {
+  // the face sits off the skull's pivot, so turning moves it: aim, then aim again from where it went
+  for (let i = 0; i < 3; i++) {
+    const aim = point.clone().sub(faceFrame(pose, m).position);
+    if (aim.length() < 1e-3) return;
+    headTo(pose, lookRotation(Math.atan2(-aim.x, -aim.z), Math.atan2(aim.y, Math.hypot(aim.x, aim.z)) + HEAD_REST_PITCH, roll), true);
+  }
+}
+
+/**
+ * How it bows to a victim's eye at `target`: the crouch (studs), the chest's bend (radians) and the step back off its
+ * root (studs) that hang its mask, aimed at the eye, LOOM_DISTANCE in front of it and level with it (the jumpscare's
+ * camera then sits between them, looking level into the mask). A coarse search, then a finer one round the best.
+ */
+function loomSolve(pose, m, target) {
+  const saved = [ROOT, WAIST, NECK].map((j) => pose.get(j));
+  const restore = () => [ROOT, WAIST, NECK].forEach((j, k) => pose.set(j, saved[k]));
+  const evaluate = (drop, pitch) => {
+    restore();
+    shiftBody(pose, V(0, -drop, 0));
+    pose.set(WAIST, euler(-pitch, 0, 0).mul(saved[1]));
+    aimHead(pose, m, target, 0);
+    let face = faceFrame(pose, m).position;
+    // it steps back off its root (up to LOOM_BACK) so the mask hangs in front of the eye, not past it; stepping moves
+    // the aim, so it is measured again after
+    const rise0 = face.y - target.y;
+    const want = Math.sqrt(Math.max(LOOM_DISTANCE * LOOM_DISTANCE - rise0 * rise0, 0.04));
+    const back = clamp(want - (face.z - target.z), 0, LOOM_BACK);
+    if (back > 0.01) {
+      shiftBody(pose, V(0, 0, back));
+      aimHead(pose, m, target, 0);
+      face = faceFrame(pose, m).position;
+    }
+    const rise = face.y - target.y;
+    const horizontal = Math.hypot(face.x - target.x, face.z - target.z);
+    const distance = Math.hypot(horizontal, rise);
+    const elevation = Math.atan2(rise, horizontal);
+    const score = (distance - LOOM_DISTANCE) ** 2 + 2 * (elevation - LOOM_ELEVATION) ** 2 + 0.004 * pitch + 0.006 * drop + 0.01 * back;
+    return { drop, pitch, back, score };
+  };
+  let best = { drop: 0, pitch: 0, back: 0, score: Infinity };
+  const dropStep = m.leg * LOOM_DROP;
+  for (let i = 0; i <= 10; i += 2) {
+    for (let k = 0; k <= 12; k += 2) {
+      const r = evaluate(dropStep * i, LOOM_PITCH * k);
+      if (r.score < best.score) best = r;
+    }
+  }
+  const coarse = best;
+  for (let i = -1; i <= 1; i++) {
+    for (let k = -1; k <= 1; k++) {
+      if (i === 0 && k === 0) continue;
+      const drop = clamp(coarse.drop + dropStep * i, 0, dropStep * 10);
+      const pitch = clamp(coarse.pitch + LOOM_PITCH * k, 0, LOOM_PITCH * 12);
+      const r = evaluate(drop, pitch);
+      if (r.score < best.score) best = r;
+    }
+  }
+  restore();
+  return best;
+}
+
 function lunge(ctx, pose, m, elapsed, run) {
   const weight = envelope(elapsed, DURATIONS.Lunge, LUNGE_WIND * 0.6, LUNGE_RELEASE);
   if (weight <= 0) return;
   const recoil = smoothstep(0, LUNGE_WIND, elapsed) * (1 - smoothstep(LUNGE_WIND, LUNGE_WIND + 0.08, elapsed));
-  const thrust = elapsed < LUNGE_WIND ? 0 : outBack((elapsed - LUNGE_WIND) / Math.max(0.05, LUNGE - LUNGE_WIND), 1.6);
-  const tremor = smoothstep(LUNGE, LUNGE + 0.1, elapsed) * stepped(ctx.time, 24, run.seed);
-  const standing = clamp01(pose.frame(UPPER).upVector.y);
-  pose.set(WAIST, euler((rad(-22) * thrust + rad(14) * recoil) * weight * standing, 0, rad(3) * tremor * weight).mul(pose.get(WAIST)));
-  const [rx, ry, rz] = pose.delta(HEAD).toEulerAnglesYXZ();
-  const push = pose.delta(UPPER).inverse().pointToWorld(faceFrame(pose, m).lookVector.multiplyScalar(0.14 * thrust * weight));
-  pose.set(NECK, CFrame.at(push).mul(pose.get(NECK)));
-  headTo(pose, euler(lerp(rx, rad(10) - rad(14) * recoil, weight), lerp(ry, 0, weight), lerp(rz, rad(6) * tremor, weight)), true);
-  const face = faceFrame(pose, m);
+  const thrust = elapsed < LUNGE_WIND ? 0 : outBack((elapsed - LUNGE_WIND) / LUNGE_THRUST, 1.6);
+  const strike = clamp01(thrust);
+  // a jolt as the slit tears, a violent shudder through the hold
+  const jolt = impulse(elapsed - 0.36, 0.03, 9);
+  const tremor = smoothstep(LUNGE, LUNGE + 0.1, elapsed) * stepped(ctx.time, 24, run.seed) * (1 + 1.5 * smoothstep(0.85, 1.0, elapsed) * (1 - smoothstep(1.25, 1.45, elapsed)));
   const bore = QUADRUPED.has(ctx.state);
+  const swimming = ctx.state === 'Swim';
+  const target = targetPoint(ctx, m, 4.2);
+  // it bows to the victim: the knees fold, the chest bends far forward, the long neck reaching down until the mask
+  // hangs level with their eye
+  if (!bore && !swimming) {
+    // solved on each state's base pose before the bow (the animator blends states, each posing the actions on its own
+    // base), again every LOOM_RESOLVE seconds (the base pose may change under it)
+    run.looms ||= {};
+    let loom = run.looms[ctx.state];
+    if (!loom || ctx.time - loom.at > LOOM_RESOLVE) {
+      loom = loomSolve(pose, m, target);
+      loom.at = ctx.time;
+      run.looms[ctx.state] = loom;
+    }
+    const k = Math.min(thrust, 1.08) * weight;
+    shiftBody(pose, V(0, 0, loom.back * k));
+    crouch(pose, m, loom.drop * k);
+    pose.set(WAIST, euler(-loom.pitch * k + rad(8) * recoil * weight + rad(3) * jolt * weight, 0, rad(2) * tremor * weight).mul(pose.get(WAIST)));
+  }
+  // the mask stares straight into the victim's eye, cocked over as it snaps in, trembling through the hold
+  const tilt = run.sign * lerp(LOOM_TILT, LOOM_TILT_HOLD, smoothstep(0.15, 0.6, elapsed)) * strike;
+  const [rx, ry, rz] = pose.delta(HEAD).toEulerAnglesYXZ();
+  aimHead(pose, m, target, tilt + rad(4) * tremor + run.sign * rad(6) * jolt);
+  const [ax, ay, az] = pose.delta(HEAD).toEulerAnglesYXZ();
+  headTo(pose, euler(lerp(rx, ax - rad(10) * recoil, weight), lerp(ry, ay, weight), lerp(rz, az, weight)), true);
+  // the hands come up around the victim's head, the long fingers spread, curling as it holds
+  const face = faceFrame(pose, m);
   for (const side of SIDES) {
     const s = SIGN[side];
     blendJoints(pose, ARM_JOINTS[side], weight, () => {
       const shoulder = pose.pivot(SHOULDER[side]);
-      let target = face.pointToWorld(V(s * lerp(0.45, 0.8, thrust), -0.05 * thrust - 0.4 * recoil, -lerp(0.3, LUNGE_REACH, thrust)));
-      const toward = target.clone().sub(shoulder);
-      if (toward.length() > m.arm * 0.97) target = shoulder.clone().addScaledVector(toward.normalize(), m.arm * 0.97);
-      const grab = face.rotation
-        .mul(CFrame.angles(0, s * rad(15), 0))
-        .mul(CFrame.angles(-rad(20), 0, 0))
-        .mul(CFrame.fromMatrix(V(0, 0, 0), V(0, s, 0), V(0, 0, 1), V(s, 0, 0)));
+      // beside the mask, just outside its outline and a little in front of it: the long fingers frame it, closing in
+      let goal = face.pointToWorld(V(s * lerp(1.05, 0.95, strike), lerp(-0.7, -0.12, strike) - 0.3 * recoil, -lerp(0.0, 0.12, strike)));
+      const reach = goal.clone().sub(shoulder);
+      if (reach.length() > m.arm * 0.97) goal = shoulder.clone().addScaledVector(reach.normalize(), m.arm * 0.97);
       if (bore) {
         const lim = BORE_HALF - BORE_MARGIN - 0.3;
-        target = V(clamp(target.x, -lim, lim), clamp(target.y, -lim, lim), target.z);
-        limbInBore(pose, ARM[side], SHOULDER[side], m.upperArm, m.forearm, target, ARM_POLES[side], 0.24, grab);
+        goal = V(clamp(goal.x, -lim, lim), clamp(goal.y, -lim, lim), goal.z);
+        limbInBore(pose, ARM[side], SHOULDER[side], m.upperArm, m.forearm, goal, ARM_POLES[side], 0.24, null);
       } else {
-        pose.limb(ARM[side], target, face.vectorToWorld(V(s, -0.4, 0)), grab);
+        // the elbows up over the head like a mantis, so the forearms come down past the mask's sides, not across it
+        pose.limb(ARM[side], goal, face.vectorToWorld(V(s * 0.45, 1, 0.35)), null);
       }
+      pose.set(WRIST[side], euler(-rad(20) * strike, -s * rad(18) * strike, 0).mul(pose.get(WRIST[side])));
     });
+    fingers(pose, m, side, lerp(rad(-14), rad(38), smoothstep(LUNGE, LUNGE + 0.6, elapsed)) * weight, rad(22) * weight, rad(6) * weight, ctx.time * 4);
   }
-  const open = rad(68) * smoothstep(LUNGE_WIND * 0.5, LUNGE, elapsed) + rad(4) * tremor;
+  // the hinge parts a little as the slit tears (the jagged maw is the mask's own: mask.js maskFx)
+  const tear = elapsed < 0.36 ? 0 : 0.35 + 0.65 * smoothstep(0.36, 0.78, elapsed);
+  const open = LUNGE_JAW * tear + rad(1) * tremor;
   setJaw(pose, lerp(jawOpen(pose), open, weight));
+}
+
+/** A held action's weight: in over `fadeIn` seconds, out over its HeldRelease once released. */
+function heldWeight(ctx, run, fadeIn) {
+  let w = smoothstep(0, fadeIn, ctx.time - run.startAt);
+  if (run.releaseAt !== null && run.releaseAt !== undefined) w *= 1 - smoothstep(0, HeldRelease[run.name] || 0.3, ctx.time - run.releaseAt);
+  return w;
+}
+
+function stare(ctx, pose, m, elapsed, run) {
+  const w = heldWeight(ctx, run, 0.22);
+  if (w <= 0) return;
+  // frozen: the chest still and leaning a little toward what it stares at, the head cocking slowly over with a
+  // jolt at the start, the fingers flexing
+  const cock = run.sign * (rad(31) * (1 - Math.exp(-elapsed * 1.4)) + rad(9) * impulse(elapsed, 0.04, 7));
+  pose.set(WAIST, euler(-rad(5) * w, 0, 0).mul(pose.get(WAIST)));
+  const current = pose.delta(HEAD);
+  const desired = lookRotation(ctx.lookYaw, ctx.lookPitch - rad(3), cock);
+  headTo(pose, current.lerp(desired, w));
+  for (const side of SIDES) {
+    const flex = 0.5 + 0.5 * Math.sin(elapsed * 1.25 + SIGN[side] * 1.7);
+    fingers(pose, m, side, (rad(4) + rad(30) * flex) * w, rad(12) * w, 0, 0);
+  }
+}
+
+function lookAway(ctx, pose, m, elapsed, run) {
+  const w = heldWeight(ctx, run, 0.45);
+  if (w <= 0) return;
+  // the head turns away down the tunnel (the chest helps), a slow drift while it looks
+  const drift = rad(6) * Math.sin(elapsed * 0.9);
+  pose.set(WAIST, euler(0, run.sign * rad(28) * w, 0).mul(pose.get(WAIST)));
+  const current = pose.delta(HEAD);
+  const away = lookRotation(run.sign * rad(112) + drift, rad(4), -run.sign * rad(9));
+  headTo(pose, current.lerp(away, w));
+}
+
+function reachIn(ctx, pose, m, elapsed, run) {
+  const w = heldWeight(ctx, run, 0.3);
+  if (w <= 0) return;
+  const target = targetPoint(ctx, m, 3);
+  const lean = smoothstep(0, 0.7, elapsed);
+  const push = smoothstep(0.45, 1.7, elapsed);
+  const grab = smoothstep(1.6, 2.2, elapsed);
+  const search = Math.sin(elapsed * 2.6) * (1 - grab);
+  // the chest leans and turns toward the gap
+  const chest = pose.frame(UPPER).position;
+  const flat = V(target.x - chest.x, 0, target.z - chest.z);
+  const turn = flat.length() > 1e-3 ? Math.atan2(-flat.x, -flat.z) : 0;
+  const down = clamp(Math.atan2(chest.y - target.y, Math.max(flat.length(), 0.5)), 0, rad(55));
+  pose.set(WAIST, euler(-(rad(8) + down * 0.6) * lean * w, clamp(turn, -rad(40), rad(40)) * 0.6 * lean * w, 0).mul(pose.get(WAIST)));
+  // the right arm slides into the gap, the long fingers splayed, then curling shut
+  blendJoints(pose, ARM_JOINTS.Right, w, () => {
+    const shoulder = pose.pivot(SHOULDER.Right);
+    const toward = target.clone().sub(shoulder);
+    const distance = toward.length();
+    const reach = Math.min(distance, m.arm * 0.98);
+    const into = shoulder.clone().addScaledVector(toward.normalize(), lerp(reach * 0.5, reach, push))
+      .add(V(0.05 * search, 0.04 * search, 0));
+    pose.limb(ARM.Right, into, V(1, -0.2, 0.4), null);
+    pose.set(WRIST.Right, euler(-rad(12) * push, 0, rad(10) * search).mul(pose.get(WRIST.Right)));
+  });
+  fingers(pose, m, 'Right', lerp(rad(-18), rad(62), grab) * w, rad(24) * (1 - grab) * w, rad(10) * (1 - grab) * w, elapsed * 3);
+  // the head tips toward the gap, cocked
+  const current = pose.delta(HEAD);
+  const aim = target.clone().sub(faceFrame(pose, m).position);
+  const yaw = Math.atan2(-aim.x, -aim.z);
+  const pitch = Math.atan2(aim.y, Math.hypot(aim.x, aim.z));
+  headTo(pose, current.lerp(lookRotation(yaw, pitch, run.sign * rad(20)), w * 0.8));
+}
+
+function fadeOut(ctx, pose, m, elapsed, run) {
+  const u = clamp01(elapsed / FADE_OUT);
+  const w = smoothstep(0, 0.1, elapsed) * (elapsed <= FADE_OUT + 0.1 ? 1 : 0);
+  if (w <= 0) return;
+  // it rises as it goes: the chest lifts, the head tips back and away, the arms drift up and out, fingers splayed
+  pose.set(WAIST, euler(rad(12) * u * w, 0, 0).mul(pose.get(WAIST)));
+  for (const side of SIDES) {
+    const s = SIGN[side];
+    pose.set(SHOULDER[side], euler(rad(22) * u * w, 0, s * rad(24) * u * w).mul(pose.get(SHOULDER[side])));
+    pose.set(ELBOW[side], euler(-rad(10) * u * w, 0, 0).mul(pose.get(ELBOW[side])));
+    fingers(pose, m, side, rad(-20) * u * w, rad(30) * u * w, 0, 0);
+  }
+  const current = pose.delta(HEAD);
+  headTo(pose, current.lerp(lookRotation(ctx.lookYaw * 0.5 + run.sign * rad(20), rad(32), run.sign * rad(16)), u * w));
+  glitch(pose, ctx.time, run.seed, 0.3 * u * w, true);
+}
+
+function fadeIn(ctx, pose, m, elapsed, run) {
+  const u = clamp01(elapsed / FADE_IN);
+  const fold = 1 - smoothstep(0.05, 0.85, u);
+  if (elapsed > FADE_IN + 0.1) return;
+  // it forms folded over, unfolds upward, and the head comes up last, snapping onto its target
+  crouch(pose, m, m.leg * 0.22 * fold);
+  pose.set(WAIST, euler(-rad(40) * fold, 0, 0).mul(pose.get(WAIST)));
+  for (const side of SIDES) {
+    const s = SIGN[side];
+    pose.set(SHOULDER[side], euler(rad(18) * fold, 0, s * rad(6) * fold).mul(pose.get(SHOULDER[side])));
+    fingers(pose, m, side, rad(45) * fold, rad(10) * fold, 0, 0);
+  }
+  const current = pose.delta(HEAD);
+  const hang = lookRotation(ctx.lookYaw * 0.3, -rad(60), run.sign * rad(25));
+  const snap = smoothstep(0.82, 0.92, u);
+  headTo(pose, current.lerp(hang, (1 - snap) * smoothstep(0, 0.1, elapsed)));
+  glitch(pose, ctx.time, run.seed, 0.4 * fold, true);
 }
 
 function lockerRip(ctx, pose, m, elapsed) {
@@ -1159,7 +1470,7 @@ function lockerRip(ctx, pose, m, elapsed) {
       pose.set(WRIST[side], euler(rad(50) * brace, 0, 0).mul(pose.get(WRIST[side])));
     });
   }
-  setJaw(pose, rad(30) * rip * weight + rad(5));
+  setJaw(pose, rad(6) * rip * weight + rad(1.5));
 }
 
 function doorSmash(ctx, pose, m, elapsed) {
@@ -1180,7 +1491,7 @@ function doorSmash(ctx, pose, m, elapsed) {
     const shoulder = pose.pivot(SHOULDER.Left);
     pose.limb(ARM.Left, shoulder.clone().add(V(0.5, -m.arm * 0.15, -m.arm * 0.6)), V(-1, -0.4, 0.3), null);
   });
-  setJaw(pose, rad(26) * smash * weight + rad(4));
+  setJaw(pose, rad(6) * smash * weight + rad(1.5));
 }
 
 const GLITCH_JOINTS = [NECK, WAIST, SHOULDER.Left, SHOULDER.Right, ELBOW.Left, ELBOW.Right, WRIST.Left, WRIST.Right];
@@ -1214,7 +1525,20 @@ function reveal(ctx, pose, _m, elapsed, run) {
   pose.set(NECK, euler(rad(6) * cock, run.sign * rad(14) * cock, run.sign * rad(34) * cock).mul(pose.get(NECK)));
 }
 
-const ACTIONS = { NeckSnap: neckSnap, Lunge: lunge, LockerRip: lockerRip, DoorSmash: doorSmash, Vanish: vanish, Reveal: reveal };
+const ACTIONS = {
+  NeckSnap: neckSnap,
+  Lunge: lunge,
+  Jumpscare: lunge,
+  LockerRip: lockerRip,
+  DoorSmash: doorSmash,
+  Vanish: vanish,
+  Reveal: reveal,
+  Stare: stare,
+  LookAway: lookAway,
+  ReachIn: reachIn,
+  FadeOut: fadeOut,
+  FadeIn: fadeIn,
+};
 
 function applyActions(ctx, pose, m) {
   for (const run of runtimeOf(ctx.map).actions) {
@@ -1278,19 +1602,32 @@ export function isAction(name) {
   return typeof name === 'string' && DURATIONS[name] !== undefined;
 }
 
-/** The profile state for the Creature's situation: body shape (PoseMode, InVent) first, then the AI state. */
+const STATE_ALIASES = Object.freeze({
+  Patrol: 'Patrol', Stalk: 'Patrol', AquaticStalk: 'Patrol', Teleport: 'Patrol', HidingResponse: 'Patrol',
+  InvestigateNoise: 'Investigate', Investigate: 'Investigate', Search: 'Investigate',
+  WallChase: 'Chase', VentChase: 'Chase', Chase: 'Chase', Stunned: 'Stunned', Scripted: 'Scripted', Dormant: 'Dormant',
+});
+
+/**
+ * The profile state for the Creature's situation: body shape (PoseMode, InVent) first, then the AI state. Knows
+ * today's MonsterStates and the behaviour's newer names (Stalk, Investigate, Search, Chase, HidingResponse, Teleport);
+ * anything else with "Chase" in it lopes, with "Search" / "Investigat" in it searches.
+ */
 export function resolveState(monsterState, poseMode, inVent) {
   if (poseMode === 'Quadruped' || inVent === true) return monsterState === 'Stunned' ? 'VentRetreat' : 'VentCrawl';
   if (poseMode === 'Swim') return monsterState === 'Stunned' ? 'Stunned' : 'Swim';
-  if (monsterState === 'Patrol' || monsterState === 'AquaticStalk') return 'Patrol';
-  if (monsterState === 'InvestigateNoise') return 'Investigate';
-  if (monsterState === 'WallChase' || monsterState === 'VentChase') return 'Chase';
-  if (monsterState === 'Stunned') return 'Stunned';
-  if (monsterState === 'Scripted') return poseMode === 'Hunched' ? 'Dormant' : 'Scripted';
+  if (poseMode === 'Stunned') return 'Stunned';
+  if (monsterState === 'Scripted' && poseMode === 'Hunched') return 'Dormant';
+  const known = STATE_ALIASES[monsterState];
+  if (known) return known;
+  const name = String(monsterState || '');
+  if (/chase/i.test(name)) return 'Chase';
+  if (/search|investigat/i.test(name)) return 'Investigate';
+  if (/stun/i.test(name)) return 'Stunned';
   return 'Dormant';
 }
 
-/** How far the body ducks for a PoseMode (Hunched fits the 6-stud hitbox). */
+/** How far the body ducks for a PoseMode (Hunched: about Rig.HunchedHeight, the 9-stud hitbox). */
 export function hunchFor(poseMode) {
   return poseMode === 'Hunched' ? 1 : 0;
 }
@@ -1302,7 +1639,7 @@ export function playAction(map, name, startAt) {
   const runtime = runtimeOf(map);
   runtime.actions = runtime.actions.filter((r) => r.name !== name);
   runtime.serial += 1;
-  runtime.actions.push({ name, startAt: startAt ?? null, sign: 0, seed: runtime.serial * 97 + name.length });
+  runtime.actions.push({ name, startAt: startAt ?? null, sign: 0, seed: runtime.serial * 97 + name.length, releaseAt: null });
   return true;
 }
 
@@ -1310,6 +1647,29 @@ export function playAction(map, name, startAt) {
 export function stopAction(map, name) {
   const runtime = runtimeOf(map);
   runtime.actions = runtime.actions.filter((r) => name !== null && name !== undefined && r.name !== name);
+}
+
+/** Lets a held action (Stare, LookAway, ReachIn) go over its HeldRelease from `at`; any other action ends at once. */
+export function releaseAction(map, name, at) {
+  const runtime = runtimeOf(map);
+  if (HeldRelease[name] === undefined) {
+    stopAction(map, name);
+    return;
+  }
+  for (const run of runtime.actions) if (run.name === name && (run.releaseAt === null || run.releaseAt === undefined)) run.releaseAt = at;
+}
+
+/** Whether `name` is a held action (it runs until released). */
+export function isHeld(name) {
+  return HeldRelease[name] !== undefined;
+}
+
+/** The rig-space point the Jumpscare and ReachIn aim at (null: their defaults). @param {THREE.Vector3|null} point */
+export function setLookTarget(map, point) {
+  const runtime = runtimeOf(map);
+  if (!point) runtime.target = null;
+  else if (runtime.target) runtime.target.copy(point);
+  else runtime.target = point.clone();
 }
 
 export function activeActions(map) {

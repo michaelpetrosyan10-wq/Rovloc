@@ -4,30 +4,29 @@
 local CreatureConfig = {}
 
 CreatureConfig.Rig = table.freeze({
-	Height = 8.5,
+	Height = 11, -- standing, floor to the crown
+	HunchedHeight = 9, -- bent under a 10-11 stud tunnel ceiling
 	RootSize = Vector3.new(2.6, 2.6, 1.4),
 	HipHeight = 3.4, -- root centre sits HipHeight + RootSize.Y / 2 above the floor
-	ArmLength = 4.6, -- elongated arms, shoulder to fingertip
-	ClawLength = 0.5, -- six inches at the game's ~1 stud = 1 foot scale
-	SkinColor = Color3.fromRGB(214, 210, 198),
-	HairColor = Color3.fromRGB(12, 11, 12),
-	EyeSocketColor = Color3.fromRGB(4, 4, 5),
-	PupilColor = Color3.fromRGB(255, 244, 214),
-	GrinColor = Color3.fromRGB(28, 9, 9),
-	ToothColor = Color3.fromRGB(226, 220, 196),
+	ArmLength = 6.3, -- shoulder to the middle fingertip: the hands hang below the knees
+	FingerLength = 1.3, -- long, tapering, black; no claws
+	Reach = 4, -- how far from its root a catch reaches
+	ShadowColor = Color3.fromRGB(12, 12, 15), -- the body: matte near-black with a faint sheen
+	MaskColor = Color3.fromRGB(205, 194, 166), -- the porcelain mask: ivory, not white
+	PupilColor = Color3.fromRGB(255, 244, 214), -- pinprick glows deep in the eye holes
 })
 
 CreatureConfig.Hitbox = table.freeze({
-	Biped = Vector3.new(3, 8, 2),
-	Hunched = Vector3.new(3, 6, 3),
+	Biped = Vector3.new(2.6, 11, 2.7),
+	Hunched = Vector3.new(2.6, 9, 4.2),
 	Quadruped = Vector3.new(2.8, 2.8, 6),
-	Swim = Vector3.new(3, 3, 7),
+	Swim = Vector3.new(3, 3, 10),
 } :: { [string]: Vector3 })
 
 -- Eye position above the root centre, per PoseMode (used by Perception and the jumpscare camera).
 CreatureConfig.EyeHeightAboveRoot = table.freeze({
-	Biped = 3.1,
-	Hunched = 1.6,
+	Biped = 5.64,
+	Hunched = 3.6,
 	Quadruped = 0.5,
 	Swim = 0.4,
 } :: { [string]: number })

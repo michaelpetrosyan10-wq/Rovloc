@@ -175,6 +175,29 @@ function buildRigData(map, profile) {
   return { map, limbs, boneRest, boneHint };
 }
 
+const subtrees = new WeakMap();
+
+/** The parts a joint moves (its Part1 and every part below it), per joint map, cached. */
+function subtreeParts(map, joint) {
+  let table = subtrees.get(map);
+  if (!table) {
+    table = new Map();
+    subtrees.set(map, table);
+  }
+  let parts = table.get(joint);
+  if (parts) return parts;
+  parts = [];
+  const walk = (name) => {
+    const j = map.joints[name];
+    if (!j) return;
+    parts.push(j.part1Name);
+    for (const child of j.children) walk(child);
+  };
+  walk(joint);
+  table.set(joint, parts);
+  return parts;
+}
+
 /**
  * The pose builder a state's pose function writes into (ProceduralAnimator.PoseBuilder).
  */
@@ -192,7 +215,13 @@ export class PoseBuilder {
 
   set(joint, entry) {
     this.entries.set(joint, entry);
-    this.cache.clear();
+    this._invalidate(joint);
+  }
+
+  /** Drops the cached frames a joint's entry moves: its Part1 and everything hanging below it. */
+  _invalidate(joint) {
+    if (this.cache.size === 0) return;
+    for (const part of subtreeParts(this.map, joint)) this.cache.delete(part);
   }
 
   get(joint) {
@@ -243,7 +272,7 @@ export class PoseBuilder {
     this.entries.set(spec.upper, parentDelta.inverse().mul(upperDelta));
     this.entries.set(spec.lower, upperDelta.inverse().mul(lowerDelta));
     this.entries.set(spec.tip, tip ? lowerDelta.inverse().mul(tip.rotation) : IDENTITY);
-    this.cache.clear();
+    this._invalidate(spec.upper);
     return solution;
   }
 
@@ -257,7 +286,7 @@ export class PoseBuilder {
     const previous = this.entries.get(joint);
     const offset = previous ? previous.position : new THREE.Vector3();
     this.entries.set(joint, CFrame.at(offset).mul(parentDelta.inverse().mul(delta)));
-    this.cache.clear();
+    this._invalidate(joint);
   }
 
   plant(foot, planted) {
