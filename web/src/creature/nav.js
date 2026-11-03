@@ -23,7 +23,15 @@
 // (`crawlOnly`, `clearance`) or from the zone graph edge of the same portal; until the tunnel maps carry them every
 // edge is clear. A portal (or a room) lower than its standing height is walked hunched (clearanceAt).
 // pathLength(from, to) is the walking distance of a route (Infinity without one); samplePoints() is a lattice of free
-// floor points over the walkable rooms (the teleport's candidates while the maps carry none).
+// floor points over the walkable rooms (the teleport's candidates while the maps carry none); reachable(from) tells
+// which points a walk from `from` can get to through the portals open now (a level may fall apart into several parts
+// joined only by locked airlocks or ducts).
+//
+// Pools. A basin's water is no floor (the Creature enters and leaves the water only by a warp, Locomotion): a room a
+// basin lies in keeps only the deck round it, as up to four strips (west and east the room's full depth, north and
+// south between them), each a node of its own (`key`; `id` stays the room's), joined where they meet. A door opens
+// onto the strip it lies on, none onto the water. So no route crosses the pool, and decks the water parts are joined
+// only by the ways round it.
 
 import * as THREE from 'three';
 import { STEP_UP } from './body.js';
@@ -44,14 +52,17 @@ const WALL_CLEARANCE = RADIUS + WorldDefaults.WallThickness / 2; // a detour cor
 const INTERIOR = 0.01; // footprints shrink by this for the crossing test, so legs along their edges are clear
 const MAX_SPLITS = 24;
 const SPACING = CreatureConfig.PathAgent.WaypointSpacing;
+const MIN_DECK = 2; // a deck strip narrower than this beside a pool is no floor
 
 /** @typedef {{id: string, minX: number, maxX: number, minZ: number, maxZ: number}} Obstacle */
 
 /**
- * @typedef {{id: string, kind: string, minX: number, maxX: number, minZ: number, maxZ: number, floorY: number,
- *   height: number}} NavRoom
+ * `id` is the layout room's; `key` names the node in the route graph (the room's id, or `<id>#<side>` for one strip
+ * of the deck round a pool).
+ * @typedef {{id: string, key: string, kind: string, minX: number, maxX: number, minZ: number, maxZ: number,
+ *   floorY: number, height: number}} NavRoom
  * @typedef {{id: string, kind: string, a: string, b: string, axis: 'X'|'Z', coord: number, u0: number, u1: number,
- *   mid: THREE.Vector3, scripted: boolean, clearance: number}} Portal
+ *   mid: THREE.Vector3, scripted: boolean, clearance: number}} Portal  `a` / `b` are room keys
  */
 
 /** The tunnel flags of every portal: zone graph edges first, the layout door's own fields win. */
@@ -90,57 +101,107 @@ export class FloorNav {
     const world = meta.worldConfig || {};
     const doorWidth = world.DoorWidth ?? WorldDefaults.DoorWidth;
     const airlockWidth = world.AirlockDoorWidth ?? WorldDefaults.AirlockDoorWidth;
+    // rooms are world rects; a layout door's `at` is level-local (along the shared wall)
+    const level = meta.levels && meta.levels[levelId];
+    const origin = level && Array.isArray(level.origin) ? level.origin : [0, 0, 0];
+    const basins = levelBasins(meta, levelId, origin);
     /** @type {NavRoom[]} */
     this.rooms = [];
-    /** @type {Map<string, NavRoom>} */
+    /** @type {Map<string, NavRoom>} the route graph's nodes, by key */
     this.roomById = new Map();
+    /** @type {Map<string, NavRoom[]>} a layout room's nodes: itself, or the deck strips round the pool in it */
+    this.partsOf = new Map();
     for (const room of meta.rooms || []) {
       if (room.level !== levelId || NO_FLOOR.has(room.kind)) continue;
       const r = room.rect;
-      const nr = { id: room.id, kind: room.kind, minX: r.x, maxX: r.x + r.w, minZ: r.z, maxZ: r.z + r.d, floorY: room.floorY,
-        height: room.height ?? levelHeight ?? Infinity };
-      this.rooms.push(nr);
-      this.roomById.set(room.id, nr);
+      const nr = { id: room.id, key: room.id, kind: room.kind, minX: r.x, maxX: r.x + r.w, minZ: r.z, maxZ: r.z + r.d,
+        floorY: room.floorY, height: room.height ?? levelHeight ?? Infinity };
+      const parts = deckParts(nr, basins);
+      this.partsOf.set(room.id, parts);
+      for (const part of parts) {
+        this.rooms.push(part);
+        this.roomById.set(part.key, part);
+      }
     }
     /** @type {Portal[]} */
     this.portals = [];
     /** @type {Map<string, Portal[]>} */
     this.portalsOf = new Map();
-    for (const room of this.rooms) this.portalsOf.set(room.id, []);
-    // rooms are world rects; a layout door's `at` is level-local (along the shared wall)
-    const level = meta.levels && meta.levels[levelId];
-    const origin = level && Array.isArray(level.origin) ? level.origin : [0, 0, 0];
+    for (const room of this.rooms) this.portalsOf.set(room.key, []);
     for (const door of meta.layoutDoors || []) {
       if (door.level !== levelId || !PASSABLE.has(door.kind)) continue;
       const flag = flags.get(door.id);
       // crawl-only, or too low even hunched: never its way
       if (flag && (flag.crawlOnly || flag.clearance < this.minClearance)) continue;
-      const a = this.roomById.get(door.rooms[0]);
-      const b = this.roomById.get(door.rooms[1]);
-      if (!a || !b) continue;
-      const edge = sharedEdge(a, b);
-      if (!edge) continue;
       const width = door.width ?? (door.kind === 'Airlock' ? airlockWidth : doorWidth);
-      const at = door.at + (edge.axis === 'X' ? origin[2] : origin[0]);
-      const u0 = Math.max(at - width / 2, edge.from);
-      const u1 = Math.min(at + width / 2, edge.to);
-      if (u1 - u0 < EPS) continue;
-      const um = (u0 + u1) / 2;
-      const mid = edge.axis === 'X' ? new THREE.Vector3(edge.coord, a.floorY, um) : new THREE.Vector3(um, a.floorY, edge.coord);
-      const portal = {
-        id: door.id, kind: door.kind, a: a.id, b: b.id, axis: edge.axis, coord: edge.coord, u0, u1, mid,
-        scripted: SCRIPTED.has(door.kind), clearance: flag ? flag.clearance : Infinity,
-      };
-      this.portals.push(portal);
-      this.portalsOf.get(a.id).push(portal);
-      this.portalsOf.get(b.id).push(portal);
+      // the door opens onto the node (a deck strip, or the room) its opening lies on
+      for (const a of this.partsOf.get(door.rooms[0]) || []) {
+        for (const b of this.partsOf.get(door.rooms[1]) || []) {
+          const edge = sharedEdge(a, b);
+          if (!edge) continue;
+          const at = door.at + (edge.axis === 'X' ? origin[2] : origin[0]);
+          const u0 = Math.max(at - width / 2, edge.from);
+          const u1 = Math.min(at + width / 2, edge.to);
+          if (u1 - u0 < EPS) continue;
+          this._addPortal({ id: door.id, kind: door.kind, a, b, edge, u0, u1, scripted: SCRIPTED.has(door.kind),
+            clearance: flag ? flag.clearance : Infinity });
+        }
+      }
     }
-    /** @type {Obstacle[]} the layout's in-room footprints, grown by CLEARANCE */
-    this.obstacles = levelObstacles(meta, levelId).map((o) => ({
+    // the strips of a deck join where they meet, round the pool's corners
+    for (const parts of this.partsOf.values()) {
+      for (let i = 0; i < parts.length; i++) {
+        for (let j = i + 1; j < parts.length; j++) {
+          const edge = sharedEdge(parts[i], parts[j]);
+          if (!edge) continue;
+          this._addPortal({ id: `${parts[i].key}|${parts[j].key}`, kind: 'Doorway', a: parts[i], b: parts[j], edge,
+            u0: edge.from, u1: edge.to, scripted: false, clearance: Infinity });
+        }
+      }
+    }
+    /** @type {Obstacle[]} the layout's in-room footprints, grown by CLEARANCE (it passes under a platform only hunched) */
+    this.obstacles = levelObstacles(meta, levelId, Math.max(AGENT_HEIGHT, this.minClearance)).map((o) => ({
       id: o.id, minX: o.minX - CLEARANCE, maxX: o.maxX + CLEARANCE, minZ: o.minZ - CLEARANCE, maxZ: o.maxZ + CLEARANCE,
     }));
     /** @type {Array<{position: THREE.Vector3, room: string}>|null} */
     this.samples = null;
+  }
+
+  /** Adds a portal on `edge` (the wall `a` and `b` share) over [u0, u1] along it. */
+  _addPortal({ id, kind, a, b, edge, u0, u1, scripted, clearance }) {
+    const um = (u0 + u1) / 2;
+    const mid = edge.axis === 'X' ? new THREE.Vector3(edge.coord, a.floorY, um) : new THREE.Vector3(um, a.floorY, edge.coord);
+    const portal = { id, kind, a: a.key, b: b.key, axis: edge.axis, coord: edge.coord, u0, u1, mid, scripted, clearance };
+    this.portals.push(portal);
+    this.portalsOf.get(a.key).push(portal);
+    this.portalsOf.get(b.key).push(portal);
+  }
+
+  /**
+   * Which points a walk from `from` can get to now, through the portals open now: a test (point) => boolean. A point
+   * off every room counts by the room nearest it.
+   * @param {THREE.Vector3} from
+   * @returns {(point: THREE.Vector3) => boolean}
+   */
+  reachable(from) {
+    const start = this.roomAt(from) || this.nearestRoom(from);
+    if (!start) return () => false;
+    const seen = new Set([start.key]);
+    const stack = [start.key];
+    while (stack.length > 0) {
+      const key = stack.pop();
+      for (const portal of this.portalsOf.get(key) || []) {
+        if (!this.open(portal)) continue;
+        const next = portal.a === key ? portal.b : portal.a;
+        if (seen.has(next)) continue;
+        seen.add(next);
+        stack.push(next);
+      }
+    }
+    return (point) => {
+      const room = this.roomAt(point) || this.nearestRoom(point);
+      return !!room && seen.has(room.key);
+    };
   }
 
   /** The head room at `p`: its room's height, or a low portal's clearance when it stands in that opening. */
@@ -245,7 +306,7 @@ export class FloorNav {
     const corridor = [];
     let room = start;
     for (const portal of route) {
-      const next = portal.a === room.id ? this.roomById.get(portal.b) : this.roomById.get(portal.a);
+      const next = portal.a === room.key ? this.roomById.get(portal.b) : this.roomById.get(portal.a);
       for (const piece of crossing(portal, room)) corridor.push(piece);
       room = next;
     }
@@ -320,9 +381,9 @@ export class FloorNav {
     const closed = new Set();
     const open = new BinaryHeap();
     const h = (p) => Math.hypot(p.x - to.x, p.z - to.z);
-    for (const portal of this.portalsOf.get(start.id) || []) {
+    for (const portal of this.portalsOf.get(start.key) || []) {
       if (!this.open(portal)) continue;
-      const into = portal.a === start.id ? portal.b : portal.a;
+      const into = portal.a === start.key ? portal.b : portal.a;
       const k = key(portal, into);
       const c = Math.hypot(portal.mid.x - from.x, portal.mid.z - from.z);
       if (!cost.has(k) || c < cost.get(k)) {
@@ -335,7 +396,7 @@ export class FloorNav {
       const node = open.pop();
       if (closed.has(node.k)) continue;
       closed.add(node.k);
-      if (node.into === goal.id) {
+      if (node.into === goal.key) {
         const route = [];
         let cursor = node;
         while (cursor) {
@@ -525,12 +586,60 @@ function midpoint(s) {
 }
 
 /**
+ * The level's pool basins as world rects (world.json basins: `rect` level-local).
+ * @param {any} meta @param {string} levelId @param {number[]} origin the level's origin
+ * @returns {Array<{minX: number, maxX: number, minZ: number, maxZ: number}>}
+ */
+function levelBasins(meta, levelId, origin) {
+  const out = [];
+  for (const b of meta.basins || []) {
+    const r = b && b.rect;
+    if (!r || b.level !== levelId) continue;
+    out.push({ minX: origin[0] + r.x, maxX: origin[0] + r.x + r.w, minZ: origin[2] + r.z, maxZ: origin[2] + r.z + r.d });
+  }
+  return out;
+}
+
+/**
+ * The floor of `room` round the pools in it: [room] when no basin lies in it, else the deck strips round each basin
+ * (west and east the full depth, north and south between them; one narrower than MIN_DECK is left out), keyed
+ * `<key>#W|E|N|S` (see the header).
+ * @param {NavRoom} room
+ * @param {Array<{minX: number, maxX: number, minZ: number, maxZ: number}>} basins
+ * @returns {NavRoom[]}
+ */
+export function deckParts(room, basins) {
+  let parts = [room];
+  for (const b of basins) {
+    const next = [];
+    for (const p of parts) {
+      if (!(b.minX < p.maxX - EPS && b.maxX > p.minX + EPS && b.minZ < p.maxZ - EPS && b.maxZ > p.minZ + EPS)) {
+        next.push(p);
+        continue;
+      }
+      const x0 = Math.max(p.minX, b.minX);
+      const x1 = Math.min(p.maxX, b.maxX);
+      const strip = (side, minX, maxX, minZ, maxZ) => {
+        if (maxX - minX >= MIN_DECK && maxZ - minZ >= MIN_DECK) next.push({ ...p, key: `${p.key}#${side}`, minX, maxX, minZ, maxZ });
+      };
+      strip('W', p.minX, x0, p.minZ, p.maxZ);
+      strip('E', x1, p.maxX, p.minZ, p.maxZ);
+      strip('N', x0, x1, p.minZ, Math.max(p.minZ, b.minZ));
+      strip('S', x0, x1, Math.min(p.maxZ, b.maxZ), p.maxZ);
+    }
+    parts = next;
+  }
+  return parts;
+}
+
+/**
  * The layout's Default-group footprints inside rooms, in world space: platforms whose top is above what the walker
  * steps up and whose underside the agent cannot pass beneath, and the pillars.
  * @param {any} meta world.json @param {string} levelId
+ * @param {number} [agentHeight] the head room the agent needs under a platform
  * @returns {Obstacle[]}
  */
-export function levelObstacles(meta, levelId) {
+export function levelObstacles(meta, levelId, agentHeight = AGENT_HEIGHT) {
   const layout = meta.layouts && meta.layouts[levelId];
   const level = meta.levels && meta.levels[levelId];
   if (!layout || !level) return [];
@@ -542,7 +651,7 @@ export function levelObstacles(meta, levelId) {
     const r = p.rect;
     if (!r || !(p.top > STEP_UP)) continue;
     const bottom = p.top - (p.thickness ?? p.top);
-    if (bottom >= AGENT_HEIGHT) continue;
+    if (bottom >= agentHeight) continue;
     out.push({ id: p.id, minX: ox + r.x, maxX: ox + r.x + r.w, minZ: oz + r.z, maxZ: oz + r.z + r.d });
   }
   (layout.pillars || []).forEach((p, i) => {

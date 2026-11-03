@@ -13,6 +13,10 @@
 // the difficulty's sightRangeMultiplier. The view cone is SightHalfAngle (MovingHalfAngle while they move), and anything
 // within PeripheralRange (MovingPeripheralRange) is felt whatever the facing; while it looks away (HidingResponse's
 // LookAway) the peripheral sense is off. Then the line of sight.
+// The cone and the peripheral range are measured about its upright axis (the bearing from its facing, the distance
+// along the floor): it stands 11 studs tall and bends its long neck to look down, so whoever is at its feet, standing or
+// downed, is in front of it and felt, not under its field of view (from an eye 6 to 8 studs above theirs, a cone tilted
+// with the eye would leave everyone within its reach unseen).
 // Score: closeness + InCone + Lit + Target - Downed; ties: nearer, then lower UserId.
 //
 // The stare (§2.2): stareAngle() is the angle between a player's view centre and the Creature's head; within
@@ -68,16 +72,18 @@ export function fullRange(difficulty) {
   return SENSES.SightTorch * difficultySpec(difficulty).sightRangeMultiplier;
 }
 
-/** Inside the cone of `halfAngleDeg` around `facing`, or within `peripheral` of the eye. */
+/**
+ * Inside the cone of `halfAngleDeg` around `facing`, or within `peripheral` of the eye, both about the upright axis:
+ * the bearing from the flat facing and the distance along the floor (see the header).
+ */
 export function inViewCone(eye, facing, target, halfAngleDeg, peripheral) {
   const ox = target.x - eye.x;
-  const oy = target.y - eye.y;
   const oz = target.z - eye.z;
-  const distance = Math.hypot(ox, oy, oz);
+  const distance = Math.hypot(ox, oz);
   if (distance <= peripheral || distance < SAME_SPOT) return true;
-  const fl = Math.hypot(facing.x, facing.y, facing.z);
+  const fl = Math.hypot(facing.x, facing.z);
   if (fl < SAME_SPOT) return false;
-  const dot = (facing.x * ox + facing.y * oy + facing.z * oz) / (fl * distance);
+  const dot = (facing.x * ox + facing.z * oz) / (fl * distance);
   return dot >= Math.cos((halfAngleDeg * Math.PI) / 180) - 1e-9;
 }
 

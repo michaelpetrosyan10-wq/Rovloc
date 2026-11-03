@@ -30,8 +30,9 @@
 // THE VIEW CONTRACT (R <-> A, design §5). The creature view reads, every frame, from snapshot() (and viewState()):
 //   state            the MonsterState above
 //   speed            the root's measured horizontal speed, studs/s (0 standing, 7 stalking, 16.5 chasing)
-//   poseMode         'Biped' | 'Hunched' (under a low lintel or tunnel: the clearance below its standing height, or
-//                    sniffing at a hiding spot) | 'Swim' | 'Stunned'
+//   poseMode         'Biped' | 'Hunched' (under a low lintel or tunnel, or about to walk under one: the clearance at
+//                    its root or along its way just ahead below HunchBelow; or sniffing at a hiding spot) | 'Swim' |
+//                    'Stunned'. The brain's eye is this pose's eye.
 //   action           'Stare' | 'ReachIn' | 'LookAway' | 'FadeOut' | 'FadeIn' | 'Jumpscare' | null
 //   actionStartedAt  the game clock (service.now()) when that action began
 //   fade             0..1, how visible it is (FadeOut 1 -> 0 over 0.6 s, hidden 0, FadeIn 0 -> 1 over 0.8 s)
@@ -53,7 +54,7 @@ import { CFrame } from './cframe.js';
 import {
   CreatureConfig, GameConfig, MonsterStates, NoisePriorities, ROOT_HEIGHT, WorldDefaults, creatureMetrics, difficultySpec,
 } from './config.js';
-import { CreatureBody } from './body.js';
+import { BODY_RADIUS, CreatureBody } from './body.js';
 import * as Hearing from './hearing.js';
 import { JumpscareHandler } from './jumpscare.js';
 import { Mover } from './locomotion.js';
@@ -115,7 +116,14 @@ const TUNNEL_KINDS = new Set(['Corridor', 'Tunnel', 'Gallery', 'Hallway']); // n
 const WARP_WAIT = 3; // a spot still in view this long after it was picked is swapped for another
 const WARP_GIVE_UP = 12; // hidden this long: any spot out of sight will do
 const MURK_RANGE = 10; // a swimmer under the surface is seen only this close
-const CLEARANCE_EVERY = 0.2;
+// The hunch comes before the lintel: the head room counts this far along its way ahead, its head's lead on its root
+// (the mask hangs about 1.6 studs ahead of it, more in a chase) plus what its pace covers while it bends (the rig's
+// hunch settles in about half a second), sampled every HEADROOM_STEP studs.
+const HEAD_LEAD = 2;
+const HUNCH_LEAD_SECONDS = 0.5;
+const HEADROOM_STEP = 1;
+const _ahead = new THREE.Vector3();
+const STAGE_LIFTS = [-1, 0, 1]; // the walker's body (its root box) from the root: a catch's staging step clears it
 const SPEED_DAMP = 10;
 const LOUD_RANK = 3;
 const NEAR_EYE = 8; // a point this close to a player's eye counts as in their view
@@ -184,6 +192,7 @@ export function levelIndex(levelId) {
  * @property {(player: any, kind: string) => boolean} tryCatch
  * @property {(player: any, spot: string) => void} reachIn
  * @property {(point: THREE.Vector3) => boolean} visible
+ * @property {() => ((point: THREE.Vector3) => boolean)|null} reachable which points it can walk to from where it stands
  * @property {(minDistance: number, maxDistance: number) => THREE.Vector3|null} repositionPoint
  * @property {() => THREE.Vector3[]} playerPositions
  * @property {() => Function|null} lockerInspector
@@ -292,8 +301,8 @@ export class MonsterAI {
     this.speedMeasured = 0;
     this.lastRoot = null;
     this.lastPlacements = 0;
+    /** The head room it walks under now (and just ahead): Hunched below CreatureConfig.HunchBelow. */
     this.clearance = Infinity;
-    this.clearanceAt = -Infinity;
     // warps, teleports, the hiding rule
     this.warp = null;
     this.lookAway = null;
@@ -328,6 +337,7 @@ export class MonsterAI {
       unlock: (p) => (local(p) ? env.unlockPlayer('Jumpscare') : p.setCaught(false)),
       turnPlayer: (p, cframe) => (local(p) ? env.turnPlayer(cframe) : p.turn(cframe)),
       creature: () => (this.ctx ? { body: this.body, state: this.state } : null),
+      stage: (from, to) => this._stageTo(from, to),
       faceWorld: () => (this.view ? this.view.faceWorld() : null),
       playLunge: (_kind, startAt) => {
         if (this.view) this.view.playAction('Lunge', startAt);
@@ -540,8 +550,21 @@ export class MonsterAI {
     return best;
   }
 
+  /**
+   * Its eye: where the rig's eyes are in the pose it stands in (the contract's poseMode): hunched under a low lintel
+   * or a tunnel's ceiling. Standing, the Tall Man's eyes are 10.3 studs up, inside the ceiling of a 10-stud tunnel: the
+   * brain sees, is stared at and catches from where its mask really is.
+   */
   _creatureEye() {
-    return Perception.creatureEyeAt(this.body.getCFrame(), this.body.pose, this.metrics.eyeHeights);
+    return Perception.creatureEyeAt(this.body.getCFrame(), this._poseMode(), this.metrics.eyeHeights);
+  }
+
+  /** How high its head stands over a root at `point` on land: hunched where the head room there is low. */
+  _headLift(point) {
+    const eyes = this.metrics.eyeHeights;
+    if (this.mover && this.mover.basinAt(point)) return eyes.Biped;
+    const nav = this._nav(this.creatureLevel);
+    return nav && nav.clearanceAt(point) < CreatureConfig.HunchBelow ? eyes.Hunched : eyes.Biped;
   }
 
   _lineClear(from, to) {
@@ -550,10 +573,11 @@ export class MonsterAI {
 
   /** Could a player see the Creature with its root at `point` (its head or its chest): any clear line, any facing. */
   _visible(point) {
+    const head = this._headLift(point);
     for (const player of this._playingPlayers()) {
       const eye = this._playerEye(player);
       if (!eye || eye.distanceTo(point) > SIGHT_RANGE_LIMIT) continue;
-      for (const lift of [this.metrics.eyeHeights.Biped, 0]) {
+      for (const lift of [head, 0]) {
         if (this._lineClear(eye, new THREE.Vector3(point.x, point.y + lift, point.z))) return true;
       }
     }
@@ -567,11 +591,12 @@ export class MonsterAI {
    */
   _inViewOfAnyone(point) {
     const murky = !!this.mover && !!this.mover.basinAt(point);
+    const head = this._headLift(point);
     for (const player of this._playingPlayers()) {
       const eye = this._playerEye(player);
       if (!eye) continue;
       const look = this._lookOf(player);
-      for (const lift of [this.metrics.eyeHeights.Biped, 0]) {
+      for (const lift of [head, 0]) {
         const q = new THREE.Vector3(point.x, point.y + lift, point.z);
         const d = eye.distanceTo(q);
         if (d <= NEAR_EYE) return true;
@@ -673,12 +698,17 @@ export class MonsterAI {
     return this.roster().find((p) => p.lockerId && p.lockerId() === spot) || null;
   }
 
-  /** The bodies see each other: chest to chest (never a catch through a wall). */
-  _bodyClear(player) {
+  /**
+   * The bodies see each other: chest to chest (never a catch through a wall). `through` is the hiding spot a ReachIn
+   * reaches into: its own door and shell are no wall (the catch tears its door off).
+   */
+  _bodyClear(player, through = null) {
     const root = this._rootOf(player);
     if (!root) return false;
     const here = this.body.getPosition();
-    return this._lineClear(new THREE.Vector3(here.x, here.y + 1, here.z), new THREE.Vector3(root.x, root.y + 0.5, root.z));
+    const a = new THREE.Vector3(here.x, here.y + 1, here.z);
+    const b = new THREE.Vector3(root.x, root.y + 0.5, root.z);
+    return through ? this.env.lineClear(a, b, { ignoreEntity: through }) : this._lineClear(a, b);
   }
 
   _record(player) {
@@ -756,6 +786,7 @@ export class MonsterAI {
     m.reset(water ? 'Water' : 'Floor');
     if (water) b.setPose('Swim');
     else if (b.pose === 'Swim' || b.pose === 'Quadruped') b.setPose('Biped');
+    this.clearance = this._headroom(cframe.position);
   }
 
   /** Hidden where it stands until nobody can see it there; then it fades in (a "Reveal" warp). */
@@ -1321,6 +1352,27 @@ export class MonsterAI {
     });
   }
 
+  /**
+   * A catch's staging step (jumpscare.js facePair) from root `from` to `to`, cut short where its body (the walker's
+   * radius) would meet the Monster geometry: the look's spacing eases it back from a close victim, and that step must
+   * never put the root in or behind a wall (the rig's bow steps back the rest on screen).
+   * @param {CFrame} from @param {CFrame} to @returns {CFrame}
+   */
+  _stageTo(from, to) {
+    const a = from.position;
+    const b = to.position;
+    const length = Math.hypot(b.x - a.x, b.z - a.z);
+    if (length < 1e-3) return to;
+    const dir = new THREE.Vector3((b.x - a.x) / length, 0, (b.z - a.z) / length);
+    let free = length;
+    for (const lift of STAGE_LIFTS) {
+      const hit = this.env.monsterRay(new THREE.Vector3(a.x, a.y + lift, a.z), dir, length + BODY_RADIUS);
+      if (hit !== null) free = Math.min(free, Math.max(0, hit - BODY_RADIUS));
+    }
+    if (free >= length - 1e-3) return to;
+    return to.withPosition(new THREE.Vector3(a.x + dir.x * free, b.y, a.z + dir.z * free));
+  }
+
   _tryCatch(player, kind) {
     if (!this.mover || this.catching !== null || this.jumpscare.isBusy() || !this._canHuntNow()) return false;
     if (this.ignored || this.now() < this.stunUntil || this.warp) return false;
@@ -1346,7 +1398,8 @@ export class MonsterAI {
     const r = this.pendingReach;
     if (!r || t < r.at) return;
     this.pendingReach = null;
-    const ok = this._playing(r.player) && this._tryCatch(r.player, 'Locker');
+    // never through a wall: nothing but the spot it reaches into stands between its chest and theirs
+    const ok = this._playing(r.player) && this._bodyClear(r.player, r.spot) && this._tryCatch(r.player, 'Locker');
     if (!ok && this.action === 'ReachIn') this._setAction(null);
   }
 
@@ -1827,11 +1880,34 @@ export class MonsterAI {
     if (this.speedMeasured < 0.05) this.speedMeasured = 0;
     this.lastRoot = root.clone();
     this.lastPlacements = this.body.placements;
-    if (t - this.clearanceAt >= CLEARANCE_EVERY) {
-      this.clearanceAt = t;
-      const nav = m.getMedium() === 'Floor' ? this._nav(this.creatureLevel) : null;
-      this.clearance = nav ? nav.clearanceAt(root) : Infinity;
+    this.clearance = this._headroom(root);
+  }
+
+  /**
+   * The head room it walks under (the contract's poseMode, and its eye, hunch below CreatureConfig.HunchBelow): the
+   * lowest nav clearance at its root and along the way it walks, HEAD_LEAD + its pace x HUNCH_LEAD_SECONDS ahead, so it
+   * is down before its head reaches a lintel or a tunnel's ceiling. Infinity off the floor.
+   */
+  _headroom(root) {
+    const m = this.mover;
+    const nav = m && m.getMedium() === 'Floor' ? this._nav(this.creatureLevel) : null;
+    if (!nav) return Infinity;
+    let clearance = nav.clearanceAt(root);
+    let left = HEAD_LEAD + Math.max(0, this.body.walkSpeed) * HUNCH_LEAD_SECONDS;
+    let from = root;
+    for (const to of m.routeAhead()) {
+      const leg = Math.hypot(to.x - from.x, to.z - from.z);
+      const span = Math.min(leg, left);
+      for (let s = HEADROOM_STEP; s < span + HEADROOM_STEP; s += HEADROOM_STEP) {
+        const k = Math.min(s, span) / leg;
+        _ahead.set(from.x + (to.x - from.x) * k, from.y, from.z + (to.z - from.z) * k);
+        clearance = Math.min(clearance, nav.clearanceAt(_ahead));
+      }
+      left -= leg;
+      if (left <= 0) break;
+      from = to;
     }
+    return clearance;
   }
 
   /** The 30 Hz game tick: the catch, motion every tick, the brain at ServerTickHz. @param {number} dt */
@@ -1886,6 +1962,7 @@ export class MonsterAI {
       tryCatch: (player, kind) => this._tryCatch(player, kind),
       reachIn: (player, spot) => this._reachIn(player, spot),
       visible: (point) => this._visible(point),
+      reachable: () => this._reachableTest(),
       repositionPoint: (minDistance, maxDistance) => {
         const info = this.ctx ? this.ctx.level : null;
         if (!info) return null;
@@ -1935,6 +2012,18 @@ export class MonsterAI {
       playerEye: (player) => this._playerEye(player),
     };
     return ctx;
+  }
+
+  /**
+   * Which points it can walk to from where it stands now (through the portals open now; a point in a pool counts, it
+   * gets in by a warp): a test (point) => boolean, or null off the floor.
+   */
+  _reachableTest() {
+    const m = this.mover;
+    const nav = m && m.getMedium() === 'Floor' ? this._nav(this.creatureLevel) : null;
+    if (!nav) return null;
+    const walk = nav.reachable(this.body.getPosition());
+    return (point) => m.basinAt(point) !== null || walk(point);
   }
 
   /** Down the tunnel, away from the spot it watches: the more open of its two sides (a level-headed look). */

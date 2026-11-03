@@ -522,6 +522,23 @@ export class Mover {
     return last.goal || null;
   }
 
+  /**
+   * Where the walker is heading, in order: the point it walks at now (its MoveTo target), then the rest of its route.
+   * Empty when it is not walking (the service's head room looks ahead along this).
+   * @returns {THREE.Vector3[]}
+   */
+  routeAhead() {
+    const leg = this.legs[0];
+    const w = this.walk;
+    if (!leg || leg.kind !== 'Walk' || w.issued === null) return [];
+    const out = [w.issued];
+    const current = w.waypoints[w.index];
+    if (current && horizontalDistance(current, w.issued) < 0.5) {
+      for (let i = w.index + 1; i < w.waypoints.length; i++) out.push(w.waypoints[i]);
+    }
+    return out;
+  }
+
   /** The Creature never rides the duct rail now (kept for the readers of the old API). */
   railPoint() {
     return null;

@@ -8,6 +8,8 @@
 //   * Choosing the next loop: the rooms it heard noises in during the last HeardTtl seconds pull it: with the pacing's
 //     sweep chance (BuildUp 0.75, Peak 0.6, Relax never) it takes the loop through the most and loudest of them; in
 //     Relax it takes the loop farthest from the latest one instead; otherwise one of the three loops nearest it.
+//     Only loops it can walk to count (ctx.reachable: a level may fall apart into parts joined only by locked airlocks
+//     or ducts, and a warp may leave it in any of them); a loop it cannot reach would fail every leg where it stands.
 //   * Withdrawing: entered with ctx.reposition (after a catch or a stun) it first walks, at InvestigateNoise speed, to
 //     a waypoint out of every player's sight 35..140 studs from them, then patrols. (A chase that gives up fades out
 //     instead: the service's warp, before Patrol starts.)
@@ -37,11 +39,13 @@ export function nextIndex(loop, index) {
   return (index + 1) % count;
 }
 
-/** The waypoint of `loop` nearest `position`. */
-export function nearestIndex(loop, position) {
+/** The waypoint of `loop` nearest `position` (of those `reachable` passes, when any does). */
+export function nearestIndex(loop, position, reachable = null) {
   let best = 0;
   let bestDistance = Infinity;
+  const any = !!reachable && loop.waypoints.some((w) => reachable(w.position));
   loop.waypoints.forEach((w, i) => {
+    if (any && !reachable(w.position)) return;
     const d = w.position.distanceTo(position);
     if (d < bestDistance) {
       best = i;
@@ -172,7 +176,11 @@ function pickLoop(ctx, run) {
     return;
   }
   const position = ctx.body.getPosition();
-  const loop = chooseLoop(level.loops, position, {
+  // the loops it can walk to from here (all of them when it can reach none: the mover then stalls and the service
+  // moves it unseen)
+  const reachable = ctx.reachable ? ctx.reachable() : null;
+  const walkable = reachable ? level.loops.filter((l) => l.waypoints.some((w) => reachable(w.position))) : level.loops;
+  const loop = chooseLoop(walkable.length > 0 ? walkable : level.loops, position, {
     current: run.lastLoop,
     heardZones: ctx.heardZones,
     now: ctx.now(),
@@ -187,7 +195,7 @@ function pickLoop(ctx, run) {
   run.arrived = false;
   if (loop) {
     run.lastLoop = loop.id;
-    run.index = nearestIndex(loop, position);
+    run.index = nearestIndex(loop, position, reachable);
     ctx.mover.goTo(loop.waypoints[run.index].position, { arrive: ARRIVE });
   }
 }

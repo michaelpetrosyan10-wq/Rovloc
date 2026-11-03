@@ -170,14 +170,17 @@ export class CreatureApi {
 
   /**
    * The CreatureHitbox (CreatureRigBuilder.setHitbox: the pose's box on the root, floor poses standing on the floor,
-   * the crouched and swimming ones pushed forward), or null when hidden or absent.
+   * the crouched and swimming ones pushed forward), or null when hidden or absent. The pose is the one it stands in
+   * (the view contract's poseMode): Hunched under a low lintel or tunnel, where the 11-stud Biped box would reach
+   * into the ceiling.
    * @returns {{matrix: THREE.Matrix4, inv: THREE.Matrix4, size: number[]}|null}
    */
   hitbox() {
     const c = this.c;
     const body = c && c.service ? c.service.body : null;
     if (!body || body.hidden || !c.service.running) return null;
-    const pose = body.pose || 'Biped';
+    const contract = typeof c.service.viewState === 'function' ? c.service.viewState().poseMode : null;
+    const pose = contract === 'Hunched' || contract === 'Swim' ? contract : body.pose || 'Biped';
     const size = CreatureConfig.Hitbox[pose] || CreatureConfig.Hitbox.Biped;
     const layout = HITBOX_LAYOUTS[pose] || HITBOX_LAYOUTS.Biped;
     const y = layout.floor ? size[1] / 2 - ROOT_HEIGHT : 0;

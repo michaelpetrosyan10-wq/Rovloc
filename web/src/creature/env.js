@@ -132,9 +132,12 @@ export class CreatureEnv {
 
   // ------------------------------------------------------------------ world queries
 
-  /** Sight line (Default group: walls, lockers, desks, closed doors block it). */
-  lineClear(a, b) {
-    return this.engine.world.lineClear(a, b);
+  /**
+   * Sight line (Default group: walls, lockers, desks, closed doors block it). `opts.ignoreEntity` leaves one entity
+   * out (a ReachIn's own hiding spot).
+   */
+  lineClear(a, b, opts) {
+    return this.engine.world.lineClear(a, b, opts);
   }
 
   /** Solid surfaces between two points, up to `max` (SpatialQuery.countOccluders: each wall counts once). */
@@ -210,6 +213,11 @@ export class CreatureEnv {
       if (this._monsterRay(_o, _d, len) !== null) return false;
     }
     return true;
+  }
+
+  /** The first Monster-geometry hit along a ray (what the walker collides with): its distance, or null within `max`. */
+  monsterRay(origin, dir, max) {
+    return this._monsterRay(origin, dir, max);
   }
 
   _monsterRay(origin, dir, max) {

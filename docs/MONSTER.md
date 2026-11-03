@@ -36,10 +36,10 @@ asserted by `web/tools/creature-sim.mjs`.
 |---|---|
 | Height standing / hunched | 11 / 9 (`meta.creature.height` / `hunchedHeight` when the rig exports them) |
 | Root centre above the floor | 4.7 (HipHeight 3.4 + half the 2.6 root) |
-| Eye above the root | Biped 3.1, Hunched 1.6, Swim 0.4, Stunned 2.4 (from `meta.creature.eyeHeight` when exported: Biped = eyeHeight − 4.7; Hunched = eyeHeight × 9/11 − 4.7), nudged 0.6 forward along the facing |
+| Eye above the root | Biped 5.64, Hunched 3.6, Swim 0.4, Stunned 4.6 (`meta.creature.eyeHeightAboveRoot` when the rig exports it), nudged 0.6 forward along the facing. Its eye is the one of the poseMode it stands in (section 12): under a low clearance the hunched one, never the standing eye (10.34 over the floor) inside a tunnel's ceiling. Sight, the stare, the reveal, the catch's eye line and the hitbox all use it |
 | Catch reach | 4 horizontal, 5 vertical (`meta.creature.reach` when exported) |
-| Path agent | radius 2, no jumping, no climbing |
-| Hunch | poseMode `Hunched` wherever the clearance (a portal's `clearance` within 3 studs of its opening, else the room's height) is under **12.5**, and while sniffing at a hiding spot |
+| Path agent | radius 2, height 9 (its hunched height: it passes under nothing lower), no jumping, no climbing; a pool's water is no floor (section 5) |
+| Hunch | poseMode `Hunched` wherever the clearance (a portal's `clearance` within 3 studs of its opening, else the room's height) is under **12.5**, and while sniffing at a hiding spot. The clearance counts at its root and along its route ahead, **2 + pace × 0.5** studs (its head's lead plus what it walks while it bends), every tick: it is down before its head reaches a lintel |
 
 **Speed cap.** Outside Scripted nothing ever moves faster than **18.5** (a sprinting player runs 19).
 Every state's pace is `min(18.5, base × difficulty multiplier (1 [1.2]) × level speed scale (0.5..2))`.
@@ -126,7 +126,9 @@ Evaluated every brain tick unless it is **blind**: hidden, fading (any warp), or
     above **0.2**.
 - **Cone:** half-angle **55°**, or **75°** when the player moves (their speed above 2 studs/s, measured from their root
   between brain ticks: `speed += (v − speed) × clamp01(dt × 6)`, a jump over 12 studs counts as 0).
-  - Anything within the peripheral range is felt whatever the facing: 6, or 10 when moving.
+  - The cone is measured about its upright axis, as a bearing from its facing: it bends its long neck to look down, so
+    whoever is at its feet, standing or downed, is in front of it, not below its view.
+  - Anything within the peripheral range (along the floor) is felt whatever the facing: 6, or 10 when moving.
   - During a LookAway the facing is the look-away direction and there is no peripheral sense.
 - **Line:** a clear ray from its eye to the player's eye (root + 1.5 standing, 1.4 sprinting, 0 crouching, 1.3
   hiding, …).
@@ -204,6 +206,10 @@ catching, and may hunt.
 - **Walkable rooms and portals.** Rooms of kind Crawlway / Chase give it no floor; a portal flagged `crawlOnly`, or
   whose `clearance` is under 9 (its hunched height), is shut to it. The flags come from the layout door or the zone
   graph edge of the same portal; missing means clear.
+- **Pools.** A basin's water is no floor (it gets in and out only by a warp, 6.10): a room a basin lies in keeps only
+  the deck round it, as up to four strips (west and east the room's full depth, north and south between them; a strip
+  under 2 wide is left out), joined where they meet. A door opens onto the strip it lies on. No route crosses the
+  water, so a pool that splits a deck in two leaves two decks joined only by the ways round it, if any.
 
 ---
 
@@ -258,13 +264,16 @@ Still, anchored, nobody targeted. In the water it keeps PoseMode Swim.
 
 ### 6.3 Patrol (the Stalk)
 
-- **Pace and route:** 7 studs/s along its loops. It joins a loop at the nearest waypoint and walks one lap (the last
-  waypoint leads back to the first).
+- **Pace and route:** 7 studs/s along its loops. It joins a loop at the nearest waypoint it can walk to and walks one
+  lap (the last waypoint leads back to the first).
 - **Junction pauses:** where the route turns 50° or more (loops of 3+), it pauses twice for U(0.6, 1.1) s each.
   - First it looks into the room's farthest corner that is not behind it (dot with the incoming direction ≥ −0.2).
   - Then it looks along the way on.
-- **The next loop:** the candidates are every loop but the last one walked (unless there is only one), sorted by their
-  nearest waypoint's distance.
+- **The next loop:** the candidates are every loop it can walk to from where it stands (a waypoint of it reachable
+  through the doors open now, or in a pool: a warp gets it there; every loop when none is), but the last one walked
+  (unless there is only one), sorted by their nearest waypoint's distance. A level can fall apart into parts joined only
+  by locked airlocks or ducts, and a warp can leave it in any of them; a loop out of reach would fail every leg where
+  it stands.
   - **Relax:** the loop whose centre is farthest from the latest heard position (or the nearest loop if nothing was
     heard).
   - **Otherwise, the heard pull:** with probability **0.75** (BuildUp) / **0.6** (Peak), the loop with the largest pull,
@@ -569,12 +578,20 @@ From getting in:
   through a wall;
 - the victim is within reach: 4 horizontal (6 for the exit rule) and 5 vertical.
 
+The ReachIn's victim is hiding, so it is held to the chest line alone, with the hiding spot it reaches into (that
+spot's own door and shell, which the catch tears open) left out of it: anything else between their chests, and there
+is no catch.
+
 The game may veto a catch (a cutscene, a player not playing).
 
-**The moment** (unchanged from today):
+**The moment:**
 - The victim is locked.
-- The two are set face to face, it at the kind's distance: Hallway 2.4 (min 1.9), Locker 3.0 (min 2.4), Underwater
-  2.6 (min 2.0).
+- The two are set face to face, root to root at the kind's distance (`jumpscare.js` SPACING, far enough back for the
+  rig's bow to bring the mask level with the victim's eye; `docs/MONSTER-LOOK.md`): Hallway 4.2 (min 3.4), Locker 4.4
+  (min 3.6), Underwater 2.6 (min 2.0).
+  - It closes in, or is eased back out to the minimum, along the line between them, but only as far as its body
+    (radius 1, at its root's height ± 1) clears the walls: the root never ends in or behind a wall. The bow steps back
+    the rest, on screen only.
 - 0.2 s later the lunge (0.45 s), then the hold (1.4 s).
 - At 2.05 s the outcome:
   - **Downed** for an Alive victim never downed this run;
@@ -590,8 +607,9 @@ The game may veto a catch (a cutscene, a player not playing).
 
 ## 10. Movement, stalls and repositioning
 
-- **Routes:** A* over the zone graph's open portals, string-pulled through each opening narrowed by the agent radius,
-  and detoured round obstacle footprints inside rooms. Fixture doors are open only while open.
+- **Routes:** A* over the zone graph's open portals (never across a pool's water, section 5), string-pulled through
+  each opening narrowed by the agent radius, and detoured round obstacle footprints inside rooms. Fixture doors are
+  open only while open.
 - **Waypoints:** a waypoint every 4 studs, reached within 2.5. Re-routed every 2 s (Patrol), 1 s (Investigate,
   Search) or 0.35 s (chases), when the goal has moved 2+ studs.
 - **Stalls:** no progress of 1.2 studs for 2.5 s forces a fresh route. A second stall within 12 s reports Stuck.
@@ -642,7 +660,7 @@ Published every frame (`snapshot()` / `viewState()`):
 |---|---|
 | `state` | the MonsterState |
 | `speed` | its root's measured horizontal speed (smoothed; a placement reads 0) |
-| `poseMode` | `Biped` \| `Hunched` (clearance < 12.5, or sniffing) \| `Swim` \| `Stunned` |
+| `poseMode` | `Biped` \| `Hunched` (clearance < 12.5 at its root or just ahead on its way, or sniffing) \| `Swim` \| `Stunned` |
 | `action` | `Stare` \| `ReachIn` \| `LookAway` \| `FadeOut` \| `FadeIn` \| `Jumpscare` \| null |
 | `actionStartedAt` | game time the action began |
 | `fade` | 0..1 visible |
@@ -675,7 +693,7 @@ Published every frame (`snapshot()` / `viewState()`):
 2. Never teleports into anyone's view, nor within 12 studs of anyone. Every teleport:
    - is warned 1.6 s ahead;
    - is 12..24 studs of walking from its target at planning.
-3. Never catches through a wall: every catch has a clear chest-to-chest line.
+3. Never catches through a wall: every catch has a clear chest-to-chest line (a ReachIn's own hiding spot aside).
 4. The first teleport on a floor comes no sooner than the floor's grace + 45 s.
 5. A chase ends after 4 s without a sight (Search), or at 22 [28] s whatever happens (it fades away).
 6. A LookAway lets a hider slip out and escape by breaking the line; stepping out under its nose is a catch; the
@@ -699,6 +717,6 @@ Published every frame (`snapshot()` / `viewState()`):
 | `meta.teleportPoints[level]` `{pos, facings, region, zone}` | teleport candidates (`zone` names the room; its facing is toward the target, `facings` unused) |
 | `patrolLoops`, PatrolWaypoint anchors | the Stalk's loops (derived from the rooms when absent) |
 | CreatureSpawn anchor | its start (ignored outside the main walkable component) |
-| `meta.creature` `height`, `hunchedHeight`, `eyeHeight`, `reach` | the metrics in section 2 |
-| `basins` | the pool |
+| `meta.creature` `height`, `hunchedHeight`, `eyeHeightAboveRoot` (else `eyeHeight`), `reach` | the metrics in section 2 |
+| `basins` | the pool (its water is no floor for routes: section 5) |
 | probe grids (base irradiance) | "lit" |

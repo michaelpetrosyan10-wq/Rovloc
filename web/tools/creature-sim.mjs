@@ -279,7 +279,11 @@ function session(opts = {}) {
     fairness.catches += 1;
     const root = victim === PLAYER ? engine.player.body.position : victim.root();
     const here = svc.body.getPosition();
-    if (root && !engine.world.lineClear(new THREE.Vector3(here.x, here.y + 1, here.z), new THREE.Vector3(root.x, root.y + 0.5, root.z))) {
+    // a Locker catch is the ReachIn into the victim's own hiding spot (the game tears its door off): that spot's door
+    // and shell are no wall, anything else between the chests is
+    const spot = kind === 'Locker' ? (victim === PLAYER ? s.hideSpot : victim.lockerId && victim.lockerId()) : null;
+    if (root && !engine.world.lineClear(new THREE.Vector3(here.x, here.y + 1, here.z), new THREE.Vector3(root.x, root.y + 0.5, root.z),
+      spot ? { ignoreEntity: spot } : {})) {
       fairness.wallCatches.push({ at: engine.loop.time, kind, level: svc.creatureLevel });
     }
   });

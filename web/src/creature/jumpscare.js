@@ -8,7 +8,9 @@
 //   2. Face to face (facePair): the victim's root turns in place to face the Creature; the Creature's root is anchored
 //      for the moment and set on the line between them at the kind's spacing (SPACING: far enough back for its bow to
 //      bring the mask level with the victim's eye), facing the victim, at its own height. It only ever closes in,
-//      unless closer than the kind's minimum, where it is eased back out to it.
+//      unless closer than the kind's minimum, where it is eased back out to it. The step is the brain's to bound
+//      (deps.stage): only as far as its body clears the walls, so the root never ends in or behind one (the rig's bow
+//      steps back the rest, on screen only).
 //   3. The moment at startAt = now + OneShotLead: the Lunge action on the rig, the victim's camera session
 //      (JumpscareView: face lock, lunge, shake, flashes, cut to black) until resolveAt, the Screech at the Creature's
 //      face and the JumpscareSting for the victim.
@@ -125,6 +127,8 @@ export function faceOffset(rootCFrame, faceWorld, poseMode) {
  * @property {(player: any) => void} unlock
  * @property {(player: any, cframe: CFrame) => void} turnPlayer
  * @property {() => {body: import('./body.js').CreatureBody, state: string}|null} creature
+ * @property {(from: CFrame, to: CFrame) => CFrame} [stage] the staging step from its root `from` toward `to`, cut
+ *   short where its body would meet a wall (`to` itself when the way is clear)
  * @property {() => CFrame|null} faceWorld the rig's face frame (FaceFrontAttachment) in world space now
  * @property {(kind: string, startAt: number) => void} playLunge
  * @property {(cue: {kind: string, startAt: number, endsAt: number, face: THREE.Vector3}) => void} victimCue
@@ -184,7 +188,8 @@ export class JumpscareHandler {
     d.lock(victim);
     // 2. face to face
     const faceInRoot = faceOffset(body.getCFrame(), d.faceWorld(), body.pose);
-    const [victimTarget, creatureTarget] = facePair(victimRoot, body.getCFrame(), kind);
+    const [victimTarget, spaced] = facePair(victimRoot, body.getCFrame(), kind);
+    const creatureTarget = d.stage ? d.stage(body.getCFrame(), spaced) : spaced;
     d.turnPlayer(victim, victimTarget);
     if (!body.anchored) body.setAnchored(true);
     body.placeAt(creatureTarget);
