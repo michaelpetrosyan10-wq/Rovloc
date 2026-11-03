@@ -17,6 +17,17 @@
 // hidden); what they tell it is forwarded (stun, alert) or declined (acquireScripted: the scenes are the host's).
 // The host also asks a client to run a locker check on its own hiding player ({t: 'breathReq'} -> its registered
 // inspector -> {t: 'breath', v}) and to start a pool grab on its swimmer ({t: 'grabReq'}).
+//
+// Tunnels (the Tall Man). The host's brain stares back at every player through their pose's yaw and pitch (the
+// handle's look). The world packet carries the states the codec knows (Search and HidingResponse go as
+// InvestigateNoise, Teleport as Patrol); the exact state and the view contract's action go reliably beside it
+// ({t: 'cst', st, a, ago} on every change), so a client's puppet publishes the same {state, speed, poseMode, action,
+// actionStartedAt, fade} as the host's Creature. Positions are never interpolated across a hidden sample (a teleport
+// snaps). The host relays its events: a teleport's warning to everyone ({t: 'cwarn'}: the flicker and the hiss; the
+// torch stutter on its target's page), the grunt before a LookAway ({t: 'cgrunt'}), a chase giving up ({t: 'cgive'}),
+// and to their target only a reveal scare ({t: 'creveal'}) and a stare's sting ({t: 'cstare'}). Hiding spots: a
+// teammate's Pull ({t: 'hpull'} to the host -> {t: 'hpulled'} to the hider, the brain told it was a pull), a fake-out
+// that played ({t: 'hfake'}: safe for everyone now).
 
 import * as THREE from 'three';
 import { CFrame } from '../../creature/cframe.js';
@@ -25,6 +36,12 @@ import { PoseFlags } from '../../net/codec.js';
 import { lerpAngle } from './squad.js';
 
 const DEDUPE_RADIUS = 4;
+// the states the world packet's codec carries for the Tall Man's new ones (the exact one rides on {t: 'cst'})
+const WIRE_STATE = { Search: 'InvestigateNoise', HidingResponse: 'InvestigateNoise', Teleport: 'Patrol' };
+const FADE_OUT = 0.6;
+const FADE_IN = 0.8;
+const HUNCH_BELOW = 12.5;
+const SPEED_DAMP = 10;
 const DEDUPE_SECONDS = 1.5;
 const BUFFER = 10;
 const SWIM_STATES = new Set(['Treading', 'Freestyle', 'Underwater', 'Grabbed']);
@@ -64,7 +81,23 @@ export class CreatureNet {
       grabReq: () => this._onGrabRequest(),
       grabbed: (from, msg) => this._onGrabbed(from, msg),
       drowned: () => this._onDrowned(),
+      cst: (from, msg) => this._onCreatureState(msg),
+      cwarn: (from, msg) => this._onWarn(msg),
+      cgrunt: (from, msg) => this._onGrunt(msg),
+      cgive: (from, msg) => this._onGiveUp(msg),
+      creveal: (from, msg) => this._onReveal(msg),
+      cstare: () => this._onStare(),
+      hpull: (from, msg) => this._onPull(from, msg),
+      hpulled: (from, msg) => this._onPulled(msg),
+      hfake: (from, msg) => this._onFakeout(from, msg),
     };
+    /** host: the exact state and action last sent; client: the last received ({state, action, actionAt}) */
+    this.sentFx = null;
+    this.fx = null;
+    this.puppetSpeed = 0;
+    this.puppetLast = null;
+    this.clearance = Infinity;
+    this.clearanceAt = -Infinity;
   }
 
   /** The W3 Creature object (createCreature's) behind the game's adapter, or null. */
@@ -111,6 +144,7 @@ export class CreatureNet {
       this.localGrabber = service.poolGrabber;
       service.registerPoolGrabber((player) => this._grab(player));
       this.restore.push(() => service.registerPoolGrabber(this.localGrabber));
+      this._relayEvents(c);
       return;
     }
     // client: the puppet
@@ -118,7 +152,8 @@ export class CreatureNet {
     this.state = null;
     set(service, 'tick', () => this._puppetTick());
     set(service, 'snapshot', () => this._snapshot());
-    set(c, 'getState', () => (this.state ? this.state.state : 'Dormant'));
+    set(service, 'viewState', () => this._viewState());
+    set(c, 'getState', () => (this.state ? this._exactState(this.state.state) : 'Dormant'));
     set(c, 'getTarget', () => (this._targetsMe() ? c.PLAYER : null));
     set(c, 'getVentNode', () => null);
     set(c, 'acquireScripted', () => null);
@@ -149,6 +184,29 @@ export class CreatureNet {
     this.restore.push(offNoise);
     const offSplash = this.env.onSplashCrossed(() => this.coop.toHost({ t: 'splash' }));
     this.restore.push(offSplash);
+  }
+
+  /** Host: the brain's Tall Man events, to the pages they concern. */
+  _relayEvents(c) {
+    const service = c.service;
+    const coop = this.coop;
+    const slotOf = (player) => {
+      if (!player) return -1;
+      if (player === c.PLAYER) return coop.me ? coop.me.slot : -1;
+      return player.member ? player.member.slot : -1;
+    };
+    const offs = [
+      service.teleportWarning.connect((spot, target, seconds) => coop.broadcast({ t: 'cwarn', p: vec(spot), s: seconds, tg: slotOf(target) })),
+      service.grunted.connect((position) => coop.broadcast({ t: 'cgrunt', p: vec(position) })),
+      service.gaveUp.connect((player, position) => coop.broadcast({ t: 'cgive', p: vec(position), tg: slotOf(player) })),
+      service.revealed.connect((target, kind) => {
+        if (target && target !== c.PLAYER && target.member) coop.send(target.member.id, { t: 'creveal', k: kind });
+      }),
+      service.stared.connect((player) => {
+        if (player && player !== c.PLAYER && player.member) coop.send(player.member.id, { t: 'cstare' });
+      }),
+    ];
+    this.restore.push(() => offs.forEach((off) => off()));
   }
 
   uninstall() {
@@ -204,6 +262,12 @@ export class CreatureNet {
         if (p.flags & PoseFlags.Swim || SWIM_STATES.has(p.moveState)) return 'Swim';
         return 'OnFoot';
       },
+      look: () => {
+        const p = pose();
+        if (!p) return new THREE.Vector3(0, 0, -1);
+        const cp = Math.cos(p.pitch || 0);
+        return new THREE.Vector3(-Math.sin(p.yaw) * cp, Math.sin(p.pitch || 0), -Math.cos(p.yaw) * cp);
+      },
       inVent: () => !!pose() && (pose().flags & PoseFlags.Vent) !== 0,
       flashlightOn: () => !!pose() && (pose().flags & PoseFlags.Torch) !== 0,
       lockerId: () => member.lockerId,
@@ -255,8 +319,15 @@ export class CreatureNet {
     if (s.targetUserId !== null && s.targetUserId !== undefined) target = s.targetUserId - 1;
     const held = c.service.grabbed;
     const grabbed = held ? held.userId - 1 : -1;
+    // the exact state and the action, reliably, whenever they change
+    const sent = this.sentFx;
+    if (!sent || sent.state !== s.state || sent.action !== s.action || sent.actionAt !== s.actionStartedAt) {
+      this.sentFx = { state: s.state, action: s.action, actionAt: s.actionStartedAt };
+      this.coop.broadcast({ t: 'cst', st: s.state, a: s.action, ago: Math.max(0, c.service.now() - s.actionStartedAt) });
+    }
     return { present: true, hidden: s.hidden, inVent: s.inVent, awake: s.awake, x: s.position.x, y: s.position.y,
-      z: s.position.z, yaw: Math.atan2(-look.x, -look.z), state: s.state, pose: s.pose, level: s.levelId, target, grabbed };
+      z: s.position.z, yaw: Math.atan2(-look.x, -look.z), state: WIRE_STATE[s.state] || s.state, pose: s.pose, level: s.levelId,
+      target, grabbed };
   }
 
   _member(from) {
@@ -376,7 +447,8 @@ export class CreatureNet {
     const a = prev.s;
     const z = next.s;
     const jump = (a.x - z.x) ** 2 + (a.y - z.y) ** 2 + (a.z - z.z) ** 2 > 144;
-    if (jump) return { ...z, teleport: true };
+    // a teleport: never drawn sliding from where it was (it moves while hidden: no interpolation across a hidden sample)
+    if (jump || ((a.hidden || z.hidden) && (a.x - z.x) ** 2 + (a.z - z.z) ** 2 > 1)) return { ...z, teleport: true };
     return { ...(f < 0.5 ? a : z), x: a.x + (z.x - a.x) * f, y: a.y + (z.y - a.y) * f, z: a.z + (z.z - a.z) * f,
       yaw: lerpAngle(a.yaw, z.yaw, f), teleport: false };
   }
@@ -403,12 +475,52 @@ export class CreatureNet {
     service.body.setPose(s.pose);
     service.body.setHidden(s.hidden);
     service.creatureLevel = s.level;
-    if (s.state !== this.lastState) {
+    const state = this._exactState(s.state);
+    if (state !== this.lastState) {
       const previous = this.lastState;
-      this.lastState = s.state;
-      service.state = s.state;
-      service.stateChanged.fire(s.state, previous);
+      this.lastState = state;
+      service.state = state;
+      service.stateChanged.fire(state, previous);
     }
+    // the contract's speed (a snap reads as still) and head room
+    const now = this.env.now();
+    if (this.puppetLast && !moved) {
+      const dt = Math.max(1e-3, now - this.puppetLast.t);
+      const v = Math.hypot(at.x - this.puppetLast.x, at.z - this.puppetLast.z) / dt;
+      this.puppetSpeed += (v - this.puppetSpeed) * Math.min(1, dt * SPEED_DAMP);
+    } else this.puppetSpeed = 0;
+    if (this.puppetSpeed < 0.05) this.puppetSpeed = 0;
+    this.puppetLast = { x: at.x, z: at.z, t: now };
+    if (now - this.clearanceAt >= 0.2) {
+      this.clearanceAt = now;
+      const nav = s.level && service._nav ? service._nav(s.level) : null;
+      this.clearance = nav ? nav.clearanceAt(at) : Infinity;
+    }
+  }
+
+  /** The host's exact state: the reliable one when it agrees with the packet's (the codec's coarser) state. */
+  _exactState(wire) {
+    const fx = this.fx;
+    if (fx && (WIRE_STATE[fx.state] || fx.state) === wire) return fx.state;
+    return wire;
+  }
+
+  /** Client: the view contract from the host's state ({state, speed, poseMode, action, actionStartedAt, fade}). */
+  _viewState() {
+    const s = this.state;
+    const fx = this.fx;
+    const now = this.env.now();
+    const state = s ? this._exactState(s.state) : 'Dormant';
+    const action = fx && s && fx.state === state ? fx.action : null;
+    const actionStartedAt = action ? fx.actionAt : 0;
+    let fade = !s || s.hidden ? 0 : 1;
+    if (action === 'FadeOut') fade = Math.max(0, 1 - (now - actionStartedAt) / FADE_OUT);
+    else if (action === 'FadeIn' && s && !s.hidden) fade = Math.min(1, (now - actionStartedAt) / FADE_IN);
+    let poseMode = 'Biped';
+    if (state === 'Stunned') poseMode = 'Stunned';
+    else if (s && s.pose === 'Swim') poseMode = 'Swim';
+    else if ((s && s.pose === 'Hunched') || this.clearance < HUNCH_BELOW) poseMode = 'Hunched';
+    return { state, speed: this.puppetSpeed, poseMode, action, actionStartedAt, fade };
   }
 
   _snapshot() {
@@ -436,7 +548,94 @@ export class CreatureNet {
       pacing: null,
       position,
       eye: new THREE.Vector3(position.x, position.y + eyeLift, position.z),
+      ...this._viewState(),
     };
+  }
+
+  // ---------------------------------------------------------------------------------------------------- Tall Man relays
+
+  _onCreatureState(msg) {
+    if (!this.coop.isClient()) return;
+    this.fx = { state: msg.st, action: msg.a || null, actionAt: this.env.now() - (Number.isFinite(msg.ago) ? msg.ago : 0) };
+  }
+
+  _onWarn(msg) {
+    const c = this._creature();
+    if (!c || !this.coop.isClient() || !Array.isArray(msg.p)) return;
+    const spot = new THREE.Vector3(msg.p[0], msg.p[1], msg.p[2]);
+    const mine = !!this.coop.me && msg.tg === this.coop.me.slot;
+    if (c.warnLocal) c.warnLocal(spot, msg.s, mine);
+    if (c.events && c.events.teleportWarning) c.events.teleportWarning.fire(spot, mine, msg.s);
+  }
+
+  _onGrunt(msg) {
+    const c = this._creature();
+    if (!c || !this.coop.isClient() || !Array.isArray(msg.p)) return;
+    if (c.events && c.events.grunted) c.events.grunted.fire(new THREE.Vector3(msg.p[0], msg.p[1], msg.p[2]));
+  }
+
+  _onGiveUp(msg) {
+    const c = this._creature();
+    if (!c || !this.coop.isClient() || !Array.isArray(msg.p)) return;
+    const mine = !!this.coop.me && msg.tg === this.coop.me.slot;
+    if (c.events && c.events.gaveUp) c.events.gaveUp.fire(new THREE.Vector3(msg.p[0], msg.p[1], msg.p[2]), mine);
+  }
+
+  _onReveal(msg) {
+    const c = this._creature();
+    if (!c) return;
+    if (c.reveal) c.reveal(msg.k || 'Teleport');
+    if (c.events && c.events.revealed) c.events.revealed.fire(msg.k || 'Teleport');
+  }
+
+  _onStare() {
+    const c = this._creature();
+    if (c && c.events && c.events.stared) c.events.stared.fire();
+  }
+
+  /** A Pull on spot `id` from this page (its player at `from`): applied here on the host, else asked of it. */
+  requestPull(id, from) {
+    if (this.coop.isHost()) this._onPull(this.coop.localId, { id, f: vec(from) });
+    else this.coop.toHost({ t: 'hpull', id, f: vec(from) });
+  }
+
+  /** Host: someone pulls the hider out of `msg.id`: the hider's page throws them out; the brain hears it was a pull. */
+  _onPull(from, msg) {
+    if (!this.coop.isHost() || typeof msg.id !== 'string') return;
+    const c = this._creature();
+    const game = this.game;
+    const at = Array.isArray(msg.f) ? new THREE.Vector3(msg.f[0], msg.f[1], msg.f[2]) : null;
+    if (game.lockers && game.lockers.occupiedId() === msg.id) {
+      if (c && c.service) c.service.notePulled(c.PLAYER);
+      game.lockers.pulledOut(msg.id, at);
+      return;
+    }
+    const hider = this.coop.squad.list().find((m) => !m.local && m.lockerId === msg.id);
+    if (!hider || hider.id === from) return;
+    if (c && c.service) c.service.notePulled(this._handle(hider));
+    this.coop.send(hider.id, { t: 'hpulled', id: msg.id, f: msg.f });
+  }
+
+  _onPulled(msg) {
+    const lockers = this.game.lockers;
+    if (!lockers || typeof msg.id !== 'string') return;
+    lockers.pulledOut(msg.id, Array.isArray(msg.f) ? new THREE.Vector3(msg.f[0], msg.f[1], msg.f[2]) : null);
+  }
+
+  /** A fake-out played in a spot on this page: it is safe for the whole squad now. */
+  shareHide(ev, data) {
+    if (ev !== 'fakeout' || !data || typeof data.id !== 'string') return;
+    if (this.coop.isHost()) this.coop.broadcast({ t: 'hfake', id: data.id });
+    else this.coop.toHost({ t: 'hfake', id: data.id });
+  }
+
+  _onFakeout(from, msg) {
+    const lockers = this.game.lockers;
+    if (!lockers || typeof msg.id !== 'string') return;
+    lockers.remoteFakeout(msg.id);
+    if (this.coop.isHost()) {
+      for (const m of this.coop.squad.list()) if (!m.local && m.id !== from) this.coop.send(m.id, { t: 'hfake', id: msg.id });
+    }
   }
 
   /** The host's Creature caught this page's player: the moment plays here. */
@@ -504,6 +703,10 @@ export class CreatureNet {
     this.buffer = [];
     this.state = null;
     this.lastState = 'Dormant';
+    this.fx = null;
+    this.sentFx = null;
+    this.puppetLast = null;
+    this.puppetSpeed = 0;
   }
 }
 

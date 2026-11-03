@@ -34,9 +34,11 @@ import * as THREE from 'three';
 import { MeshBVH } from 'three-mesh-bvh';
 import { CFrame } from './cframe.js';
 import { monsterIndex } from './monsterCollision.js';
+import { sampleProbe } from '../engine/data.js';
 import { nearest as railNearest } from './ventgraph.js';
 
 const PASSTHROUGH = 'MonsterPassthrough';
+const HIDE_KINDS = ['Locker', 'Barrel', 'Cabinet'];
 const OCCLUDER_SKIP = 1.5; // the far face of a wall this close behind its near face is the same occluder
 const FLOOR_NORMAL = 0.35;
 
@@ -53,6 +55,11 @@ const FLOOR_NORMAL = 0.35;
  * @property {(doorId: string) => boolean} [doorOpen] a fixture door (Gate, Airlock, RoofDoor) lets it through
  * @property {(lockerId: string) => boolean} [lockerOccupied] the player hides in this locker
  * @property {() => string|null} [playerLevel] the LevelId the player is on
+ * @property {(levelId: string) => Array<{id: string, kind: string, zone: string|null, front: CFrame}>} [hideSpots]
+ *   the level's hiding spots (lockers, barrels, cabinets; the game's hidespots.js)
+ * @property {(id: string) => boolean} [hideSpotOccupied] the player hides in this spot
+ * @property {() => string|null} [hideSpotOf] the spot the player hides in
+ * @property {() => boolean} [teleportBlocked] the game forbids a teleport now (survive countdown, finale)
  */
 
 export class CreatureEnv {
@@ -513,6 +520,73 @@ export class CreatureEnv {
     return m ? CFrame.fromMatrix4(m) : null;
   }
 
+  // ------------------------------------------------------------------ Tunnels: hiding spots, light, the game's vetoes
+
+  /**
+   * The hiding spots of a level (lockers, barrels, cabinets): [{id, kind, zone, front}] with `front` the spot's
+   * ExitAnchor (floor level, facing out of it). The game's hidespots hook wins; else the entities tagged Hideable
+   * (the tunnel maps; HideKind "Locker" | "Barrel" | "Cabinet", missing: "Locker"), HideableLocker (today's) or of
+   * a hide type. Cached per level (the spots do not move).
+   */
+  hideSpots(levelId) {
+    if (this.hooks.hideSpots) return this.hooks.hideSpots(levelId) || [];
+    if (!this.hideCache) this.hideCache = new Map();
+    if (this.hideCache.has(levelId)) return this.hideCache.get(levelId);
+    const entities = this.engine.entities;
+    if (!entities) return [];
+    const out = [];
+    for (const e of entities.list()) {
+      const a = e.attributes || {};
+      const tags = e.tags || [];
+      const hideable = tags.includes('Hideable') || tags.includes('HideableLocker') || HIDE_KINDS.includes(e.type);
+      if (!hideable || (a.LevelId || e.level) !== levelId) continue;
+      const m = entities.attachmentWorld(e.id, 'ExitAnchor');
+      const kind = HIDE_KINDS.includes(a.HideKind) ? a.HideKind : HIDE_KINDS.includes(e.type) ? e.type : 'Locker';
+      if (m) out.push({ id: e.id, kind, zone: a.ZoneId || null, front: CFrame.fromMatrix4(m) });
+    }
+    this.hideCache.set(levelId, out);
+    return out;
+  }
+
+  /** Whether the local player hides in this spot. */
+  hideSpotOccupied(id) {
+    if (this.hooks.hideSpotOccupied) return !!this.hooks.hideSpotOccupied(id);
+    return this.lockerOccupied(id);
+  }
+
+  /** The spot the local player hides in (id), or null. */
+  playerHideSpot() {
+    if (this.hooks.hideSpotOf) return this.hooks.hideSpotOf() || null;
+    return null;
+  }
+
+  /**
+   * The BAKED probe irradiance (luminance) at `position`: the level's static probe grid only, never the scripted groups'
+   * live levels, the flicker texture or anything the render frame or the quality tier writes (gameplay reads this; the
+   * engine's probeAt adds the per-frame flicker state and is for drawing only).
+   */
+  bakedLight(position) {
+    const world = this.engine.world;
+    const probes = world.decoded && world.decoded.probes;
+    if (!probes) return BAKED_DARK;
+    let level = world.levelAt(position);
+    if (!level || level === STAIRWELLS || !probes[level]) level = world.nearestLevel(position.y);
+    const grid = (level && probes[level]) || probes[STAIRWELLS];
+    if (!grid) return BAKED_DARK;
+    sampleProbe(grid, position.x, position.y, position.z, _probeRgb, null);
+    return 0.2126 * _probeRgb[0] + 0.7152 * _probeRgb[1] + 0.0722 * _probeRgb[2];
+  }
+
+  /** Whether `position` stands in a lit pool: the baked probe irradiance there above `threshold` (deterministic). */
+  litAt(position, threshold) {
+    return this.bakedLight(position) > threshold;
+  }
+
+  /** The game forbids a teleport now (an objective's survive countdown, the roof's finale chase, ...). */
+  teleportBlocked() {
+    return !!(this.hooks.teleportBlocked && this.hooks.teleportBlocked());
+  }
+
   // ------------------------------------------------------------------ events and audio
 
   /** Every noise pulse, in Hearing's shape. */
@@ -686,3 +760,6 @@ const _pm = new THREE.Matrix4();
 const _frustum = new THREE.Frustum();
 const _sphere = new THREE.Sphere();
 const _scale = new THREE.Vector3();
+const _probeRgb = [0, 0, 0];
+const STAIRWELLS = 'Stairwells';
+const BAKED_DARK = 0.045; // the engine's fallback irradiance (no grid) as luminance

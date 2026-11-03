@@ -1,7 +1,7 @@
-// Dormant (States/Dormant.luau): the Creature waits, still, where it was placed: at its level's CreatureSpawn before
-// the player reaches that level, after an airlock relocation (hidden until nobody can see it appear), or held by a
-// dev command. Its root is anchored (the Level 4 spawn is under water); nothing is hunted. The service wakes it
-// (Patrol) a short delay after its level activates; a cutscene that acquired it first takes it from there instead.
+// Dormant: the Creature waits, still, where it was placed: at its level's CreatureSpawn before the players reach that
+// level, after an airlock relocation (hidden until nobody can see it fade in), or held by a dev command. Its root is
+// anchored (the Level 4 spawn is under water); nothing is hunted. The service wakes it (Patrol) a short delay after
+// its level activates; a level controller that acquired it first (the spawn hold, a scene) takes it from there.
 
 export const Name = 'Dormant';
 
@@ -12,11 +12,8 @@ export function enter(ctx) {
   ctx.mover.setSpeed(0);
   ctx.body.setWalkSpeed(0);
   ctx.body.face(null);
-  const medium = ctx.mover.getMedium();
-  if (medium !== 'Vent') {
-    ctx.body.setAnchored(true);
-    ctx.body.setPose(medium === 'Water' ? 'Swim' : 'Biped');
-  }
+  ctx.body.setAnchored(true);
+  ctx.body.setPose(ctx.mover.getMedium() === 'Water' ? 'Swim' : 'Biped');
 }
 
 export function update() {}

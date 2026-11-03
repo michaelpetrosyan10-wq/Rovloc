@@ -1,11 +1,12 @@
-// WallChase (States/WallChase.luau): the Creature has seen someone and runs them down on two legs at WallChase
-// speed x the difficulty's multiplier, re-routing every Repath.ChaseInterval (and walking straight at them when the
-// way is clear and close).
+// WallChase (the Chase, Tunnels §2.3): the Creature saw someone (or was stared at) and runs them down at 16.5 studs/s
+// (x the difficulty, never past SpeedCap: a sprinting player, 19, gains on it; a walking one loses ground), re-routing
+// every Repath.ChaseInterval (and walking straight at them when the way is clear and close).
 //
-//   * Goal: the target while in sight; once not, the last place it saw or heard them (memory, MemorySeconds long).
-//     Reaching that spot with nobody in sight ends the chase (the brain searches the area).
-//   * Catches: anyone in sight within CatchDistance (same floor, clear line, the brain's catch rules) is caught as a
-//     Hallway jumpscare; the target first.
+//   * Goal: the target while in sight; once not, the last place it saw or heard them.
+//   * Catches: anyone in sight within the catch reach (4 studs, the same floor, a clear line eye to eye and chest to
+//     chest: never through a wall; the brain's catch rules) is caught as a Hallway jumpscare; the target first.
+//   * Ends (the brain): after ChaseLost seconds without a sight of its quarry, or on reaching the last seen point with
+//     nobody in sight, it searches there (Search); MaxChase seconds in, it gives up and fades out (Patrol).
 //   * An unreachable target (no route) is retried a moment later while still in sight; an unreachable memory ends it.
 
 import { CreatureConfig } from '../config.js';
@@ -45,7 +46,7 @@ export function enter(ctx) {
   ctx.mover.setSpeed(speed);
   ctx.body.setWalkSpeed(speed);
   ctx.mover.setRepathInterval(CreatureConfig.Repath.ChaseInterval);
-  ctx.body.setPose('Biped');
+  if (ctx.mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
   ctx.body.face(null);
 }
 

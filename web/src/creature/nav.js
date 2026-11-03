@@ -17,6 +17,13 @@
 // meets one of those footprints (grown by the agent radius) is replaced by the shortest way round it inside its
 // room: Dijkstra over the grown footprints' corners that keep the agent clear of the room's walls. Footprints holding
 // the start or the goal do not block (the Creature is already beside it, or its target is on it).
+//
+// Tunnels. The Creature never enters a crawlway or a duct: rooms of kind Crawlway / Chase give it no floor, and a
+// portal flagged crawl-only, or lower than its hunched height, is shut to it. The flags come from the layout door
+// (`crawlOnly`, `clearance`) or from the zone graph edge of the same portal; until the tunnel maps carry them every
+// edge is clear. A portal (or a room) lower than its standing height is walked hunched (clearanceAt).
+// pathLength(from, to) is the walking distance of a route (Infinity without one); samplePoints() is a lattice of free
+// floor points over the walkable rooms (the teleport's candidates while the maps carry none).
 
 import * as THREE from 'three';
 import { STEP_UP } from './body.js';
@@ -24,6 +31,10 @@ import { CreatureConfig, WorldDefaults } from './config.js';
 import { BinaryHeap } from './util.js';
 
 const PASSABLE = new Set(['Doorway', 'Door', 'Ajar', 'RoofDoor', 'Gate', 'Airlock']);
+const NO_FLOOR = new Set(['Chase', 'Crawlway']);
+const NO_SAMPLES = new Set(['Airlock', 'Chase', 'Stairwell', 'Crawlway', 'Pool']);
+const SAMPLE_INSET = 2.5;
+const PORTAL_REACH = 3; // within this of a portal's opening its clearance counts
 const SCRIPTED = new Set(['Gate', 'Airlock', 'RoofDoor']);
 const EPS = 1e-3;
 const RADIUS = CreatureConfig.PathAgent.AgentRadius;
@@ -37,20 +48,45 @@ const SPACING = CreatureConfig.PathAgent.WaypointSpacing;
 /** @typedef {{id: string, minX: number, maxX: number, minZ: number, maxZ: number}} Obstacle */
 
 /**
- * @typedef {{id: string, kind: string, minX: number, maxX: number, minZ: number, maxZ: number, floorY: number}} NavRoom
+ * @typedef {{id: string, kind: string, minX: number, maxX: number, minZ: number, maxZ: number, floorY: number,
+ *   height: number}} NavRoom
  * @typedef {{id: string, kind: string, a: string, b: string, axis: 'X'|'Z', coord: number, u0: number, u1: number,
- *   mid: THREE.Vector3, scripted: boolean}} Portal
+ *   mid: THREE.Vector3, scripted: boolean, clearance: number}} Portal
  */
+
+/** The tunnel flags of every portal: zone graph edges first, the layout door's own fields win. */
+export function portalFlags(meta) {
+  /** @type {Map<string, {clearance: number, crawlOnly: boolean}>} */
+  const out = new Map();
+  const edges = meta.zoneGraph && Array.isArray(meta.zoneGraph.edges) ? meta.zoneGraph.edges : [];
+  for (const e of edges) {
+    if (!e || !e.portalId || (e.clearance === undefined && e.crawlOnly === undefined)) continue;
+    out.set(e.portalId, { clearance: Number.isFinite(e.clearance) ? e.clearance : Infinity, crawlOnly: e.crawlOnly === true });
+  }
+  for (const d of meta.layoutDoors || []) {
+    if (!d || (d.clearance === undefined && d.crawlOnly === undefined)) continue;
+    const was = out.get(d.id) || { clearance: Infinity, crawlOnly: false };
+    out.set(d.id, {
+      clearance: Number.isFinite(d.clearance) ? d.clearance : was.clearance,
+      crawlOnly: d.crawlOnly === true || (d.crawlOnly === undefined && was.crawlOnly),
+    });
+  }
+  return out;
+}
 
 export class FloorNav {
   /**
    * @param {string} levelId
    * @param {any} meta world.json
    * @param {(doorId: string) => boolean} doorOpen whether a fixture door lets the Creature through now
+   * @param {{hunchedHeight?: number}} [metrics] the rig's hunched height (lower portals are shut to it)
    */
-  constructor(levelId, meta, doorOpen) {
+  constructor(levelId, meta, doorOpen, metrics = {}) {
     this.levelId = levelId;
     this.doorOpen = doorOpen;
+    this.minClearance = Number.isFinite(metrics.hunchedHeight) ? metrics.hunchedHeight : 9;
+    const flags = portalFlags(meta);
+    const levelHeight = meta.levels && meta.levels[levelId] ? meta.levels[levelId].height : undefined;
     const world = meta.worldConfig || {};
     const doorWidth = world.DoorWidth ?? WorldDefaults.DoorWidth;
     const airlockWidth = world.AirlockDoorWidth ?? WorldDefaults.AirlockDoorWidth;
@@ -59,9 +95,10 @@ export class FloorNav {
     /** @type {Map<string, NavRoom>} */
     this.roomById = new Map();
     for (const room of meta.rooms || []) {
-      if (room.level !== levelId || room.kind === 'Chase') continue;
+      if (room.level !== levelId || NO_FLOOR.has(room.kind)) continue;
       const r = room.rect;
-      const nr = { id: room.id, kind: room.kind, minX: r.x, maxX: r.x + r.w, minZ: r.z, maxZ: r.z + r.d, floorY: room.floorY };
+      const nr = { id: room.id, kind: room.kind, minX: r.x, maxX: r.x + r.w, minZ: r.z, maxZ: r.z + r.d, floorY: room.floorY,
+        height: room.height ?? levelHeight ?? Infinity };
       this.rooms.push(nr);
       this.roomById.set(room.id, nr);
     }
@@ -75,6 +112,9 @@ export class FloorNav {
     const origin = level && Array.isArray(level.origin) ? level.origin : [0, 0, 0];
     for (const door of meta.layoutDoors || []) {
       if (door.level !== levelId || !PASSABLE.has(door.kind)) continue;
+      const flag = flags.get(door.id);
+      // crawl-only, or too low even hunched: never its way
+      if (flag && (flag.crawlOnly || flag.clearance < this.minClearance)) continue;
       const a = this.roomById.get(door.rooms[0]);
       const b = this.roomById.get(door.rooms[1]);
       if (!a || !b) continue;
@@ -89,7 +129,7 @@ export class FloorNav {
       const mid = edge.axis === 'X' ? new THREE.Vector3(edge.coord, a.floorY, um) : new THREE.Vector3(um, a.floorY, edge.coord);
       const portal = {
         id: door.id, kind: door.kind, a: a.id, b: b.id, axis: edge.axis, coord: edge.coord, u0, u1, mid,
-        scripted: SCRIPTED.has(door.kind),
+        scripted: SCRIPTED.has(door.kind), clearance: flag ? flag.clearance : Infinity,
       };
       this.portals.push(portal);
       this.portalsOf.get(a.id).push(portal);
@@ -99,6 +139,64 @@ export class FloorNav {
     this.obstacles = levelObstacles(meta, levelId).map((o) => ({
       id: o.id, minX: o.minX - CLEARANCE, maxX: o.maxX + CLEARANCE, minZ: o.minZ - CLEARANCE, maxZ: o.maxZ + CLEARANCE,
     }));
+    /** @type {Array<{position: THREE.Vector3, room: string}>|null} */
+    this.samples = null;
+  }
+
+  /** The head room at `p`: its room's height, or a low portal's clearance when it stands in that opening. */
+  clearanceAt(p) {
+    const room = this.roomAt(p);
+    let c = room ? room.height : Infinity;
+    for (const portal of this.portals) {
+      if (!(portal.clearance < c)) continue;
+      const along = portal.axis === 'X' ? p.z : p.x;
+      const across = portal.axis === 'X' ? p.x : p.z;
+      if (Math.abs(across - portal.coord) <= PORTAL_REACH && along >= portal.u0 - 1 && along <= portal.u1 + 1) c = portal.clearance;
+    }
+    return c;
+  }
+
+  /** The walking distance of the route from `from` to `to` (Infinity when there is none). */
+  pathLength(from, to) {
+    const route = this.computePath(from, to);
+    if (!route) return Infinity;
+    let length = 0;
+    let a = from;
+    for (const b of route.waypoints) {
+      length += Math.hypot(b.x - a.x, b.z - a.z);
+      a = b;
+    }
+    return length;
+  }
+
+  /**
+   * Free floor points over the walkable rooms, every `spacing` studs (no stair vestibule, duct, crawlway or pool;
+   * clear of the obstacle footprints and SAMPLE_INSET off the walls). Cached; deterministic.
+   */
+  samplePoints(spacing = 6) {
+    if (this.samples) return this.samples;
+    const out = [];
+    for (const room of this.rooms) {
+      if (NO_SAMPLES.has(room.kind)) continue;
+      const minX = room.minX + SAMPLE_INSET;
+      const maxX = room.maxX - SAMPLE_INSET;
+      const minZ = room.minZ + SAMPLE_INSET;
+      const maxZ = room.maxZ - SAMPLE_INSET;
+      if (minX > maxX || minZ > maxZ) continue;
+      const nx = Math.max(1, Math.floor((maxX - minX) / spacing) + 1);
+      const nz = Math.max(1, Math.floor((maxZ - minZ) / spacing) + 1);
+      for (let i = 0; i < nx; i++) {
+        for (let j = 0; j < nz; j++) {
+          const x = nx === 1 ? (minX + maxX) / 2 : minX + ((maxX - minX) * i) / (nx - 1);
+          const z = nz === 1 ? (minZ + maxZ) / 2 : minZ + ((maxZ - minZ) * j) / (nz - 1);
+          let free = true;
+          for (const o of this.obstacles) if (insideRect(o, x, z)) free = false;
+          if (free) out.push({ position: new THREE.Vector3(x, room.floorY, z), room: room.id });
+        }
+      }
+    }
+    this.samples = out;
+    return out;
   }
 
   /** The (non-Chase) room holding `p` horizontally, or null. @param {THREE.Vector3} p */

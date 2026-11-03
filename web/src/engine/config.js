@@ -33,7 +33,7 @@ export const GameConfig = Object.freeze({
   ParachutePackCount: 4,
   ParachuteDescentSpeed: 9,
   StaminaMax: 100,
-  StaminaSprintDrain: 16,
+  StaminaSprintDrain: 7, // a full sprint lasts about 14 s (Tunnels: the Creature chases at 16.5, you sprint at 19)
   StaminaScurryDrain: 22,
   StaminaFreestyleDrain: 20,
   StaminaTreadDrain: 2,
@@ -137,23 +137,31 @@ export const CameraConfig = Object.freeze({
  * @type {Readonly<Record<string, {radius: number, priority: 'Low'|'Normal'|'High'|'Critical', medium: 'Air'|'Vent'|'Water', interval: number}>>}
  */
 export const NoiseKinds = Object.freeze({
-  CrouchWalk: { radius: 8, priority: 'Low', medium: 'Air', interval: 0.6 },
+  // Tunnels retune (design §2.2): the Creature hears a sprint from far away, a walk from the next junction, a crouch
+  // only when it is all but on you
+  CrouchWalk: { radius: 5, priority: 'Low', medium: 'Air', interval: 0.6 },
   SlowVentCrawl: { radius: 8, priority: 'Low', medium: 'Vent', interval: 0.7 },
   GrateUnscrew: { radius: 10, priority: 'Low', medium: 'Air', interval: 0.9 },
   Treading: { radius: 12, priority: 'Low', medium: 'Water', interval: 0.8 },
-  Walk: { radius: 30, priority: 'Normal', medium: 'Air', interval: 0.45 },
+  Walk: { radius: 22, priority: 'Normal', medium: 'Air', interval: 0.45 },
   Gasp: { radius: 40, priority: 'High', medium: 'Air', interval: 0 },
   FlaskShatter: { radius: 50, priority: 'High', medium: 'Air', interval: 0 },
-  Sprint: { radius: 65, priority: 'High', medium: 'Air', interval: 0.3 },
+  Sprint: { radius: 60, priority: 'High', medium: 'Air', interval: 0.3 },
+  JumpLand: { radius: 26, priority: 'Normal', medium: 'Air', interval: 0 },
+  // climbing into a hiding spot (a locker, a barrel, a cabinet): quietly, or hurried (sprinting a moment before)
+  HideEnter: { radius: 8, priority: 'Low', medium: 'Air', interval: 0 },
+  HideEnterHurried: { radius: 14, priority: 'Normal', medium: 'Air', interval: 0 },
   Freestyle: { radius: 75, priority: 'High', medium: 'Water', interval: 0.35 },
   Splash: { radius: 75, priority: 'High', medium: 'Water', interval: 0 },
   VentScurry: { radius: 90, priority: 'High', medium: 'Vent', interval: 0.3 },
   GrateKick: { radius: 130, priority: 'Critical', medium: 'Air', interval: 0 },
   FloorDebris: { radius: 130, priority: 'Critical', medium: 'Air', interval: 0 },
   TrapSnap: { radius: 130, priority: 'Critical', medium: 'Air', interval: 0 },
-  DoorSlam: { radius: 130, priority: 'Critical', medium: 'Air', interval: 0 },
+  DoorSlam: { radius: 90, priority: 'Critical', medium: 'Air', interval: 0 },
   FallingObject: { radius: 24, priority: 'Low', medium: 'Air', interval: 0 },
   Scripted: { radius: 0, priority: 'Low', medium: 'Air', interval: 0 },
+  // co-op text chat, should the web ever get one (there is no voice chat on the web)
+  ChatMessage: { radius: 25, priority: 'Normal', medium: 'Air', interval: 0 },
   // floor objectives: a working hold (keys in a lock, the mix, the valve, the cutters) once a second, a loud single
   // action (the breaker, a lock clunking open, the chain snapping), the generator starting
   ObjectiveWork: { radius: 34, priority: 'Normal', medium: 'Air', interval: 0 },

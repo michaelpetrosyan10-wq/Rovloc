@@ -22,6 +22,7 @@ import { Lockers } from './mechanics/lockers.js';
 import { Pool } from './mechanics/pool.js';
 import { Parachute } from './mechanics/parachute.js';
 import { Debris } from './mechanics/debris.js';
+import { MonsterFx } from './mechanics/monsterFx.js';
 import { Level0 } from './levels/level0.js';
 import { Level1 } from './levels/level1.js';
 import { Level2 } from './levels/level2.js';
@@ -64,6 +65,8 @@ export async function start(engine, opts = {}) {
   game.add(new Debris(game));
   game.airlock = game.add(new Airlock(game));
   game.add(new CreatureLevels(game));
+  // the Tall Man's warnings, chase music, stings and the brain's game-state vetoes (Tunnels)
+  game.monsterFx = game.add(new MonsterFx(game));
   game.level0 = game.add(new Level0(game));
   game.level1 = game.add(new Level1(game));
   game.level2 = game.add(new Level2(game));

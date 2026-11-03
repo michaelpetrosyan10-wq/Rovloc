@@ -2,9 +2,10 @@
 // this runs the level around them.
 //
 // Pool activation. A pool session starts when the player gets into the water and ends when they are out. ALERT_MIN..
-// ALERT_MAX s into a session (seeded), if the Creature is wandering the level (Patrol or InvestigateNoise), it is
-// alerted (Normal) to the swimmer's spot: it comes to the water, where its own senses take over. One alert per
-// session, at most one every ALERT_COOLDOWN s; while the Creature is busy the alert waits.
+// ALERT_MAX s into a session (seeded), if the Creature is wandering the level (Patrol, InvestigateNoise or Search), it
+// is alerted (Normal) to the swimmer's spot: it comes to the water, where its own senses take over. It never uses the
+// vents (Tunnels): it slips into the pool, and later out of it, by fading out and back in out of everyone's sight. One
+// alert per session, at most one every ALERT_COOLDOWN s; while the Creature is busy the alert waits.
 //
 // The emergency floodlights (the FloodlightSwitch's 1 s Floodlight prompt, one use per run): the lever is thrown over
 // LEVER_SECONDS (the green indicator lit once it is up), the breaker clanks at the switch, and BREAKER_DELAY later the
@@ -28,8 +29,8 @@ const ALERT_MIN = 4;
 const ALERT_MAX = 7;
 const ALERT_COOLDOWN = 40;
 const ALERT_CHECK = 1;
-const ALERTABLE = new Set(['Patrol', 'InvestigateNoise']);
-const HUNTING = new Set(['AquaticStalk', 'WallChase', 'VentChase']);
+const ALERTABLE = new Set(['Patrol', 'InvestigateNoise', 'Search']);
+const HUNTING = new Set(['AquaticStalk', 'WallChase', 'HidingResponse', 'Teleport']);
 const LEVER_SECONDS = 0.45;
 const LEVER_LIT_AT = 0.85;
 const LEVER_THROW = (2 * 50 * Math.PI) / 180;

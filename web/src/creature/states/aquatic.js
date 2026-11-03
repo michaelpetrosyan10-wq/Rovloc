@@ -1,18 +1,19 @@
-// AquaticStalk (States/AquaticStalk.luau): the pool level (Level 4). Someone is swimming, so the Creature slips under
-// the murky surface (a kinematic glide, PoseMode Swim, SwimDepth down) and stalks: toward the swimmer while it can see
-// them (underwater players are only seen by a swimming Creature), else toward the latest splash it heard, else where
-// it last sensed them. It stalks at the AquaticStalk pace (6.5): a freestyle swimmer (9) outswims it, one treading
-// water (4) does not.
+// AquaticStalk: the pool level (Level 4). Someone is swimming, so the Creature slips under the murky surface (a
+// kinematic glide, PoseMode Swim, SwimDepth down) and stalks: toward the swimmer while it can see them (underwater
+// players are only seen by a swimming Creature), else toward the latest splash it heard, else where it last sensed
+// them. It stalks at the AquaticStalk pace (6.5): a freestyle swimmer (9) outswims it, one treading water (4) does not.
+// It gets into the water, and later out of it, only by fading out and back in out of everyone's sight (the Mover's
+// Warp leg; Tunnels: no vents, no climbing out at the deck).
 //
-// The grab belongs to the pool system (W4) through the pool grabber hook. Once a swimmer's splashing has crossed the
-// grab threshold (the splash meter, remembered for a while) and they are within LungeRange, the Creature TELEGRAPHS:
-// it holds still for Water.TelegraphSeconds while the lunge origin gives it away (ctx.telegraph: rising bubbles, a
-// ripple ring on the surface and a low growl there), so the swimmer can climb out or swim off. Only then does it close
-// in fast (AquaticLunge) from below, for at most Water.LungeWindow, and within GrabReach call the hook; a grab that
-// starts holds it there until the pool system lets go. A lunge that misses (the swimmer out of reach or out of the
-// water) waits Water.LungeCooldown before the next telegraph. Without a hook registered it circles under them and
-// never grabs. While the service has it retreating after a grab (ctx.poolRetreat), it swims to the far end of the
-// water and never lunges.
+// The grab belongs to the pool system through the pool grabber hook. Once a swimmer's splashing has crossed the grab
+// threshold (the splash meter, remembered for a while) and they are within LungeRange, the Creature TELEGRAPHS: it
+// holds still for Water.TelegraphSeconds while the lunge origin gives it away (ctx.telegraph: rising bubbles, a ripple
+// ring on the surface and a low growl there), so the swimmer can climb out or swim off. Only then does it close in
+// fast (AquaticLunge) from below, for at most Water.LungeWindow, and within GrabReach call the hook; a grab that starts
+// holds it there until the pool system lets go. A lunge that misses (the swimmer out of reach or out of the water)
+// waits Water.LungeCooldown before the next telegraph. Without a hook registered it circles under them and never
+// grabs. While the service has it retreating after a grab (ctx.poolRetreat), it swims to the far end of the water and
+// never lunges.
 
 import * as THREE from 'three';
 import { CreatureConfig, difficultySpec } from '../config.js';
@@ -51,7 +52,7 @@ function inSight(ctx, player) {
 
 function speedFor(ctx, lunging) {
   if (!lunging) return ctx.speedOf(Name);
-  return CreatureConfig.Speeds.AquaticLunge * difficultySpec(ctx.difficulty).creatureSpeedMultiplier;
+  return Math.min(CreatureConfig.SpeedCap, CreatureConfig.Speeds.AquaticLunge * difficultySpec(ctx.difficulty).creatureSpeedMultiplier);
 }
 
 /** @param {import('../service.js').Context} ctx */

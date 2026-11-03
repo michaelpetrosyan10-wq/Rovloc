@@ -1,48 +1,73 @@
-// The Creature for Rovloc Web: MonsterAIService + JumpscareHandler (the brain and the catch), CreatureController (the
-// animated, lit rig and its sounds) and JumpscareController (the victim's moment), for the single player.
+// The Creature for Rovloc Web ("the Tall Man", Tunnels §2): the brain and the catch (service.js), the animated, lit
+// rig and its sounds (view.js, R's) and the victim's moment (jumpscareView.js, R's), for the local player.
 //
 //   import { createCreature } from './creature/index.js';
 //   const creature = createCreature(engine);
-//   creature.beginRun({ difficulty: 'Standard' });   // run start (BeginRun): placed Dormant on Level 1
-//   creature.activateLevel('Level2_ScienceHall');    // each level the run activates (LevelActivated)
-//   creature.deactivate();                           // run end (EndRun)
+//   creature.beginRun({ difficulty: 'Standard' });   // run start: placed Dormant on the basement
+//   creature.activateLevel('Level0_Basement');       // each level the run activates (the basement is hunted too)
+//   creature.deactivate();                           // run end
 //
-// API (MonsterAIService's, as W4's level code uses it):
+// API (MonsterAIService's, as the level code uses it):
 //   getState() -> MonsterState                       getTarget() -> PLAYER | null
 //   stun(seconds, from)                              alert(position, priority)
 //   acquireScripted(token) -> {moveTo, teleport, setPose, setHidden, face, release, setTarget, playAction} | null
-//   registerLockerInspector(fn)   fn(lockerId) -> Promise<'Empty' | 'HiddenSafe' | 'Caught'> (or the verdict)
+//   registerLockerInspector(fn)   fn(spotId) -> Promise<'Empty' | 'HiddenSafe' | 'Caught'> (lockers, barrels, cabinets)
 //   registerPoolGrabber(fn)       fn(PLAYER) -> boolean (a grab started)
 //   setSpeedScale(scale)          catchGrabbed(PLAYER) -> boolean
 //   stateChanged (new, old) / caught (player, kind) / jumpscareFinished (player, kind, outcome): Signals (connect)
 //   lungeTelegraph (origin, seconds): a pool lunge is coming (the pool shows its bubbles and ripple ring there)
 //   activateLevel(levelId) / deactivate()            bindGame(hooks) (env.js GameHooks)
 //   playAction(name, startAt?) / stopAction(name?)   one-shot animation layers on the rig
-//   snapshot() / setPaused(on) / devCommand("ai ..." | "hunt" | "ignoreme") / setClock(fn) / dispose()
-//   W4's extras: events {stateChanged(new, old), caught(kind), jumpscareFinished(kind, outcome)} (single-player
-//   shapes), getPosition(), getEye(), isHidden(), getPoseMode(), getVentNode(), setDifficulty(name),
-//   setCatchHooks({canCatch(kind), outcome(kind) -> 'Down' | 'Execute', apply(outcome)})
+//   snapshot() / viewState() / setPaused(on) / devCommand("ai ..." | "hunt" | "ignoreme") / setClock(fn) / dispose()
+//   events {stateChanged(new, old), caught(kind), jumpscareFinished(kind, outcome), lungeTelegraph(origin, seconds),
+//     teleportWarning(spot, targetsMe, seconds), revealed(kind), stared(), gaveUp(position, wasMe), grunted(position)}
+//     (single-player shapes: the local player's own), getPosition(), getEye(), isHidden(), getPoseMode(),
+//     setDifficulty(name), setCatchHooks({canCatch(kind), outcome(kind) -> 'Down' | 'Execute', apply(outcome)}),
+//     notePulled(player), reveal(kind) (the reveal scare on this page: R's jumpscareView.reveal, else a flash),
+//     warnLocal(spot, seconds, targetsMe) (a teleport warning's torch stutter on this page)
+//
+// The player's feel (§3): the heartbeat and breathing rise when it is within Senses.NearRadius whether or not it is
+// seen (a panic floor), the torch crackles with static within Senses.EmfRadius and stutters through a teleport warning
+// aimed at you.
 
-import { CreatureConfig, WorldDefaults } from './config.js';
+import { CreatureConfig } from './config.js';
 import { CreatureEnv } from './env.js';
 import { JumpscareView } from './jumpscareView.js';
 import { PLAYER, MonsterAI, levelIndex } from './service.js';
+import { registerMonsterSounds } from './sounds.js';
 import { CreatureView } from './view.js';
-import { segmentNodes } from './perception.js';
-import { adjacentZones } from './ventgraph.js';
 import { Signal, clamp01, smoothstep } from './util.js';
 
 export { PLAYER, levelIndex };
 
 const EMF_FULL_SHARE = 0.15;
-const VENT_ADJACENT_INTENSITY = 0.55;
+const NEAR_TOKEN = 'CreatureNear';
+const NEAR_FLOOR_FAR = 0.27; // a slow heartbeat and breathing at the edge of NearRadius
+const NEAR_FLOOR_CLOSE = 0.7; // racing within NEAR_CLOSE
+const NEAR_CLOSE = 6;
+const NEAR_EVERY = 0.1;
+const STUTTER_HZ = 9;
+const FLASH_SECONDS = 0.35;
 
-/** Flashlight.emfIntensity: EMF 0..1 for a Creature `distance` studs away (or in an adjacent wall vent). */
-export function emfIntensity(distance, radius, ventAdjacent) {
+/** Flashlight.emfIntensity: EMF 0..1 for a Creature `distance` studs away. */
+export function emfIntensity(distance, radius) {
   let level = 0;
   if (distance === distance && radius > 0 && distance < radius) level = smoothstep(radius, radius * EMF_FULL_SHARE, distance);
-  if (ventAdjacent) level = Math.max(level, VENT_ADJACENT_INTENSITY);
   return clamp01(level);
+}
+
+/** The panic floor for a Creature `distance` studs away (null beyond NearRadius): the heartbeat, seen or not. */
+export function nearFloor(distance) {
+  const radius = CreatureConfig.Senses.NearRadius;
+  if (!(distance < radius)) return null;
+  return NEAR_FLOOR_FAR + (NEAR_FLOOR_CLOSE - NEAR_FLOOR_FAR) * smoothstep(radius, NEAR_CLOSE, distance);
+}
+
+/** A torch stutter's EMF at `t` seconds into it: hard on / off flicker, fading out at the end. */
+export function stutter(t, seconds) {
+  if (t < 0 || t > seconds) return 0;
+  const on = Math.floor(t * STUTTER_HZ + Math.sin(t * 23) * 0.6) % 2 === 0;
+  return on ? 1 : 0.35;
 }
 
 /**
@@ -51,6 +76,7 @@ export function emfIntensity(distance, radius, ventAdjacent) {
  * @param {{env?: CreatureEnv, render?: boolean}} [opts] `render: false` runs the brain without a rig (tools)
  */
 export function createCreature(engine, opts = {}) {
+  registerMonsterSounds();
   const env = opts.env || new CreatureEnv(engine);
   const service = new MonsterAI(env);
   const view = opts.render === false ? null : new CreatureView(env, service);
@@ -58,52 +84,73 @@ export function createCreature(engine, opts = {}) {
   service.view = view;
   service.jumpscareView = jumpscareView;
 
+  // the heartbeat within NearRadius (seen or not), sensed at 10 Hz from the published state (a co-op client's puppet
+  // publishes the host's)
+  let nearClock = 0;
+  let nearOn = false;
+  const senseNear = (dt) => {
+    nearClock += dt;
+    if (nearClock < NEAR_EVERY) return;
+    nearClock = 0;
+    const s = service.snapshot();
+    const eye = s.running && !s.hidden && s.state !== 'Dormant' && s.state !== 'Scripted' ? env.playerEye() : null;
+    const floor = eye && s.eye ? nearFloor(s.eye.distanceTo(eye)) : null;
+    if (floor === null && !nearOn) return;
+    nearOn = floor !== null;
+    env.setPanicFloor(NEAR_TOKEN, floor);
+  };
+
   const offTick = env.onTick((dt) => {
     if (view) view.beforeTick();
     service.tick(dt);
     if (view) view.afterTick();
+    senseNear(dt);
   });
   const offFrame = env.onFrame((dt, alpha) => {
     if (view) view.frame(dt, alpha);
     jumpscareView.step();
   });
 
-  // PanicFx senses the Creature; the flashlight flickers near it (EMF).
+  // PanicFx senses the Creature; the flashlight crackles near it (EMF) and stutters through a warning aimed at us.
   env.setCreatureSource(() => {
     const s = service.snapshot();
     if (!s.running) return null;
     return { eye: s.eye, state: s.state, hidden: s.hidden, targetingMe: s.targetingPlayer };
   });
-  const adjacency = new Map();
-  const touches = (levelId, segment, zoneId) => {
-    const key = `${levelId}|${segment}`;
-    if (!adjacency.has(key)) {
-      const graph = service._graph(levelId);
-      const nodes = graph ? segmentNodes(graph, segment) : null;
-      let zones = [];
-      if (graph && nodes) {
-        const rooms = (env.meta().rooms || []).filter((r) => r.level === levelId);
-        const world = { ...WorldDefaults, ...(env.meta().worldConfig || {}) };
-        zones = adjacentZones(rooms, graph.nodes[nodes[0]].position, graph.nodes[nodes[1]].position, world);
-      }
-      adjacency.set(key, new Set(zones));
-    }
-    return adjacency.get(key).has(zoneId);
-  };
+  let stutterFrom = -Infinity;
+  let stutterSeconds = 0;
   env.setEmfSource((position) => {
+    const t = env.now() - stutterFrom;
+    const warning = t >= 0 && t <= stutterSeconds ? stutter(t, stutterSeconds) : 0;
     const s = service.snapshot();
-    if (!s.running) return 0;
-    let adjacent = false;
-    if (s.inVent && s.segment) {
-      const zone = env.playerZone();
-      if (zone) adjacent = touches(s.levelId, s.segment, zone);
-    }
-    return emfIntensity(s.position.distanceTo(position), CreatureConfig.Senses.EmfRadius, adjacent);
+    if (!s.running || s.hidden) return warning;
+    return Math.max(warning, emfIntensity(s.position.distanceTo(position), CreatureConfig.Senses.EmfRadius));
   });
+  const warnLocal = (spot, seconds, targetsMe) => {
+    if (!targetsMe) return;
+    stutterFrom = env.now();
+    stutterSeconds = seconds;
+    env.play('TorchStutter', { volume: 0.8 });
+  };
 
-  // single-player shapes of the events (W4's adapter reads `events` first): caught(kind),
-  // jumpscareFinished(kind, outcome), for the local player's catches (a co-op host's remote catches stay on `service`)
-  const events = { stateChanged: new Signal(), caught: new Signal(), jumpscareFinished: new Signal(), lungeTelegraph: new Signal() };
+  // the reveal scare (a teleport's, a fake-out's): R's jumpscareView.reveal, else a flash, the sting and a jolt
+  const reveal = (kind) => {
+    if (typeof jumpscareView.reveal === 'function') {
+      try {
+        jumpscareView.reveal(kind);
+        return;
+      } catch (err) {
+        console.warn('[creature] reveal failed', err);
+      }
+    }
+    fallbackReveal(env, kind);
+  };
+
+  // single-player shapes of the events (the game's adapter reads `events` first), for the local player
+  const events = {
+    stateChanged: new Signal(), caught: new Signal(), jumpscareFinished: new Signal(), lungeTelegraph: new Signal(),
+    teleportWarning: new Signal(), revealed: new Signal(), stared: new Signal(), gaveUp: new Signal(), grunted: new Signal(),
+  };
   service.stateChanged.connect((next, previous) => events.stateChanged.fire(next, previous));
   service.lungeTelegraph.connect((origin, seconds) => events.lungeTelegraph.fire(origin, seconds));
   service.caught.connect((player, kind) => {
@@ -112,6 +159,20 @@ export function createCreature(engine, opts = {}) {
   service.jumpscareFinished.connect((player, kind, outcome) => {
     if (player === PLAYER) events.jumpscareFinished.fire(kind, outcome);
   });
+  service.teleportWarning.connect((spot, target, seconds) => {
+    warnLocal(spot, seconds, target === PLAYER);
+    events.teleportWarning.fire(spot, target === PLAYER, seconds);
+  });
+  service.revealed.connect((target, kind) => {
+    if (target !== PLAYER) return;
+    reveal(kind);
+    events.revealed.fire(kind);
+  });
+  service.stared.connect((player) => {
+    if (player === PLAYER) events.stared.fire();
+  });
+  service.gaveUp.connect((player, position) => events.gaveUp.fire(position, player === PLAYER));
+  service.grunted.connect((position) => events.grunted.fire(position));
 
   return {
     PLAYER,
@@ -130,6 +191,7 @@ export function createCreature(engine, opts = {}) {
     setSpeedScale: (scale) => service.setSpeedScale(scale),
     getSpeedScale: () => service.getSpeedScale(),
     catchGrabbed: (player = PLAYER) => service.catchGrabbed(player),
+    notePulled: (player = PLAYER) => service.notePulled(player),
     stateChanged: service.stateChanged,
     caught: service.caught,
     jumpscareFinished: service.jumpscareFinished,
@@ -140,23 +202,50 @@ export function createCreature(engine, opts = {}) {
     playAction: (name, startAt) => (view ? view.playAction(name, startAt) : false),
     stopAction: (name) => (view ? view.stopAction(name) : undefined),
     snapshot: () => service.snapshot(),
+    viewState: () => service.viewState(),
     getPosition: () => service.body.getPosition(),
     getEye: () => service.snapshot().eye,
     isHidden: () => service.body.hidden,
     getPoseMode: () => service.body.pose,
-    getVentNode: () => (service.mover && service.mover.getMedium() === 'Vent' ? service.mover.nearestNode() : null),
+    getVentNode: () => null,
     setDifficulty: (name) => service.setDifficulty(name),
     setCatchHooks: (hooks) => env.setCatchHooks(hooks),
     setPaused: (on) => service.setPaused(on),
     devCommand: (command) => service.devCommand(command),
     setClock: (fn) => service.setClock(fn),
+    reveal,
+    warnLocal,
     dispose: () => {
       service.endRun();
       offTick();
       offFrame();
       env.setCreatureSource(null);
       env.setEmfSource(null);
+      env.setPanicFloor(NEAR_TOKEN, null);
       if (view) view.dispose();
     },
   };
+}
+
+/** Until R's jumpscareView.reveal lands: a white-to-red flash over the screen, the sting and a camera jolt. */
+function fallbackReveal(env, kind) {
+  env.play('RevealSting', {});
+  const player = env.engine && env.engine.player;
+  const motion = clamp01(env.setting('MotionScale') ?? 1);
+  if (player && typeof player.shake === 'function') player.shake(2.6 * motion, 0.45);
+  const root = env.overlayRoot();
+  if (!root || typeof document === 'undefined') return;
+  const flashScale = clamp01(env.setting('FlashScale') ?? 1);
+  const el = document.createElement('div');
+  el.dataset.creatureReveal = kind;
+  Object.assign(el.style, {
+    position: 'absolute', inset: '0', pointerEvents: 'none', zIndex: '40', opacity: String(0.85 * flashScale),
+    background: 'radial-gradient(ellipse at center, rgba(255,247,238,0.95) 0%, rgba(150,6,4,0.75) 70%, rgba(0,0,0,0.9) 100%)',
+    transition: `opacity ${FLASH_SECONDS}s ease-out`,
+  });
+  root.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    el.style.opacity = '0';
+  }));
+  setTimeout(() => el.remove(), FLASH_SECONDS * 1000 + 120);
 }

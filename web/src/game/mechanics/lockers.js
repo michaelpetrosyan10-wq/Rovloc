@@ -1,5 +1,13 @@
-// lockers.js: the Level 3 hideable lockers and the hold-breath check (LockerHidingService + LockerMotion +
-// LockerController), for the one player. The only writer of a locker's door pose and its OccupantUserId / DoorOpen.
+// lockers.js: the hiding spots (lockers; the tunnel maps' barrels and cabinets: hidespots.js reads the kinds) and the
+// hold-breath check (LockerHidingService + LockerMotion + LockerController), for the one player. The only writer of a
+// spot's door pose and its OccupantUserId / DoorOpen. A spot without a door (no DoorRest) is entered the same way,
+// unanimated: the camera settles behind its gap.
+//
+// Tunnels (hidespots.js): getting in is heard (HideEnter, 8 studs; HideEnterHurried, 14, straight off a sprint); a spot
+// used KickOutWarning (35 s) gets the warning knock and at KickOutSeconds (45 s) shoves its hider out, unhurt (held
+// while a breath check runs); about one spot in 12 is a seeded fake-out (a mask flash, a shriek, then nothing; at most
+// one per floor per player; the spot is safe after); a teammate may pull a hider out (Pull, co-op); the Creature's
+// ReachIn (it saw you get in) tears the door off like a failed breath check.
 //
 // A locker is Free, Entering, Hidden, Exiting or Smashed (its door torn off by the Creature: never usable again this
 // run). The Hide prompt (0.25 s hold) serves every unsmashed locker, except one Floor 3's key search holds ajar
@@ -40,6 +48,7 @@ import { S } from '../strings.js';
 import { Palette, el, meter } from '../ui/style.js';
 import { cfMatrix, clamp01, frameAt, horizontalDistance, lerpFrame, seededRandom, smoothstep, wrapAngle, yawOf } from '../util.js';
 import { valueAt } from './doors.js';
+import { FakeoutBudget, PullSeconds, StayClock, canPull, fakeoutSpots, hideSpotEntities, hideSpotKind, hurried } from './hidespots.js';
 
 // LockerMotion
 export const OpenSeconds = 0.34;
@@ -66,7 +75,10 @@ const ROOT_HEIGHT = 3;
 const AT_DOOR = 8;
 const DEV_CHECK_SECONDS = 5;
 const ON_FOOT = new Set(['Standing', 'Sprinting', 'Crouching']);
-const CHASES = new Set(['WallChase', 'VentChase']);
+const CHASES = new Set(['WallChase']);
+// the Creature's states that stand at a spot sniffing (the breath check runs while it is there)
+const AT_SPOT_STATES = new Set(['InvestigateNoise', 'Search', 'HidingResponse']);
+const FAKEOUT_DELAY = 0.12;
 const CLEAR_HALF_WIDTH = 0.9;
 const SEARCH_OPEN = 0.42; // Floor 3's key search (objectives/floor3.js): a searched locker's door stands this far open
 
@@ -207,7 +219,7 @@ export class Lockers {
     this.env = game.env;
     /** @type {Map<string, any>} */
     this.lockers = new Map();
-    for (const info of game.world.entities('Locker')) this.lockers.set(info.id, this._make(info));
+    for (const info of hideSpotEntities(game.world.meta)) this.lockers.set(info.id, this._make(info));
     this.occupied = null;
     /** @type {Breath|null} */
     this.breath = null;
@@ -218,6 +230,15 @@ export class Lockers {
     /** @type {{at: number, preset: string, position: THREE.Vector3}[]} door cues waiting for their motion's start */
     this.cues = [];
     this.devCheckPending = false;
+    /** @type {Set<string>} this run's fake-out spots (hidespots.js) */
+    this.fakeouts = new Set();
+    this.fakeoutBudget = new FakeoutBudget();
+    this.fakeout = null;
+    this.stay = null;
+    this.lastSprintAt = -Infinity;
+    this.env.onMoveStateChanged((next, prev) => {
+      if (prev === 'Sprinting' || next === 'Sprinting') this.lastSprintAt = this.env.now();
+    });
     this.ui = this._buildUi();
     this.env.onAction('HoldBreath', (phase) => this._onHoldBreath(phase === 'Begin'));
     this.env.onAction('Interact', (phase) => {
@@ -232,23 +253,26 @@ export class Lockers {
   _make(info) {
     const a = info.attachments;
     const base = cfMatrix(info.pivot);
-    const rest = cfMatrix(a.DoorRest);
-    const local = new THREE.Vector3().setFromMatrixPosition(rest).applyMatrix4(base.clone().invert());
-    const swing = local.x <= 0 ? 1 : -1;
-    const restInv = rest.clone().invert();
+    // a spot without a door (a barrel, a cabinet without one) keeps a null rest: nothing swings
+    const rest = a.DoorRest ? cfMatrix(a.DoorRest) : null;
+    const local = rest ? new THREE.Vector3().setFromMatrixPosition(rest).applyMatrix4(base.clone().invert()) : null;
+    const swing = !local || local.x <= 0 ? 1 : -1;
+    const restInv = rest ? rest.clone().invert() : null;
     return {
       id: info.id,
       info,
+      kind: hideSpotKind(info),
       level: info.level,
       zone: info.attributes.ZoneId,
       base,
       rest,
       swing,
-      landed: a.DoorLanding ? restInv.clone().multiply(cfMatrix(a.DoorLanding)) : rest.clone().identity(),
+      landed: rest && a.DoorLanding ? restInv.clone().multiply(cfMatrix(a.DoorLanding)) : new THREE.Matrix4(),
       peek: cfMatrix(a.PeekAnchor),
       hide: cfMatrix(a.HideAnchor),
       exit: cfMatrix(a.ExitAnchor),
       prompt: info.prompts.find((p) => p.name === 'Hide') || null,
+      pull: null,
       state: 'Free',
       motion: null,
       schedule: null,
@@ -305,6 +329,7 @@ export class Lockers {
   // ---------------------------------------------------------------------------------------------------- doors
 
   _pose(locker, mode, value) {
+    if (!locker.rest) return;
     const m = mode === 'Smash' ? rippedTransform(locker.swing, locker.landed, value, _m) : doorTransform(locker.swing, value, _m);
     this.env.setNodePivot(locker.id, 'Door', _m2.copy(locker.rest).multiply(m));
   }
@@ -332,6 +357,8 @@ export class Lockers {
   beginRun(run) {
     this.random = seededRandom(run.seed, 'Lockers');
     this._clear();
+    this.fakeouts = fakeoutSpots(run.seed, [...this.lockers.keys()]);
+    this.fakeoutBudget.reset();
     for (const locker of this.lockers.values()) {
       locker.state = 'Free';
       locker.searchOpen = false;
@@ -349,7 +376,7 @@ export class Lockers {
         entity: locker.id,
         attachment: spec ? spec.host : 'HidePrompt',
         text: S('Prompt.Hide'),
-        objectText: S('Prompt.Locker'),
+        objectText: spec && spec.objectText ? spec.objectText : S('Prompt.Locker'),
         holdSeconds: spec ? spec.holdDuration : 0.25,
         distance: spec ? spec.maxDistance : 7,
         requiresLineOfSight: false,
@@ -359,6 +386,23 @@ export class Lockers {
         netRelease: (member) => this.remoteVacate(locker, member),
         onTriggered: () => this.hide(locker),
       });
+      // co-op: a teammate hiding here can be pulled out (the THRESHOLD throw); shown only while one is inside
+      if (locker.pull) locker.pull.remove();
+      locker.pull = null;
+      const coop = this.game.coop;
+      if (coop && coop.active) {
+        locker.pull = this.env.addPrompt({
+          entity: locker.id,
+          attachment: spec ? spec.host : 'HidePrompt',
+          text: S('Prompt.PullOut'),
+          objectText: spec && spec.objectText ? spec.objectText : S('Prompt.Locker'),
+          holdSeconds: PullSeconds,
+          distance: spec ? spec.maxDistance : 7,
+          requiresLineOfSight: false,
+          onTriggered: () => this.requestPull(locker),
+        });
+        locker.pull.setEnabled(false);
+      }
     }
   }
 
@@ -367,6 +411,8 @@ export class Lockers {
     for (const locker of this.lockers.values()) {
       if (locker.handle) locker.handle.remove();
       locker.handle = null;
+      if (locker.pull) locker.pull.remove();
+      locker.pull = null;
       locker.motion = null;
       locker.schedule = null;
       this._pose(locker, 'Swing', 0);
@@ -376,6 +422,8 @@ export class Lockers {
   _clear() {
     this.cues = [];
     this.devCheckPending = false;
+    this.fakeout = null;
+    this.stay = null;
     if (this.occupied) this._drop(this.occupied, false);
     for (const peek of this.peeks) peek.resolve('Empty');
     this.peeks = [];
@@ -429,6 +477,15 @@ export class Lockers {
     locker.schedule = enterSchedule(startAt);
     this._startDoor(locker, 'Swing', 0, 1, OpenSeconds, startAt);
     this._beginSession(locker);
+    // heard getting in (louder straight off a sprint); the stay limit starts; a fake-out leaps out as it opens
+    g.noise(this._doorPoint(locker, new THREE.Vector3()), hurried(this.lastSprintAt, now) ? 'HideEnterHurried' : 'HideEnter');
+    this.stay = new StayClock(now);
+    if (this.fakeouts.has(locker.id) && this.fakeoutBudget.take(locker.level)) {
+      this.fakeouts.delete(locker.id);
+      this.fakeout = { at: startAt + FAKEOUT_DELAY, locker };
+      const coop = g.coop;
+      if (coop && coop.active && coop.creatureNet) coop.creatureNet.shareHide('fakeout', { id: locker.id });
+    }
   }
 
   /** ExitHide: steps out when settled, not under a check and a clear spot exists. */
@@ -474,6 +531,7 @@ export class Lockers {
     if (this.occupied !== locker) return;
     this.occupied = null;
     this.breath = null;
+    this.stay = null;
     env.setEntityAttribute(locker.id, 'OccupantUserId', 0);
     env.popOverride('Locker');
     this.game.unlock('Locker');
@@ -581,7 +639,7 @@ export class Lockers {
 
   _creatureAtDoor(locker) {
     const c = this.game.creature;
-    if (c.getState() !== 'InvestigateNoise') return false;
+    if (!AT_SPOT_STATES.has(c.getState())) return false;
     const at = c.position(_a);
     return !!at && horizontalDistance(at, _b.setFromMatrixPosition(locker.exit)) <= AT_DOOR;
   }
@@ -639,7 +697,7 @@ export class Lockers {
 
   /** The Creature's catch started: a Locker catch on the gasping occupant tears the door off. */
   _onCaught(kind) {
-    const locker = this.pendingCatch;
+    const locker = this.pendingCatch || (kind === 'Locker' ? this.occupied : null);
     this.pendingCatch = null;
     if (kind !== 'Locker' || !locker || this.occupied !== locker) return;
     const now = this.env.now();
@@ -668,6 +726,7 @@ export class Lockers {
     this._startDoor(locker, 'Swing', 0, 1, OpenSeconds, now + LEAD);
     locker.remoteCloseAt = now + LEAD + OpenSeconds + StepInSeconds;
     if (locker.handle) locker.handle.setEnabled(false);
+    if (locker.pull) locker.pull.setEnabled(true);
   }
 
   /** Co-op: the teammate stepped out (or was let go): the door swings for them and the locker is free. */
@@ -682,6 +741,7 @@ export class Lockers {
     this._startDoor(locker, 'Swing', from, 1, OpenSeconds * (1 - from), now + LEAD);
     locker.remoteCloseAt = now + LEAD + OpenSeconds + StepOutSeconds;
     if (locker.handle) locker.handle.setEnabled(true);
+    if (locker.pull) locker.pull.setEnabled(false);
   }
 
   /** Co-op: the Creature tore this locker open on its occupant's page: smashed here too. */
@@ -694,7 +754,56 @@ export class Lockers {
     locker.remoteCloseAt = null;
     this._startDoor(locker, 'Smash', 0, 1, RipSeconds, now + LEAD);
     if (locker.handle) locker.handle.setEnabled(false);
+    if (locker.pull) locker.pull.setEnabled(false);
     for (const m of this.game.coop.squad.list()) if (m.lockerId === id) m.lockerId = null;
+  }
+
+  /** Co-op: a teammate's fake-out played in this spot: it is an ordinary one now. */
+  remoteFakeout(id) {
+    this.fakeouts.delete(id);
+  }
+
+  /** The Pull prompt on a spot a teammate hides in: asks the host to drag them out (hidespots.canPull). */
+  requestPull(locker) {
+    const g = this.game;
+    const coop = g.coop;
+    if (!coop || !coop.active || !coop.creatureNet || !locker.remote) return false;
+    const ok = canPull({ alive: g.life.state === 'Alive', onFoot: ON_FOOT.has(this.env.moveState()), hiding: this.occupied !== null,
+      occupiedByOther: true, distance: this.env.rootPosition(_a).distanceTo(_b.setFromMatrixPosition(locker.exit)) });
+    if (!ok) return false;
+    coop.creatureNet.requestPull(locker.id, this.env.rootPosition(new THREE.Vector3()));
+    return true;
+  }
+
+  /**
+   * A teammate pulled this page's player out of `id` (the THRESHOLD throw): out at once, beside the puller (`from`,
+   * their root) when that spot is clear, else at the spot's own exit.
+   */
+  pulledOut(id, from) {
+    const locker = this.lockers.get(id);
+    if (!locker || this.occupied !== locker || locker.state === 'Smashed') return false;
+    if (locker.check) this._finishCheck(locker.check, 'Empty', 'Gone', this.env.now());
+    let spot = null;
+    if (from) {
+      const at = new THREE.Vector3(from.x, _b.setFromMatrixPosition(locker.exit).y, from.z);
+      const toward = _d.subVectors(at, _b).setY(0);
+      if (toward.lengthSq() > 1e-4) {
+        toward.normalize();
+        const floor = new THREE.Matrix4().lookAt(_b.clone().add(toward), _b.clone().addScaledVector(toward, 2), _up).setPosition(at);
+        if (this._spotClear(locker, floor)) spot = floor.multiply(_t.makeTranslation(0, ROOT_HEIGHT, 0));
+      }
+    }
+    if (!spot) spot = this._exitSpot(locker);
+    if (locker.state !== 'Exiting') this._beginExit(locker, spot);
+    if (!locker.moved) {
+      locker.moved = true;
+      const target = spot || locker.exitSpot;
+      if (target) this._teleport(target);
+      this._vacate(locker);
+      this._endSession();
+    }
+    this.env.play('HideKick', { volume: 0.8 });
+    return true;
   }
 
   /** The Locker catch ended: a victim still playing is put down outside the torn locker. */
@@ -762,6 +871,24 @@ export class Lockers {
         locker.ripShakeAt = null;
         const d = this.env.eye(_a).distanceTo(_b.setFromMatrixPosition(locker.base));
         if (d < RIP_SHAKE_RADIUS) this.env.shake(RIP_SHAKE * (1 - d / RIP_SHAKE_RADIUS) * (this.env.setting('MotionScale') ?? 1), 0.5);
+      }
+    }
+    const fake = this.fakeout;
+    if (fake && now >= fake.at) {
+      this.fakeout = null;
+      if (this.occupied === fake.locker) {
+        this.game.creature.reveal('Fakeout');
+        this.env.play('FakeoutShriek', { volume: 1 });
+      }
+    }
+    if (this.stay && this.occupied && this.occupied.state === 'Hidden') {
+      const verdict = this.stay.step(now, !!this.occupied.check);
+      if (verdict === 'Warn') {
+        this.env.play('HideWarn', { volume: 1 });
+        this.env.hint(S('Hud.HideWarn'), 4);
+      } else if (verdict === 'KickOut') {
+        this.env.play('HideKick', { volume: 1 });
+        this._release(this.occupied, true);
       }
     }
     const locker = this.occupied;
@@ -1086,6 +1213,7 @@ function sway(t, held, fraction, scale, seed, out) {
 }
 
 const _identity = new THREE.Matrix4();
+const _up = new THREE.Vector3(0, 1, 0);
 const _wrench = new THREE.Matrix4();
 const _lift = new THREE.Matrix4();
 const _c = new THREE.Vector3();

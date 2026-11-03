@@ -1,15 +1,17 @@
-// Patrol (States/Patrol.luau): the Creature walks its level's patrol loops at Patrol speed.
+// Patrol (the Stalk, Tunnels §2.3): the Creature walks its level's patrol loops (the junction graph; derived from the
+// rooms where a level has no waypoints) at the Patrol pace, 7 studs/s: slower than a walking player.
 //
 //   * It joins a loop at the waypoint nearest it, walks it in order (the last waypoint leads back to the first) for
 //     one lap, then picks the next loop.
-//   * At a corner (the route turns by CornerDegrees or more) it stops: first it looks into the room's far corner, then
-//     along the way it is about to go, a beat each.
-//   * Choosing the next loop: the rooms it heard noises in lately pull it: with the pacing's sweep chance (BuildUp
-//     0.6, Peak 0.45, Relax never) it takes the loop through the most and loudest of them; in Relax it takes the loop
-//     farthest from the latest one instead; otherwise one of the three loops nearest it.
-//   * Withdrawing: entered with ctx.reposition (after a catch, a stun, a chase that ran too long) it first walks, at
-//     InvestigateNoise speed, to a waypoint out of every player's sight 35..140 studs from them, then patrols.
-// Inside a duct the first walk crawls out through the best open grate (Locomotion plans the way out).
+//   * At a junction (the route turns by CornerDegrees or more) it pauses: head tilted, listening: first it looks into
+//     the room's far corner, then along the way it is about to go, a beat each.
+//   * Choosing the next loop: the rooms it heard noises in during the last HeardTtl seconds pull it: with the pacing's
+//     sweep chance (BuildUp 0.75, Peak 0.6, Relax never) it takes the loop through the most and loudest of them; in
+//     Relax it takes the loop farthest from the latest one instead; otherwise one of the three loops nearest it.
+//   * Withdrawing: entered with ctx.reposition (after a catch or a stun) it first walks, at InvestigateNoise speed, to
+//     a waypoint out of every player's sight 35..140 studs from them, then patrols. (A chase that gives up fades out
+//     instead: the service's warp, before Patrol starts.)
+// In the water (Level 4) the first goal on land is reached by a warp: the Mover fades it out and in on land.
 
 import * as THREE from 'three';
 import { CreatureConfig } from '../config.js';
@@ -226,7 +228,7 @@ export function enter(ctx) {
   run.looks = [];
   run.withdrawTo = null;
   ctx.mover.setRepathInterval(CreatureConfig.Repath.PatrolInterval);
-  ctx.body.setPose('Biped');
+  if (ctx.mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
   if (ctx.reposition) {
     ctx.reposition = false;
     const point = ctx.repositionPoint(WITHDRAW_MIN, WITHDRAW_MAX);

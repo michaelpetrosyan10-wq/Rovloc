@@ -15,6 +15,8 @@
 //   getPosition() -> Vector3 (root) / getEye() -> Vector3, isHidden(), getPoseMode(), getVentNode() -> node id | null,
 //   playAction(name) (the scene timelines' "creature" track: NeckSnap, DoorSmash, Reveal, Vanish),
 //   setDifficulty(name), setCatchHooks({canCatch(kind), outcome(kind) -> 'Down'|'Execute', apply(outcome)}).
+// The Tall Man's (Tunnels): events teleportWarning(spot, targetsMe, seconds), revealed(kind), stared(), gaveUp(position,
+//   wasMe), grunted(position); reveal(kind) (the reveal scare on this page), notePulled(player), viewState().
 //
 // createCreatureApi(engine) builds W3's Creature (src/creature/index.js createCreature) on the engine; start() can
 // be handed another one (or null) instead. Without one every call is a dormant Creature's answer: acquireScripted
@@ -83,11 +85,22 @@ export class CreatureApi {
     this.jumpscareFinished = new Signal();
     /** @type {Signal<[THREE.Vector3, number]>} a pool lunge is telegraphed at (origin, seconds) */
     this.lungeTelegraph = new Signal();
+    /** @type {Signal<[THREE.Vector3, boolean, number]>} a teleport's warning: (spot, aimed at this page's player, seconds) */
+    this.teleportWarning = new Signal();
+    /** @type {Signal<[string]>} this page's player got a reveal scare (kind) */
+    this.revealed = new Signal();
+    /** @type {Signal<[]>} this page's player's held stare started a chase */
+    this.stared = new Signal();
+    /** @type {Signal<[THREE.Vector3, boolean]>} a chase gave up and it faded away: (where, it chased this page's player) */
+    this.gaveUp = new Signal();
+    /** @type {Signal<[THREE.Vector3]>} the grunt before a LookAway */
+    this.grunted = new Signal();
     if (this.c) {
       this._bridge('stateChanged', this.stateChanged);
       this._bridge('caught', this.caught);
       this._bridge('jumpscareFinished', this.jumpscareFinished);
       this._bridge('lungeTelegraph', this.lungeTelegraph);
+      for (const name of ['teleportWarning', 'revealed', 'stared', 'gaveUp', 'grunted']) this._bridge(name, this[name]);
     }
   }
 
@@ -172,10 +185,25 @@ export class CreatureApi {
     return { matrix, inv: this._boxInv.copy(matrix).invert(), size };
   }
 
-  /** Whether it is chasing the player right now (WallChase / VentChase / AquaticStalk with us as its target). */
+  /** Whether it is chasing the player right now (WallChase / AquaticStalk with us as its target). */
   chasingPlayer() {
     const s = this.getState();
-    return (s === 'WallChase' || s === 'VentChase' || s === 'AquaticStalk') && this.hasTarget();
+    return (s === 'WallChase' || s === 'AquaticStalk') && this.hasTarget();
+  }
+
+  /** The view contract ({state, speed, poseMode, action, actionStartedAt, fade}), or null. */
+  viewState() {
+    return this._call('viewState') || null;
+  }
+
+  /** The reveal scare on this page (a teleport's, a fake-out's). */
+  reveal(kind) {
+    this._call('reveal', kind);
+  }
+
+  /** A teammate pulled `player` out of a hiding spot (no catch for it). */
+  notePulled(player) {
+    this._call('notePulled', player);
   }
 
   // ---------------------------------------------------------------------------------------------------- commands

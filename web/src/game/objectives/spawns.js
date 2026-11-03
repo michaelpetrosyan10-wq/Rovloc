@@ -1,7 +1,8 @@
-// spawns.js: where the Creature starts on Levels 2 and 3, and its grace (Level 1 keeps its scripted scare start, Level
-// 4 its pool, Level 5 its roof door: see level5.js).
+// spawns.js: where the Creature starts on Levels 0, 2 and 3, and its grace (Level 1 keeps its scripted scare start,
+// Level 4 its pool, Level 5 its roof door: see level5.js). The basement is hunted too now (Tunnels §2.3).
 //
-// Candidates: the level's PatrolWaypoint and CreatureSpawn anchors that pass all three rules:
+// Candidates: the level's PatrolWaypoint and CreatureSpawn anchors (a level without PatrolWaypoints, today's basement,
+// offers the patrol points the Creature derives from its rooms instead) that pass all three rules:
 //   * MinDistance..MaxDistance studs of walking distance from the entry (the run route's entry room, from its first
 //     PlayerSpawn slot) over the zone graph (rooms joined by doorways, and the ducts: worldData.walkDistance);
 //   * not visible from the entry: no clear line (static geometry) from any of five eye-height points of the entry room
@@ -16,11 +17,12 @@
 // when the player comes within ReleaseNear or can see its head from ReleaseSight. Released, it patrols.
 
 import * as THREE from 'three';
+import { levelInfo } from '../../creature/brain.js';
 import { CreatureMetrics } from '../creatureApi.js';
 import { SpawnTuning } from './config.js';
 import { cfPos, lookAtMatrix, seededRandom } from '../util.js';
 
-const LEVELS = new Set(['Level2_ScienceHall', 'Level3_Gymnasium']);
+const LEVELS = new Set(['Level0_Basement', 'Level2_ScienceHall', 'Level3_Gymnasium']);
 const TOKEN = 'CreatureSpawn';
 const LOUD = new Set(['High', 'Critical']);
 const RETRY = 0.25;
@@ -68,8 +70,7 @@ export class CreatureSpawns {
     const eyes = this._entryEyes(entryRoom);
     const objective = this.objectiveRooms(level, plan);
     const out = [];
-    for (const a of this.world.meta.anchors) {
-      if (a.level !== level || (a.kind !== 'PatrolWaypoint' && a.kind !== 'CreatureSpawn')) continue;
+    for (const a of this.candidateAnchors(level)) {
       const p = cfPos(a.cframe);
       const walk = this.world.walkDistance(level, entryRoom, from, a.room, p);
       const visible = this._visible(eyes, p);
@@ -78,6 +79,24 @@ export class CreatureSpawns {
     }
     out.sort((x, y) => (x.id < y.id ? -1 : 1));
     return out;
+  }
+
+  /**
+   * The anchors a start may use: the level's PatrolWaypoint and CreatureSpawn anchors; without PatrolWaypoints, the
+   * Creature's derived patrol points (as PatrolWaypoint-like anchors) beside its CreatureSpawn.
+   */
+  candidateAnchors(level) {
+    const meta = this.world.meta;
+    const own = meta.anchors.filter((a) => a.level === level && (a.kind === 'PatrolWaypoint' || a.kind === 'CreatureSpawn'));
+    if (own.some((a) => a.kind === 'PatrolWaypoint')) return own;
+    if (!this.derived) this.derived = new Map();
+    if (!this.derived.has(level)) {
+      const info = levelInfo(level, meta);
+      const points = info && info.derived ? info.waypoints : [];
+      this.derived.set(level, points.map((w) => ({ id: w.id, kind: 'PatrolWaypoint', level, room: w.zoneId,
+        cframe: [w.position.x, w.position.y, w.position.z, 1, 0, 0, 0, 1, 0, 0, 0, 1] })));
+    }
+    return own.concat(this.derived.get(level));
   }
 
   /** The run's pick for `level`: {choice, fallback, candidates}. */

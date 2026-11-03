@@ -1,40 +1,58 @@
-// MonsterAIService (MonsterAIService/init.luau): the Creature's brain. The local player is PLAYER; in a co-op run the
-// host's game adds the remote players through setRoster (handles with the same reads: root, eye, MoveState, life,
-// duct crawl, torch, locker), so it sees, hears, chases and catches every one of them, choosing among them as the
-// Roblox brain does among a server's players. A remote catch runs here; its victim's own page plays the moment.
+// MonsterAI: the Creature's brain ("the Tall Man", Tunnels design §2.2-§2.4). The local player is PLAYER; in a co-op
+// run the host's game adds the remote players through setRoster (handles with the same reads: root, eye, look,
+// MoveState, life, duct crawl, torch, hiding spot), so it sees, hears, chases, teleports to and catches every one of
+// them. A remote catch runs here; its victim's own page plays the moment.
 //
 // Brain, at GameConfig.ServerTickHz (10 Hz) during a run:
-//   perceive  Perception.scan over the player (unless ignored), every noise pulse since the last tick through
-//             Hearing.perceive (the Creature's level, its eye, its duct node, the level's VentGraph, the pacing's
-//             HearingScale), plus scripted alerts. It remembers the target's last seen or heard position
-//             (MemorySeconds), the rooms it heard noises in (Patrol sweeps toward them), a crawler that gave itself
-//             away (seen climbing in within SpotWindow, heard making a High / Critical duct noise, spotted through a
-//             grate) and a swimmer on the pool level.
-//   pace      PacingDirector.tick (chasing, target in sight, nearest player).
+//   watch     every player's trail (where they came from: the teleport's "behind"), speed, life (a fresh Downed blocks
+//             teleports for Teleport.AfterCatch), hiding (someone it saw within Hiding.SeenWindow climbing into a
+//             spot: the saw-you-hide rule) and stare (looking straight at its head for Stare.Seconds starts a chase).
+//   perceive  Perception.scan over the players (unless ignored; nothing while it is hidden or fading), every noise pulse
+//             since the last tick through Hearing.perceive (the pacing's HearingScale), plus scripted alerts. It
+//             remembers the target's last seen or heard position, the rooms it heard noises in (the Stalk leans toward
+//             them), a swimmer on the pool level and who was loud lately (a teleport target weighs more).
+//   pace      Pacing.tick (chasing, target in sight, nearest player).
 //   decide    Brain.decide over a Summary (the transition table); entering a state runs the old state's exit and the
-//             new one's enter; the current state updates once per tick.
+//             new one's enter; the current state updates once per tick (not while a catch or a warp runs).
 //   act       the states drive Locomotion, stepped every motion tick (30 Hz) so kinematic motion is smooth.
-// Catches go through the JumpscareHandler (Hallway on floors, Vent in ducts, Locker through the locker inspector,
-// Underwater through catchGrabbed). While a catch runs the brain leaves the body alone; when it finishes the movement
-// is re-synced, the pacing notes the catch (cooldown, Relax) and the Creature withdraws out of sight. A mover that
-// stalls for good is put back on its level's patrol network at the nearest waypoint nobody can see, and only while
-// nobody can see the Creature either: it never pops in or out in front of the player.
 //
-// The pool (Level 4 fairness, CreatureConfig.Water). Its swims are capped at the AquaticStalk pace but for a lunge, and
-// every lunge is telegraphed (lungeTelegraph: the growl here, the pool's bubbles and ripple ring). In the water it
-// takes a swimmer only with the pool grab (no Hallway catch on or from the water). It leaves the pool only through
-// its vent route: into a pool grate, then (the ducts giving no way out onto land) on to a land spot nobody can see,
-// backing off along the duct first while watched. PoolGraceSeconds after the player first stands in a pool room, and
-// GrabRetreatSeconds after any grab (swimming to the far end of the water), it neither sees nor hears the player there.
+// States: Dormant, Patrol (the Stalk, 7), InvestigateNoise (9), WallChase (the Chase, 16.5: ChaseLost s without sight
+// -> Search, MaxChase s -> it gives up and fades out), Search (the hiding spots near the last seen point, 12..18 s),
+// HidingResponse (it saw them hide: LookAways, ReachIn at 30 s), Teleport (warning, FadeIn, stare, stalk), Stunned,
+// AquaticStalk (Level 4) and Scripted. Nothing outside Scripted moves faster than CreatureConfig.SpeedCap.
 //
-// Levels. activateLevel (Level 1 or later): PacingDirector.noteAirlock (grace), the Creature is moved hidden to that
-// level's CreatureSpawn if it is elsewhere, reappears once nobody can see it, and wakes into Patrol WakeDelay seconds
-// later. A level controller that acquired it (acquireScripted) keeps it.
+// Warps: every FadeOut / FadeIn relocation (a teleport, a chase giving up, the pool entered or left, a concealed
+// Creature revealing itself) runs through one machine (this.warp): FadeOut (FadeOutSeconds; the catch and the senses
+// off) -> Hidden (placed at the destination; waits until no player can see it there, or picks another spot) ->
+// Warning (teleports only: WarningSeconds, the teleportWarning signal: lights, torch, hiss) -> FadeIn (FadeInSeconds)
+// -> Stare (teleports only: StareSeconds, the reveal check). The brain holds its state while a warp runs.
+//
+// THE VIEW CONTRACT (R <-> A, design §5). The creature view reads, every frame, from snapshot() (and viewState()):
+//   state            the MonsterState above
+//   speed            the root's measured horizontal speed, studs/s (0 standing, 7 stalking, 16.5 chasing)
+//   poseMode         'Biped' | 'Hunched' (under a low lintel or tunnel: the clearance below its standing height, or
+//                    sniffing at a hiding spot) | 'Swim' | 'Stunned'
+//   action           'Stare' | 'ReachIn' | 'LookAway' | 'FadeOut' | 'FadeIn' | 'Jumpscare' | null
+//   actionStartedAt  the game clock (service.now()) when that action began
+//   fade             0..1, how visible it is (FadeOut 1 -> 0 over 0.6 s, hidden 0, FadeIn 0 -> 1 over 0.8 s)
+// A co-op client's puppet (game/coop/creature.js) publishes the same fields from the host's state.
+//
+// Catches go through the JumpscareHandler (Hallway on floors, Locker through a ReachIn, Underwater through
+// catchGrabbed). While a catch runs the brain leaves the body alone; when it finishes the movement is re-synced, the
+// pacing notes the catch (cooldown, Relax) and the Creature withdraws out of sight. A mover that stalls for good is put
+// back at the nearest standing spot nobody can see, and only while nobody can see the Creature either.
+//
+// Levels. activateLevel (every level, the basement too): Pacing.noteAirlock (grace), the Creature is moved hidden to that
+// level's CreatureSpawn if it is elsewhere, fades in once nobody can see it, and wakes into Patrol WakeDelay seconds
+// later; the first teleport waits FloorGrace + Teleport.FirstAfterGrace. A level controller that acquired it
+// (acquireScripted: the spawn hold, a scene) keeps it.
 
 import * as THREE from 'three';
 import * as Brain from './brain.js';
 import { CFrame } from './cframe.js';
-import { CreatureConfig, GameConfig, MonsterStates, NoisePriorities, ROOT_HEIGHT, WorldDefaults } from './config.js';
+import {
+  CreatureConfig, GameConfig, MonsterStates, NoisePriorities, ROOT_HEIGHT, WorldDefaults, creatureMetrics, difficultySpec,
+} from './config.js';
 import { CreatureBody } from './body.js';
 import * as Hearing from './hearing.js';
 import { JumpscareHandler } from './jumpscare.js';
@@ -42,26 +60,26 @@ import { Mover } from './locomotion.js';
 import { FloorNav } from './nav.js';
 import { Pacing, repositionPoint } from './pacing.js';
 import * as Perception from './perception.js';
-import { Random, Signal, clamp, flatDirection, horizontalDistance, isFiniteNumber, isFiniteVector } from './util.js';
+import { Random, Signal, clamp, clamp01, flatDirection, horizontalDistance, isFiniteNumber, isFiniteVector } from './util.js';
 import { buildGraph, nearest as railNearest } from './ventgraph.js';
 import { SWIM_DEPTH, clampToWater } from './water.js';
 import * as AquaticStalk from './states/aquatic.js';
 import * as Dormant from './states/dormant.js';
+import * as HidingResponse from './states/hiding.js';
 import * as InvestigateNoise from './states/investigate.js';
 import * as Patrol from './states/patrol.js';
 import * as Scripted from './states/scripted.js';
+import * as Search from './states/search.js';
 import * as Stunned from './states/stunned.js';
-import * as VentChase from './states/ventchase.js';
+import * as Teleport from './states/teleport.js';
 import * as WallChase from './states/wallchase.js';
 
-const STATES = { Dormant, Patrol, InvestigateNoise, WallChase, VentChase, Stunned, AquaticStalk, Scripted };
+const STATES = { Dormant, Patrol, InvestigateNoise, WallChase, Search, HidingResponse, Teleport, Stunned, AquaticStalk, Scripted };
 
 const TICK = 1 / GameConfig.ServerTickHz;
+const T = CreatureConfig.Teleport;
+const H = CreatureConfig.Hiding;
 export const WAKE_DELAY = 4;
-const REVEAL_RETRY = 25;
-export const SPOT_WINDOW = 3;
-const SEEN_ENTER_WINDOW = 1.5;
-const VENT_BLOCK_SECONDS = 15;
 const SWIMMER_MEMORY = 6;
 const GRAB_ARMED_SECONDS = 10;
 const GRAB_GRACE = 1;
@@ -70,7 +88,6 @@ const HEARD_ZONE_TTL = Patrol.HeardTtl;
 const NOISE_QUEUE_LIMIT = 64;
 const SIGHT_RANGE_LIMIT = 250;
 const UNSTICK_MIN = 6;
-const POOL_EXIT_MIN = 30; // studs from the player at least, where it comes back onto land from the pool's vent route
 const DUCT_SNAP = 1.5;
 const EXACT_RANK = Hearing.priorityRank('High');
 const DEV_FORCE_SECONDS = 30;
@@ -80,11 +97,28 @@ const TP_MAX = 60;
 const SPOT_PRESET = 'Screech';
 const SPOT_VOLUME = 0.75;
 const STUN_PRESET = 'Screech';
+const GRUNT_PRESET = 'CreatureGrunt';
 const MIN_SPEED_SCALE = 0.5;
 const MAX_SPEED_SCALE = 2;
 const SWIM_STATES = new Set(['Treading', 'Freestyle', 'Underwater', 'Grabbed']);
 const LEVEL_ORDER = ['Level0_Basement', 'Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium', 'Level4_FloodedPool', 'Level5_Roof'];
 const RANDOM_SEED = 20251029;
+const TRAIL_SECONDS = 15;
+const TRAIL_EVERY = 0.5;
+const TRAIL_SKIP = 1; // the last second of a trail is not "behind" yet
+const PLAYER_FLOOR = 3; // a player's root centre over the floor
+const PULL_STARTLE = 1.2; // a teammate's pull-out startles it this long (blind)
+const PULL_MEMORY = 2.5;
+const TELEPORT_RETRY = 4;
+const SAMPLE_SPACING = 5;
+const TUNNEL_KINDS = new Set(['Corridor', 'Tunnel', 'Gallery', 'Hallway']); // not keep-rooms
+const WARP_WAIT = 3; // a spot still in view this long after it was picked is swapped for another
+const WARP_GIVE_UP = 12; // hidden this long: any spot out of sight will do
+const MURK_RANGE = 10; // a swimmer under the surface is seen only this close
+const CLEARANCE_EVERY = 0.2;
+const SPEED_DAMP = 10;
+const LOUD_RANK = 3;
+const NEAR_EYE = 8; // a point this close to a player's eye counts as in their view
 
 /** The local participant (Roblox's Player); a co-op host's remote players are RemotePlayer handles (setRoster). */
 export const PLAYER = Object.freeze({ userId: 1, name: 'Player' });
@@ -98,13 +132,14 @@ const NO_REMOTES = Object.freeze([]);
  * @property {string} name
  * @property {() => THREE.Vector3|null} root the root centre (null when not in play)
  * @property {() => CFrame|null} rootCFrame facing their look
+ * @property {() => THREE.Vector3} [look] their view direction (unit; from their pose's yaw and pitch)
  * @property {() => string} lifeState
  * @property {() => number} downedCount
  * @property {() => string} moveState
  * @property {() => string} mode 'OnFoot' | 'Vent' | 'Swim'
  * @property {() => boolean} inVent
  * @property {() => boolean} flashlightOn
- * @property {() => string|null} lockerId the locker they hide in
+ * @property {() => string|null} lockerId the hiding spot they are in
  * @property {(reason: string) => boolean} hasLock
  * @property {() => string} controlLock
  * @property {(kind: string) => boolean} canCatch
@@ -121,7 +156,7 @@ export function levelIndex(levelId) {
 }
 
 /**
- * @typedef {Object} Context the runtime context the states work through (Brain.Context)
+ * @typedef {Object} Context the runtime context the states work through
  * @property {CreatureBody} body
  * @property {Mover} mover
  * @property {import('./brain.js').LevelInfo|null} level
@@ -137,34 +172,42 @@ export function levelIndex(levelId) {
  * @property {string} phase
  * @property {boolean} canHunt
  * @property {{position: THREE.Vector3, rank: number, at: number}|null} investigation
+ * @property {THREE.Vector3|null} searchFrom
+ * @property {{player: any, spot: string, front: CFrame, since: number}|null} hiding
+ * @property {any} teleportPlan
  * @property {boolean} reposition
  * @property {boolean} stateDone
- * @property {boolean} ventBlocked
  * @property {THREE.Vector3|null} stunFrom
  * @property {(state: string) => number} speedOf
  * @property {(player: any) => void} setTarget
  * @property {(player: any) => string|null} catchKind
  * @property {(player: any, kind: string) => boolean} tryCatch
+ * @property {(player: any, spot: string) => void} reachIn
  * @property {(point: THREE.Vector3) => boolean} visible
  * @property {(minDistance: number, maxDistance: number) => THREE.Vector3|null} repositionPoint
  * @property {() => THREE.Vector3[]} playerPositions
  * @property {() => Function|null} lockerInspector
  * @property {() => Function|null} poolGrabber
- * @property {(player: any) => void} noteSpotted
  * @property {(player: any) => boolean} grabArmed
  * @property {(player: any) => void} setGrabbed
  * @property {(player: any) => boolean} inVent
- * @property {(player: any) => import('./ventgraph.js').RailPoint|null} railPointOf
- * @property {(player: any) => string|null} exitGrateOf
- * @property {() => any[]} ventOccupants
- * @property {(id: string) => string} grateState
- * @property {(grate: import('./ventgraph.js').Grate) => CFrame} standPoint
  * @property {(player: any) => boolean} swimming
+ * @property {(player: any) => boolean} playing
+ * @property {(player: any) => boolean} isHiding
+ * @property {(player: any) => string|null} hideSpotOf
+ * @property {(point: THREE.Vector3, radius: number) => Array<{id: string, kind: string, front: CFrame}>} hideSpotsNear
+ * @property {(spot: string) => any} hideSpotOccupant
+ * @property {(spot: string) => CFrame|null} hideSpotFront
+ * @property {(player: any) => boolean} pulledOut
+ * @property {(player: any) => boolean} bodyClear
  * @property {(player: any) => THREE.Vector3|null} rootOf
+ * @property {(p: THREE.Vector3) => THREE.Vector3} floorPointNear
  * @property {(a: THREE.Vector3, b: THREE.Vector3) => boolean} lineClear
- * @property {(levelId: string, zoneId: string) => Array<{locker: string, front: CFrame}>} lockersIn
- * @property {(locker: string) => any} lockerOccupant
- * @property {(locker: string) => CFrame|null} lockerFront
+ * @property {(direction: THREE.Vector3|null) => void} setLookAway
+ * @property {(front: CFrame) => THREE.Vector3} lookAwayDirection
+ * @property {() => void} grunt
+ * @property {(plan: any) => boolean} startTeleport
+ * @property {() => boolean} warping
  * @property {() => THREE.Vector3} creatureEye
  * @property {(player: any) => THREE.Vector3|null} playerEye
  */
@@ -182,7 +225,18 @@ export class MonsterAI {
     this.jumpscareFinished = new Signal();
     /** (origin, seconds) when a pool lunge is telegraphed (the pool shows the bubbles and the ripple there). */
     this.lungeTelegraph = new Signal();
+    /** (spot: floor point, target, seconds) a teleport's warning starts: the lights there flicker, a hiss rises. */
+    this.teleportWarning = new Signal();
+    /** (target, kind) the target looked at it as it formed (or a hiding spot's fake-out): their reveal scare. */
+    this.revealed = new Signal();
+    /** (player) someone's held stare started a chase (their sting). */
+    this.stared = new Signal();
+    /** (player|null, position) a chase ran out and it faded away (the give-up swell). */
+    this.gaveUp = new Signal();
+    /** (position) the low grunt before a LookAway. */
+    this.grunted = new Signal();
 
+    this.metrics = creatureMetrics(env.meta());
     this.running = false;
     this.difficulty = 'Standard';
     this.speedScale = 1;
@@ -204,38 +258,58 @@ export class MonsterAI {
     this.lastReason = 'placed';
     this.awake = false;
     this.wakeAt = null;
-    this.revealPending = false;
-    this.revealAt = 0;
     this.paused = false;
     this.chaseStarted = null;
+    this.chaseSeenAt = 0;
     this.stunUntil = 0;
-    this.ventBlockedUntil = 0;
     this.devHuntUntil = 0;
     this.catching = null;
+    this.pendingReach = null;
     this.grabbed = null;
     this.grabbedHeldAt = 0;
     this.scripted = null;
     this.noiseQueue = [];
     this.alerts = [];
     this.lastSeen = new Map();
-    this.spotted = new Map();
-    this.exitGrates = new Map();
     this.splashArmed = new Map();
     this.swimmerAt = -Infinity;
     this.swimmerPlayer = null;
-    /** When the player first stood in a pool room on this level (the pool grace runs from it), or null. */
+    /** When a player first stood in a pool room on this level (the pool grace runs from it), or null. */
     this.poolEnteredAt = null;
     /** Until when it retreats to the far end of the water after a grab. */
     this.poolRetreatUntil = -Infinity;
     this.ignored = false;
-    this.wasInVent = false;
     this.accumulated = 0;
     this.lockerInspector = null;
     this.poolGrabber = null;
     /** @type {() => RemotePlayer[]} the co-op host's remote players (none when played alone) */
     this.roster = () => NO_REMOTES;
-    /** @type {Map<any, boolean>} whether each remote player was in a duct at the last motion tick */
-    this.ventSeen = new Map();
+    /** @type {Map<any, any>} per player: trail, speed, stare, hiding and life last seen */
+    this.records = new Map();
+    // the view contract
+    this.action = null;
+    this.actionAt = 0;
+    this.speedMeasured = 0;
+    this.lastRoot = null;
+    this.lastPlacements = 0;
+    this.clearance = Infinity;
+    this.clearanceAt = -Infinity;
+    // warps, teleports, the hiding rule
+    this.warp = null;
+    this.lookAway = null;
+    this.stareTrigger = null;
+    this.hideWatch = null;
+    this.pulled = new Map();
+    this.startleUntil = -Infinity;
+    this.lastSeenAny = 0;
+    this.teleportReadyAt = Infinity;
+    this.nextTeleportTry = 0;
+    this.lastTeleportTarget = null;
+    this.lastCatchAt = -Infinity;
+    this.lastDownAt = -Infinity;
+    this.teleports = 0;
+    this.creatureLit = false;
+    this.unsticks = 0;
 
     const local = (p) => p === PLAYER || p === null || p === undefined;
     this.jumpscare = new JumpscareHandler({
@@ -318,6 +392,28 @@ export class MonsterAI {
     return player && player.moveState ? player.moveState() : 'Standing';
   }
 
+  _torchOf(player) {
+    if (player === PLAYER) return this.env.playerFlashlightOn();
+    return !!player && !!player.flashlightOn && player.flashlightOn();
+  }
+
+  /** A player's view direction (unit). */
+  _lookOf(player) {
+    if (player === PLAYER) return this.env.playerLookVector().clone();
+    if (player && player.look) {
+      const l = player.look();
+      if (l) return l.clone();
+    }
+    const cf = player && player.rootCFrame ? player.rootCFrame() : null;
+    return cf ? cf.lookVector.clone() : new THREE.Vector3(0, 0, -1);
+  }
+
+  /** The hiding spot a player is in (id), or null. */
+  _hideSpotOf(player) {
+    if (player === PLAYER) return this.env.playerHideSpot();
+    return player && player.lockerId ? player.lockerId() || null : null;
+  }
+
   /** A remote player's noise (their page heard it from their own body): queued like a local one. */
   hearRemote(event) {
     this._onNoise(event);
@@ -328,17 +424,30 @@ export class MonsterAI {
     if (this.running && player) this.splashArmed.set(player, this.now());
   }
 
-  /** Drops everything remembered about a player who left the run (target, sightings, duct spots, a catch). */
+  /** A teammate pulled `player` out of their hiding spot (the THRESHOLD throw): no catch for it; it is startled. */
+  notePulled(player) {
+    if (!this.running || !player) return;
+    const t = this.now();
+    this.pulled.set(player, t);
+    const c = this.ctx;
+    if (this.state === 'HidingResponse' && c && c.hiding && c.hiding.player === player) this.startleUntil = t + PULL_STARTLE;
+  }
+
+  /** Drops everything remembered about a player who left the run (target, sightings, a catch). */
   forgetPlayer(player) {
     const c = this.ctx;
     if (c) {
       if (c.target === player) this._setTarget(null);
       if (c.memory && c.memory.player === player) c.memory = null;
       c.sightings = c.sightings.filter((s) => s.player !== player);
+      if (c.hiding && c.hiding.player === player) c.stateDone = true;
     }
+    if (this.hideWatch && this.hideWatch.player === player) this.hideWatch = null;
     if (this.swimmerPlayer === player) this.swimmerPlayer = null;
     if (this.grabbed === player) this.grabbed = null;
-    for (const map of [this.lastSeen, this.spotted, this.exitGrates, this.splashArmed, this.ventSeen]) map.delete(player);
+    if (this.lastTeleportTarget === player) this.lastTeleportTarget = null;
+    if (this.pendingReach && this.pendingReach.player === player) this.pendingReach = null;
+    for (const map of [this.lastSeen, this.splashArmed, this.records, this.pulled]) map.delete(player);
     if (this.jumpscare.getVictim() === player) this.jumpscare.abort('Left');
   }
 
@@ -373,7 +482,7 @@ export class MonsterAI {
   _nav(levelId) {
     if (!levelId) return null;
     if (this.navs.has(levelId)) return this.navs.get(levelId);
-    const nav = new FloorNav(levelId, this.env.meta(), (doorId) => this.env.doorOpen(doorId));
+    const nav = new FloorNav(levelId, this.env.meta(), (doorId) => this.env.doorOpen(doorId), this.metrics);
     this.navs.set(levelId, nav);
     return nav;
   }
@@ -411,15 +520,6 @@ export class MonsterAI {
     return !!player && !!player.inVent && player.inVent();
   }
 
-  _railPointOf(player) {
-    if (!player || !this._inVent(player)) return null;
-    const graph = this.ctx ? this.ctx.graph : null;
-    if (!graph) return null;
-    if (player === PLAYER) return this.env.playerRailPoint(graph);
-    const root = this._rootOf(player);
-    return root ? railNearest(graph, root) : null;
-  }
-
   _playerEye(player) {
     const root = this._rootOf(player);
     if (!root) return null;
@@ -441,23 +541,55 @@ export class MonsterAI {
   }
 
   _creatureEye() {
-    return Perception.creatureEyeAt(this.body.getCFrame(), this.body.pose);
+    return Perception.creatureEyeAt(this.body.getCFrame(), this.body.pose, this.metrics.eyeHeights);
   }
 
   _lineClear(from, to) {
     return this.env.lineClear(from, to);
   }
 
-  /** Could the player see the Creature with its root at `point` (its head or its chest)? */
+  /** Could a player see the Creature with its root at `point` (its head or its chest): any clear line, any facing. */
   _visible(point) {
     for (const player of this._playingPlayers()) {
       const eye = this._playerEye(player);
       if (!eye || eye.distanceTo(point) > SIGHT_RANGE_LIMIT) continue;
-      for (const lift of [CreatureConfig.EyeHeightAboveRoot.Biped, 0]) {
+      for (const lift of [this.metrics.eyeHeights.Biped, 0]) {
         if (this._lineClear(eye, new THREE.Vector3(point.x, point.y + lift, point.z))) return true;
       }
     }
     return false;
+  }
+
+  /**
+   * Whether a player sees the Creature with its root at `point`: inside their view cone (Teleport.ViewHalfAngle of
+   * their look) with a clear line to its head or its chest, or right at their eye. Under a pool's surface only a
+   * player within MURK_RANGE sees it.
+   */
+  _inViewOfAnyone(point) {
+    const murky = !!this.mover && !!this.mover.basinAt(point);
+    for (const player of this._playingPlayers()) {
+      const eye = this._playerEye(player);
+      if (!eye) continue;
+      const look = this._lookOf(player);
+      for (const lift of [this.metrics.eyeHeights.Biped, 0]) {
+        const q = new THREE.Vector3(point.x, point.y + lift, point.z);
+        const d = eye.distanceTo(q);
+        if (d <= NEAR_EYE) return true;
+        if (d > SIGHT_RANGE_LIMIT || (murky && d > MURK_RANGE)) continue;
+        if (Perception.stareAngle(eye, look, q) <= T.ViewHalfAngle && this._lineClear(eye, q)) return true;
+      }
+    }
+    return false;
+  }
+
+  /** The straight distance from `point` to the nearest playing player's root (Infinity with none). */
+  _nearestPlayerDistanceTo(point) {
+    let best = Infinity;
+    for (const p of this._playingPlayers()) {
+      const r = this._rootOf(p);
+      if (r) best = Math.min(best, r.distanceTo(point));
+    }
+    return best;
   }
 
   _playerEyes() {
@@ -477,6 +609,14 @@ export class MonsterAI {
       if (this.mover && this.mover.basinAt(p)) out.push(p.clone());
       else out.push(new THREE.Vector3(p.x, p.y + ROOT_HEIGHT, p.z));
     }
+    return out;
+  }
+
+  /** Root positions over the whole floor: the waypoints, then the nav's lattice (land only). */
+  _landSpots(info) {
+    const out = this._standingSpots(info).filter((p) => !(this.mover && this.mover.basinAt(p)));
+    const nav = this._nav(info.levelId);
+    if (nav) for (const s of nav.samplePoints(SAMPLE_SPACING)) out.push(new THREE.Vector3(s.position.x, s.position.y + ROOT_HEIGHT, s.position.z));
     return out;
   }
 
@@ -515,6 +655,93 @@ export class MonsterAI {
     return best ? this._grateStandPoint(best).position : position.clone();
   }
 
+  /** The hiding spots of its level within `radius` of `point`: [{id, kind, front}]. */
+  _hideSpotsNear(point, radius) {
+    if (!this.creatureLevel) return [];
+    return this.env.hideSpots(this.creatureLevel).filter((s) => s.front.position.distanceTo(point) <= radius);
+  }
+
+  _hideSpotFront(id) {
+    if (!this.creatureLevel) return null;
+    const spot = this.env.hideSpots(this.creatureLevel).find((s) => s.id === id);
+    return spot ? spot.front : null;
+  }
+
+  /** Who hides in `spot` (the local player or a remote one), or null. */
+  _hideSpotOccupant(spot) {
+    if (this.env.hideSpotOccupied(spot)) return PLAYER;
+    return this.roster().find((p) => p.lockerId && p.lockerId() === spot) || null;
+  }
+
+  /** The bodies see each other: chest to chest (never a catch through a wall). */
+  _bodyClear(player) {
+    const root = this._rootOf(player);
+    if (!root) return false;
+    const here = this.body.getPosition();
+    return this._lineClear(new THREE.Vector3(here.x, here.y + 1, here.z), new THREE.Vector3(root.x, root.y + 0.5, root.z));
+  }
+
+  _record(player) {
+    let r = this.records.get(player);
+    if (!r) {
+      r = { trail: [], trailAt: -Infinity, last: null, lastAt: 0, speed: 0, travel: null, stare: 0, hiding: false, life: null,
+        loudAt: -Infinity };
+      this.records.set(player, r);
+    }
+    return r;
+  }
+
+  /** The level the Creature is on holds this player (a room of it under their feet). */
+  _onLevel(player) {
+    const root = this._rootOf(player);
+    const nav = this._nav(this.creatureLevel);
+    if (!root || !nav) return false;
+    const room = nav.roomAt(root);
+    return !!room && Math.abs(root.y - PLAYER_FLOOR - room.floorY) < 8;
+  }
+
+  // ------------------------------------------------------------------ the view contract
+
+  _setAction(name) {
+    if (this.action === name && name !== null) return;
+    this.action = name;
+    this.actionAt = this.now();
+  }
+
+  /** How visible it is (the contract's fade): the warp's FadeOut / FadeIn ramps, 0 hidden, 1 shown. */
+  _fade(t) {
+    const w = this.warp;
+    if (w) {
+      if (w.phase === 'FadeOut') return clamp01(1 - (t - w.phaseAt) / T.FadeOutSeconds);
+      if (w.phase === 'FadeIn') return clamp01((t - w.phaseAt) / T.FadeInSeconds);
+      if (w.phase === 'Hidden' || w.phase === 'Warning') return 0;
+    }
+    return this.body.hidden ? 0 : 1;
+  }
+
+  _poseMode() {
+    if (this.state === 'Stunned') return 'Stunned';
+    const pose = this.body.pose;
+    if (pose === 'Swim') return 'Swim';
+    if (pose === 'Hunched') return 'Hunched';
+    return this.clearance < CreatureConfig.HunchBelow ? 'Hunched' : 'Biped';
+  }
+
+  /**
+   * The fields the creature view animates (the R <-> A contract, see the header): {state, speed, poseMode, action,
+   * actionStartedAt, fade}.
+   */
+  viewState() {
+    return {
+      state: this.state,
+      speed: this.speedMeasured,
+      poseMode: this._poseMode(),
+      action: this.action,
+      actionStartedAt: this.actionAt,
+      fade: this._fade(this.now()),
+    };
+  }
+
   // ------------------------------------------------------------------ body placement
 
   _placeBody(cframe) {
@@ -531,10 +758,9 @@ export class MonsterAI {
     else if (b.pose === 'Swim' || b.pose === 'Quadruped') b.setPose('Biped');
   }
 
-  _hide(seconds) {
-    this.body.setHidden(true);
-    this.revealPending = true;
-    this.revealAt = this.now() + seconds;
+  /** Hidden where it stands until nobody can see it there; then it fades in (a "Reveal" warp). */
+  _hide() {
+    this._startWarp({ kind: 'Reveal', startHidden: true, to: this.body.getCFrame(), pick: () => this._unseenSpot(0) });
   }
 
   _forgetMind() {
@@ -543,6 +769,9 @@ export class MonsterAI {
       c.target = null;
       c.memory = null;
       c.investigation = null;
+      c.searchFrom = null;
+      c.hiding = null;
+      c.teleportPlan = null;
       c.heard = null;
       c.sightings = [];
       c.reposition = false;
@@ -551,8 +780,13 @@ export class MonsterAI {
     }
     this.noiseQueue = [];
     this.alerts = [];
-    this.spotted.clear();
     this.lastSeen.clear();
+    this.records.clear();
+    this.pulled.clear();
+    this.hideWatch = null;
+    this.stareTrigger = null;
+    this.pendingReach = null;
+    this.lookAway = null;
     this.swimmerPlayer = null;
     this.swimmerAt = -Infinity;
     this.poolRetreatUntil = -Infinity;
@@ -571,11 +805,410 @@ export class MonsterAI {
     m.setLevel(c.graph, info ? info.basins : []);
     this.env.setNavLevel(levelId);
     this._forgetMind();
+    this._cancelWarp();
     this.poolEnteredAt = null;
     let spawn = info ? info.spawn : null;
     if (!spawn && info && info.waypoints[0]) spawn = CFrame.at(this._standingSpots(info)[0]);
     if (spawn) this._placeBody(spawn);
-    if (conceal) this._hide(REVEAL_RETRY);
+    // concealed: it fades in once nobody can see it (a script holding it decides that itself)
+    if (conceal) {
+      if (this.scripted) this.body.setHidden(true);
+      else this._hide();
+    }
+  }
+
+  // ------------------------------------------------------------------ warps (FadeOut / FadeIn relocations)
+
+  /**
+   * Starts a warp: {kind: 'Teleport'|'GiveUp'|'Pool'|'Reveal', to?: CFrame, pick?: () => CFrame|null, warning?, stare?,
+   * plan?, startHidden?}. The destination is `to`, else what `pick` returns (asked again when it stays in view).
+   */
+  _startWarp(opts) {
+    const t = this.now();
+    this.warp = {
+      kind: opts.kind,
+      phase: opts.startHidden ? 'Hidden' : 'FadeOut',
+      phaseAt: t,
+      startedAt: t,
+      to: opts.to || null,
+      pick: opts.pick || null,
+      warning: !!opts.warning,
+      stare: !!opts.stare,
+      plan: opts.plan || null,
+      retries: 0,
+      placed: false,
+      revealed: false,
+      pickedAt: opts.to ? t : -Infinity,
+    };
+    this.lookAway = null;
+    if (this.mover) this.mover.stop();
+    if (opts.startHidden) {
+      this.body.setHidden(true);
+      this._setAction(null);
+    } else {
+      this.body.setHidden(false);
+      this._setAction('FadeOut');
+    }
+  }
+
+  _cancelWarp() {
+    if (!this.warp) return;
+    this.warp = null;
+    if (this.action === 'FadeOut' || this.action === 'FadeIn' || this.action === 'Stare') this._setAction(null);
+  }
+
+  /** Whether the Creature may appear at `cframe` now: nobody sees the spot, nobody within MinStraight of it. */
+  _clearToAppear(cframe, kind) {
+    const p = cframe.position;
+    if (this._nearestPlayerDistanceTo(p) < T.MinStraight) return false;
+    if (kind === 'Teleport') return !this._inViewOfAnyone(p);
+    if (this.mover && this.mover.basinAt(p)) return !this._inViewOfAnyone(p);
+    return !this._visible(p);
+  }
+
+  /** One warp step (every motion tick). */
+  _stepWarp(t) {
+    const w = this.warp;
+    if (!w) return;
+    if (w.phase === 'FadeOut') {
+      if (t - w.phaseAt < T.FadeOutSeconds) return;
+      this.body.setHidden(true);
+      this._setAction(null);
+      w.phase = 'Hidden';
+      w.phaseAt = t;
+      return;
+    }
+    if (w.phase === 'Hidden') {
+      if (!w.to) {
+        // a destination: the warp's own pick (throttled), or once this has gone on too long any spot out of sight
+        const late = t - w.startedAt > WARP_GIVE_UP;
+        if (!late && w.pick && t - w.pickedAt >= WARP_WAIT) {
+          w.to = w.pick();
+          w.pickedAt = t;
+        }
+        if (!w.to && late && t - w.pickedAt >= 1) {
+          w.to = this._unseenSpot(T.MinStraight);
+          w.pickedAt = t;
+          w.warning = false;
+          w.stare = false;
+        }
+        if (!w.to) return;
+        w.placed = false;
+        w.phaseAt = t;
+      }
+      if (!w.placed) {
+        this._placeBody(w.to);
+        w.placed = true;
+      }
+      if (!this._clearToAppear(w.to, w.kind)) {
+        // still watched there: another spot shortly
+        if (t - w.phaseAt >= WARP_WAIT) w.to = null;
+        return;
+      }
+      if (w.warning) {
+        w.phase = 'Warning';
+        w.phaseAt = t;
+        const floor = w.to.position.clone();
+        floor.y -= ROOT_HEIGHT;
+        this.teleportWarning.fire(floor, w.plan ? w.plan.target : null, T.WarningSeconds);
+        return;
+      }
+      this._beginFadeIn(t);
+      return;
+    }
+    if (w.phase === 'Warning') {
+      if (t - w.phaseAt < T.WarningSeconds) return;
+      if (!this._clearToAppear(w.to, w.kind)) {
+        // watched now: another spot (and another warning), or after Retries any spot out of sight, unannounced
+        w.retries += 1;
+        if (w.retries > T.Retries) {
+          w.warning = false;
+          w.stare = false;
+          w.to = this._unseenSpot(T.MinStraight);
+        } else {
+          w.to = w.pick ? w.pick() : null;
+        }
+        w.pickedAt = t;
+        w.placed = false;
+        w.phase = 'Hidden';
+        w.phaseAt = t;
+        return;
+      }
+      this._beginFadeIn(t);
+      return;
+    }
+    if (w.phase === 'FadeIn') {
+      if (w.stare) this._checkReveal(w);
+      if (t - w.phaseAt < T.FadeInSeconds) return;
+      if (w.stare) {
+        w.phase = 'Stare';
+        w.phaseAt = t;
+        this._setAction('Stare');
+        return;
+      }
+      this._endWarp();
+      return;
+    }
+    if (w.phase === 'Stare') {
+      this._checkReveal(w);
+      const target = w.plan ? w.plan.target : null;
+      const root = target ? this._rootOf(target) : null;
+      if (root) this.body.face(root.clone().sub(this.body.getPosition()));
+      if (t - w.phaseAt >= T.StareSeconds || this.stareTrigger !== null) this._endWarp();
+    }
+  }
+
+  _beginFadeIn(t) {
+    const w = this.warp;
+    this.body.setHidden(false);
+    w.phase = 'FadeIn';
+    w.phaseAt = t;
+    this._setAction('FadeIn');
+    const target = w.plan ? w.plan.target : null;
+    const root = target ? this._rootOf(target) : null;
+    if (root) this.body.face(root.clone().sub(this.body.getPosition()));
+  }
+
+  _endWarp() {
+    const w = this.warp;
+    this.warp = null;
+    if (this.action === 'FadeIn' || this.action === 'Stare' || this.action === 'FadeOut') this._setAction(null);
+    this.body.setHidden(false);
+    const m = this.mover;
+    if (m) m.reset(m.basinAt(this.body.getPosition()) ? 'Water' : 'Floor');
+    if (w && w.kind === 'Teleport') this.lastSeenAny = Math.max(this.lastSeenAny, this.now());
+  }
+
+  /** The target looks at it as it forms (within Stare.RevealHalfAngle, a clear line): their reveal scare, once. */
+  _checkReveal(w) {
+    if (w.revealed || !w.plan) return;
+    const target = w.plan.target;
+    const eye = this._playerEye(target);
+    if (!eye || !this._playing(target)) return;
+    const head = this._creatureEye();
+    if (eye.distanceTo(head) > T.MaxWalk * 2) return;
+    if (Perception.stareAngle(eye, this._lookOf(target), head) > CreatureConfig.Stare.RevealHalfAngle) return;
+    if (!this._lineClear(eye, head)) return;
+    w.revealed = true;
+    this.revealed.fire(target, 'Teleport');
+  }
+
+  /** A root CFrame out of everyone's sight at least `minDistance` from them (nearest to it first), or null. */
+  _unseenSpot(minDistance) {
+    const info = this.ctx ? this.ctx.level : null;
+    if (!info) return null;
+    const here = this.body.getPosition();
+    const point = repositionPoint(this._landSpots(info), this._playerEyes(), here, minDistance, Infinity,
+      (p) => this._visible(p));
+    if (!point) return null;
+    const toward = this._nearestRoot(point);
+    const facing = (toward && flatDirection(toward.clone().sub(point))) || flatDirection(this.body.getCFrame().lookVector) ||
+      new THREE.Vector3(0, 0, -1);
+    return CFrame.lookAt(point, point.clone().add(facing));
+  }
+
+  /** Warps for the Mover (into / out of a pool): a fade out here and in at the destination, out of sight. */
+  _warpForMover(goal, medium) {
+    if (this.warp || !this.ctx) return false;
+    if (medium === 'Water') {
+      const basin = this.mover ? this.mover.basinAt(goal) : null;
+      this._startWarp({ kind: 'Pool', pick: () => this._waterSpot(basin, goal) });
+    } else {
+      this._startWarp({ kind: 'Pool', pick: () => this._landSpot(goal) });
+    }
+    return true;
+  }
+
+  /** A point under the water of `basin`, nearest `goal`, that no swimmer close by would see. */
+  _waterSpot(basin, goal) {
+    if (!basin) return null;
+    const candidates = [clampToWater(basin, goal, SWIM_DEPTH)];
+    for (const x of [basin.minX, (basin.minX + basin.maxX) / 2, basin.maxX]) {
+      for (const z of [basin.minZ, (basin.minZ + basin.maxZ) / 4, (basin.minZ + basin.maxZ) / 2, (3 * basin.maxZ + basin.minZ) / 4, basin.maxZ]) {
+        candidates.push(clampToWater(basin, new THREE.Vector3(x, basin.surfaceY - SWIM_DEPTH, z), SWIM_DEPTH));
+      }
+    }
+    candidates.sort((a, b) => a.distanceTo(goal) - b.distanceTo(goal));
+    for (const p of candidates) {
+      const cf = CFrame.lookAt(p, p.clone().add(flatDirection(goal.clone().sub(p)) || new THREE.Vector3(0, 0, -1)));
+      if (this._clearToAppear(cf, 'Pool')) return cf;
+    }
+    return null;
+  }
+
+  /** A land spot out of the pool (ExitMin from everyone, out of sight), nearest `goal`. */
+  _landSpot(goal) {
+    const info = this.ctx ? this.ctx.level : null;
+    if (!info) return null;
+    const point = repositionPoint(this._landSpots(info), this._playerEyes(), goal, CreatureConfig.Water.ExitMin, Infinity,
+      (p) => this._visible(p));
+    if (!point) return null;
+    const toward = this._nearestRoot(point);
+    const facing = (toward && flatDirection(toward.clone().sub(point))) || new THREE.Vector3(0, 0, -1);
+    return CFrame.lookAt(point, point.clone().add(facing));
+  }
+
+  /** A chase that ran out: it fades out where it stands and comes back far from everyone, out of sight. */
+  _giveUp(t) {
+    const c = this.ctx;
+    if (!c) return;
+    const target = c.target;
+    this.gaveUp.fire(target, this.body.getPosition().clone());
+    this._setTarget(null);
+    c.memory = null;
+    c.reposition = false;
+    const g = CreatureConfig.GiveUp;
+    this._startWarp({
+      kind: 'GiveUp',
+      pick: () => {
+        const info = c.level;
+        if (!info) return null;
+        const here = this.body.getPosition();
+        const point = repositionPoint(this._landSpots(info), this._playerEyes(), here, g.MinDistance, g.MaxDistance,
+          (p) => this._visible(p));
+        return point ? CFrame.lookAt(point, point.clone().add(flatDirection(here.clone().sub(point)) || new THREE.Vector3(0, 0, -1))) : null;
+      },
+    });
+    const [low] = difficultySpec(this.difficulty).teleportCooldown;
+    this.teleportReadyAt = Math.max(this.teleportReadyAt, t + low / 2);
+  }
+
+  // ------------------------------------------------------------------ teleports
+
+  /** The teleport is due now: every §2.3 condition holds and a plan (target, spot) exists (ctx.teleportPlan). */
+  _teleportDue(t) {
+    const c = this.ctx;
+    const m = this.mover;
+    if (!c || !m || !c.level || this.state !== 'Patrol' || this.warp) return false;
+    if (t < this.teleportReadyAt || t < this.nextTeleportTry) return false;
+    if (t - this.lastSeenAny < T.UnseenSeconds) return false;
+    if (t < this.lastCatchAt + T.AfterCatch || t < this.lastDownAt + T.AfterCatch) return false;
+    if (m.getMedium() !== 'Floor' || this.env.teleportBlocked()) return false;
+    const plan = this._planTeleport();
+    if (!plan) {
+      this.nextTeleportTry = t + TELEPORT_RETRY;
+      return false;
+    }
+    c.teleportPlan = plan;
+    return true;
+  }
+
+  /** The players a teleport may go for: hunted, on its level, on foot (not hiding, in a duct or swimming). */
+  _teleportTargets() {
+    return this._huntablePlayers().filter((p) => !this._inVent(p) && !this._swimming(p) &&
+      this._moveStateOf(p) !== 'Hiding' && this._onLevel(p));
+  }
+
+  /** The target (weighted) and the spot for a teleport, or null. */
+  _planTeleport() {
+    const c = this.ctx;
+    const nav = this._nav(this.creatureLevel);
+    if (!c || !nav) return null;
+    const targets = this._teleportTargets();
+    if (!targets.length) return null;
+    const t = this.now();
+    const weights = targets.map((p) => {
+      const root = this._rootOf(p);
+      let isolated = true;
+      for (const other of this._playingPlayers()) {
+        const r = other === p ? null : this._rootOf(other);
+        if (r && root && r.distanceTo(root) <= T.Isolated) isolated = false;
+      }
+      if (this._playingPlayers().length < 2) isolated = false;
+      const loud = t - this._record(p).loudAt <= T.LoudWindow;
+      return Teleport.targetWeight({ isolated, loud, lastTarget: p === this.lastTeleportTarget });
+    });
+    const target = Teleport.pickWeighted(targets, weights, c.random.nextNumber());
+    const spot = target ? this._teleportSpot(target, nav) : null;
+    return spot ? { target, ...spot } : null;
+  }
+
+  /** The spot near `target` (§2.3 placement), or null. */
+  _teleportSpot(target, nav) {
+    const c = this.ctx;
+    const root = this._rootOf(target);
+    if (!c || !root) return null;
+    const room = nav.roomAt(root);
+    if (!room) return null;
+    const feet = new THREE.Vector3(root.x, room.floorY, root.z);
+    const keepRoom = TUNNEL_KINDS.has(room.kind) ? null : room.id;
+    const rec = this._record(target);
+    const trail = rec.trail.filter((e) => this.now() - e.t >= TRAIL_SKIP).map((e) => e.p);
+    const look = this._lookOf(target);
+    const candidates = this._teleportCandidates(nav);
+    const buckets = { Behind: [], Ahead: [], Side: [] };
+    for (const cand of candidates) {
+      const p = cand.position;
+      if (Math.abs(p.y - room.floorY) > 6) continue;
+      if (horizontalDistance(p, root) > T.MaxWalk + 0.5) continue;
+      if (keepRoom && cand.room === keepRoom) continue;
+      const appear = new THREE.Vector3(p.x, p.y + ROOT_HEIGHT, p.z);
+      if (this._nearestPlayerDistanceTo(appear) < T.MinStraight) continue;
+      const walk = nav.pathLength(feet, p);
+      if (walk < T.MinWalk || walk > T.MaxWalk) continue;
+      if (this._inViewOfAnyone(appear)) continue;
+      buckets[Teleport.classify(p, root, trail, look, rec.travel)].push({ appear, walk });
+    }
+    const behindFirst = c.random.nextNumber() < T.BehindShare;
+    const order = behindFirst ? ['Behind', 'Ahead', 'Side'] : ['Ahead', 'Behind', 'Side'];
+    for (const kind of order) {
+      const list = buckets[kind];
+      if (!list.length) continue;
+      const chosen = list[Math.floor(c.random.nextNumber() * list.length)];
+      const facing = flatDirection(root.clone().sub(chosen.appear)) || new THREE.Vector3(0, 0, -1);
+      return { spot: CFrame.lookAt(chosen.appear, chosen.appear.clone().add(facing)), side: kind, walk: chosen.walk };
+    }
+    return null;
+  }
+
+  /**
+   * Teleport candidates: the tunnel maps' meta.teleportPoints[level] ({pos, facings, region, zone} on the tunnel
+   * centrelines) when present, else the nav's lattice over today's rooms. [{position (floor), room}]
+   */
+  _teleportCandidates(nav) {
+    const meta = this.env.meta();
+    const level = this.creatureLevel;
+    const own = meta.teleportPoints && Array.isArray(meta.teleportPoints[level]) ? meta.teleportPoints[level] : null;
+    if (own && own.length) {
+      if (!this.teleportPointCache || this.teleportPointCache.level !== level) {
+        const list = [];
+        for (const x of own) {
+          if (!x || !Array.isArray(x.pos) || x.pos.length < 3) continue;
+          const at = new THREE.Vector3(x.pos[0], x.pos[1], x.pos[2]);
+          const room = nav.roomAt(at);
+          if (!room) continue; // a crawlway, or off the walkable floor
+          const zone = typeof x.zone === 'string' ? x.zone.split(':').pop() : null;
+          list.push({ position: new THREE.Vector3(at.x, room.floorY, at.z), room: zone || room.id });
+        }
+        this.teleportPointCache = { level, list };
+      }
+      if (this.teleportPointCache.list.length) return this.teleportPointCache.list;
+    }
+    return nav.samplePoints(SAMPLE_SPACING);
+  }
+
+  /** Teleport.enter: the warp to the planned spot (FadeOut here, the warning there, FadeIn, the stare). */
+  _startTeleport(plan) {
+    const c = this.ctx;
+    if (!c || !plan || this.warp) return false;
+    const t = this.now();
+    const [low, high] = difficultySpec(this.difficulty).teleportCooldown;
+    this.teleportReadyAt = t + c.random.nextNumber(low, high);
+    this.lastTeleportTarget = plan.target;
+    this.teleports += 1;
+    this._startWarp({
+      kind: 'Teleport',
+      to: plan.spot,
+      warning: true,
+      stare: true,
+      plan,
+      pick: () => {
+        const nav = this._nav(this.creatureLevel);
+        const again = nav && this._playing(plan.target) ? this._teleportSpot(plan.target, nav) : null;
+        return again ? again.spot : null;
+      },
+    });
+    return true;
   }
 
   // ------------------------------------------------------------------ the pool (Level 4 fairness)
@@ -635,20 +1268,18 @@ export class MonsterAI {
   }
 
   /** Teleports to the nearest standing spot (>= UNSTICK_MIN away) nobody can see, only while nobody sees it here. */
-  _relocateUnseen(landOnly = false) {
+  _relocateUnseen() {
     const c = this.ctx;
     const info = c ? c.level : null;
     if (!c || !info) return false;
     const here = this.body.getPosition();
     if (this._visible(here)) return false;
-    const spots = this._standingSpots(info).filter((s) => s.distanceTo(here) >= UNSTICK_MIN &&
-      !(landOnly && this.mover && this.mover.basinAt(s)));
-    // out of the pool's ducts it comes up well away from the player, not round the corner from them
-    const point = repositionPoint(spots, this._playerEyes(), here, landOnly ? POOL_EXIT_MIN : 0, Infinity, (p) => this._visible(p));
+    const spots = this._standingSpots(info).filter((s) => s.distanceTo(here) >= UNSTICK_MIN);
+    const point = repositionPoint(spots, this._playerEyes(), here, 0, Infinity, (p) => this._visible(p));
     if (!point) return false;
     const facing = flatDirection(this.body.getCFrame().lookVector) || new THREE.Vector3(0, 0, -1);
     this._placeBody(CFrame.lookAt(point, point.clone().add(facing)));
-    this.unsticks = (this.unsticks || 0) + 1;
+    this.unsticks += 1;
     return true;
   }
 
@@ -674,29 +1305,49 @@ export class MonsterAI {
     return Brain.catchKind({
       horizontal: horizontalDistance(here, target),
       vertical: Math.abs(here.y - target.y),
-      distance: here.distanceTo(target),
-      creatureInVent: this.mover.getMedium() === 'Vent',
+      reach: this.metrics.reach,
       targetInVent: this._inVent(player),
       creatureInWater: this.mover.getMedium() === 'Water',
       targetSwimming: this._swimming(player),
       lineClear: this._lineClear(this._creatureEye(), eye),
+      bodyClear: this._bodyClear(player),
       playing: this._huntable(player),
       hiding: this._moveStateOf(player) === 'Hiding',
       canHunt: this._canHuntNow(),
       busy: this.catching !== null || this.jumpscare.isBusy(),
       hidden: this.body.hidden,
       stunned: this.now() < this.stunUntil,
+      warping: this.warp !== null,
     });
   }
 
   _tryCatch(player, kind) {
     if (!this.mover || this.catching !== null || this.jumpscare.isBusy() || !this._canHuntNow()) return false;
-    if (this.ignored || this.now() < this.stunUntil) return false;
+    if (this.ignored || this.now() < this.stunUntil || this.warp) return false;
     if (!this.jumpscare.catch(player, kind)) return false;
     this.catching = { player, kind, at: this.now() };
+    this.lastCatchAt = this.now();
     this.mover.stop();
+    this.lookAway = null;
+    this._setAction('Jumpscare');
     this.caught.fire(player, kind);
     return true;
+  }
+
+  /** The ReachIn: the action now, the Locker catch ReachInLead later (if it still may). */
+  _reachIn(player, spot) {
+    if (this.pendingReach || this.catching) return;
+    this.lookAway = null;
+    this._setAction('ReachIn');
+    this.pendingReach = { player, spot, at: this.now() + H.ReachInLead };
+  }
+
+  _stepReach(t) {
+    const r = this.pendingReach;
+    if (!r || t < r.at) return;
+    this.pendingReach = null;
+    const ok = this._playing(r.player) && this._tryCatch(r.player, 'Locker');
+    if (!ok && this.action === 'ReachIn') this._setAction(null);
   }
 
   // ------------------------------------------------------------------ states
@@ -708,17 +1359,13 @@ export class MonsterAI {
     this.current.exit(c, next);
     if (Brain.isChase(next) && !Brain.isChase(previous)) {
       this.chaseStarted = t;
+      this.chaseSeenAt = t;
       if (!this.body.hidden) this.env.play(SPOT_PRESET, { position: this._creatureEye(), volume: SPOT_VOLUME });
     } else if (!Brain.isChase(next)) {
       this.chaseStarted = null;
     }
-    if (previous === 'VentChase') {
-      if (c.ventBlocked) {
-        this.ventBlockedUntil = t + VENT_BLOCK_SECONDS;
-        c.ventBlocked = false;
-      }
-      this.spotted.clear();
-    }
+    if (this.action === 'LookAway' || this.action === 'ReachIn') this._setAction(null);
+    this.lookAway = null;
     this.state = next;
     this.stateSince = t;
     c.stateDone = false;
@@ -727,18 +1374,9 @@ export class MonsterAI {
     this.stateChanged.fire(next, previous);
   }
 
-  _bestNonCrawler() {
+  _bestSeen() {
     const c = this.ctx;
-    if (!c) return null;
-    for (const s of c.sightings) if (!this._inVent(s.player)) return s.player;
-    return null;
-  }
-
-  _bestCrawler() {
-    const c = this.ctx;
-    if (!c) return null;
-    for (const s of c.sightings) if (this._inVent(s.player)) return s.player;
-    return null;
+    return c && c.sightings.length ? c.sightings[0].player : null;
   }
 
   _remember(player, position, t) {
@@ -746,21 +1384,20 @@ export class MonsterAI {
     if (c && c.target === player) c.memory = { player, position: position.clone(), at: t };
   }
 
-  _transition(decision, quarry, t) {
+  _transition(decision, t) {
     const c = this.ctx;
     if (!c) return;
     this.lastReason = decision.reason;
     if (decision.reposition) c.reposition = true;
     const next = decision.state;
-    if (next === this.state) return;
+    if (next === this.state) {
+      if (next === 'WallChase' && this.stareTrigger && !this._sees(c.target)) this._chase(this.stareTrigger, t);
+      return;
+    }
+    if (decision.giveUp) this._giveUp(t);
     if (next === 'WallChase') {
-      const target = c.target;
-      const chosen = target && this._sees(target) ? target : this._bestNonCrawler();
-      this._setTarget(chosen);
-      const position = chosen ? this._rootOf(chosen) : null;
-      if (chosen && position) this._remember(chosen, position, t);
-    } else if (next === 'VentChase') {
-      this._setTarget(quarry || this._bestCrawler() || c.target);
+      const chosen = this.stareTrigger || (c.target && this._sees(c.target) ? c.target : this._bestSeen());
+      this._chase(chosen, t);
     } else if (next === 'AquaticStalk') {
       this._setTarget(this.swimmerPlayer);
     } else if (next === 'InvestigateNoise') {
@@ -775,28 +1412,46 @@ export class MonsterAI {
       } else if (memory) position = memory.position;
       else position = this.body.getPosition();
       c.investigation = { position: this._floorPointNear(position), rank, at: t };
+    } else if (next === 'Search') {
+      const watched = c.hiding;
+      if (c.memory) c.searchFrom = this._floorPointNear(c.memory.position);
+      else if (watched) c.searchFrom = HidingResponse.standPoint(watched.front);
+      else c.searchFrom = this.body.getPosition().clone();
+    } else if (next === 'HidingResponse') {
+      c.hiding = this.hideWatch;
+      this.hideWatch = null;
+      if (c.hiding) {
+        this._setTarget(c.hiding.player);
+        const front = c.hiding.front.position;
+        c.memory = { player: c.hiding.player, position: front.clone(), at: t };
+      }
     }
     this._enterState(next, t);
   }
 
-  _updateTarget(quarry) {
+  _chase(player, t) {
+    this._setTarget(player);
+    const position = player ? this._rootOf(player) : null;
+    if (player && position) this._remember(player, position, t);
+    this.chaseSeenAt = t;
+  }
+
+  _updateTarget() {
     const c = this.ctx;
     if (!c) return;
     const target = c.target;
     if (this.state === 'WallChase') {
       if (!(target && this._sees(target))) {
-        const other = this._bestNonCrawler();
+        const other = this._bestSeen();
         if (other) this._setTarget(other);
       }
-    } else if (this.state === 'VentChase') {
-      if (quarry && target === null) this._setTarget(quarry);
     } else if (this.state === 'AquaticStalk') {
       const swimmer = this.swimmerPlayer;
       if (swimmer && target !== swimmer && !(target && this._sees(target))) this._setTarget(swimmer);
-    } else if (this.state === 'Patrol' || this.state === 'InvestigateNoise') {
+    } else if (this.state === 'Patrol' || this.state === 'InvestigateNoise' || this.state === 'Search') {
       const best = c.sightings[0];
       this._setTarget(best ? best.player : null);
-    } else {
+    } else if (this.state !== 'HidingResponse' && this.state !== 'Teleport') {
       this._setTarget(null);
     }
   }
@@ -809,7 +1464,7 @@ export class MonsterAI {
     if (noise.zoneId) c.heardZones[noise.zoneId] = { at: t, rank: noise.rank, position: noise.position.clone() };
     const source = this._playerByUserId(noise.sourceUserId);
     if (source && this._huntable(source)) {
-      if (noise.medium === 'Vent' && noise.rank >= EXACT_RANK && this._inVent(source)) this.spotted.set(source, t);
+      if (noise.rank >= LOUD_RANK) this._record(source).loudAt = t;
       if (noise.medium === 'Water' && this._swimming(source)) {
         this.swimmerAt = t;
         this.swimmerPlayer = source;
@@ -820,51 +1475,120 @@ export class MonsterAI {
     return best;
   }
 
+  /** Every player's trail, speed, life, hiding (the saw-you-hide rule) and stare. */
+  _watchPlayers(t, dt) {
+    const c = this.ctx;
+    if (!c) return;
+    const visible = !this.body.hidden && this._fade(t) >= 0.5;
+    const head = this._creatureEye();
+    const canStare = visible && this.awake && this.state !== 'Dormant' && this.state !== 'Scripted' &&
+      this.state !== 'Stunned' && this.catching === null && this._canHuntNow();
+    if (canStare) this.creatureLit = this.env.litAt(new THREE.Vector3(head.x, head.y - 2, head.z), CreatureConfig.Senses.LitIrradiance);
+    for (const player of this._players()) {
+      const r = this._record(player);
+      const root = this._rootOf(player);
+      const life = this._lifeOf(player);
+      if (r.life !== null && r.life !== 'Downed' && life === 'Downed') this.lastDownAt = t;
+      r.life = life;
+      if (!root) {
+        r.stare = 0;
+        continue;
+      }
+      // speed and trail
+      if (r.last) {
+        const step = Math.hypot(root.x - r.last.x, root.z - r.last.z);
+        const span = Math.max(1e-3, t - r.lastAt);
+        const v = step < 12 ? step / span : 0;
+        r.speed += (v - r.speed) * clamp01(dt * 6);
+        if (step > 0.05 && step < 12) r.travel = new THREE.Vector3(root.x - r.last.x, 0, root.z - r.last.z).normalize();
+        else if (r.speed < 0.5) r.travel = null;
+      }
+      r.last = root.clone();
+      r.lastAt = t;
+      if (t - r.trailAt >= TRAIL_EVERY) {
+        r.trailAt = t;
+        r.trail.push({ t, p: root.clone() });
+        while (r.trail.length && t - r.trail[0].t > TRAIL_SECONDS) r.trail.shift();
+      }
+      // the saw-you-hide rule
+      const hiding = this._moveStateOf(player) === 'Hiding';
+      if (hiding && !r.hiding) this._noteHid(player, t);
+      r.hiding = hiding;
+      // the stare
+      if (!canStare || hiding || !this._huntable(player) || this._inVent(player) || life !== 'Alive') {
+        r.stare = 0;
+        continue;
+      }
+      const eye = this._playerEye(player);
+      const looker = { eye, look: this._lookOf(player), torch: this._torchOf(player) };
+      if (eye && Perception.staring(looker, head, this.creatureLit, (a, b) => this._lineClear(a, b))) {
+        r.stare += dt;
+        if (r.stare >= CreatureConfig.Stare.Seconds && this.stareTrigger === null) {
+          r.stare = 0;
+          this.stareTrigger = player;
+          this.lastSeenAny = t;
+          this.stared.fire(player);
+        }
+      } else r.stare = 0;
+    }
+  }
+
+  /** `player` just got into a hiding spot: it saw them do it when it saw them within Hiding.SeenWindow. */
+  _noteHid(player, t) {
+    const c = this.ctx;
+    if (!c || !this.awake || this.warp || this.catching || this.scripted || t < this.stunUntil) return;
+    if (this.state === 'Dormant' || this.state === 'Stunned' || this.state === 'HidingResponse') return;
+    if (!this._huntable(player) || !this._canHuntNow()) return;
+    const seenAt = this.lastSeen.get(player);
+    if (seenAt === undefined || t - seenAt > H.SeenWindow) return;
+    const spot = this._hideSpotOf(player);
+    const front = spot ? this._hideSpotFront(spot) : null;
+    if (!spot || !front) return;
+    this.hideWatch = { player, spot, front, since: t };
+  }
+
   _sense(t) {
     const c = this.ctx;
     const m = this.mover;
     const p = this.pacing;
     if (!c || !m || !p) return;
-    const inVent = m.getMedium() === 'Vent';
-    const segment = m.segment();
-    const graph = c.graph;
-    let ventNodes = null;
-    if (inVent && graph) {
-      ventNodes = segment ? Perception.segmentNodes(graph, segment) : null;
-      if (!ventNodes) ventNodes = Perception.railNodes(graph, this.body.getPosition());
-    }
+    const blind = this.body.hidden || this.warp !== null || t < this.startleUntil;
     const viewer = {
       eye: this._creatureEye(),
-      facing: this.body.getCFrame().lookVector,
+      facing: this.lookAway || this.body.getCFrame().lookVector,
+      blindPeripheral: this.lookAway !== null,
       difficulty: this.difficulty,
-      inVent,
-      ventNodes,
       aquatic: this.body.pose === 'Swim' || this.state === 'AquaticStalk',
       targetUserId: c.target ? c.target.userId : null,
       raycast: (a, b) => this._lineClear(a, b),
     };
     const observations = [];
-    for (const player of this._huntablePlayers()) {
-      const eye = this._playerEye(player);
-      if (!eye) continue;
-      const pv = this._inVent(player);
-      const life = this._lifeOf(player);
-      observations.push({
-        player,
-        eye,
-        playing: life === 'Alive' || life === 'Downed',
-        downed: life === 'Downed',
-        moveState: this._moveStateOf(player),
-        lit: player === PLAYER ? this.env.playerFlashlightOn() : player.flashlightOn(),
-        inVent: pv,
-        rail: pv ? this._railPointOf(player) : null,
-      });
+    if (!blind) {
+      for (const player of this._huntablePlayers()) {
+        const eye = this._playerEye(player);
+        if (!eye) continue;
+        const life = this._lifeOf(player);
+        const root = this._rootOf(player);
+        observations.push({
+          player,
+          eye,
+          playing: life === 'Alive' || life === 'Downed',
+          downed: life === 'Downed',
+          moveState: this._moveStateOf(player),
+          torch: this._torchOf(player),
+          lit: !!root && this.env.litAt(new THREE.Vector3(root.x, root.y + 1, root.z), CreatureConfig.Senses.LitIrradiance),
+          moving: this._record(player).speed > CreatureConfig.Senses.MovingSpeed,
+          inVent: this._inVent(player),
+        });
+      }
     }
     const quiet = this._poolQuiet(t);
     const sightings = Perception.scan(viewer, observations).filter((s) => !(quiet && this._inPoolRoom(s.player)));
     c.sightings = sightings;
+    if (sightings.length) this.lastSeenAny = t;
     for (const s of sightings) {
       this.lastSeen.set(s.player, t);
+      if (s.player === c.target) this.chaseSeenAt = t;
       const position = this._rootOf(s.player);
       if (position) this._remember(s.player, position, t);
       if (c.level && c.level.basins.length > 0 && this._swimming(s.player)) {
@@ -875,9 +1599,9 @@ export class MonsterAI {
     const listener = {
       position: this._creatureEye(),
       levelId: this.creatureLevel,
-      inVent,
-      ventNode: m.nearestNode(),
-      graph,
+      inVent: false,
+      ventNode: null,
+      graph: c.graph,
       difficulty: this.difficulty,
       occluders: (a, b) => this.env.countOccluders(a, b, 3),
       grateOpen: (id) => {
@@ -912,19 +1636,7 @@ export class MonsterAI {
     for (const alert of pending) if (!(quiet && this._inPoolRoomAt(alert.position))) best = this._noteHeard(alert, best, t);
     c.heard = best;
     for (const [zone, heard] of Object.entries(c.heardZones)) if (t - heard.at > HEARD_ZONE_TTL) delete c.heardZones[zone];
-    for (const [player, at] of [...this.spotted]) if (t - at > SPOT_WINDOW) this.spotted.delete(player);
-  }
-
-  _ventQuarry(t) {
-    if (t < this.ventBlockedUntil) return null;
-    const c = this.ctx;
-    let best = null;
-    for (const [player, at] of this.spotted) {
-      if (t - at <= SPOT_WINDOW && this._huntable(player) && this._inVent(player)) {
-        if (best === null || (c !== null && c.target === player)) best = player;
-      }
-    }
-    return best;
+    for (const [player, at] of [...this.pulled]) if (t - at > PULL_MEMORY) this.pulled.delete(player);
   }
 
   _nearestPlayerDistance() {
@@ -944,55 +1656,47 @@ export class MonsterAI {
     const c = this.ctx;
     const m = this.mover;
     const p = this.pacing;
-    const best = c.sightings[0];
-    const quarry = this._ventQuarry(t);
+    const spec = difficultySpec(this.difficulty);
     const devHunt = t < this.devHuntUntil;
+    let sees = c.sightings.length > 0;
+    // the stalk after a teleport: sight alone starts no chase, only a stare or coming close
+    if (this.state === 'Teleport' && Teleport.stalking(c)) sees = c.sightings.some((s) => s.distance <= T.StalkNear);
     const chaseSeconds = this.chaseStarted !== null ? t - this.chaseStarted : 0;
     const level = c.level;
+    const canHunt = devHunt || p.canHunt(t);
     /** @type {import('./brain.js').Summary} */
     const summary = {
       state: this.state,
       elapsed: t - this.stateSince,
       scripted: this.scripted !== null,
       stunned: t < this.stunUntil,
-      awake: this.awake && !this.revealPending,
-      catching: this.catching !== null || this.grabbed !== null,
-      canHunt: devHunt || p.canHunt(t),
-      inVent: m.getMedium() === 'Vent',
-      sees: !!best,
-      seesInVent: !!best && this._inVent(best.player),
-      ventQuarry: quarry !== null,
+      awake: this.awake,
+      catching: this.catching !== null || this.grabbed !== null || this.pendingReach !== null,
+      warping: this.warp !== null,
+      canHunt,
+      sees,
+      stared: this.stareTrigger !== null,
+      hidingWatch: this.hideWatch !== null,
       heard: c.heard ? c.heard.rank : 0,
       investigating: c.investigation && this.state === 'InvestigateNoise' ? c.investigation.rank : 0,
-      memoryAge: c.memory ? t - c.memory.at : null,
-      breakChase: this.chaseStarted !== null && !devHunt && p.shouldBreakChase(chaseSeconds),
+      chaseSeconds: devHunt ? 0 : chaseSeconds,
+      lostSeconds: this.state === 'WallChase' ? t - this.chaseSeenAt : 0,
+      maxChase: spec.maxChaseSeconds,
+      chaseLost: spec.chaseLostSeconds,
       swimmer: level !== null && level.basins.length > 0 && t - this.swimmerAt <= SWIMMER_MEMORY,
       inWater: m.getMedium() === 'Water',
       retreating: t < this.poolRetreatUntil,
+      teleportDue: false,
       stateDone: c.stateDone,
     };
-    return [summary, quarry];
+    if (this.state === 'Patrol' && canHunt && this.awake && !summary.sees && !summary.stared && !summary.hidingWatch &&
+      !summary.heard && !summary.swimmer && !summary.catching && !summary.warping && !summary.stunned && !summary.scripted) {
+      summary.teleportDue = this._teleportDue(t);
+    }
+    return summary;
   }
 
   // ------------------------------------------------------------------ upkeep
-
-  _updateReveal(t) {
-    if (!this.revealPending) return;
-    if (!this._visible(this.body.getPosition())) {
-      this.body.setHidden(false);
-      this.revealPending = false;
-      return;
-    }
-    if (t >= this.revealAt) {
-      // still watched: slip away to a spot nobody sees and appear there, or keep waiting out of sight
-      if (this._relocateUnseen()) {
-        this.body.setHidden(false);
-        this.revealPending = false;
-      } else {
-        this.revealAt = t + REVEAL_RETRY;
-      }
-    }
-  }
 
   _updateGrab(t) {
     const victim = this.grabbed;
@@ -1005,6 +1709,7 @@ export class MonsterAI {
     if (!(life === 'Alive' || life === 'Downed') || (!holding && t - this.grabbedHeldAt > GRAB_GRACE)) {
       this.grabbed = null;
       p.noteCatch(t);
+      this.lastCatchAt = t;
       c.reposition = true;
       this.poolRetreatUntil = t + CreatureConfig.Water.GrabRetreatSeconds;
       this.splashArmed.delete(victim);
@@ -1012,23 +1717,14 @@ export class MonsterAI {
     }
   }
 
-  /** A mover that stalled for good (or is shut in the ducts) is moved unseen to a standing spot; the state restarts. */
+  /** A mover that stalled for good is moved unseen to a standing spot; the state restarts. */
   _handleMover() {
     const m = this.mover;
     const c = this.ctx;
     if (!m || !c) return;
-    const status = m.getStatus();
-    if (status === 'Stuck' || (status === 'Failed' && m.getMedium() === 'Vent')) {
-      // out of a sealed pool's ducts (its vent route) it comes out on land, unseen
-      const landOnly = m.getMedium() === 'Vent' && !!c.level && c.level.basins.some((b) => b.ventExitOnly);
-      if (this._relocateUnseen(landOnly)) this.current.enter(c, this.state);
-      else if (landOnly && status === 'Failed') {
-        // watched in the mouth of the pool's duct: back off along it, out of sight, and move on from there
-        const from = this._nearestRoot(this.body.getPosition()) || this.body.getPosition();
-        m.reset('Vent');
-        m.retreat(from, 4);
-      } else m.reset(m.getMedium());
-    }
+    if (m.getStatus() !== 'Stuck') return;
+    if (this._relocateUnseen()) this.current.enter(c, this.state);
+    else m.reset(m.getMedium());
   }
 
   _settleCatch(outcome) {
@@ -1037,9 +1733,14 @@ export class MonsterAI {
     const p = this.pacing;
     const active = this.catching;
     this.catching = null;
+    if (this.action === 'Jumpscare' || this.action === 'ReachIn') this._setAction(null);
     if (!c || !m || !p || !active) return;
     m.reset(m.getMedium());
-    if (outcome !== 'Aborted') p.noteCatch(this.now());
+    const t = this.now();
+    if (outcome !== 'Aborted') {
+      p.noteCatch(t);
+      this.lastCatchAt = t;
+    }
     this.devHuntUntil = 0;
     c.reposition = true;
     if (c.target === active.player) {
@@ -1049,42 +1750,6 @@ export class MonsterAI {
   }
 
   // ------------------------------------------------------------------ brain tick + motion
-
-  /** Upkeep the game needs every motion tick: vent entry / exit of every player (VentNetworkService.Entered / Exited). */
-  _watchVents() {
-    for (const player of this._players()) {
-      const inVent = this._inVent(player);
-      const was = player === PLAYER ? this.wasInVent : this.ventSeen.get(player) === true;
-      if (inVent === was) continue;
-      if (player === PLAYER) this.wasInVent = inVent;
-      else this.ventSeen.set(player, inVent);
-      this._ventCrossed(player, inVent);
-    }
-  }
-
-  _ventCrossed(player, inVent) {
-    const graph = this.ctx ? this.ctx.graph : null;
-    const root = this._rootOf(player);
-    let grateId = null;
-    if (graph && root) {
-      let bestDistance = Infinity;
-      for (const id of graph.grateIds) {
-        const d = graph.grates[id].mouth.distanceTo(root);
-        if (d < bestDistance) {
-          bestDistance = d;
-          grateId = id;
-        }
-      }
-    }
-    if (inVent) {
-      const seen = this.lastSeen.get(player);
-      if (this.running && seen !== undefined && this.now() - seen <= SEEN_ENTER_WINDOW && this._huntable(player)) {
-        this.spotted.set(player, this.now());
-      }
-    } else if (grateId) {
-      this.exitGrates.set(player, grateId);
-    }
-  }
 
   /** One brain tick. @param {number} dt */
   step(dt) {
@@ -1102,17 +1767,24 @@ export class MonsterAI {
     if (active && t - active.at > CATCH_TIMEOUT) {
       if (!this.jumpscare.abort('Timeout')) this._settleCatch('Aborted');
     }
+    this._stepReach(t);
     this._updateGrab(t);
     if (this.scripted) {
       this.noiseQueue = [];
       this.alerts = [];
       return;
     }
-    const busy = this.catching !== null;
-    if (!busy) this._updateReveal(t);
     this._updatePoolGrace(t);
     m.setWaterSpeedCap(c.speedOf('AquaticStalk'));
+    this._watchPlayers(t, dt);
     this._sense(t);
+    // leaving the water, not yet gone: a swimmer turns it back (the warp is called off where it still is)
+    const w = this.warp;
+    if (w && w.kind === 'Pool' && !w.placed && m.getMedium() === 'Water' && t - this.swimmerAt <= SWIMMER_MEMORY) {
+      this._cancelWarp();
+      this.body.setHidden(false);
+      m.reset('Water');
+    }
     const target = c.target;
     c.phase = p.tick(dt, {
       chasing: Brain.isChase(this.state),
@@ -1123,11 +1795,13 @@ export class MonsterAI {
       this.awake = true;
       this.wakeAt = null;
     }
-    const [summary, quarry] = this._summarize(t);
+    const summary = this._summarize(t);
     c.canHunt = summary.canHunt;
-    this._transition(Brain.decide(summary), quarry, t);
-    this._updateTarget(quarry);
-    if (!busy) {
+    this._transition(Brain.decide(summary), t);
+    this._updateTarget();
+    this.stareTrigger = null;
+    if (this.hideWatch && this.state !== 'HidingResponse' && t - this.hideWatch.since > H.SeenWindow) this.hideWatch = null;
+    if (this.catching === null && this.pendingReach === null && this.warp === null) {
       this._handleMover();
       this.current.update(c, dt);
     }
@@ -1136,9 +1810,28 @@ export class MonsterAI {
   /** One movement step (nothing moves while a catch runs). @param {number} dt */
   stepMotion(dt) {
     const m = this.mover;
-    if (!(this.running && m) || this.paused || this.catching !== null) return;
-    m.step(dt);
-    this.body.stepPhysics(dt);
+    if (!(this.running && m) || this.paused) return;
+    const t = this.now();
+    if (this.catching === null && this.scripted === null) this._stepWarp(t);
+    // it stands still while it fades out, is gone, or forms (a warp), and while a catch plays
+    if (this.catching === null && this.warp === null) {
+      m.step(dt);
+      this.body.stepPhysics(dt);
+    }
+    // the contract's speed (a teleport reads as still) and the head room (Hunched under a low lintel)
+    const root = this.body.getPosition();
+    if (this.lastRoot && this.body.placements === this.lastPlacements && dt > 0) {
+      const v = Math.hypot(root.x - this.lastRoot.x, root.z - this.lastRoot.z) / dt;
+      this.speedMeasured += (v - this.speedMeasured) * clamp01(dt * SPEED_DAMP);
+    } else this.speedMeasured = 0;
+    if (this.speedMeasured < 0.05) this.speedMeasured = 0;
+    this.lastRoot = root.clone();
+    this.lastPlacements = this.body.placements;
+    if (t - this.clearanceAt >= CLEARANCE_EVERY) {
+      this.clearanceAt = t;
+      const nav = m.getMedium() === 'Floor' ? this._nav(this.creatureLevel) : null;
+      this.clearance = nav ? nav.clearanceAt(root) : Infinity;
+    }
   }
 
   /** The 30 Hz game tick: the catch, motion every tick, the brain at ServerTickHz. @param {number} dt */
@@ -1148,7 +1841,6 @@ export class MonsterAI {
       return;
     }
     this.jumpscare.update();
-    this._watchVents();
     this.stepMotion(dt);
     this.accumulated += dt;
     if (this.accumulated + 1e-9 < TICK) return;
@@ -1179,14 +1871,20 @@ export class MonsterAI {
       phase: 'BuildUp',
       canHunt: false,
       investigation: null,
+      searchFrom: null,
+      hiding: null,
+      teleportPlan: null,
       reposition: false,
       stateDone: false,
-      ventBlocked: false,
       stunFrom: null,
-      speedOf: (name) => Brain.speedFor(name, this.difficulty) * (name === 'Scripted' ? 1 : this.speedScale),
+      speedOf: (name) => {
+        const base = Brain.speedFor(name, this.difficulty);
+        return name === 'Scripted' ? base : Math.min(CreatureConfig.SpeedCap, base * this.speedScale);
+      },
       setTarget: (player) => this._setTarget(player),
       catchKind: (player) => this._catchKindFor(player),
       tryCatch: (player, kind) => this._tryCatch(player, kind),
+      reachIn: (player, spot) => this._reachIn(player, spot),
       visible: (point) => this._visible(point),
       repositionPoint: (minDistance, maxDistance) => {
         const info = this.ctx ? this.ctx.level : null;
@@ -1197,9 +1895,6 @@ export class MonsterAI {
       playerPositions: () => this._playerEyes(),
       lockerInspector: () => this.lockerInspector,
       poolGrabber: () => this.poolGrabber,
-      noteSpotted: (player) => {
-        if (this._huntable(player)) this.spotted.set(player, this.now());
-      },
       grabArmed: (player) => {
         const at = this.splashArmed.get(player);
         return at !== undefined && this.now() - at <= GRAB_ARMED_SECONDS && !this._poolQuiet(this.now());
@@ -1211,24 +1906,58 @@ export class MonsterAI {
         this.grabbedHeldAt = this.now();
       },
       inVent: (player) => this._inVent(player),
-      railPointOf: (player) => this._railPointOf(player),
-      exitGrateOf: (player) => this.exitGrates.get(player) || null,
-      ventOccupants: () => this._huntablePlayers().filter((p) => this._inVent(p)),
-      grateState: (id) => env.grateState(id),
-      standPoint: (grate) => this._grateStandPoint(grate),
       swimming: (player) => this._swimming(player),
+      playing: (player) => this._huntable(player),
+      isHiding: (player) => this._moveStateOf(player) === 'Hiding',
+      hideSpotOf: (player) => this._hideSpotOf(player),
+      hideSpotsNear: (point, radius) => this._hideSpotsNear(point, radius),
+      hideSpotOccupant: (spot) => this._hideSpotOccupant(spot),
+      hideSpotFront: (spot) => this._hideSpotFront(spot),
+      pulledOut: (player) => this.pulled.has(player),
+      bodyClear: (player) => this._bodyClear(player),
       rootOf: (player) => this._rootOf(player),
+      floorPointNear: (p) => this._floorPointNear(p),
       lineClear: (a, b) => this._lineClear(a, b),
-      lockersIn: (levelId, zoneId) => env.lockersIn(levelId, zoneId),
-      lockerOccupant: (locker) => {
-        if (env.lockerOccupied(locker)) return PLAYER;
-        return this.roster().find((p) => p.lockerId() === locker) || null;
+      setLookAway: (direction) => {
+        this.lookAway = direction ? direction.clone() : null;
+        if (direction) this._setAction('LookAway');
+        else if (this.action === 'LookAway') this._setAction(null);
       },
-      lockerFront: (locker) => env.lockerFront(locker),
+      lookAwayDirection: (front) => this._lookAwayDirection(front),
+      grunt: () => {
+        const at = this._creatureEye();
+        env.play(GRUNT_PRESET, { position: at, volume: 1 });
+        this.grunted.fire(at.clone());
+      },
+      startTeleport: (plan) => this._startTeleport(plan),
+      warping: () => this.warp !== null,
       creatureEye: () => this._creatureEye(),
       playerEye: (player) => this._playerEye(player),
     };
     return ctx;
+  }
+
+  /** Down the tunnel, away from the spot it watches: the more open of its two sides (a level-headed look). */
+  _lookAwayDirection(front) {
+    const facing = new THREE.Vector3(-front.lookVector.x, 0, -front.lookVector.z);
+    if (facing.lengthSq() < 1e-6) facing.set(0, 0, -1);
+    facing.normalize();
+    const left = new THREE.Vector3(-facing.z, 0, facing.x);
+    const right = left.clone().negate();
+    const eye = this._creatureEye();
+    const reach = (dir) => {
+      let d = 0;
+      for (const step of [4, 8, 12, 16]) {
+        if (!this._lineClear(eye, eye.clone().addScaledVector(dir, step))) break;
+        d = step;
+      }
+      return d;
+    };
+    const l = reach(left);
+    const r = reach(right);
+    // turned well away: down the tunnel and a little back, so the spot it watches is out of its eyes
+    const side = l >= r ? left : right;
+    return side.addScaledVector(facing, -0.35).normalize();
   }
 
   /** Takes over the Creature for the run: placed at its level's CreatureSpawn, Dormant until that level activates. */
@@ -1239,21 +1968,19 @@ export class MonsterAI {
         return nav ? nav.computePath(from, to) : null;
       },
       clear: (from, to) => this.env.monsterClear(from, to),
-    }, {
-      state: (id) => this.env.grateState(id),
-      standPoint: (grate) => this._grateStandPoint(grate),
-      kick: (id) => this.env.forceGrate(id, 'Kicked'),
+      warp: (goal, medium) => this._warpForMover(goal, medium),
+      warping: () => this.warp !== null,
     }, () => this.now());
     this.ctx = this._newContext();
-    let fallback = 'Level1_Hallways';
-    if (levelId && levelIndex(levelId) >= 2) fallback = levelId;
+    const fallback = levelId && levelIndex(levelId) >= 1 ? levelId : LEVEL_ORDER[0];
     this.state = 'Dormant';
     this.current = STATES.Dormant;
     this.stateSince = this.now();
     this.lastReason = 'placed';
     this.awake = false;
     this.wakeAt = null;
-    this.revealPending = false;
+    this.warp = null;
+    this.action = null;
     this.body.setHidden(false);
     this._relocate(fallback, false);
     Dormant.enter(this.ctx);
@@ -1266,23 +1993,26 @@ export class MonsterAI {
     this.difficulty = name === 'Nightmare' ? 'Nightmare' : 'Standard';
   }
 
-  /** Starts a run (BeginRun): the Creature is placed Dormant at `startLevel`'s spawn (Level 1 for the basement). */
+  /** Starts a run (BeginRun): the Creature is placed Dormant at `startLevel`'s spawn (the basement's by default). */
   beginRun(opts = {}) {
     this.running = true;
     this.difficulty = (opts.difficulty ?? this.difficulty) === 'Nightmare' ? 'Nightmare' : 'Standard';
     this.pacing = new Pacing(this.difficulty, this.now());
     this.paused = false;
     this.stunUntil = 0;
-    this.ventBlockedUntil = 0;
     this.devHuntUntil = 0;
     this.catching = null;
+    this.pendingReach = null;
     this.grabbed = null;
     this.scripted = null;
-    this.exitGrates.clear();
     this.splashArmed.clear();
-    this.ventSeen.clear();
-    this.wasInVent = this.env.playerInVent();
     this.accumulated = 0;
+    this.lastCatchAt = -Infinity;
+    this.lastDownAt = -Infinity;
+    this.teleportReadyAt = Infinity;
+    this.teleports = 0;
+    this.lastTeleportTarget = null;
+    this.startleUntil = -Infinity;
     this._attach(opts.level || null);
   }
 
@@ -1295,6 +2025,8 @@ export class MonsterAI {
     this.catching = null;
     this.grabbed = null;
     this._forgetMind();
+    this.warp = null;
+    this.action = null;
     this.mover = null;
     this.ctx = null;
     this.creatureLevel = null;
@@ -1303,10 +2035,8 @@ export class MonsterAI {
     this.current = STATES.Dormant;
     this.awake = false;
     this.wakeAt = null;
-    this.revealPending = false;
     this.paused = false;
     this.speedScale = 1;
-    this.exitGrates.clear();
     this.splashArmed.clear();
     this.lastSeen.clear();
     this.body.setHidden(true);
@@ -1318,17 +2048,20 @@ export class MonsterAI {
     if (!this.running) this.beginRun({ difficulty: this.difficulty, level: levelId });
     const p = this.pacing;
     const c = this.ctx;
-    if (!p || !c) return;
-    if (levelIndex(levelId) < 2) return; // the basement has no Creature
+    if (!p || !c || levelIndex(levelId) < 1) return;
     const t = this.now();
     p.noteAirlock(t);
     if (this.catching) this.jumpscare.abort('Level');
     this.stunUntil = 0;
     this.grabbed = null;
+    this.pendingReach = null;
     if (this.creatureLevel !== levelId) this._relocate(levelId, true);
     else this._forgetMind();
     this.awake = false;
     this.wakeAt = t + WAKE_DELAY;
+    this.lastSeenAny = t;
+    this.teleportReadyAt = t + (CreatureConfig.FloorGrace[this.difficulty] ?? CreatureConfig.FloorGrace.Standard) + T.FirstAfterGrace;
+    this.nextTeleportTry = 0;
     this.lastReason = `level ${levelId} activated`;
     if (!this.scripted) this._enterState('Dormant', t);
   }
@@ -1350,6 +2083,9 @@ export class MonsterAI {
     this.stunUntil = Math.max(this.stunUntil, t + Math.max(0, seconds));
     c.stunFrom = from.clone();
     this._setTarget(null);
+    this.pendingReach = null;
+    this.lookAway = null;
+    if (this.action === 'LookAway' || this.action === 'ReachIn') this._setAction(null);
     this.env.play(STUN_PRESET, { position: this._creatureEye() });
     if (this.state === 'Stunned') Stunned.retreat(c);
     else this._enterState('Stunned', t);
@@ -1357,12 +2093,13 @@ export class MonsterAI {
 
   /** Blinded for `seconds`, stumbling back away from `from`. A catch in progress is called off; not while held / asleep. */
   stun(seconds, from) {
-    if (!(this.running && this.ctx) || this.scripted || !this.awake) return;
+    if (!(this.running && this.ctx) || this.scripted || !this.awake || this.body.hidden) return;
     if (!isFiniteNumber(seconds) || !isFiniteVector(from)) return;
     if (this.catching) {
       this.jumpscare.abort('Stunned');
       if (this.catching) this._settleCatch('Aborted');
     }
+    this._cancelWarp();
     this._applyStun(seconds, new THREE.Vector3(from.x, from.y, from.z));
   }
 
@@ -1396,24 +2133,18 @@ export class MonsterAI {
     this.scripted = null;
     if (!c) return;
     this.body.face(null);
-    if (this.body.hidden) this._hide(REVEAL_RETRY);
+    if (this.body.hidden) this._hide();
     const t = this.now();
     let wanted = nextState && MonsterStates.includes(nextState) && nextState !== 'Scripted' ? nextState : 'Patrol';
+    if (wanted === 'VentChase') wanted = 'InvestigateNoise';
+    if (wanted === 'Search' || wanted === 'HidingResponse' || wanted === 'Teleport') wanted = 'Patrol';
     this.awake = wanted !== 'Dormant';
     this.wakeAt = null;
     const here = this.body.getPosition();
     if (wanted === 'WallChase') {
       const victim = this._nearestPlayerTo(here, (pl) => !this._inVent(pl));
-      this._setTarget(victim);
-      const position = victim ? this._rootOf(victim) : null;
-      if (victim && position) this._remember(victim, position, t);
+      if (victim) this._chase(victim, t);
       else wanted = 'Patrol';
-    } else if (wanted === 'VentChase') {
-      const crawler = this._nearestPlayerTo(here, (pl) => this._inVent(pl));
-      if (crawler) {
-        this._setTarget(crawler);
-        this.spotted.set(crawler, t);
-      } else wanted = 'Patrol';
     } else if (wanted === 'InvestigateNoise') {
       const near = this._nearestPlayerTo(here, null);
       const position = near ? this._rootOf(near) : null;
@@ -1451,8 +2182,8 @@ export class MonsterAI {
       },
       setHidden: (hidden) => {
         if (!live()) return;
+        this._cancelWarp();
         this.body.setHidden(hidden === true);
-        this.revealPending = false;
       },
       face: (position) => {
         if (!live() || !this.mover || !isFiniteVector(position)) return;
@@ -1470,7 +2201,7 @@ export class MonsterAI {
 
   /**
    * Exclusive control for a cutscene: null while another token holds it, during a catch, or without a run; the same
-   * token gets its handle back.
+   * token gets its handle back. A warp in progress is called off (the script places the Creature itself).
    * @param {string} token
    * @returns {ScriptedHandle|null}
    */
@@ -1481,6 +2212,10 @@ export class MonsterAI {
     if (this.catching) return null;
     const handle = this._makeHandle(token);
     this.scripted = { token, handle };
+    this.pendingReach = null;
+    this.lookAway = null;
+    this._cancelWarp();
+    this._setAction(null);
     this.lastReason = `acquired by ${token}`;
     this._enterState('Scripted', this.now());
     return handle;
@@ -1497,7 +2232,7 @@ export class MonsterAI {
     return true;
   }
 
-  /** Level tuning: every state's pace times `scale` (0.5..2); a pace already set follows at once, in proportion. */
+  /** Level tuning: every state's pace times `scale` (0.5..2, never past SpeedCap); a pace already set follows at once. */
   setSpeedScale(scale) {
     const value = isFiniteNumber(scale) ? clamp(scale, MIN_SPEED_SCALE, MAX_SPEED_SCALE) : 1;
     const previous = this.speedScale;
@@ -1505,7 +2240,7 @@ export class MonsterAI {
     this.speedScale = value;
     const m = this.mover;
     if (m && this.scripted === null && this.catching === null && this.state !== 'Scripted') {
-      const pace = (this.body.walkSpeed * value) / previous;
+      const pace = Math.min(CreatureConfig.SpeedCap, (this.body.walkSpeed * value) / previous);
       m.setSpeed(pace);
       this.body.setWalkSpeed(pace);
     }
@@ -1533,6 +2268,8 @@ export class MonsterAI {
     this.grabbed = null;
     AquaticStalk.released(c);
     this.catching = { player, kind: 'Underwater', at: this.now() };
+    this.lastCatchAt = this.now();
+    this._setAction('Jumpscare');
     m.stop();
     this.caught.fire(player, 'Underwater');
     return true;
@@ -1544,7 +2281,10 @@ export class MonsterAI {
     if (value && this.mover) this.mover.stop();
   }
 
-  /** The Creature's public state (the Roblox attributes: MonsterState, PoseMode, InVent, VentSegmentId, Hidden, ...). */
+  /**
+   * The Creature's public state: the old attributes (MonsterState, PoseMode, Hidden, ...) plus the view contract's
+   * fields (viewState: state, speed, poseMode, action, actionStartedAt, fade).
+   */
   snapshot() {
     const m = this.mover;
     const c = this.ctx;
@@ -1554,9 +2294,9 @@ export class MonsterAI {
       stateSince: this.stateSince,
       reason: this.lastReason,
       pose: this.body.pose,
-      inVent: m ? m.getMedium() === 'Vent' : false,
+      inVent: false,
       medium: m ? m.getMedium() : 'Floor',
-      segment: m ? m.segment() : null,
+      segment: null,
       hidden: this.body.hidden,
       levelId: this.creatureLevel,
       targetingPlayer: !!c && c.target === PLAYER,
@@ -1564,13 +2304,16 @@ export class MonsterAI {
       grabbed: this.grabbed !== null,
       awake: this.awake,
       catching: this.catching !== null,
+      warping: this.warp ? this.warp.phase : null,
+      teleports: this.teleports,
       pacing: this.pacing ? this.pacing.snapshot() : null,
       position: this.body.getPosition(),
       eye: this._creatureEye(),
+      ...this.viewState(),
     };
   }
 
-  // ------------------------------------------------------------------ dev commands (DevToolsService: ai, hunt, ignoreme)
+  // ------------------------------------------------------------------ dev commands (ai, hunt, ignoreme)
 
   _bringNear() {
     const c = this.ctx;
@@ -1578,7 +2321,7 @@ export class MonsterAI {
     const eye = this._playerEye(PLAYER);
     const levelId = this.env.playerLevel();
     if (!c || !root || !eye || !levelId) return 'you need a character on a school level';
-    if (levelIndex(levelId) < 2) return 'the Creature never enters the basement';
+    if (levelIndex(levelId) < 1) return 'the Creature only hunts the school levels';
     if (this.creatureLevel !== levelId) {
       const info = this._levelInfo(levelId);
       this.creatureLevel = levelId;
@@ -1590,6 +2333,7 @@ export class MonsterAI {
     }
     const info = c.level;
     if (!info) return `no layout for ${levelId}`;
+    this._cancelWarp();
     const spots = this._standingSpots(info);
     let point = repositionPoint(spots, [eye], root, TP_MIN, TP_MAX, (p) => this._visible(p));
     let note = '';
@@ -1616,9 +2360,9 @@ export class MonsterAI {
   _wakeForDev() {
     this.awake = true;
     this.wakeAt = null;
-    if (this.revealPending) {
+    if (this.warp && this.warp.kind === 'Reveal') {
+      this._cancelWarp();
       this.body.setHidden(false);
-      this.revealPending = false;
     }
   }
 
@@ -1649,22 +2393,34 @@ export class MonsterAI {
       this._enterState('Patrol', t);
       return 'Creature patrolling';
     }
+    if (wanted === 'Teleport') {
+      if (this.state !== 'Patrol') this._enterState('Patrol', t);
+      const plan = this._planTeleport();
+      if (!plan) return 'no teleport spot near you right now';
+      c.teleportPlan = plan;
+      this.lastReason = 'ai Teleport';
+      this._enterState('Teleport', t);
+      return `Creature teleporting ${plan.side.toLowerCase()} you (${plan.walk.toFixed(0)} studs of walking)`;
+    }
     if (!root) return 'you need a character';
     this.devHuntUntil = t + DEV_FORCE_SECONDS;
     this.lastReason = `ai ${wanted}`;
     if (wanted === 'InvestigateNoise') {
       c.investigation = { position: this._floorPointNear(root), rank: EXACT_RANK, at: t };
       this._enterState('InvestigateNoise', t);
+    } else if (wanted === 'Search') {
+      c.searchFrom = this._floorPointNear(root);
+      this._enterState('Search', t);
     } else if (wanted === 'WallChase') {
-      if (this._inVent(PLAYER)) return 'you are in a vent: use ai VentChase';
-      this._setTarget(PLAYER);
-      this._remember(PLAYER, root, t);
+      if (this._inVent(PLAYER)) return 'you are in a vent: it cannot follow you there';
+      this._chase(PLAYER, t);
       this._enterState('WallChase', t);
-    } else if (wanted === 'VentChase') {
-      if (!this._inVent(PLAYER)) return 'you are not in a vent';
-      this._setTarget(PLAYER);
-      this.spotted.set(PLAYER, t);
-      this._enterState('VentChase', t);
+    } else if (wanted === 'HidingResponse') {
+      const spot = this._hideSpotOf(PLAYER);
+      const front = spot ? this._hideSpotFront(spot) : null;
+      if (!front) return 'you are not in a hiding spot';
+      this.hideWatch = { player: PLAYER, spot, front, since: t };
+      this._transition({ state: 'HidingResponse', reason: 'ai HidingResponse', reposition: false, giveUp: false }, t);
     } else if (wanted === 'AquaticStalk') {
       if (!(c.level && c.level.basins.length > 0)) return 'no pool on this level';
       this.swimmerAt = t;
@@ -1682,7 +2438,7 @@ export class MonsterAI {
     if (!(this.running && this.ctx)) return 'no Creature this run';
     if (head === 'hunt') {
       if (this.ignored) return 'it is ignoring you (ignoreme to stop)';
-      const reply = this._force(this._inVent(PLAYER) ? 'VentChase' : 'WallChase');
+      const reply = this._force('WallChase');
       this.devHuntUntil = Math.max(this.devHuntUntil, this.now() + DEV_HUNT_SECONDS);
       return reply;
     }
@@ -1692,7 +2448,6 @@ export class MonsterAI {
         this._setTarget(null);
         this.ctx.memory = null;
       }
-      this.spotted.delete(PLAYER);
       return this.ignored ? 'the Creature ignores you' : 'the Creature notices you again';
     }
     if (head !== 'ai') return 'usage: ai [state|pause|resume|tp] | hunt | ignoreme';
@@ -1701,7 +2456,9 @@ export class MonsterAI {
       const s = this.pacing ? this.pacing.snapshot() : null;
       const t = this.now();
       return `${this.state} for ${(t - this.stateSince).toFixed(1)}s (${this.lastReason}) | target ${this.ctx.target ? 'you' : 'none'}` +
-        ` | pose ${this.body.pose} | ${this.mover.getMedium()}${this.body.hidden ? ', hidden' : ''} | ${this.creatureLevel}` +
+        ` | pose ${this._poseMode()} | ${this.mover.getMedium()}${this.body.hidden ? ', hidden' : ''}` +
+        `${this.warp ? `, warp ${this.warp.kind}/${this.warp.phase}` : ''} | ${this.creatureLevel}` +
+        ` | next teleport in ${Math.max(0, this.teleportReadyAt - t).toFixed(0)}s` +
         (s ? ` | pacing ${s.phase}, tension ${s.tension.toFixed(2)}` : '') + (this.paused ? ' | PAUSED' : !this.awake ? ' | asleep' : '');
     }
     const word = arg.toLowerCase();

@@ -1,6 +1,8 @@
-// level0.js: the basement's ambience beats (Level0_BasementController). No Creature down here; the bear traps are
-// traps.js. While the player is on Level 0 a seeded director plays a scare every 25-50 s, never the same kind twice
-// in a row, from a point 25-45 studs (horizontally) from the player that they cannot see:
+// level0.js: the basement's ambience beats (Level0_BasementController). The Creature hunts down here too now (Tunnels
+// §2.3: woken by the run's activation like any floor, held at its start for the floor's grace by objectives/spawns.js,
+// then stalking the patrol loops it derives from the basement's rooms); these beats stay on top of it. The bear traps
+// are traps.js. While the player is on Level 0 a seeded director plays a scare every 25-50 s, never the same kind
+// twice in a row, from a point 25-45 studs (horizontally) from the player that they cannot see:
 //   PipeBang       a bang in the overhead pipes,          BoilerSurge  a boiler roaring, the lit bulbs near it stuttering,
 //   CeilingDrag    something dragged away across the ceiling void,   ChildVoice  a whisper or a giggle in the dark,
 //   FallingObject  something clattering to the floor (the FallingObject noise where it lands).

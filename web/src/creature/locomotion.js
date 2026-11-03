@@ -1,12 +1,10 @@
-// Locomotion (MonsterAIService/Locomotion.luau): how the Creature gets anywhere. One Mover runs a plan: a queue of
-// legs stepped every motion tick, so kinematic motion is smooth.
+// Locomotion: how the Creature gets anywhere. One Mover runs a plan: a queue of legs stepped every motion tick, so
+// kinematic motion is smooth.
 //
-// Mediums. Floor (the walker walks an unanchored root), Water (the root is anchored and glides under a pool's surface,
-// PoseMode Swim) and Vent (the root is anchored on the duct centreline, PoseMode Quadruped). GoTo(point) plans what the
-// change of medium needs: out of the ducts first through the best open grate, then a walk to the pool deck and a slip
-// into the water, or a swim to the deck edge and a climb out. From a VentExitOnly pool (Level 4) there is no climbing
-// out: the way out is its own vent route, a swim to the nearest pool grate and in; the ducts give no exit back onto
-// the land from there, so the plan ends in the duct and the brain moves the Creature on unseen ("Failed" in a vent).
+// Mediums. Floor (the walker walks an unanchored root) and Water (the root is anchored and glides under a pool's
+// surface, PoseMode Swim). It never enters a duct or a crawlway (Tunnels: VentChase is gone). goTo(point) plans what
+// the change of medium needs: a pool is entered and left only by a Warp (the service's FadeOut, a placement out of
+// everyone's sight, a FadeIn), never by walking down the deck or climbing out.
 //
 // Legs.
 //   Walk     floor pathfinding (FloorNav: the zone graph's portals, agent radius 2); waypoints followed with MoveTo,
@@ -16,20 +14,17 @@
 //            repositions the Creature out of everyone's sight).
 //   Swim     a straight glide under the surface, clamped inside the basin's water, at most the water pace
 //            (setWaterSpeedCap: the AquaticStalk speed) unless the leg is a telegraphed lunge.
-//   Transit  a short kinematic tween between two CFrames (through a grate mouth, into or out of a pool).
-//   Rail     the root steps along a polyline of VentGraph points at the vent speed, facing its travel (or a threat
-//            while it backs away), on the centreline.
+//   Warp     into or out of the water: engine.warp(goal, medium) starts the service's fade relocation; the leg ends
+//            when it is over (the body placed there, the medium switched).
 //   Hold     stand still for a moment, optionally facing a direction.
-//   Do       run a callback (kicking a grate).
-// Transit, Hold and Do are uninterruptible: a new plan asked for while one runs replaces the rest once it ends.
+// Warp and Hold are uninterruptible: a new plan asked for while one runs replaces the rest once it ends.
 
 import * as THREE from 'three';
 import { CFrame } from './cframe.js';
-import { CreatureConfig, ROOT_HEIGHT } from './config.js';
+import { CreatureConfig } from './config.js';
 import { StuckTracker } from './body.js';
-import { flatDirection, horizontalDistance, smoothstep } from './util.js';
-import { nearest as railNearest, nearestNode, path as ventPath, retreatPath } from './ventgraph.js';
-import { SWIM_DEPTH, clampToWater, deckCrossing, inWater } from './water.js';
+import { flatDirection, horizontalDistance } from './util.js';
+import { SWIM_DEPTH, clampToWater, inWater } from './water.js';
 
 const WAYPOINT_REACH = 2.5;
 const ARRIVE_VERTICAL = 6;
@@ -40,116 +35,26 @@ const CLEAR_RECHECK = 0.2;
 const REISSUE_SECONDS = 2;
 const MAX_PATH_FAILURES = 2;
 const STALL_WINDOW = 12;
-const SLIP_SECONDS = 0.9;
-const CLIMB_SECONDS = 1.1;
-export const SQUEEZE_SECONDS = 0.8;
-const FACE_SECONDS = 0.3;
-export const KICK_RECOVER = 0.55;
 const RETREAT_DISTANCE = 9;
 const RETREAT_ANGLES = [0, 35, -35, 70, -70];
 const SWIM_RETREAT = 12;
-const VERTICAL_TRAVEL = 0.95;
 const DEFAULT_REPATH = CreatureConfig.Repath.PatrolInterval;
-const BUSY_KINDS = new Set(['Transit', 'Hold', 'Do']);
+const BUSY_KINDS = new Set(['Warp', 'Hold']);
 
 export { SWIM_DEPTH };
 
 /**
- * @typedef {'Floor'|'Water'|'Vent'} Medium
+ * @typedef {'Floor'|'Water'} Medium
  * @typedef {'Idle'|'Moving'|'Failed'|'Stuck'} MoveStatus
  * @typedef {{computePath: (from: THREE.Vector3, to: THREE.Vector3) => ({waypoints: THREE.Vector3[]}|null),
- *   clear: (from: THREE.Vector3, to: THREE.Vector3) => boolean}} Engine
- * @typedef {{state: (id: string) => string, standPoint: (grate: import('./ventgraph.js').Grate) => CFrame,
- *   kick: (id: string) => void}} Grates
+ *   clear: (from: THREE.Vector3, to: THREE.Vector3) => boolean,
+ *   warp?: (goal: THREE.Vector3, medium: Medium) => boolean, warping?: () => boolean}} Engine
  * @typedef {{arrive?: number, depth?: number, lunge?: boolean}} GoOptions
  */
 
-/**
- * The cheapest route on the rail between two rail points: [points ending at the target, length] or [null, Infinity].
- * @param {import('./ventgraph.js').Graph} graph
- * @param {import('./ventgraph.js').RailPoint} from
- * @param {import('./ventgraph.js').RailPoint} target
- * @returns {[THREE.Vector3[]|null, number]}
- */
-export function railRoute(graph, from, target) {
-  const ends = (point) => {
-    const a = graph.nodes[point.a];
-    if (!a) return [];
-    const out = [{ id: point.a, lead: point.position.distanceTo(a.position) }];
-    if (point.b && graph.nodes[point.b]) out.push({ id: point.b, lead: point.position.distanceTo(graph.nodes[point.b].position) });
-    return out;
-  };
-  if (from.b !== null && from.a === target.a && from.b === target.b) {
-    return [[target.position.clone()], target.position.distanceTo(from.position)];
-  }
-  if (from.b === null && target.b === null && from.a === target.a) {
-    const n = graph.nodes[from.a].position;
-    return [[n.clone(), target.position.clone()], from.position.distanceTo(n) + target.position.distanceTo(n)];
-  }
-  let bestNodes = null;
-  let bestCost = Infinity;
-  for (const start of ends(from)) {
-    for (const goal of ends(target)) {
-      const [nodes, cost] = ventPath(graph, start.id, goal.id);
-      if (nodes && start.lead + cost + goal.lead < bestCost) {
-        bestNodes = nodes;
-        bestCost = start.lead + cost + goal.lead;
-      }
-    }
-  }
-  if (!bestNodes) return [null, Infinity];
-  const points = bestNodes.map((id) => graph.nodes[id].position.clone());
-  points.push(target.position.clone());
-  return [points, bestCost];
-}
-
-/**
- * Moves along `points` from `position` by `budget` studs starting at points[index]: [position, next index, heading].
- * @returns {[THREE.Vector3, number, THREE.Vector3|null]}
- */
-export function advance(points, index, position, budget) {
-  const at = position.clone();
-  let next = index;
-  let left = Math.max(0, budget);
-  let heading = null;
-  while (next < points.length) {
-    const target = points[next];
-    const delta = target.clone().sub(at);
-    const distance = delta.length();
-    if (distance > 1e-6) heading = delta.clone().divideScalar(distance);
-    if (distance <= left) {
-      at.copy(target);
-      left -= distance;
-      next++;
-    } else {
-      if (distance > 1e-6) at.addScaledVector(delta, left / distance);
-      break;
-    }
-  }
-  return [at, next, heading];
-}
-
 function newLeg(kind) {
-  return {
-    kind,
-    goal: null,
-    arrive: 1.5,
-    depth: SWIM_DEPTH,
-    to: null,
-    from: null,
-    seconds: 0,
-    elapsed: 0,
-    pose: null,
-    exitPose: null,
-    enterMedium: null,
-    exitMedium: null,
-    points: [],
-    index: 0,
-    backward: false,
-    face: null,
-    run: null,
-    started: false,
-  };
+  return { kind, goal: null, arrive: 1.5, depth: SWIM_DEPTH, lunge: false, medium: null, seconds: 0, elapsed: 0,
+    face: null, started: false };
 }
 
 function walkLeg(goal, arrive = 1.5) {
@@ -168,22 +73,10 @@ function swimLeg(goal, arrive = 1.5, depth = SWIM_DEPTH, lunge = false) {
   return leg;
 }
 
-function transitLeg(to, seconds, pose, enterMedium, exitPose, exitMedium) {
-  const leg = newLeg('Transit');
-  leg.to = to;
-  leg.seconds = seconds;
-  leg.pose = pose;
-  leg.enterMedium = enterMedium;
-  leg.exitPose = exitPose;
-  leg.exitMedium = exitMedium;
-  return leg;
-}
-
-function railLeg(points, backward, face) {
-  const leg = newLeg('Rail');
-  leg.points = points;
-  leg.backward = backward;
-  leg.face = face ? face.clone() : null;
+function warpLeg(goal, medium) {
+  const leg = newLeg('Warp');
+  leg.goal = goal.clone();
+  leg.medium = medium;
   return leg;
 }
 
@@ -194,26 +87,16 @@ function holdLeg(seconds, face) {
   return leg;
 }
 
-function doLeg(run) {
-  const leg = newLeg('Do');
-  leg.run = run;
-  return leg;
-}
-
 export class Mover {
   /**
    * @param {import('./body.js').CreatureBody} body
    * @param {Engine} engine
-   * @param {Grates} grates
    * @param {() => number} now
    */
-  constructor(body, engine, grates, now) {
+  constructor(body, engine, now) {
     this.body = body;
     this.engine = engine;
-    this.grates = grates;
     this.now = now;
-    /** @type {import('./ventgraph.js').Graph|null} */
-    this.graph = null;
     /** @type {import('./water.js').Basin[]} */
     this.basins = [];
     /** @type {Medium} */
@@ -361,7 +244,7 @@ export class Mover {
     const t = this.now();
     const w = this.walk;
     if (this.basinAt(position)) {
-      // walked off the coping: it swims from here
+      // fell off the coping: it swims from here (and leaves the water only by a warp)
       this._stopWalking();
       this.medium = 'Water';
       this.body.setAnchored(true);
@@ -440,52 +323,20 @@ export class Mover {
     return false;
   }
 
-  _stepTransit(leg, dt) {
-    const to = leg.to;
-    if (!to) return true;
+  _stepWarp(leg) {
     if (!leg.started) {
       leg.started = true;
       this._stopWalking();
-      leg.from = this.body.getCFrame();
-      this.body.setAnchored(true);
-      if (leg.pose) this.body.setPose(leg.pose);
-      if (leg.enterMedium) this.medium = leg.enterMedium;
-    }
-    leg.elapsed += dt;
-    const from = leg.from || to;
-    if (leg.elapsed >= leg.seconds) {
-      this.body.setCFrame(to);
-      if (leg.exitPose) this.body.setPose(leg.exitPose);
-      if (leg.exitMedium) {
-        this.medium = leg.exitMedium;
-        if (leg.exitMedium === 'Floor') this.body.setAnchored(false);
+      const started = !!(this.engine.warp && this.engine.warp(leg.goal, leg.medium));
+      if (!started) {
+        this._fail('Failed');
+        return false;
       }
-      return true;
+      return false;
     }
-    this.body.setCFrame(from.lerp(to, smoothstep(0, 1, leg.elapsed / leg.seconds)));
-    return false;
-  }
-
-  _stepRail(leg, dt) {
-    if (!leg.started) {
-      leg.started = true;
-      this._stopWalking();
-    }
-    if (!this.body.anchored) this.body.setAnchored(true);
-    this.body.setPose('Quadruped');
-    this.medium = 'Vent';
-    const [position, index, heading] = advance(leg.points, leg.index, this.body.getPosition(), this.speed * dt);
-    leg.index = index;
-    let facing = heading;
-    if (leg.backward && leg.face) facing = leg.face.clone().sub(position);
-    else if (leg.backward && heading) facing = heading.clone().negate();
-    const look = facing && facing.length() > 1e-6 ? facing.clone().normalize() : null;
-    if (look && Math.abs(look.y) < VERTICAL_TRAVEL) {
-      this.body.setCFrame(CFrame.lookAt(position, position.clone().add(new THREE.Vector3(look.x, 0, look.z))));
-    } else {
-      this.body.setCFrame(this.body.getCFrame().withPosition(position));
-    }
-    return index >= leg.points.length;
+    if (this.engine.warping && this.engine.warping()) return false;
+    this.medium = leg.medium;
+    return true;
   }
 
   _stepHold(leg, dt) {
@@ -504,183 +355,28 @@ export class Mover {
         return this._stepWalk(leg);
       case 'Swim':
         return this._stepSwim(leg, dt);
-      case 'Transit':
-        return this._stepTransit(leg, dt);
-      case 'Rail':
-        return this._stepRail(leg, dt);
-      case 'Hold':
-        return this._stepHold(leg, dt);
+      case 'Warp':
+        return this._stepWarp(leg);
       default:
-        leg.started = true;
-        if (leg.run) leg.run();
-        return true;
+        return this._stepHold(leg, dt);
     }
-  }
-
-  _railHere() {
-    if (this.medium !== 'Vent' || !this.graph) return null;
-    return railNearest(this.graph, this.body.getPosition());
-  }
-
-  _standCFrame(grate) {
-    const stand = this.grates.standPoint(grate);
-    const sp = stand.position;
-    const basin = this.basinAt(new THREE.Vector3(sp.x, sp.y - 0.6, sp.z));
-    if (basin) {
-      const point = clampToWater(basin, sp);
-      return [CFrame.lookAt(point, point.clone().add(stand.lookVector)), 'Water'];
-    }
-    const root = new THREE.Vector3(sp.x, sp.y + ROOT_HEIGHT, sp.z);
-    return [CFrame.lookAt(root, root.clone().add(stand.lookVector)), 'Floor'];
-  }
-
-  /** Legs that crawl out through `grate` (or the best grate toward `toward`): [plan|null, medium, point]. */
-  _exitPlan(grate, toward) {
-    const level = this.graph;
-    const here = this._railHere();
-    const position = this.body.getPosition();
-    if (!level || !here) return [null, this.medium, position];
-    // a goal on land is never reached by dropping back into a pool the Creature may not climb out of
-    const landGoal = !!toward && !this.basinAt(toward);
-    const intoSealedPool = (candidate) => landGoal && this._sealedBasinAt(this._standCFrame(candidate)[0].position);
-    const routeTo = (candidate) => {
-      if (!level.nodes[candidate.nodeId]) return [null, Infinity];
-      const mouth = { a: candidate.nodeId, b: null, t: 1, position: candidate.mouth.clone(), distance: 0 };
-      return railRoute(level, here, mouth);
-    };
-    let chosen = grate;
-    let kick = false;
-    let route = null;
-    if (chosen) {
-      [route] = routeTo(chosen);
-      const state = this.grates.state(chosen.id);
-      kick = !(state === 'Open' || state === 'Kicked');
-      if (state === 'Locked' || intoSealedPool(chosen)) route = null;
-    } else {
-      let bestCost = Infinity;
-      let bestKickCost = Infinity;
-      let kickable = null;
-      let kickRoute = null;
-      for (const id of level.grateIds) {
-        const candidate = level.grates[id];
-        const state = this.grates.state(id);
-        if (state === 'Locked' || intoSealedPool(candidate)) continue;
-        const [points, cost] = routeTo(candidate);
-        if (!points) continue;
-        const stand = this.grates.standPoint(candidate);
-        const total = cost + (toward ? horizontalDistance(stand.position, toward) : 0);
-        if (state === 'Open' || state === 'Kicked') {
-          if (total < bestCost) {
-            chosen = candidate;
-            route = points;
-            bestCost = total;
-          }
-        } else if (total < bestKickCost) {
-          kickable = candidate;
-          kickRoute = points;
-          bestKickCost = total;
-        }
-      }
-      if (!chosen && kickable) {
-        chosen = kickable;
-        route = kickRoute;
-        kick = true;
-      }
-    }
-    if (!chosen || !route) return [null, this.medium, position];
-    const out = chosen;
-    const plan = [railLeg(route, false, null)];
-    if (kick) {
-      plan.push(doLeg(() => this.grates.kick(out.id)));
-      plan.push(holdLeg(KICK_RECOVER, null));
-    }
-    const [stand, outside] = this._standCFrame(out);
-    plan.push(transitLeg(stand, SQUEEZE_SECONDS, null, null, outside === 'Water' ? 'Swim' : 'Biped', outside));
-    return [plan, outside, stand.position];
   }
 
   _planTo(goal, options) {
     const arrive = options && options.arrive ? options.arrive : 1.5;
     const depth = options && options.depth ? options.depth : SWIM_DEPTH;
-    const plan = [];
-    let from = this.medium;
-    let position = this.body.getPosition();
-    if (from === 'Vent') {
-      const [exits, outside, point] = this._exitPlan(null, goal);
-      if (!exits) return [];
-      for (const leg of exits) plan.push(leg);
-      from = outside;
-      position = point;
-    }
+    const from = this.medium;
     const goalBasin = this.basinAt(goal);
     if (from === 'Floor' && goalBasin) {
-      const [stand, water] = deckCrossing(goalBasin, goal);
-      if (stand && water) {
-        const sp = stand.position;
-        plan.push(walkLeg(new THREE.Vector3(sp.x, sp.y - ROOT_HEIGHT, sp.z), 1.2));
-        plan.push(transitLeg(CFrame.lookAt(water, water.clone().sub(stand.lookVector)), SLIP_SECONDS, 'Swim', 'Water', null, null));
-        plan.push(swimLeg(goal, arrive, depth));
-      } else {
-        plan.push(walkLeg(goal, arrive));
-      }
-    } else if (from === 'Water' && !goalBasin) {
-      const basin = this.basinAt(position) || this._nearestBasin(position);
-      if (basin && basin.ventExitOnly) return this._poolVentPlan(basin, position);
-      let stand = null;
-      let water = null;
-      if (basin) [stand, water] = deckCrossing(basin, goal);
-      if (stand && water) {
-        plan.push(swimLeg(water, 1, SWIM_DEPTH));
-        plan.push(transitLeg(stand, CLIMB_SECONDS, null, null, 'Biped', 'Floor'));
-      }
-      plan.push(walkLeg(goal, arrive));
-    } else if (from === 'Water') {
-      plan.push(swimLeg(goal, arrive, depth, !!(options && options.lunge)));
-    } else {
-      plan.push(walkLeg(goal, arrive));
+      // into the water: fade out here, in under the surface out of everyone's sight
+      return [warpLeg(clampToWater(goalBasin, goal, depth), 'Water')];
     }
-    return plan;
-  }
-
-  /** A basin the Creature may leave only through its vent route, holding `p` (in its water), or null. */
-  _sealedBasinAt(p) {
-    const basin = this.basinAt(p);
-    return basin && basin.ventExitOnly ? basin : null;
-  }
-
-  /**
-   * The way out of a VentExitOnly pool: a swim to the nearest pool grate (one whose stand point is in this basin's
-   * water), a kick when it is shut, and in to its duct node. Empty when the pool has no usable grate (it stays in).
-   */
-  _poolVentPlan(basin, position) {
-    const level = this.graph;
-    if (!level) return [];
-    let best = null;
-    let bestDistance = Infinity;
-    for (const id of level.grateIds) {
-      const grate = level.grates[id];
-      if (!level.nodes[grate.nodeId] || this.grates.state(id) === 'Locked') continue;
-      const [stand, medium] = this._standCFrame(grate);
-      if (medium !== 'Water' || this.basinAt(stand.position) !== basin) continue;
-      const d = stand.position.distanceTo(position);
-      if (d < bestDistance) {
-        best = { grate, stand };
-        bestDistance = d;
-      }
+    if (from === 'Water' && !goalBasin) {
+      // out of the water: never climbing out at the deck; fade out under it and in on land out of sight
+      return [warpLeg(goal, 'Floor')];
     }
-    if (!best) return [];
-    const { grate, stand } = best;
-    const state = this.grates.state(grate.id);
-    const intoWall = stand.lookVector.clone().negate();
-    const plan = [swimLeg(stand.position, 1, SWIM_DEPTH), holdLeg(FACE_SECONDS, intoWall)];
-    if (!(state === 'Open' || state === 'Kicked')) {
-      plan.push(doLeg(() => this.grates.kick(grate.id)));
-      plan.push(holdLeg(KICK_RECOVER, intoWall));
-    }
-    const f = flatDirection(intoWall) || new THREE.Vector3(0, 0, -1);
-    plan.push(transitLeg(CFrame.lookAt(grate.mouth, grate.mouth.clone().add(f)), SQUEEZE_SECONDS, 'Quadruped', 'Vent', null, null));
-    plan.push(railLeg([level.nodes[grate.nodeId].position.clone()], false, null));
-    return plan;
+    if (from === 'Water') return [swimLeg(goal, arrive, depth, !!(options && options.lunge))];
+    return [walkLeg(goal, arrive)];
   }
 
   // ------------------------------------------------------------------ API
@@ -690,8 +386,8 @@ export class Mover {
     this.waterSpeed = Number.isFinite(speed) && speed > 0 ? speed : Infinity;
   }
 
-  setLevel(graph, basins) {
-    this.graph = graph;
+  /** @param {any} _graph (unused: the Creature never enters the ducts) @param {import('./water.js').Basin[]} basins */
+  setLevel(_graph, basins) {
     this.basins = basins;
   }
 
@@ -726,62 +422,15 @@ export class Mover {
     this._install(plan);
   }
 
-  enterVent(grate, kick) {
-    const level = this.graph;
-    const node = level && level.nodes[grate.nodeId];
-    if (!node) {
-      this._fail('Failed');
-      return;
-    }
-    const stand = this.grates.standPoint(grate);
-    const intoWall = stand.lookVector.negate();
-    const plan = this._planTo(stand.position, { arrive: 1.2 });
-    plan.push(holdLeg(FACE_SECONDS, intoWall));
-    if (kick) {
-      plan.push(doLeg(() => this.grates.kick(grate.id)));
-      plan.push(holdLeg(KICK_RECOVER, intoWall));
-    }
-    const f = flatDirection(intoWall) || new THREE.Vector3(0, 0, -1);
-    plan.push(transitLeg(CFrame.lookAt(grate.mouth, grate.mouth.clone().add(f)), SQUEEZE_SECONDS, 'Quadruped', 'Vent', null, null));
-    plan.push(railLeg([node.position.clone()], false, null));
-    this._install(plan);
-  }
-
-  exitVent(grate, toward) {
-    if (this.medium !== 'Vent') return true;
-    const [plan] = this._exitPlan(grate || null, toward || null);
-    if (!plan) return false;
-    this._install(plan);
-    return true;
-  }
-
-  railTo(target) {
-    const level = this.graph;
-    const here = this._railHere();
-    if (!level || !here) return false;
-    const [points] = railRoute(level, here, target);
-    if (!points) return false;
-    this._install([railLeg(points, false, null)]);
-    return true;
-  }
-
-  retreat(awayFrom, hops) {
+  /** Stumbles back away from `awayFrom` (a stun): straight back, veering off a wall behind, flailing when boxed in. */
+  retreat(awayFrom) {
     const position = this.body.getPosition();
-    const level = this.graph;
-    if (this.medium === 'Vent' && level) {
-      const node = nearestNode(level, position);
-      if (!node) return;
-      const walkNodes = retreatPath(level, node, awayFrom, hops);
-      this._install([railLeg(walkNodes.map((id) => level.nodes[id].position.clone()), true, awayFrom)]);
-      return;
-    }
     const away = flatDirection(position.clone().sub(awayFrom)) ||
       flatDirection(this.body.getCFrame().lookVector.negate()) || new THREE.Vector3(0, 0, 1);
     if (this.medium === 'Water') {
       this._install([swimLeg(position.clone().addScaledVector(away, SWIM_RETREAT), 1, SWIM_DEPTH)]);
       return;
     }
-    // stumble straight back, or veering off when a wall is right behind; flail in place when boxed in
     for (const degrees of RETREAT_ANGLES) {
       const direction = CFrame.angles(0, (degrees * Math.PI) / 180, 0).vectorToWorld(away);
       const goal = position.clone().addScaledVector(direction, RETREAT_DISTANCE);
@@ -799,14 +448,14 @@ export class Mover {
 
   stop() {
     const current = this.legs[0];
-    if (current && BUSY_KINDS.has(current.kind) && current.started && current.kind === 'Transit') {
+    if (current && current.kind === 'Warp' && current.started) {
       this.legs = [current];
     } else {
       this.legs = [];
       this._stopWalking();
     }
     this.queued = null;
-    this.status = 'Idle';
+    this.status = this.legs.length ? 'Moving' : 'Idle';
   }
 
   /** @param {Medium} [medium] */
@@ -862,25 +511,27 @@ export class Mover {
     return (!!current && BUSY_KINDS.has(current.kind)) || this.queued !== null;
   }
 
+  /** Whether a Warp leg is running or waiting. */
+  warpPending() {
+    return this.legs.some((l) => l.kind === 'Warp') || (!!this.queued && this.queued.some((l) => l.kind === 'Warp'));
+  }
+
   goal() {
     const last = this.legs[this.legs.length - 1];
     if (!last) return null;
-    if (last.goal) return last.goal;
-    if (last.to) return last.to.position;
-    return last.points[last.points.length - 1] || null;
+    return last.goal || null;
   }
 
+  /** The Creature never rides the duct rail now (kept for the readers of the old API). */
   railPoint() {
-    return this._railHere();
+    return null;
   }
 
   segment() {
-    const here = this._railHere();
-    if (!here || !this.graph || !here.b) return null;
-    return this.graph.segments[`${here.a}|${here.b}`] || null;
+    return null;
   }
 
   nearestNode() {
-    return this.graph ? nearestNode(this.graph, this.body.getPosition()) : null;
+    return null;
   }
 }
