@@ -1,6 +1,10 @@
 // objective-run.mjs: the floor objectives played through, lobby to landing, with the pre-installed Playwright Chromium.
 //
-//   node tools/objective-run.mjs [--seeds 1029,4242] [--html <page>] [--no-build] [--shots <dir>]
+//   node tools/objective-run.mjs [--seeds 1029,4242] [--floors L0,L1,L2,L3,L4,L5] [--html <page>] [--no-build]
+//                                [--shots <dir>]
+//
+// --floors stops each seed's run after the last floor listed (from Level 0: `--floors L0` plays the basement, spawn
+// to fuses to breaker to the exit unlocked and the airlock out).
 //
 // For every seed (a fresh page with ?dev&seed=N, so the run's picks, plan, routes and Creature start come from it):
 // the lobby's ready pad (real keys), the countdown, the deploy; then every floor's objective with real input and the
@@ -44,6 +48,10 @@ const opt = (name, fallback) => {
   return i >= 0 && argv[i + 1] ? argv[i + 1] : fallback;
 };
 const SEEDS = opt('--seeds', '1029,4242').split(',').map(Number);
+const FLOORS = opt('--floors', 'L0,L1,L2,L3,L4,L5').split(',').map((f) => Number(f.replace(/^L/, ''))).filter(Number.isFinite);
+const LAST_FLOOR = Math.max(0, ...FLOORS);
+/** Thrown to end a seed's run after the last floor asked for (not a failure). */
+class FloorsDone extends Error {}
 const shots = path.resolve(opt('--shots', path.join(web, 'build/cache/objective-shots')));
 let page = opt('--html', null);
 if (!page) {
@@ -519,6 +527,7 @@ for (const [si, seed] of SEEDS.entries()) {
     check(`L0: the tracker names the route's stairwell (the ${named} one)`, !!named && t.title === `Get to the ${named} stairwell`, t);
 
     await leave('Level1_Hallways');
+    if (LAST_FLOOR < 1) throw new FloorsDone('L0');
 
     // ================================================================== Level 1: master keys
     await ff(1);
@@ -556,6 +565,7 @@ for (const [si, seed] of SEEDS.entries()) {
     check('L1: the 4 s unlock with the keys (a Normal noise each second) opens the exit', p && /Unlock/.test(p.text) &&
       work >= 4 && f.unlocked && f.door === 'Open', { p, work, f });
     await leave('Level2_ScienceHall');
+    if (LAST_FLOOR < 2) throw new FloorsDone('L1');
 
     // ================================================================== Level 2: burn the chain
     await shot('L2-tracker.png');
@@ -643,6 +653,7 @@ for (const [si, seed] of SEEDS.entries()) {
     check(`L2: the chain burnt by the ${first ? 'throw' : 'pour'}: the exit unlocked`, f.unlocked && f.door === 'Open' &&
       f.level === 'Level2_ScienceHall', { f, chain });
     await leave('Level3_Gymnasium');
+    if (LAST_FLOOR < 3) throw new FloorsDone('L2');
 
     // ================================================================== Level 3: the gym generator
     await shot('L3-tracker.png');
@@ -692,6 +703,7 @@ for (const [si, seed] of SEEDS.entries()) {
     f = await floorOf();
     check('L3: after 45 s the door motor has wound: the exit unlocked', f.unlocked && f.door === 'Open', f);
     await leave('Level4_FloodedPool');
+    if (LAST_FLOOR < 4) throw new FloorsDone('L3');
 
     // ================================================================== Level 4: the valve wheel
     await ff(1);
@@ -767,6 +779,7 @@ for (const [si, seed] of SEEDS.entries()) {
     check('L4: the valve turned (Normal noise each second): hatch open, grate usable, exit unlocked', f.unlocked &&
       f.door === 'Open' && s.passable && (await noises()).filter((n) => n === 'ObjectiveWork').length >= 4, { f, s });
     await leave('Level5_Roof');
+    if (LAST_FLOOR < 5) throw new FloorsDone('L4');
 
     // ================================================================== Level 5: cut the crate open
     await ff(2);
@@ -846,10 +859,14 @@ for (const [si, seed] of SEEDS.entries()) {
     check(`L5: the arrival housing's roof door (${arrival.wantDoor}) was smashed and the Creature let go from behind it`,
       s.door === 'Smashed' && s.smashed, s);
   } catch (err) {
-    check('objective run completed', false, String(err && err.stack ? err.stack : err));
-    try {
-      await shot('99-failure.png');
-    } catch { /* gone */ }
+    if (err instanceof FloorsDone) {
+      console.log(`  stopped after ${err.message} (--floors)`);
+    } else {
+      check('objective run completed', false, String(err && err.stack ? err.stack : err));
+      try {
+        await shot('99-failure.png');
+      } catch { /* gone */ }
+    }
   }
   const fatal = logs.filter((l) => /pageerror|error:|warning:/.test(l));
   check('no console errors or warnings', fatal.length === 0, fatal.slice(0, 8));

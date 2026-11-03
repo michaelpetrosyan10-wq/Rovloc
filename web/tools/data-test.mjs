@@ -215,7 +215,7 @@ for (const e of meta.entities) {
   const ids = new Set(meta.entities.map((e) => e.id));
   check(new Set(meta.entities.map((e) => `${e.level}/${e.id}`)).size === meta.entities.length, 'entity ids unique per level');
   const byType = (type) => meta.entities.filter((e) => e.type === type);
-  const ITEMS = { Fuse: 13, MasterKeys: 10, ReagentJar: 12, CoachKey: 32, ValveWheel: 8, BoltCutters: 9, AcidFlask: 1 };
+  const ITEMS = { Fuse: 14, MasterKeys: 10, ReagentJar: 12, CoachKey: 32, ValveWheel: 8, BoltCutters: 9, AcidFlask: 1 };
   for (const [type, count] of Object.entries(ITEMS)) {
     const list = byType(type);
     check(list.length === count, `${type}: ${list.length} entities (want ${count})`);
@@ -354,6 +354,86 @@ for (const e of meta.entities) {
   const traps = meta.entities.filter((e) => e.type === 'BearTrap');
   check(traps.length >= 16, `${traps.length} bear trap entities (want >= 16)`);
   console.log(`  ok   routes ${pairs.length} pairs, ${Object.values(routes).flat().length} candidates, ${traps.length} traps`);
+}
+// tunnel floors, decor (Detail) and the potentially visible sets
+{
+  const rooms = new Map(meta.rooms.map((r) => [r.id, r]));
+  // visibility: every zone of every layout level lists itself, its neighbours through openings, ids of its own level,
+  // symmetric
+  const vis = meta.visibility || {};
+  const layoutLevels = Object.keys(meta.layouts || {});
+  let listed = 0;
+  for (const level of layoutLevels) {
+    const sets = vis[level];
+    check(!!sets && typeof sets === 'object', `visibility for ${level}`);
+    if (!sets) continue;
+    for (const z of meta.rooms.filter((r) => r.level === level)) {
+      const list = sets[z.id];
+      check(Array.isArray(list) && list.includes(z.id), `visibility ${z.id} lists itself`);
+      if (!Array.isArray(list)) continue;
+      listed += list.length;
+      for (const id of list) {
+        const other = rooms.get(id);
+        check(!!other && other.level === level, `visibility ${z.id} -> ${id} on its own level`);
+        check(Array.isArray(sets[id]) && sets[id].includes(z.id), `visibility ${z.id} <-> ${id} both ways`);
+      }
+    }
+    for (const d of meta.layoutDoors.filter((d) => d.level === level && d.kind !== 'Boarded')) {
+      const [a, b] = d.rooms;
+      if (sets[a] && sets[b]) check(sets[a].includes(b), `visibility: ${a} sees ${b} through ${d.id}`);
+    }
+  }
+  check(meta.visibilityInfo && meta.visibilityInfo.maxDistance > 0, 'visibilityInfo');
+  // Detail: decorative static / decal chunks only, levels 1..3, each level present on the basement; no collider is decor
+  const detailChunks = meta.chunks.filter((c) => c.detail !== undefined);
+  for (const c of detailChunks) check(c.kind === 'static' && [1, 2, 3].includes(c.detail), `chunk ${c.id} detail ${c.detail}`);
+  for (const lv of [1, 2, 3]) check(detailChunks.some((c) => c.detail === lv && c.level === 'Level0_Basement'), `Level 0 has Detail ${lv} chunks`);
+  for (const e of meta.entities) for (const col of e.colliders) check(!(col.attributes && col.attributes.Detail), `${e.id} collider is no decor`);
+  // the basement's tunnel data
+  const L0 = 'Level0_Basement';
+  const points = (meta.teleportPoints || {})[L0] || [];
+  check(points.length >= 100, `${points.length} teleport points on Level 0`);
+  for (const p of points) {
+    const r = rooms.get(p.zone);
+    check(!!r && r.level === L0 && (r.kind === 'Tunnel' || r.kind === 'Gallery'), `teleport point in a tunnel (${p.zone})`);
+    if (r) {
+      const inside = p.pos[0] >= r.rect.x - 0.01 && p.pos[0] <= r.rect.x + r.rect.w + 0.01 && p.pos[2] >= r.rect.z - 0.01 && p.pos[2] <= r.rect.z + r.rect.d + 0.01;
+      check(inside, `teleport point inside ${p.zone}`);
+    }
+  }
+  const marks = (meta.landmarks || {})[L0] || [];
+  const plates = marks.filter((m) => m.kind === 'JunctionPlate');
+  check(plates.length >= 20 && plates.every((m) => /^J-\d\d$/.test(m.text)), `${plates.length} junction plates J-NN`);
+  check(marks.every((m) => rooms.has(m.room) && m.text), 'landmarks name their room and text');
+  const regions = (meta.regions || {})[L0] || [];
+  check(regions.length >= 4 && regions.length <= 6 && new Set(regions.map((r) => r.name)).size === regions.length, `${regions.length} named regions`);
+  // doors: head room and crawl-only flags, the zone graph's too
+  for (const d of meta.layoutDoors) check(typeof d.clearance === 'number' && d.clearance > 0 && typeof d.crawlOnly === 'boolean', `door ${d.id} clearance / crawlOnly`);
+  const crawlDoors = meta.layoutDoors.filter((d) => d.crawlOnly);
+  check(crawlDoors.length >= 6 && crawlDoors.every((d) => d.clearance < 9), `${crawlDoors.length} crawl-only mouths, all under 9`);
+  const crawlEdges = ((meta.zoneGraph && meta.zoneGraph.edges) || []).filter((e) => e.crawlOnly);
+  check(crawlEdges.length === crawlDoors.length, `zone graph: ${crawlEdges.length} crawl-only edges (${crawlDoors.length} mouths)`);
+  // hiding spots: barrels and cabinets (most standing free with a side exit), lockers with HideKind
+  const hides = meta.entities.filter((e) => e.type === 'Barrel' || e.type === 'Cabinet');
+  check(hides.length >= 40, `${hides.length} barrels and cabinets`);
+  let side = 0;
+  for (const e of hides) {
+    check(e.tags.includes('Hideable') && e.attributes.HideKind === e.type, `${e.id} Hideable / HideKind`);
+    for (const name of ['EntryAnchor', 'ExitAnchor', 'HideAnchor', 'PeekAnchor']) check(!!e.attachments[name], `${e.id} ${name}`);
+    check(e.prompts.some((p) => p.name === 'Hide'), `${e.id} Hide prompt`);
+    const exit = e.attachments.ExitAnchor;
+    if (exit) {
+      const pv = e.pivot;
+      const d = [exit[0] - pv[0], exit[2] - pv[2]];
+      const right = [pv[3], pv[9]];
+      const look = [-pv[5], -pv[11]];
+      if (Math.abs(d[0] * right[0] + d[1] * right[1]) > Math.abs(d[0] * look[0] + d[1] * look[1])) side++;
+    }
+  }
+  check(side >= 0.6 * hides.length, `${side} of ${hides.length} hiding spots step out to a side`);
+  const lockers = meta.entities.filter((e) => e.type === 'Locker');
+  check(lockers.length > 0 && lockers.every((e) => e.attributes.HideKind === 'Locker'), 'lockers carry HideKind Locker');
+  console.log(`  ok   tunnels: ${points.length} teleport points, ${plates.length} plates, ${regions.length} regions, ${hides.length} barrels / cabinets (${side} side exits); ${detailChunks.length} Detail chunks; visibility ${listed} entries`);
 }
 // collision
 for (const [level, c] of Object.entries(world.collision)) {

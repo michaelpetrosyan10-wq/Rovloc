@@ -126,7 +126,8 @@ addresses.
   - the builder (`init.luau`);
   - the shell, stairwells, lobby and skyline builders;
   - the props under `Props/`;
-  - the level blueprints (`Layouts/*.luau`, validated by `LayoutSchema`);
+  - the level blueprints (`Layouts/*.luau`, validated by `LayoutSchema`); a tunnel floor's map comes from
+    `TunnelPlanner` and passes `TunnelRules` (the authoring guide is `docs/MAPS.md`);
   - the creature rig (`CreatureRigBuilder`);
   - `ZoneGraph` (rooms and door edges);
   - lighting: `LightingMood`, `LightingRig` and `FixtureGlow`;

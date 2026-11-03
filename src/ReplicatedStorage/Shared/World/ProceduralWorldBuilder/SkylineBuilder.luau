@@ -14,10 +14,10 @@ local SchoolShellBuilder = require(script.Parent.SchoolShellBuilder)
 
 local SkylineBuilder = {}
 
-local INNER_RADIUS = 300 -- nearest skyline building to the school centre
-local OUTER_RADIUS = 620
-local BUILDING_COUNT = 72
-local FAR_GROUND = 720 -- half extent of the cosmetic ground plane around the school
+local INNER_RADIUS = 400 -- nearest skyline building to the school centre (the 400 x 288 school's corners are 246 out)
+local OUTER_RADIUS = 760
+local BUILDING_COUNT = 92
+local FAR_GROUND = 880 -- half extent of the cosmetic ground plane around the school
 local LOBBY_CLEARANCE = 320 -- nothing cosmetic within this distance of the (enclosed, far-off) lobby
 local BURIED = 12 -- towers start this far below street level, so they never float on uneven ground
 

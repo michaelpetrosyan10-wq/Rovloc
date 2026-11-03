@@ -1,26 +1,39 @@
 --!strict
--- Level 0 · Boiler Basement (below grade). The squad drops in from the lobby into L0_DeliveryBay on the west wall
--- and must cross the pitch-black undercroft to L0_AirlockEast. No Creature activity here: the danger is the
--- randomized bear traps (RunDirector picks from the TrapCandidate anchors every run).
+-- Level 0 · the maintenance level (below grade): steam tunnels, pipe galleries, coal chutes and drains. The squad
+-- drops in from the lobby into L0_DeliveryBay on the west wall and must cross the maze to one of the three stair
+-- vestibules on the east wall (the run's route picks which; the others are jammed). The power is out: the tunnels are
+-- dark but for red emergency lamps until the squad finds three fuses and throws the breaker in the electrical room
+-- (the mains then stutter back on). The Creature hunts down here too, and the bear traps lie in wait.
 --
--- Plan (X west -> east, Z north -> south):
---   x   0..24   west service rooms (workshop, delivery bay = spawn, laundry)
---   z   0..30   north plant rooms (coal bunker, north boiler room, electrical) along the exterior wall
---   z  30..130  three pillared halls: west undercroft -> boiler hall (two boilers force a detour) -> east undercroft
---   z 130..160  south plant rooms (pump room, south boiler room, water heaters, a condemned store)
---   x 228..240  east stores around the stair airlock
--- The undercroft-to-boiler-hall wall only opens at its north and south ends, while the boiler hall opens east only
--- at its middle, past the two boilers, so the walk route snakes past the trap fields.
---
--- Anchor heights: props rest on the floor (y = 0); DripPipe sits at pipe height under the ceiling; PlayerSpawn is at
--- HumanoidRootPart height plus clearance (3.5) and Creature placements at the rig's root height (5). Yaw is degrees
--- about +Y: 0 faces north (-Z), 90 west, 180 south, -90 east.
+-- The map is TunnelPlanner's (seed below): the keep-rooms here, then the tunnels it lays around them, over the whole
+-- 400 x 288 footprint. Barrier lines fold the floor into one long walk: four bands, each split down the middle by a
+-- barrier open only at its north end (z 28), so a band is walked up one side and down the other; band 1 joins band 2
+-- at the south (z 238 and below), band 2 joins band 3 only through the boiler room, band 3 joins band 4 at z 192 and
+-- below. The shortest walk from the bay to the farthest stairs is about 1,900 studs (2.9 minutes at walking pace).
+-- The regions follow the bands (each region's `areas`):
+--   band 1 (x 0..126)    Coal Chutes: the bay (south-west), the coal bunker, the storage cage
+--   band 2 (x 126..231)  Red Steam Run: the workshop; then through the boiler room (the only way on to band 3: a
+--                        landmark you must walk through)
+--   band 3 (x 231..336)  Yellow Gas Line (the west side, the north and the electrical room with the breaker panel),
+--                        then Blue Water Main (the east side's south half, the pump room off its south end)
+--   band 4 (x 336..400)  Flood Drains: up the west side, back down the east side past the three stair vestibules
+--                        (north z 28, middle z 144, south z 260)
+-- Eleven crawlways cut through the bands' middle barriers (bands 1 and 2 at z 76, 192 and 238, band 3 at z 76 and
+-- 192, band 4 at z 52, 144 and 216), so a culvert the Creature cannot enter is never more than 60 studs' walk away
+-- (the planner keeps every tunnel within reach of one); each also skips a band's turn, a shortcut for whoever dares
+-- to crawl.
+
+-- Anchor heights: props rest on the floor (y = 0) or on a shelf / bench (its top); DripPipe sits under the ceiling;
+-- PlayerSpawn is at HumanoidRootPart height plus clearance (3.5) and Creature placements at the rig's root height (5).
+-- Yaw is degrees about +Y: 0 faces north (-Z), 90 west, 180 south, -90 east.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local TunnelPlanner = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelPlanner)
+local TunnelRules = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules)
 
 type Room = LayoutSchema.Room
 
@@ -39,16 +52,16 @@ type LightOptions = {
 	color: Color3?,
 	flicker: string?,
 	broken: boolean?,
+	cage: boolean?,
 }
 
 type LightDefaults = { brightness: number, range: number, color: Color3 }
 
-type DoorOptions = { id: string?, width: number?, height: number?, scriptedId: string? }
-
 local PREFIX = "L0"
+local SEED = 20261103
 local HEIGHT = WorldConfig.Levels.Level0_Basement.height
 
-local FACE_N, FACE_W, FACE_E = 0, 90, -90
+local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -60,27 +73,20 @@ local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	BoilerGlow = { brightness = 0.8, range = 14, color = Color3.fromRGB(255, 112, 36) },
 }
 
-local HALL: Style = {
-	floor = "ConcreteStained",
-	wall = "ConcreteDark",
-	ceiling = "ConcreteDark",
-	surface = "Concrete",
-	acoustic = "Basement",
-}
 local BOILER: Style =
 	{ floor = "ConcreteStained", wall = "Brick", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Basement" }
 local PLANT: Style =
 	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Basement" }
 local STORE: Style =
 	{ floor = "ConcreteStained", wall = "Brick", ceiling = "Concrete", surface = "Concrete", acoustic = "Room" }
-local LAUNDRY: Style =
-	{ floor = "TileWhite", wall = "PlasterSchool", ceiling = "Concrete", surface = "Tile", acoustic = "Room" }
 local WORKSHOP: Style =
 	{ floor = "ConcreteStained", wall = "WoodPanel", ceiling = "Concrete", surface = "Concrete", acoustic = "Room" }
 local ELECTRICAL: Style =
 	{ floor = "MetalGalvanized", wall = "ConcreteDark", ceiling = "Concrete", surface = "Metal", acoustic = "Room" }
 local AIRLOCK: Style =
 	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Stairwell" }
+
+local rgb = Color3.fromRGB
 
 --------------------------------------------------------------------------------
 -- Blueprint helpers
@@ -92,16 +98,24 @@ local doors: { LayoutSchema.Door } = {}
 local anchors: { LayoutSchema.Anchor } = {}
 local anchorCounts: { [string]: number } = {}
 local triggers: { LayoutSchema.Trigger } = {}
-local windows: { LayoutSchema.Window } = {}
-local pillars: { LayoutSchema.Pillar } = {}
 local platforms: { LayoutSchema.Platform } = {}
 local lightCount = 0
 
-local function room(id: string, kind: Enums.RoomKind, x: number, z: number, w: number, d: number, style: Style): Room
+local function room(
+	id: string,
+	kind: Enums.RoomKind,
+	x: number,
+	z: number,
+	w: number,
+	d: number,
+	style: Style,
+	height: number?
+): Room
 	local entry: Room = {
 		id = id,
 		kind = kind,
 		rect = LayoutSchema.rect(x, z, w, d),
+		height = height,
 		floor = style.floor,
 		wall = style.wall,
 		ceiling = style.ceiling,
@@ -122,10 +136,10 @@ local function getRoom(id: string): Room
 	return found
 end
 
--- The room holding (x, z) at least 0.25 studs inside its walls.
+-- The room holding (x, z) at least 0.05 studs inside its walls (never solid ground).
 local function roomAt(x: number, z: number): string
 	for _, candidate in rooms do
-		if candidate.kind ~= "Chase" and LayoutSchema.rectContains(candidate.rect, x, z, 0.25) then
+		if candidate.kind ~= "Solid" and LayoutSchema.rectContains(candidate.rect, x, z, 0.05) then
 			return candidate.id
 		end
 	end
@@ -147,60 +161,9 @@ local function light(roomId: string, kind: Enums.LightKind, x: number, y: number
 			color = o.color or defaults.color,
 			flickerGroup = o.flicker,
 			broken = o.broken,
+			cage = o.cage,
 		})
 	end
-end
-
--- nx * nz ceiling fixtures spread evenly over a room. `pattern` is read cyclically, one character per fixture:
--- "x" = broken, "o" = lit (dim, steady), "f" = lit and flickering with options.flicker.
-local function lightGrid(
-	roomId: string,
-	kind: Enums.LightKind,
-	nx: number,
-	nz: number,
-	pattern: string,
-	options: LightOptions?
-)
-	local target = getRoom(roomId)
-	local rect = target.rect
-	local y = (target.height or HEIGHT) - 0.4
-	local o: LightOptions = options or {}
-	local index = 0
-	for i = 1, nx do
-		for j = 1, nz do
-			index += 1
-			local p = ((index - 1) % #pattern) + 1
-			local mark = string.sub(pattern, p, p)
-			light(roomId, kind, rect.x + rect.w * (i - 0.5) / nx, y, rect.z + rect.d * (j - 0.5) / nz, {
-				brightness = o.brightness,
-				range = o.range,
-				color = o.color,
-				flicker = if mark == "f" then o.flicker else nil,
-				broken = mark == "x",
-			})
-		end
-	end
-end
-
-local function door(kind: Enums.DoorKind, a: string, b: string, at: number?, options: DoorOptions?)
-	local o: DoorOptions = options or {}
-	local roomA, roomB = getRoom(a), getRoom(b)
-	local position: number
-	if at then
-		position = at
-	else
-		local edge = LayoutSchema.sharedEdge(roomA.rect, roomB.rect)
-		position = if edge then (edge.from + edge.to) / 2 else 0
-	end
-	table.insert(doors, {
-		id = o.id or string.format("%s_Door_%02d", PREFIX, #doors + 1),
-		kind = kind,
-		rooms = { a, b },
-		at = position,
-		width = o.width,
-		height = o.height,
-		scriptedId = o.scriptedId,
-	})
 end
 
 local function anchor(
@@ -226,13 +189,6 @@ local function anchor(
 	return anchorId
 end
 
--- Each point is { x, z } or { x, z, yaw }.
-local function scatter(kind: Enums.AnchorKind, y: number, points: { { number } })
-	for _, p in points do
-		anchor(kind, p[1], y, p[2], p[3])
-	end
-end
-
 local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number, w: number, d: number, height: number)
 	table.insert(triggers, {
 		id = id,
@@ -241,40 +197,6 @@ local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number
 		rect = LayoutSchema.rect(x, z, w, d),
 		height = height,
 	})
-end
-
--- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
-local function windowRow(
-	roomId: string,
-	side: LayoutSchema.Side,
-	count: number,
-	width: number,
-	height: number,
-	sill: number,
-	boarded: boolean
-)
-	local rect = getRoom(roomId).rect
-	local alongX = side == "N" or side == "S"
-	local from = if alongX then rect.x else rect.z
-	local span = if alongX then rect.w else rect.d
-	for i = 1, count do
-		local at = from + span * (i - 0.5) / count
-		local facesTower = not alongX and WorldConfig.facesTower(at - width / 2, at + width / 2, 2)
-		if not facesTower then
-			table.insert(
-				windows,
-				{ room = roomId, side = side, at = at, width = width, height = height, sill = sill, boarded = boarded }
-			)
-		end
-	end
-end
-
-local function pillarGrid(roomId: string, xs: { number }, zs: { number }, size: number)
-	for _, x in xs do
-		for _, z in zs do
-			table.insert(pillars, { room = roomId, x = x, z = z, size = size })
-		end
-	end
 end
 
 local function platform(
@@ -312,315 +234,377 @@ local function deepFreeze(value: unknown)
 end
 
 --------------------------------------------------------------------------------
--- Rooms
+-- Keep-rooms (the rooms the game needs; the planner tunnels around them)
 --------------------------------------------------------------------------------
 
--- West service rooms
-room("L0_Storage_NW", "Storage", 0, 0, 24, 30, STORE)
-room("L0_Workshop", "Storage", 0, 30, 24, 32, WORKSHOP)
-room("L0_DeliveryBay", "Storage", 0, 62, 24, 36, PLANT)
-room("L0_Laundry", "Storage", 0, 98, 24, 32, LAUNDRY)
-room("L0_Storage_SW", "Storage", 0, 130, 24, 30, STORE)
+local keep: { TunnelPlanner.KeepRoom } = {}
+local function keepRoom(r: Room, ports: { TunnelPlanner.Port }, region: string?, sign: string?)
+	table.insert(keep, { room = r, ports = ports, region = region, sign = sign })
+end
 
--- North plant rooms
-room("L0_CoalBunker", "Boiler", 24, 0, 48, 30, BOILER)
-room("L0_FurnitureStore", "Storage", 72, 0, 48, 30, STORE)
-room("L0_BoilerRoom_North", "Boiler", 120, 0, 48, 30, BOILER)
-room("L0_ElectricalRoom", "Storage", 168, 0, 36, 30, ELECTRICAL)
-room("L0_Storage_NE", "Storage", 204, 0, 24, 30, STORE)
-room("L0_AirlockNorthEast", "Airlock", 228, 0, 12, 30, AIRLOCK)
-
--- The three halls
-room("L0_Undercroft_West", "Storage", 24, 30, 80, 100, HALL)
-room("L0_BoilerHall", "Boiler", 104, 30, 72, 100, BOILER)
-room("L0_Undercroft_East", "Storage", 176, 30, 52, 100, HALL)
-
--- East stores and the stair vestibule
-room("L0_Store_E1", "Storage", 228, 30, 12, 36, STORE)
-room("L0_AirlockEast", "Airlock", 228, 66, 12, 28, AIRLOCK)
-room("L0_Store_E2", "Storage", 228, 94, 12, 36, STORE)
-
--- South plant rooms
-room("L0_PumpRoom", "Boiler", 24, 130, 48, 30, PLANT)
-room("L0_ArchiveStore", "Storage", 72, 130, 48, 30, STORE)
-room("L0_BoilerRoom_South", "Boiler", 120, 130, 48, 30, BOILER)
-room("L0_WaterHeaterRoom", "Boiler", 168, 130, 36, 30, PLANT)
-room("L0_CondemnedStore", "Storage", 204, 130, 24, 30, STORE)
-room("L0_AirlockSouthEast", "Airlock", 228, 130, 12, 30, AIRLOCK)
-
---------------------------------------------------------------------------------
--- Doors
---------------------------------------------------------------------------------
-
-door("Doorway", "L0_DeliveryBay", "L0_Undercroft_West", 80, { width = 8 })
-door("Door", "L0_Workshop", "L0_Undercroft_West", 46)
-door("Door", "L0_Workshop", "L0_Storage_NW", 12)
-door("Door", "L0_Laundry", "L0_Undercroft_West", 114)
-door("Door", "L0_Laundry", "L0_Storage_SW", 12)
-
-door("Doorway", "L0_Undercroft_West", "L0_CoalBunker", 48, { width = 8 })
-door("Door", "L0_Undercroft_West", "L0_FurnitureStore", 88)
-door("Doorway", "L0_BoilerHall", "L0_BoilerRoom_North", 144, { width = 8 })
-door("Door", "L0_BoilerRoom_North", "L0_ElectricalRoom", 15)
-door("Door", "L0_Undercroft_East", "L0_ElectricalRoom", 190)
-door("Door", "L0_Undercroft_East", "L0_Storage_NE", 216)
-
-door("Doorway", "L0_Undercroft_West", "L0_BoilerHall", 46, { width = 10 })
-door("Doorway", "L0_Undercroft_West", "L0_BoilerHall", 114, { width = 10 })
-door("Doorway", "L0_BoilerHall", "L0_Undercroft_East", 80, { width = 10 })
-
-door("Door", "L0_Undercroft_East", "L0_Store_E1", 48)
-door("Airlock", "L0_Undercroft_East", "L0_AirlockEast", 80, { id = "L0_Door_AirlockEast" })
-door("Door", "L0_Undercroft_East", "L0_Store_E2", 112)
--- The corner stair vestibules: off the north-east store, and off the south-east store (the condemned store beside
--- it is boarded up)
-door("Airlock", "L0_Storage_NE", "L0_AirlockNorthEast", 15, { id = "L0_Door_AirlockNorthEast" })
-door("Airlock", "L0_Store_E2", "L0_AirlockSouthEast", 234, { id = "L0_Door_AirlockSouthEast" })
-
-door("Doorway", "L0_Undercroft_West", "L0_PumpRoom", 48, { width = 8 })
-door("Door", "L0_Undercroft_West", "L0_ArchiveStore", 88)
-door("Doorway", "L0_BoilerHall", "L0_BoilerRoom_South", 144, { width = 8 })
-door("Door", "L0_BoilerRoom_South", "L0_WaterHeaterRoom", 145)
-door("Door", "L0_Undercroft_East", "L0_WaterHeaterRoom", 190)
-door("Boarded", "L0_Undercroft_East", "L0_CondemnedStore", 216, { id = "L0_Door_Condemned" })
-
---------------------------------------------------------------------------------
--- Structure: pillar grids, boilers and plant (platforms are solid blocks standing on the floor)
---------------------------------------------------------------------------------
-
-pillarGrid("L0_Undercroft_West", { 40, 56, 72, 88 }, { 38, 54, 70, 90, 106, 122 }, 2.5)
-pillarGrid("L0_BoilerHall", { 112, 128, 152, 168 }, { 38, 54, 106, 122 }, 2.5)
-pillarGrid("L0_Undercroft_East", { 192, 212 }, { 38, 54, 70, 90, 106, 122 }, 2.5)
-
-platform("L0_Boiler_A", "L0_BoilerHall", 118, 62, 18, 36, 10, 10, "MetalRust")
-platform("L0_Boiler_B", "L0_BoilerHall", 144, 62, 18, 36, 10, 10, "MetalRust")
-platform("L0_Boiler_C", "L0_BoilerRoom_North", 132, 6, 24, 14, 8, 8, "MetalRust")
-platform("L0_Boiler_D", "L0_BoilerRoom_South", 132, 140, 24, 14, 8, 8, "MetalRust")
-platform("L0_WaterHeater_A", "L0_WaterHeaterRoom", 176, 140, 10, 10, 9, 9, "MetalGalvanized")
-platform("L0_WaterHeater_B", "L0_WaterHeaterRoom", 176, 150, 10, 8, 9, 9, "MetalGalvanized")
-platform("L0_CoalHeap", "L0_CoalBunker", 28, 4, 20, 10, 3, 3, "ConcreteDark")
-platform("L0_Pump_A", "L0_PumpRoom", 32, 140, 8, 6, 4, 4, "MetalRust")
-platform("L0_Pump_B", "L0_PumpRoom", 32, 150, 8, 6, 4, 4, "MetalRust")
-platform("L0_Switchgear", "L0_ElectricalRoom", 172, 2, 28, 4, 8, 8, "MetalGalvanized")
-platform("L0_Workbench", "L0_Workshop", 2, 52, 4, 8, 3, 3, "WoodPanel")
--- Steel shelving in the stores and a bank of washers in the laundry (fuse candidates lie on their tops)
-platform("L0_Shelf_NW", "L0_Storage_NW", 2, 0, 8, 2.6, 4, 4, "MetalRust")
-platform("L0_Shelf_SW", "L0_Storage_SW", 12, 157.4, 10, 2.6, 4, 4, "MetalRust")
-platform("L0_Washers", "L0_Laundry", 0, 100, 7, 12, 3.2, 3.2, "MetalGalvanized")
-platform("L0_Shelf_Furniture", "L0_FurnitureStore", 110, 0, 8, 2.6, 4, 4, "MetalRust")
-platform("L0_Shelf_Archive", "L0_ArchiveStore", 100, 157.4, 10, 2.6, 4, 4, "MetalRust")
-platform("L0_Shelf_E1", "L0_Store_E1", 237.4, 34, 2.6, 10, 4, 4, "MetalRust")
-
---------------------------------------------------------------------------------
--- Lights: the basement is pitch black. Pilot flames glow behind boiler doors; one red lamp marks the stairs.
---------------------------------------------------------------------------------
-
-lightGrid("L0_Undercroft_West", "Bulb", 3, 3, "x")
-lightGrid("L0_BoilerHall", "Bulb", 3, 3, "xxxxfxxxx", { flicker = "L0_HallBulb", brightness = 0.25 })
-lightGrid("L0_Undercroft_East", "Bulb", 2, 3, "x")
-for _, id in
+-- Band 1: the arrival bay (the lobby drop lands here) and the coal bunker west of the west rail; the storage cage east
+-- of the east rail
+keepRoom(
+	room("L0_DeliveryBay", "Storage", 22, 248, 26, 24, PLANT, 12),
+	{ { side = "E", at = 260, kind = "Doorway", width = 8, id = "L0_Door_DeliveryBay" } },
+	"Coal",
+	"GOODS IN"
+)
+keepRoom(
+	room("L0_CoalBunker", "Boiler", 22, 156, 26, 24, BOILER, 12),
+	{ { side = "E", at = 168, kind = "Doorway", width = 6, id = "L0_Door_CoalBunker" } },
+	"Coal",
+	"COAL"
+)
+keepRoom(
+	room("L0_StorageCage", "Storage", 96, 64, 22, 24, STORE, 11.5),
+	{ { side = "W", at = 76, kind = "Door", id = "L0_Door_StorageCage" } },
+	"Coal",
+	"STORES"
+)
+-- Band 2: the workshop west of its west rail; the boiler room between bands 2 and 3 (the only way across)
+keepRoom(
+	room("L0_Workshop", "Storage", 132, 88, 24, 24, WORKSHOP, 11.5),
+	{ { side = "E", at = 100, kind = "Door", id = "L0_Door_Workshop" } },
+	"Steam",
+	"WORKSHOP"
+)
+keepRoom(room("L0_BoilerRoom", "Boiler", 204, 226, 40, 24, BOILER, 16), {
+	{ side = "W", at = 238, kind = "Doorway", width = 8, id = "L0_Door_BoilerWest" },
+	{ side = "E", at = 238, kind = "Doorway", width = 8, id = "L0_Door_BoilerEast" },
+}, "Steam", "BOILER ROOM")
+-- Band 3: the electrical room (the breaker panel) east of its east side; the pump room off that side's south end
+keepRoom(
+	room("L0_ElectricalRoom", "Storage", 306, 88, 24, 24, ELECTRICAL, 12),
+	{ { side = "W", at = 100, kind = "Door", id = "L0_Door_Electrical" } },
+	"Gas",
+	"ELECTRICAL"
+)
+keepRoom(
+	room("L0_PumpRoom", "Boiler", 306, 234, 24, 24, PLANT, 12),
+	{ { side = "N", at = 318, kind = "Door", id = "L0_Door_PumpRoom" } },
+	"Water",
+	"PUMPS"
+)
+-- Band 4: the three stair vestibules (route candidates) against the east towers
+for _, v in
 	{
-		"L0_Storage_NW",
-		"L0_Workshop",
-		"L0_Laundry",
-		"L0_Storage_SW",
-		"L0_CoalBunker",
-		"L0_FurnitureStore",
-		"L0_BoilerRoom_North",
-		"L0_ElectricalRoom",
-		"L0_Storage_NE",
-		"L0_Store_E1",
-		"L0_Store_E2",
-		"L0_PumpRoom",
-		"L0_ArchiveStore",
-		"L0_BoilerRoom_South",
-		"L0_WaterHeaterRoom",
-		"L0_CondemnedStore",
-	} :: { string }
+		{ "L0_AirlockNorthEast", 16, 28, "L0_Door_AirlockNorthEast" },
+		{ "L0_AirlockEast", 132, 144, "L0_Door_AirlockEast" },
+		{ "L0_AirlockSouthEast", 248, 260, "L0_Door_AirlockSouthEast" },
+	} :: { { any } }
 do
-	lightGrid(id, "Bulb", 1, 1, "x")
+	-- (no stencil: the fire door's STAIRS sign is SignageBuilder's, beside it on the tunnel side)
+	keepRoom(
+		room(v[1], "Airlock", 386, v[2], 14, 24, AIRLOCK, 12),
+		{ { side = "W", at = v[3], kind = "Airlock", id = v[4] } },
+		"Drains"
+	)
 end
-lightGrid("L0_DeliveryBay", "Bulb", 1, 2, "fx", { flicker = "L0_Spawn", brightness = 0.3 })
-for _, id in { "L0_AirlockEast", "L0_AirlockNorthEast", "L0_AirlockSouthEast" } :: { string } do
-	lightGrid(id, "Fluorescent", 1, 2, "x")
-end
-
-light("L0_BoilerHall", "BoilerGlow", 127, 2, 61, { flicker = "L0_Boilers" })
-light("L0_BoilerHall", "BoilerGlow", 153, 2, 99, { flicker = "L0_Boilers" })
-light("L0_BoilerRoom_North", "BoilerGlow", 144, 2, 21, { flicker = "L0_Boilers", brightness = 0.6 })
-light("L0_BoilerRoom_South", "BoilerGlow", 144, 2, 139, { flicker = "L0_Boilers", brightness = 0.6 })
-light("L0_Undercroft_East", "EmergencyRed", 226, HEIGHT - 3, 80, { flicker = "L0_Exit", brightness = 0.5 })
-light("L0_Undercroft_East", "ExitSign", 226.5, 11, 80)
-light("L0_AirlockEast", "EmergencyRed", 234, HEIGHT - 1, 80, { brightness = 0.3 })
-light("L0_AirlockNorthEast", "EmergencyRed", 234, HEIGHT - 1, 15, { brightness = 0.3 })
-light("L0_AirlockSouthEast", "EmergencyRed", 234, HEIGHT - 1, 145, { brightness = 0.3 })
 
 --------------------------------------------------------------------------------
--- Anchors
+-- The tunnels
+--------------------------------------------------------------------------------
+
+local exclusions: { LayoutSchema.Rect } = {}
+
+local plan = TunnelPlanner.plan({
+	levelId = "Level0_Basement",
+	prefix = PREFIX,
+	seed = SEED,
+	height = HEIGHT,
+	keepRooms = keep,
+	entry = "L0_DeliveryBay",
+	exits = { "L0_AirlockNorthEast", "L0_AirlockEast", "L0_AirlockSouthEast" },
+	exclusions = exclusions,
+	barriers = {
+		-- each band's two sides meet only at the north row (z 28); bands 1 / 2 meet at the south rows (z 238+),
+		-- bands 2 / 3 only through the boiler room, bands 3 / 4 at z 192+
+		{ x0 = 72, z0 = 40, x1 = 72, z1 = 288 },
+		{ x0 = 126, z0 = 0, x1 = 126, z1 = 226 },
+		{ x0 = 180, z0 = 40, x1 = 180, z1 = 288 },
+		{ x0 = 231, z0 = 0, x1 = 231, z1 = 288 },
+		{ x0 = 264, z0 = 40, x1 = 264, z1 = 288 },
+		{ x0 = 336, z0 = 0, x1 = 336, z1 = 180 },
+		{ x0 = 367, z0 = 40, x1 = 367, z1 = 288 },
+	},
+	gridX = { 36, 60, 84, 108, 144, 168, 192, 216, 252, 276, 300, 318, 355, 370 },
+	gridZ = { 28, 52, 76, 100, 122, 144, 168, 192, 216, 238, 260 },
+	crawlSites = {
+		{ 60, 76, 84, 76 },
+		{ 60, 192, 84, 192 },
+		{ 60, 238, 84, 238 },
+		{ 168, 76, 192, 76 },
+		{ 168, 192, 192, 192 },
+		{ 168, 238, 192, 238 },
+		{ 252, 76, 276, 76 },
+		{ 252, 192, 276, 192 },
+		{ 355, 52, 370, 52 },
+		{ 355, 144, 370, 144 },
+		{ 355, 216, 370, 216 },
+	},
+	style = {
+		width = { 6, 7, 7, 8 },
+		height = { 10.5, 11 },
+		galleryWidth = 9,
+		galleryHeight = { 14, 15 },
+		galleryShare = 0.18,
+		galleryMin = 40,
+		pitch = 24,
+		jitter = 3,
+		length = 2700,
+		deadEnds = 6,
+		crawlWidth = 4,
+		crawlAcrossBarriers = true,
+		alcoveWidth = 5,
+		alcoveDepth = 6,
+		alcoveHeight = 10,
+		lightSpacing = { 8, 11 },
+		deadShare = 0.28,
+		flickerShare = 0.1,
+		plateLampEvery = 2,
+		wall = "ConcreteDark",
+		floor = "ConcreteStained",
+		ceiling = "ConcreteDark",
+		acoustic = "Basement",
+		galleryAcoustic = "Hall",
+		crawlAcoustic = "Vent",
+	},
+	rules = {
+		maxLoop = 200,
+		deadEndCount = 8,
+		deadEndLength = 25,
+		-- about 2.5-3 minutes at walking pace (11 studs/s)
+		crossing = { 1650, 1980 },
+		crawlCrossingSeconds = 40,
+		-- the 400 x 288 floor's walk is too long for six culverts to keep one within 60 studs of everywhere
+		crawlways = { 3, 12 },
+		crawlLength = 20,
+		crawlHeight = TunnelRules.CrawlClearance,
+		crawlReach = 60,
+		hideReach = 30,
+		objectiveHideReach = 25,
+		regions = { 4, 6 },
+	},
+	regions = {
+		{
+			id = "Coal",
+			medium = "AIR",
+			name = "Coal Chutes",
+			x = 60,
+			z = 160,
+			areas = { { 0, 0, 126, 288 } },
+			pipe = rgb(48, 48, 50),
+			band = rgb(150, 146, 136),
+			grime = rgb(14, 13, 12),
+			paint = rgb(226, 222, 206),
+			graffiti = { "HE HEARS YOU RUN", "KEEP LOW", "DON'T RUN", "COUNT THE PLATES" },
+			wall = "ConcreteDark",
+		},
+		{
+			id = "Steam",
+			medium = "STEAM",
+			name = "Red Steam Run",
+			x = 180,
+			z = 130,
+			areas = { { 126, 0, 231, 288 } },
+			pipe = rgb(132, 30, 24),
+			band = rgb(214, 206, 186),
+			grime = rgb(40, 18, 12),
+			paint = rgb(236, 226, 196),
+			graffiti = { "DON'T LOOK AT HIS FACE", "WALK. DON'T RUN", "HE WAS HERE", "STEAM ON" },
+			wall = "Brick",
+		},
+		{
+			id = "Gas",
+			medium = "GAS",
+			name = "Yellow Gas Line",
+			x = 264,
+			z = 60,
+			areas = { { 231, 0, 264, 288 }, { 264, 0, 336, 130 } },
+			pipe = rgb(176, 136, 24),
+			band = rgb(30, 28, 24),
+			grime = rgb(36, 30, 14),
+			paint = rgb(232, 70, 48),
+			graffiti = { "3 FUSES", "NO FLAME", "BREAKER IS EAST", "SHUT IT OFF" },
+			wall = "ConcreteStained",
+		},
+		{
+			id = "Water",
+			medium = "WATER",
+			name = "Blue Water Main",
+			x = 290,
+			z = 200,
+			areas = { { 264, 130, 336, 288 } },
+			pipe = rgb(36, 78, 128),
+			band = rgb(220, 220, 214),
+			grime = rgb(16, 24, 26),
+			paint = rgb(240, 236, 220),
+			graffiti = { "HIDE IN THE DRUMS", "HE WAITS", "IT CAN'T FIT", "LISTEN" },
+			wall = "Concrete",
+			wet = true,
+		},
+		{
+			id = "Drains",
+			medium = "DRAIN",
+			name = "Flood Drains",
+			x = 367,
+			z = 150,
+			areas = { { 336, 0, 400, 288 } },
+			pipe = rgb(54, 92, 58),
+			band = rgb(214, 196, 64),
+			grime = rgb(18, 22, 14),
+			paint = rgb(236, 232, 214),
+			graffiti = { "DON'T LOOK BACK", "ALMOST OUT", "STAIRS EAST", "UP IS OUT" },
+			wall = "ConcreteStained",
+			wet = true,
+		},
+	},
+	attempts = 6,
+	crossingTarget = 1820,
+	items = { { kind = "FuseCandidate" :: Enums.AnchorKind, count = 6, shelf = 3.2, guard = true } },
+	hideTargets = {
+		Vector3.new(384, 0, 28),
+		Vector3.new(384, 0, 144),
+		Vector3.new(384, 0, 260),
+	},
+	traps = 22,
+	batteries = 12,
+	clutter = 20,
+	corpses = 4,
+	drips = 9,
+	debris = 7,
+	scares = 4,
+	creatureSpawns = 6,
+	creatureBand = { 70, 140 },
+})
+
+for _, r in plan.rooms do
+	table.insert(rooms, r)
+	roomById[r.id] = r
+end
+for _, d in plan.doors do
+	table.insert(doors, d)
+end
+for _, a in plan.anchors do
+	table.insert(anchors, a)
+end
+for _, t in plan.triggers do
+	table.insert(triggers, t)
+end
+for _, p in plan.platforms do
+	table.insert(platforms, p)
+end
+
+--------------------------------------------------------------------------------
+-- Keep-room furniture: plant blocks (platforms stand on the floor), shelves and benches
+--------------------------------------------------------------------------------
+
+platform("L0_CoalHeap", "L0_CoalBunker", 23, 157, 10, 12, 3, 3, "ConcreteDark")
+platform("L0_Crates_Bay", "L0_DeliveryBay", 23, 249, 5, 5, 3, 3, "WoodPanel")
+platform("L0_Shelf_CageA", "L0_StorageCage", 97, 64.6, 10, 2.6, 4, 4, "MetalRust")
+platform("L0_Shelf_CageB", "L0_StorageCage", 115.4, 70, 2.6, 12, 4, 4, "MetalRust")
+platform("L0_Workbench", "L0_Workshop", 133, 96, 4, 8, 3, 3, "WoodPanel")
+platform("L0_Shelf_Workshop", "L0_Workshop", 140, 88.6, 10, 2.6, 4, 4, "MetalRust")
+platform("L0_Boiler_A", "L0_BoilerRoom", 208, 228, 12, 8, 10, 10, "MetalRust")
+platform("L0_Boiler_B", "L0_BoilerRoom", 228, 228, 12, 8, 10, 10, "MetalRust")
+platform("L0_Pump_A", "L0_PumpRoom", 308, 248, 7, 6, 4, 4, "MetalRust")
+platform("L0_Pump_B", "L0_PumpRoom", 320, 248, 7, 6, 4, 4, "MetalRust")
+platform("L0_Switchgear", "L0_ElectricalRoom", 325, 89, 4, 18, 8, 8, "MetalGalvanized")
+
+--------------------------------------------------------------------------------
+-- Keep-room lights: steady mains (held down while the power is out), boiler pilots, the reds that never die
+--------------------------------------------------------------------------------
+
+-- every keep-room is its own steady mains circuit (a local group: a flicker, the Creature's teleport warning, touches
+-- only that room), held down with the tunnels' circuits until the breaker is thrown
+local function mains(roomId: string): string
+	return "Mains:" .. roomId
+end
+light("L0_DeliveryBay", "Bulb", 35, 11.2, 254, { flicker = "L0_Spawn", brightness = 0.35, cage = true })
+light("L0_DeliveryBay", "Bulb", 35, 11.2, 266, { flicker = mains("L0_DeliveryBay"), broken = true, cage = true })
+light("L0_DeliveryBay", "EmergencyRed", 46.6, 9, 260, { brightness = 0.4 })
+light("L0_CoalBunker", "Bulb", 35, 11.2, 168, { flicker = mains("L0_CoalBunker"), cage = true })
+light("L0_StorageCage", "Bulb", 107, 10.8, 76, { flicker = mains("L0_StorageCage"), cage = true })
+light("L0_Workshop", "Bulb", 144, 10.8, 100, { flicker = mains("L0_Workshop"), cage = true })
+light("L0_Workshop", "Fluorescent", 144, 11.1, 106, { flicker = mains("L0_Workshop"), broken = true })
+light("L0_BoilerRoom", "Fluorescent", 214, 15.4, 243, { flicker = mains("L0_BoilerRoom"), broken = true })
+light("L0_BoilerRoom", "Fluorescent", 224, 15.4, 243, { flicker = mains("L0_BoilerRoom") })
+light("L0_BoilerRoom", "Fluorescent", 234, 15.4, 243, { flicker = mains("L0_BoilerRoom") })
+light("L0_BoilerRoom", "BoilerGlow", 214, 2, 236.4, { flicker = "L0_Boilers" })
+light("L0_BoilerRoom", "BoilerGlow", 234, 2, 236.4, { flicker = "L0_Boilers", brightness = 0.6 })
+light("L0_BoilerRoom", "EmergencyRed", 224, 13, 249.4, { brightness = 0.4 })
+light("L0_PumpRoom", "Bulb", 318, 11.2, 242, { flicker = mains("L0_PumpRoom"), cage = true })
+light("L0_ElectricalRoom", "Fluorescent", 316, 11.4, 100, { flicker = mains("L0_ElectricalRoom") })
+light("L0_ElectricalRoom", "EmergencyRed", 316, 9, 110.6, { brightness = 0.5 })
+for _, v in { { "L0_AirlockNorthEast", 28 }, { "L0_AirlockEast", 144 }, { "L0_AirlockSouthEast", 260 } } :: { { any } } do
+	light(v[1], "Fluorescent", 393, 11.4, v[2], { flicker = mains(v[1]), broken = true })
+	light(v[1], "EmergencyRed", 393, HEIGHT - 5, v[2] - 8, { brightness = 0.3 })
+end
+
+--------------------------------------------------------------------------------
+-- Keep-room anchors
 --------------------------------------------------------------------------------
 
 -- Arrival from the lobby (DevTools "level 0" and the run deploy land here)
-scatter("PlayerSpawn", 3.5, { { 6, 76, FACE_E }, { 10, 76, FACE_E }, { 6, 84, FACE_E }, { 10, 84, FACE_E } })
-
--- The Creature lies Dormant behind the boarded door of the condemned store until the director wakes it.
-anchor("CreatureSpawn", 222, 5, 148, FACE_N, "L0_CreatureSpawn")
-
--- Bear trap candidates over the walk route (>= 8 studs apart, clear of pillars and plant).
-local trapPoints: { { number } } = {}
-for _, x in { 32, 48, 64, 80, 96 } do
-	for _, z in { 46, 62, 80, 98, 114 } do
-		table.insert(trapPoints, { x, z })
-	end
+for _, p in { { 30, 256 }, { 36, 256 }, { 30, 264 }, { 36, 264 } } do
+	anchor("PlayerSpawn", p[1], 3.5, p[2], FACE_E)
 end
-for _, p in
-	{
-		-- boiler hall: both detours, the gap between the boilers and the east doorway
-		{ 112, 46 },
-		{ 128, 46 },
-		{ 144, 46 },
-		{ 160, 46 },
-		{ 112, 114 },
-		{ 128, 114 },
-		{ 144, 114 },
-		{ 160, 114 },
-		{ 110, 80 },
-		{ 140, 80 },
-		{ 170, 72 },
-		{ 170, 88 },
-		{ 144, 36 },
-		{ 144, 124 },
-		-- east undercroft: the approach to the airlock
-		{ 184, 46 },
-		{ 184, 62 },
-		{ 184, 80 },
-		{ 184, 98 },
-		{ 184, 114 },
-		{ 202, 46 },
-		{ 202, 80 },
-		{ 202, 114 },
-		{ 220, 64 },
-		{ 220, 96 },
-		-- side rooms where batteries tempt detours
-		{ 56, 20 },
-		{ 96, 15 },
-		{ 56, 148 },
-		{ 90, 145 },
-		{ 12, 40 },
-		{ 12, 118 },
-		{ 186, 18 },
-		{ 196, 148 },
-	} :: { { number } }
-do
-	table.insert(trapPoints, p)
-end
-scatter("TrapCandidate", 0, trapPoints)
 
-scatter("BatteryCandidate", 0, {
-	{ 8, 36 },
-	{ 64, 6 },
-	{ 110, 24 },
-	{ 196, 8 },
-	{ 6, 124 },
-	{ 66, 156 },
-	{ 78, 152 },
-	{ 224, 10 },
-	{ 234, 100 },
-})
-
-scatter("DripPipe", HEIGHT - 1.2, {
-	{ 48, 72 },
-	{ 136, 44 },
-	{ 200, 100 },
-	{ 12, 104 },
-	{ 50, 136 },
-	{ 126, 156 },
-})
-
-scatter("Corpse", 0, { { 14, 44, 60 }, { 206, 120, -20 } })
-
--- Floor objective (RestorePower): thirteen fuse candidates on benches and shelves, by the boilers, the pumps, the
--- switchgear and the water heaters, all over the basement (RunDirector uses three, in different rooms), each with a
--- bear-trap spot on its approach (its ref: the director arms the guard traps of the first two fuses it uses), each a
--- few studs from a dark corner of its room and well away from the delivery bay; the breaker panel on the electrical room's east wall (the anchor is the
--- floor point on the wall face, facing into the room); the exit lock on the stair airlock's fire door (the floor point
--- on the door's corridor face, facing out of the door).
+-- Floor objective (RestorePower): fuse candidates in the keep-rooms (the coal heap, the cage's shelving, the workbench,
+-- by the boilers and the pumps, the switchgear), each with a bear-trap spot on its approach (its ref: the director arms
+-- the guard traps of the first two fuses it uses), plus the planner's six in tunnel alcoves (on wall shelves, guarded
+-- the same way). The breaker panel stands on the electrical room's north wall (the floor point on the wall face,
+-- facing into the room); the exit locks on the three stair airlocks' fire doors (the floor point on each door's
+-- corridor face, facing out of the door).
 local function fuse(x: number, y: number, z: number, guardX: number, guardZ: number)
 	local n = (anchorCounts.FuseCandidate or 0) + 1
 	local guard = anchor("TrapCandidate", guardX, 0, guardZ, nil, string.format("%s_TrapGuard_%02d", PREFIX, n))
 	anchor("FuseCandidate", x, y, z, nil, nil, guard)
 end
-fuse(4, 3, 57, 9.5, 56) -- on the workshop bench
-fuse(5, 4, 1.8, 7, 8) -- on the shelving in the north-west store
-fuse(4, 3.2, 104, 10.5, 104) -- on the washers
-fuse(37, 0, 148, 44, 148) -- wedged between the pumps
-fuse(44, 3, 12.5, 45, 19.5) -- on the coal heap, past the coal dust
-fuse(17, 4, 158.4, 17, 151) -- on the shelving in the south-west store
-fuse(126, 0, 24, 132, 26) -- on the floor beside the north boiler
-fuse(126, 0, 136, 132, 134) -- on the floor beside the south boiler
-fuse(172, 0, 9, 176, 14) -- dropped in front of the switchgear
-fuse(114, 4, 1.8, 110, 8) -- on the shelving in the furniture store
-fuse(105, 4, 158.4, 100, 152) -- on the shelving in the archive store
-fuse(190, 0, 145, 196, 140) -- on the floor by the water heaters
-fuse(238.6, 4, 39, 234, 44) -- on the shelving in the east store by the stairs
-anchor("BreakerPanel", 203.5, 0, 18, FACE_W, "L0_BreakerPanel")
-anchor("ExitLock", 227.5, 0, 80, FACE_W, "L0_ExitLock")
-anchor("ExitLock", 227.5, 0, 15, FACE_W, "L0_ExitLock_North")
-anchor("ExitLock", 234, 0, 129.5, FACE_N, "L0_ExitLock_South")
--- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
-anchor("Locker", 225.95, 0, 26, FACE_W)
+fuse(28, 3, 163, 34, 166) -- on the coal heap
+fuse(102, 4, 65.8, 104, 74) -- on the cage's back shelving
+fuse(116.7, 4, 80, 110, 82) -- on the cage's side shelving
+fuse(135, 3, 100, 141, 100) -- on the workshop bench
+fuse(212, 0, 248.5, 218, 243) -- at the foot of the first boiler
+fuse(242.5, 0, 230, 242, 233) -- wedged behind the second boiler
+fuse(318, 0, 256.5, 317.5, 251) -- between the pumps
+fuse(322, 0, 92, 316, 96) -- dropped in front of the switchgear
+anchor("BreakerPanel", 316, 0, 88.5, FACE_S, "L0_BreakerPanel")
+anchor("ExitLock", 385.5, 0, 144, FACE_W, "L0_ExitLock")
+anchor("ExitLock", 385.5, 0, 28, FACE_W, "L0_ExitLock_North")
+anchor("ExitLock", 385.5, 0, 260, FACE_W, "L0_ExitLock_South")
 
-scatter("Clutter", 0, {
-	{ 30, 36, 0 },
-	{ 100, 36, 45 },
-	{ 30, 124, 90 },
-	{ 100, 124, 15 },
-	{ 64, 100, -30 },
-	{ 120, 54, 20 },
-	{ 164, 106, 70 },
-	{ 196, 40, -45 },
-	{ 222, 120, 10 },
-	{ 80, 10, 0 },
-	{ 100, 150, 30 },
-	{ 216, 20, 60 },
-	{ 18, 140, 0 },
-	{ 18, 10, 80 },
-})
+-- Lockers in the keep-rooms (backs to a wall, about two studs off its line), so every objective step keeps a hiding
+-- spot within reach
+anchor("Locker", 24.05, 0, 176, FACE_E) -- coal bunker, west wall
+anchor("Locker", 100, 0, 85.95, FACE_N) -- storage cage, south wall
+anchor("Locker", 150, 0, 109.95, FACE_N) -- workshop, south wall
+anchor("Locker", 206.05, 0, 246, FACE_E) -- boiler room, west wall
+anchor("Locker", 241.95, 0, 246, FACE_W) -- boiler room, east wall
+anchor("Locker", 327.95, 0, 252, FACE_W) -- pump room, east wall
+anchor("Locker", 327.95, 0, 108, FACE_W) -- electrical room, by the panel
+for i, z in { 28, 144, 260 } do
+	-- the stair vestibules: a steel cabinet by the far wall
+	anchor("Cabinet", 398.6, 0, z + 9, FACE_W, string.format("%s_Cabinet_Stairs%d", PREFIX, i))
+end
+
+anchor("Clutter", 26, 0, 268, 30)
+anchor("Clutter", 100, 0, 68, 45)
+anchor("Clutter", 136, 0, 108, 10)
+anchor("Corpse", 40, 0, 176, 60)
+anchor("DripPipe", 224, HEIGHT - 1.2, 245)
+anchor("BatteryCandidate", 24, 0, 270)
 
 --------------------------------------------------------------------------------
 -- Triggers
 --------------------------------------------------------------------------------
 
-trigger("L0_Trigger_DebrisJars", "FloorDebris", 60, 74, 8, 12, 4)
-trigger("L0_Trigger_DebrisBoilerGap", "FloorDebris", 136, 72, 8, 16, 4)
-trigger("L0_Trigger_DebrisGlass", "FloorDebris", 196, 100, 8, 8, 4)
-trigger("L0_Trigger_DebrisCoal", "FloorDebris", 34, 16, 10, 8, 4)
-trigger("L0_Trigger_Checkpoint", "Checkpoint", 229, 67, 10, 26, 12)
-trigger("L0_Trigger_CheckpointNorthEast", "Checkpoint", 229, 1, 10, 28, 12)
-trigger("L0_Trigger_CheckpointSouthEast", "Checkpoint", 229, 131, 10, 28, 12)
-
---------------------------------------------------------------------------------
--- Boarded windows high on the foundation walls (light wells to the street)
---------------------------------------------------------------------------------
-
-local SILL, PANE_H, PANE_W = HEIGHT - 4.5, 3, 6
-windowRow("L0_Storage_NW", "N", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_CoalBunker", "N", 2, PANE_W, PANE_H, SILL, true)
-windowRow("L0_FurnitureStore", "N", 2, PANE_W, PANE_H, SILL, true)
-windowRow("L0_BoilerRoom_North", "N", 2, PANE_W, PANE_H, SILL, true)
-windowRow("L0_ElectricalRoom", "N", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_Storage_NE", "N", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_Storage_SW", "S", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_PumpRoom", "S", 2, PANE_W, PANE_H, SILL, true)
-windowRow("L0_ArchiveStore", "S", 2, PANE_W, PANE_H, SILL, true)
-windowRow("L0_BoilerRoom_South", "S", 2, PANE_W, PANE_H, SILL, true)
-windowRow("L0_WaterHeaterRoom", "S", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_CondemnedStore", "S", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_Storage_NW", "W", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_Workshop", "W", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_Laundry", "W", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_Storage_SW", "W", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_Store_E1", "E", 1, PANE_W, PANE_H, SILL, true)
-windowRow("L0_Store_E2", "E", 1, PANE_W, PANE_H, SILL, true)
+trigger("L0_Trigger_DebrisCoal", "FloorDebris", 34, 158, 6, 8, 4)
+trigger("L0_Trigger_DebrisBoiler", "FloorDebris", 219, 238, 10, 6, 4)
+trigger("L0_Trigger_Checkpoint", "Checkpoint", 387, 133, 12, 22, 11)
+trigger("L0_Trigger_CheckpointNorthEast", "Checkpoint", 387, 17, 12, 22, 11)
+trigger("L0_Trigger_CheckpointSouthEast", "Checkpoint", 387, 249, 12, 22, 11)
 
 --------------------------------------------------------------------------------
 
@@ -635,9 +619,8 @@ local layout: LayoutSchema.LevelLayout = {
 	doors = doors,
 	anchors = anchors,
 	triggers = triggers,
-	pillars = pillars,
 	platforms = platforms,
-	windows = windows,
+	tunnels = plan.tunnels,
 }
 
 deepFreeze(layout)

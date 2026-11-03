@@ -182,9 +182,11 @@ local LEVELS: { [string]: LevelMood } = {
 		bulbCast = rgb(255, 172, 98),
 		grade = rgb(255, 240, 222),
 	},
+	-- The tunnels: TunnelPlanner already decides which caged bulbs are dead and which flicker (and puts every working
+	-- one on a "Mains:" group the power switch holds), so nothing here revives a broken one.
 	Level0_Basement = {
-		revive = 0.45,
-		flicker = 0.35,
+		revive = 0,
+		flicker = 0,
 		brightness = 2.75,
 		range = 1.3,
 		cast = rgb(236, 200, 136),

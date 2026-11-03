@@ -147,6 +147,11 @@ Attributes.World = table.freeze({
 	Armed = "Armed",
 	TrappedUserId = "TrappedUserId",
 	OccupantUserId = "OccupantUserId",
+	HideKind = "HideKind", -- a hiding spot's kind: "Locker" | "Barrel" | "Cabinet"
+	-- decorative parts only (never colliding, queried or touched; never collision or nav geometry): 1 (shapes a
+	-- room's look: the tunnels' mains, cable trays, corpses, lore graffiti) .. 3 (small: debris, rubble, bands,
+	-- hangers, tags). A lower graphics setting may hide Detail >= n; nothing else on the map changes
+	Detail = "Detail",
 	DoorOpen = "DoorOpen",
 	TakenByUserId = "TakenByUserId",
 	On = "On",

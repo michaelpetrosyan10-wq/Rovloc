@@ -6,7 +6,8 @@
 //    studs-based UVs; faces larger than the level's cell size are subdivided so vertex light can hold a pool; face
 //    cells buried inside other solid static parts are culled. Static parts merge per level x bucket (opaque /
 //    transparent / emissive Neon) x material key x 80-stud cell; entity parts (doors, grates, lockers, pickups, ...)
-//    stay separate per entity node in that node's space; the Creature rig is grouped per Motor6D bone.
+//    stay separate per entity node in that node's space; the Creature rig is grouped per Motor6D bone. Decorative
+//    static parts (attribute Detail 1..3) keep to chunks of their own level (chunk.detail) a low setting may skip.
 // 2. Light. Every vertex gets baked light (light.mjs): direct light from every burning Light (and the moonlight
 //    window spills) with soft BVH shadow rays, soft AO on the ambient fill, sky openness for the outdoor ambient and
 //    the moon; plus its dominant flicker group and that group's share. Probes: a 4-stud irradiance grid per level.
@@ -25,6 +26,7 @@ import { bakeDecals, bakeWear } from './bake/decals.mjs';
 import { buildTracer } from './bake/trace.mjs';
 import { LightGrid, asArray, collectLights, directEstimate, srgbToLinear } from './bake/light.mjs';
 import { buildMeta } from './bake/meta.mjs';
+import { computeVisibility } from './bake/pvs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webDir = path.resolve(here, '..');
@@ -55,7 +57,7 @@ const EDGE_DARK = 8;
 const EDGE_EVEN = 5;
 const DARK_LEVEL = 0.1; // peak unshadowed light below this (sqrt-encoded 0..1) counts as dark
 const EVEN_SPREAD = 0.035; // sqrt-encoded spread below this counts as even
-const CELL = { default: 240, Exterior: 4000 }; // static chunk cells (studs, XZ): one per level footprint (draw calls)
+const CELL = { default: 400, Exterior: 4000 }; // static chunk cells (studs, XZ): one per level footprint (320 x 240; draw calls)
 const MAX_CHUNK_VERTS = 65535;
 
 // Ambient fills (LightingRig.Baseline), as linear light. The scales map Roblox's ambient colours onto the same
@@ -123,6 +125,12 @@ function loadTextureMeta() {
 
 const VISIBLE_MIN = 1e-3;
 
+/** A decorative part's Detail level (attribute Detail 1..3: a low graphics setting may hide it), else 0. */
+function detailOf(p) {
+  const d = p.attributes ? Number(p.attributes.Detail) : 0;
+  return d >= 1 && d <= 3 ? Math.round(d) : 0;
+}
+
 /** Render bucket of a part. */
 function bucketOf(p) {
   if (p.material === 'Neon') return 'emissive';
@@ -172,6 +180,41 @@ const solidIndex = new SolidIndex(solids, 4);
 log(`solids: ${solids.length}`);
 
 const { lights, groups } = collectLights(raw);
+
+// Power circuits (TunnelPlanner): a tunnel floor wires its bulbs in small local groups, steady "Mains:<...>" and
+// flickering "Circuit:<...>", all held down by the power switch. Every such group of one level is one family: a
+// vertex lit by several takes its dominant one at their pooled share (so a switched-off floor goes dark between
+// circuits too, and a flicker stays near its own bulbs), and the probes keep a family's light in one grid.
+const POWER_CIRCUIT = /^(Mains|Circuit):/;
+const familyKeys = groups.map((g, i) => (i > 0 && POWER_CIRCUIT.test(g.name || '') ? `power:${g.level}` : `group:${i}`));
+const familyIds = new Map();
+const groupFamily = familyKeys.map((k) => {
+  if (!familyIds.has(k)) familyIds.set(k, familyIds.size);
+  return familyIds.get(k);
+});
+// probe slots: one per scripted group outside a family, one per power family (its first scripted member stands for
+// it, else its first member); each slot's light is kept out of the base grid and scaled by that group's level
+const probeSlots = [];
+{
+  const slotOfFamily = new Map();
+  groups.forEach((g, i) => {
+    if (i === 0) return;
+    const key = familyKeys[i];
+    if (key.startsWith('power:')) {
+      let slot = slotOfFamily.get(key);
+      if (!slot) {
+        slot = { rep: i, members: [] };
+        slotOfFamily.set(key, slot);
+        probeSlots.push(slot);
+      }
+      slot.members.push(i);
+      if (g.kind === 'scripted' && groups[slot.rep].kind !== 'scripted') slot.rep = i;
+    } else if (g.kind === 'scripted') {
+      probeSlots.push({ rep: i, members: [i] });
+    }
+  });
+}
+log(`flicker groups: ${groups.length - 1} (${probeSlots.length} probe slots, ${familyKeys.filter((k) => k.startsWith('power:')).length} in power families)`);
 log(`lights: ${lights.length} baked (${lights.filter((l) => l.kind === 'Moonlight').length} moonlight spills), ${groups.length - 1} flicker groups`);
 const lightGrid = new LightGrid(lights);
 
@@ -346,14 +389,15 @@ for (const p of staticParts) {
   growBounds(level, p);
   const before = builderList.length;
   const cell = CELL[level] || CELL.default;
+  const detail = detailOf(p);
   addPart(p, {
     maxEdge,
     adaptive: bucket !== 'emissive',
     cull: bucket === 'opaque',
     bake: bucket !== 'emissive',
     alpha: opacity,
-    info: { kind: 'static', level, bucket, material },
-    keyOf: (x, z) => `S|${level}|${bucket}|${material}|${Math.floor(x / cell)},${Math.floor(z / cell)}`,
+    info: { kind: 'static', level, bucket, material, detail },
+    keyOf: (x, z) => `S|${level}|${bucket}|${material}|${Math.floor(x / cell)},${Math.floor(z / cell)}|d${detail}`,
   });
   if (builderList.length === before && false) culledParts++;
 }
@@ -496,14 +540,15 @@ for (const d of decalResult.decals) {
   } else {
     const level = p.level;
     const cell = CELL[level] || CELL.default;
+    const detail = detailOf(p);
     addPart(p, {
       generate,
       uvMap,
       color: white,
       bake: true,
       glowFixture,
-      info: { kind: 'static', level, bucket: 'decal', material, uvScale: DECAL_UV_SCALE },
-      keyOf: (x, z) => `SD|${level}|${material}|${Math.floor(x / cell)},${Math.floor(z / cell)}`,
+      info: { kind: 'static', level, bucket: 'decal', material, uvScale: DECAL_UV_SCALE, detail },
+      keyOf: (x, z) => `SD|${level}|${material}|${Math.floor(x / cell)},${Math.floor(z / cell)}|d${detail}`,
     });
   }
   decalQuads++;
@@ -602,6 +647,12 @@ for (const p of parts) {
 const tracerData = buildTracer(new Float32Array(casterTris));
 log(`tracer: ${casterTris.length / 9} triangles`);
 
+// Potentially visible sets per level (pvs.mjs): zone -> the zones a player in it may see.
+const pvsStart = Date.now();
+const wc = raw.worldConfig || {};
+const pvs = computeVisibility(raw, parts, { doorWidth: wc.DoorWidth, airlockDoorWidth: wc.AirlockDoorWidth, doorHeight: wc.DoorHeight, log });
+log(`pvs done in ${((Date.now() - pvsStart) / 1000).toFixed(1)}s`);
+
 const baseline = raw.lighting.baseline;
 const lin = (c) => c.map(srgbToLinear);
 const ambient = lin(baseline.Ambient).map((v) => v * AMBIENT_SCALE);
@@ -631,6 +682,8 @@ async function runWorkers(jobs) {
             moonDir,
             moonColor,
             groupKinds: groups.map((g) => g.kind),
+            groupFamily,
+            probeSlots: probeSlots.map((slot) => slot.members),
           });
         }),
     ),
@@ -686,8 +739,8 @@ for (const b of builderList) {
   }
 }
 
-// Scripted groups (switched as a whole by a scene): probes keep their light apart, per group.
-const scriptedGroups = groups.map((g, i) => (g.kind === 'scripted' ? i : -1)).filter((g) => g > 0);
+// Scripted groups (switched as a whole by a scene) and power families: probes keep their light apart, per slot.
+const scriptedGroups = probeSlots.map((slot) => slot.rep);
 
 // Probe grids per level key (within its static bounds, `probeSpacing` apart, a little above floors).
 const probeLevels = Object.keys(levelBounds).filter((k) => k !== 'Exterior');
@@ -916,6 +969,8 @@ for (const b of builderList) {
     aabb: [...lo, ...hi].map((v) => Math.round(v * 1000) / 1000),
   };
   if (info.uvScale) chunk.uvScale = info.uvScale;
+  // decorative static geometry (parts with attribute Detail 1..3) keeps to its own chunks: a low setting skips them
+  if (info.detail) chunk.detail = info.detail;
   if (info.bucket === 'transparent') {
     chunk.alphaOffset = writer.push('alpha', Uint8Array, Uint8Array.from(b.alpha, (a) => Math.round(Math.max(0, Math.min(1, a)) * 255)));
   }
@@ -1036,6 +1091,8 @@ const meta = buildMeta(raw, {
   groups,
   levelBounds,
   creatureBones,
+  visibility: pvs.visibility,
+  visibilityStats: pvs.stats,
   ambient: { indoor: ambient, outdoor, moonDir, moonColor, ambientScale: AMBIENT_SCALE, outdoorScale: OUTDOOR_SCALE },
   stats: { vertices: vertexCursor, triangles: totalTris, bakedVertices: bakedVerts, rays, bakeSeconds, threads: THREADS },
 });

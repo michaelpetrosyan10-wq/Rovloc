@@ -1,15 +1,17 @@
 --!strict
 -- World dimensions shared by builders, layouts, AI and cameras. All values in studs unless noted.
 --
--- The school stands on a 240 x 160 footprint (level-local X 0..240, Z 0..160). Levels stack vertically.
--- Six stair towers stand outside the footprint, three against each side wall: West / East (X -28..0 / 240..268) at
--- Z 64..96 in the middle, NorthWest / NorthEast at Z -4..28 and SouthWest / SouthEast at Z 132..164 on the corners
--- (those stick 4 studs out past the north / south facade). A tower's opening (Towers[id].openingZ) meets one airlock
--- vestibule on every floor it serves. A floor is entered from one side and left by the other, so the squad crosses
--- every floor:
+-- The school stands on a 400 x 288 footprint (level-local X 0..400, Z 0..288). Levels stack vertically.
+-- Six stair towers stand outside the footprint, three against each side wall (X -28..0 west, 400..428 east), each
+-- 32 deep along Z: North at Z 12..44 (opening z 28), Middle (West / East) at Z 128..160 (opening z 144) and South at
+-- Z 244..276 (opening z 260). A tower's opening (Towers[id].openingZ) meets one airlock vestibule on every floor it
+-- serves. A floor is entered from one side and left by the other, so the squad crosses every floor:
 --   L0 (spawn W) -> East -> L1 -> West -> L2 -> East -> L3 -> West -> L4 -> East -> L5 roof (run W, jump).
 -- Every floor pair (1..5) has three candidate stairwells, one per tower of its side (slots North, Middle, South):
 -- RunDirector.pickRoute picks one per pair for a run (plan.route); the other two are jammed shut for that run.
+--
+-- Legacy floors: a layout marked `legacy` still has the old 240 x 160 plan (LegacyFootprint) until it is rebuilt on
+-- TunnelPlanner; its vestibules no longer meet the moved towers (see LayoutSchema.validate and docs/MAPS.md).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -47,7 +49,9 @@ export type LevelSpec = {
 local WorldConfig = {}
 
 WorldConfig.SchoolOrigin = Vector3.new(0, 0, 0)
-WorldConfig.FootprintSize = Vector2.new(240, 160)
+WorldConfig.FootprintSize = Vector2.new(400, 288)
+-- The footprint the legacy layouts were drawn for (their rooms tile it; the rest of the footprint stays solid ground).
+WorldConfig.LegacyFootprint = Vector2.new(240, 160)
 WorldConfig.SlabThickness = 2
 WorldConfig.WallThickness = 1 -- never thinner: thin walls leak light and sound
 WorldConfig.ExteriorWallThickness = 1.5
@@ -66,23 +70,23 @@ WorldConfig.LobbyOrigin = Vector3.new(-800, 0, 0)
 
 -- A tower against the `side` wall spanning Z minZ..minZ + 32, its opening `opening` studs in from minZ.
 local function towerSpec(side: TowerSide, minZ: number, opening: number): TowerSpec
-	local minX = if side == "East" then 240 else -28
+	local minX = if side == "East" then WorldConfig.FootprintSize.X else -28
 	local spec: TowerSpec =
 		{ minX = minX, maxX = minX + 28, minZ = minZ, maxZ = minZ + 32, side = side, openingZ = minZ + opening }
 	return table.freeze(spec)
 end
 
 WorldConfig.Towers = table.freeze({
-	West = towerSpec("West", 64, 16),
-	East = towerSpec("East", 64, 16),
-	NorthWest = towerSpec("West", -4, 16),
-	SouthWest = towerSpec("West", 132, 16),
-	NorthEast = towerSpec("East", -4, 16),
-	SouthEast = towerSpec("East", 132, 16),
+	West = towerSpec("West", 128, 16),
+	East = towerSpec("East", 128, 16),
+	NorthWest = towerSpec("West", 12, 16),
+	SouthWest = towerSpec("West", 244, 16),
+	NorthEast = towerSpec("East", 12, 16),
+	SouthEast = towerSpec("East", 244, 16),
 } :: { [string]: TowerSpec })
 
 -- The middle towers' opening; every tower has its own centre (Towers[id].openingZ), the width and height are shared.
-WorldConfig.TowerOpening = table.freeze({ centerZ = 80, width = 6, height = 10 })
+WorldConfig.TowerOpening = table.freeze({ centerZ = 144, width = 6, height = 10 })
 
 -- The school levels in climbing order: floor pair i leaves LevelOrder[i] for LevelOrder[i + 1].
 WorldConfig.LevelOrder = table.freeze({

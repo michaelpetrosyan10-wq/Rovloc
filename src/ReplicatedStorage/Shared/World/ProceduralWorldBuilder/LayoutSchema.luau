@@ -2,15 +2,22 @@
 -- Data contract for every level blueprint in Layouts/, plus the geometry helpers that builders and the validator
 -- share, so "where is this door" has exactly one answer.
 --
--- Coordinates are level-local studs: X 0..240 and Z 0..160 cover the school footprint, Y is height above that
--- level's floor. A Rect is its min corner (x, z) plus size (w along X, d along Z). Rooms tile the floor plan
--- without overlapping; walls are generated on room edges, and two rooms that touch share one wall.
+-- Coordinates are level-local studs: X 0..400 and Z 0..288 cover the school footprint (WorldConfig.FootprintSize), Y
+-- is height above that level's floor. A Rect is its min corner (x, z) plus size (w along X, d along Z). Rooms tile the
+-- floor plan without overlapping; walls are generated on room edges, and two rooms that touch share one wall.
 -- Ducts live inside "Chase" rooms (5-stud service cavities between rooms), so they are literally inside the walls.
+-- Tunnel floors (TunnelPlanner) fill the ground between their tunnels with "Solid" rooms: walls stand where a Solid
+-- meets a real room, never between two Solids, and nothing else is built in one. Their `tunnels` data (TunnelRules)
+-- carries the tunnel graph, regions and landmarks, and validate asserts the tunnel rules on them.
+-- A `legacy` layout is one still drawn for the old 240 x 160 footprint (WorldConfig.LegacyFootprint): it tiles that,
+-- and its stair vestibules are not checked against the towers (they moved with the new footprint).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
+
+local TunnelRules = require(script.Parent.TunnelRules)
 
 export type Rect = { x: number, z: number, w: number, d: number }
 
@@ -26,6 +33,7 @@ export type Light = {
 	flickerGroup: string?, -- lights in a group flicker together
 	broken: boolean?, -- fixture is built but stays dark
 	shadows: boolean?, -- default true (unshadowed lights shine through walls); false opts out
+	cage: boolean?, -- a wire guard round the fixture (the tunnels' caged bulbs)
 }
 
 export type Room = {
@@ -51,6 +59,8 @@ export type Door = {
 	width: number?, -- default WorldConfig.DoorWidth (Airlock: AirlockDoorWidth)
 	height: number?, -- default WorldConfig.DoorHeight
 	scriptedId: string?, -- ScriptedDoor DoorId (HallwayGate, RoofStairDoor, ClassroomDoor)
+	crawlOnly: boolean?, -- a crawlway's mouth: players crouch through, the Creature never passes
+	clearance: number?, -- head room through the opening (default LayoutSchema.doorClearance)
 }
 
 export type VentNodeSpec = {
@@ -87,6 +97,9 @@ export type Anchor = {
 	pos: Vector3, -- level-local
 	yaw: number?, -- degrees about +Y
 	ref: string?, -- another anchor of the layout this one belongs to (a coach's key's locker, a fuse's guard trap)
+	-- Barrel / Cabinet standing free: the side the hider steps out to (prop space: "Left" -X, "Right" +X, X across
+	-- the front); nil steps out at the front, the locker's way
+	exit: ("Left" | "Right")?,
 }
 
 export type Trigger = {
@@ -148,7 +161,16 @@ export type LevelLayout = {
 	platforms: { Platform }?,
 	pillars: { Pillar }?,
 	windows: { Window }?,
+	legacy: boolean?, -- drawn for WorldConfig.LegacyFootprint; awaiting its tunnel rebuild
+	tunnels: TunnelData?, -- TunnelPlanner's graph, regions and landmarks (tunnel floors only)
 }
+
+export type TunnelData = TunnelRules.TunnelData
+export type TunnelNode = TunnelRules.TunnelNode
+export type TunnelEdge = TunnelRules.TunnelEdge
+export type TunnelSegment = TunnelRules.TunnelSegment
+export type TunnelRegion = TunnelRules.TunnelRegion
+export type Landmark = TunnelRules.Landmark
 
 export type SharedEdge = {
 	axis: "X" | "Z", -- "X": edge lies at constant X (runs along Z); "Z": constant Z (runs along X)
@@ -241,6 +263,39 @@ end
 
 function LayoutSchema.doorHeight(door: Door): number
 	return door.height or WorldConfig.DoorHeight
+end
+
+-- Head room through a door: its lintel, or the lower ceiling of its two rooms when that is lower.
+function LayoutSchema.doorClearance(layout: LevelLayout, door: Door): number
+	if door.clearance then
+		return door.clearance
+	end
+	local clearance = LayoutSchema.doorHeight(door)
+	for _, room in layout.rooms do
+		if room.id == door.rooms[1] or room.id == door.rooms[2] then
+			clearance = math.min(clearance, LayoutSchema.roomHeight(layout, room) - 0.4)
+		end
+	end
+	return clearance
+end
+
+-- Whether a door only lets crouching players through (a crawlway's mouth).
+function LayoutSchema.doorCrawlOnly(layout: LevelLayout, door: Door): boolean
+	if door.crawlOnly ~= nil then
+		return door.crawlOnly
+	end
+	for _, room in layout.rooms do
+		if (room.id == door.rooms[1] or room.id == door.rooms[2]) and room.kind == "Crawlway" then
+			return true
+		end
+	end
+	return false
+end
+
+-- The footprint a layout's rooms tile: the school's, or the old one for a legacy layout.
+function LayoutSchema.footprintOf(layout: LevelLayout): Rect
+	local size = if layout.legacy then WorldConfig.LegacyFootprint else WorldConfig.FootprintSize
+	return { x = 0, z = 0, w = size.X, d = size.Y }
 end
 
 function LayoutSchema.ventNodeY(node: VentNodeSpec): number
@@ -529,7 +584,7 @@ end
 function LayoutSchema.validate(layout: LevelLayout): { string }
 	local errors: { string } = {}
 	local rooms = LayoutSchema.indexRooms(layout)
-	local footprint = LayoutSchema.rect(0, 0, WorldConfig.FootprintSize.X, WorldConfig.FootprintSize.Y)
+	local footprint = LayoutSchema.footprintOf(layout)
 	local seenIds: { [string]: string } = {}
 	local openings: { WallOpening } = {}
 	local ducts: { DuctBox } = {}
@@ -549,7 +604,10 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 			pushf(errors, "room %s has non-positive size", room.id)
 		end
 		if isSchoolLevel(layout) and not LayoutSchema.rectInside(room.rect, footprint) then
-			pushf(errors, "room %s leaves the 240x160 footprint", room.id)
+			pushf(errors, "room %s leaves the %dx%d footprint", room.id, footprint.w, footprint.d)
+		end
+		if room.kind == "Solid" and room.lights and #room.lights > 0 then
+			pushf(errors, "room %s is solid ground and holds lights", room.id)
 		end
 		if room.wallHeight and room.wallHeight > LayoutSchema.roomHeight(layout, room) + EPS then
 			pushf(errors, "room %s wallHeight exceeds its height", room.id)
@@ -610,6 +668,9 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		end
 		if a.kind == "Chase" or b.kind == "Chase" then
 			pushf(errors, "door %s opens into a chase; chases are reachable only through vents", door.id)
+		end
+		if a.kind == "Solid" or b.kind == "Solid" then
+			pushf(errors, "door %s opens into solid ground", door.id)
 		end
 		local edge = LayoutSchema.sharedEdge(a.rect, b.rect)
 		if not edge then
@@ -970,8 +1031,9 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		})
 	end
 
-	-- Stairwell vestibules must sit against their tower and exist
-	if isSchoolLevel(layout) then
+	-- Stairwell vestibules must sit against their tower and exist (a legacy layout's still sit where the old towers
+	-- stood)
+	if isSchoolLevel(layout) and not layout.legacy then
 		for roomId, spec in stairwellRooms(layout.id) do
 			local room = rooms[roomId]
 			if not room then
@@ -1060,6 +1122,13 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 			if rooms[exit] and not seen["room:" .. exit] then
 				pushf(errors, "exit %s is unreachable from %s once lockable grates lock and gates shut", exit, entry)
 			end
+		end
+	end
+
+	-- Tunnel floors: connectivity, loops, the crossing, crawlways, hiding spots, regions (TunnelRules)
+	if layout.tunnels then
+		for _, problem in TunnelRules.problems(layout :: any) do
+			table.insert(errors, problem)
 		end
 	end
 

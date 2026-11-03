@@ -135,7 +135,12 @@ export type Piece = {
 	role: Role,
 	label: string?, -- Strings key printed on the piece (SurfaceGui) on the face looking along labelNormal
 	labelNormal: Vector3?,
+	detail: number?, -- a "Detail" piece's Attributes.World.Detail level (else Kit.realize's)
 }
+
+-- What Kit.realize marks its "Detail" pieces with (Attributes.World.Detail): a level 1..3, or "BySize"
+-- (PropKit.detailBySize); nil leaves them unmarked (gameplay props, signage).
+export type DetailSpec = number | "BySize"
 
 -- An axis-aligned level-local box that dressing must stay out of.
 export type Zone = {
@@ -465,8 +470,9 @@ local function surfaceLabel(part: BasePart, key: string, normal: Vector3)
 	gui.Parent = part
 end
 
--- Creates every piece under `parent` (Geometry factory, then the role's collision preset). Returns the parts.
-function Kit.realize(parent: Instance, pieces: { Piece }): { BasePart }
+-- Creates every piece under `parent` (Geometry factory, then the role's collision preset). `detail` marks the
+-- "Detail" pieces as decor a lower graphics setting may hide (a piece's own `detail` wins). Returns the parts.
+function Kit.realize(parent: Instance, pieces: { Piece }, detail: DetailSpec?): { BasePart }
 	local out: { BasePart } = {}
 	for _, piece in pieces do
 		local base = piece.options
@@ -487,7 +493,13 @@ function Kit.realize(parent: Instance, pieces: { Piece }): { BasePart }
 		if piece.role == "Solid" then
 			Geometry.makePassthrough(part)
 		elseif piece.role == "Detail" then
-			PropKit.detail(part)
+			local level = piece.detail
+				or (if detail == "BySize" then PropKit.detailBySize(piece.size) elseif detail then detail else nil)
+			if level then
+				PropKit.decor(part, level)
+			else
+				PropKit.detail(part)
+			end
 		else
 			part.CanCollide = false
 			part.CanQuery = true
@@ -1584,7 +1596,7 @@ local function buildLabCounters(ctx: PropKit.StaticContext): number
 		end
 		local model =
 			PropKit.model(ctx.parent, "LabCounter_" .. anchor.id, CFrame.new(info.origin) * levelLocal(anchor))
-		Kit.realize(model, pieces)
+		Kit.realize(model, pieces, "BySize")
 		stamp(model, info, {
 			[W.AnchorId] = anchor.id,
 			[W.AnchorKind] = anchor.kind,
@@ -1931,7 +1943,7 @@ local function buildSmashedLockers(ctx: PropKit.StaticContext): number
 			then CFrame.new(info.origin) * span.frame
 			else CFrame.new(info.origin) * levelLocal(anchor)
 		local model = PropKit.model(ctx.parent, "SmashedLocker_" .. anchor.id, pivot)
-		Kit.realize(model, list)
+		Kit.realize(model, list, "BySize")
 		stamp(model, info, {
 			[W.AnchorId] = anchor.id,
 			[W.AnchorKind] = anchor.kind,
@@ -2363,7 +2375,7 @@ local function buildDripPipes(ctx: PropKit.StaticContext): number
 			end
 		end
 		local model = PropKit.model(ctx.parent, "DripPipe_" .. anchor.id, CFrame.new(drip))
-		Kit.realize(model, pipe)
+		Kit.realize(model, pipe, "BySize")
 		local bead = Geometry.part(model, "Drip", CFrame.new(drip), Vector3.one * DRIP_BEAD, "Water", {
 			shape = Enum.PartType.Ball,
 			transparency = 0.25,
@@ -2519,6 +2531,9 @@ local function planDebris(info: LevelInfo, trigger: Trigger, random: Random): { 
 	for _, kind: DebrisKind in DEBRIS_ORDER do
 		total += mix[kind] or 0
 	end
+	-- a scare step always crunches: its first pieces are glass, whatever the mix rolls
+	local glassFirst = if trigger.kind == "ScareStep" then 8 else 0
+	local glassPlaced = 0
 	local pieces: { Piece } = {}
 	local tries = 0
 	while #pieces < count and tries < count * 12 do
@@ -2531,6 +2546,9 @@ local function planDebris(info: LevelInfo, trigger: Trigger, random: Random): { 
 				kind = candidate
 				break
 			end
+		end
+		if glassPlaced < glassFirst then
+			kind = "Glass"
 		end
 		local x = between(random, r.x + 0.25, r.x + r.w - 0.25)
 		local z = between(random, r.z + 0.25, r.z + r.d - 0.25)
@@ -2546,6 +2564,9 @@ local function planDebris(info: LevelInfo, trigger: Trigger, random: Random): { 
 			and not piecesOverlap(info, { piece }, pieces)
 		then
 			table.insert(pieces, piece)
+			if kind == "Glass" then
+				glassPlaced += 1
+			end
 		end
 	end
 	return pieces
@@ -2566,7 +2587,7 @@ local function buildFloorDebris(ctx: PropKit.StaticContext): number
 			"FloorDebris_" .. trigger.id,
 			CFrame.new(info.origin + Vector3.new(r.x + r.w / 2, trigger.y or 0, r.z + r.d / 2))
 		)
-		Kit.realize(model, pieces)
+		Kit.realize(model, pieces, 3)
 		stamp(model, info, {
 			[W.TriggerId] = trigger.id,
 			[W.TriggerKind] = trigger.kind,
@@ -3005,7 +3026,7 @@ local function buildCorpse(anchor: Anchor, cframe: CFrame, parent: Instance, ran
 			})
 			if fits then
 				local model = PropKit.model(parent, "Corpse_" .. anchor.id, frame)
-				Kit.realize(model, placed)
+				Kit.realize(model, placed, 1)
 				model:AddTag(Tags.Corpse)
 				PropKit.setAttributes(model, {
 					[W.AnchorId] = anchor.id,
@@ -3267,7 +3288,7 @@ local function buildClutter(anchor: Anchor, cframe: CFrame, parent: Instance, ra
 		return
 	end
 	local model = PropKit.model(parent, "Clutter_" .. anchor.id, CFrame.new(info.origin + anchor.pos))
-	Kit.realize(model, placed)
+	Kit.realize(model, placed, 2)
 	PropKit.setAttributes(model, {
 		[W.AnchorId] = anchor.id,
 		[W.LevelId] = layout.id,
@@ -3339,7 +3360,7 @@ local function buildDripCosmetic(anchor: Anchor, cframe: CFrame, parent: Instanc
 		Kit.disc("RingInner", base + Vector3.new(0, 0.016, 0), inner, 0.008, "Water", "Detail", pale),
 		Kit.disc("RingInnerCore", base + Vector3.new(0, 0.024, 0), inner - 0.07, 0.008, "Water", "Detail", dark),
 	}
-	Kit.realize(model, rings)
+	Kit.realize(model, rings, 3)
 	PropKit.setAttributes(model, {
 		[W.AnchorId] = anchor.id,
 		[W.LevelId] = layout.id,

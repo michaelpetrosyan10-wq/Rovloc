@@ -4,13 +4,16 @@
 --   places(layout)            every objective spot of a layout: the item candidates, the stations and the locks
 --   hideSpots(layout)         where a player can get out of the Creature's way on that floor:
 --                               Locker      a hideable locker (every floor)
+--                               Barrel      a steel drum to climb into (tunnel floors)
+--                               Cabinet     a tall slatted steel cabinet (tunnel floors)
 --                               Vent        the mouth of a grate the director never locks and no hatch shuts
---                               DarkCorner  a room corner or a pillar no burning light reaches (the basement, where
---                                           nothing hunts)
+--                               DarkCorner  a room corner or a pillar no burning light reaches (an old basement
+--                                           without tunnels, where nothing hunted; never on a tunnel floor)
 --                               DryFooting  out of the water (the pool, where the Creature cannot leave the water)
 --                               Cover       a plant block to crouch behind, at least CoverHeight tall (the roof)
 --   nearestHide(layout, place) the closest hide spot the place can use, with its distance (straight line; lockers and
---                              vents only count in the place's own room or a room joined to it by a doorway)
+--                              vents only count in the place's own room or a room joined to it by a doorway; on a
+--                              tunnel floor every locker, barrel and cabinet counts, by the walk to it, TunnelRules)
 --   arrivalPoint(layout, room) where the squad arrives in a room: the centroid of its PlayerSpawn anchors
 --   entryPoint(layout)         the arrival point of the layout's entry room
 --   entries(layout)            every way a run may enter the floor: the entry room and every entry vestibule candidate
@@ -35,11 +38,12 @@ local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local PoolWaterBuilder = require(script.Parent.Props.PoolWaterBuilder)
+local TunnelRules = require(script.Parent.TunnelRules)
 
 type Layout = LayoutSchema.LevelLayout
 type Anchor = LayoutSchema.Anchor
 
-export type HideKind = "Locker" | "Vent" | "DarkCorner" | "DryFooting" | "Cover"
+export type HideKind = "Locker" | "Barrel" | "Cabinet" | "Vent" | "DarkCorner" | "DryFooting" | "Cover"
 
 export type Place = { id: string, kind: Enums.AnchorKind, room: string, pos: Vector3 }
 
@@ -105,7 +109,7 @@ end
 local function darkCorners(layout: Layout): { Hide }
 	local out: { Hide } = {}
 	for _, room in layout.rooms do
-		if room.kind == "Chase" or room.kind == "Airlock" or room.kind == "Stairwell" then
+		if room.kind == "Chase" or room.kind == "Airlock" or room.kind == "Stairwell" or room.kind == "Solid" then
 			continue
 		end
 		local r = room.rect
@@ -170,8 +174,9 @@ end
 function ObjectivePlaces.hideSpots(layout: Layout): { Hide }
 	local out: { Hide } = {}
 	for _, anchor in layout.anchors do
-		if anchor.kind == "Locker" then
-			table.insert(out, { kind = "Locker", id = anchor.id, room = anchor.room, pos = anchor.pos, distance = 0 })
+		if anchor.kind == "Locker" or anchor.kind == "Barrel" or anchor.kind == "Cabinet" then
+			local kind: HideKind = anchor.kind :: any
+			table.insert(out, { kind = kind, id = anchor.id, room = anchor.room, pos = anchor.pos, distance = 0 })
 		end
 	end
 	local vents = layout.vents
@@ -194,7 +199,7 @@ function ObjectivePlaces.hideSpots(layout: Layout): { Hide }
 			end
 		end
 	end
-	if layout.id == "Level0_Basement" then
+	if layout.id == "Level0_Basement" and not layout.tunnels then
 		for _, corner in darkCorners(layout) do
 			table.insert(out, corner)
 		end
@@ -224,8 +229,42 @@ local function platformById(layout: Layout, id: string): LayoutSchema.Platform?
 	return nil
 end
 
+type TunnelHides = { graph: TunnelRules.WalkGraph, dist: { number }, hides: { Hide } }
+local tunnelHideCache: { [Layout]: TunnelHides } = setmetatable({}, { __mode = "k" }) :: any
+
+-- On a tunnel floor: the walk from `place` to its nearest locker, barrel or cabinet (on foot, crawlways shut).
+local function nearestTunnelHide(layout: Layout, place: Place): Hide?
+	local cached = tunnelHideCache[layout]
+	if not cached then
+		local graph = TunnelRules.walkGraph(layout :: any, false)
+		local hides: { Hide } = {}
+		for _, hide in ObjectivePlaces.hideSpots(layout) do
+			if hide.kind == "Locker" or hide.kind == "Barrel" or hide.kind == "Cabinet" then
+				table.insert(hides, hide)
+			end
+		end
+		cached = { graph = graph, dist = {}, hides = hides }
+		tunnelHideCache[layout] = cached
+	end
+	local c = cached :: TunnelHides
+	local p = Vector2.new(place.pos.X, place.pos.Z)
+	local dist = TunnelRules.distances(c.graph, TunnelRules.seedsAt(c.graph, place.room, p))
+	local best: Hide? = nil
+	for _, hide in c.hides do
+		local q = Vector2.new(hide.pos.X, hide.pos.Z)
+		local d = TunnelRules.reach(c.graph, dist, hide.room, q, if hide.room == place.room then { p } else nil)
+		if best == nil or d < (best :: Hide).distance then
+			best = { kind = hide.kind, id = hide.id, room = hide.room, pos = hide.pos, distance = d }
+		end
+	end
+	return best
+end
+
 -- The closest hide spot `place` can use on `layout`, or nil when the floor has none in reach of it.
 function ObjectivePlaces.nearestHide(layout: Layout, place: Place): Hide?
+	if layout.tunnels then
+		return nearestTunnelHide(layout, place)
+	end
 	local best: Hide? = nil
 	local function consider(hide: Hide, distance: number)
 		if best == nil or distance < (best :: Hide).distance then

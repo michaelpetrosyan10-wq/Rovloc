@@ -649,21 +649,24 @@ local function nearDoor(
 	local px = if edge.axis == "X" then edge.coord else door.at
 	local pz = if edge.axis == "X" then door.at else edge.coord
 	local w = style.size.X
-	for _, wall in wallsOf(state.info, room) do
-		if wall.axis == edge.axis and math.abs(wall.line - edge.coord) < EPS then
-			continue -- the door's own wall
-		end
-		local along = if wall.axis == "Z" then px else pz
-		local across = math.abs((if wall.axis == "Z" then pz else px) - wall.face)
-		if across > NEAR_DOOR then
-			continue
-		end
-		local inward = if along - wall.u0 < wall.u1 - along then 1 else -1
-		for offset = 1.2 + w / 2, NEAR_DOOR, 1.2 do
-			local piece =
-				tryWall(state, wall, along + inward * offset, style.y, style, tilt(random, style), name, options)
-			if piece then
-				return piece
+	-- 1.2-stud steps first; then, where nothing fitted (a short stretch of wall between openings), finer ones
+	for _, step in { 1.2, 0.3 } do
+		for _, wall in wallsOf(state.info, room) do
+			if wall.axis == edge.axis and math.abs(wall.line - edge.coord) < EPS then
+				continue -- the door's own wall
+			end
+			local along = if wall.axis == "Z" then px else pz
+			local across = math.abs((if wall.axis == "Z" then pz else px) - wall.face)
+			if across > NEAR_DOOR then
+				continue
+			end
+			local inward = if along - wall.u0 < wall.u1 - along then 1 else -1
+			for offset = 1.2 + w / 2, NEAR_DOOR, step do
+				local piece =
+					tryWall(state, wall, along + inward * offset, style.y, style, tilt(random, style), name, options)
+				if piece then
+					return piece
+				end
 			end
 		end
 	end

@@ -11,6 +11,7 @@ local Tags = table.freeze({
 	BearTrap = "BearTrap",
 	ChemicalItem = "ChemicalItem",
 	HideableLocker = "HideableLocker",
+	Hideable = "Hideable", -- every hiding spot (lockers, barrels, cabinets); its HideKind attribute says which
 	ParachutePack = "ParachutePack",
 	BatteryPickup = "BatteryPickup",
 	FloodlightSwitch = "FloodlightSwitch",
@@ -40,6 +41,7 @@ local Tags = table.freeze({
 	LevelLight = "LevelLight", -- attrs: LightKind, LevelId, ZoneId, FlickerGroup, BaseBrightness
 	AmbientEmitter = "AmbientEmitter", -- attrs: Preset, LevelId
 	DripPipe = "DripPipe",
+	SteamVent = "SteamVent", -- a tunnel's leaking relief valve (its nozzle part; a "Steam" ParticleEmitter under it)
 	Corpse = "Corpse",
 
 	-- Actors

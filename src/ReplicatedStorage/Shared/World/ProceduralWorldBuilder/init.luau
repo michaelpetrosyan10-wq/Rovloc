@@ -393,8 +393,11 @@ function Builder.BuildAuthoritative(options: BuildOptions?): BuildResult
 		end)
 		local exterior = Instance.new("Model")
 		exterior.Name = Names.Exterior
+		-- a legacy street-level storey (still the old 240 x 160 plan) leaves the rest of the footprint capped
+		local streetLevel = layoutsById.Level1_Hallways
+		local street = if streetLevel and streetLevel.legacy then WorldConfig.LegacyFootprint else nil
 		guarded("exterior", function()
-			SchoolShellBuilder.buildExterior(exterior)
+			SchoolShellBuilder.buildExterior(exterior, street)
 		end)
 		exterior.Parent = school
 	end

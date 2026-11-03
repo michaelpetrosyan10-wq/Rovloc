@@ -844,6 +844,8 @@ windowRow("L4_Storage_E2", "E", 1, 4, 4, 5, true)
 
 local layout: LayoutSchema.LevelLayout = {
 	id = "Level4_FloodedPool",
+	-- still the 240 x 160 plan: rebuilt on TunnelPlanner in the next wave (docs/MAPS.md)
+	legacy = true,
 	height = HEIGHT,
 	acoustic = "Hall",
 	ambience = "DronePool",

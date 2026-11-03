@@ -25,6 +25,7 @@ local FurnitureBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldB
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local PoolWaterBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PoolWaterBuilder)
 local SchoolShellBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.SchoolShellBuilder)
+local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
 local SetDressingBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.SetDressingBuilder)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
@@ -464,7 +465,11 @@ return {
 				end
 			end
 		end
-		t.eq(tagged, 29, "every DripPipe anchor has one tagged Drip")
+		local anchors = 0
+		for _, id: Enums.LevelId in Enums.LevelId do
+			anchors += #PropKit.anchorsOf(layoutOf(id), "DripPipe")
+		end
+		t.eq(tagged, anchors, "every DripPipe anchor has one tagged Drip")
 	end,
 
 	["floor debris: inside every FloorDebris and ScareStep trigger, flat, never colliding"] = function(t: Expect)
@@ -509,7 +514,7 @@ return {
 				end
 			end
 		end
-		t.eq(triggers, 18, "FloorDebris + ScareStep triggers across the school")
+		t.truthy(triggers >= 18, "FloorDebris + ScareStep triggers across the school")
 	end,
 
 	["static dressing stays out of doorways, grate fronts, landings and spawns"] = function(t: Expect)
@@ -837,7 +842,8 @@ return {
 					t.falsy(overlaps(lo, hi, boxLo, boxHi), part.Name .. " covers a " .. item.kind .. " opening")
 				end
 			end
-			if id ~= "Lobby" then
+			-- (a tunnel floor's own signs are its landmarks: junction plates, region stencils, TunnelDressingBuilder)
+			if id ~= "Lobby" and not layout.tunnels then
 				t.truthy(count >= 10, string.format("%s has %d signs", id, count))
 			end
 			-- STAIRS by every fire door, on the corridor side
@@ -858,7 +864,9 @@ return {
 			local pipes = props(id):FindFirstChild("Pipes_" .. id)
 			assert(pipes, id .. " has pipework")
 			local list = parts(pipes)
-			t.truthy(#list >= 30, string.format("%s has %d pipe parts", id, #list))
+			-- a tunnel floor's plant rooms are few: its tunnels carry their own pipes (TunnelDressingBuilder)
+			local least = if layoutOf(id).tunnels then 8 else 30
+			t.truthy(#list >= least, string.format("%s has %d pipe parts", id, #list))
 			local fixtures: { { lo: Vector3, hi: Vector3, name: string } } = {}
 			for _, part in parts(model(world()[id], "Lights")) do
 				local lo, hi = aabb(part)
@@ -1134,5 +1142,92 @@ return {
 			end
 		end
 		t.truthy(total > 0, "some ceilings have come down")
+	end,
+
+	["decor: a Detail level marks only parts that never collide, are never queried or touched"] = function(t: Expect)
+		local marked = 0
+		for id, level in world() do
+			for _, part in parts(level) do
+				local detail = part:GetAttribute(W.Detail)
+				if detail == nil then
+					continue
+				end
+				marked += 1
+				t.truthy(
+					type(detail) == "number" and detail >= 1 and detail <= 3 and detail % 1 == 0,
+					string.format("%s Detail %s is 1..3", part:GetFullName(), tostring(detail))
+				)
+				if not isDetail(part) then
+					t.fail(
+						string.format("%s (%s) is decor but collides, is queried or touched", part:GetFullName(), id)
+					)
+				end
+			end
+		end
+		t.truthy(marked >= 2000, string.format("%d decor parts", marked))
+	end,
+
+	["tunnel dressing: decor but the landmarks, a cable tray in every tunnel, steam vents that leak"] = function(
+		t: Expect
+	)
+		local layout = layoutOf("Level0_Basement")
+		local tunnels = model(props(layout.id), "Tunnels_" .. layout.id)
+		local levels: { [number]: number } = {}
+		local wayfinding = 0
+		for _, part in parts(tunnels) do
+			t.truthy(isDetail(part), part.Name .. " never collides")
+			local detail = part:GetAttribute(W.Detail)
+			local name = part.Name
+			-- junction plates, region / keep-room stencils and arrows find the way at every setting
+			local finds = string.sub(name, 1, 6) == "Plate_"
+				or (
+					string.sub(name, 1, 6) == "Paint_"
+					and (
+						string.find(name, "_RegionSign_", 1, true) ~= nil
+						or string.find(name, "_Arrow_", 1, true) ~= nil
+					)
+				)
+			if finds then
+				wayfinding += 1
+				t.eq(detail, nil, name .. " stays at every setting")
+			else
+				t.truthy(detail ~= nil, name .. " carries a Detail level")
+				if type(detail) == "number" then
+					levels[detail] = (levels[detail] or 0) + 1
+				end
+			end
+		end
+		t.truthy(wayfinding >= 40, string.format("%d wayfinding landmarks", wayfinding))
+		for level = 1, 3 do
+			t.truthy((levels[level] or 0) >= 50, string.format("Detail %d: %d parts", level, levels[level] or 0))
+		end
+		-- every tunnel and gallery carries a cable tray
+		local trays: { [string]: boolean } = {}
+		for _, part in parts(tunnels) do
+			local room = string.match(part.Name, "^(.-)_TrayFloor$")
+			if room then
+				trays[room] = true
+			end
+		end
+		for _, room in layout.rooms do
+			local long = math.max(room.rect.w, room.rect.d) >= 10
+			if
+				(room.kind == "Tunnel" or room.kind == "Gallery")
+				and long
+				and not string.find(room.id, "Alcove", 1, true)
+			then
+				t.truthy(trays[room.id], room.id .. " has a cable tray")
+			end
+		end
+		-- steam vents: tagged nozzles leaking a Steam plume, most of them in the steam region
+		local vents = 0
+		for _, part in parts(tunnels) do
+			if part:HasTag(Tags.SteamVent) then
+				vents += 1
+				local plume = part:FindFirstChild("Steam", true)
+				t.truthy(plume ~= nil and plume:IsA("ParticleEmitter"), part.Name .. " leaks a Steam plume")
+			end
+		end
+		t.truthy(vents >= 12, string.format("%d steam vents", vents))
 	end,
 }

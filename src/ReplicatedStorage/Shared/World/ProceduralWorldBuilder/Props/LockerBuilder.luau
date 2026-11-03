@@ -16,11 +16,12 @@
 --   HideAnchor   interior floor centre (where the hidden player stands)
 --   PeekAnchor   the hidden player's eye right behind the middle slit (the LockerPeeking camera)
 --   ExitAnchor   floor level, 2.2 studs in front of the closed door, facing away from the locker
+--   EntryAnchor  floor level, 1.4 studs in front of the door, facing the locker (where a player climbs in from)
 --   HidePrompt   in front of the door; hosts the Hide prompt (created disabled)
 --   DoorLanding  where the LockerRip leaves the torn door's hinge pivot: lying face up in front of the row, on the
 --                first of three spots the room has clear floor for (inside its walls, off its benches)
--- Attributes AnchorId, LevelId, ZoneId, DoorOpen = false; OccupantUserId stays unset until someone hides. Tags
--- HideableLocker and Interactable.
+-- Attributes AnchorId, LevelId, ZoneId, DoorOpen = false, HideKind = "Locker"; OccupantUserId stays unset until
+-- someone hides. Tags HideableLocker, Hideable and Interactable (HideBuilder's barrels and cabinets share the rest).
 --
 -- Collision: the shell and the door are MonsterPassthrough (players bump into them, the Creature walks through and
 -- reaches in, a hidden player is NoCollide under its Locked control lock); hand-scale details collide with nothing.
@@ -112,6 +113,7 @@ local PEEK_BEHIND = 0.3 -- eye distance behind the door's inner face
 
 -- Anchors and prompt
 local EXIT_DISTANCE = 2.2
+local ENTRY_DISTANCE = 1.4
 local PROMPT_OUT = 0.6
 local PROMPT_Y = 3.6
 
@@ -704,6 +706,8 @@ function LockerBuilder.buildLocker(parent: Instance, spec: LockerSpec, random: R
 	anchorAt("HideAnchor", CFrame.new(0, FLOOR_Y, (front + DOOR_T + back - BACK_T) / 2))
 	anchorAt("PeekAnchor", CFrame.new(0, PEEK_EYE_Y, front + DOOR_T + PEEK_BEHIND))
 	anchorAt("ExitAnchor", CFrame.new(0, 0, front - EXIT_DISTANCE))
+	-- where a player stands to climb in, facing the locker (the same convention as the tunnels' barrels and cabinets)
+	anchorAt("EntryAnchor", CFrame.new(0, 0, front - ENTRY_DISTANCE) * CFrame.Angles(0, math.pi, 0))
 	local promptHost = anchorAt("HidePrompt", CFrame.new(0, PROMPT_Y, front - PROMPT_OUT))
 
 	-- Where the LockerRip flings the door: the first landing whose footprint the room has clear floor for (the last
@@ -726,8 +730,10 @@ function LockerBuilder.buildLocker(parent: Instance, spec: LockerSpec, random: R
 		[W.LevelId] = spec.levelId,
 		[W.ZoneId] = spec.zoneId,
 		[W.DoorOpen] = false,
+		[W.HideKind] = "Locker",
 	})
 	model:AddTag(Tags.HideableLocker)
+	model:AddTag(Tags.Hideable)
 	PropKit.prompt(promptHost, HIDE_PROMPT, model)
 	return model
 end

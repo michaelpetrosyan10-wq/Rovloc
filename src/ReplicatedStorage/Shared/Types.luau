@@ -105,6 +105,8 @@ export type ZoneEdge = {
 	kind: PortalKind,
 	portalId: string, -- door id, grate id, duct edge id or stairwell id
 	length: number, -- studs between node centers along the portal
+	clearance: number?, -- doors: head room through the opening (the lintel, or the lower ceiling either side)
+	crawlOnly: boolean?, -- doors into a crawlway: players crouch through; the Creature never paths this way
 }
 
 export type ZoneGraphData = {

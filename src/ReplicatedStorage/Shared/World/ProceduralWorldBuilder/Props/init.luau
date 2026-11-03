@@ -20,6 +20,7 @@ local FumeHoodBuilder = require(script.FumeHoodBuilder)
 local FurnitureBuilder = require(script.FurnitureBuilder)
 local GeneratorBuilder = require(script.GeneratorBuilder)
 local HatchValveBuilder = require(script.HatchValveBuilder)
+local HideBuilder = require(script.HideBuilder)
 local LockBuilder = require(script.LockBuilder)
 local LockerBuilder = require(script.LockerBuilder)
 local ObjectiveItemBuilder = require(script.ObjectiveItemBuilder)
@@ -29,6 +30,7 @@ local PoolWaterBuilder = require(script.PoolWaterBuilder)
 local ServicePipeBuilder = require(script.ServicePipeBuilder)
 local SetDressingBuilder = require(script.SetDressingBuilder)
 local SignageBuilder = require(script.SignageBuilder)
+local TunnelDressingBuilder = require(script.TunnelDressingBuilder)
 local VentGrateBuilder = require(script.VentGrateBuilder)
 
 local log = Log.new("Props")
@@ -47,6 +49,7 @@ local MODULES: { { name: string, module: Module } } = {
 	{ name = "FurnitureBuilder", module = FurnitureBuilder },
 	{ name = "GeneratorBuilder", module = GeneratorBuilder },
 	{ name = "HatchValveBuilder", module = HatchValveBuilder },
+	{ name = "HideBuilder", module = HideBuilder },
 	{ name = "LockBuilder", module = LockBuilder },
 	{ name = "LockerBuilder", module = LockerBuilder },
 	{ name = "ObjectiveItemBuilder", module = ObjectiveItemBuilder },
@@ -56,6 +59,7 @@ local MODULES: { { name: string, module: Module } } = {
 	{ name = "ServicePipeBuilder", module = ServicePipeBuilder },
 	{ name = "SetDressingBuilder", module = SetDressingBuilder },
 	{ name = "SignageBuilder", module = SignageBuilder },
+	{ name = "TunnelDressingBuilder", module = TunnelDressingBuilder },
 	{ name = "VentGrateBuilder", module = VentGrateBuilder },
 }
 

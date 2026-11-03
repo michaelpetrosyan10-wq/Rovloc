@@ -876,6 +876,8 @@ windowRow("L1_SouthHall_East", "E", 1, 6, 6, 3.5, true)
 
 local layout: LayoutSchema.LevelLayout = {
 	id = "Level1_Hallways",
+	-- still the 240 x 160 plan: rebuilt on TunnelPlanner in the next wave (docs/MAPS.md)
+	legacy = true,
 	height = HEIGHT,
 	acoustic = "Corridor",
 	ambience = "DroneHallways",

@@ -192,6 +192,12 @@ export type RoomKind =
 	| "Stairwell"
 	| "Roof"
 	| "LobbyHall"
+	-- tunnel floors (TunnelPlanner): corridors, tall pipe galleries, crawlways the Creature cannot enter, and the
+	-- solid ground between them (fill: no floor walked, no zone, no lights)
+	| "Tunnel"
+	| "Gallery"
+	| "Crawlway"
+	| "Solid"
 
 export type AnchorKind =
 	"PlayerSpawn"
@@ -202,6 +208,8 @@ export type AnchorKind =
 	| "CreatureSpawn"
 	| "CreatureScarePose"
 	| "Locker"
+	| "Barrel" -- a steel drum to climb into (tunnel hiding spot)
+	| "Cabinet" -- a tall slatted steel cabinet (tunnel hiding spot)
 	| "ParachuteCrate"
 	| "FloodlightSwitch"
 	| "LabCounter"
@@ -525,6 +533,10 @@ Enums.RoomKind = table.freeze({
 	"Stairwell",
 	"Roof",
 	"LobbyHall",
+	"Tunnel",
+	"Gallery",
+	"Crawlway",
+	"Solid",
 } :: { RoomKind })
 
 Enums.AnchorKind = table.freeze({
@@ -536,6 +548,8 @@ Enums.AnchorKind = table.freeze({
 	"CreatureSpawn",
 	"CreatureScarePose",
 	"Locker",
+	"Barrel",
+	"Cabinet",
 	"ParachuteCrate",
 	"FloodlightSwitch",
 	"LabCounter",

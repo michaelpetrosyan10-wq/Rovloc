@@ -275,7 +275,7 @@ local function buildServicePipes(ctx: PropKit.StaticContext): number
 	end
 	local model = PropKit.model(ctx.parent, "Pipes_" .. layout.id, CFrame.new(info.origin))
 	model:SetAttribute(W.LevelId, layout.id)
-	local parts = Kit.realize(model, pieces)
+	local parts = Kit.realize(model, pieces, 1)
 	-- Detail parts never cast shadows; the heavy runs do
 	for i, part in parts do
 		local options = pieces[i].options

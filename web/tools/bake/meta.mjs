@@ -3,6 +3,7 @@
 
 import { FALLOFF_K, asArray } from './light.mjs';
 import { cfInverse, cfMul } from './mesh.mjs';
+import { MAX_DISTANCE as PVS_MAX_DISTANCE } from './pvs.mjs';
 
 const IDENTITY = [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1];
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -21,6 +22,8 @@ function entityType(e) {
   if (tags.includes('ChemicalItem')) return 'ChemicalFlask';
   if (tags.includes('VentGrate')) return 'VentGrate';
   if (tags.includes('HideableLocker')) return 'Locker';
+  // the tunnels' other hiding spots (HideBuilder): tag Hideable, attribute HideKind Barrel / Cabinet
+  if (tags.includes('Hideable') && (a.HideKind === 'Barrel' || a.HideKind === 'Cabinet')) return a.HideKind;
   if (tags.includes('FloodlightSwitch')) return 'FloodlightSwitch';
   if (tags.includes('AirlockDoor')) return 'AirlockDoor';
   if (tags.includes('ScriptedDoor')) {
@@ -222,12 +225,14 @@ export function buildMeta(raw, r) {
     }
   }
 
-  // rooms in world space from the layouts (rects, heights, kind, acoustics, ambience)
+  // rooms in world space from the layouts (rects, heights, kind, acoustics, ambience); a tunnel floor's Solid fill (the
+  // ground between its tunnels) is no room anyone stands in, so it stays in meta.layouts only
   const rooms = [];
   for (const id of raw.layoutIds) {
     const layout = raw.layouts[id];
     const origin = raw.levels[id].origin;
     for (const room of arr(layout.rooms)) {
+      if (room.kind === 'Solid') continue;
       const rect = room.rect;
       rooms.push({
         id: room.id,
@@ -246,10 +251,20 @@ export function buildMeta(raw, r) {
     }
   }
 
-  // layout doors in local form (incl. Boarded / Doorway) so navigation can reason about them
+  // layout doors in local form (incl. Boarded / Doorway) so navigation can reason about them, each with its head room
+  // (`clearance`: the lintel, or the lower ceiling either side, LayoutSchema.doorClearance) and `crawlOnly` (a
+  // crawlway's mouth: the Creature never passes)
   const layoutDoors = [];
   for (const id of raw.layoutIds) {
-    for (const d of arr(raw.layouts[id].doors)) layoutDoors.push({ level: id, ...d });
+    const layout = raw.layouts[id];
+    const roomHeights = new Map(arr(layout.rooms).map((r) => [r.id, { h: r.height ?? layout.height, kind: r.kind }]));
+    for (const d of arr(layout.doors)) {
+      const sides = arr(d.rooms).map((r) => roomHeights.get(r)).filter(Boolean);
+      const lintel = d.height ?? 10;
+      const clearance = d.clearance ?? Math.min(lintel, ...sides.map((r) => r.h - 0.4));
+      const crawlOnly = d.crawlOnly ?? sides.some((r) => r.kind === 'Crawlway');
+      layoutDoors.push({ level: id, ...d, clearance: r3(clearance), crawlOnly: !!crawlOnly });
+    }
   }
 
   const pools = triggers
@@ -336,6 +351,14 @@ export function buildMeta(raw, r) {
     routes: raw.routes || null,
     routePairs: raw.routePairs || null,
     routeRule: raw.routeRule || null,
+    // tunnel floors (TunnelPlanner), per level: teleport points on the tunnel centrelines, landmarks, regions
+    teleportPoints: raw.teleportPoints || {},
+    landmarks: raw.landmarks || {},
+    regions: raw.regions || {},
+    // potentially visible sets (pvs.mjs), per level: zone id -> the zone ids a player in it may see (itself and its
+    // neighbours through any opening included); pairs farther apart than pvs.MAX_DISTANCE are never listed
+    visibility: r.visibility || {},
+    visibilityInfo: { maxDistance: PVS_MAX_DISTANCE, method: 'rays between opening + floor samples through static colliding opaque non-Detail parts; doors and entities open, glass clear', levels: r.visibilityStats || {} },
     layouts: raw.layouts,
     creature,
   };

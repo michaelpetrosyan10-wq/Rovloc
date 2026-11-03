@@ -91,6 +91,9 @@ export function collectLights(raw) {
     } else if (kind === 'ClassroomGlow') {
       groupName = `Scripted:${fixture.name}`;
       groupKind = 'scripted';
+    } else if (groupName && groupName.startsWith('Mains:')) {
+      // a tunnel floor's steady mains (TunnelPlanner): lit and still, but a group the power switch can hold down
+      groupKind = 'scripted';
     }
     if (!(brightness > 0) || !(l.range > 0)) return;
     const g = groupOf(groupName, groupKind, level, initial);

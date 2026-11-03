@@ -24,7 +24,8 @@ local L1: Enums.LayoutId = "Level1_Hallways"
 -- Fixtures
 --------------------------------------------------------------------------------
 
--- The east end of a basement: a spawn hall and the airlock that climbs to Level 1 (Stairwell_0_1).
+-- The east end of a basement: a spawn hall and the airlock that climbs to Level 1 (Stairwell_0_1), against the East
+-- tower (x 400, opening z 144).
 local function basementSlice(): Layout
 	return {
 		id = L0,
@@ -34,10 +35,10 @@ local function basementSlice(): Layout
 		entry = "B_Spawn",
 		exit = "L0_AirlockEast",
 		rooms = {
-			{ id = "B_Spawn", kind = "Boiler", rect = R(180, 66, 48, 28) },
-			{ id = "L0_AirlockEast", kind = "Airlock", rect = R(228, 66, 12, 28) },
+			{ id = "B_Spawn", kind = "Boiler", rect = R(340, 130, 48, 28) },
+			{ id = "L0_AirlockEast", kind = "Airlock", rect = R(388, 130, 12, 28) },
 		},
-		doors = { { id = "D_B", kind = "Airlock", rooms = { "B_Spawn", "L0_AirlockEast" }, at = 80 } },
+		doors = { { id = "D_B", kind = "Airlock", rooms = { "B_Spawn", "L0_AirlockEast" }, at = 144 } },
 		anchors = {},
 		triggers = {},
 	}
@@ -57,29 +58,29 @@ local function hallwaySlice(): Layout
 		entry = "L1_AirlockEast",
 		exit = "S_East",
 		rooms = {
-			{ id = "L1_AirlockEast", kind = "Airlock", rect = R(228, 66, 12, 28) },
-			{ id = "S_Hall", kind = "Corridor", rect = R(180, 66, 48, 28) },
-			{ id = "S_West", kind = "Classroom", rect = R(180, 40, 20, 26) },
-			{ id = "S_Chase", kind = "Chase", rect = R(200, 40, 5, 26) },
-			{ id = "S_East", kind = "Classroom", rect = R(205, 40, 35, 26) },
-			{ id = "S_Store", kind = "Storage", rect = R(180, 94, 60, 10) },
+			{ id = "L1_AirlockEast", kind = "Airlock", rect = R(388, 130, 12, 28) },
+			{ id = "S_Hall", kind = "Corridor", rect = R(340, 130, 48, 28) },
+			{ id = "S_West", kind = "Classroom", rect = R(340, 104, 20, 26) },
+			{ id = "S_Chase", kind = "Chase", rect = R(360, 104, 5, 26) },
+			{ id = "S_East", kind = "Classroom", rect = R(365, 104, 35, 26) },
+			{ id = "S_Store", kind = "Storage", rect = R(340, 158, 60, 10) },
 		},
 		doors = {
-			{ id = "D_Air", kind = "Airlock", rooms = { "L1_AirlockEast", "S_Hall" }, at = 80 },
-			{ id = "D_Gate", kind = "Gate", rooms = { "S_Hall", "S_East" }, at = 216, scriptedId = "HallwayGate" },
-			{ id = "D_West", kind = "Door", rooms = { "S_Hall", "S_West" }, at = 190 },
-			{ id = "D_Board", kind = "Boarded", rooms = { "S_Hall", "S_Store" }, at = 200 },
-			{ id = "D_Ajar", kind = "Ajar", rooms = { "S_Store", "L1_AirlockEast" }, at = 234 },
+			{ id = "D_Air", kind = "Airlock", rooms = { "L1_AirlockEast", "S_Hall" }, at = 144 },
+			{ id = "D_Gate", kind = "Gate", rooms = { "S_Hall", "S_East" }, at = 376, scriptedId = "HallwayGate" },
+			{ id = "D_West", kind = "Door", rooms = { "S_Hall", "S_West" }, at = 350 },
+			{ id = "D_Board", kind = "Boarded", rooms = { "S_Hall", "S_Store" }, at = 360 },
+			{ id = "D_Ajar", kind = "Ajar", rooms = { "S_Store", "L1_AirlockEast" }, at = 394 },
 		},
 		vents = {
 			nodes = {
-				{ id = "gW", x = 200, z = 52 },
-				{ id = "j1", x = 202.5, z = 52 },
-				{ id = "jN", x = 202.5, z = 45 },
-				{ id = "jS", x = 202.5, z = 55.5 },
-				{ id = "j2", x = 202.5, z = 59 },
-				{ id = "gE", x = 205, z = 59 },
-				{ id = "gH", x = 202.5, z = 66 },
+				{ id = "gW", x = 360, z = 116 },
+				{ id = "j1", x = 362.5, z = 116 },
+				{ id = "jN", x = 362.5, z = 109 },
+				{ id = "jS", x = 362.5, z = 119.5 },
+				{ id = "j2", x = 362.5, z = 123 },
+				{ id = "gE", x = 365, z = 123 },
+				{ id = "gH", x = 362.5, z = 130 },
 			},
 			edges = {
 				{ a = "gW", b = "j1" },
@@ -196,18 +197,18 @@ return {
 		t.eq(hall.kind, "Room")
 		t.eq(hall.layoutId, L1)
 		t.eq(hall.roomKind, "Corridor")
-		t.near((hall.center - Vector3.new(204, 18, 80)).Magnitude, 0, 1e-6, "room centre on its floor, world space")
+		t.near((hall.center - Vector3.new(364, 18, 144)).Magnitude, 0, 1e-6, "room centre on its floor, world space")
 		local j2 = graph.nodes[vent(L1, "j2")]
 		t.eq(j2.kind, "VentNode")
 		t.eq(j2.roomKind, nil)
 		t.near(
-			(j2.center - Vector3.new(202.5, 18 + WorldConfig.VentCenterHeight, 59)).Magnitude,
+			(j2.center - Vector3.new(362.5, 18 + WorldConfig.VentCenterHeight, 123)).Magnitude,
 			0,
 			1e-6,
 			"duct centre"
 		)
 		local spawn = graph.nodes[room(L0, "B_Spawn")]
-		t.near((spawn.center - Vector3.new(204, 0, 80)).Magnitude, 0, 1e-6, "basement room centre")
+		t.near((spawn.center - Vector3.new(364, 0, 144)).Magnitude, 0, 1e-6, "basement room centre")
 		for id, _ in graph.nodes do
 			t.truthy(graph.adjacency[id], "adjacency list for " .. id)
 		end
@@ -516,7 +517,13 @@ return {
 		local byId: { [string]: Layout } = {}
 		for _, layout in layouts do
 			byId[layout.id] = layout
-			expectedNodes += #layout.rooms + (if layout.vents then #layout.vents.nodes else 0)
+			-- every room but a tunnel floor's solid ground, and every vent node
+			for _, r in layout.rooms do
+				if r.kind ~= "Solid" then
+					expectedNodes += 1
+				end
+			end
+			expectedNodes += if layout.vents then #layout.vents.nodes else 0
 			if layout.id == "Lobby" then
 				continue
 			end
@@ -535,7 +542,7 @@ return {
 				t.truthy(edge and edge.kind == "Grate", layout.id .. " grate edge " .. grate.id)
 			end
 		end
-		t.eq(countKeys(graph.nodes), expectedNodes, "one node per room and vent node")
+		t.eq(countKeys(graph.nodes), expectedNodes, "one node per walkable room and vent node")
 		for _, spec in WorldConfig.Stairwells do
 			if byId[spec.from] and byId[spec.to] then
 				local edge = findEdge(graph, spec.id)

@@ -554,13 +554,19 @@ local function levelForPosition(p): string
 	if p.X < -400 then
 		return "Lobby"
 	end
-	local inFootprint = p.X >= -0.5 and p.X <= 240.5 and p.Z >= -0.5 and p.Z <= 160.5
+	local size = WorldConfig.FootprintSize
+	local inFootprint = p.X >= -0.5 and p.X <= size.X + 0.5 and p.Z >= -0.5 and p.Z <= size.Y + 0.5
 	if not inFootprint then
-		local inTower = (p.X >= -28 and p.X <= 0 or p.X >= 240 and p.X <= 268) and p.Z >= 64 and p.Z <= 96
+		local inTower = false
+		for _, tower in WorldConfig.Towers do
+			if p.X >= tower.minX and p.X <= tower.maxX and p.Z >= tower.minZ and p.Z <= tower.maxZ then
+				inTower = true
+			end
+		end
 		if inTower and p.Y < WorldConfig.Levels.Level5_Roof.elevation then
 			return "Stairwells"
 		end
-		if p.Y > WorldConfig.Levels.Level5_Roof.elevation - 2 and p.X > -40 and p.X < 280 and p.Z > -40 and p.Z < 200 then
+		if p.Y > WorldConfig.Levels.Level5_Roof.elevation - 2 and p.X > -40 and p.X < size.X + 40 and p.Z > -40 and p.Z < size.Y + 40 then
 			return "Level5_Roof"
 		end
 		return "Exterior"
@@ -790,9 +796,10 @@ local volumes: { any } = {}
 local guis: { any } = {}
 local partIndex: { [Instance]: number } = {}
 
--- Volumes and roots never render: zones, triggers, anchor / waypoint roots, vent node roots, hitboxes.
+-- Volumes and roots never render: zones, triggers, anchor / waypoint roots, vent node roots, hitboxes. A transparent
+-- part that carries a SurfaceGui is a decal host (the tunnels' paint), exported as a part for its decals.
 local function isVolume(part): boolean
-	return part.Transparency >= 0.999 and not part.CanCollide
+	return part.Transparency >= 0.999 and not part.CanCollide and part:FindFirstChildOfClass("SurfaceGui") == nil
 end
 
 -- SurfaceGui trees (frames, text, gradients, corners, strokes) for the decal baker.
@@ -1084,6 +1091,58 @@ end
 
 local zoneGraph = ZoneGraph.build(layouts)
 
+-- Tunnel floors (TunnelPlanner): the runtime's teleport points (TunnelRules.teleportPoints: tunnel and gallery
+-- centrelines every 6 studs, never in a crawlway or a doorway), the landmarks (junction plates, region stencils,
+-- graffiti) and the regions, per level, in world space. See web/DATA.md.
+local TunnelRules = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules")
+local teleportPoints = {}
+local landmarks = {}
+local regions = {}
+for _, layout in layouts do
+	local tunnels = layout.tunnels
+	if not tunnels then
+		continue
+	end
+	local origin = WorldConfig.levelOrigin(layout.id)
+	local points = {}
+	for _, point in TunnelRules.teleportPoints(layout) do
+		table.insert(points, {
+			pos = v3(origin + point.pos),
+			facings = point.facings,
+			region = point.region,
+			zone = point.zone,
+		})
+	end
+	teleportPoints[layout.id] = points
+	local marks = {}
+	for _, landmark in tunnels.landmarks do
+		table.insert(marks, {
+			id = landmark.id,
+			kind = landmark.kind,
+			region = landmark.region,
+			room = landmark.room,
+			pos = v3(origin + landmark.pos),
+			normal = v3(landmark.normal),
+			text = landmark.text,
+		})
+	end
+	landmarks[layout.id] = marks
+	local list = {}
+	for _, region in tunnels.regions do
+		table.insert(list, {
+			id = region.id,
+			name = region.name,
+			zones = region.rooms,
+			junctions = region.junctions,
+			pipe = c3(region.pipe),
+			band = c3(region.band),
+			wet = region.wet == true,
+			medium = region.medium,
+		})
+	end
+	regions[layout.id] = list
+end
+
 local layoutData = {}
 for _, layout in layouts do
 	layoutData[layout.id] = toJson(layout)
@@ -1281,6 +1340,9 @@ local out = {
 	ventGraphs = ventGraphs,
 	zoneGraph = toJson(zoneGraph),
 	layouts = layoutData,
+	teleportPoints = teleportPoints,
+	landmarks = landmarks,
+	regions = regions,
 	windows = windows,
 	creature = creature,
 }

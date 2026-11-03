@@ -396,6 +396,8 @@ trigger("L5_Trigger_SkylightGlass", "FloorDebris", 192, 42, 8, 6, 4)
 
 local layout: LayoutSchema.LevelLayout = {
 	id = "Level5_Roof",
+	-- still the 240 x 160 plan: rebuilt on TunnelPlanner in the next wave (docs/MAPS.md)
+	legacy = true,
 	height = HEIGHT,
 	acoustic = "Outdoor",
 	ambience = "DroneRoof",

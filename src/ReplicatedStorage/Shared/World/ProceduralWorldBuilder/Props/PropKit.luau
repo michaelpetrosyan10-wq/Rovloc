@@ -270,6 +270,20 @@ function PropKit.detail(part: BasePart)
 	part.CastShadow = false
 end
 
+-- A decorative part a lower graphics setting may hide (Attributes.World.Detail, 1 = shapes the look .. 3 = small
+-- clutter): made a Detail part first (never colliding, queried or touched), so nothing it carries is collision or nav
+-- geometry. Returns the part.
+function PropKit.decor(part: BasePart, level: number): BasePart
+	PropKit.detail(part)
+	part:SetAttribute(Attributes.World.Detail, math.clamp(math.round(level), 1, 3))
+	return part
+end
+
+-- The Detail level of a small decorative part by its size: 2 when its longest side reaches 3 studs, else 3.
+function PropKit.detailBySize(size: Vector3): number
+	return if math.max(size.X, size.Y, size.Z) >= 3 then 2 else 3
+end
+
 -- Applies Geometry.makePassthrough to every BasePart under `root` that still collides (the Creature walks through).
 function PropKit.passthroughAll(root: Instance)
 	for _, descendant in root:GetDescendants() do

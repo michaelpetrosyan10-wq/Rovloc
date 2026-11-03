@@ -1,9 +1,10 @@
 // Bake worker: shades batches of points (surface vertices or probe points) with light.mjs over a shared tracer.
 //
-// init message: { tracer: { positions, index, nodes }, lights, settings, ambient, outdoor, moonDir, moonColor, groups }
+// init message: { tracer: { positions, index, nodes }, lights, settings, ambient, outdoor, moonDir, moonColor,
+//                 groupKinds, groupFamily (family id per group: power circuits pool), probeSlots (groups per slot) }
 // job message:  { id, points: Float32Array (xyz), normals: Float32Array (xyz, or empty for probes), seeds: Uint32Array }
 // reply:        { id, rgb: Float32Array (3n), group: Uint8Array (n), share: Float32Array (n), ao: Float32Array (n),
-//                 sky: Float32Array (n), extra: Float32Array (probes: n x scripted groups x 3, taken out of rgb), rays }
+//                 sky: Float32Array (n), extra: Float32Array (probes: n x probe slots x 3, taken out of rgb), rays }
 
 import { parentPort } from 'node:worker_threads';
 import { Tracer } from './trace.mjs';
@@ -11,6 +12,17 @@ import { LightGrid, shadePoint } from './light.mjs';
 
 let ctx = null;
 let groupCount = 1;
+
+/** The groups of each family (index = family id). */
+function membersOf(groupFamily) {
+  const out = [];
+  if (!groupFamily) return out;
+  groupFamily.forEach((f, g) => {
+    if (g === 0) return;
+    (out[f] ||= []).push(g);
+  });
+  return out.map((m) => m || []);
+}
 
 parentPort.on('message', (msg) => {
   if (msg.type === 'init') {
@@ -25,7 +37,10 @@ parentPort.on('message', (msg) => {
       moonDir: msg.moonDir,
       moonColor: msg.moonColor,
       groupKinds: msg.groupKinds,
-      scriptedGroups: msg.groupKinds.map((k, g) => (k === 'scripted' ? g : -1)).filter((g) => g > 0),
+      groupFamily: msg.groupFamily,
+      familyMembers: membersOf(msg.groupFamily),
+      // probe slots: the groups each slot pools (a scripted group alone, or a power family)
+      probeSlots: msg.probeSlots,
     };
     groupCount = msg.groupKinds.length;
     parentPort.postMessage({ type: 'ready' });
@@ -41,10 +56,11 @@ parentPort.on('message', (msg) => {
     const sky = new Float32Array(n);
     const acc = new Float64Array(groupCount);
     const hasNormals = normals.length === points.length;
-    // probes: the scripted groups' light is kept apart (base + level x extra at run time)
-    const scripted = ctx.scriptedGroups;
+    // probes: the slots' light is kept apart (base + level x extra at run time)
+    const slots = ctx.probeSlots;
+    const family = ctx.groupFamily;
     const groupRgb = hasNormals ? null : new Float64Array(groupCount * 3);
-    const extra = hasNormals ? new Float32Array(0) : new Float32Array(n * scripted.length * 3);
+    const extra = hasNormals ? new Float32Array(0) : new Float32Array(n * slots.length * 3);
     const before = ctx.tracer.rays;
     for (let i = 0; i < n; i++) {
       acc.fill(0);
@@ -56,10 +72,11 @@ parentPort.on('message', (msg) => {
       rgb[i * 3 + 1] = res.g;
       rgb[i * 3 + 2] = res.b;
       if (groupRgb) {
-        scripted.forEach((g, k) => {
+        slots.forEach((members, k) => {
           for (let c = 0; c < 3; c++) {
-            const v = groupRgb[g * 3 + c];
-            extra[(i * scripted.length + k) * 3 + c] = v;
+            let v = 0;
+            for (const g of members) v += groupRgb[g * 3 + c];
+            extra[(i * slots.length + k) * 3 + c] = v;
             rgb[i * 3 + c] -= v;
           }
         });
@@ -78,8 +95,17 @@ parentPort.on('message', (msg) => {
         }
       }
       if (best && total > 1e-6) {
+        // a power family's light is pooled into its dominant member
+        let pooled = acc[best];
+        if (family) {
+          const members = ctx.familyMembers[family[best]];
+          if (members.length > 1) {
+            pooled = 0;
+            for (const g of members) pooled += acc[g];
+          }
+        }
         group[i] = best;
-        share[i] = Math.min(1, acc[best] / total);
+        share[i] = Math.min(1, pooled / total);
       }
     }
     parentPort.postMessage({ type: 'done', id, rgb, group, share, ao, sky, extra, rays: ctx.tracer.rays - before }, [

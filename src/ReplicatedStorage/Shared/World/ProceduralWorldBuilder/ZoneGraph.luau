@@ -3,7 +3,9 @@
 --
 -- Nodes are rooms ("room:<layoutId>:<roomId>") and vent nodes ("vent:<layoutId>:<nodeId>"). Edges are portals:
 --   doors       Doorway -> "Doorway"; Door / Ajar / RoofDoor -> "Door"; Gate -> "Gate"; Airlock -> "Airlock";
---               Boarded doors are planked shut and produce no edge. portalId = door id.
+--               Boarded doors are planked shut and produce no edge. portalId = door id. Each door edge carries its
+--               `clearance` (LayoutSchema.doorClearance: the lintel, or the lower ceiling either side) and `crawlOnly`
+--               (a crawlway's mouth: the Creature never paths through it, and it hunches under clearance < 12.5).
 --   grates      room <-> the vent node the grate sits on, kind "Grate", portalId = grate id.
 --   ducts       vent node <-> vent node, kind "Duct", portalId = "duct:<a>-<b>".
 --   stairwells  WorldConfig.Stairwells fromRoom <-> toRoom across layouts, kind "Stair", portalId = stairwell id.
@@ -203,19 +205,20 @@ function ZoneGraph.build(layouts: { Layout }): Graph
 		adjacency[node.id] = {}
 	end
 
-	local function addEdge(a: string, b: string, kind: Types.PortalKind, portalId: string, length: number)
+	local function addEdge(a: string, b: string, kind: Types.PortalKind, portalId: string, length: number): ZoneEdge?
 		if not nodes[a] or not nodes[b] then
 			log.warn("%s portal %s joins a missing node (%s, %s)", kind, portalId, a, b)
-			return
+			return nil
 		end
 		if a == b then
 			log.warn("%s portal %s joins %s to itself; ignored", kind, portalId, a)
-			return
+			return nil
 		end
 		local edge: ZoneEdge = { a = a, b = b, kind = kind, portalId = portalId, length = length }
 		table.insert(edges, edge)
 		table.insert(adjacency[a], edge)
 		table.insert(adjacency[b], edge)
+		return edge
 	end
 
 	for _, layout in layouts do
@@ -228,6 +231,9 @@ function ZoneGraph.build(layouts: { Layout }): Graph
 		local rooms = LayoutSchema.indexRooms(layout)
 
 		for _, room in layout.rooms do
+			if room.kind == "Solid" then
+				continue -- solid ground between tunnels: nobody is ever in it
+			end
 			addNode({
 				id = ZoneGraph.roomNodeId(layout.id, room.id),
 				kind = "Room",
@@ -271,13 +277,17 @@ function ZoneGraph.build(layouts: { Layout }): Graph
 				continue
 			end
 			local ca, cb = roomCenter(origin, a), roomCenter(origin, b)
-			addEdge(
+			local edge = addEdge(
 				ZoneGraph.roomNodeId(layout.id, a.id),
 				ZoneGraph.roomNodeId(layout.id, b.id),
 				portalKind :: Types.PortalKind,
 				door.id,
 				(ca - portal).Magnitude + (portal - cb).Magnitude
 			)
+			if edge then
+				edge.clearance = LayoutSchema.doorClearance(layout, door)
+				edge.crawlOnly = LayoutSchema.doorCrawlOnly(layout, door)
+			end
 		end
 
 		if vents then

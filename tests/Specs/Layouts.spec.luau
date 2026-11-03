@@ -11,7 +11,9 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local ObjectivePlaces = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces)
 local PoolWaterBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PoolWaterBuilder)
+local RunDirector = require(ReplicatedStorage.Shared.World.RunDirector)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
 type Expect = SpecRunner.Expect
@@ -290,7 +292,10 @@ return {
 			t.eq(#slots, 3, "floor pair " .. pair .. " has three candidate stairwells")
 		end
 		local basementEntry = roomOf(LAYOUTS.Level0_Basement, LAYOUTS.Level0_Basement.entry)
-		t.truthy(basementEntry and basementEntry.rect.x == 0, "the basement spawn room sits on the west wall")
+		t.truthy(
+			basementEntry and basementEntry.rect.x + basementEntry.rect.w <= WorldConfig.FootprintSize.X / 4,
+			"the basement arrival bay is on the west side (its first quarter)"
+		)
 		local roofExit = roomOf(LAYOUTS.Level5_Roof, LAYOUTS.Level5_Roof.exit)
 		t.truthy(roofExit and roofExit.rect.x == 0, "the roof exit is the west edge")
 		for id, layout in LAYOUTS do
@@ -375,7 +380,8 @@ return {
 		for _, id in schoolLevels() do
 			local count = #anchorsOf(LAYOUTS[id], "CreatureSpawn")
 			if id == "Level0_Basement" then
-				t.truthy(count <= 1, "the basement holds at most a dormant placement")
+				-- the Creature hunts the tunnels too: several starts for the spawn rule to choose from
+				t.truthy(count >= 4, "the basement's tunnels hold several Creature starts")
 			elseif id == "Level5_Roof" then
 				-- one behind each stair housing's roof door (the run arrives in one of them)
 				t.eq(count, 3, id .. " CreatureSpawn per stair housing")
@@ -393,6 +399,11 @@ return {
 		for id, layout in LAYOUTS do
 			t.truthy(Enums.has(Enums.AcousticPreset, layout.acoustic), id .. " acoustic")
 			for _, r in layout.rooms do
+				if r.kind == "Solid" then
+					-- the ground between tunnels: only its walls show (in the tunnels' keys)
+					t.truthy(r.wall and table.find(PALETTE_KEYS, r.wall), r.id .. " wall key")
+					continue
+				end
 				for _, key in { r.floor, r.wall, r.ceiling } :: { string? } do
 					t.truthy(
 						key and table.find(PALETTE_KEYS, key),
@@ -433,7 +444,16 @@ return {
 				end
 			end
 			t.truthy(next(groups) ~= nil, id .. " has a flicker group")
-			if id ~= "Lobby" then
+			if layout.tunnels then
+				-- a tunnel floor's caged bulbs: about a third dead, the rest on a group the power switch holds down
+				-- (the floor starts dark but for its emergency reds)
+				t.truthy(lit <= 0.75 * #lights, string.format("%s: %d of %d fixtures lit", id, lit, #lights))
+				for _, l in lights do
+					if not l.broken and (l.kind == "Bulb" or l.kind == "Fluorescent") then
+						t.truthy(l.flickerGroup ~= nil, l.id .. " is on a group the power switch holds")
+					end
+				end
+			elseif id ~= "Lobby" then
 				t.truthy(
 					lit <= math.max(2, 0.2 * #lights),
 					string.format("%s: %d of %d fixtures lit", id, lit, #lights)
@@ -470,10 +490,19 @@ return {
 				t.truthy(n >= 3, id .. " loop " .. loop .. " has at least three waypoints")
 				for i = 1, n do
 					local a, b = points[i], points[(i % n) + 1]
-					t.truthy(
-						a.room == b.room or joined[a.room .. "|" .. b.room],
-						string.format("%s loop %s: %s -> %s crosses no doorway", id, loop, a.id, b.id)
-					)
+					if layout.tunnels then
+						-- tunnel floors: junction to junction along the tunnels, a short walk apart
+						local walk = ObjectivePlaces.walkDistance(layout, a.room, a.pos, b.room, b.pos)
+						t.truthy(
+							walk <= 140,
+							string.format("%s loop %s: %s -> %s walks %.0f studs", id, loop, a.id, b.id, walk)
+						)
+					else
+						t.truthy(
+							a.room == b.room or joined[a.room .. "|" .. b.room],
+							string.format("%s loop %s: %s -> %s crosses no doorway", id, loop, a.id, b.id)
+						)
+					end
 				end
 			end
 			if id ~= "Lobby" and id ~= "Level0_Basement" then
@@ -578,6 +607,9 @@ return {
 		for _, id in schoolLevels() do
 			local layout = LAYOUTS[id]
 			local rooms = LayoutSchema.indexRooms(layout)
+			if layout.legacy then
+				continue -- still the old plan: its facade and the old towers' places are not this footprint's
+			end
 			for _, w in (layout.windows or {}) :: { LayoutSchema.Window } do
 				local r = rooms[w.room]
 				local rect = r.rect
@@ -601,19 +633,37 @@ return {
 		end
 	end,
 
-	["basement: trap fields, batteries, debris and the checkpoint"] = function(t: Expect)
+	["basement: tunnels, trap spots, batteries, debris, checkpoints and the hunt"] = function(t: Expect)
 		local layout = LAYOUTS.Level0_Basement
 		local rooms = LayoutSchema.indexRooms(layout)
+		t.truthy(layout.tunnels ~= nil, "the basement is a tunnel floor (TunnelPlanner)")
+		-- bear traps: Nightmare's sixteen fit, never on the only way, never two within 6 studs (RunDirector's spacing)
 		local traps = anchorsOf(layout, "TrapCandidate")
-		t.truthy(#traps >= 40, "at least 40 trap candidates")
-		for i, a in traps do
+		local excluded = RunDirector.trapExcludedRooms(layout)
+		local open = 0
+		for _, a in traps do
+			if not excluded[a.room] then
+				open += 1
+			end
 			t.truthy(a.room ~= layout.entry and rooms[a.room].kind ~= "Airlock", a.id .. " outside spawn/airlock")
-			for j = i + 1, #traps do
-				t.truthy(flatDistance(a.pos, traps[j].pos) >= 6, a.id .. " keeps 6 studs from " .. traps[j].id)
+		end
+		t.truthy(open >= 16, "at least 16 trap spots a run may arm (Nightmare's trapCount)")
+		local spaced = 0
+		for i, a in traps do
+			local clear = true
+			for j, b in traps do
+				if i ~= j and flatDistance(a.pos, b.pos) < 6 then
+					clear = false
+				end
+			end
+			if clear then
+				spaced += 1
 			end
 		end
+		t.truthy(spaced >= 16, "at least 16 trap spots stand 6 studs from every other")
 		t.truthy(#anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
-		t.truthy(#triggersOf(layout, "FloorDebris") >= 1, "floor debris")
+		t.truthy(#triggersOf(layout, "FloorDebris") >= 3, "floor debris in the tunnels")
+		t.truthy(#triggersOf(layout, "ScareStep") >= 2, "scare steps in the tunnels")
 		local checkpoints = triggersOf(layout, "Checkpoint")
 		t.eq(#checkpoints, 3, "one checkpoint per exit vestibule candidate")
 		for _, spec in WorldConfig.stairwellCandidates(layout.id) do
@@ -625,13 +675,29 @@ return {
 			end
 			t.eq(here, 1, "a checkpoint in " .. spec.fromRoom)
 		end
-		t.falsy(layout.vents, "no vents in the basement")
-		t.truthy(#(layout.pillars or {}) >= 20, "a pillar grid")
-		t.truthy(#(layout.windows or {}) >= 8, "boarded windows")
-		for _, w in (layout.windows or {}) :: { LayoutSchema.Window } do
-			t.truthy(w.boarded and w.sill >= layout.height / 2, "basement windows are boarded and high")
+		t.falsy(layout.vents, "no vents in the basement (crawlways instead)")
+		t.truthy(#anchorsOf(layout, "PatrolWaypoint") >= 12, "patrol waypoints at the junctions")
+		t.truthy(#anchorsOf(layout, "Barrel") + #anchorsOf(layout, "Cabinet") >= 20, "barrels and cabinets to hide in")
+		t.truthy(#anchorsOf(layout, "Corpse") >= 1 and #anchorsOf(layout, "Clutter") >= 8, "corpses and clutter")
+		t.truthy(#anchorsOf(layout, "DripPipe") >= 3, "leaking pipes")
+		-- the spawn rule (CreatureBand studs walked from the entry, outside every objective room) has options
+		local band = RunDirector.CreatureBand
+		local entry = ObjectivePlaces.entryPoint(layout)
+		local objectiveRooms: { [string]: boolean } = {}
+		for _, place in ObjectivePlaces.places(layout) do
+			objectiveRooms[place.room] = true
 		end
-		t.eq(#anchorsOf(layout, "PatrolWaypoint"), 0, "no creature activity")
+		local starts = 0
+		for _, a in anchorsOf(layout, "CreatureSpawn") do
+			local walk = ObjectivePlaces.walkDistance(layout, layout.entry, entry, a.room, a.pos)
+			if walk >= band[1] and walk <= band[2] and not objectiveRooms[a.room] then
+				starts += 1
+			end
+		end
+		t.truthy(
+			starts >= 4,
+			string.format("%d Creature starts %d..%d studs walked from the entry", starts, band[1], band[2])
+		)
 	end,
 
 	["hallways: the scripted classroom, glass step, gate and gate-bypass vent"] = function(t: Expect)
@@ -1205,11 +1271,16 @@ return {
 		local exitRoom = rooms[layout.exit]
 		t.eq(exitRoom.rect.x, 0, "the gap is on the west edge")
 		t.truthy(exitRoom.rect.d <= 16, "a gap, not a missing wall")
-		local tower = WorldConfig.Towers.West
-		t.truthy(
-			exitRoom.rect.z >= tower.maxZ or exitRoom.rect.z + exitRoom.rect.d <= tower.minZ,
-			"the jump clears the west stair tower"
-		)
+		if not layout.legacy then
+			for _, tower in WorldConfig.Towers do
+				if tower.side == "West" then
+					t.truthy(
+						exitRoom.rect.z >= tower.maxZ or exitRoom.rect.z + exitRoom.rect.d <= tower.minZ,
+						"the jump clears the west stair towers"
+					)
+				end
+			end
+		end
 		t.truthy(#(layout.platforms or {}) >= 3, "HVAC units")
 		t.truthy(#lightsOf(layout) <= 10, "almost no lights (the three stair housings' lamps and the beacon)")
 	end,

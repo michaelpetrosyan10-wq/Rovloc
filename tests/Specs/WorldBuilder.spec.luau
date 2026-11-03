@@ -560,7 +560,7 @@ return {
 		end
 		table.insert(holes, { axis = "Z", coord = 66, u0 = 212.25, u1 = 215.75, y0 = 0.25, y1 = 3.75 })
 		table.insert(holes, { axis = "Z", coord = 61, u0 = 220.25, u1 = 223.75, y0 = 0.25, y1 = 3.75 })
-		table.insert(holes, { axis = "X", coord = 240, u0 = 77, u1 = 83, y0 = 0, y1 = 10 })
+		-- (the legacy hallway floor's east airlock no longer meets a tower: no opening is cut there)
 		table.insert(holes, { axis = "X", coord = 200, u0 = 45, u1 = 51, y0 = 4, y1 = 8 })
 		table.insert(holes, { axis = "Z", coord = 104, u0 = 207.5, u1 = 212.5, y0 = 5, y1 = 8 })
 		local checked = 0
@@ -1722,7 +1722,7 @@ return {
 		host.Name = "SpecWorld"
 		local result = Builder.BuildAuthoritative({ parent = host :: Instance, yieldEvery = 0 })
 		t.truthy(result.partCount > 2000, "a real world")
-		t.truthy(result.partCount < 20000, string.format("part budget (%d)", result.partCount))
+		t.truthy(result.partCount < 26000, string.format("part budget (%d)", result.partCount))
 		for _, id: Enums.LevelId in Enums.LevelId do
 			local level = result.levels[id]
 			assert(level, "level " .. id)
@@ -1732,7 +1732,13 @@ return {
 			end
 			local layout = Builder.getLayout(id)
 			assert(layout, id)
-			t.eq(#child(level, "Zones"):GetChildren(), #layout.rooms, id .. " zones")
+			local walkable = 0
+			for _, r in layout.rooms do
+				if r.kind ~= "Solid" then
+					walkable += 1
+				end
+			end
+			t.eq(#child(level, "Zones"):GetChildren(), walkable, id .. " zones (one per room but solid ground)")
 		end
 		t.eq(#child(result.school, "Stairwells"):GetChildren(), #WorldConfig.Stairwells)
 		child(result.school, "Exterior")

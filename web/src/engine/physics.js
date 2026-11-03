@@ -10,6 +10,8 @@
 // it through a slab between two probes. Jumps launch at
 // sqrt(2 g JumpHeight). "Ball" mode is the vent crawl's 2.6-stud VentCollider: a sphere at the root, no floor
 // probe, no gravity (the vent rail drives it).
+// Crouching lowers the crown to CrouchHeight (the player sets `height`), so a crouched body fits the tunnels'
+// crawlways (CrouchHeight + 0.6 of head room, TunnelRules.CrawlClearance); `headroom()` says whether it may stand.
 
 import * as THREE from 'three';
 import { PhysicsConfig } from './config.js';
@@ -19,6 +21,9 @@ const SNAP_DOWN = 0.75; // studs a grounded body follows the floor down (stairs,
 const RING = 0.72; // floor probe ring radius
 const MAX_PUSH_ITERATIONS = 3;
 const ROOT_ABOVE_FEET = PhysicsConfig.HipHeight + PhysicsConfig.RootHalfHeight;
+/** Feet to crown of a crouched body (TunnelRules.CrouchHeight in the map tool). */
+export const CrouchHeight = 3.7;
+const HEADROOM_RING = 0.85;
 
 const _seg = new THREE.Line3();
 const _segLocal = new THREE.Line3();
@@ -29,6 +34,7 @@ const _dir = new THREE.Vector3();
 const _push = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 const _down = new THREE.Vector3(0, -1, 0);
+const _up = new THREE.Vector3(0, 1, 0);
 const _o = new THREE.Vector3();
 const _ray = new THREE.Ray();
 const _m3 = new THREE.Matrix3();
@@ -49,6 +55,8 @@ export class CharacterBody {
     /** @type {'Biped'|'Ball'} */
     this.shape = 'Biped';
     this.radius = PhysicsConfig.BodyRadius;
+    /** feet to crown (BodyHeight standing, CrouchHeight crouched) */
+    this.height = PhysicsConfig.BodyHeight;
     this.anchored = false;
     this.gravity = true;
     this.lastPush = new THREE.Vector3();
@@ -137,9 +145,27 @@ export class CharacterBody {
     const feet = this.feetY;
     const r = this.radius;
     out.start.set(this.position.x, feet + PhysicsConfig.StepHeight + r, this.position.z);
-    out.end.set(this.position.x, feet + PhysicsConfig.BodyHeight - r, this.position.z);
+    out.end.set(this.position.x, feet + this.height - r, this.position.z);
     if (out.end.y < out.start.y) out.end.y = out.start.y;
     return r;
+  }
+
+  /** Whether a body `height` tall (default standing) fits over the feet here: nothing overhead below its crown. */
+  headroom(height = PhysicsConfig.BodyHeight) {
+    const feet = this.feetY;
+    const from = Math.min(this.height, height) - 0.15;
+    const reach = height - from + 0.05;
+    if (reach <= 0) return true;
+    for (let i = 0; i < 5; i++) {
+      const a = (i - 1) * (Math.PI / 2);
+      _o.set(
+        this.position.x + (i === 0 ? 0 : Math.cos(a) * HEADROOM_RING),
+        feet + from,
+        this.position.z + (i === 0 ? 0 : Math.sin(a) * HEADROOM_RING),
+      );
+      if (this.world.raycast(_o, _up, reach)) return false;
+    }
+    return true;
   }
 
   _resolve() {

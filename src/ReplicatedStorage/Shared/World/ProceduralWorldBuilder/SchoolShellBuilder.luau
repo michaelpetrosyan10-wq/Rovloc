@@ -16,6 +16,10 @@
 -- facade skin owns the whole square at every building corner. Ceilings are thin panels hanging just under each
 -- room's height.
 --
+-- Tunnel floors (TunnelPlanner): Tunnel, Gallery and Crawlway rooms are built like any room (bare concrete or brick by
+-- default); Solid rooms are the ground between them: no floor (none on the bottom level, where nothing sees it), no
+-- ceiling, no zone, no wear, and no wall between two of them, so the tunnels' walls stand alone in the rock.
+--
 -- Every light fixture casts shadows unless its layout entry says `shadows = false`: a Future-lighting light
 -- without shadows shines straight through walls and slabs into the neighbouring rooms. LightingController's
 -- render budget can still turn them off on low-end devices.
@@ -63,6 +67,7 @@ export type LevelOptions = {
 	facadeTop: number?, -- level-local Y footprint walls rise to (the next level's slab underside); nil = own height
 	facadeKey: string?, -- palette of the outside skin of footprint walls (nil = single skin, e.g. below grade)
 	gradeY: number?, -- level-local Y of street level; windows below it get a soil backing outside
+	bottom: boolean?, -- the lowest level: nothing below ever sees its slab, so Solid ground gets no floor
 	groundUnderside: number?, -- level-local Y of the exterior ground slab's underside (soil backings stop there)
 	slabEdgeKey: string?, -- palette of the slab-edge strips under footprint walls (default ConcreteDark)
 }
@@ -84,6 +89,7 @@ export type LightSpec = {
 	aimAt: Vector3?, -- world point floodlights aim at
 	along: Vector3?, -- horizontal axis a ceiling strip fixture runs along (the room's long axis; default X)
 	hang: boolean?, -- false: a broken fixture never sags out of its mounts (a pipe runs under it); default true
+	cage: boolean?, -- a wire guard round a bulb (the tunnels' caged bulbs)
 }
 
 type Run = {
@@ -156,6 +162,10 @@ local DEFAULT_FLOOR: { [string]: string } = {
 	Stairwell = "ConcreteDark",
 	Roof = "RoofGravel",
 	LobbyHall = "ConcreteStained",
+	Tunnel = "ConcreteStained",
+	Gallery = "ConcreteStained",
+	Crawlway = "ConcreteDark",
+	Solid = "ConcreteDark",
 }
 
 local DEFAULT_WALL: { [string]: string } = {
@@ -174,6 +184,10 @@ local DEFAULT_WALL: { [string]: string } = {
 	Stairwell = "ConcreteDark",
 	Roof = "Brick",
 	LobbyHall = "Brick",
+	Tunnel = "ConcreteDark",
+	Gallery = "Brick",
+	Crawlway = "ConcreteDark",
+	Solid = "ConcreteDark",
 }
 
 local DEFAULT_CEILING: { [string]: string } = {
@@ -186,6 +200,9 @@ local DEFAULT_CEILING: { [string]: string } = {
 	Boiler = "ConcreteDark",
 	Office = "PlasterSchool",
 	Restroom = "PlasterSchool",
+	Tunnel = "ConcreteDark",
+	Gallery = "ConcreteDark",
+	Crawlway = "ConcreteDark",
 }
 
 local TRIGGER_TAGS: { [string]: string } = {
@@ -215,14 +232,14 @@ SchoolShellBuilder.CeilingThickness = CEILING
 
 -- Street-level exterior around the school (world X/Z; the ground's top is WorldConfig.GroundY).
 SchoolShellBuilder.Exterior = table.freeze({
-	minX = -360,
-	maxX = 600,
-	minZ = -280,
-	maxZ = 440,
+	minX = -300,
+	maxX = 700,
+	minZ = -220,
+	maxZ = 508,
 	groundThickness = 2,
 	sidewalkWidth = 12,
 	sidewalkHeight = 0.35,
-	landing = table.freeze({ x = -190, z = 10, w = 150, d = 140 }),
+	landing = table.freeze({ x = -190, z = 74, w = 150, d = 140 }),
 	boundaryHeight = 40, -- invisible walls around the ground slab's edge
 	boundaryThickness = 2,
 })
@@ -248,7 +265,7 @@ function SchoolShellBuilder.surface(room: Room): Enums.SurfaceKind
 end
 
 local function hasCeiling(room: Room): boolean
-	return not room.noCeiling and room.kind ~= "Chase"
+	return not room.noCeiling and room.kind ~= "Chase" and room.kind ~= "Solid"
 end
 
 -- World Y of a room's ceiling underside (or its open top).
@@ -382,6 +399,7 @@ function SchoolShellBuilder.levelOptions(layoutId: string): LevelOptions
 	local aboveGrade = elevation >= WorldConfig.GroundY - EPS
 	return {
 		isSchool = true,
+		bottom = index == 1,
 		hasLevelAbove = nextId ~= nil,
 		facadeTop = facadeTop,
 		facadeKey = if aboveGrade then "Brick" else nil,
@@ -670,6 +688,42 @@ function SchoolShellBuilder.buildLight(parent: Instance, spec: LightSpec): BaseP
 			castShadow = false,
 			canCollide = false,
 		}))
+		if spec.cage then
+			-- the wire guard: four ribs from a collar round the lamp holder to a ring under the bulb
+			local ring = BULB_SIZE * 0.72
+			local top = at + Vector3.new(0, BULB_SIZE * 0.55, 0)
+			local bottom = at - Vector3.new(0, BULB_SIZE * 0.62, 0)
+			for i = 0, 3 do
+				local angle = i * math.pi / 2 + math.pi / 4
+				local out = Vector3.new(math.cos(angle), 0, math.sin(angle)) * ring
+				local mid = at + out * 1.05
+				for k, pair in { { top + out * 0.45, mid }, { mid, bottom + out * 0.4 } } do
+					local bar = Geometry.cylinder(
+						fixture,
+						string.format("Cage%d_%d", i, k),
+						pair[1],
+						pair[2],
+						0.045,
+						"TrimMetal",
+						{
+							castShadow = false,
+							canCollide = false,
+						}
+					)
+					if bar then
+						Geometry.makeFixture(bar)
+					end
+				end
+			end
+			local collar =
+				Geometry.cylinder(fixture, "CageCollar", top, top + Vector3.new(0, 0.12, 0), ring * 0.9, "TrimMetal", {
+					castShadow = false,
+					canCollide = false,
+				})
+			if collar then
+				Geometry.makeFixture(collar)
+			end
+		end
 		if ceilingY and ceilingY - at.Y > BULB_SIZE then
 			local cord = Geometry.cylinder(
 				fixture,
@@ -776,10 +830,14 @@ local function collectLines(layout: Layout): ({ [string]: Line }, { string })
 	return lines, order
 end
 
--- Two chases that touch form one continuous service cavity (ducts may cross between them). Every other shared
--- edge gets a wall; between open roof rooms that wall is a parapet-height firewall (their wallHeight).
+-- Two chases that touch form one continuous service cavity (ducts may cross between them), and two Solids one mass
+-- of ground. Every other shared edge gets a wall; between open roof rooms that wall is a parapet-height firewall
+-- (their wallHeight).
 local function wallIsOpen(low: Room?, high: Room?): boolean
-	return low ~= nil and high ~= nil and low.kind == "Chase" and high.kind == "Chase"
+	if low == nil or high == nil then
+		return false
+	end
+	return (low.kind == "Chase" and high.kind == "Chase") or (low.kind == "Solid" and high.kind == "Solid")
 end
 
 local function buildRuns(layout: Layout, line: Line, options: LevelOptions)
@@ -837,9 +895,9 @@ local function buildRuns(layout: Layout, line: Line, options: LevelOptions)
 			local a, b = low :: Room, high :: Room
 			height = math.max(sideHeight(layout, a), sideHeight(layout, b))
 			lowKey, highKey = SchoolShellBuilder.wallKey(a), SchoolShellBuilder.wallKey(b)
-			if a.kind == "Chase" then
+			if a.kind == "Chase" or a.kind == "Solid" then
 				lowKey = highKey
-			elseif b.kind == "Chase" then
+			elseif b.kind == "Chase" or b.kind == "Solid" then
 				highKey = lowKey
 			end
 		end
@@ -934,7 +992,7 @@ end
 
 -- Weathers the face of wall box `part` (wall-local [u0, u1] x [y0, y1] on `run`) that looks into `room`.
 local function wearFace(wear: WearContext, part: BasePart, run: Run, box: Geometry.WallBox, room: Room?, high: boolean)
-	if not room then
+	if not room or room.kind == "Solid" then
 		return
 	end
 	local r = wear.inner[room.id]
@@ -1300,7 +1358,7 @@ local function planOpenings(layout: Layout, rooms: { [string]: Room }, lines: { 
 		end
 	end
 
-	if layout.id ~= "Lobby" then
+	if layout.id ~= "Lobby" and not layout.legacy then
 		local opening = WorldConfig.TowerOpening
 		for _, spec in WorldConfig.Stairwells do
 			local roomId = if spec.from == layout.id
@@ -1692,7 +1750,9 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 			end
 		end
 		local floorKey = SchoolShellBuilder.floorKey(room)
-		for i, piece in Geometry.subtractRects(room.rect, holes) do
+		local solid = room.kind == "Solid"
+		local pieces: { Rect } = if solid and options.bottom then {} else Geometry.subtractRects(room.rect, holes)
+		for i, piece in pieces do
 			local floor = Geometry.box(
 				shell,
 				string.format("Floor_%s_%d", room.id, i),
@@ -1700,7 +1760,7 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 				origin + Vector3.new(piece.x + piece.w, 0, piece.z + piece.d),
 				floorKey
 			)
-			if floor then
+			if floor and not solid then
 				Finishes.decorateFloor(floor, levelId, room, floorKey)
 			end
 		end
@@ -1992,8 +2052,11 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		end
 	end
 
-	-- Zones
+	-- Zones (never in solid ground)
 	for _, room in layout.rooms do
+		if room.kind == "Solid" then
+			continue
+		end
 		local r = room.rect
 		local bottom = 0
 		for _, basin in (basinsByRoom[room.id] or {}) :: { LayoutSchema.Basin } do
@@ -2104,6 +2167,7 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 				color = LightingMood.cast(layout.id, room.id, light.kind, base),
 				along = along,
 				hang = not dripRooms[room.id],
+				cage = light.cage,
 				flickerGroup = mood.flickerGroup,
 				broken = mood.broken,
 				shadows = light.shadows,
@@ -2207,13 +2271,16 @@ end
 -- Exterior: street-level ground around the school, sidewalks, the parachute landing field
 --------------------------------------------------------------------------------
 
-function SchoolShellBuilder.buildExterior(parent: Instance): number
+-- `street` is the part of the footprint the street-level storey covers (default: all of it): a legacy storey still
+-- drawn for the old footprint leaves the rest capped by the ground slab, so the street never opens onto the basement.
+function SchoolShellBuilder.buildExterior(parent: Instance, street: Vector2?): number
 	local before = Geometry.partsCreated()
 	local ext = SchoolShellBuilder.Exterior
 	local groundY = WorldConfig.GroundY
 	local size = WorldConfig.FootprintSize
 	local margin = WorldConfig.ExteriorWallThickness / 2
-	local footprint = Geometry.rect(-margin, -margin, size.X + margin * 2, size.Y + margin * 2)
+	local covered = street or size
+	local footprint = Geometry.rect(-margin, -margin, covered.X + margin * 2, covered.Y + margin * 2)
 	local holes: { Rect } = { footprint }
 	for _, tower in WorldConfig.Towers do
 		table.insert(holes, Geometry.rect(tower.minX, tower.minZ, tower.maxX - tower.minX, tower.maxZ - tower.minZ))
@@ -2283,8 +2350,8 @@ function SchoolShellBuilder.buildExterior(parent: Instance): number
 	local attempts = 0
 	while placedDebris < 14 and attempts < 200 do
 		attempts += 1
-		local x = random:NextNumber(-140, 380)
-		local z = random:NextNumber(-90, 250)
+		local x = random:NextNumber(-140, size.X + 140)
+		local z = random:NextNumber(-90, size.Y + 90)
 		if not clearOfSchool(x, z, 6) then
 			continue
 		end
@@ -2299,15 +2366,18 @@ function SchoolShellBuilder.buildExterior(parent: Instance): number
 			"Rubble"
 		)
 	end
+	-- dead lamp posts along the sidewalks, clear of the stair towers on the side walls
 	local lampSpots: { { number } } = {
-		{ -walk + 1.5, 44 },
-		{ -walk + 1.5, 116 },
-		{ 60, -walk + 1.5 },
-		{ 180, -walk + 1.5 },
-		{ 60, size.Y + walk - 1.5 },
-		{ 180, size.Y + walk - 1.5 },
-		{ size.X + walk - 1.5, 44 },
-		{ size.X + walk - 1.5, 116 },
+		{ -walk + 1.5, size.Y * 0.29 },
+		{ -walk + 1.5, size.Y * 0.71 },
+		{ size.X * 0.25, -walk + 1.5 },
+		{ size.X * 0.5, -walk + 1.5 },
+		{ size.X * 0.75, -walk + 1.5 },
+		{ size.X * 0.25, size.Y + walk - 1.5 },
+		{ size.X * 0.5, size.Y + walk - 1.5 },
+		{ size.X * 0.75, size.Y + walk - 1.5 },
+		{ size.X + walk - 1.5, size.Y * 0.29 },
+		{ size.X + walk - 1.5, size.Y * 0.71 },
 	}
 	for i, spot in lampSpots do
 		local x, z = spot[1], spot[2]

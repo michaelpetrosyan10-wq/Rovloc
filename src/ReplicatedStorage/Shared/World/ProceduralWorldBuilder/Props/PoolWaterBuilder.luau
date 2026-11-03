@@ -1625,7 +1625,7 @@ local function buildPool(ctx: PropKit.StaticContext): number
 			"PoolDressing_" .. basin.id,
 			CFrame.new(info.origin + Vector3.new(r.x + r.w / 2, basin.waterLevel, r.z + r.d / 2))
 		)
-		Kit.realize(model, pieces)
+		Kit.realize(model, pieces, "BySize")
 		PropKit.setAttributes(model, {
 			[W.LevelId] = layout.id,
 			[W.ZoneId] = basin.room,

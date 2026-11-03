@@ -29,7 +29,7 @@ import { CameraConfig, GameConfig, MaterialSurface, OverridePriority, StaminaDra
 import { Flashlight } from './flashlight.js';
 import { clamp01, dampNumber, NumberSpring, VectorSpring, toMatrix, wrapAngle, yawPitchFromVector } from './math.js';
 import { PanicFx } from './panic.js';
-import { CharacterBody, ROOT_ABOVE_FEET } from './physics.js';
+import { CharacterBody, CrouchHeight, ROOT_ABOVE_FEET } from './physics.js';
 import { Signal } from './signal.js';
 import { Viewmodel } from './viewmodel.js';
 
@@ -393,6 +393,11 @@ export class Player {
     if (this.mode === 'Vent') return canSprint ? 'VentScurrying' : 'VentCrawling';
     if (this.mode === 'Swim') return this.intent.dive ? 'Underwater' : canSprint ? 'Freestyle' : 'Treading';
     if (this.intent.crouch) return 'Crouching';
+    // under a low ceiling (a crawlway) a crouched body cannot stand up: it stays crouched until there is room
+    if (this.moveState === 'Crouching' && this.mode === 'OnFoot' && !this.body.headroom()) {
+      this.intent.crouch = true;
+      return 'Crouching';
+    }
     return canSprint && this.moving ? 'Sprinting' : 'Standing';
   }
 
@@ -427,6 +432,8 @@ export class Player {
       this.moveState = next;
       this.moveStateChanged.fire(next, prev);
     }
+    // the crouched body is shorter (crawlways): physics.js CrouchHeight
+    this.body.height = this.moveState === 'Crouching' ? CrouchHeight : PhysicsConfig.BodyHeight;
     this.noiseClock += dt;
     if (this.noiseClock >= 1 / NOISE_HZ) {
       this.noiseClock = 0;

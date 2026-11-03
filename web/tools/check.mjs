@@ -10,7 +10,8 @@
 //    and single-player still plays.
 // 2. The engine walk (a sandbox build of the same engine, build/cache/check-sandbox.html, so the game's own flow
 //    cannot hold the player): spawn in the Level 1 corridor; walking W moves the body along the floor (it neither
-//    falls through nor floats), a wall stops it, Shift sprints and drains stamina, C crouches, F toggles the torch,
+//    falls through nor floats), a wall stops it, a Level 0 crawlway's mouth stops a standing body and lets a crouched
+//    one crawl through, Shift sprints and drains stamina, C crouches, F toggles the torch,
 //    a held E fills a prompt and triggers it once, walking emits locomotion noise, an airlock door's leaves swung
 //    shut through the entity API block rays (and open do not), decals and the creature rig build, the audio engine
 //    runs and every one of the 101 SynthPresets recipes renders non-silent, finite audio offline.
@@ -216,6 +217,48 @@ async function main() {
   await page.keyboard.up('KeyS');
   const s4 = await state();
   report(s4.pos[2] < 87 && s4.pos[2] > 84, 'a wall stops the body', `z ${s4.pos[2].toFixed(2)} (wall at 87)`);
+  // a crawlway (Level 0): standing, the body does not fit its mouth; crouched, it crawls through to the far side
+  const crawl = await page.evaluate(() => {
+    const m = window.__rovloc.engine.world.meta;
+    const r = m.rooms.find((x) => x.kind === 'Crawlway' && x.level === 'Level0_Basement');
+    return r ? { id: r.id, rect: r.rect, floorY: r.floorY } : null;
+  });
+  report(!!crawl, 'Level 0 has a crawlway', crawl ? crawl.id : 'none');
+  if (crawl) {
+    const r = crawl.rect;
+    const alongX = r.w > r.d;
+    const from = alongX ? r.x : r.z;
+    const to = alongX ? r.x + r.w : r.z + r.d;
+    const along = (s) => (alongX ? s.pos[0] : s.pos[2]);
+    await page.evaluate(([rr, ax, fy]) => {
+      const e = window.__rovloc.engine;
+      const at = ax ? { x: rr.x - 3, y: fy + 3, z: rr.z + rr.d / 2 } : { x: rr.x + rr.w / 2, y: fy + 3, z: rr.z - 3 };
+      const yaw = ax ? -Math.PI / 2 : Math.PI; // facing +X / +Z
+      e.player.teleport({ position: at, yaw });
+      e.player.setLook(yaw, 0);
+    }, [r, alongX, crawl.floorY]);
+    await step(10);
+    await page.keyboard.down('KeyW');
+    await step(60);
+    await page.keyboard.up('KeyW');
+    const c1 = await state();
+    report(along(c1) < from + 0.5, 'standing, the body does not fit a crawlway\'s mouth', `${along(c1).toFixed(2)} (mouth at ${from.toFixed(1)})`);
+    await page.keyboard.press('KeyC');
+    await step(10);
+    await page.keyboard.down('KeyW');
+    await step(Math.ceil(((to - from + 8) / 5) * 30));
+    await page.keyboard.up('KeyW');
+    const c2 = await state();
+    report(along(c2) > to + 0.5 && c2.grounded, 'crouched, the body crawls through a crawlway', `${along(c2).toFixed(2)} (far mouth at ${to.toFixed(1)}), ${c2.moveState}`);
+    await page.keyboard.press('KeyC');
+    await step(10);
+    await page.evaluate(() => {
+      const e = window.__rovloc.engine;
+      e.player.teleport({ position: { x: 222, y: 21, z: 80 }, yaw: 0 });
+      e.player.setLook(0, 0);
+    });
+    await step(10);
+  }
   const torch0 = s4.torch;
   await page.keyboard.press('KeyF');
   await step(5);
@@ -318,20 +361,22 @@ async function main() {
     }, [w, h], { timeout: 120000 });
     await page.waitForTimeout(300);
   };
-  for (const tier of ['Low', 'Medium', 'High']) {
-    const prep = (t) => {
+  // the Level 1 corridor, and the Level 0 tunnels (down a lit pipe gallery, the power on)
+  const places = { L1: { p: [222, 21, 80], yaw: Math.PI / 2 }, L0: { p: [168, 3.5, 40], yaw: Math.PI } };
+  for (const [place, at] of Object.entries(places)) for (const tier of ['Low', 'Medium', 'High']) {
+    const prep = ([t, a]) => {
       const e = window.__rovloc.engine;
       e.quality.setTier(t);
       e.quality.scale = e.quality.budget.maxScale;
       e.quality.scaleChanged.fire(e.quality.scale);
-      e.player.teleport({ position: { x: 222, y: 21, z: 80 }, yaw: Math.PI / 2 });
+      e.player.teleport({ position: { x: a.p[0], y: a.p[1], z: a.p[2] }, yaw: a.yaw });
       e.player.flashlight.setOn(true);
       for (let i = 0; i < 10; i++) e.loop.stepManual(1 / 30);
     };
     // main-thread cost of a frame (simulation + draw submission) at a tiny canvas, so the software rasterizer's
     // backlog never stalls the measurement: this is the CPU figure that carries over to a Chromebook
     await setView(320, 180);
-    await page.evaluate(prep, tier);
+    await page.evaluate(prep, [tier, at]);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     const cpu = await page.evaluate(() => {
       const e = window.__rovloc.engine;
@@ -348,7 +393,7 @@ async function main() {
     // real frame rate at 1280x720 with the loop running (software rasterizer included)
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     await setView(1280, 720);
-    await page.evaluate(prep, tier);
+    await page.evaluate(prep, [tier, at]);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
     const fps = await page.evaluate(async (seconds) => {
       const e = window.__rovloc.engine;
@@ -363,8 +408,8 @@ async function main() {
     }, quick ? 3 : 6);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     const r = { cpuMedian: cpu.median, cpuP90: cpu.p90, calls: cpu.calls, triangles: cpu.triangles, ...fps };
-    perf[tier] = r;
-    console.log(`INFO  4x CPU throttle, ${tier}: main thread ${r.cpuMedian.toFixed(1)} ms median / ` +
+    perf[place === 'L1' ? tier : `${place} ${tier}`] = r;
+    console.log(`INFO  4x CPU throttle, ${place} ${tier}: main thread ${r.cpuMedian.toFixed(1)} ms median / ` +
       `${r.cpuP90.toFixed(1)} ms p90 per frame (${r.calls} draw calls, ${(r.triangles / 1000).toFixed(0)}k triangles); ` +
       `${r.fps.toFixed(1)} fps headless at ${r.internal.join('x')} internal (software GPU)`);
   }
@@ -375,7 +420,9 @@ async function main() {
   const views = {
     'l1-corridor': { p: [222, 21, 80], yaw: 90, pitch: -3 },
     'l2-lab': { p: [40, 37, 70], yaw: 38, pitch: -8 },
-    'l0-boilerhall': { p: [140, 3, 120], yaw: 0, pitch: 0 },
+    'l0-gallery': { p: [168, 3.5, 40], yaw: 180, pitch: 0 },
+    'l0-boiler': { p: [207, 3.5, 238], yaw: -90, pitch: -4 },
+    'l0-drains': { p: [370, 3.5, 230], yaw: 0, pitch: 0 },
     'l3-gym': { p: [115, 53, 80], yaw: 90, pitch: 5 },
     'l4-pool': { p: [220, 85, 125], yaw: 57, pitch: -10 },
     'l5-roof': { p: [236, 115.5, 90], yaw: 90, pitch: 0 },

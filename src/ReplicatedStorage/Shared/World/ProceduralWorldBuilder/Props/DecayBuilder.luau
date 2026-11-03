@@ -547,7 +547,7 @@ local function buildDecay(ctx: PropKit.StaticContext): number
 	local info = Kit.info(layout)
 	local model = PropKit.model(ctx.parent, "Decay_" .. layout.id, CFrame.new(info.origin))
 	model:SetAttribute(W.LevelId, layout.id)
-	local parts = Kit.realize(model, plan.pieces)
+	local parts = Kit.realize(model, plan.pieces, "BySize")
 	for index, painter in plan.painters do
 		local part = parts[index]
 		if part then

@@ -73,9 +73,20 @@ build.mjs inlines `world.json`, `world.bin` (gzip, then base64; inflate with Dec
 | `bucket` | `opaque`; `transparent` (glass / water / bulbs; per-vertex `alpha`); `emissive` (Neon: self-lit in its colour × its flicker); `decal`; `wear` |
 | `material` | key into `meta.materials` |
 | `aabb` | min xyz, max xyz |
+| `detail` | static and decal chunks of decorative parts only: their `Detail` level 1..3 (absent: always drawn) |
 
-Static chunks are split per level × bucket × material (one 240-stud cell, so a level is about 55 draw calls: cull per
-level). There are about 400 chunks in all.
+Static chunks are split per level × bucket × material × Detail level (one 400-stud cell, so a level is one cell: cull
+per level). There are about 530 chunks in all.
+
+**Detail (the low graphics settings).** Builders mark purely decorative parts with the Roblox attribute `Detail`
+(Attributes.World.Detail): 1 shapes a room's look (the tunnels' mains and cable trays, corpses, service pipes, lore
+graffiti), 2 medium (branch pipes and conduits, pipe markers, steam vents, grates, puddles, clutter, decay), 3 small
+(debris, rubble, bands, hangers, tags, crumbs). Such a part never collides, is never queried or touched, and carries
+no gameplay; collision and navigation geometry never carries the attribute (the collision buffer and every collider
+come from colliding parts only). Their geometry and decals are baked into chunks of their own with `chunk.detail`,
+so a setting may skip every chunk with `detail >= n` without changing the map, physics, hitboxes or mechanics.
+Navigation landmarks (junction plates, region and keep-room stencils, EXIT arrows), signage, lights and every entity
+are never Detail.
 
 Faces buried in other solid static parts are culled. Large faces are subdivided where light varies:
 
@@ -143,14 +154,24 @@ The atlases `Decals<N>` and `Wear<N>` have `atlas: true` and `studsPerTile` 1.
   - `kind` `flicker`: the Roblox FlickerGroup. The level is a pure function of (RunSeed or 1, name, server time),
     as in LightingController.
   - `kind` `scripted`: `Scripted:Floodlights` (L4 pool, `initial` 0, on at the switch) and
-    `Scripted:L1_Light_ClassroomGlow[Spill]` (die in the Floor 1 scare's burst).
+    `Scripted:L1_Light_ClassroomGlow[Spill]` (die in the Floor 1 scare's burst), and the tunnel floors' steady
+    circuits `Mains:<...>`.
+  - **Power circuits (tunnel floors):** TunnelPlanner wires every run's caged bulbs in local circuits of up to four
+    neighbours, each its own group: `Mains:L0_<Region>_<nn>` burns steady (`scripted`), a bad circuit
+    `Circuit:L0_<Region>_<nn>` flickers (`flicker`); every keep-room is its own `Mains:<roomId>`. A teleport
+    warning's flicker therefore touches only the bulbs near it, and the floor's power switch (floor0.js: every group of
+    the level whose lights are all bulbs or fluorescents) holds them all down. All `Mains:` / `Circuit:` groups of one
+    level form a family: a vertex lit by several carries its dominant one at their pooled share (so a dark floor is
+    dark between circuits too), and the probes keep a family's light in one grid.
+  - At most 255 groups in all (the vertex stores the group in a byte); the world has about 240.
   - A vertex's light is `baked × (1 − share + share × level[group])`. Neon glow parts and self-lit decals have share
     255.
 - **Probes (`world.probes[level]`):** `{ origin, dims, spacing: 4, data, groups }`, linear RGB irradiance, lit
   omnidirectionally (N·L = 1). Probe (x, y, z) is at `((y * nz + z) * nx + x) * 3`. Probes inside solids are filled
   from their neighbours.
   - `data` excludes the scripted groups. `groups` has one extra grid per scripted group that reaches the level
-    (`Scripted:Floodlights` on L4, the classroom glow on L1). Add `level[group] × extra`.
+    (`Scripted:Floodlights` on L4, the classroom glow on L1) and one per power family (L0: every `Mains:` /
+    `Circuit:` circuit's light, scaled by the family's first steady circuit). Add `level[group] × extra`.
   - `sampleProbe(grid, x, y, z, out, groupLevels)` does this when given the group levels (for example the flicker
     table).
   - Use probes for anything that moves: the creature, hands, held items, open doors.
@@ -169,6 +190,10 @@ Each entity is one interactive or scripted object of a run. `type` is one of:
 - `VentGrate`, `BearTrap`, `Locker`, `ChemicalFlask`, `Battery`;
 - `ParachuteCrate`, `FloodlightSwitch`;
 - `ReadyPad`, `Terminal`;
+- `Barrel`, `Cabinet`: the tunnels' other hiding spots (HideBuilder; tag `Hideable`, attribute `HideKind`
+  `Barrel` / `Cabinet`, lockers carry `HideKind` `Locker` too). Same attachments and Hide prompt as a locker. Most
+  stand free in a niche: their anchor's `exit` puts the `ExitAnchor` 1.3 studs off the prop's Left (−X) or Right (+X)
+  side, looking out that way (a side the Creature may not be standing on); the rest step out at the front;
 - floor objectives (see "Floor objectives" below):
   - items: `Fuse`, `MasterKeys`, `ReagentJar`, `CoachKey`, `ValveWheel`, `BoltCutters`, `AcidFlask`;
   - stations: `BreakerPanel`, `FumeHood`, `Generator`, `HatchValve`, `StoreLock`, `CrateChain`;
@@ -353,8 +378,13 @@ lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones f
 | `triggers` | ScareStep, FloorDebris, Checkpoint, PoolWater, LevelExit volumes (`cframe`, `size`, `attributes`) |
 | `pools` | PoolWater volumes as surface Y, rect and depth (`basins`: the layout basins) |
 | `doors` | layout door anchors (Door / Ajar / Gate / Airlock / RoofDoor: cframe looking into the next room, width, height, scriptedId) |
-| `layoutDoors` | every layout door incl. Boarded / Doorway, level-local |
-| `zoneGraph` | `ZoneGraph.build` output: `nodes`, `edges`, `adjacency` (rooms + portals) |
+| `layoutDoors` | every layout door incl. Boarded / Doorway, level-local, each with `clearance` (studs of head room: the lintel or the lower ceiling either side, minus the panel) and `crawlOnly` (a crawlway's mouth) |
+| `zoneGraph` | `ZoneGraph.build` output: `nodes`, `edges`, `adjacency` (rooms + portals); door edges carry `clearance` and `crawlOnly` (the Creature never takes a crawl-only edge, nor one under 9; it hunches under 12.5) |
+| `visibility[level][zoneId]` | the potentially visible set: the zone ids a player in that zone may see (itself and its neighbours through any opening included), sorted; see below |
+| `visibilityInfo` | `{ maxDistance, method, levels: { [level]: { zones, pairsTested, rays, meanVisible } } }` |
+| `teleportPoints[level]` | tunnel floors: `[{ pos (world), facings, region, zone }]`, on the tunnel and gallery centrelines every 6 studs, never in a crawlway or a doorway (the Creature's teleport candidates) |
+| `landmarks[level]` | tunnel floors: `[{ id, kind, region, room, pos (world), normal, text }]`: `JunctionPlate` ("J-07"), `RegionSign` (region and keep-room stencils), `Arrow` (EXIT), `Lore`, `Tag`, `Tally` |
+| `regions[level]` | tunnel floors: `[{ id, name, zones, junctions, pipe, band, wet, medium }]`, 4..6 named regions (zones: their rooms, junctions: their plates) |
 | `vents.graphs[level]` | `VentGraph.build` output: `nodes` (positions, links, grateId), `grates` (wall CFrame, mouth, lockable, criticalPath), `grateAtNode`, `segments` |
 | `vents.nodes`, `vents.grates` | the raw VentNode / grate attachments |
 | `stairwells` | WorldConfig.Stairwells: all 15 candidates (`id, pair, slot, tower, from, to, fromRoom, toRoom`), see "Routes" |
@@ -365,6 +395,24 @@ lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones f
 | `film.levels[key]` | LightingMood.film (exposure, contrast, saturation, lift, bloom, Atmosphere density / offset / haze / glare / colour / decay, sun rays, DOF, vignette, shafts, dust, moon). `film.base` is the base film; `film.levels.Outdoor` is the storm outside |
 | `lighting` | `baseline` (LightingRig), `moods` (per level: cast, grade tint, revive, ...), `moonlight`, `fixtureCones` (haze-cone shapes per light kind), `bakedAmbient`, `falloff` |
 | `palette` | Palette keys: material, colour, surface, texture |
+
+**Potentially visible sets (`meta.visibility`).** Computed offline in the bake (`tools/bake/pvs.mjs`): for every pair
+of zones of a level (layout rooms; a tunnel floor's Solid fill is no zone) within `maxDistance` (300 studs) of each
+other, rays between their samples (points across each of their openings at crouched and standing eye height, a step
+inside the zone, plus a 6-stud grid over the floor at eye height) against the static structure (colliding, opaque,
+non-glass static parts without `Detail`: walls, floors, ceilings, solid furniture). Doors and every other entity
+count as open and glass as clear, so the set is conservative; one clear ray makes the pair visible both ways. A
+renderer may skip whatever lies in zones outside the camera zone's set (dynamic lights, entities, particles,
+decorative chunks); static chunks are one per level and stay.
+
+## Tunnel floors
+
+Level 0 (the basement) is built by TunnelPlanner (docs/MAPS.md): its rooms are kind `Tunnel`, `Gallery`, `Crawlway`
+(culverts only a crouched player fits: their mouths are `crawlOnly`, `clearance` 4.3), keep-rooms (`Storage`,
+`Boiler`, `Airlock`) and `Solid` fill (no zone, kept in `layouts` only). Alcoves are `Tunnel` rooms. The planner's
+data rides in `layouts.Level0_Basement.tunnels` (graph, segments, regions, landmarks, rules, stats) and, ready to
+use, in `teleportPoints`, `landmarks`, `regions`, `visibility`, `layoutDoors` / `zoneGraph` flags and the Barrel /
+Cabinet entities above.
 
 ## Known differences from a live server
 

@@ -41,7 +41,7 @@ local SEEDS = 120
 
 -- Candidate counts the brief asks for, and the stations every floor has
 local CANDIDATES: { [string]: number } = {
-	Level0_Basement = 13,
+	Level0_Basement = 14,
 	Level1_Hallways = 10,
 	Level2_ScienceHall = 12,
 	Level3_Gymnasium = 32,
