@@ -380,7 +380,7 @@ return {
 		for _, id in schoolLevels() do
 			local count = #anchorsOf(LAYOUTS[id], "CreatureSpawn")
 			if LAYOUTS[id].tunnels then
-				-- the Creature hunts the tunnels: several starts for the spawn rule to choose from
+				-- a tunnel floor: the Creature hunts the tunnels, several starts for the spawn rule to choose from
 				t.truthy(count >= 4, id .. ": the tunnels hold several Creature starts")
 			elseif id == "Level5_Roof" then
 				-- one behind each stair housing's roof door (the run arrives in one of them)
@@ -945,9 +945,12 @@ return {
 		t.truthy(#anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
 	end,
 
-	["gymnasium: tall gym with bleachers, locker rooms, low vents"] = function(t: Expect)
+	["gymnasium: a tall gym across the floor's fold, the equipment store off it, the locker rooms"] = function(
+		t: Expect
+	)
 		local layout = LAYOUTS.Level3_Gymnasium
 		local rooms = LayoutSchema.indexRooms(layout)
+		t.truthy(layout.tunnels ~= nil, "the gym's floor is a tunnel floor (TunnelPlanner)")
 		local gym: Room? = nil
 		local lockerRooms: { [string]: boolean } = {}
 		local coach = false
@@ -983,27 +986,62 @@ return {
 			end
 		end
 		t.truthy(inLockerRooms * 2 >= #lockers, "most lockers line the locker rooms")
-		local vents = layout.vents
-		t.truthy(vents, "vents")
-		if not vents then
-			return
+		t.eq(#anchorsOf(layout, "CoachKeyCandidate"), inLockerRooms, "every locker-room locker may hold the key")
+		-- the equipment store opens off the gym: its steel door is the floor objective's StoreDoor
+		local store = doorsWhere(layout, function(d: Door): boolean
+			return d.scriptedId == "EquipmentStoreDoor"
+		end)
+		t.eq(#store, 1, "one equipment store door")
+		if store[1] then
+			t.eq(store[1].kind, "RoofDoor", "a single dented steel leaf")
+			t.truthy(table.find(store[1].rooms, gym.id) ~= nil, "the store opens off the gym")
+			t.truthy(table.find(store[1].rooms, "L3_EquipmentStore") ~= nil, "into the equipment store")
 		end
-		local opensInto: { [string]: boolean } = {}
-		for _, g in vents.grates do
-			opensInto[g.room] = true
+		-- the floor is folded so that the way west crosses the court and passes through a locker room: without the
+		-- gym's doors, or without the locker rooms', the exit cannot be reached
+		local function reachesExit(blocked: (Door) -> boolean): boolean
+			local adjacency: { [string]: { string } } = {}
+			for _, d in layout.doors do
+				if d.kind ~= "Boarded" and not blocked(d) then
+					for i = 1, 2 do
+						local a, b = d.rooms[i], d.rooms[3 - i]
+						adjacency[a] = adjacency[a] or {}
+						table.insert(adjacency[a], b)
+					end
+				end
+			end
+			local seen: { [string]: boolean } = { [layout.entry] = true }
+			local queue = { layout.entry }
+			local head = 1
+			while head <= #queue do
+				local current = queue[head]
+				head += 1
+				for _, nextId in adjacency[current] or {} :: { string } do
+					if not seen[nextId] then
+						seen[nextId] = true
+						table.insert(queue, nextId)
+					end
+				end
+			end
+			return seen[layout.exit] == true
 		end
-		t.truthy(opensInto[gym.id], "a grate into the gym")
-		for roomId in lockerRooms do
-			t.truthy(opensInto[roomId], "a grate into " .. roomId)
+		-- (crawlways are shortcuts, never the only way: they stay shut here too)
+		local function crawl(d: Door): boolean
+			return LayoutSchema.doorCrawlOnly(layout, d)
 		end
-		for _, n in vents.nodes do
-			t.near(LayoutSchema.ventNodeY(n), WorldConfig.VentCenterHeight, EPS, n.id .. " is a low wall vent")
-		end
-		local total, lockable, critical = grateCounts(layout)
-		t.truthy(lockable * 2 >= total - critical, "at least half the other grates lock")
-		-- the way into the gym from the locker wing is the vent
-		local doorsOnly = reachable(layout, layout.entry, { noVents = true })
-		t.falsy(doorsOnly["room:" .. gym.id], "the gym's doors to the locker wing are shut")
+		t.truthy(reachesExit(crawl), "the exit is reached on foot")
+		t.falsy(
+			reachesExit(function(d: Door): boolean
+				return crawl(d) or table.find(d.rooms, gym.id) ~= nil
+			end),
+			"only across the gym"
+		)
+		t.falsy(
+			reachesExit(function(d: Door): boolean
+				return crawl(d) or lockerRooms[d.rooms[1]] == true or lockerRooms[d.rooms[2]] == true
+			end),
+			"only through a locker room"
+		)
 		t.truthy(rooms[layout.exit] and #anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
 	end,
 
@@ -1129,6 +1167,60 @@ return {
 			end
 		end
 		t.truthy(floodlights >= 4, "pool floodlights for the switch")
+		-- the pool must be crossed: with the hall shut (its doors and its grates) no exit vestibule is reached from the
+		-- entry, not by a tunnel, a crawlway or a duct; with it, every one is
+		local tunnels = layout.tunnels
+		t.truthy(tunnels, "the pool's floor is a tunnel floor (TunnelPlanner)")
+		if tunnels then
+			local hall = "room:" .. pool.id
+			local function exitsReached(withHall: boolean): number
+				local adjacency: { [string]: { string } } = {}
+				local function link(a: string, b: string)
+					if withHall or (a ~= hall and b ~= hall) then
+						adjacency[a] = adjacency[a] or {}
+						adjacency[b] = adjacency[b] or {}
+						table.insert(adjacency[a], b)
+						table.insert(adjacency[b], a)
+					end
+				end
+				for _, d in layout.doors do
+					if d.kind ~= "Boarded" then
+						link("room:" .. d.rooms[1], "room:" .. d.rooms[2])
+					end
+				end
+				local ducts = layout.vents
+				if ducts then
+					for _, e in ducts.edges do
+						link("vent:" .. e.a, "vent:" .. e.b)
+					end
+					for _, g in ducts.grates do
+						link("room:" .. g.room, "vent:" .. g.node)
+					end
+				end
+				local seen: { [string]: boolean } = { ["room:" .. layout.entry] = true }
+				local queue: { string } = { "room:" .. layout.entry }
+				local head = 1
+				while head <= #queue do
+					local current = queue[head]
+					head += 1
+					for _, nextId in (adjacency[current] or {}) :: { string } do
+						if not seen[nextId] then
+							seen[nextId] = true
+							table.insert(queue, nextId)
+						end
+					end
+				end
+				local reached = 0
+				for _, id in tunnels.exits do
+					if seen["room:" .. id] then
+						reached += 1
+					end
+				end
+				return reached
+			end
+			t.eq(exitsReached(true), #tunnels.exits, "every exit vestibule is reached across the pool")
+			t.eq(exitsReached(false), 0, "no dry way round the pool")
+		end
 	end,
 
 	["pool fragments stand on piers or rubble, none hovers over the water"] = function(t: Expect)

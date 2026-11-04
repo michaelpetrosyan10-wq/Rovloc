@@ -243,8 +243,13 @@ return {
 		t.truthy(ParachuteMotion.offRoof(Vector3.new(-1.2, DECK, GAP_Z)), "past the face and dropping")
 		t.falsy(ParachuteMotion.offRoof(Vector3.new(-1.2, DECK + STAND, GAP_Z)), "past the face but still up")
 		t.truthy(ParachuteMotion.offRoof(Vector3.new(60, DECK - 30, -4)), "anywhere along the edge: the north side")
-		t.falsy(ParachuteMotion.offRoof(Vector3.new(254, DECK - 10, 80)), "climbing the east stair tower")
-		t.falsy(ParachuteMotion.offRoof(Vector3.new(-14, DECK - 20, 80)), "in the west stair tower")
+		local east, west = WorldConfig.Towers.East, WorldConfig.Towers.West
+		local function towerPoint(tower: WorldConfig.TowerSpec, drop: number): Vector3
+			return WorldConfig.SchoolOrigin
+				+ Vector3.new((tower.minX + tower.maxX) / 2, DECK - drop, (tower.minZ + tower.maxZ) / 2)
+		end
+		t.falsy(ParachuteMotion.offRoof(towerPoint(east, 10)), "climbing the east stair tower")
+		t.falsy(ParachuteMotion.offRoof(towerPoint(west, 20)), "in the west stair tower")
 		t.near(ParachuteMotion.outside(Vector3.new(-3, 0, GAP_Z)), 3, 1e-6)
 		t.eq(ParachuteMotion.outside(ON_ROOF), 0)
 	end,
@@ -256,7 +261,12 @@ return {
 		local inside = Vector3.new(2, DECK + STAND, GAP_Z)
 		t.eq(ParachuteMotion.edgePoint(inside), Vector3.new(0, DECK, GAP_Z), "inside: the nearest side")
 		t.eq(ParachuteMotion.outward(inside), Vector3.new(-1, 0, 0))
-		t.eq(ParachuteMotion.outward(Vector3.new(120, DECK, 158)), Vector3.new(0, 0, 1), "near the south side")
+		local south = Vector3.new(
+			(ParachuteMotion.Footprint.minX + ParachuteMotion.Footprint.maxX) / 2,
+			DECK,
+			ParachuteMotion.Footprint.maxZ - 2
+		)
+		t.eq(ParachuteMotion.outward(south), Vector3.new(0, 0, 1), "near the south side")
 		local corner = ParachuteMotion.outward(Vector3.new(-3, DECK, -3))
 		t.near(corner.X, -math.sqrt(0.5), 1e-6, "past a corner: diagonal")
 		t.near(corner.Z, -math.sqrt(0.5), 1e-6)

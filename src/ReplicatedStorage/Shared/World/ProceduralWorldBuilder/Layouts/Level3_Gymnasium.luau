@@ -1,27 +1,44 @@
 --!strict
--- Level 3 · Gymnasium & Locker Rooms. The squad arrives in L3_AirlockEast from Stairwell_2_3 and must reach
--- L3_AirlockWest, which opens straight off the gym floor.
+-- Level 3 · the gymnasium and the undercroft round it: boiler runs, team corridors, the tunnels under the bleachers,
+-- the equipment vaults and the maintenance shafts. The squad comes up into one of the three east stair vestibules
+-- (L3_AirlockEast in the middle, the route picks which) and must leave by one of the three west ones, whose fire doors'
+-- motors are dead until the gym's generator winds them.
 --
--- Plan (X west -> east, Z north -> south):
---   z   0..31  weight room, equipment store, coach office, laundry ...    z  31..45  north hall (barricaded at x = 127)
---   z  45..115 GYMNASIUM (x 12..122, 30 tall, bleachers N and S) | gym chase | locker rooms + showers | gym foyer
---   z 115..129 south hall (barricaded at x = 127)                         z 129..160 wrestling, dance, team rooms
--- The gym's doors to the east wing are chained shut (the halls are barricaded where the wings meet), so the way into
--- the gym is the low wall vent from the boys' locker room straight through L3_Chase_GymEast (critical, never
--- locked). Both locker rooms are lined with hideable lockers and joined by a second low duct under the lockers.
+-- The map is TunnelPlanner's (seed below): the keep-rooms here, then the tunnels it lays round them over the whole
+-- 400 x 288 footprint. Barrier lines fold the floor into four bands (each split down the middle by a barrier open at
+-- one end, so a band is walked up one side and down the other), and the bands meet only where the floor's script
+-- needs the squad to go:
+--   band D (x 300..400)  Boiler Run: the three entry vestibules on the east wall (north z 28, middle 144, south 260);
+--                        its middle barrier (x 350) is open at the north
+--   the locker rooms     the boys' and girls' locker rooms straddle the D | C wall (x 300): the only way on is through
+--                        one of them, past the lockers that may hold the coach's key (their showers, the coach's
+--                        office and the team room sit between and beside them)
+--   band C (x 200..300)  Team Corridors (the east side, by the locker rooms), then Under the Bleachers (the west side,
+--                        along the gym's south wall); its middle barrier (x 250) is open at the south
+--   the gym              the gymnasium (x 140..260, against the north facade) straddles the C | B wall (x 200): the
+--                        only way on is across the court, through its two south doorways, with the Creature quicker
+--                        on the boards (Level3_GymnasiumController); the equipment store opens off its west wall (the
+--                        generator inside, the store door locked until the coach's key opens its padlock)
+--   band B (x 100..200)  Under the Bleachers on its east side, the Equipment Vaults on its west side (open at the
+--                        south), which meets band A only at the north (z 28)
+--   band A (x 0..100)    Maintenance Shafts: down its east side, back up its west side past the three exit vestibules
+--                        (south z 260, middle 144, north 28)
+-- The shortest walk from the middle entry to the farthest exit is about 1,750 studs (2.7 minutes at walking pace).
+-- Crawlways cut short rungs and some barriers, so a culvert the Creature cannot enter is never more than 60 studs' walk
+-- away; under the gym, nothing rises past the Level 4 pool basin above (the basin-clearance spec).
 --
--- Everything except the gym has a 14-stud ceiling: the floor above (Level 4) hangs its pool basin over the east wing,
--- so nothing under x 128..214 may rise past that (spec-checked).
---
--- Anchor heights: props on the floor (y = 0), DripPipe under the ceiling, Locker = floor centre of a standing locker
--- whose door faces the yaw, PlayerSpawn at root height plus clearance (3.5), Creature placements at the rig's root
--- height (5). Yaw: 0 faces north (-Z), 90 west, 180 south, -90 east.
+-- Anchor heights: props rest on the floor (y = 0) or on a bench (its top); DripPipe sits under the ceiling; Locker =
+-- the floor centre of a standing locker whose door faces the yaw; PlayerSpawn is at HumanoidRootPart height plus
+-- clearance (3.5) and Creature placements at the rig's root height (5). Yaw is degrees about +Y: 0 faces north (-Z),
+-- 90 west, 180 south, -90 east.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local TunnelPlanner = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelPlanner)
+local TunnelRules = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules)
 
 type Room = LayoutSchema.Room
 
@@ -40,26 +57,17 @@ type LightOptions = {
 	color: Color3?,
 	flicker: string?,
 	broken: boolean?,
+	cage: boolean?,
 }
 
 type LightDefaults = { brightness: number, range: number, color: Color3 }
 
 type DoorOptions = { id: string?, width: number?, height: number?, scriptedId: string? }
 
-type GratePlan = {
-	id: string,
-	room: string, -- the room the grate opens into
-	side: LayoutSchema.Side, -- which side of the chase the grate sits on
-	at: number?, -- position along the chase for grates on its long sides
-	lockable: boolean,
-	critical: boolean,
-}
-
-type Stop = { coord: number, node: string }
-
 local PREFIX = "L3"
+local SEED = 20261122
 local HEIGHT = WorldConfig.Levels.Level3_Gymnasium.height
-local LOW = 14 -- ceiling of every room except the gym
+local LOW = 14 -- every room but the gym (the vestibules, the locker rooms and their annexes, the store)
 
 local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
 
@@ -75,30 +83,20 @@ local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 
 local GYM: Style =
 	{ floor = "WoodGym", wall = "Brick", ceiling = "MetalGalvanized", surface = "Wood", acoustic = "Hall" }
-local HALL: Style =
-	{ floor = "Linoleum", wall = "Brick", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Corridor" }
-local FOYER: Style =
-	{ floor = "TileWhite", wall = "Brick", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Hall" }
 local LOCKERS: Style =
 	{ floor = "TileBlue", wall = "TileWhite", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
 local SHOWERS: Style =
 	{ floor = "TileWhite", wall = "TileBlue", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local WEIGHTS: Style =
-	{ floor = "ConcreteDark", wall = "Brick", ceiling = "PlasterSchool", surface = "Concrete", acoustic = "Room" }
-local MATS: Style =
-	{ floor = "Carpet", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Carpet", acoustic = "Room" }
-local DANCE: Style =
-	{ floor = "WoodPanel", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Wood", acoustic = "Room" }
 local OFFICE: Style =
 	{ floor = "Carpet", wall = "WoodPanel", ceiling = "PlasterSchool", surface = "Carpet", acoustic = "Room" }
-local SERVICE: Style =
-	{ floor = "TileWhite", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local STORAGE: Style =
+local TEAM: Style =
+	{ floor = "Carpet", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Carpet", acoustic = "Room" }
+local STORE: Style =
 	{ floor = "ConcreteStained", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Room" }
 local AIRLOCK: Style =
 	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Stairwell" }
-local CHASE: Style =
-	{ floor = "ConcreteDark", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Metal", acoustic = "Vent" }
+
+local rgb = Color3.fromRGB
 
 --------------------------------------------------------------------------------
 -- Blueprint helpers
@@ -110,11 +108,8 @@ local doors: { LayoutSchema.Door } = {}
 local anchors: { LayoutSchema.Anchor } = {}
 local anchorCounts: { [string]: number } = {}
 local triggers: { LayoutSchema.Trigger } = {}
-local windows: { LayoutSchema.Window } = {}
 local platforms: { LayoutSchema.Platform } = {}
-local ventNodes: { LayoutSchema.VentNodeSpec } = {}
-local ventEdges: { LayoutSchema.VentEdgeSpec } = {}
-local grates: { LayoutSchema.GrateSpec } = {}
+local windows: { LayoutSchema.Window } = {}
 local lightCount = 0
 
 local function room(
@@ -152,10 +147,10 @@ local function getRoom(id: string): Room
 	return found
 end
 
--- The non-chase room holding (x, z) at least 0.25 studs inside its walls.
+-- The room holding (x, z) at least 0.05 studs inside its walls (never solid ground).
 local function roomAt(x: number, z: number): string
 	for _, candidate in rooms do
-		if candidate.kind ~= "Chase" and LayoutSchema.rectContains(candidate.rect, x, z, 0.25) then
+		if candidate.kind ~= "Solid" and LayoutSchema.rectContains(candidate.rect, x, z, 0.05) then
 			return candidate.id
 		end
 	end
@@ -177,56 +172,20 @@ local function light(roomId: string, kind: Enums.LightKind, x: number, y: number
 			color = o.color or defaults.color,
 			flickerGroup = o.flicker,
 			broken = o.broken,
+			cage = o.cage,
 		})
 	end
 end
 
--- nx * nz ceiling fixtures spread evenly over a room. `pattern` is read cyclically, one character per fixture:
--- "x" = broken, "o" = lit (dim, steady), "f" = lit and flickering with options.flicker.
-local function lightGrid(
-	roomId: string,
-	kind: Enums.LightKind,
-	nx: number,
-	nz: number,
-	pattern: string,
-	options: LightOptions?
-)
-	local target = getRoom(roomId)
-	local rect = target.rect
-	local y = (target.height or HEIGHT) - 0.4
-	local o: LightOptions = options or {}
-	local index = 0
-	for i = 1, nx do
-		for j = 1, nz do
-			index += 1
-			local p = ((index - 1) % #pattern) + 1
-			local mark = string.sub(pattern, p, p)
-			light(roomId, kind, rect.x + rect.w * (i - 0.5) / nx, y, rect.z + rect.d * (j - 0.5) / nz, {
-				brightness = o.brightness,
-				range = o.range,
-				color = o.color,
-				flicker = if mark == "f" then o.flicker else nil,
-				broken = mark == "x",
-			})
-		end
-	end
-end
-
-local function door(kind: Enums.DoorKind, a: string, b: string, at: number?, options: DoorOptions?)
+local function door(kind: Enums.DoorKind, a: string, b: string, at: number, options: DoorOptions?)
 	local o: DoorOptions = options or {}
-	local roomA, roomB = getRoom(a), getRoom(b)
-	local position: number
-	if at then
-		position = at
-	else
-		local edge = LayoutSchema.sharedEdge(roomA.rect, roomB.rect)
-		position = if edge then (edge.from + edge.to) / 2 else 0
-	end
+	getRoom(a)
+	getRoom(b)
 	table.insert(doors, {
 		id = o.id or string.format("%s_Door_%02d", PREFIX, #doors + 1),
 		kind = kind,
 		rooms = { a, b },
-		at = position,
+		at = at,
 		width = o.width,
 		height = o.height,
 		scriptedId = o.scriptedId,
@@ -256,28 +215,6 @@ local function anchor(
 	return anchorId
 end
 
--- Each point is { x, z } or { x, z, yaw }.
-local function scatter(kind: Enums.AnchorKind, y: number, points: { { number } })
-	for _, p in points do
-		anchor(kind, p[1], y, p[2], p[3])
-	end
-end
-
--- A row of standing lockers at constant z, one per x, doors facing `yaw`.
-local function lockerRow(z: number, xs: { number }, yaw: number)
-	for _, x in xs do
-		anchor("Locker", x, 0, z, yaw)
-	end
-end
-
--- A closed patrol loop: waypoint i leads to i + 1 and the last back to the first, each hop within one room or
--- through one doorway.
-local function patrol(loop: string, points: { { number } })
-	for i, p in points do
-		anchor("PatrolWaypoint", p[1], 0, p[2], nil, string.format("%s_WP_%s_%02d", PREFIX, loop, i))
-	end
-end
-
 local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number, w: number, d: number, height: number)
 	table.insert(triggers, {
 		id = id,
@@ -286,32 +223,6 @@ local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number
 		rect = LayoutSchema.rect(x, z, w, d),
 		height = height,
 	})
-end
-
--- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
-local function windowRow(
-	roomId: string,
-	side: LayoutSchema.Side,
-	count: number,
-	width: number,
-	height: number,
-	sill: number,
-	boarded: boolean
-)
-	local rect = getRoom(roomId).rect
-	local alongX = side == "N" or side == "S"
-	local from = if alongX then rect.x else rect.z
-	local span = if alongX then rect.w else rect.d
-	for i = 1, count do
-		local at = from + span * (i - 0.5) / count
-		local facesTower = not alongX and WorldConfig.facesTower(at - width / 2, at + width / 2, 2)
-		if not facesTower then
-			table.insert(
-				windows,
-				{ room = roomId, side = side, at = at, width = width, height = height, sill = sill, boarded = boarded }
-			)
-		end
-	end
 end
 
 local function platform(
@@ -336,78 +247,6 @@ local function platform(
 	})
 end
 
--- One straight duct along the middle of a chase, a junction under every side grate, end grates as terminals.
--- A duct never leaves its chase, so each chase room carries exactly one run.
-local function chaseRun(chaseId: string, plans: { GratePlan }, submerged: boolean?)
-	local rect = getRoom(chaseId).rect
-	local alongX = rect.w > rect.d
-	local cx, cz = rect.x + rect.w / 2, rect.z + rect.d / 2
-	local stops: { Stop } = {}
-	local stubs: { { string } } = {}
-	local function stop(coord: number, existing: string?): string
-		for _, s in stops do
-			if math.abs(s.coord - coord) < 1e-3 then
-				return s.node
-			end
-		end
-		local nodeId = existing or string.format("%s_J%02d", chaseId, #stops + 1)
-		if not existing then
-			table.insert(ventNodes, { id = nodeId, x = if alongX then coord else cx, z = if alongX then cz else coord })
-		end
-		table.insert(stops, { coord = coord, node = nodeId })
-		return nodeId
-	end
-	for _, plan in plans do
-		local along = plan.at or 0
-		local isEnd = if alongX then plan.side == "W" or plan.side == "E" else plan.side == "N" or plan.side == "S"
-		local x, z = 0, 0
-		if alongX then
-			if plan.side == "N" then
-				x, z = along, rect.z
-			elseif plan.side == "S" then
-				x, z = along, rect.z + rect.d
-			elseif plan.side == "W" then
-				x, z = rect.x, cz
-			else
-				x, z = rect.x + rect.w, cz
-			end
-		else
-			if plan.side == "W" then
-				x, z = rect.x, along
-			elseif plan.side == "E" then
-				x, z = rect.x + rect.w, along
-			elseif plan.side == "N" then
-				x, z = cx, rect.z
-			else
-				x, z = cx, rect.z + rect.d
-			end
-		end
-		local nodeId = plan.id .. "_Node"
-		table.insert(ventNodes, { id = nodeId, x = x, z = z })
-		table.insert(grates, {
-			id = plan.id,
-			node = nodeId,
-			room = plan.room,
-			lockable = plan.lockable,
-			criticalPath = plan.critical,
-		})
-		if isEnd then
-			stop(if alongX then x else z, nodeId)
-		else
-			table.insert(stubs, { nodeId, stop(along) })
-		end
-	end
-	table.sort(stops, function(a: Stop, b: Stop): boolean
-		return a.coord < b.coord
-	end)
-	for i = 1, #stops - 1 do
-		table.insert(ventEdges, { a = stops[i].node, b = stops[i + 1].node, submerged = submerged })
-	end
-	for _, stub in stubs do
-		table.insert(ventEdges, { a = stub[1], b = stub[2], submerged = submerged })
-	end
-end
-
 local function deepFreeze(value: unknown)
 	if type(value) == "table" then
 		local t = value :: { [unknown]: unknown }
@@ -421,275 +260,463 @@ local function deepFreeze(value: unknown)
 end
 
 --------------------------------------------------------------------------------
--- Rooms
+-- Keep-rooms (the rooms the game needs; the planner tunnels around them) and the rooms joined to them
 --------------------------------------------------------------------------------
 
--- Halls (split where the gym wing meets the locker wing)
-room("L3_NorthHall_West", "Corridor", 0, 31, 60, 14, HALL, LOW)
-room("L3_NorthHall_Mid", "Corridor", 60, 31, 67, 14, HALL, LOW)
-room("L3_NorthHall_East", "Corridor", 127, 31, 113, 14, HALL, LOW)
-room("L3_SouthHall_West", "Corridor", 0, 115, 60, 14, HALL, LOW)
-room("L3_SouthHall_Mid", "Corridor", 60, 115, 67, 14, HALL, LOW)
-room("L3_SouthHall_East", "Corridor", 127, 115, 113, 14, HALL, LOW)
+local keep: { TunnelPlanner.KeepRoom } = {}
+local function keepRoom(r: Room, ports: { TunnelPlanner.Port }, region: string?, sign: string?)
+	table.insert(keep, { room = r, ports = ports, region = region, sign = sign })
+end
+-- Rooms the planner only steps round (reached by the layout's own doors from a keep-room)
+local exclusions: { LayoutSchema.Rect } = {}
+local function annex(r: Room)
+	table.insert(exclusions, r.rect)
+end
 
--- West end: the gym and the exit vestibule
-room("L3_Storage_W1", "Storage", 0, 45, 12, 21, STORAGE, LOW)
-room("L3_AirlockWest", "Airlock", 0, 66, 12, 28, AIRLOCK, LOW)
-room("L3_AirlockNorthWest", "Airlock", 0, 0, 12, 31, AIRLOCK, LOW)
-room("L3_AirlockSouthWest", "Airlock", 0, 129, 12, 31, AIRLOCK, LOW)
-room("L3_Storage_W2", "Storage", 0, 94, 12, 21, STORAGE, LOW)
-room("L3_Gymnasium", "Gym", 12, 45, 110, 70, GYM)
-
--- Locker wing
-room("L3_Chase_GymEast", "Chase", 122, 45, 5, 70, CHASE, LOW)
-room("L3_LockerRoom_Boys", "LockerRoom", 127, 45, 50, 33, LOCKERS, LOW)
-room("L3_Chase_Lockers", "Chase", 127, 78, 69, 5, CHASE, LOW)
-room("L3_LockerRoom_Girls", "LockerRoom", 127, 83, 50, 32, LOCKERS, LOW)
-room("L3_Showers_Boys", "Restroom", 177, 45, 19, 33, SHOWERS, LOW)
-room("L3_Showers_Girls", "Restroom", 177, 83, 19, 32, SHOWERS, LOW)
-room("L3_GymFoyer", "Corridor", 196, 45, 32, 70, FOYER, LOW)
-
--- East end: the arrival vestibule
-room("L3_Storage_E1", "Storage", 228, 45, 12, 21, STORAGE, LOW)
-room("L3_AirlockEast", "Airlock", 228, 66, 12, 28, AIRLOCK, LOW)
-room("L3_AirlockNorthEast", "Airlock", 228, 0, 12, 31, AIRLOCK, LOW)
-room("L3_AirlockSouthEast", "Airlock", 228, 129, 12, 31, AIRLOCK, LOW)
-room("L3_Storage_E2", "Storage", 228, 94, 12, 21, STORAGE, LOW)
-
--- North exterior row
-room("L3_WeightRoom", "Storage", 12, 0, 36, 31, WEIGHTS, LOW)
-room("L3_EquipmentStore", "Storage", 48, 0, 36, 31, STORAGE, LOW)
-room("L3_TrainerRoom", "Office", 84, 0, 28, 31, SERVICE, LOW)
-room("L3_CoachOffice", "Office", 112, 0, 28, 31, OFFICE, LOW)
-room("L3_AthleticDirector", "Office", 140, 0, 24, 31, OFFICE, LOW)
-room("L3_LaundryRoom", "Storage", 164, 0, 32, 31, SERVICE, LOW)
-room("L3_Restroom_North", "Restroom", 196, 0, 20, 31, SHOWERS, LOW)
-room("L3_Storage_N", "Storage", 216, 0, 12, 31, STORAGE, LOW)
-
--- South exterior row
-room("L3_WrestlingRoom", "Gym", 12, 129, 48, 31, MATS, LOW)
-room("L3_DanceStudio", "Gym", 60, 129, 52, 31, DANCE, LOW)
-room("L3_TeamRoom", "Classroom", 112, 129, 36, 31, OFFICE, LOW)
-room("L3_MatStore", "Storage", 148, 129, 28, 31, STORAGE, LOW)
-room("L3_ConcessionStand", "Storage", 176, 129, 32, 31, SERVICE, LOW)
-room("L3_TicketOffice", "Office", 208, 129, 20, 31, OFFICE, LOW)
-
---------------------------------------------------------------------------------
--- Doors
---------------------------------------------------------------------------------
-
-door("Airlock", "L3_AirlockEast", "L3_GymFoyer", 80, { id = "L3_Door_AirlockEast" })
-door("Airlock", "L3_Gymnasium", "L3_AirlockWest", 80, { id = "L3_Door_AirlockWest" })
--- The corner stair vestibules open off the outer halls; the west halls are caved in at x = 60, so the corner exits
--- too are only reached across the gym floor (through its west doorways)
-door("Airlock", "L3_AirlockNorthEast", "L3_NorthHall_East", 234, { id = "L3_Door_AirlockNorthEast" })
-door("Airlock", "L3_AirlockSouthEast", "L3_SouthHall_East", 234, { id = "L3_Door_AirlockSouthEast" })
-door("Airlock", "L3_NorthHall_West", "L3_AirlockNorthWest", 6, { id = "L3_Door_AirlockNorthWest" })
-door("Airlock", "L3_SouthHall_West", "L3_AirlockSouthWest", 6, { id = "L3_Door_AirlockSouthWest" })
-door("Boarded", "L3_NorthHall_West", "L3_NorthHall_Mid", 38, { id = "L3_Door_NorthCaveIn", width = 12 })
-door("Boarded", "L3_SouthHall_West", "L3_SouthHall_Mid", 122, { id = "L3_Door_SouthCaveIn", width = 12 })
-door("Boarded", "L3_NorthHall_East", "L3_NorthHall_Mid", 38, { id = "L3_Door_NorthBarricade", width = 12 })
-door("Boarded", "L3_SouthHall_East", "L3_SouthHall_Mid", 122, { id = "L3_Door_SouthBarricade", width = 12 })
-
--- Locker wing
-door("Doorway", "L3_GymFoyer", "L3_NorthHall_East", 212, { width = 10 })
-door("Doorway", "L3_GymFoyer", "L3_SouthHall_East", 212, { width = 10 })
-door("Door", "L3_GymFoyer", "L3_Storage_E1", 55)
-door("Door", "L3_GymFoyer", "L3_Storage_E2", 105)
-door("Door", "L3_NorthHall_East", "L3_LockerRoom_Boys", 152)
-door("Doorway", "L3_LockerRoom_Boys", "L3_Showers_Boys", 62)
-door("Door", "L3_SouthHall_East", "L3_LockerRoom_Girls", 152)
-door("Doorway", "L3_LockerRoom_Girls", "L3_Showers_Girls", 99)
-
--- Gym (double doors in the corners, clear of the bleachers)
-door("Doorway", "L3_NorthHall_West", "L3_Gymnasium", 18, { width = 8 })
-door("Doorway", "L3_NorthHall_Mid", "L3_Gymnasium", 116, { width = 8 })
-door("Doorway", "L3_SouthHall_West", "L3_Gymnasium", 18, { width = 8 })
-door("Doorway", "L3_SouthHall_Mid", "L3_Gymnasium", 116, { width = 8 })
-door("Door", "L3_Gymnasium", "L3_Storage_W1", 58)
-door("Door", "L3_Gymnasium", "L3_Storage_W2", 102)
-
--- North exterior row
-door("Doorway", "L3_NorthHall_West", "L3_WeightRoom", 24, { width = 8 })
--- The equipment store's steel door is a fixture (DoorBuilder "RoofDoor" kind, a single dented steel leaf): the
--- floor objective keeps it locked until the coach's key opens it (the StoreLock below).
+-- The gymnasium against the north facade: the only way from band C to band B, through its two south doorways (one
+-- each side of the C | B wall at x 200)
+keepRoom(room("L3_Gymnasium", "Gym", 140, 0, 120, 80, GYM), {
+	{ side = "S", at = 188, kind = "Doorway", width = 8, id = "L3_Door_GymSouthWest" },
+	{ side = "S", at = 214, kind = "Doorway", width = 8, id = "L3_Door_GymSouthEast" },
+}, "Bleachers", "GYMNASIUM")
+-- The equipment store off the gym's west wall: its steel door (DoorBuilder "RoofDoor": a single dented leaf) is the
+-- floor objective's StoreDoor, locked until the coach's key opens its padlock (the StoreLock, gym side)
+annex(room("L3_EquipmentStore", "Storage", 116, 36, 24, 32, STORE, LOW))
 door(
 	"RoofDoor",
-	"L3_NorthHall_Mid",
+	"L3_Gymnasium",
 	"L3_EquipmentStore",
-	66,
+	52,
 	{ id = "L3_Door_EquipmentStore", width = 8, scriptedId = "EquipmentStoreDoor" }
 )
-door("Door", "L3_NorthHall_Mid", "L3_TrainerRoom", 98)
-door("Door", "L3_NorthHall_Mid", "L3_CoachOffice", 120)
-door("Door", "L3_NorthHall_East", "L3_AthleticDirector", 152)
-door("Door", "L3_NorthHall_East", "L3_LaundryRoom", 180)
-door("Door", "L3_NorthHall_East", "L3_Restroom_North", 206)
-door("Door", "L3_NorthHall_East", "L3_Storage_N", 222)
 
--- South exterior row
-door("Doorway", "L3_SouthHall_West", "L3_WrestlingRoom", 30, { width = 8 })
-door("Doorway", "L3_SouthHall_Mid", "L3_DanceStudio", 86, { width = 8 })
-door("Door", "L3_SouthHall_Mid", "L3_TeamRoom", 119)
-door("Door", "L3_SouthHall_East", "L3_MatStore", 162, { width = 8 })
-door("Door", "L3_SouthHall_East", "L3_ConcessionStand", 192)
-door("Door", "L3_SouthHall_East", "L3_TicketOffice", 224)
+-- The locker block straddling the D | C wall (x 300): the boys' and the girls' locker rooms (each a way through, west
+-- and east doors), their showers, the coach's office and the team room between them
+annex(room("L3_Showers_Boys", "Restroom", 280, 90, 48, 18, SHOWERS, LOW))
+keepRoom(room("L3_LockerRoom_Boys", "LockerRoom", 280, 108, 48, 32, LOCKERS, LOW), {
+	{ side = "W", at = 122, kind = "Door", id = "L3_Door_LockerBoysWest" },
+	{ side = "E", at = 122, kind = "Door", id = "L3_Door_LockerBoysEast" },
+}, "Team", "BOYS")
+annex(room("L3_CoachOffice", "Office", 290, 140, 28, 18, OFFICE, 12))
+annex(room("L3_TeamRoom", "Classroom", 290, 158, 28, 18, TEAM, 12))
+keepRoom(room("L3_LockerRoom_Girls", "LockerRoom", 280, 176, 48, 32, LOCKERS, LOW), {
+	{ side = "W", at = 192, kind = "Door", id = "L3_Door_LockerGirlsWest" },
+	{ side = "E", at = 192, kind = "Door", id = "L3_Door_LockerGirlsEast" },
+}, "Team", "GIRLS")
+annex(room("L3_Showers_Girls", "Restroom", 280, 208, 48, 18, SHOWERS, LOW))
+door("Doorway", "L3_LockerRoom_Boys", "L3_Showers_Boys", 304, { id = "L3_Door_ShowersBoys", width = 6 })
+door("Door", "L3_LockerRoom_Boys", "L3_CoachOffice", 304, { id = "L3_Door_CoachOffice" })
+door("Door", "L3_CoachOffice", "L3_TeamRoom", 310, { id = "L3_Door_TeamRoomOffice" })
+door("Door", "L3_TeamRoom", "L3_LockerRoom_Girls", 304, { id = "L3_Door_TeamRoom" })
+door("Doorway", "L3_LockerRoom_Girls", "L3_Showers_Girls", 304, { id = "L3_Door_ShowersGirls", width = 6 })
 
---------------------------------------------------------------------------------
--- Low wall vents
---------------------------------------------------------------------------------
+-- Side rooms off the tunnels, each a landmark with somewhere to hide: the trophy hall north of the team corridors and
+-- the mat store at the boiler run's south end
+local HALL: Style =
+	{ floor = "Linoleum", wall = "Brick", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Corridor" }
+local MATS: Style =
+	{ floor = "Carpet", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Carpet", acoustic = "Room" }
+keepRoom(
+	room("L3_TrophyHall", "Corridor", 264, 24, 30, 44, HALL, LOW),
+	{ { side = "S", at = 270, kind = "Door", id = "L3_Door_TrophyHall" } },
+	"Team",
+	"TROPHIES"
+)
+keepRoom(
+	room("L3_MatStore", "Storage", 304, 236, 42, 44, MATS, LOW),
+	{ { side = "N", at = 337, kind = "Door", id = "L3_Door_MatStore" } },
+	"Boiler",
+	"MAT STORE"
+)
 
--- Gym chase: the boys' locker grate and the gym grate share one junction, a straight crawl through the wall.
-chaseRun("L3_Chase_GymEast", {
-	{ id = "L3_Grate_GE_NorthHall", room = "L3_NorthHall_Mid", side = "N", lockable = true, critical = false },
-	{ id = "L3_Grate_GE_SouthHall", room = "L3_SouthHall_Mid", side = "S", lockable = true, critical = false },
-	{ id = "L3_Grate_GE_Gym1", room = "L3_Gymnasium", side = "W", at = 56, lockable = true, critical = false },
-	{ id = "L3_Grate_GE_Gym2", room = "L3_Gymnasium", side = "W", at = 66, lockable = false, critical = true },
-	{ id = "L3_Grate_GE_Gym3", room = "L3_Gymnasium", side = "W", at = 104, lockable = false, critical = false },
-	{ id = "L3_Grate_GE_Boys", room = "L3_LockerRoom_Boys", side = "E", at = 66, lockable = false, critical = true },
-	{ id = "L3_Grate_GE_Girls", room = "L3_LockerRoom_Girls", side = "E", at = 100, lockable = true, critical = false },
-})
--- Locker chase between the two locker rooms, out to the showers and the foyer.
-chaseRun("L3_Chase_Lockers", {
-	{ id = "L3_Grate_LK_Boys1", room = "L3_LockerRoom_Boys", side = "N", at = 138, lockable = true, critical = false },
-	{ id = "L3_Grate_LK_Boys2", room = "L3_LockerRoom_Boys", side = "N", at = 165, lockable = false, critical = false },
-	{ id = "L3_Grate_LK_ShowerB", room = "L3_Showers_Boys", side = "N", at = 186, lockable = true, critical = false },
+-- The stair vestibules: the entries against the east towers (from Stairwell_2_3 and its corner candidates), the exits
+-- (route candidates, each fire door with the floor's Keypad ExitLock) against the west towers
+for _, v in
 	{
-		id = "L3_Grate_LK_Girls1",
-		room = "L3_LockerRoom_Girls",
-		side = "S",
-		at = 145,
-		lockable = true,
-		critical = false,
-	},
+		{ "L3_AirlockNorthEast", 16, 28, "L3_Door_AirlockNorthEast" },
+		{ "L3_AirlockEast", 132, 144, "L3_Door_AirlockEast" },
+		{ "L3_AirlockSouthEast", 248, 260, "L3_Door_AirlockSouthEast" },
+	} :: { { any } }
+do
+	-- (no stencil: the fire door's STAIRS sign is SignageBuilder's, beside it on the tunnel side)
+	keepRoom(
+		room(v[1], "Airlock", 386, v[2], 14, 24, AIRLOCK, LOW),
+		{ { side = "W", at = v[3], kind = "Airlock", id = v[4] } },
+		"Boiler"
+	)
+end
+for _, v in
 	{
-		id = "L3_Grate_LK_Girls2",
-		room = "L3_LockerRoom_Girls",
-		side = "S",
-		at = 170,
-		lockable = false,
-		critical = false,
+		{ "L3_AirlockNorthWest", 16, 28, "L3_Door_AirlockNorthWest" },
+		{ "L3_AirlockWest", 132, 144, "L3_Door_AirlockWest" },
+		{ "L3_AirlockSouthWest", 248, 260, "L3_Door_AirlockSouthWest" },
+	} :: { { any } }
+do
+	keepRoom(
+		room(v[1], "Airlock", 0, v[2], 14, 24, AIRLOCK, LOW),
+		{ { side = "E", at = v[3], kind = "Airlock", id = v[4] } },
+		"Shafts"
+	)
+end
+
+--------------------------------------------------------------------------------
+-- The tunnels
+--------------------------------------------------------------------------------
+
+local plan = TunnelPlanner.plan({
+	levelId = "Level3_Gymnasium",
+	prefix = PREFIX,
+	seed = SEED,
+	height = HEIGHT,
+	keepRooms = keep,
+	entry = "L3_AirlockEast",
+	exits = { "L3_AirlockNorthWest", "L3_AirlockWest", "L3_AirlockSouthWest" },
+	exclusions = exclusions,
+	barriers = {
+		{ x0 = 50, z0 = 0, x1 = 50, z1 = 250 }, -- band A's middle, open at the south
+		{ x0 = 100, z0 = 40, x1 = 100, z1 = 288 }, -- A | B, open at the north
+		{ x0 = 150, z0 = 80, x1 = 150, z1 = 250 }, -- band B's middle (south of the gym), open at the south
+		{ x0 = 200, z0 = 0, x1 = 200, z1 = 288 }, -- B | C: only across the gym
+		{ x0 = 256, z0 = 80, x1 = 256, z1 = 250 }, -- band C's middle (south of the gym), open at the south
+		{ x0 = 300, z0 = 0, x1 = 300, z1 = 288 }, -- C | D: only through a locker room
+		{ x0 = 350, z0 = 40, x1 = 350, z1 = 288 }, -- band D's middle, open at the north
+		-- each stair vestibule's line stops at its rail (the stub is the crossing's side arm, so the plate, the arrows
+		-- and the graffiti go on the rail and the stub's walls keep room for the STAIRS sign)
+		{ x0 = 37, z0 = 24, x1 = 37, z1 = 32 },
+		{ x0 = 37, z0 = 140, x1 = 37, z1 = 148 },
+		{ x0 = 37, z0 = 256, x1 = 37, z1 = 264 },
+		{ x0 = 363, z0 = 24, x1 = 363, z1 = 32 },
+		{ x0 = 363, z0 = 140, x1 = 363, z1 = 148 },
+		{ x0 = 363, z0 = 256, x1 = 363, z1 = 264 },
 	},
-	{ id = "L3_Grate_LK_ShowerG", room = "L3_Showers_Girls", side = "S", at = 189, lockable = true, critical = false },
-	{ id = "L3_Grate_LK_Foyer", room = "L3_GymFoyer", side = "E", lockable = true, critical = false },
+	gridX = { 30, 44, 62, 86, 106, 128, 162, 188, 214, 244, 270, 292, 312, 337, 356, 370 },
+	crawlSites = {
+		{ 44, 52, 62, 52 },
+		{ 30, 144, 44, 144 },
+		{ 44, 238, 62, 238 },
+		{ 86, 52, 106, 52 },
+		{ 86, 168, 106, 168 },
+		{ 86, 260, 106, 260 },
+		{ 162, 238, 188, 238 },
+		{ 188, 100, 214, 100 },
+		{ 188, 192, 214, 192 },
+		{ 244, 100, 270, 100 },
+		{ 244, 144, 270, 144 },
+		{ 244, 238, 270, 238 },
+		{ 337, 52, 356, 52 },
+		{ 337, 144, 356, 144 },
+		{ 356, 144, 370, 144 },
+		{ 337, 216, 356, 216 },
+		{ 356, 238, 370, 238 },
+	},
+	gridZ = { 28, 52, 76, 100, 122, 144, 168, 192, 216, 238, 260 },
+	style = {
+		width = { 6, 7, 7, 8 },
+		height = { 10.5, 11 },
+		galleryWidth = 9,
+		galleryHeight = { 14, 15 },
+		galleryShare = 0.16,
+		galleryMin = 40,
+		pitch = 24,
+		jitter = 3,
+		length = 3300,
+		deadEnds = 4,
+		crawlWidth = 4,
+		crawlAcrossBarriers = true,
+		alcoveWidth = 5,
+		alcoveDepth = 6,
+		alcoveHeight = 10,
+		lightSpacing = { 8, 11 },
+		deadShare = 0.3,
+		flickerShare = 0.12,
+		plateLampEvery = 2,
+		wall = "ConcreteDark",
+		floor = "ConcreteStained",
+		ceiling = "ConcreteDark",
+		acoustic = "Basement",
+		galleryAcoustic = "Hall",
+		crawlAcoustic = "Vent",
+	},
+	rules = {
+		maxLoop = 200,
+		deadEndCount = 8,
+		deadEndLength = 25,
+		-- about 2.5-3 minutes at walking pace (11 studs/s)
+		crossing = { 1650, 1980 },
+		crawlCrossingSeconds = 40,
+		-- the 400 x 288 floor's walk is too long for six culverts to keep one within 60 studs of everywhere (the
+		-- side rooms' doors and the vestibules' stubs each want one near)
+		crawlways = { 3, 18 },
+		crawlLength = 20,
+		crawlHeight = TunnelRules.CrawlClearance,
+		crawlReach = 60,
+		hideReach = 30,
+		objectiveHideReach = 25,
+		regions = { 4, 6 },
+	},
+	regions = {
+		{
+			id = "Shafts",
+			medium = "DRAIN",
+			name = "Maintenance Shafts",
+			x = 50,
+			z = 150,
+			areas = { { 0, 0, 100, 288 } },
+			pipe = rgb(54, 92, 58),
+			band = rgb(214, 196, 64),
+			grime = rgb(18, 22, 14),
+			paint = rgb(236, 232, 214),
+			graffiti = { "WEST IS OUT", "THE MOTOR WINDS", "DON'T LOOK BACK", "45 SECONDS" },
+			wall = "ConcreteStained",
+			wet = true,
+		},
+		{
+			id = "Vaults",
+			medium = "GAS",
+			name = "Equipment Vaults",
+			x = 125,
+			z = 150,
+			areas = { { 100, 0, 150, 288 } },
+			pipe = rgb(176, 136, 24),
+			band = rgb(30, 28, 24),
+			grime = rgb(36, 30, 14),
+			paint = rgb(232, 70, 48),
+			graffiti = { "THE GENERATOR IS LOUD", "HIDE BEFORE YOU PULL", "IT HEARS THE MOTOR", "NO BALLS ALLOWED" },
+			wall = "Brick",
+		},
+		{
+			id = "Bleachers",
+			medium = "AIR",
+			name = "Under the Bleachers",
+			x = 200,
+			z = 110,
+			areas = { { 150, 80, 236, 288 } },
+			pipe = rgb(48, 48, 50),
+			band = rgb(150, 146, 136),
+			grime = rgb(14, 13, 12),
+			paint = rgb(226, 222, 206),
+			graffiti = { "DON'T CROSS THE COURT", "HE'S FASTER ON THE FLOOR", "STAY UNDER", "COUNT THE SEATS" },
+			wall = "ConcreteDark",
+		},
+		{
+			id = "Team",
+			medium = "WATER",
+			name = "Team Corridors",
+			x = 270,
+			z = 150,
+			-- the corridors behind the locker rooms and the one under the bleachers' east rake
+			areas = { { 236, 0, 300, 288 } },
+			pipe = rgb(36, 78, 128),
+			band = rgb(220, 220, 214),
+			grime = rgb(16, 24, 26),
+			paint = rgb(240, 236, 220),
+			graffiti = { "GO TEAM", "KEY'S IN A LOCKER", "SEARCH THEM ALL", "HE CHECKS THE LOCKERS" },
+			wall = "PlasterSchool",
+			wet = true,
+		},
+		{
+			id = "Boiler",
+			medium = "STEAM",
+			name = "Boiler Run",
+			x = 350,
+			z = 150,
+			areas = { { 300, 0, 400, 288 } },
+			pipe = rgb(132, 30, 24),
+			band = rgb(214, 206, 186),
+			grime = rgb(40, 18, 12),
+			paint = rgb(236, 226, 196),
+			graffiti = { "HE HEARS YOU RUN", "DON'T LOOK AT HIS FACE", "STEAM ON", "WALK. DON'T RUN" },
+			wall = "Brick",
+		},
+	},
+	attempts = 6,
+	crossingTarget = 1780,
+	-- the vestibules' and the keep-rooms' doors (their stubs): a hide near each
+	hideTargets = {
+		Vector3.new(16, 0, 28),
+		Vector3.new(16, 0, 144),
+		Vector3.new(16, 0, 260),
+		Vector3.new(188, 0, 82),
+		Vector3.new(214, 0, 82),
+		Vector3.new(337, 0, 90),
+	},
+	traps = 0,
+	batteries = 12,
+	clutter = 20,
+	corpses = 4,
+	drips = 9,
+	debris = 7,
+	scares = 4,
+	creatureSpawns = 6,
+	creatureBand = { 70, 140 },
 })
 
+for _, r in plan.rooms do
+	table.insert(rooms, r)
+	roomById[r.id] = r
+end
+for _, d in plan.doors do
+	table.insert(doors, d)
+end
+for _, a in plan.anchors do
+	table.insert(anchors, a)
+end
+for _, t in plan.triggers do
+	table.insert(triggers, t)
+end
+for _, p in plan.platforms do
+	table.insert(platforms, p)
+end
+
 --------------------------------------------------------------------------------
--- Structure: bleachers (stepped, solid to the floor) and locker-room benches
+-- Furniture: the bleachers (stepped, solid to the floor), the locker-room benches, the store's racks
 --------------------------------------------------------------------------------
 
+-- North bleachers along the whole north wall; south bleachers either side of the two south doorways
 for tier = 1, 4 do
 	local top = 7.5 - 1.5 * tier
 	local depth = 2.5
 	platform(
 		string.format("L3_Bleacher_N%d", tier),
 		"L3_Gymnasium",
-		24,
-		45 + depth * (tier - 1),
-		86,
+		150,
+		depth * (tier - 1),
+		100,
 		depth,
 		top,
 		top,
 		"WoodPanel"
 	)
 	platform(
-		string.format("L3_Bleacher_S%d", tier),
+		string.format("L3_Bleacher_SW%d", tier),
 		"L3_Gymnasium",
-		24,
-		115 - depth * tier,
-		86,
+		146,
+		80 - depth * tier,
+		32,
+		depth,
+		top,
+		top,
+		"WoodPanel"
+	)
+	platform(
+		string.format("L3_Bleacher_SE%d", tier),
+		"L3_Gymnasium",
+		222,
+		80 - depth * tier,
+		32,
 		depth,
 		top,
 		top,
 		"WoodPanel"
 	)
 end
-platform("L3_Bench_Boys1", "L3_LockerRoom_Boys", 137, 61, 12, 1.5, 1.6, 1.6, "WoodPanel")
-platform("L3_Bench_Boys2", "L3_LockerRoom_Boys", 157, 61, 12, 1.5, 1.6, 1.6, "WoodPanel")
-platform("L3_Bench_Girls1", "L3_LockerRoom_Girls", 137, 98, 12, 1.5, 1.6, 1.6, "WoodPanel")
-platform("L3_Bench_Girls2", "L3_LockerRoom_Girls", 157, 98, 12, 1.5, 1.6, 1.6, "WoodPanel")
-platform("L3_WeightRack", "L3_WeightRoom", 16, 4, 20, 3, 4, 4, "MetalRust")
+platform("L3_Bench_Boys1", "L3_LockerRoom_Boys", 288, 123.25, 12, 1.5, 1.6, 1.6, "WoodPanel")
+platform("L3_Bench_Boys2", "L3_LockerRoom_Boys", 308, 123.25, 12, 1.5, 1.6, 1.6, "WoodPanel")
+platform("L3_Bench_Girls1", "L3_LockerRoom_Girls", 288, 191.25, 12, 1.5, 1.6, 1.6, "WoodPanel")
+platform("L3_Bench_Girls2", "L3_LockerRoom_Girls", 308, 191.25, 12, 1.5, 1.6, 1.6, "WoodPanel")
+platform("L3_Rack_Store", "L3_EquipmentStore", 117, 37, 16, 2.6, 4, 4, "MetalRust")
+platform("L3_MatStack_Store", "L3_EquipmentStore", 117, 59, 8, 7, 2.4, 2.4, "WoodPanel")
+platform("L3_Desk_Coach", "L3_CoachOffice", 292, 142, 6, 3, 2.6, 2.6, "WoodPanel")
+platform("L3_TrophyCase_N", "L3_TrophyHall", 266, 25, 26, 2, 7, 7, "WoodPanel")
+platform("L3_TrophyCase_E", "L3_TrophyHall", 291.5, 30, 2, 20, 7, 7, "WoodPanel")
+platform("L3_MatPile_A", "L3_MatStore", 306, 262, 12, 16, 2, 2, "Carpet")
+platform("L3_MatPile_B", "L3_MatStore", 321, 266, 11, 12, 3, 3, "Carpet")
+platform("L3_VaultHorse", "L3_MatStore", 334, 246, 8, 4, 4, 4, "WoodPanel")
+platform("L3_Table_Team", "L3_TeamRoom", 298, 164, 12, 5, 2.6, 2.6, "WoodPanel")
 
 --------------------------------------------------------------------------------
--- Lights: one sputtering high-bay in the gym, dead tubes everywhere else, a forgotten desk lamp.
+-- Keep-room lights: one sputtering high-bay over the court, dead tubes, the locker rooms on their own steady mains
 --------------------------------------------------------------------------------
 
-lightGrid("L3_Gymnasium", "Floodlight", 4, 2, "xxxxxfxx", { flicker = "L3_GymHighBay" })
-for _, id in { "L3_NorthHall_Mid", "L3_SouthHall_Mid", "L3_SouthHall_East" } :: { string } do
-	lightGrid(id, "Fluorescent", if id == "L3_SouthHall_East" then 7 else 4, 1, "x")
+-- every keep-room is its own steady mains circuit (a local group: a flicker, the Creature's teleport warning, touches
+-- only that room)
+local function mains(roomId: string): string
+	return "Mains:" .. roomId
 end
-for _, id in { "L3_NorthHall_West", "L3_SouthHall_West" } :: { string } do
-	lightGrid(id, "Fluorescent", 3, 1, "x")
-end
-lightGrid("L3_NorthHall_East", "Fluorescent", 7, 1, "xxxfxxx", { flicker = "L3_NorthHall", brightness = 0.3 })
-lightGrid("L3_LockerRoom_Boys", "Fluorescent", 3, 2, "x")
-lightGrid("L3_LockerRoom_Girls", "Fluorescent", 3, 2, "xxxxfx", { flicker = "L3_LockerGirls", brightness = 0.3 })
-lightGrid("L3_Showers_Boys", "Fluorescent", 1, 2, "x")
-lightGrid("L3_Showers_Girls", "Fluorescent", 1, 2, "x")
-lightGrid("L3_GymFoyer", "Fluorescent", 2, 3, "x")
-for _, id in
-	{
-		"L3_WeightRoom",
-		"L3_EquipmentStore",
-		"L3_TrainerRoom",
-		"L3_AthleticDirector",
-		"L3_LaundryRoom",
-		"L3_Restroom_North",
-		"L3_WrestlingRoom",
-		"L3_DanceStudio",
-		"L3_TeamRoom",
-		"L3_ConcessionStand",
-		"L3_TicketOffice",
-	} :: { string }
 do
-	lightGrid(id, "Fluorescent", 2, 1, "x")
+	-- the court's high-bays: a 5 x 2 grid, all dead but one that sputters ("L3_GymHighBay")
+	local n = 0
+	for _, x in { 152, 176, 200, 224, 248 } do
+		for _, z in { 26, 54 } do
+			n += 1
+			light("L3_Gymnasium", "Floodlight", x, HEIGHT - 0.6, z, {
+				flicker = if n == 6 then "L3_GymHighBay" else nil,
+				broken = n ~= 6,
+			})
+		end
+	end
 end
-for _, id in
-	{ "L3_Storage_W1", "L3_Storage_W2", "L3_Storage_E1", "L3_Storage_E2", "L3_Storage_N", "L3_MatStore" } :: { string }
-do
-	lightGrid(id, "Bulb", 1, 1, "x")
+light("L3_Gymnasium", "EmergencyRed", 200, 12, 79.4, { brightness = 0.4, range = 18 })
+light("L3_Gymnasium", "ExitSign", 186, 10.6, 79.4)
+light("L3_Gymnasium", "ExitSign", 214, 10.6, 79.4)
+light("L3_EquipmentStore", "Bulb", 126, LOW - 0.6, 52, { flicker = mains("L3_EquipmentStore"), cage = true })
+light(
+	"L3_EquipmentStore",
+	"Bulb",
+	120,
+	LOW - 0.6,
+	62,
+	{ flicker = mains("L3_EquipmentStore"), broken = true, cage = true }
+)
+for _, id in { "L3_LockerRoom_Boys", "L3_LockerRoom_Girls" } do
+	local r = getRoom(id).rect
+	local cz = r.z + r.d / 2
+	light(id, "Fluorescent", 292, LOW - 0.4, cz, { flicker = mains(id), broken = true })
+	light(id, "Fluorescent", 304, LOW - 0.4, cz, { flicker = mains(id) })
+	light(id, "Fluorescent", 316, LOW - 0.4, cz, { flicker = mains(id), broken = true })
 end
-light("L3_CoachOffice", "Bulb", 130, 3.2, 8, { brightness = 0.22, range = 10 })
-light("L3_AirlockEast", "EmergencyRed", 234, LOW - 1, 80, { flicker = "L3_AirlockEast", brightness = 0.35 })
-light("L3_AirlockWest", "EmergencyRed", 6, LOW - 1, 80, { flicker = "L3_AirlockWest", brightness = 0.35 })
-for _, spot in
+light("L3_Showers_Boys", "Fluorescent", 304, LOW - 0.4, 99, { flicker = mains("L3_Showers_Boys"), broken = true })
+light("L3_Showers_Girls", "Fluorescent", 304, LOW - 0.4, 217, { flicker = "Circuit:L3_ShowersGirls", brightness = 0.3 })
+light("L3_CoachOffice", "Bulb", 296, 3.4, 143.5, { flicker = mains("L3_CoachOffice"), brightness = 0.22, range = 10 }) -- a forgotten desk lamp
+light("L3_TeamRoom", "Fluorescent", 304, 11.6, 167, { flicker = mains("L3_TeamRoom"), broken = true })
+light("L3_TrophyHall", "Fluorescent", 279, LOW - 0.4, 40, { flicker = mains("L3_TrophyHall") })
+light("L3_TrophyHall", "Fluorescent", 279, LOW - 0.4, 58, { flicker = mains("L3_TrophyHall"), broken = true })
+light("L3_MatStore", "Bulb", 325, LOW - 0.6, 250, { flicker = mains("L3_MatStore"), cage = true })
+light("L3_MatStore", "Bulb", 315, LOW - 0.6, 270, { flicker = mains("L3_MatStore"), broken = true, cage = true })
+for _, v in
 	{
-		{ "L3_AirlockNorthWest", 6, 15.5 },
-		{ "L3_AirlockSouthWest", 6, 144.5 },
-		{ "L3_AirlockNorthEast", 234, 15.5 },
-		{ "L3_AirlockSouthEast", 234, 144.5 },
+		{ "L3_AirlockNorthEast", 393, 28 },
+		{ "L3_AirlockEast", 393, 144 },
+		{ "L3_AirlockSouthEast", 393, 260 },
+		{ "L3_AirlockNorthWest", 7, 28 },
+		{ "L3_AirlockWest", 7, 144 },
+		{ "L3_AirlockSouthWest", 7, 260 },
 	} :: { { any } }
 do
-	light(spot[1], "EmergencyRed", spot[2], LOW - 1, spot[3], { flicker = spot[1], brightness = 0.35 })
+	light(v[1], "Fluorescent", v[2], LOW - 0.6, v[3], { flicker = mains(v[1]), broken = true })
+	light(v[1], "EmergencyRed", v[2], LOW - 3, v[3] - 8, { brightness = 0.3 })
 end
-light("L3_Gymnasium", "ExitSign", 13.5, 11, 80)
-light("L3_GymFoyer", "ExitSign", 226.5, 11, 80)
 
 --------------------------------------------------------------------------------
--- Anchors
+-- Keep-room anchors
 --------------------------------------------------------------------------------
 
--- Arrival from Stairwell_2_3
-scatter("PlayerSpawn", 3.5, { { 232, 74, FACE_W }, { 236, 74, FACE_W }, { 232, 86, FACE_W }, { 236, 86, FACE_W } })
--- Arrival from Stairwell_2_3_North / _South (the corner vestibules)
-scatter("PlayerSpawn", 3.5, { { 232, 5, FACE_S }, { 236, 5, FACE_S }, { 232, 19, FACE_S }, { 236, 19, FACE_S } })
-scatter("PlayerSpawn", 3.5, { { 232, 141, FACE_N }, { 236, 141, FACE_N }, { 232, 155, FACE_N }, { 236, 155, FACE_N } })
-anchor("CreatureSpawn", 60, 5, 80, FACE_W, "L3_CreatureSpawn")
+-- Arrival from Stairwell_2_3 and its corner candidates (the east vestibules)
+for _, z in { 28, 144, 260 } do
+	for _, p in { { 392, z - 5 }, { 396, z - 5 }, { 392, z + 5 }, { 396, z + 5 } } do
+		anchor("PlayerSpawn", p[1], 3.5, p[2], FACE_W)
+	end
+end
 
--- Hideable lockers (kept clear of doors and grate openings)
-lockerRow(46.8, { 132, 135, 138, 141, 144, 147, 158, 161, 164, 167 }, FACE_S)
-lockerRow(76.2, { 131, 143, 146, 149, 152, 155 }, FACE_N)
-lockerRow(113.2, { 132, 135, 138, 141, 144, 147, 158, 161, 164, 167 }, FACE_N)
-lockerRow(84.8, { 131, 134, 152, 155, 158, 161 }, FACE_S)
-lockerRow(43.2, { 186, 189, 192, 195 }, FACE_N)
-lockerRow(116.8, { 186, 189, 192, 195 }, FACE_S)
+-- Hideable lockers lining the two locker rooms (backs to the long walls, clear of the doors): every one may hold the
+-- coach's key (searchable) and every one hides a player
+local LOCKER_XS = { 283, 286, 289, 292, 295, 298, 310, 313, 316, 319, 322, 325 }
+local LOCKER_INSET = 1.8 -- a locker's floor centre off its wall line
+for _, id in { "L3_LockerRoom_Boys", "L3_LockerRoom_Girls" } do
+	local r = getRoom(id).rect
+	for _, x in LOCKER_XS do
+		anchor("Locker", x, 0, r.z + LOCKER_INSET, FACE_S)
+	end
+	for _, x in { 283, 286, 289, 319, 322, 325 } do
+		anchor("Locker", x, 0, r.z + r.d - LOCKER_INSET, FACE_N)
+	end
+end
 
--- Floor objective (GymGenerator): the coach's key hangs inside any one of the 32 lockers lining the two locker rooms
--- (each candidate's ref is its locker; the anchor is the hook on the locker's back wall at chest height, facing out
--- through its door); the generator stands free in the equipment store, its pull start toward the door; the store
--- door's padlock (the floor point on the door's corridor face, facing out of the door); hideable lockers in the store,
--- outside its door and in the two stores off the gym beside the stairwell door, where the squad hides while the door
--- motor winds; the exit lock on the west stair airlock's fire door.
+-- Floor objective (GymGenerator): the coach's key hangs inside any one of the locker-room lockers (each candidate's ref
+-- is its locker; the anchor is the hook on the locker's back wall at chest height, facing out through its door); the
+-- generator stands in the equipment store, its pull start toward the door; the store door's padlock (the floor point on
+-- the door's gym face, facing out of the door); the exit locks on the three west vestibules' fire doors (the floor point
+-- on each door's tunnel face, facing out of the door).
 local KEY_HOOK_Y = 4.6
 local KEY_BACK = 1.1 -- the hook sits this far behind the locker's floor centre, toward its back wall
 local LOCKER_ROOMS: { [string]: boolean } = { L3_LockerRoom_Boys = true, L3_LockerRoom_Girls = true }
@@ -701,116 +728,78 @@ for _, locker in table.clone(anchors) do
 	local back = if yaw == FACE_S then -KEY_BACK else KEY_BACK -- facing south, the back wall is to the north
 	anchor("CoachKeyCandidate", locker.pos.X, KEY_HOOK_Y, locker.pos.Z + back, yaw, nil, locker.id)
 end
-anchor("Generator", 66, 0, 13, FACE_S, "L3_Generator")
-anchor("StoreLock", 66, 0, 31.5, FACE_S, "L3_StoreLock")
-scatter("Locker", 0, {
-	{ 82.2, 8, FACE_W }, -- equipment store
-	{ 82.2, 11, FACE_W },
-	{ 76, 32.8, FACE_S }, -- north hall, outside the store
-	{ 5.5, 64.7, FACE_N }, -- the two stores off the gym either side of the stairwell door
-	{ 5.5, 95.3, FACE_S },
-})
-anchor("ExitLock", 12.5, 0, 80, FACE_E, "L3_ExitLock")
-anchor("ExitLock", 6, 0, 31.5, FACE_S, "L3_ExitLock_North")
-anchor("ExitLock", 6, 0, 128.5, FACE_N, "L3_ExitLock_South")
--- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
-scatter("Locker", 0, { { 8, 43.2, FACE_N }, { 8, 116.8, FACE_S } })
+anchor("Generator", 124, 0, 52, FACE_E, "L3_Generator")
+anchor("StoreLock", 140.5, 0, 52, FACE_E, "L3_StoreLock")
+anchor("ExitLock", 14.5, 0, 144, FACE_E, "L3_ExitLock")
+anchor("ExitLock", 14.5, 0, 28, FACE_E, "L3_ExitLock_North")
+anchor("ExitLock", 14.5, 0, 260, FACE_E, "L3_ExitLock_South")
 
-scatter(
-	"SmashedLocker",
-	0,
-	{ { 52, 43.2, FACE_N }, { 90, 43.2, FACE_N }, { 52, 116.8, FACE_S }, { 96, 116.8, FACE_S } }
-)
+-- The 45 s while the door motor winds: hideable lockers in the store and along the gym's west wall either side of the
+-- store door, and one by each exit's fire door (inside its vestibule) so every lock keeps a locker within reach
+anchor("Locker", 117.8, 0, 45, FACE_E) -- the store, west wall
+anchor("Locker", 117.8, 0, 48, FACE_E)
+anchor("Locker", 136, 0, 66.2, FACE_N) -- the store, south wall
+for _, z in { 18, 21, 24, 40, 43, 64, 67 } do
+	anchor("Locker", 141.8, 0, z, FACE_E) -- the gym's west wall
+end
+for i, z in { 28, 144, 260 } do
+	anchor("Locker", 12.2, 0, z + 7.5, FACE_W, string.format("%s_Locker_Exit%d", PREFIX, i))
+	-- and one inside each entry vestibule beside its fire door (the arrival's first hiding spot)
+	anchor("Locker", 387.8, 0, z + 7.5, FACE_E, string.format("%s_Locker_Entry%d", PREFIX, i))
+end
 
-scatter("BatteryCandidate", 0, {
-	{ 16, 26 },
-	{ 136, 4 },
-	{ 80, 4 },
-	{ 192, 4 },
-	{ 172, 156 },
-	{ 224, 156 },
-	{ 6, 50 },
-	{ 234, 110 },
-	{ 190, 112 },
-})
-
-scatter("Corpse", 0, { { 60, 70, 0 }, { 186, 50, -45 }, { 100, 40, 150 } })
-scatter("DripPipe", LOW - 1.2, { { 186, 60 }, { 186, 100 }, { 180, 15 }, { 205, 20 } })
-scatter("Clutter", 0, {
-	{ 40, 70, 0 },
-	{ 90, 95, 45 },
-	{ 70, 62, 120 },
-	{ 30, 98, -30 },
-	{ 145, 70, 10 },
-	{ 165, 90, -20 },
-	{ 210, 60, 30 },
-	{ 215, 100, 60 },
-	{ 60, 20, 0 },
-	{ 30, 145, 90 },
-	{ 90, 150, 15 },
-	{ 190, 145, -45 },
-	{ 125, 20, 0 },
-	{ 130, 145, 30 },
-})
-
-patrol("GYM", { { 20, 60 }, { 66, 60 }, { 116, 60 }, { 116, 100 }, { 66, 100 }, { 20, 100 } })
-patrol("GC", { { 66, 70 }, { 90, 80 }, { 66, 90 }, { 40, 80 } })
-patrol("GN", { { 18, 62 }, { 18, 38 }, { 52, 38 }, { 40, 62 } })
-patrol("GS", { { 18, 98 }, { 18, 122 }, { 52, 122 }, { 40, 98 } })
-patrol("LB", { { 152, 38 }, { 150, 52 }, { 170, 70 }, { 186, 62 }, { 165, 54 } })
-patrol("LG", { { 152, 122 }, { 150, 108 }, { 170, 90 }, { 186, 99 }, { 165, 106 } })
-patrol("FY", { { 212, 55 }, { 220, 80 }, { 212, 105 }, { 204, 80 } })
-patrol("NE", { { 140, 38 }, { 230, 38 }, { 180, 40 } })
-patrol("SE", { { 140, 122 }, { 230, 122 }, { 180, 120 } })
-patrol("NW", { { 10, 38 }, { 52, 38 }, { 30, 60 } })
-patrol("NM", { { 66, 38 }, { 120, 38 }, { 100, 40 } })
-patrol("SW", { { 10, 122 }, { 52, 122 }, { 30, 100 } })
-patrol("SM", { { 66, 122 }, { 120, 122 }, { 100, 120 } })
+-- banks of lockers torn open: the old team lockers down the trophy hall's west wall (a corridor, so the wreckage keeps
+-- to its wall and the hall's lane stays clear)
+for _, z in { 30, 39.5, 49, 58 } do
+	anchor("SmashedLocker", 265.8, 0, z, FACE_E)
+end
+-- the side rooms: lockers to duck into, a battery, their clutter
+anchor("Locker", 292.2, 0, 60, FACE_W) -- the trophy hall
+anchor("Locker", 292.2, 0, 63, FACE_W)
+anchor("Locker", 344.2, 0, 270, FACE_W) -- the mat store
+anchor("Locker", 344.2, 0, 273, FACE_W)
+anchor("BatteryCandidate", 310, 0, 244)
+anchor("Clutter", 280, 0, 48, 15)
+anchor("Corpse", 318, 0, 252, 40)
+anchor("Clutter", 170, 0, 40, 30)
+anchor("Clutter", 232, 0, 30, -20)
+anchor("Clutter", 300, 0, 172, 10)
+anchor("Clutter", 128, 0, 60, 45)
+anchor("Corpse", 196, 0, 46, 60)
+anchor("BatteryCandidate", 128, 0, 64)
+anchor("BatteryCandidate", 316, 0, 146)
+anchor("BatteryCandidate", 252, 0, 70)
 
 --------------------------------------------------------------------------------
 -- Triggers
 --------------------------------------------------------------------------------
 
-trigger("L3_Trigger_DebrisCourt", "FloorDebris", 60, 76, 8, 8, 4)
-trigger("L3_Trigger_DebrisShowers", "FloorDebris", 180, 102, 6, 6, 4)
-trigger("L3_Trigger_DebrisNorthHall", "FloorDebris", 140, 33, 6, 10, 4)
-trigger("L3_Trigger_Checkpoint", "Checkpoint", 1, 67, 10, 26, 10)
-trigger("L3_Trigger_CheckpointNorthWest", "Checkpoint", 1, 1, 10, 29, 10)
-trigger("L3_Trigger_CheckpointSouthWest", "Checkpoint", 1, 130, 10, 29, 10)
+trigger("L3_Trigger_DebrisCourt", "FloorDebris", 196, 36, 8, 8, 4)
+trigger("L3_Trigger_DebrisShowers", "FloorDebris", 300, 212, 6, 6, 4)
+trigger("L3_Trigger_Checkpoint", "Checkpoint", 1, 133, 12, 22, 11)
+trigger("L3_Trigger_CheckpointNorthWest", "Checkpoint", 1, 17, 12, 22, 11)
+trigger("L3_Trigger_CheckpointSouthWest", "Checkpoint", 1, 249, 12, 22, 11)
 
 --------------------------------------------------------------------------------
--- Boarded windows on the facade
+-- Boarded clerestory windows high on the gym's facade wall
 --------------------------------------------------------------------------------
 
-windowRow("L3_WeightRoom", "N", 3, 7, 6, 3.5, true)
-windowRow("L3_EquipmentStore", "N", 2, 5, 3, 8, true)
-windowRow("L3_TrainerRoom", "N", 2, 7, 6, 3.5, true)
-windowRow("L3_CoachOffice", "N", 2, 7, 6, 3.5, true)
-windowRow("L3_AthleticDirector", "N", 1, 7, 6, 3.5, true)
-windowRow("L3_LaundryRoom", "N", 2, 5, 3, 8, true)
-windowRow("L3_Restroom_North", "N", 1, 4, 3, 8, true)
-windowRow("L3_Storage_N", "N", 1, 5, 3, 8, true)
-windowRow("L3_WrestlingRoom", "S", 3, 7, 6, 3.5, true)
-windowRow("L3_DanceStudio", "S", 3, 7, 6, 3.5, true)
-windowRow("L3_TeamRoom", "S", 2, 7, 6, 3.5, true)
-windowRow("L3_MatStore", "S", 1, 5, 3, 8, true)
-windowRow("L3_ConcessionStand", "S", 2, 7, 6, 3.5, true)
-windowRow("L3_TicketOffice", "S", 2, 7, 6, 3.5, true)
-windowRow("L3_NorthHall_West", "W", 1, 6, 6, 3.5, true)
-windowRow("L3_Storage_W1", "W", 1, 4, 4, 5, true)
-windowRow("L3_Storage_W2", "W", 1, 4, 4, 5, true)
-windowRow("L3_SouthHall_West", "W", 1, 6, 6, 3.5, true)
-windowRow("L3_NorthHall_East", "E", 1, 6, 6, 3.5, true)
-windowRow("L3_Storage_E1", "E", 1, 4, 4, 5, true)
-windowRow("L3_Storage_E2", "E", 1, 4, 4, 5, true)
-windowRow("L3_SouthHall_East", "E", 1, 6, 6, 3.5, true)
+for i = 1, 6 do
+	table.insert(windows, {
+		room = "L3_Gymnasium",
+		side = "N",
+		at = 140 + 120 * (i - 0.5) / 6,
+		width = 9,
+		height = 6,
+		sill = 18,
+		boarded = true,
+	})
+end
 
 --------------------------------------------------------------------------------
 
 local layout: LayoutSchema.LevelLayout = {
 	id = "Level3_Gymnasium",
-	-- still the 240 x 160 plan: rebuilt on TunnelPlanner in the next wave (docs/MAPS.md)
-	legacy = true,
 	height = HEIGHT,
 	acoustic = "Hall",
 	ambience = "DroneGym",
@@ -818,11 +807,11 @@ local layout: LayoutSchema.LevelLayout = {
 	exit = "L3_AirlockWest",
 	rooms = rooms,
 	doors = doors,
-	vents = { nodes = ventNodes, edges = ventEdges, grates = grates },
 	anchors = anchors,
 	triggers = triggers,
 	platforms = platforms,
 	windows = windows,
+	tunnels = plan.tunnels,
 }
 
 deepFreeze(layout)

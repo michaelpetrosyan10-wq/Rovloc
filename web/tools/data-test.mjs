@@ -223,7 +223,7 @@ for (const e of meta.entities) {
   const byType = (type) => meta.entities.filter((e) => e.type === type);
   // the fewest candidates each floor may offer (a rebuilt floor offers at least as many as the one it replaced); every
   // candidate anchor of the item's kind becomes one entity
-  const ITEMS = { Fuse: 14, MasterKeys: 10, ReagentJar: 12, CoachKey: 32, ValveWheel: 8, BoltCutters: 9, AcidFlask: 1 };
+  const ITEMS = { Fuse: 14, MasterKeys: 10, ReagentJar: 12, CoachKey: 36, ValveWheel: 8, BoltCutters: 10, AcidFlask: 1 };
   const anchorKind = new Map(meta.anchors.map((a) => [a.id, a.kind]));
   for (const [type, least] of Object.entries(ITEMS)) {
     const list = byType(type);

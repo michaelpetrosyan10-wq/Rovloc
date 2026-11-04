@@ -97,7 +97,7 @@ return {
 		t.truthy(basement.R > basement.G and basement.G > basement.B, "the basement tubes an amber")
 		local bulb = LightingMood.cast("Level0_Basement", "L0_BoilerHall", "Bulb", white)
 		t.truthy(bulb.R > bulb.B + 0.2, "the basement bulbs a warm sodium")
-		local pool = LightingMood.cast("Level4_FloodedPool", "L4_Corridor_West", "Fluorescent", white)
+		local pool = LightingMood.cast("Level4_FloodedPool", "L4_PumpRoom", "Fluorescent", white)
 		t.truthy(pool.B > pool.R and pool.B >= pool.G, "the pool a cold cyan")
 		-- the pull is partial: the layout's own colour still shows through
 		t.truthy(hallways.R > 0.5, "a cast, not a recolour")

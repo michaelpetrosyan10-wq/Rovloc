@@ -44,9 +44,9 @@ local CANDIDATES: { [string]: number } = {
 	Level0_Basement = 14,
 	Level1_Hallways = 14,
 	Level2_ScienceHall = 15,
-	Level3_Gymnasium = 32,
+	Level3_Gymnasium = 36,
 	Level4_FloodedPool = 8,
-	Level5_Roof = 9,
+	Level5_Roof = 10,
 }
 -- The least the brief asks for on each floor
 local MIN_CANDIDATES: { [string]: number } = {
@@ -54,8 +54,8 @@ local MIN_CANDIDATES: { [string]: number } = {
 	Level1_Hallways = 9,
 	Level2_ScienceHall = 12,
 	Level3_Gymnasium = 12,
-	Level4_FloodedPool = 6,
-	Level5_Roof = 8,
+	Level4_FloodedPool = 8,
+	Level5_Roof = 9,
 }
 local COVERAGE_SEEDS = 600 -- pickObjective alone (cheap): every candidate turns up within this many seeds
 local STATIONS: { [string]: { Enums.AnchorKind } } = {

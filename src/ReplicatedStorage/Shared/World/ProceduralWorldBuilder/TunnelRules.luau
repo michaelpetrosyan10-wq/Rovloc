@@ -18,7 +18,9 @@
 --   crawlways   crawlways[1]..crawlways[2] of them, each at most crawlLength studs long with crawlHeight head room
 --               at its mouths; a crawlway mouth within crawlReach studs walked of every tunnel point;
 --   hides       a hiding spot (Locker, Barrel, Cabinet) within hideReach studs walked of every tunnel point and
---               within objectiveHideReach of every objective place (ObjectivePlaces' stations, locks and items);
+--               within objectiveHideReach of every objective place (ObjectivePlaces' stations, locks and items); a
+--               place under a pool's water (in a basin, below the deck) is served by dry footing instead, the pool's
+--               own rule (ObjectivePlaces.nearestHide, the pool specs: the Creature never leaves the water);
 --   regions     regions[1]..regions[2] regions with distinct names; every tunnel room in one; a junction plate at
 --               every junction.
 
@@ -139,6 +141,7 @@ type VentNodeLike = { id: string, x: number, z: number }
 type VentEdgeLike = { a: string, b: string }
 type GrateLike = { id: string, node: string, room: string, lockable: boolean }
 type VentsLike = { nodes: { VentNodeLike }, edges: { VentEdgeLike }, grates: { GrateLike } }
+type BasinLike = { room: string, rect: Rect }
 export type LayoutLike = {
 	id: string,
 	height: number,
@@ -147,6 +150,7 @@ export type LayoutLike = {
 	doors: { DoorLike },
 	anchors: { AnchorLike },
 	vents: VentsLike?,
+	basins: { BasinLike }?,
 	tunnels: TunnelData?,
 }
 
@@ -775,7 +779,26 @@ function TunnelRules.measure(layout: LayoutLike): Measures
 	return m
 end
 
--- The walk from every objective place of `layout` to its nearest hiding spot, on foot ({ anchor id -> studs }).
+-- Whether the point `pos` of room `room` lies under a pool's water: in a basin of that room, below the deck.
+function TunnelRules.underWater(layout: LayoutLike, room: string, pos: Vector3): boolean
+	if pos.Y > -EPS then
+		return false
+	end
+	for _, basin in layout.basins or {} :: { BasinLike } do
+		local r = basin.rect
+		local inside = pos.X >= r.x - EPS
+			and pos.X <= r.x + r.w + EPS
+			and pos.Z >= r.z - EPS
+			and pos.Z <= r.z + r.d + EPS
+		if basin.room == room and inside then
+			return true
+		end
+	end
+	return false
+end
+
+-- The walk from every objective place of `layout` to its nearest hiding spot, on foot ({ anchor id -> studs }); places
+-- under a pool's water are left out (dry footing serves them: see the header).
 function TunnelRules.objectiveHides(layout: LayoutLike): { [string]: number }
 	local foot = TunnelRules.walkGraph(layout, false)
 	local hideSeeds: { { number } } = {}
@@ -793,6 +816,9 @@ function TunnelRules.objectiveHides(layout: LayoutLike): { [string]: number }
 	local toHide = TunnelRules.distances(foot, hideSeeds)
 	local out: { [string]: number } = {}
 	for _, anchor in objectivePoints(layout) do
+		if TunnelRules.underWater(layout, anchor.room, anchor.pos) then
+			continue
+		end
 		out[anchor.id] = TunnelRules.reach(
 			foot,
 			toHide,

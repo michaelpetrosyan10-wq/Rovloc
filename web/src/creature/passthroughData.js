@@ -12,37 +12,37 @@ export const PASSTHROUGH = {
       ],
     },
     "Exterior": {
-      vertexCount: 558, indexCount: 3024, fingerprint: 4241910975,
+      vertexCount: 546, indexCount: 2880, fingerprint: 3083874047,
       runs: [
       ],
     },
     "Level5_Roof": {
-      vertexCount: 568, indexCount: 4572, fingerprint: 3447430781,
+      vertexCount: 1025, indexCount: 7632, fingerprint: 2367585995,
       runs: [
       ],
     },
     "Level4_FloodedPool": {
-      vertexCount: 5930, indexCount: 37764, fingerprint: 3125273305,
+      vertexCount: 22477, indexCount: 147996, fingerprint: 1079597462,
       runs: [
-        1188, 56, 80, 196, 72, 448, 1928, 1822,
+        820, 6888, 12368, 2261,
       ],
     },
     "Level3_Gymnasium": {
-      vertexCount: 7277, indexCount: 47472, fingerprint: 2737503253,
+      vertexCount: 19820, indexCount: 133116, fingerprint: 2477319751,
       runs: [
-        1484, 756, 2952, 1701,
+        478, 6216, 11695, 1431,
       ],
     },
     "Level2_ScienceHall": {
-      vertexCount: 13278, indexCount: 82944, fingerprint: 3333528013,
+      vertexCount: 20438, indexCount: 136116, fingerprint: 3105648240,
       runs: [
-        1504, 1428, 3867, 5605,
+        224, 6216, 11778, 2220,
       ],
     },
     "Level1_Hallways": {
-      vertexCount: 13206, indexCount: 79440, fingerprint: 1710941014,
+      vertexCount: 25180, indexCount: 167124, fingerprint: 1867007300,
       runs: [
-        1480, 1624, 3553, 6259,
+        192, 7810, 14472, 2642,
       ],
     },
     "Level0_Basement": {

@@ -463,9 +463,13 @@ async function main() {
     'l0-gallery': { p: [168, 3.5, 40], yaw: 180, pitch: 0 },
     'l0-boiler': { p: [207, 3.5, 238], yaw: -90, pitch: -4 },
     'l0-drains': { p: [370, 3.5, 230], yaw: 0, pitch: 0 },
-    'l3-gym': { p: [115, 53, 80], yaw: 90, pitch: 5 },
-    'l4-pool': { p: [220, 85, 125], yaw: 57, pitch: -10 },
-    'l5-roof': { p: [236, 115.5, 90], yaw: 90, pitch: 0 },
+    'l3-gym': { p: [148, 53, 40], yaw: -90, pitch: 5 },
+    'l3-lockers': { p: [286, 53, 124], yaw: -90, pitch: -4 },
+    'l3-tunnels': { p: [105, 53.5, 192], yaw: 0, pitch: 0 },
+    'l4-pool': { p: [320, 85, 283], yaw: 57, pitch: -10 },
+    'l4-pumps': { p: [194, 85, 140], yaw: -90, pitch: -6 },
+    'l5-roof': { p: [380, 115.5, 144], yaw: 90, pitch: 0 },
+    'l5-plant': { p: [300, 115.5, 110], yaw: 180, pitch: 0 },
     lobby: { p: [-776, 3.5, 38], yaw: -90, pitch: 0 },
   };
   const list = quick ? ['l1-corridor'] : Object.keys(views);

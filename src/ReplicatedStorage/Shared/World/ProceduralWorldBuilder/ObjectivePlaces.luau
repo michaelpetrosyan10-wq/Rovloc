@@ -13,7 +13,8 @@
 --                               Cover       a plant block to crouch behind, at least CoverHeight tall (the roof)
 --   nearestHide(layout, place) the closest hide spot the place can use, with its distance (straight line; lockers and
 --                              vents only count in the place's own room or a room joined to it by a doorway; on a
---                              tunnel floor every locker, barrel and cabinet counts, by the walk to it, TunnelRules)
+--                              tunnel floor every locker, barrel and cabinet counts, by the walk to it, TunnelRules,
+--                              and a place under a pool's water counts its swim to dry footing too)
 --   arrivalPoint(layout, room) where the squad arrives in a room: the centroid of its PlayerSpawn anchors
 --   entryPoint(layout)         the arrival point of the layout's entry room
 --   entries(layout)            every way a run may enter the floor: the entry room and every entry vestibule candidate
@@ -263,7 +264,26 @@ end
 -- The closest hide spot `place` can use on `layout`, or nil when the floor has none in reach of it.
 function ObjectivePlaces.nearestHide(layout: Layout, place: Place): Hide?
 	if layout.tunnels then
-		return nearestTunnelHide(layout, place)
+		local best = nearestTunnelHide(layout, place)
+		-- under a pool's water the Creature cannot follow out of it: dry footing is the hiding spot there
+		if TunnelRules.underWater(layout :: any, place.room, place.pos) then
+			for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
+				if basin.room == place.room then
+					local groups = PoolWaterBuilder.dryGroups(
+						layout,
+						basin,
+						ObjectivePlaces.ClimbBand.min,
+						ObjectivePlaces.ClimbBand.max
+					)
+					local swim = PoolWaterBuilder.swimToDry(groups, place.pos.X, place.pos.Z)
+					if best == nil or swim < (best :: Hide).distance then
+						best =
+							{ kind = "DryFooting", id = basin.id, room = basin.room, pos = place.pos, distance = swim }
+					end
+				end
+			end
+		end
+		return best
 	end
 	local best: Hide? = nil
 	local function consider(hide: Hide, distance: number)

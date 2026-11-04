@@ -133,7 +133,8 @@ local GRID = 9
 local INSET = 3
 local WATER_LIFT = 0.1
 local CEILING_DROP = 1.2
-local SKIPPED_ROOMS: { [string]: boolean } = { Airlock = true, Chase = true }
+-- (no beats in the solid ground between the tunnels, nor in a crawlway)
+local SKIPPED_ROOMS: { [string]: boolean } = { Airlock = true, Chase = true, Solid = true, Crawlway = true }
 local BEAT_KINDS: { BeatKind } = { "Drip", "Slosh", "TileFall", "Groan" }
 local BEAT_PRESETS: { [string]: string } = {
 	Drip = "PoolDrip",

@@ -53,7 +53,21 @@ local W = Attributes.World
 local L4: Enums.LevelId = "Level4_FloodedPool"
 local SEED = 4404
 local ORIGIN = WorldConfig.levelOrigin(L4)
-local WEST_DECK = ORIGIN + Vector3.new(110, 3, 60)
+-- A point given in the old natatorium's coordinates (its corner was at (90, 30)), wherever the hall now stands.
+local HALL = (function(): Vector3
+	local layout = Builder.getLayout(L4)
+	assert(layout, "Level 4 layout")
+	for _, room in layout.rooms do
+		if room.id == "L4_Natatorium" then
+			return ORIGIN + Vector3.new(room.rect.x - 90, 0, room.rect.z - 30)
+		end
+	end
+	error("Level 4 has no natatorium")
+end)()
+local function hall(x: number, y: number, z: number): Vector3
+	return HALL + Vector3.new(x, y, z)
+end
+local WEST_DECK = hall(110, 3, 60)
 
 local nextUserId = 9800
 
@@ -106,7 +120,7 @@ local function switchModel(): Model
 	model.Name = "L4_FloodlightSwitch"
 	local base = Instance.new("Part")
 	base.Name = "Base"
-	base.CFrame = CFrame.new(ORIGIN + Vector3.new(91.5, 4, 70))
+	base.CFrame = CFrame.new(hall(91.5, 4, 70))
 	base.Parent = model
 	model.PrimaryPart = base
 	model:SetAttribute(W.On, false)
@@ -122,7 +136,7 @@ local function onLevel(body: (world: World) -> ())
 		players = { player },
 		roots = { [player] = WEST_DECK },
 		swimmers = {},
-		creature = ORIGIN + Vector3.new(170, -4, 100),
+		creature = hall(170, -4, 100),
 		state = "Patrol",
 		alerts = {},
 		stuns = {},
@@ -322,7 +336,7 @@ return {
 		local always = function(_a: Vector3, _b: Vector3): boolean
 			return true
 		end
-		local listener = ORIGIN + Vector3.new(150, 0, 80)
+		local listener = hall(150, 0, 80)
 		local eyes = { listener + Vector3.new(0, 1.5, 0) }
 		local point = Level4.place("Drip", candidates, listener, eyes, never, random)
 		assert(point, "a drip in the band")
@@ -407,7 +421,7 @@ return {
 		end)
 		-- A Creature away from the pool is not blinded.
 		onLevel(function(world: World)
-			world.creature = ORIGIN + Vector3.new(30, 3, 50)
+			world.creature = hall(30, 3, 50)
 			Level4.Flip(world.players[1], switchModel())
 			step(world, 1)
 			t.eq(#world.stuns, 0, "in the changing rooms")
@@ -421,7 +435,7 @@ return {
 			t.eq(#world.alerts, 0, "nobody swims")
 			world.state = "Dormant"
 			world.swimmers = { swimmer }
-			world.roots[swimmer] = ORIGIN + Vector3.new(140, -1, 60)
+			world.roots[swimmer] = hall(140, -1, 60)
 			local entered = world.now
 			step(world, 12)
 			t.eq(#world.alerts, 0, "it sleeps: the alert waits")
@@ -454,7 +468,7 @@ return {
 		onLevel(function(world: World)
 			local swimmer = world.players[1]
 			world.swimmers = { swimmer }
-			world.roots[swimmer] = ORIGIN + Vector3.new(140, -1, 60)
+			world.roots[swimmer] = hall(140, -1, 60)
 			local entered = world.now
 			step(world, Level4.AlertMax + 1.2)
 			t.eq(#world.alerts, 1)

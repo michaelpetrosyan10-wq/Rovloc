@@ -17,11 +17,11 @@
 --   Floor 2  BurnChain     3 reagents, one of each kind (12 candidates, four per kind) -> mix them at the fume hood
 --                          (5 s) -> an acid flask -> throw it at the chain (within 3 studs) or pour it at the door (2 s).
 --                          Chain.
---   Floor 3  GymGenerator  the coach's key (in any of the 32 locker-room lockers) -> unlock the equipment store (2 s) ->
+--   Floor 3  GymGenerator  the coach's key (in any of the 36 locker-room lockers) -> unlock the equipment store (2 s) ->
 --                          start the generator (3 s) -> survive 45 s while the door motor winds. Keypad (motor).
 --   Floor 4  ValveWheel    the valve wheel (8 spots on the deep pool floor) -> fit it on the hatch valve (3 s) -> turn
 --                          it (4 s). Keypad (hatch interlock).
---   Floor 5  CutCrate      the bolt cutters (9 candidates) -> cut the chain on the parachute crate (4 s).
+--   Floor 5  CutCrate      the bolt cutters (10 candidates) -> cut the chain on the parachute crate (4 s).
 --
 -- Fair spots (the specs and web/tools/data-test.mjs hold every candidate to them): on a real surface the squad can
 -- reach (on foot, through the vents or by swimming); a hiding spot within HideReach; at least EntryClearance studs of

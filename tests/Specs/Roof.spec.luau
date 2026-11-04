@@ -16,10 +16,12 @@ local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local ParachuteMotion = require(ReplicatedStorage.Shared.Sequence.ParachuteMotion)
 local Scenes = require(ReplicatedStorage.Shared.Sequence.Scenes)
 local Timeline = require(ReplicatedStorage.Shared.Sequence.Timeline)
 local Types = require(ReplicatedStorage.Shared.Types)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Levels = require(ServerScriptService.Services.Levels)
 local Level5 = require(ServerScriptService.Services.Levels.Level5_RoofController)
@@ -66,10 +68,40 @@ local DECK = ParachuteMotion.DeckY
 local STAND = 3
 local GAP = ParachuteMotion.Gap
 local GAP_Z = (GAP.minZ + GAP.maxZ) / 2
-local IN_HOUSING = Vector3.new(233, DECK + STAND, 86)
-local IN_TOWER = Vector3.new(252, DECK - 12, 80)
-local OUT_FAR = Vector3.new(190, DECK + STAND, 80)
-local OUT_NEAR_DOOR = Vector3.new(221, DECK + STAND, 80)
+
+-- The middle stair housing and its roof door, from the layout and WorldConfig: the doorway on the housing's wall
+-- shared with the roof (deck height), `OUT` the way out through it, the tower that comes up into the housing.
+local ROOF_LAYOUT = Builder.getLayout(L5) :: LayoutSchema.LevelLayout
+local ROOF_ROOMS = LayoutSchema.indexRooms(ROOF_LAYOUT)
+local HOUSING = ROOF_ROOMS.L5_RoofAccess.rect
+local DOORWAY, OUT = (function(): (Vector3, Vector3)
+	local edge = LayoutSchema.sharedEdge(HOUSING, ROOF_ROOMS.L5_Roof_East.rect) :: LayoutSchema.SharedEdge
+	for _, door in ROOF_LAYOUT.doors do
+		if door.scriptedId == "RoofStairDoor" then
+			local at = WorldConfig.levelOrigin(L5)
+				+ (
+					if edge.axis == "X"
+						then Vector3.new(edge.coord, 0, door.at)
+						else Vector3.new(door.at, 0, edge.coord)
+				)
+			local centre = WorldConfig.levelOrigin(L5)
+				+ Vector3.new(HOUSING.x + HOUSING.w / 2, 0, HOUSING.z + HOUSING.d / 2)
+			local away = at - centre
+			local out = if edge.axis == "X"
+				then Vector3.new(if away.X < 0 then -1 else 1, 0, 0)
+				else Vector3.new(0, 0, if away.Z < 0 then -1 else 1)
+			return at, out
+		end
+	end
+	error("the roof has no RoofStairDoor")
+end)()
+local EAST_TOWER = WorldConfig.Towers.East
+local IN_HOUSING = WorldConfig.levelOrigin(L5)
+	+ Vector3.new(HOUSING.x + HOUSING.w / 2, STAND, DOORWAY.Z - WorldConfig.levelOrigin(L5).Z + 6)
+local IN_TOWER = WorldConfig.SchoolOrigin
+	+ Vector3.new((EAST_TOWER.minX + EAST_TOWER.maxX) / 2, DECK - 12, EAST_TOWER.openingZ)
+local OUT_FAR = DOORWAY + OUT * 36 + Vector3.new(0, STAND, 0)
+local OUT_NEAR_DOOR = DOORWAY + OUT * 5 + Vector3.new(0, STAND, 0)
 local LEFT_FROM = Vector3.new(-3, DECK + 1, GAP_Z)
 local LEAD = GameConfig.OneShotLead
 local DOOR = Scenes.RoofDoor
@@ -180,7 +212,7 @@ local function onRoof(names: { string }, body: (world: World, players: { Player 
 		acquires = 0,
 		stares = {},
 		alerts = {},
-		creature = Vector3.new(233, DECK + ROOT_HEIGHT, 70),
+		creature = DOORWAY - OUT * 7 + Vector3.new(0, ROOT_HEIGHT, -10),
 		target = nil,
 		scales = {},
 		door = door,
@@ -364,9 +396,10 @@ end
 return {
 	["Level5: the roof's geometry from the layout"] = function(t: Expect)
 		local g = geometry()
-		t.eq(g.doorway, Vector3.new(226, DECK, 80), "the door in the housing's west wall")
+		t.eq(g.doorway, DOORWAY, "the door in the housing's west wall")
+		t.eq(DOORWAY.X, HOUSING.x, "(on the roof side of the housing)")
 		t.eq(g.out, Vector3.new(-1, 0, 0), "out onto the roof")
-		t.eq(g.behind.Position, Vector3.new(229, DECK + ROOT_HEIGHT, 80), "right behind the door")
+		t.eq(g.behind.Position, DOORWAY - OUT * 3 + Vector3.new(0, ROOT_HEIGHT, 0), "right behind the door")
 		t.truthy(g.behind.LookVector:Dot(g.out) > 0.99, "facing it")
 		t.truthy(Level5.inside(IN_HOUSING, g), "the housing")
 		t.truthy(Level5.inside(IN_TOWER, g), "the stair tower under it")

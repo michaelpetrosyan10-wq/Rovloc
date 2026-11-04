@@ -64,6 +64,16 @@ local function roomById(id: string): LayoutSchema.Room
 	error("no room " .. id)
 end
 
+-- The room an anchor of the blueprint stands in (a tunnel floor's tunnels are named by the planner).
+local function anchorRoom(id: string): string
+	for _, anchor in layout().anchors do
+		if anchor.id == id then
+			return anchor.room
+		end
+	end
+	error("no anchor " .. id)
+end
+
 local function centreOf(id: string, y: number): Vector3
 	local rect = roomById(id).rect
 	return WorldConfig.levelOrigin(L3) + Vector3.new(rect.x + rect.w / 2, y, rect.z + rect.d / 2)
@@ -230,9 +240,7 @@ return {
 		t.truthy(#set.showers > 0 and #set.lockers > 0 and #set.court > 0, "every pool has points")
 		for _, point in set.showers do
 			t.truthy(
-				inRoom("L3_Showers_Boys", point)
-					or inRoom("L3_Showers_Girls", point)
-					or inRoom("L3_Restroom_North", point),
+				inRoom("L3_Showers_Boys", point) or inRoom("L3_Showers_Girls", point),
 				"a shower point in a shower room"
 			)
 		end
@@ -270,7 +278,7 @@ return {
 		local front = Level3.lockerFront(fronts, "L3_LockerRoom_Boys", Random.new(4))
 		assert(front, "a locker front")
 		t.truthy(inRoom("L3_LockerRoom_Boys", front))
-		t.eq(Level3.lockerFront(fronts, "L3_Gymnasium", Random.new(4)), nil, "no lockers on the court")
+		t.eq(Level3.lockerFront(fronts, "L3_CoachOffice", Random.new(4)), nil, "no lockers in the coach's office")
 
 		t.eq(Level3.sweepRoom({}, 50), nil)
 		t.eq(Level3.sweepRoom({ A = 45 }, 50), nil, "not long enough")
@@ -403,7 +411,9 @@ return {
 		onLevel(function(world: World)
 			-- out of the gym on patrol, the squad in the boys' changing room
 			world.state = "Patrol"
-			world.creature = centreOf("L3_NorthHall_West", 5)
+			-- (away from the court: the tunnel by the west exit)
+			local away = anchorRoom("L3_ExitLock")
+			world.creature = centreOf(away, 5)
 			advance(world, world.now + Level3.SweepDwell - 1)
 			t.eq(#world.alerts, 0, "no sweep before the dwell")
 			advance(world, world.now + Level3.SweepMax + 2)
@@ -420,8 +430,8 @@ return {
 			t.truthy(sweeps >= 1)
 
 			-- they leave the lockers for the north hall, away from the court; it prowls back to the gym
-			world.zone = "L3_NorthHall_West"
-			world.root = centreOf("L3_NorthHall_West", 3)
+			world.zone = away
+			world.root = centreOf(away, 3)
 			local before = #world.alerts
 			advance(world, world.now + Level3.ProwlMax + Level3.ProwlAway + 2)
 			local prowled = false

@@ -1,37 +1,51 @@
 --!strict
--- Level 4 · Flooded Olympic Pool. The squad arrives in L4_AirlockWest from Stairwell_3_4 and must reach
--- L4_AirlockEast on the far side of the natatorium.
+-- Level 4 · the flooded Olympic pool and the plant tunnels round it: the pump gallery, the pipe galleries, the filter
+-- tunnels, the chlorine run and the overflow drains. The squad comes up into one of the three west stair vestibules
+-- (L4_AirlockWest in the middle, the route picks which) and must reach one of the three east ones; the natatorium
+-- against the south facade is the only way across, so every route east crosses the pool.
 --
--- Plan (X west -> east, Z north -> south):
---   z   0..25  staff room, laundry, filter room | pump room, chlorine store (filter/pump wall collapsed)
---   z  25..30  L4_Chase_Maintenance: a half-flooded service duct along the natatorium's north wall
---   z  30..130 changing rooms + showers + lifeguard office (x 0..90) | NATATORIUM (x 90..228, 28 tall)
---   z 130..160 plant room, spectator gallery, scoreboard room
--- The natatorium is almost all basin: deep murky water wall to wall (x 128..214), a 38-stud west deck and a 14-stud
--- east deck. The old spectator bridge across the pool has collapsed into 8-stud-wide slabs on their broken piers,
--- parted by step-over cracks, with one fallen span mid-pool (a 12-stud swim); a north spur runs to the maintenance
--- duct's jammed west hatch and a south spur into the deep end, and fallen roof slabs are rest islands, so the dry
--- route covers most of the hall and every swim between safe dry spots is short (see the pool section). The
--- maintenance duct is sunk to the pool's waterline: its centre sits at the water surface, so the murky water fills
--- the lower half of the bore (every duct edge is Submerged, VentShaftBuilder floods it, and a PoolWater volume covers
--- the flooded half). It runs through the chase floor into the void above the Level 3 ceilings, and its grates all
--- open low in the natatorium's north wall, straight over the water: the crawl is FallenSlab_A -> a short swim to
--- L4_Grate_M_PoolWest (behind the hatch the floor objective opens) -> half-flooded crawl east -> out at
--- L4_Grate_M_PoolEast beside the east deck. The two grates between them may be locked; they are the Creature's ways
--- in and out of the duct from the deep water.
+-- The map is TunnelPlanner's (seed below): the keep-rooms here, then the tunnels it lays round them over the whole
+-- 400 x 288 footprint. Barrier lines fold the floor; the natatorium and its flooded maintenance duct (the chase along
+-- its north wall), with the barrier from the duct to the north facade (x 259), part the west from the east, and no
+-- crawlway crosses that line (the culverts are pinned), so there is no dry bypass:
+--   west (x 0..259)   Pump Gallery (x 0..60, the entry vestibules), Pipe Galleries (x 60..140) and Filter Tunnels
+--                     (x 140..259 north of the duct, and the strip beside the pool's west wall), folded by barriers at
+--                     x 60 (open at the north), 140 (open at the south) and 165 (open at the north); the natatorium's
+--                     two west doors open off the last of them
+--   the natatorium    the pool hall: the west deck, the collapsed bridge with its short swim, the spurs, the rest slabs,
+--                     the diving tower's footing and the east deck; its one dry way on is the door in the east deck's
+--                     north wall
+--   east (x 259..400) Chlorine Run (north of the duct, east of the pool line) and the Overflow Drains along the east
+--                     wall past the three exit vestibules (north z 28, middle 144, south 260), the barrier at x 350 open
+--                     at the north
+-- The shortest walk from the middle entry to the farthest exit is about 1,500 studs, plus the pool's swim and its
+-- wading (about 2.5 minutes).
+--
+-- The natatorium is the old hall, every fairness rule kept (the same pieces relative to the hall): it is almost all
+-- basin, deep murky water wall to wall (x 228..314), a 38-stud west deck and a 14-stud east deck. The old spectator
+-- bridge has collapsed into 8-stud-wide slabs on their broken piers, parted by step-over cracks, with one fallen span
+-- mid-pool (a 12-stud swim); a north spur runs to the maintenance duct's jammed west hatch and a south spur into the
+-- deep end, and fallen roof slabs are rest islands, so the dry route covers most of the hall and every swim between safe
+-- dry spots is short. The maintenance duct is sunk to the pool's waterline: its centre sits at the water surface, so
+-- the murky water fills the lower half of the bore (every duct edge is Submerged, VentShaftBuilder floods it, and a
+-- PoolWater volume covers the flooded half); its grates all open low in the natatorium's north wall, straight over the
+-- water. The west grate is behind the hatch the floor objective opens (the hatch valve: FallenSlab_A, a short swim,
+-- the valve half under the water); after it the duct is a half-flooded crawl east to the grate beside the east deck.
 --
 -- The 9 Floodlight fixtures over the pool start dark (broken) in FlickerGroup "L4_Floodlights"; the emergency
--- FloodlightSwitch on the west deck (P7) brings them up through LightingController overrides.
+-- FloodlightSwitch on the west deck brings them up through the lighting overrides.
 --
 -- Anchor heights: props on the floor or on the starting blocks they stand on, DripPipe under the ceiling,
--- PlayerSpawn at root height plus clearance (3.5), Creature placements at the rig's root height (5; the pool
--- spawn and the pool patrol are under water). Yaw: 0 faces north (-Z), 90 west, 180 south, -90 east.
+-- PlayerSpawn at root height plus clearance (3.5), Creature placements at the rig's root height (5). Yaw: 0 faces
+-- north (-Z), 90 west, 180 south, -90 east.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local TunnelPlanner = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelPlanner)
+local TunnelRules = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules)
 
 type Room = LayoutSchema.Room
 
@@ -50,11 +64,10 @@ type LightOptions = {
 	color: Color3?,
 	flicker: string?,
 	broken: boolean?,
+	cage: boolean?,
 }
 
 type LightDefaults = { brightness: number, range: number, color: Color3 }
-
-type DoorOptions = { id: string?, width: number?, height: number?, scriptedId: string? }
 
 type GratePlan = {
 	id: string,
@@ -68,13 +81,24 @@ type GratePlan = {
 type Stop = { coord: number, node: string }
 
 local PREFIX = "L4"
+local SEED = 20261130
 local HEIGHT = WorldConfig.Levels.Level4_FloodedPool.height
-local LOW = 14 -- ceiling of the rooms around the natatorium
+local LOW = 14 -- the stair vestibules
 local DUCT_ROOM = 6 -- the maintenance chase is a low service tunnel
 local WATER = WorldConfig.WaterSurfaceOffset
 local POOL_DEPTH = 10
 local HALF_BORE = WorldConfig.VentBore / 2
 local DUCT_Y = WATER -- the flooded duct's centre line: the water surface halves the bore
+
+-- The natatorium's pieces are placed relative to the old hall's corner (90, 30): the hall now stands at (190, 188),
+-- against the south facade.
+local OX, OZ = 100, 158
+local function px(x: number): number
+	return x + OX
+end
+local function pz(z: number): number
+	return z + OZ
+end
 
 local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
 
@@ -90,33 +114,14 @@ local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 
 local NATATORIUM: Style =
 	{ floor = "PoolTile", wall = "TileBlue", ceiling = "MetalGalvanized", surface = "Tile", acoustic = "Hall" }
-local CHANGING: Style =
-	{ floor = "TileBlue", wall = "TileWhite", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local SHOWERS: Style =
-	{ floor = "TileWhite", wall = "TileBlue", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local CORRIDOR: Style =
-	{ floor = "TileWhite", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Corridor" }
-local OFFICE: Style =
-	{ floor = "Linoleum", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local PLANT: Style =
-	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Basement" }
-local CHEMICALS: Style = {
-	floor = "ConcreteStained",
-	wall = "MetalGalvanized",
-	ceiling = "ConcreteDark",
-	surface = "Concrete",
-	acoustic = "Room",
-}
-local BOILERS: Style =
-	{ floor = "ConcreteStained", wall = "Brick", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Basement" }
-local GALLERY: Style =
-	{ floor = "Linoleum", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Hall" }
-local STORAGE: Style =
-	{ floor = "ConcreteStained", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Room" }
 local AIRLOCK: Style =
 	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Stairwell" }
+local PLANT: Style =
+	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Basement" }
 local CHASE: Style =
 	{ floor = "ConcreteDark", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Water", acoustic = "Vent" }
+
+local rgb = Color3.fromRGB
 
 --------------------------------------------------------------------------------
 -- Blueprint helpers
@@ -171,10 +176,14 @@ local function getRoom(id: string): Room
 	return found
 end
 
--- The non-chase room holding (x, z) at least 0.25 studs inside its walls.
+-- The walkable room holding (x, z) at least 0.05 studs inside its walls (never solid ground or the chase).
 local function roomAt(x: number, z: number): string
 	for _, candidate in rooms do
-		if candidate.kind ~= "Chase" and LayoutSchema.rectContains(candidate.rect, x, z, 0.25) then
+		if
+			candidate.kind ~= "Solid"
+			and candidate.kind ~= "Chase"
+			and LayoutSchema.rectContains(candidate.rect, x, z, 0.05)
+		then
 			return candidate.id
 		end
 	end
@@ -196,86 +205,29 @@ local function light(roomId: string, kind: Enums.LightKind, x: number, y: number
 			color = o.color or defaults.color,
 			flickerGroup = o.flicker,
 			broken = o.broken,
+			cage = o.cage,
 		})
 	end
 end
 
--- nx * nz ceiling fixtures spread evenly over a room. `pattern` is read cyclically, one character per fixture:
--- "x" = broken, "o" = lit (dim, steady), "f" = lit and flickering with options.flicker.
-local function lightGrid(
-	roomId: string,
-	kind: Enums.LightKind,
-	nx: number,
-	nz: number,
-	pattern: string,
-	options: LightOptions?
-)
-	local target = getRoom(roomId)
-	local rect = target.rect
-	local y = (target.height or HEIGHT) - 0.4
-	local o: LightOptions = options or {}
-	local index = 0
-	for i = 1, nx do
-		for j = 1, nz do
-			index += 1
-			local p = ((index - 1) % #pattern) + 1
-			local mark = string.sub(pattern, p, p)
-			light(roomId, kind, rect.x + rect.w * (i - 0.5) / nx, y, rect.z + rect.d * (j - 0.5) / nz, {
-				brightness = o.brightness,
-				range = o.range,
-				color = o.color,
-				flicker = if mark == "f" then o.flicker else nil,
-				broken = mark == "x",
-			})
-		end
-	end
-end
-
-local function door(kind: Enums.DoorKind, a: string, b: string, at: number?, options: DoorOptions?)
-	local o: DoorOptions = options or {}
-	local roomA, roomB = getRoom(a), getRoom(b)
-	local position: number
-	if at then
-		position = at
-	else
-		local edge = LayoutSchema.sharedEdge(roomA.rect, roomB.rect)
-		position = if edge then (edge.from + edge.to) / 2 else 0
-	end
-	table.insert(doors, {
-		id = o.id or string.format("%s_Door_%02d", PREFIX, #doors + 1),
-		kind = kind,
-		rooms = { a, b },
-		at = position,
-		width = o.width,
-		height = o.height,
-		scriptedId = o.scriptedId,
-	})
-end
-
-local function anchor(kind: Enums.AnchorKind, x: number, y: number, z: number, yaw: number?, id: string?)
+local function anchor(kind: Enums.AnchorKind, x: number, y: number, z: number, yaw: number?, id: string?): string
 	local n = (anchorCounts[kind] or 0) + 1
 	anchorCounts[kind] = n
+	local anchorId = id or string.format("%s_%s_%02d", PREFIX, kind, n)
 	table.insert(anchors, {
-		id = id or string.format("%s_%s_%02d", PREFIX, kind, n),
+		id = anchorId,
 		kind = kind,
 		room = roomAt(x, z),
 		pos = Vector3.new(x, y, z),
 		yaw = yaw,
 	})
+	return anchorId
 end
 
 -- Each point is { x, z } or { x, z, yaw }.
 local function scatter(kind: Enums.AnchorKind, y: number, points: { { number } })
 	for _, p in points do
 		anchor(kind, p[1], y, p[2], p[3])
-	end
-end
-
--- A closed patrol loop at height `y`: waypoint i leads to i + 1 and the last back to the first, each hop within one
--- room or through one doorway.
-local function patrol(loop: string, y: number, points: { { number } })
-	for i, p in points do
-		anchor("PatrolWaypoint", p[1], y, p[2], nil, string.format("%s_WP_%s_%02d", PREFIX, loop, i))
 	end
 end
 
@@ -298,32 +250,6 @@ local function trigger(
 		height = height,
 		y = y,
 	})
-end
-
--- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
-local function windowRow(
-	roomId: string,
-	side: LayoutSchema.Side,
-	count: number,
-	width: number,
-	height: number,
-	sill: number,
-	boarded: boolean
-)
-	local rect = getRoom(roomId).rect
-	local alongX = side == "N" or side == "S"
-	local from = if alongX then rect.x else rect.z
-	local span = if alongX then rect.w else rect.d
-	for i = 1, count do
-		local at = from + span * (i - 0.5) / count
-		local facesTower = not alongX and WorldConfig.facesTower(at - width / 2, at + width / 2, 2)
-		if not facesTower then
-			table.insert(
-				windows,
-				{ room = roomId, side = side, at = at, width = width, height = height, sill = sill, boarded = boarded }
-			)
-		end
-	end
 end
 
 local function platform(
@@ -437,88 +363,272 @@ local function deepFreeze(value: unknown)
 end
 
 --------------------------------------------------------------------------------
--- Rooms
+-- Keep-rooms (the rooms the game needs; the planner tunnels around them) and the rooms joined to them
 --------------------------------------------------------------------------------
 
--- North service row
-room("L4_AirlockNorthWest", "Airlock", 0, 0, 12, 25, AIRLOCK, LOW)
-room("L4_StaffRoom", "Office", 12, 0, 28, 25, OFFICE, LOW)
-room("L4_Laundry", "Storage", 40, 0, 50, 25, SHOWERS, LOW)
-room("L4_FilterRoom", "Boiler", 90, 0, 50, 25, PLANT, LOW)
-room("L4_PumpRoom", "Boiler", 140, 0, 50, 25, PLANT, LOW)
-room("L4_ChlorineStore", "Storage", 190, 0, 38, 25, CHEMICALS, LOW)
-room("L4_AirlockNorthEast", "Airlock", 228, 0, 12, 25, AIRLOCK, LOW)
+local keep: { TunnelPlanner.KeepRoom } = {}
+local function keepRoom(r: Room, ports: { TunnelPlanner.Port }, region: string?, sign: string?)
+	table.insert(keep, { room = r, ports = ports, region = region, sign = sign })
+end
+local exclusions: { LayoutSchema.Rect } = {}
 
--- West wing: changing rooms off the pool corridor
-room("L4_Storage_W1", "Storage", 0, 25, 12, 41, STORAGE, LOW)
-room("L4_ChangingRoom_Boys", "LockerRoom", 12, 25, 44, 48, CHANGING, LOW)
-room("L4_Showers_Boys", "Restroom", 56, 25, 34, 28, SHOWERS, LOW)
-room("L4_LifeguardOffice", "Office", 56, 53, 34, 20, OFFICE, LOW)
-room("L4_AirlockWest", "Airlock", 0, 66, 12, 28, AIRLOCK, LOW)
-room("L4_Corridor_West", "Corridor", 12, 73, 78, 14, CORRIDOR, LOW)
-room("L4_Storage_W2", "Storage", 0, 94, 12, 36, STORAGE, LOW)
-room("L4_ChangingRoom_Girls", "LockerRoom", 12, 87, 44, 43, CHANGING, LOW)
-room("L4_FirstAid", "Office", 56, 87, 34, 20, OFFICE, LOW)
-room("L4_Showers_Girls", "Restroom", 56, 107, 34, 23, SHOWERS, LOW)
+-- The natatorium against the south facade: two doors from the filter tunnels onto the west deck, and the east deck's
+-- door in its north wall (beside the duct's east end) on to the chlorine run, the one dry way east
+keepRoom(room("L4_Natatorium", "Pool", px(90), pz(30), 138, 100, NATATORIUM), {
+	{ side = "W", at = 210, kind = "Doorway", width = 8, id = "L4_Door_NatatoriumWest" },
+	{ side = "W", at = 260, kind = "Door", id = "L4_Door_NatatoriumSouthWest" },
+	{ side = "N", at = 321, kind = "Door", id = "L4_Door_NatatoriumEast" },
+}, "Filters", "POOL")
+-- The pump room off the filter tunnels: the pool's filter pumps and its heater, a landmark with lockers
+keepRoom(room("L4_PumpRoom", "Boiler", 190, 116, 48, 40, PLANT, LOW), {
+	{ side = "W", at = 144, kind = "Door", id = "L4_Door_PumpRoomWest" },
+	{ side = "S", at = 204, kind = "Door", id = "L4_Door_PumpRoomSouth" },
+}, "Filters", "PUMP ROOM")
+-- The pool staff's room off the filter tunnels (lockers, the lifeguards' first-aid kit)
+local STAFF: Style =
+	{ floor = "Linoleum", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
+keepRoom(
+	room("L4_StaffRoom", "Office", 186, 60, 44, 36, STAFF, LOW),
+	{ { side = "W", at = 76, kind = "Door", id = "L4_Door_StaffRoom" } },
+	"Filters",
+	"POOL STAFF"
+)
+-- The flooded maintenance duct along the natatorium's north wall (a chase: reached only through its grates)
+room("L4_Chase_Maintenance", "Chase", px(90), pz(25), 124, 5, CHASE, DUCT_ROOM)
+table.insert(exclusions, getRoom("L4_Chase_Maintenance").rect)
 
--- The natatorium and its flooded maintenance duct
-room("L4_Chase_Maintenance", "Chase", 90, 25, 124, 5, CHASE, DUCT_ROOM)
--- A service passage through the natatorium's north wall: the east deck to the chlorine store
-room("L4_ChlorineHall", "Corridor", 214, 25, 14, 5, STORAGE, LOW)
-room("L4_Natatorium", "Pool", 90, 30, 138, 100, NATATORIUM)
-
--- East end
-room("L4_Storage_E1", "Storage", 228, 25, 12, 41, STORAGE, LOW)
-room("L4_AirlockEast", "Airlock", 228, 66, 12, 28, AIRLOCK, LOW)
-room("L4_Storage_E2", "Storage", 228, 94, 12, 36, STORAGE, LOW)
-
--- South row
-room("L4_AirlockSouthWest", "Airlock", 0, 130, 12, 30, AIRLOCK, LOW)
-room("L4_PlantRoom", "Boiler", 12, 130, 78, 30, BOILERS, LOW)
-room("L4_SpectatorGallery", "Corridor", 90, 130, 110, 30, GALLERY, LOW)
-room("L4_ScoreboardRoom", "Storage", 200, 130, 28, 30, STORAGE, LOW)
-room("L4_AirlockSouthEast", "Airlock", 228, 130, 12, 30, AIRLOCK, LOW)
+-- The stair vestibules: the entries against the west towers (from Stairwell_3_4 and its corner candidates), the exits
+-- (route candidates, each fire door with the floor's Keypad ExitLock, the hatch interlock) against the east towers
+for _, v in
+	{
+		{ "L4_AirlockNorthWest", 16, 28, "L4_Door_AirlockNorthWest" },
+		{ "L4_AirlockWest", 132, 144, "L4_Door_AirlockWest" },
+		{ "L4_AirlockSouthWest", 248, 260, "L4_Door_AirlockSouthWest" },
+	} :: { { any } }
+do
+	-- (no stencil: the fire door's STAIRS sign is SignageBuilder's, beside it on the tunnel side)
+	keepRoom(
+		room(v[1], "Airlock", 0, v[2], 14, 24, AIRLOCK, LOW),
+		{ { side = "E", at = v[3], kind = "Airlock", id = v[4] } },
+		"Pumps"
+	)
+end
+for _, v in
+	{
+		{ "L4_AirlockNorthEast", 16, 28, "L4_Door_AirlockNorthEast" },
+		{ "L4_AirlockEast", 132, 144, "L4_Door_AirlockEast" },
+		{ "L4_AirlockSouthEast", 248, 260, "L4_Door_AirlockSouthEast" },
+	} :: { { any } }
+do
+	keepRoom(
+		room(v[1], "Airlock", 386, v[2], 14, 24, AIRLOCK, LOW),
+		{ { side = "W", at = v[3], kind = "Airlock", id = v[4] } },
+		"Drains"
+	)
+end
 
 --------------------------------------------------------------------------------
--- Doors
+-- The tunnels
 --------------------------------------------------------------------------------
 
-door("Airlock", "L4_AirlockWest", "L4_Corridor_West", 80, { id = "L4_Door_AirlockWest" })
-door("Airlock", "L4_Natatorium", "L4_AirlockEast", 80, { id = "L4_Door_AirlockEast" })
-door("Doorway", "L4_Corridor_West", "L4_Natatorium", 80, { width = 8 })
--- The corner stair vestibules open off the corner rooms; the east ones (the chlorine store, the scoreboard room)
--- are reached only from the east deck, across the pool
-door("Airlock", "L4_AirlockNorthWest", "L4_StaffRoom", 12.5, { id = "L4_Door_AirlockNorthWest" })
-door("Airlock", "L4_AirlockSouthWest", "L4_PlantRoom", 145, { id = "L4_Door_AirlockSouthWest" })
-door("Airlock", "L4_ChlorineStore", "L4_AirlockNorthEast", 12.5, { id = "L4_Door_AirlockNorthEast" })
-door("Airlock", "L4_ScoreboardRoom", "L4_AirlockSouthEast", 145, { id = "L4_Door_AirlockSouthEast" })
+local plan = TunnelPlanner.plan({
+	levelId = "Level4_FloodedPool",
+	prefix = PREFIX,
+	seed = SEED,
+	height = HEIGHT,
+	keepRooms = keep,
+	entry = "L4_AirlockWest",
+	exits = { "L4_AirlockNorthEast", "L4_AirlockEast", "L4_AirlockSouthEast" },
+	exclusions = exclusions,
+	barriers = {
+		{ x0 = 60, z0 = 40, x1 = 60, z1 = 288 }, -- Pump Gallery | Pipe Galleries, open at the north
+		{ x0 = 140, z0 = 0, x1 = 140, z1 = 250 }, -- Pipe Galleries | Filter Tunnels, open at the south
+		{ x0 = 165, z0 = 40, x1 = 165, z1 = 288 }, -- the Filter Tunnels' fold, open at the north
+		{ x0 = 259, z0 = 0, x1 = 259, z1 = 183 }, -- the pool line: west and east meet only across the natatorium
+		{ x0 = 350, z0 = 40, x1 = 350, z1 = 288 }, -- the Overflow Drains' fold, open at the north
+		-- each stair vestibule's line stops at its rail (the stub is the crossing's side arm, so the plate, the arrows
+		-- and the graffiti go on the rail and the stub's walls keep room for the STAIRS sign)
+		{ x0 = 40, z0 = 24, x1 = 40, z1 = 32 },
+		{ x0 = 40, z0 = 140, x1 = 40, z1 = 148 },
+		{ x0 = 40, z0 = 256, x1 = 40, z1 = 264 },
+		{ x0 = 363, z0 = 24, x1 = 363, z1 = 32 },
+		{ x0 = 363, z0 = 140, x1 = 363, z1 = 148 },
+		{ x0 = 363, z0 = 256, x1 = 363, z1 = 264 },
+	},
+	gridX = { 30, 50, 72, 96, 128, 152, 178, 204, 230, 246, 272, 296, 321, 340, 356, 370 },
+	gridZ = { 28, 52, 76, 100, 122, 144, 166, 188, 210, 236, 260 },
+	-- pinned culverts (none across the pool line: no dry bypass of the natatorium)
+	crawlSites = {
+		{ 50, 52, 72, 52 },
+		{ 30, 144, 50, 144 },
+		{ 50, 236, 72, 236 },
+		{ 72, 100, 96, 100 },
+		{ 128, 188, 152, 188 },
+		{ 152, 260, 178, 260 },
+		{ 152, 166, 178, 166 },
+		{ 152, 52, 178, 52 },
+		{ 204, 52, 230, 52 },
+		{ 272, 52, 296, 52 },
+		{ 296, 144, 321, 144 },
+		{ 340, 52, 356, 52 },
+		{ 340, 144, 356, 144 },
+		{ 356, 144, 370, 144 },
+		{ 356, 260, 370, 260 },
+	},
+	style = {
+		width = { 6, 7, 7, 8 },
+		height = { 10.5, 11 },
+		galleryWidth = 9,
+		galleryHeight = { 14, 16 },
+		galleryShare = 0.2,
+		galleryMin = 40,
+		pitch = 24,
+		jitter = 3,
+		length = 3800,
+		deadEnds = 3,
+		crawlWidth = 4,
+		crawlAcrossBarriers = true,
+		alcoveWidth = 5,
+		alcoveDepth = 6,
+		alcoveHeight = 10,
+		lightSpacing = { 8, 11 },
+		deadShare = 0.3,
+		flickerShare = 0.12,
+		plateLampEvery = 2,
+		wall = "ConcreteDark",
+		floor = "ConcreteStained",
+		ceiling = "ConcreteDark",
+		acoustic = "Basement",
+		galleryAcoustic = "Hall",
+		crawlAcoustic = "Vent",
+	},
+	rules = {
+		maxLoop = 200,
+		deadEndCount = 8,
+		deadEndLength = 25,
+		-- about 2.5 minutes with the pool's swim and wading (the walk alone a little under)
+		crossing = { 1400, 1980 },
+		crawlCrossingSeconds = 40,
+		crawlways = { 3, 16 },
+		crawlLength = 20,
+		crawlHeight = TunnelRules.CrawlClearance,
+		crawlReach = 60,
+		hideReach = 30,
+		objectiveHideReach = 25,
+		regions = { 4, 6 },
+	},
+	regions = {
+		{
+			id = "Pumps",
+			medium = "WATER",
+			name = "Pump Gallery",
+			x = 30,
+			z = 150,
+			areas = { { 0, 0, 60, 288 } },
+			pipe = rgb(36, 78, 128),
+			band = rgb(220, 220, 214),
+			grime = rgb(16, 24, 26),
+			paint = rgb(240, 236, 220),
+			graffiti = { "HE SWIMS", "STAY OUT OF THE WATER", "LISTEN", "THE POOL IS EAST" },
+			wall = "Concrete",
+			wet = true,
+		},
+		{
+			id = "Pipes",
+			medium = "STEAM",
+			name = "Pipe Galleries",
+			x = 100,
+			z = 150,
+			areas = { { 60, 0, 140, 288 } },
+			pipe = rgb(132, 30, 24),
+			band = rgb(214, 206, 186),
+			grime = rgb(40, 18, 12),
+			paint = rgb(236, 226, 196),
+			graffiti = { "HE HEARS YOU RUN", "DON'T LOOK AT HIS FACE", "HEATER ON", "WALK. DON'T RUN" },
+			wall = "Brick",
+		},
+		{
+			id = "Filters",
+			medium = "FILTER",
+			name = "Filter Tunnels",
+			x = 200,
+			z = 100,
+			areas = { { 140, 0, 259, 288 } },
+			pipe = rgb(48, 48, 50),
+			band = rgb(150, 146, 136),
+			grime = rgb(14, 13, 12),
+			paint = rgb(226, 222, 206),
+			graffiti = { "FIND THE WHEEL", "IT'S ON THE BOTTOM", "HOLD YOUR BREATH", "SWIM FAST" },
+			wall = "ConcreteDark",
+			wet = true,
+		},
+		{
+			id = "Chlorine",
+			medium = "GAS",
+			name = "Chlorine Run",
+			x = 300,
+			z = 80,
+			areas = { { 259, 0, 350, 288 } },
+			pipe = rgb(176, 136, 24),
+			band = rgb(30, 28, 24),
+			grime = rgb(36, 30, 14),
+			paint = rgb(232, 70, 48),
+			graffiti = { "NO NAKED FLAME", "THE HATCH OPENS IT", "CHLORINE", "DON'T BREATHE IT" },
+			wall = "ConcreteStained",
+		},
+		{
+			id = "Drains",
+			medium = "DRAIN",
+			name = "Overflow Drains",
+			x = 370,
+			z = 150,
+			areas = { { 350, 0, 400, 288 } },
+			pipe = rgb(54, 92, 58),
+			band = rgb(214, 196, 64),
+			grime = rgb(18, 22, 14),
+			paint = rgb(236, 232, 214),
+			graffiti = { "ALMOST OUT", "STAIRS EAST", "UP IS OUT", "DON'T LOOK BACK" },
+			wall = "ConcreteStained",
+			wet = true,
+		},
+	},
+	attempts = 6,
+	crossingTarget = 1560,
+	hideTargets = {
+		Vector3.new(384, 0, 28),
+		Vector3.new(384, 0, 144),
+		Vector3.new(384, 0, 260),
+		Vector3.new(188, 0, 210),
+		Vector3.new(188, 0, 260),
+		Vector3.new(321, 0, 186),
+	},
+	traps = 0,
+	batteries = 12,
+	clutter = 20,
+	corpses = 4,
+	drips = 10,
+	debris = 7,
+	scares = 4,
+	creatureSpawns = 6,
+	creatureBand = { 70, 140 },
+})
 
-door("Door", "L4_Corridor_West", "L4_ChangingRoom_Boys", 34)
-door("Door", "L4_Corridor_West", "L4_LifeguardOffice", 73)
-door("Door", "L4_Corridor_West", "L4_ChangingRoom_Girls", 34)
-door("Door", "L4_Corridor_West", "L4_FirstAid", 73)
-door("Doorway", "L4_ChangingRoom_Boys", "L4_Showers_Boys", 40)
-door("Doorway", "L4_Showers_Boys", "L4_Natatorium", 42)
-door("Door", "L4_LifeguardOffice", "L4_Natatorium", 63)
-door("Doorway", "L4_ChangingRoom_Girls", "L4_Showers_Girls", 118)
-door("Doorway", "L4_Showers_Girls", "L4_Natatorium", 118)
-door("Door", "L4_FirstAid", "L4_Natatorium", 97)
-door("Door", "L4_Storage_W1", "L4_ChangingRoom_Boys", 45)
-door("Door", "L4_Storage_W2", "L4_ChangingRoom_Girls", 112)
-door("Door", "L4_StaffRoom", "L4_ChangingRoom_Boys", 26)
-door("Door", "L4_Laundry", "L4_ChangingRoom_Boys", 48)
-door("Door", "L4_Laundry", "L4_FilterRoom", 12)
-door("Boarded", "L4_FilterRoom", "L4_PumpRoom", 12, { id = "L4_Door_PumpCollapse" })
-door("Door", "L4_PumpRoom", "L4_ChlorineStore", 12)
-door("Doorway", "L4_ChlorineStore", "L4_ChlorineHall", 221)
-door("Doorway", "L4_ChlorineHall", "L4_Natatorium", 221)
-door("Door", "L4_Storage_E1", "L4_Natatorium", 48)
-door("Door", "L4_Storage_E2", "L4_Natatorium", 112)
-door("Door", "L4_Natatorium", "L4_ScoreboardRoom", 221)
-door("Door", "L4_SpectatorGallery", "L4_Natatorium", 108, { width = 8 })
-door("Boarded", "L4_SpectatorGallery", "L4_ScoreboardRoom", 145, { id = "L4_Door_GalleryCollapse" })
-door("Door", "L4_PlantRoom", "L4_ChangingRoom_Girls", 34)
-door("Door", "L4_PlantRoom", "L4_SpectatorGallery", 145)
+for _, r in plan.rooms do
+	table.insert(rooms, r)
+	roomById[r.id] = r
+end
+for _, d in plan.doors do
+	table.insert(doors, d)
+end
+for _, a in plan.anchors do
+	table.insert(anchors, a)
+end
+for _, t in plan.triggers do
+	table.insert(triggers, t)
+end
+for _, p in plan.platforms do
+	table.insert(platforms, p)
+end
 
 --------------------------------------------------------------------------------
 -- The pool: one deep basin wall to wall, the collapsed bridge, debris and the deck furniture
@@ -527,7 +637,7 @@ door("Door", "L4_PlantRoom", "L4_SpectatorGallery", 145)
 table.insert(basins, {
 	id = "L4_Basin_Pool",
 	room = "L4_Natatorium",
-	rect = LayoutSchema.rect(128, 30, 86, 100),
+	rect = LayoutSchema.rect(px(128), pz(30), 86, 100),
 	depth = POOL_DEPTH,
 	waterLevel = WATER,
 })
@@ -540,7 +650,8 @@ table.insert(basins, {
 -- the east deck's coping. FallenSlab_C and _D, fallen from the roof, are rest islands in the open water. So the dry
 -- route covers most of the hall, no swim between two safe dry spots is longer than about 25 studs (the swim legs
 -- below), and every valve-wheel spot on the pool floor is 12 studs or less of swim from a dry spot.
--- Every support runs from the basin floor up to the underside of what it carries.
+-- Every support runs from the basin floor up to the underside of what it carries. (Coordinates below are the old hall's,
+-- moved by px / pz.)
 local CRACK = 1.2 -- a step-over crack between two walkway slabs (the body never loses the floor crossing it)
 local function onPiers(
 	id: string,
@@ -553,14 +664,14 @@ local function onPiers(
 	material: string,
 	piers: { { number } }
 )
-	platform(id, "L4_Natatorium", x, z, w, d, top, thickness, material)
+	platform(id, "L4_Natatorium", px(x), pz(z), w, d, top, thickness, material)
 	local underside = top - thickness
 	for i, pier in piers do
 		platform(
 			if i == 1 then id .. "_Pier" else string.format("%s_Pier%d", id, i),
 			"L4_Natatorium",
-			pier[1],
-			pier[2],
+			px(pier[1]),
+			pz(pier[2]),
 			pier[3],
 			pier[4],
 			underside,
@@ -569,7 +680,7 @@ local function onPiers(
 		)
 	end
 end
--- The bridge, west to east along z 76..84; the fallen span leaves open water from x 164 to 176.
+-- The bridge, west to east along z 76..84 (old hall); the fallen span leaves open water from x 164 to 176.
 local BRIDGE_Z, BRIDGE_D = 76, 8
 onPiers("L4_Bridge_1", 128, BRIDGE_Z, 18, BRIDGE_D, 0, 1.2, "Concrete", { { 131, 78.5, 3, 3 }, { 141, 78.5, 3, 3 } })
 onPiers(
@@ -615,22 +726,33 @@ onPiers(
 	{ { 191, 115, 5, 4 } }
 )
 -- The diving tower's concrete footing, awash round its foot from FallenSlab_B to the east coping.
-platform("L4_TowerBase", "L4_Natatorium", 203, 114, 11, 13, -0.4, POOL_DEPTH - 0.4, "ConcreteDark")
+platform("L4_TowerBase", "L4_Natatorium", px(203), pz(114), 11, 13, -0.4, POOL_DEPTH - 0.4, "ConcreteDark")
 -- Rest islands: roof slabs fallen into the open water.
 onPiers("L4_FallenSlab_C", 156, 104, 8, 7, -0.5, 1, "ConcreteStained", { { 158.5, 106, 4, 3 } })
 onPiers("L4_FallenSlab_D", 174, 44, 8, 7, -0.6, 1.2, "ConcreteStained", { { 176.5, 46, 4, 3 } })
 -- The diving tower stands in the deep end, off the duct's east grate.
-platform("L4_DivingTower", "L4_Natatorium", 207, 118, 6, 6, 10, POOL_DEPTH + 10, "Concrete")
+platform("L4_DivingTower", "L4_Natatorium", px(207), pz(118), 6, 6, 10, POOL_DEPTH + 10, "Concrete")
 for i, z in { 40, 52, 64, 96, 108, 120 } do
-	platform(string.format("L4_StartBlock_%d", i), "L4_Natatorium", 124, z, 3, 3, 1.5, 1.5, "PoolTile")
+	platform(string.format("L4_StartBlock_%d", i), "L4_Natatorium", px(124), pz(z), 3, 3, 1.5, 1.5, "PoolTile")
 end
+platform("L4_StaffTable", "L4_StaffRoom", 204, 74, 10, 5, 2.6, 2.6, "WoodPanel")
+platform("L4_StaffCounter", "L4_StaffRoom", 187, 61, 14, 2.4, 3, 3, "WoodPanel")
+-- The pump room's filter pumps and the pool heater (the heater's glow below)
+platform("L4_Pump_A", "L4_PumpRoom", 196, 120, 8, 6, 4, 4, "MetalRust")
+platform("L4_Pump_B", "L4_PumpRoom", 210, 120, 8, 6, 4, 4, "MetalRust")
+platform("L4_FilterTank", "L4_PumpRoom", 226, 120, 10, 10, 8, 8, "MetalGalvanized")
+platform("L4_PoolHeater", "L4_PumpRoom", 224, 142, 12, 8, 6, 6, "MetalRust")
+-- Lifeguard chairs and a stack of lane-rope reels on the west deck
+platform("L4_LifeguardChair_N", "L4_Natatorium", px(112), pz(36), 3, 3, 4.5, 4.5, "MetalGalvanized")
+platform("L4_LifeguardChair_S", "L4_Natatorium", px(112), pz(118), 3, 3, 4.5, 4.5, "MetalGalvanized")
+platform("L4_ReelStack", "L4_Natatorium", px(96), pz(118), 6, 4, 2.6, 2.6, "MetalRust")
 
 --------------------------------------------------------------------------------
 -- The flooded maintenance duct (every edge Submerged), sunk to the waterline. Every grate opens over the basin: a
--- grate this low over the dry deck or into the service rooms would open into their floor.
+-- grate this low over the dry deck would open into its floor.
 --------------------------------------------------------------------------------
 
-local DUCT_WEST, DUCT_EAST = 150, 208 -- the two critical grates (centres along the north wall)
+local DUCT_WEST, DUCT_EAST = px(150), px(208) -- the two critical grates (centres along the north wall)
 
 chaseRun("L4_Chase_Maintenance", {
 	{
@@ -641,8 +763,8 @@ chaseRun("L4_Chase_Maintenance", {
 		lockable = false,
 		critical = true,
 	},
-	{ id = "L4_Grate_M_PoolMidW", room = "L4_Natatorium", side = "S", at = 166, lockable = true, critical = false },
-	{ id = "L4_Grate_M_PoolMidE", room = "L4_Natatorium", side = "S", at = 190, lockable = true, critical = false },
+	{ id = "L4_Grate_M_PoolMidW", room = "L4_Natatorium", side = "S", at = px(166), lockable = true, critical = false },
+	{ id = "L4_Grate_M_PoolMidE", room = "L4_Natatorium", side = "S", at = px(190), lockable = true, critical = false },
 	{
 		id = "L4_Grate_M_PoolEast",
 		room = "L4_Natatorium",
@@ -654,148 +776,132 @@ chaseRun("L4_Chase_Maintenance", {
 }, true, DUCT_Y)
 
 --------------------------------------------------------------------------------
--- Lights
+-- Keep-room lights
 --------------------------------------------------------------------------------
 
 local floodlight = 0
 for _, x in { 140, 171, 202 } do
 	for _, z in { 45, 80, 115 } do
 		floodlight += 1
-		light("L4_Natatorium", "Floodlight", x, HEIGHT - 0.6, z, {
+		light("L4_Natatorium", "Floodlight", px(x), HEIGHT - 0.6, pz(z), {
 			id = string.format("L4_Floodlight_%02d", floodlight),
 			flicker = "L4_Floodlights",
 			broken = true,
 		})
 	end
 end
-lightGrid("L4_Natatorium", "Bulb", 2, 4, "x")
-light("L4_Natatorium", "EmergencyRed", 225, LOW - 2, 80, { flicker = "L4_ExitEast", brightness = 0.5, range = 20 })
-light("L4_Natatorium", "ExitSign", 226.5, 11, 80)
-light("L4_Natatorium", "EmergencyRed", 93, LOW - 2, 80, { flicker = "L4_DeckWest", brightness = 0.3 })
-
-lightGrid("L4_Corridor_West", "Fluorescent", 5, 1, "xxfxx", { flicker = "L4_Corridor", brightness = 0.3 })
-for _, id in
-	{
-		"L4_ChangingRoom_Boys",
-		"L4_ChangingRoom_Girls",
-		"L4_StaffRoom",
-		"L4_Laundry",
-		"L4_FirstAid",
-		"L4_SpectatorGallery",
-	} :: { string }
-do
-	lightGrid(id, "Fluorescent", 2, 2, "x")
+for _, x in { 109, 221 } do
+	for _, z in { 42, 68, 94, 120 } do
+		light("L4_Natatorium", "Bulb", px(x), HEIGHT - 0.4, pz(z), { broken = true })
+	end
 end
-lightGrid("L4_Showers_Boys", "Fluorescent", 1, 2, "x")
-lightGrid("L4_Showers_Girls", "Fluorescent", 1, 2, "fx", { flicker = "L4_ShowersGirls", brightness = 0.25 })
-lightGrid("L4_LifeguardOffice", "Bulb", 1, 1, "o", { brightness = 0.2, range = 10 })
-for _, id in
+light("L4_Natatorium", "EmergencyRed", px(225), 12, pz(37), { flicker = "L4_DeckEast", brightness = 0.5, range = 20 })
+light("L4_Natatorium", "ExitSign", px(224.5), 11, pz(31.2))
+light("L4_Natatorium", "EmergencyRed", px(93), 12, pz(52), { flicker = "L4_DeckWest", brightness = 0.3 })
+light("L4_Natatorium", "EmergencyRed", px(93), 12, pz(102), { flicker = "L4_DeckWest", brightness = 0.3 })
+light("L4_StaffRoom", "Fluorescent", 208, LOW - 0.4, 70, { flicker = "Mains:L4_StaffRoom" })
+light("L4_StaffRoom", "Fluorescent", 208, LOW - 0.4, 86, { flicker = "Mains:L4_StaffRoom", broken = true })
+light("L4_PumpRoom", "Bulb", 206, LOW - 0.6, 136, { flicker = "Mains:L4_PumpRoom", cage = true })
+light("L4_PumpRoom", "Bulb", 222, LOW - 0.6, 136, { flicker = "Mains:L4_PumpRoom", broken = true, cage = true })
+light("L4_PumpRoom", "BoilerGlow", 230, 2, 141.4, { flicker = "L4_PoolHeater" })
+for _, v in
 	{
-		"L4_FilterRoom",
-		"L4_PumpRoom",
-		"L4_ChlorineStore",
-		"L4_Storage_W1",
-		"L4_Storage_W2",
-		"L4_Storage_E1",
-		"L4_Storage_E2",
-		"L4_ScoreboardRoom",
-	} :: { string }
-do
-	lightGrid(id, "Bulb", 1, 1, "x")
-end
-lightGrid("L4_PlantRoom", "Bulb", 3, 1, "x")
-light("L4_PlantRoom", "BoilerGlow", 20, 2, 150, { flicker = "L4_PoolHeater" })
-light("L4_AirlockWest", "EmergencyRed", 6, LOW - 1, 80, { flicker = "L4_AirlockWest", brightness = 0.35 })
-light("L4_AirlockEast", "EmergencyRed", 234, LOW - 1, 80, { flicker = "L4_AirlockEast", brightness = 0.35 })
-for _, spot in
-	{
-		{ "L4_AirlockNorthWest", 6, 12.5 },
-		{ "L4_AirlockSouthWest", 6, 145 },
-		{ "L4_AirlockNorthEast", 234, 12.5 },
-		{ "L4_AirlockSouthEast", 234, 145 },
+		{ "L4_AirlockNorthWest", 7, 28 },
+		{ "L4_AirlockWest", 7, 144 },
+		{ "L4_AirlockSouthWest", 7, 260 },
+		{ "L4_AirlockNorthEast", 393, 28 },
+		{ "L4_AirlockEast", 393, 144 },
+		{ "L4_AirlockSouthEast", 393, 260 },
 	} :: { { any } }
 do
-	light(spot[1], "EmergencyRed", spot[2], LOW - 1, spot[3], { flicker = spot[1], brightness = 0.35 })
+	light(v[1], "Fluorescent", v[2], LOW - 0.6, v[3], { flicker = "Mains:" .. v[1], broken = true })
+	light(v[1], "EmergencyRed", v[2], LOW - 3, v[3] - 8, { brightness = 0.3 })
 end
-lightGrid("L4_ChlorineHall", "Bulb", 1, 1, "o", { brightness = 0.2, range = 10 })
 
 --------------------------------------------------------------------------------
--- Anchors
+-- Keep-room anchors
 --------------------------------------------------------------------------------
 
--- Arrival from Stairwell_3_4
-scatter("PlayerSpawn", 3.5, { { 4, 74, FACE_E }, { 8, 74, FACE_E }, { 4, 86, FACE_E }, { 8, 86, FACE_E } })
--- Arrival from Stairwell_3_4_North / _South (the corner vestibules; their fire doors are in the east wall)
-scatter("PlayerSpawn", 3.5, { { 3, 4, FACE_E }, { 7, 4, FACE_E }, { 3, 21, FACE_E }, { 7, 21, FACE_E } })
-scatter("PlayerSpawn", 3.5, { { 3, 136, FACE_E }, { 7, 136, FACE_E }, { 3, 154, FACE_E }, { 7, 154, FACE_E } })
--- The Creature waits on the pool floor (AquaticStalk).
-anchor("CreatureSpawn", 171, WATER - 4, 100, FACE_N, "L4_CreatureSpawn")
-anchor("FloodlightSwitch", 91.5, 4, 70, FACE_E, "L4_FloodlightSwitch")
+-- Arrival from Stairwell_3_4 and its corner candidates (the west vestibules; their fire doors are in the east wall)
+for _, z in { 28, 144, 260 } do
+	for _, p in { { 4, z - 5 }, { 8, z - 5 }, { 4, z + 5 }, { 8, z + 5 } } do
+		anchor("PlayerSpawn", p[1], 3.5, p[2], FACE_E)
+	end
+end
+anchor("FloodlightSwitch", px(91.5), 4, pz(70), FACE_E, "L4_FloodlightSwitch")
 
 -- Floor objective (ValveWheel): the valve wheel lies on the deep pool floor at one of eight spots all over the basin,
 -- never under a walkway and each 12 studs or less of swim from dry footing (the spurs, the bridge, the fallen slabs,
--- the tower's footing, the decks); the hatch valve is the jammed
--- watertight hatch over the duct's west grate on the inner face of the north coping, its valve socket half under the
--- water (the anchor is the grate's centre at the waterline, facing into the hall), a short swim from FallenSlab_A; the
--- exit lock on the east stair airlock's fire door. On this floor the Creature cannot leave the water, so dry footing is
--- the hiding spot near every step.
-scatter("ValveWheelCandidate", -POOL_DEPTH, {
-	{ 180, 106 },
-	{ 202, 104 },
-	{ 166, 121 },
-	{ 152, 55 }, -- off the north spur
-	{ 178, 58 }, -- south of FallenSlab_D
-	{ 156, 92 }, -- south of the bridge, between it and FallenSlab_C
-	{ 208, 50 }, -- off the east deck's coping
-	{ 134, 110 }, -- off the west deck's coping
+-- the tower's footing, the decks); the hatch valve is the jammed watertight hatch over the duct's west grate on the
+-- inner face of the north coping, its valve socket half under the water (the anchor is the grate's centre at the
+-- waterline, facing into the hall), a short swim from FallenSlab_A; the exit locks on the three east vestibules' fire
+-- doors (the floor point on each door's tunnel face, facing out of the door). On the pool the Creature cannot leave the
+-- water, so dry footing is the hiding spot near every pool-floor step.
+for _, p in
+	{
+		{ 180, 106 },
+		{ 202, 104 },
+		{ 166, 121 },
+		{ 152, 55 }, -- off the north spur
+		{ 178, 58 }, -- south of FallenSlab_D
+		{ 156, 92 }, -- south of the bridge, between it and FallenSlab_C
+		{ 208, 50 }, -- off the east deck's coping
+		{ 134, 110 }, -- off the west deck's coping
+	}
+do
+	anchor("ValveWheelCandidate", px(p[1]), -POOL_DEPTH, pz(p[2]))
+end
+anchor("HatchValve", DUCT_WEST, WATER, pz(31), FACE_S, "L4_HatchValve")
+anchor("ExitLock", 385.5, 0, 144, FACE_W, "L4_ExitLock")
+anchor("ExitLock", 385.5, 0, 28, FACE_W, "L4_ExitLock_North")
+anchor("ExitLock", 385.5, 0, 260, FACE_W, "L4_ExitLock_South")
+for i, z in { 28, 144, 260 } do
+	-- a hideable locker beside each fire door (inside the vestibule), at the exits and at the arrivals
+	anchor("Locker", 387.8, 0, z + 7.5, FACE_E, string.format("%s_Locker_Exit%d", PREFIX, i))
+	anchor("Locker", 12.2, 0, z + 7.5, FACE_W, string.format("%s_Locker_Entry%d", PREFIX, i))
+end
+-- Lockers in the staff room (against its east wall)
+scatter("Locker", 0, { { 228.2, 66, FACE_W }, { 228.2, 69, FACE_W }, { 228.2, 72, FACE_W } })
+anchor("BatteryCandidate", 222, 0, 92)
+anchor("Clutter", 196, 0, 88, -10)
+-- Lockers in the pump room (against its south wall, by the west door: the plant staff's)
+scatter("Locker", 0, { { 192.5, 154.2, FACE_N }, { 195.5, 154.2, FACE_N } })
+scatter("BatteryCandidate", 0, { { 234, 152 } })
+anchor("Clutter", 214, 0, 148, 20)
+anchor("DripPipe", 214, LOW - 1.2, 132)
+-- Pool lockers against the decks' back walls
+scatter("Locker", 0, {
+	{ px(91.8), pz(40), FACE_E },
+	{ px(91.8), pz(43), FACE_E },
+	{ px(91.8), pz(86), FACE_E },
+	{ px(91.8), pz(89), FACE_E },
+	{ px(226.2), pz(60), FACE_W },
+	{ px(226.2), pz(100), FACE_W },
 })
-anchor("HatchValve", 150, WATER, 31, FACE_S, "L4_HatchValve")
-anchor("ExitLock", 227.5, 0, 80, FACE_W, "L4_ExitLock")
-anchor("ExitLock", 227.5, 0, 12.5, FACE_W, "L4_ExitLock_North")
-anchor("ExitLock", 227.5, 0, 145, FACE_W, "L4_ExitLock_South")
--- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
-scatter("Locker", 0, { { 222, 2.05, FACE_S }, { 214, 157.95, FACE_N } })
 
 -- Flasks left on the starting blocks and the decks
-scatter("FlaskCandidate", 1.5, { { 125.5, 41.5 }, { 125.5, 65.5 }, { 125.5, 109.5 } })
-scatter("FlaskCandidate", 0, { { 220, 60 }, { 220, 120 }, { 100, 112 } })
+scatter("FlaskCandidate", 1.5, { { px(125.5), pz(41.5) }, { px(125.5), pz(65.5) }, { px(125.5), pz(109.5) } })
+scatter("FlaskCandidate", 0, { { px(220), pz(60) }, { px(220), pz(120) }, { px(100), pz(112) } })
 
-scatter("BatteryCandidate", 0, {
-	{ 60, 70 },
-	{ 86, 90 },
-	{ 16, 4 },
-	{ 186, 4 },
-	{ 224, 4 },
-	{ 234, 126 },
-	{ 196, 156 },
-	{ 16, 156 },
-	{ 86, 126 },
-})
+scatter("BatteryCandidate", 0, { { px(98), pz(34) }, { px(222), pz(126) }, { px(120), pz(80) } })
+anchor("Corpse", px(154), -0.2, pz(80), 35)
+anchor("Corpse", px(100), 0, pz(60), 120)
+scatter(
+	"Clutter",
+	0,
+	{ { px(100), pz(50), 0 }, { px(112), pz(96), 30 }, { px(104), pz(124), -15 }, { px(222), pz(100), 90 } }
+)
+anchor("DripPipe", px(110), HEIGHT - 1.2, pz(50))
+anchor("DripPipe", px(200), HEIGHT - 1.2, pz(95))
 
-anchor("Corpse", 154, -0.2, 80, 35)
-scatter("Corpse", 0, { { 70, 30, 120 }, { 150, 150, -60 } })
-scatter("DripPipe", LOW - 1.2, { { 30, 50 }, { 50, 80 }, { 40, 145 }, { 70, 118 }, { 110, 12 } })
-anchor("DripPipe", 110, HEIGHT - 1.2, 50)
-scatter("Clutter", 0, {
-	{ 100, 50, 0 },
-	{ 112, 96, 30 },
-	{ 104, 124, -15 },
-	{ 222, 100, 90 },
-	{ 30, 40, 10 },
-	{ 30, 110, -20 },
-	{ 70, 95, 0 },
-	{ 120, 145, 45 },
-	{ 170, 150, 0 },
-	{ 60, 150, 60 },
-	{ 160, 12, 0 },
-	{ 215, 12, 30 },
-})
-
-patrol("DW", 0, { { 95, 36 }, { 122, 36 }, { 122, 124 }, { 95, 124 } })
-patrol("DE", 0, { { 218, 36 }, { 225, 80 }, { 218, 124 }, { 216, 80 } })
+-- Patrol over the decks (the tunnels' loops are the planner's); the pool's own loop under the water
+local function patrol(loop: string, y: number, points: { { number } })
+	for i, p in points do
+		anchor("PatrolWaypoint", px(p[1]), y, pz(p[2]), nil, string.format("%s_WP_%s_%02d", PREFIX, loop, i))
+	end
+end
+patrol("DW", 0, { { 95, 36 }, { 120, 36 }, { 120, 124 }, { 95, 124 } })
 patrol("POOL", WATER - 3, { { 156, 56 }, { 200, 56 }, { 200, 100 }, { 156, 96 } })
-patrol("WR", 0, { { 30, 80 }, { 34, 60 }, { 73, 40 }, { 100, 42 }, { 100, 80 }, { 80, 80 } })
-patrol("WS", 0, { { 34, 84 }, { 34, 100 }, { 73, 118 }, { 100, 118 }, { 100, 84 }, { 80, 84 } })
 
 --------------------------------------------------------------------------------
 -- Triggers
@@ -817,35 +923,31 @@ trigger(
 	DUCT_Y - HALF_BORE,
 	"L4_Chase_Maintenance"
 )
-trigger("L4_Trigger_DebrisCorridor", "FloorDebris", 40, 75, 6, 10, 4)
-trigger("L4_Trigger_DebrisShowers", "FloorDebris", 64, 30, 6, 6, 4)
-trigger("L4_Trigger_Checkpoint", "Checkpoint", 229, 67, 10, 26, 10)
-trigger("L4_Trigger_CheckpointNorthEast", "Checkpoint", 229, 1, 10, 23, 10)
-trigger("L4_Trigger_CheckpointSouthEast", "Checkpoint", 229, 131, 10, 28, 10)
+trigger("L4_Trigger_DebrisDeck", "FloorDebris", px(100), pz(66), 6, 8, 4)
+trigger("L4_Trigger_Checkpoint", "Checkpoint", 387, 133, 12, 22, 11)
+trigger("L4_Trigger_CheckpointNorthEast", "Checkpoint", 387, 17, 12, 22, 11)
+trigger("L4_Trigger_CheckpointSouthEast", "Checkpoint", 387, 249, 12, 22, 11)
 
 --------------------------------------------------------------------------------
--- Boarded windows on the facade
+-- Boarded windows high in the natatorium's facade wall
 --------------------------------------------------------------------------------
 
-windowRow("L4_StaffRoom", "N", 2, 7, 6, 3.5, true)
-windowRow("L4_Laundry", "N", 2, 5, 3, 8, true)
-windowRow("L4_FilterRoom", "N", 2, 5, 3, 8, true)
-windowRow("L4_PumpRoom", "N", 2, 5, 3, 8, true)
-windowRow("L4_ChlorineStore", "N", 2, 5, 3, 8, true)
-windowRow("L4_PlantRoom", "S", 3, 5, 3, 8, true)
-windowRow("L4_SpectatorGallery", "S", 5, 9, 7, 3, true)
-windowRow("L4_ScoreboardRoom", "S", 2, 6, 4, 6, true)
-windowRow("L4_Storage_W1", "W", 1, 4, 4, 5, true)
-windowRow("L4_Storage_W2", "W", 1, 4, 4, 5, true)
-windowRow("L4_Storage_E1", "E", 1, 4, 4, 5, true)
-windowRow("L4_Storage_E2", "E", 1, 4, 4, 5, true)
+for i = 1, 6 do
+	table.insert(windows, {
+		room = "L4_Natatorium",
+		side = "S",
+		at = px(90) + 138 * (i - 0.5) / 6,
+		width = 10,
+		height = 8,
+		sill = 14,
+		boarded = true,
+	})
+end
 
 --------------------------------------------------------------------------------
 
 local layout: LayoutSchema.LevelLayout = {
 	id = "Level4_FloodedPool",
-	-- still the 240 x 160 plan: rebuilt on TunnelPlanner in the next wave (docs/MAPS.md)
-	legacy = true,
 	height = HEIGHT,
 	acoustic = "Hall",
 	ambience = "DronePool",
@@ -859,6 +961,7 @@ local layout: LayoutSchema.LevelLayout = {
 	basins = basins,
 	platforms = platforms,
 	windows = windows,
+	tunnels = plan.tunnels,
 }
 
 deepFreeze(layout)

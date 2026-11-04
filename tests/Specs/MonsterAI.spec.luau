@@ -787,17 +787,19 @@ spec["pool: Level 4's basin, its decks, water bounds and the way in and out"] = 
 	t.eq(#basin.edges, 2, "decks west and east only (the basin runs wall to wall north-south)")
 	local spawn = info.spawn
 	assert(spawn, "Level 4 has a CreatureSpawn")
-	t.truthy(Locomotion.inWater(basin, spawn.Position), "the Creature waits in the water")
+	-- it hunts the plant tunnels on foot and takes to the water when a swimmer is about
+	t.falsy(Locomotion.inWater(basin, spawn.Position), "the Creature starts in the tunnels, on land")
 	local clamped = Locomotion.clampToWater(basin, Vector3.new(basin.minX - 50, basin.deckY + 20, basin.maxZ + 50))
 	t.truthy(Locomotion.inWater(basin, clamped), "clamped into the water")
 	t.near(clamped.Y, basin.surfaceY - Locomotion.SwimDepth, EPS, "at swim depth")
-	local stand, water = Locomotion.deckCrossing(basin, Vector3.new(basin.minX + 3, basin.surfaceY, 80))
+	local midZ = (basin.minZ + basin.maxZ) / 2
+	local stand, water = Locomotion.deckCrossing(basin, Vector3.new(basin.minX + 3, basin.surfaceY, midZ))
 	assert(stand and water, "a crossing")
 	t.truthy(stand.Position.X < basin.minX, "stands on the west deck")
 	t.near(stand.Position.Y, basin.deckY + CreatureBody.RootHeight, EPS, "at standing height")
 	t.truthy(Locomotion.inWater(basin, water), "slips in just inside the coping")
 	t.falsy(Locomotion.inWater(basin, stand.Position), "the deck is dry")
-	local east = Locomotion.deckCrossing(basin, Vector3.new(basin.maxX - 3, basin.surfaceY, 80))
+	local east = Locomotion.deckCrossing(basin, Vector3.new(basin.maxX - 3, basin.surfaceY, midZ))
 	t.truthy(east and east.Position.X > basin.maxX, "the east deck for the east side")
 	local dry = Brain.levelInfo(Builder.getLayout("Level1_Hallways") :: LayoutSchema.LevelLayout)
 	t.eq(dry and #dry.basins, 0, "Level 1 has no pool")
