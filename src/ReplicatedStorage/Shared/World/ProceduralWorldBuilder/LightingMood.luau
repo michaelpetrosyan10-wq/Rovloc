@@ -192,20 +192,21 @@ local LEVELS: { [string]: LevelMood } = {
 		bulbCast = rgb(255, 160, 84),
 		grade = rgb(255, 236, 214),
 	},
+	-- Levels 1 and 2 are tunnel floors too (TunnelPlanner decides their dead and flickering bulbs): nothing revived.
 	Level1_Hallways = {
-		revive = 0.4,
-		flicker = 0.4,
+		revive = 0,
+		flicker = 0,
 		brightness = 2.65,
 		range = 1.25,
-		-- The scare: the corridor outside Classroom 108 stays dark except for the glow spilling from its door.
+		-- The scare: the hallway outside Classroom 108 stays dark except for the glow spilling from its door.
 		keepDark = { "L1_Corridor_East", "L1_Classroom_108" },
 		cast = rgb(168, 236, 196),
 		bulbCast = rgb(240, 212, 150),
 		grade = rgb(236, 255, 244),
 	},
 	Level2_ScienceHall = {
-		revive = 0.5,
-		flicker = 0.3,
+		revive = 0,
+		flicker = 0,
 		brightness = 2.75,
 		range = 1.25,
 		cast = rgb(160, 232, 222),

@@ -175,7 +175,13 @@ async function main() {
       torch: p.flashlight.on, level: e.world.levelAt(p.rootPosition()),
     };
   });
-  await page.evaluate(() => {
+  // the Level 1 checkerboard hallway (its world rect, from the layout): the walk starts near its east end
+  const hall = await page.evaluate(() => {
+    const r = window.__rovloc.engine.world.meta.rooms.find((x) => x.id === 'L1_Corridor_East');
+    return { x: r.rect.x, z: r.rect.z, w: r.rect.w, d: r.rect.d, floorY: r.floorY, y: r.floorY + 3 };
+  });
+  const hallStart = { x: hall.x + hall.w - 16, y: hall.y, z: hall.z + hall.d / 2 };
+  await page.evaluate((at) => {
     const e = window.__rovloc.engine;
     e.loop.stop(); // the walk steps frames by hand: deterministic 30 fps game time whatever the software GPU does
     e.skipRender = true; // simulation only (measure() still draws)
@@ -184,11 +190,11 @@ async function main() {
     e.quality.setTier('Low');
     window.__noise = [];
     e.noise.on((n) => window.__noise.push(n.kind));
-    e.player.teleport({ position: { x: 222, y: 21, z: 80 }, yaw: Math.PI / 2 }); // L1 east corridor, facing west
-  });
+    e.player.teleport({ position: at, yaw: Math.PI / 2 }); // L1 hallway, facing west
+  }, hallStart);
   await step(20);
   const s0 = await state();
-  report(s0.grounded && Math.abs(s0.pos[1] - 21) < 0.6, 'player stands on the corridor floor', `y ${s0.pos[1].toFixed(2)}`);
+  report(s0.grounded && Math.abs(s0.pos[1] - hall.y) < 0.6, 'player stands on the corridor floor', `y ${s0.pos[1].toFixed(2)}`);
   await page.keyboard.down('KeyW');
   await step(90);
   const s1 = await state();
@@ -210,13 +216,40 @@ async function main() {
   report(s3.moveState === 'Crouching', 'C toggles crouch', s3.moveState);
   await page.keyboard.press('KeyC');
   await step(10);
-  // wall: face north (+Z wall of the corridor is at z = 87) and push
-  await page.evaluate(() => window.__rovloc.engine.player.setLook(0, 0));
+  // wall: face north and push back into the hallway's south (+Z) wall, where rays across the hallway meet bare wall
+  // (no doorway, locker bank or prop in front of it), the spot nearest the hallway's middle
+  const wall = await page.evaluate((h) => {
+    const e = window.__rovloc.engine;
+    const T = e.THREE;
+    const dir = new T.Vector3(0, 0, 1);
+    const mid = h.z + h.d / 2;
+    let best = null;
+    for (let x = h.x + 8; x <= h.x + h.w - 8; x += 1) {
+      let face = Infinity;
+      for (const dx of [-1.5, 0, 1.5]) for (const dy of [0.6, 2.5, 4.5]) {
+        const hit = e.world.raycast(new T.Vector3(x + dx, h.floorY + dy, mid), dir, h.d / 2 + 1);
+        face = hit && hit.distance > h.d / 2 - 1.2 ? Math.min(face, hit.point.z) : -Infinity;
+        if (face === -Infinity) break;
+      }
+      const centre = h.x + h.w / 2;
+      if (face > -Infinity && (!best || Math.abs(x - centre) < Math.abs(best.x - centre))) best = { x, face };
+    }
+    return best;
+  }, hall);
+  report(!!wall, 'the hallway has bare wall to push into', wall ? `x ${wall.x}, face at z ${wall.face.toFixed(2)}` : 'none');
+  const wallZ = wall ? wall.face : hall.z + hall.d;
+  await page.evaluate(([at, x]) => {
+    const p = window.__rovloc.engine.player;
+    p.teleport({ position: { x, y: at.y, z: at.z }, yaw: 0 });
+    p.setLook(0, 0);
+  }, [hallStart, wall ? wall.x : hallStart.x]);
+  await step(5);
   await page.keyboard.down('KeyS'); // backwards = +Z
   await step(90);
   await page.keyboard.up('KeyS');
   const s4 = await state();
-  report(s4.pos[2] < 87 && s4.pos[2] > 84, 'a wall stops the body', `z ${s4.pos[2].toFixed(2)} (wall at 87)`);
+  report(s4.pos[2] < wallZ && s4.pos[2] > wallZ - 3, 'a wall stops the body',
+    `z ${s4.pos[2].toFixed(2)} (wall face at ${wallZ.toFixed(2)})`);
   // a crawlway (Level 0): standing, the body does not fit its mouth; crouched, it crawls through to the far side
   const crawl = await page.evaluate(() => {
     const m = window.__rovloc.engine.world.meta;
@@ -252,11 +285,11 @@ async function main() {
     report(along(c2) > to + 0.5 && c2.grounded, 'crouched, the body crawls through a crawlway', `${along(c2).toFixed(2)} (far mouth at ${to.toFixed(1)}), ${c2.moveState}`);
     await page.keyboard.press('KeyC');
     await step(10);
-    await page.evaluate(() => {
+    await page.evaluate((at) => {
       const e = window.__rovloc.engine;
-      e.player.teleport({ position: { x: 222, y: 21, z: 80 }, yaw: 0 });
+      e.player.teleport({ position: at, yaw: 0 });
       e.player.setLook(0, 0);
-    });
+    }, hallStart);
     await step(10);
   }
   const torch0 = s4.torch;
@@ -361,8 +394,13 @@ async function main() {
     }, [w, h], { timeout: 120000 });
     await page.waitForTimeout(300);
   };
-  // the Level 1 corridor, and the Level 0 tunnels (down a lit pipe gallery, the power on)
-  const places = { L1: { p: [222, 21, 80], yaw: Math.PI / 2 }, L0: { p: [168, 3.5, 40], yaw: Math.PI } };
+  // the Level 1 checkerboard hallway (west, toward the gate), the Level 0 tunnels (down a lit pipe gallery, the power
+  // on) and Level 2's west gallery (north along its 240 studs)
+  const places = {
+    L1: { p: [380, 21, 144], yaw: Math.PI / 2 },
+    L0: { p: [168, 3.5, 40], yaw: Math.PI },
+    L2: { p: [30, 37, 250], yaw: 0 },
+  };
   for (const [place, at] of Object.entries(places)) for (const tier of ['Low', 'Medium', 'High']) {
     const prep = ([t, a]) => {
       const e = window.__rovloc.engine;
@@ -418,8 +456,10 @@ async function main() {
 
   // ------------------------------------------------------------------ 4. screenshots
   const views = {
-    'l1-corridor': { p: [222, 21, 80], yaw: 90, pitch: -3 },
-    'l2-lab': { p: [40, 37, 70], yaw: 38, pitch: -8 },
+    'l1-corridor': { p: [380, 21, 144], yaw: 90, pitch: -3 },
+    'l1-lockers': { p: [370, 21, 245], yaw: 0, pitch: -2 },
+    'l2-lab': { p: [128, 37, 247], yaw: -45, pitch: -8 },
+    'l2-prep': { p: [251, 37, 219], yaw: 0, pitch: -4 },
     'l0-gallery': { p: [168, 3.5, 40], yaw: 180, pitch: 0 },
     'l0-boiler': { p: [207, 3.5, 238], yaw: -90, pitch: -4 },
     'l0-drains': { p: [370, 3.5, 230], yaw: 0, pitch: 0 },

@@ -221,11 +221,18 @@ for (const e of meta.entities) {
   const ids = new Set(meta.entities.map((e) => e.id));
   check(new Set(meta.entities.map((e) => `${e.level}/${e.id}`)).size === meta.entities.length, 'entity ids unique per level');
   const byType = (type) => meta.entities.filter((e) => e.type === type);
+  // the fewest candidates each floor may offer (a rebuilt floor offers at least as many as the one it replaced); every
+  // candidate anchor of the item's kind becomes one entity
   const ITEMS = { Fuse: 14, MasterKeys: 10, ReagentJar: 12, CoachKey: 32, ValveWheel: 8, BoltCutters: 9, AcidFlask: 1 };
-  for (const [type, count] of Object.entries(ITEMS)) {
+  const anchorKind = new Map(meta.anchors.map((a) => [a.id, a.kind]));
+  for (const [type, least] of Object.entries(ITEMS)) {
     const list = byType(type);
-    check(list.length === count, `${type}: ${list.length} entities (want ${count})`);
+    const kinds = new Set(list.map((e) => e.attributes.Candidate).filter(Boolean));
+    const offered = kinds.size ? meta.anchors.filter((a) => kinds.has(a.kind)).length : least;
+    check(list.length >= least && list.length === offered && kinds.size <= 1,
+      `${type}: ${list.length} entities (want ${offered}, at least ${least})`);
     for (const e of list) {
+      if (e.attributes.Candidate) check(anchorKind.get(e.attributes.AnchorId) === e.attributes.Candidate, `${e.id} stands on its candidate anchor`);
       check(e.tags.includes('ObjectiveItem'), `${e.id} tag`);
       check(typeof e.attributes.Floor === 'number' && typeof e.attributes.Step === 'string', `${e.id} Floor / Step`);
       check(typeof e.attributes.Planned === 'boolean', `${e.id} Planned`);
@@ -390,29 +397,41 @@ for (const e of meta.entities) {
     }
   }
   check(meta.visibilityInfo && meta.visibilityInfo.maxDistance > 0, 'visibilityInfo');
-  // Detail: decorative static / decal chunks only, levels 1..3, each level present on the basement; no collider is decor
+  // Detail: decorative static / decal chunks only, levels 1..3, each level present on every tunnel floor; no collider is
+  // decor
+  const tunnelLevels = Object.keys(meta.regions || {});
+  check(tunnelLevels.includes('Level0_Basement'), `tunnel floors: ${tunnelLevels.join(', ')}`);
   const detailChunks = meta.chunks.filter((c) => c.detail !== undefined);
   for (const c of detailChunks) check(c.kind === 'static' && [1, 2, 3].includes(c.detail), `chunk ${c.id} detail ${c.detail}`);
-  for (const lv of [1, 2, 3]) check(detailChunks.some((c) => c.detail === lv && c.level === 'Level0_Basement'), `Level 0 has Detail ${lv} chunks`);
-  for (const e of meta.entities) for (const col of e.colliders) check(!(col.attributes && col.attributes.Detail), `${e.id} collider is no decor`);
-  // the basement's tunnel data
-  const L0 = 'Level0_Basement';
-  const points = (meta.teleportPoints || {})[L0] || [];
-  check(points.length >= 100, `${points.length} teleport points on Level 0`);
-  for (const p of points) {
-    const r = rooms.get(p.zone);
-    check(!!r && r.level === L0 && (r.kind === 'Tunnel' || r.kind === 'Gallery'), `teleport point in a tunnel (${p.zone})`);
-    if (r) {
-      const inside = p.pos[0] >= r.rect.x - 0.01 && p.pos[0] <= r.rect.x + r.rect.w + 0.01 && p.pos[2] >= r.rect.z - 0.01 && p.pos[2] <= r.rect.z + r.rect.d + 0.01;
-      check(inside, `teleport point inside ${p.zone}`);
-    }
+  for (const level of tunnelLevels) for (const lv of [1, 2, 3]) {
+    check(detailChunks.some((c) => c.detail === lv && c.level === level), `${level} has Detail ${lv} chunks`);
   }
-  const marks = (meta.landmarks || {})[L0] || [];
-  const plates = marks.filter((m) => m.kind === 'JunctionPlate');
-  check(plates.length >= 20 && plates.every((m) => /^J-\d\d$/.test(m.text)), `${plates.length} junction plates J-NN`);
-  check(marks.every((m) => rooms.has(m.room) && m.text), 'landmarks name their room and text');
-  const regions = (meta.regions || {})[L0] || [];
-  check(regions.length >= 4 && regions.length <= 6 && new Set(regions.map((r) => r.name)).size === regions.length, `${regions.length} named regions`);
+  for (const e of meta.entities) for (const col of e.colliders) check(!(col.attributes && col.attributes.Detail), `${e.id} collider is no decor`);
+  // every tunnel floor's data: teleport points in its tunnels, junction plates, landmarks, 4-6 named regions
+  let points = [];
+  let plates = [];
+  let regions = [];
+  for (const level of tunnelLevels) {
+    const own = (meta.teleportPoints || {})[level] || [];
+    check(own.length >= 100, `${own.length} teleport points on ${level}`);
+    for (const p of own) {
+      const r = rooms.get(p.zone);
+      check(!!r && r.level === level && (r.kind === 'Tunnel' || r.kind === 'Gallery'), `teleport point in a tunnel (${p.zone})`);
+      if (r) {
+        const inside = p.pos[0] >= r.rect.x - 0.01 && p.pos[0] <= r.rect.x + r.rect.w + 0.01 && p.pos[2] >= r.rect.z - 0.01 && p.pos[2] <= r.rect.z + r.rect.d + 0.01;
+        check(inside, `teleport point inside ${p.zone}`);
+      }
+    }
+    const marks = (meta.landmarks || {})[level] || [];
+    const own2 = marks.filter((m) => m.kind === 'JunctionPlate');
+    check(own2.length >= 20 && own2.every((m) => /^J-\d\d$/.test(m.text)), `${level}: ${own2.length} junction plates J-NN`);
+    check(marks.every((m) => rooms.has(m.room) && rooms.get(m.room).level === level && m.text), `${level}: landmarks name their room and text`);
+    const named = (meta.regions || {})[level] || [];
+    check(named.length >= 4 && named.length <= 6 && new Set(named.map((r) => r.name)).size === named.length, `${level}: ${named.length} named regions`);
+    points = points.concat(own);
+    plates = plates.concat(own2);
+    regions = regions.concat(named);
+  }
   // doors: head room and crawl-only flags, the zone graph's too
   for (const d of meta.layoutDoors) check(typeof d.clearance === 'number' && d.clearance > 0 && typeof d.crawlOnly === 'boolean', `door ${d.id} clearance / crawlOnly`);
   const crawlDoors = meta.layoutDoors.filter((d) => d.crawlOnly);
@@ -439,7 +458,7 @@ for (const e of meta.entities) {
   check(side >= 0.6 * hides.length, `${side} of ${hides.length} hiding spots step out to a side`);
   const lockers = meta.entities.filter((e) => e.type === 'Locker');
   check(lockers.length > 0 && lockers.every((e) => e.attributes.HideKind === 'Locker'), 'lockers carry HideKind Locker');
-  console.log(`  ok   tunnels: ${points.length} teleport points, ${plates.length} plates, ${regions.length} regions, ${hides.length} barrels / cabinets (${side} side exits); ${detailChunks.length} Detail chunks; visibility ${listed} entries`);
+  console.log(`  ok   tunnels (${tunnelLevels.length} floors): ${points.length} teleport points, ${plates.length} plates, ${regions.length} regions, ${hides.length} barrels / cabinets (${side} side exits); ${detailChunks.length} Detail chunks; visibility ${listed} entries`);
 }
 // collision
 for (const [level, c] of Object.entries(world.collision)) {

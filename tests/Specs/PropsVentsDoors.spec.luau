@@ -1,8 +1,10 @@
 --!strict
 -- VentGrateBuilder and DoorBuilder on the real layouts. Level 1 and Level 2 are built once with BuildAuthoritative
 -- (shell, vents, the static open doors) and their fixtures with BuildFixtures under a hand-made plan that locks every
--- other lockable grate; the Level 5 roof door is built from its level's anchors alone through DoorBuilder's own
--- registration. Checked: one grate per layout grate with the attachment's state, disabled Unscrew / Kick prompts,
+-- other lockable grate (every other grate when none locks: Level 1's bypass, so the rusted look is still built); every
+-- other school level with ordinary doors is built with them, so the door statistics have a sample to work on now that
+-- the tunnel floors keep few doors; the Level 5 roof door is built from its level's anchors alone through DoorBuilder's
+-- own registration. Checked: one grate per layout grate with the attachment's state, disabled Unscrew / Kick prompts,
 -- rusted locked grates, the shut panel covering the 3.5 bore on the room-side face (colliding, with sight gaps), the
 -- crawler's exit and entry anchors, grate poses; every ordinary door standing open outside its doorway's walking
 -- lane and in front of its casing; fixture door attributes, tags, signs and budgets; leaves that never cut into the
@@ -135,6 +137,20 @@ local function layoutOf(id: string): Layout
 	return layout
 end
 
+-- Every school level with ordinary doors (the door statistics' sample), Level 1 and Level 2 among them.
+local function doorLevels(): { Enums.LayoutId }
+	local out: { Enums.LayoutId } = {}
+	for _, id in WorldConfig.LevelOrder do
+		for _, door in layoutOf(id).doors do
+			if door.kind == "Door" then
+				table.insert(out, id)
+				break
+			end
+		end
+	end
+	return out
+end
+
 local function levelRoot(id: string): Instance
 	local root = Instances.layoutRoot(id)
 	assert(root, "level " .. id)
@@ -200,16 +216,24 @@ local function world(): World
 	if cached then
 		return cached
 	end
-	Builder.BuildAuthoritative({ layouts = LEVELS, yieldEvery = 0 })
+	local layouts: { Enums.LayoutId } = table.clone(LEVELS)
+	for _, id in doorLevels() do
+		if not table.find(layouts, id) then
+			table.insert(layouts, id)
+		end
+	end
+	Builder.BuildAuthoritative({ layouts = layouts, yieldEvery = 0 })
 	local holder = Instance.new("Folder")
 	holder.Name = "PropsVentsDoorsSpec"
 	holder.Parent = Workspace
 	local locked: { [string]: boolean } = {}
 	local runtime: { [string]: Folder } = {}
+	local all: { LayoutSchema.GrateSpec } = {}
 	for _, id in LEVELS do
 		local layout = layoutOf(id)
 		local flip = false
 		for _, grate in (layout.vents and layout.vents.grates or {}) :: { LayoutSchema.GrateSpec } do
+			table.insert(all, grate)
 			if grate.lockable and not grate.criticalPath then
 				flip = not flip
 				if flip then
@@ -221,6 +245,14 @@ local function world(): World
 		folder.Name = id
 		folder.Parent = holder
 		runtime[id] = folder
+	end
+	if next(locked) == nil then
+		-- no grate here ever locks in play: the builder still renders whatever a plan says
+		for i, grate in all do
+			if i % 2 == 1 then
+				locked[grate.id] = true
+			end
+		end
 	end
 	local plan: Types.SpawnPlan = {
 		seed = SEED,
@@ -325,7 +357,13 @@ return {
 				end
 			end
 		end
-		t.eq(total, 50, "Level 1 + Level 2 grates")
+		local expected = 0
+		for _, id in LEVELS do
+			local vents = layoutOf(id).vents
+			expected += if vents then #vents.grates else 0
+		end
+		t.truthy(total >= 2, "the tunnel floors' grates (Level 1's bypass)")
+		t.eq(total, expected, "one model per layout grate")
 	end,
 
 	["vent grates: disabled unscrew and kick prompts in front of the panel"] = function(t: Expect)
@@ -396,8 +434,13 @@ return {
 				end
 			end
 		end
-		t.truthy(lockedCount >= 5, "some grates locked")
-		t.truthy(closedCount >= 5, "some grates closed")
+		local planned = 0
+		for _ in built.locked do
+			planned += 1
+		end
+		t.eq(lockedCount, planned, "every grate the plan locks")
+		t.truthy(lockedCount >= 1, "some grates locked")
+		t.truthy(closedCount >= 1, "some grates closed")
 	end,
 
 	["vent grates: the shut panel covers the bore on the room-side face"] = function(t: Expect)
@@ -500,7 +543,7 @@ return {
 
 	["vent grates: panel, screw and kick poses round-trip"] = function(t: Expect)
 		local built = world()
-		local id = LEVELS[1]
+		local id = "Level1_Hallways" -- the gate's bypass vent
 		local layout = layoutOf(id)
 		local origin = WorldConfig.levelOrigin(id)
 		for _, model in grateModels(built, id) do
@@ -575,7 +618,8 @@ return {
 		world()
 		local angles: { [number]: boolean } = {}
 		local distinct, crooked, total = 0, 0, 0
-		for _, id in LEVELS do
+		local sample = doorLevels()
+		for _, id in sample do
 			local layout = layoutOf(id)
 			local root = levelRoot(id)
 			local props = child(root, Names.Props)
@@ -629,8 +673,18 @@ return {
 				end
 			end
 		end
-		t.eq(total, 84, "Level 1 + Level 2 ordinary doors")
-		t.truthy(distinct >= 10, "seeded variety of angles")
+		local expected = 0
+		for _, id in sample do
+			for _, door in layoutOf(id).doors do
+				if door.kind == "Door" then
+					expected += 1
+				end
+			end
+		end
+		t.truthy(table.find(sample, "Level1_Hallways") and table.find(sample, "Level2_ScienceHall"), "both floors")
+		t.eq(total, expected, "every ordinary door on the floors that keep them")
+		t.truthy(total >= 10, string.format("%d ordinary doors to check", total))
+		t.truthy(distinct >= 10, string.format("seeded variety of angles (%d of %d)", distinct, total))
 		t.truthy(crooked >= 1 and crooked <= total / 4, string.format("a few hang crooked (%d)", crooked))
 	end,
 
@@ -817,7 +871,7 @@ return {
 
 	["gate: the grille closes the whole opening when down and rolls up clear of it"] = function(t: Expect)
 		local built = world()
-		local id = LEVELS[1]
+		local id = "Level1_Hallways"
 		local layout = layoutOf(id)
 		local root = levelRoot(id)
 		local gate: LayoutSchema.Door? = nil

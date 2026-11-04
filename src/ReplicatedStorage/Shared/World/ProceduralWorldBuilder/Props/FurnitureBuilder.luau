@@ -367,29 +367,40 @@ local function planBoard(state: State, room: Room, random: Random): (Wall?, bool
 	local u = (u0 + u1) / 2 + between(random, -1, 1) * math.max(0, (u1 - u0 - width) / 2 - 0.3)
 	local yc = BOARD_BOTTOM + BOARD_HEIGHT / 2
 	local info = state.info
-	local frame = Kit.block(
-		"Board_" .. room.id .. "_Frame",
-		WallPlanner.cframe(info, wall, u, yc, 0.055),
-		Vector3.new(width + 0.3, BOARD_HEIGHT + 0.3, 0.1),
-		"ChalkFrame",
-		"Detail"
-	)
-	local slate = Kit.block(
-		"Board_" .. room.id .. "_Slate",
-		WallPlanner.cframe(info, wall, u, yc, 0.135),
-		Vector3.new(width, BOARD_HEIGHT, 0.06),
-		"Chalkboard",
-		"Detail"
-	)
-	local tray = Kit.block(
-		"Board_" .. room.id .. "_Tray",
-		WallPlanner.cframe(info, wall, u, BOARD_BOTTOM - 0.2, 0.2),
-		Vector3.new(width - 0.4, 0.1, 0.3),
-		"ChalkFrame",
-		"Detail"
-	)
-	local pieces = { frame, slate, tray }
-	if not Kit.fits(info, pieces, { room = room.id, margin = -0.05 }) then
+	local frame, slate, tray
+	local pieces: { Piece } = {}
+	-- at the seeded spot on the stretch, else its middle, else either end (a staged anchor may stand by one end)
+	local fitted = false
+	for _, at in { u, (u0 + u1) / 2, u0 + width / 2 + 0.45, u1 - width / 2 - 0.45 } do
+		frame = Kit.block(
+			"Board_" .. room.id .. "_Frame",
+			WallPlanner.cframe(info, wall, at, yc, 0.055),
+			Vector3.new(width + 0.3, BOARD_HEIGHT + 0.3, 0.1),
+			"ChalkFrame",
+			"Detail"
+		)
+		slate = Kit.block(
+			"Board_" .. room.id .. "_Slate",
+			WallPlanner.cframe(info, wall, at, yc, 0.135),
+			Vector3.new(width, BOARD_HEIGHT, 0.06),
+			"Chalkboard",
+			"Detail"
+		)
+		tray = Kit.block(
+			"Board_" .. room.id .. "_Tray",
+			WallPlanner.cframe(info, wall, at, BOARD_BOTTOM - 0.2, 0.2),
+			Vector3.new(width - 0.4, 0.1, 0.3),
+			"ChalkFrame",
+			"Detail"
+		)
+		pieces = { frame, slate, tray }
+		if Kit.fits(info, pieces, { room = room.id, margin = -0.05 }) then
+			u = at
+			fitted = true
+			break
+		end
+	end
+	if not fitted then
 		return wall, false -- the room still faces this way
 	end
 	local seed = MathUtil.hash(state.layout.id .. ":" .. room.id .. ":chalk")

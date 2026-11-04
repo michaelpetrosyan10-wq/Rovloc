@@ -244,7 +244,7 @@ Every floor's exit stays locked until its objective is done (ObjectiveConfig in
 - `rules`: the fairness and spread rules of the item picks: `entryClearance` (35: studs walked from the floor's
   entry to every candidate), `pickSpacing` (25: studs between two items of one run, horizontal), `pickQuarters` (2:
   three items lie in at least this many quarters of the floor), `pickAttempts` (24: re-shuffles tried), `footprint`
-  ([240, 160]: the quarters split it at its centre);
+  ([400, 288], `WorldConfig.FootprintSize`: the quarters split it at its centre);
 - `levels[levelId]`: `entry` {room, pos (level-local, the centroid of the entry room's PlayerSpawn anchors)},
   `candidates` [{anchorId, room, slot, ref, pos (level-local), planned, entryDistance (studs walked from the entry,
   ObjectivePlaces.walkDistance: door to door across rooms, through the vents a squad can always use, every Gate shut
@@ -256,8 +256,8 @@ Every floor's exit stays locked until its objective is done (ObjectiveConfig in
 | Floor | Item candidates (brief minimum) | Where |
 | --- | --- | --- |
 | 0 | 13 `Fuse` (12), each with a guard trap spot `L0_TrapGuard_NN` (its `ref`) | benches, shelves (new statics `L0_Shelf_Furniture`, `L0_Shelf_Archive`, `L0_Shelf_E1`), by the boilers, pumps, switchgear, water heaters, washers, coal heap |
-| 1 | 10 `MasterKeys` (9), all west of the gate | nails in the janitor's closet, lounge, book store, stores, kitchen, classrooms 113 / 131, cafeteria, art room, library (new hideable lockers `L1_Locker_07..11` beside the new ones) |
-| 2 | 12 `ReagentJar` (12), four per kind | lab worktops all over the floor (new hideable locker `L2_Locker_05` in chem lab 201) |
+| 1 | 14 `MasterKeys` (9), all west of the gate | ten on hooks in tunnel niches west of the gate (TunnelPlanner items, `wall`), two in the janitor's closet, two in the main office |
+| 2 | 15 `ReagentJar` (12), five per kind | five on tunnel niche shelves, six on the islands of Chem Lab 203 and Bio Lab 209, two on the chem store's shelving, two on the specimen store's racks (hideable lockers in every lab and store) |
 | 3 | 32 `CoachKey` (12) | inside every locker of both locker rooms (`ref` = the locker) |
 | 4 | 8 `ValveWheel` (6) | the deep pool floor in open water, never under a walkway, each 12 studs or less of swim from dry footing |
 | 5 | 9 `BoltCutters` (8) | against the HVAC units, the water tank, the boiler flue and the tool locker (new static `L5_ToolLocker`), on the maintenance box |
@@ -335,7 +335,7 @@ lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones f
   outside every objective room (stations and every item candidate's room, whatever a run picks). The verdicts are
   precomputed: `routeRule.checks[from][entryRoom]` = `[{ stairwellId, distance, share, creatureSpawns, fair }]` for
   every way in (the layout entry and each entry vestibule candidate), so a port only needs the draws. Today every
-  candidate is fair from every way in (shares 0.82-1.00).
+  candidate is fair from every way in (shares 0.78-1.00).
 - **Jam state.** Every stairwell door entity (`AirlockDoor` on both floors, the roof housings' `RoofStairDoor`)
   carries `StairwellId`, `RouteSlot`, `RouteRole` (`Exit` on the lower floor, `Entry` on the upper) and `Jammed` (the
   export seed's state), and has node **`Jam`** (no rest pose, never posed: a fallen slab leaning on the back of the
@@ -454,12 +454,16 @@ decorative chunks); static chunks are one per level and stay.
 
 ## Tunnel floors
 
-Level 0 (the basement) is built by TunnelPlanner (docs/MAPS.md): its rooms are kind `Tunnel`, `Gallery`, `Crawlway`
-(culverts only a crouched player fits: their mouths are `crawlOnly`, `clearance` 4.3), keep-rooms (`Storage`,
-`Boiler`, `Airlock`) and `Solid` fill (no zone, kept in `layouts` only). Alcoves are `Tunnel` rooms. The planner's
-data rides in `layouts.Level0_Basement.tunnels` (graph, segments, regions, landmarks, rules, stats) and, ready to
-use, in `teleportPoints`, `landmarks`, `regions`, `visibility`, `layoutDoors` / `zoneGraph` flags and the Barrel /
-Cabinet entities above.
+Levels 0–2 (the basement, the hallways, the science wing) are built by TunnelPlanner (docs/MAPS.md): their rooms are
+kind `Tunnel`, `Gallery`, `Crawlway` (culverts only a crouched player fits: their mouths are `crawlOnly`, `clearance`
+4.3), keep-rooms (the floor's scripted rooms: `Storage`, `Boiler`, `Office`, `Classroom`, `Corridor`, `Lab`,
+`Airlock`) and `Solid` fill (no zone, kept in `layouts` only). Alcoves are `Tunnel` rooms. The planner's data rides
+in `layouts.<level>.tunnels` (graph, segments, regions, landmarks, rules, stats) and, ready to use, in
+`teleportPoints`, `landmarks`, `regions`, `visibility`, `layoutDoors` / `zoneGraph` flags and the Barrel / Cabinet
+(and, on Level 1's Locker Banks, Locker `L1_Locker_Tnn`) entities above. A keep-room's lights are `Mains:<roomId>`;
+Level 1's hallway keeps its scripted classroom glow (`Scripted:L1_Light_ClassroomGlow[Spill]`) and its gate's
+bypass vent (`L1_Grate_CorridorEast` / `L1_Grate_CorridorWest`, never locked, `criticalPath`): with the gate down,
+the vent is the only way west, and the walk graphs (TunnelRules, ObjectivePlaces, the routes) walk it.
 
 ## Known differences from a live server
 

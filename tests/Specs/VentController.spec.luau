@@ -720,13 +720,15 @@ return {
 	end,
 
 	["real levels: a long random crawl keeps every invariant"] = function(t: Expect)
-		for index, graph in realGraphs(t) do
+		for _, graph in realGraphs(t) do
 			local open: { [string]: boolean } = {}
 			for position, id in sortedGrateIds(graph) do
 				open[id] = position % 2 == 0
 			end
 			local rail = railFor(graph, open, 0.9)
-			local random = Random.new(9100 + index)
+			-- seeded by the floor (its place in the climb), whichever floors keep ducts
+			local floor = (table.find(WorldConfig.LevelOrder, graph.levelId :: Enums.LevelId) or 1) - 1
+			local random = Random.new(9100 + floor)
 			local ids = sortedNodeIds(graph)
 			local startNode = ids[1]
 			local first = VentController.ways(rail, startNode)[1]

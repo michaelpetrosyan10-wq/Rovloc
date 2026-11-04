@@ -644,14 +644,21 @@ return {
 				end
 				t.eq(VentNetworkService.GetGrateState("NoSuchGrate"), "Closed", "an unbuilt grate reads shut")
 				t.eq(VentNetworkService.GetGrateModel("NoSuchGrate"), nil)
-				local lockedModel = pickGrate(built, true)
+				-- Level 1's bypass never locks (the director has nothing there to lock): shut one by hand, the way a
+				-- script, the Creature or a dev command may, and give it back afterwards
+				local forced = next(built.locked) == nil
+				local lockedModel = if forced then built.grates[1] else pickGrate(built, true)
+				if forced then
+					VentNetworkService.ForceGrate(grateId(lockedModel), "Locked")
+					t.eq(VentNetworkService.GetGrateState(grateId(lockedModel)), "Locked", "forced shut")
+				end
 				local canUse = VentNetworkService.UnscrewHandler.canUse
 				local kickCanUse = VentNetworkService.KickHandler.canUse
 				assert(canUse and kickCanUse, "both handlers judge players")
 				local unscrewPrompt = promptOf(lockedModel, "Unscrew")
 				t.eq(verdict(canUse(player, unscrewPrompt, lockedModel)), "Prompt.GrateLocked")
 				t.eq(verdict(kickCanUse(player, promptOf(lockedModel, "Kick"), lockedModel)), "Prompt.GrateLocked")
-				local open = pickGrate(built, false)
+				local open = pickGrate(built, false, { [lockedModel] = true })
 				t.eq(verdict(canUse(player, promptOf(open, "Unscrew"), open)), "ok")
 				local holdSeconds = VentNetworkService.UnscrewHandler.holdSeconds
 				assert(holdSeconds, "a hold length per player")
@@ -662,6 +669,10 @@ return {
 					"the Rusty Screwdriver is quicker"
 				)
 				player:SetAttribute(Attributes.Player.Loadout, nil)
+				if forced then
+					VentNetworkService.ForceGrate(grateId(lockedModel), "Closed")
+					t.eq(VentNetworkService.GetGrateState(grateId(lockedModel)), "Closed", "given back")
+				end
 			end)
 		end)
 	end,

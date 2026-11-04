@@ -27,10 +27,16 @@ type Layout = LayoutSchema.LevelLayout
 
 local W = Attributes.World
 
-local VENT_LEVELS: { Enums.LevelId } =
-	{ "Level1_Hallways", "Level2_ScienceHall", "Level3_Gymnasium", "Level4_FloodedPool" }
 local ALL_LEVELS: { Enums.LevelId } =
 	{ "Level0_Basement", "Level1_Hallways", "Level2_ScienceHall", "Level3_Gymnasium", "Level4_FloodedPool" }
+-- The levels with ducts (a tunnel floor keeps a vent only where its script needs one: Level 1's gate bypass)
+local VENT_LEVELS: { Enums.LevelId } = {}
+local DRY_LEVELS: { Enums.LevelId } = {}
+for _, id in ALL_LEVELS do
+	local layout = Builder.getLayout(id)
+	local vents = if layout then layout.vents else nil
+	table.insert(if vents and #vents.grates > 0 then VENT_LEVELS else DRY_LEVELS, id)
+end
 local EPS = 1e-3
 local MOUTH_OUT = WorldConfig.WallThickness / 2 + 0.3
 
@@ -366,7 +372,10 @@ return {
 				)
 			end
 		end
-		t.eq(VentGraph.build(built.levels.Level0_Basement, "Level0_Basement"), nil, "no ducts in the basement")
+		t.truthy(table.find(DRY_LEVELS, "Level0_Basement") ~= nil, "no ducts in the basement")
+		for _, id in DRY_LEVELS do
+			t.eq(VentGraph.build(built.levels[id], id), nil, "no ducts on " .. id)
+		end
 		t.eq(VentGraph.build(Instance.new("Folder"), "Level1_Hallways"), nil, "no VentNodeRoot")
 	end,
 

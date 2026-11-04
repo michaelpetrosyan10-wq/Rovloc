@@ -135,6 +135,10 @@ type Rect = { x: number, z: number, w: number, d: number }
 type RoomLike = { id: string, kind: string, rect: Rect, height: number? }
 type DoorLike = { id: string, kind: string, rooms: { string }, at: number, width: number?, height: number? }
 type AnchorLike = { id: string, kind: string, room: string, pos: Vector3 }
+type VentNodeLike = { id: string, x: number, z: number }
+type VentEdgeLike = { a: string, b: string }
+type GrateLike = { id: string, node: string, room: string, lockable: boolean }
+type VentsLike = { nodes: { VentNodeLike }, edges: { VentEdgeLike }, grates: { GrateLike } }
 export type LayoutLike = {
 	id: string,
 	height: number,
@@ -142,6 +146,7 @@ export type LayoutLike = {
 	rooms: { RoomLike },
 	doors: { DoorLike },
 	anchors: { AnchorLike },
+	vents: VentsLike?,
 	tunnels: TunnelData?,
 }
 
@@ -168,6 +173,7 @@ export type Measures = {
 
 TunnelRules.WalkSpeed = 11
 TunnelRules.CrouchSpeed = 5.5
+TunnelRules.VentSpeed = 4.5 -- GameConfig.VentCrawlSpeed: the always-open vents are walked at this pace when timed
 -- The web player's crouched body (feet to crown, web/src/engine/physics.js CrouchHeight); crawlways give it 0.6 more.
 TunnelRules.CrouchHeight = 3.7
 TunnelRules.CrawlClearance = TunnelRules.CrouchHeight + 0.6
@@ -299,8 +305,31 @@ export type WalkGraph = {
 
 local WALK_DOORS: { [string]: boolean } = { Doorway = true, Door = true, Ajar = true, Airlock = true, RoofDoor = true }
 
+-- Grates a HatchValve keeps shut (ObjectivePlaces' rule: its grate is no way through until the objective opens it).
+local function hatchShut(layout: LayoutLike, vents: VentsLike): { [string]: boolean }
+	local nodes: { [string]: VentNodeLike } = {}
+	for _, node in vents.nodes do
+		nodes[node.id] = node
+	end
+	local out: { [string]: boolean } = {}
+	for _, anchor in layout.anchors do
+		if anchor.kind ~= "HatchValve" then
+			continue
+		end
+		for _, grate in vents.grates do
+			local node = nodes[grate.node]
+			if node and math.abs(node.x - anchor.pos.X) < 2.5 and math.abs(node.z - anchor.pos.Z) < 1.5 then
+				out[grate.id] = true
+			end
+		end
+	end
+	return out
+end
+
 -- The walk graph of `layout`. `crawl`: keep the crawlway doors (their links cost studs x WalkSpeed / CrouchSpeed when
--- `timed`); otherwise crawlways are shut.
+-- `timed`); otherwise crawlways are shut. The vents a squad can always use (grates that never lock, none a hatch
+-- keeps shut) are walked too, whatever `crawl` says: a floor's script may make one the only way on (Level 1's gate
+-- bypass); timed, their ducts cost studs x WalkSpeed / VentSpeed.
 function TunnelRules.walkGraph(layout: LayoutLike, crawl: boolean, timed: boolean?): WalkGraph
 	local rooms: { [string]: RoomLike } = {}
 	for _, room in layout.rooms do
@@ -333,6 +362,33 @@ function TunnelRules.walkGraph(layout: LayoutLike, crawl: boolean, timed: boolea
 		end
 		if crawlA or crawlB then
 			table.insert(g.crawlMouths, index)
+		end
+	end
+	-- the always-open vents: a node per duct node, linked along the ducts; each open grate's node joins its room
+	local vents = layout.vents
+	if vents then
+		local shut = hatchShut(layout, vents)
+		local ventIndex: { [string]: number } = {}
+		for _, node in vents.nodes do
+			table.insert(g.pos, Vector2.new(node.x, node.z))
+			table.insert(g.links, {})
+			ventIndex[node.id] = #g.pos
+		end
+		local duct = if timed then TunnelRules.WalkSpeed / TunnelRules.VentSpeed else 1
+		for _, edge in vents.edges do
+			local a, b = ventIndex[edge.a], ventIndex[edge.b]
+			if a and b then
+				local cost = (g.pos[a] - g.pos[b]).Magnitude * duct
+				table.insert(g.links[a], { to = b, cost = cost })
+				table.insert(g.links[b], { to = a, cost = cost })
+			end
+		end
+		for _, grate in vents.grates do
+			local index = ventIndex[grate.node]
+			if index and not grate.lockable and not shut[grate.id] and rooms[grate.room] then
+				g.members[grate.room] = g.members[grate.room] or {}
+				table.insert(g.members[grate.room], index)
+			end
 		end
 	end
 	local slow = TunnelRules.WalkSpeed / TunnelRules.CrouchSpeed

@@ -19,8 +19,14 @@ local SpecRunner = require(script.Parent.Parent.SpecRunner)
 type Expect = SpecRunner.Expect
 type Graph = VentGraph.Graph
 
-local VENT_LEVELS: { Enums.LevelId } =
-	{ "Level1_Hallways", "Level2_ScienceHall", "Level3_Gymnasium", "Level4_FloodedPool" }
+-- The levels with ducts (a tunnel floor keeps a vent only where its script needs one: Level 1's gate bypass)
+local VENT_LEVELS: { Enums.LevelId } = {}
+for _, id in { "Level1_Hallways", "Level2_ScienceHall", "Level3_Gymnasium", "Level4_FloodedPool" } :: { Enums.LevelId } do
+	local layout = Builder.getLayout(id)
+	if layout and layout.vents and #layout.vents.grates > 0 then
+		table.insert(VENT_LEVELS, id)
+	end
+end
 local EPS = 1e-6
 
 --------------------------------------------------------------------------------

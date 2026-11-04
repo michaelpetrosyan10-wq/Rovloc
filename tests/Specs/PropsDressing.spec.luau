@@ -293,7 +293,10 @@ return {
 		local layout = layoutOf("Level2_ScienceHall")
 		local folder = props(layout.id)
 		local counters = anchorsOf(layout, "LabCounter")
-		t.eq(#counters, 33, "Level2 lab counters (32 islands and the specimen store's bench)")
+		t.truthy(
+			#counters >= 8,
+			string.format("Level2 lab counters (%d: the labs' islands, the prep bench)", #counters)
+		)
 		for _, anchor in counters do
 			local counter = model(folder, "LabCounter_" .. anchor.id)
 			t.eq(counter:GetAttribute(W.AnchorId), anchor.id)
@@ -318,9 +321,28 @@ return {
 		local folder = props(layout.id)
 		local origin = WorldConfig.levelOrigin(layout.id)
 		local flasks = anchorsOf(layout, "FlaskCandidate")
-		t.eq(#flasks, 31, "Level2 flask candidates")
+		t.truthy(#flasks >= 10, string.format("Level2 flask candidates (%d)", #flasks))
+		local benched: { [string]: boolean } = {}
+		for _, counterAnchor in anchorsOf(layout, "LabCounter") do
+			benched[counterAnchor.room] = true
+		end
 		for _, flask in flasks do
 			local point = origin + flask.pos
+			if not benched[flask.room] then
+				-- a tunnel cache: the flask stands on its niche's shelf
+				local shelved = false
+				for _, p in (layout.platforms or {}) :: { LayoutSchema.Platform } do
+					if
+						p.room == flask.room
+						and LayoutSchema.rectContains(p.rect, flask.pos.X, flask.pos.Z)
+						and math.abs(p.top - flask.pos.Y) < 1e-3
+					then
+						shelved = true
+					end
+				end
+				t.truthy(shelved, flask.id .. " stands on its cache's shelf")
+				continue
+			end
 			local rests = 0
 			for _, counterAnchor in anchorsOf(layout, "LabCounter") do
 				if counterAnchor.room ~= flask.room then
@@ -362,7 +384,11 @@ return {
 			local rooms = LayoutSchema.indexRooms(layout)
 			local folder = props(id)
 			local anchors = anchorsOf(layout, "SmashedLocker")
-			t.eq(#anchors, if id == "Level1_Hallways" then 16 else 4, id .. " smashed locker anchors")
+			if id == "Level1_Hallways" then
+				t.truthy(#anchors >= 8, string.format("%s smashed locker anchors (%d)", id, #anchors))
+			else
+				t.eq(#anchors, 4, id .. " smashed locker anchors")
+			end
 			for _, anchor in anchors do
 				local bank = model(folder, "SmashedLocker_" .. anchor.id)
 				local list = parts(bank)
@@ -782,7 +808,7 @@ return {
 		do
 			allowed[Strings.get("Prop.Sign." .. key)] = true
 		end
-		local plates = 0
+		local plates, platable = 0, 0
 		for _, id: Enums.LayoutId in Enums.LayoutId do
 			local layout = layoutOf(id)
 			local origin = WorldConfig.levelOrigin(id)
@@ -852,8 +878,36 @@ return {
 					t.truthy(signs:FindFirstChild("Stairs_" .. door.id) ~= nil, door.id .. " has a STAIRS sign")
 				end
 			end
+			-- the numbered classrooms and labs that open onto a corridor, each owed a plate beside that door (a tunnel
+			-- floor's keep-rooms are named by its stencils instead)
+			local rooms = LayoutSchema.indexRooms(layout)
+			local owed: { [string]: boolean } = {}
+			for _, door in layout.doors do
+				if door.kind ~= "Door" and door.kind ~= "Doorway" and door.kind ~= "Ajar" then
+					continue
+				end
+				for index = 1, 2 do
+					local room, other = rooms[door.rooms[index]], rooms[door.rooms[3 - index]]
+					if
+						room
+						and other
+						and other.kind == "Corridor"
+						and (room.kind == "Classroom" or room.kind == "Lab")
+						and string.match(room.id, "_(%d+)$")
+					then
+						owed[room.id] = true
+					end
+				end
+			end
+			for _ in owed do
+				platable += 1
+			end
 		end
-		t.truthy(plates >= 25, string.format("%d room plates", plates))
+		t.truthy(platable >= 1, "numbered rooms open onto the corridors (Classroom 108)")
+		t.truthy(
+			plates >= math.ceil(0.75 * platable),
+			string.format("%d room plates for %d numbered rooms on corridors", plates, platable)
+		)
 	end,
 
 	["service pipes: plant rooms only, above the door heads, clear of every light fixture and drip pipe"] = function(
@@ -927,6 +981,18 @@ return {
 	)
 		local budget = FurnitureBuilder.Budget
 		local boards, desks = 0, 0
+		-- the rooms that face a board (classrooms and labs) and the classrooms that seat pupils (not the halls)
+		local boarded, seated = 0, 0
+		for _, id: Enums.LayoutId in Enums.LayoutId do
+			for _, room in layoutOf(id).rooms do
+				if room.kind == "Classroom" or room.kind == "Lab" then
+					boarded += 1
+				end
+				if room.kind == "Classroom" and room.rect.w * room.rect.d < 1300 then
+					seated += 1
+				end
+			end
+		end
 		for _, id: Enums.LayoutId in Enums.LayoutId do
 			local layout = layoutOf(id)
 			local furniture = props(id):FindFirstChild("Furniture_" .. id)
@@ -978,8 +1044,14 @@ return {
 				t.truthy(used <= cap, string.format("%s has %d furniture parts (cap %d)", room.id, used, cap))
 			end
 		end
-		t.truthy(boards >= 20, string.format("classrooms and labs have chalkboards (%d)", boards))
-		t.truthy(desks >= 60, string.format("pupils' desks stand in the classrooms (%d)", desks))
+		t.truthy(
+			boarded > 0 and boards >= math.ceil(0.75 * boarded),
+			string.format("classrooms and labs have chalkboards (%d of %d rooms)", boards, boarded)
+		)
+		t.truthy(
+			seated > 0 and desks >= 4 * seated,
+			string.format("pupils' desks stand in the classrooms (%d in %d)", desks, seated)
+		)
 	end,
 
 	["furniture: desk columns keep aisles a player fits through, clear of the side walls"] = function(t: Expect)

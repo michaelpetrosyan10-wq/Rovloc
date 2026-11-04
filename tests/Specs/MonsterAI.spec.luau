@@ -811,11 +811,13 @@ spec["level knowledge: Level 1 rooms, open doorways, the spawn and roomAt"] = fu
 	t.eq(info.levelId, "Level1_Hallways", "level id")
 	local spawn = info.spawn
 	assert(spawn, "spawn")
+	local atAnchor = false
 	for _, a in layout.anchors do
-		if a.kind == "CreatureSpawn" then
-			t.truthy(near(spawn.Position, WorldConfig.levelOrigin("Level1_Hallways") + a.pos), "spawn at the anchor")
+		if a.kind == "CreatureSpawn" and near(spawn.Position, WorldConfig.levelOrigin("Level1_Hallways") + a.pos) then
+			atAnchor = true
 		end
 	end
+	t.truthy(atAnchor, "spawn at a CreatureSpawn anchor")
 	for id, list in info.neighbours do
 		for _, other in list do
 			t.truthy(table.find(info.neighbours[other] or {}, id) ~= nil, id .. " <-> " .. other)

@@ -1722,11 +1722,26 @@ return {
 		host.Name = "SpecWorld"
 		local result = Builder.BuildAuthoritative({ parent = host :: Instance, yieldEvery = 0 })
 		t.truthy(result.partCount > 2000, "a real world")
-		t.truthy(result.partCount < 26000, string.format("part budget (%d)", result.partCount))
+		-- a tunnel floor (TunnelPlanner: walls round every run, caged bulbs, the dressing, most of it Detail a low
+		-- graphics setting drops) fits 16000 parts, any other level 6000, the lobby, towers and exterior 6000
+		local budget = 6000
+		for _, id: Enums.LevelId in Enums.LevelId do
+			local layout = Builder.getLayout(id)
+			budget += if layout and layout.tunnels then 16000 else 6000
+		end
+		t.truthy(result.partCount < budget, string.format("part budget (%d of %d)", result.partCount, budget))
 		for _, id: Enums.LevelId in Enums.LevelId do
 			local level = result.levels[id]
 			assert(level, "level " .. id)
 			t.eq(level:GetAttribute(W.LayoutId), id)
+			local levelParts = 0
+			for _, d in level:GetDescendants() do
+				if d:IsA("BasePart") then
+					levelParts += 1
+				end
+			end
+			local cap = if (Builder.getLayout(id) :: LayoutSchema.LevelLayout).tunnels then 16000 else 6000
+			t.truthy(levelParts < cap, string.format("%s part budget (%d of %d)", id, levelParts, cap))
 			for _, name in { "Shell", "Lights", "Zones", "Vents", "Anchors", "Triggers", "Waypoints" } do
 				child(level, name)
 			end

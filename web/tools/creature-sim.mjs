@@ -518,9 +518,13 @@ report(p1.reached >= 5 && p1.travelled >= 200 && p1.travelled <= 60 * CreatureCo
   const svc = s.creature.service;
   const here = svc.body.getPosition();
   const room = svc.ctx.level ? Object.values(svc.ctx.level.rooms).find((r) => here.x >= r.minX && here.x <= r.maxX && here.z >= r.minZ && here.z <= r.maxZ) : null;
-  const target = waypointsOf(LEVEL)
+  // a waypoint in another room 30-70 studs off that it can hear (a tunnel floor's solid ground between two runs is a
+  // wall or more: FloorDebris's 130 studs shrink to 28 behind three), the nearest first
+  const band = waypointsOf(LEVEL)
     .filter((w) => (!room || w.room !== room.id) && w.position.distanceTo(here) > 30 && w.position.distanceTo(here) < 70)
-    .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))[0];
+    .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here));
+  const audible = (w) => svc.env.countOccluders(w.position.clone().add(new THREE.Vector3(0, 1, 0)), here, 3) <= 1;
+  const target = band.find(audible) || band[0];
   s.engine.noise.emit(target.position.clone().add(new THREE.Vector3(0, 1, 0)), 'FloorDebris', { level: LEVEL });
   const heardIn = advance(s, 1, () => svc.state === 'InvestigateNoise');
   let closest = Infinity;
@@ -788,7 +792,6 @@ for (const difficulty of ['Standard', 'Nightmare']) {
 }
 
 // 11. hiding: the saw-you-hide rule
-const HIDE_LEVEL = LEVEL;
 const lockersOf = (level) => meta.entities.filter((e) => e.type === 'Locker' && e.level === level).map((e) => {
   const ex = e.attachments.ExitAnchor;
   const hide = e.attachments.HideAnchor;
@@ -797,23 +800,38 @@ const lockersOf = (level) => meta.entities.filter((e) => e.type === 'Locker' && 
   const out = new THREE.Vector3(-ex[5], 0, -ex[11]).normalize();
   return { id: e.id, room: e.attributes.ZoneId, front, out, hide: new THREE.Vector3(hide[0], hide[1], hide[2]) };
 });
+/** Where the Creature stands to watch `locker`: 20 studs along its wall, 3 out, on the floor, in plain sight; or null. */
+function watchPoint(s, level, locker) {
+  const along = new THREE.Vector3(-locker.out.z, 0, locker.out.x);
+  for (const sign of [1, -1]) {
+    const p = locker.front.clone().addScaledVector(locker.out, 3).addScaledVector(along, sign * 20);
+    if (navOf(level).roomAt(p) && s.engine.world.lineClear(p.clone().setY(p.y + 7), locker.front.clone().setY(locker.front.y + 4.5))) {
+      return p;
+    }
+  }
+  return null;
+}
+// A locker along a wall with 20 studs of floor in front of it, Level 1's first, else the next floor's in the climb
+// (Level 1's tunnel lockers stand at the back of their niches, out of sight from along a run).
+const HIDE = (() => {
+  const probe = session();
+  const order = ['Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium', 'Level4_FloodedPool', 'Level0_Basement'];
+  for (const level of [LEVEL, ...order.filter((l) => l !== LEVEL)]) {
+    for (const locker of lockersOf(level)) if (watchPoint(probe, level, locker)) return { level, locker };
+  }
+  return { level: LEVEL, locker: lockersOf(LEVEL)[0] };
+})();
+const HIDE_LEVEL = HIDE.level;
+console.log(`      hiding scenarios: ${HIDE.locker.id} (${HIDE.locker.room}, ${HIDE_LEVEL})`);
 /**
  * The Creature 22 studs out from a corridor locker, facing it, the player at its door in plain sight, then climbing in.
  * Returns the locker, or null.
  */
 function seenHiding(s, who = PLAYER) {
   const svc = s.creature.service;
-  const locker = lockersOf(HIDE_LEVEL).find((l) => l.room === 'L1_NorthHall_West' && l.id === 'L1_Locker_03') || lockersOf(HIDE_LEVEL)[0];
+  const locker = HIDE.locker;
   // along the corridor, in front of the locker
-  const along = new THREE.Vector3(-locker.out.z, 0, locker.out.x);
-  let from = null;
-  for (const sign of [1, -1]) {
-    const p = locker.front.clone().addScaledVector(locker.out, 3).addScaledVector(along, sign * 20);
-    if (navOf(HIDE_LEVEL).roomAt(p) && s.engine.world.lineClear(p.clone().setY(p.y + 7), locker.front.clone().setY(locker.front.y + 4.5))) {
-      from = p;
-      break;
-    }
-  }
+  const from = watchPoint(s, HIDE_LEVEL, locker);
   if (!from) return null;
   if (who === PLAYER) {
     s.player.moveState = 'Standing';

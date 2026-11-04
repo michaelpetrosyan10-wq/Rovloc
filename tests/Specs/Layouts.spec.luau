@@ -379,9 +379,9 @@ return {
 	["the creature has a spawn on every level from the hallways up"] = function(t: Expect)
 		for _, id in schoolLevels() do
 			local count = #anchorsOf(LAYOUTS[id], "CreatureSpawn")
-			if id == "Level0_Basement" then
-				-- the Creature hunts the tunnels too: several starts for the spawn rule to choose from
-				t.truthy(count >= 4, "the basement's tunnels hold several Creature starts")
+			if LAYOUTS[id].tunnels then
+				-- the Creature hunts the tunnels: several starts for the spawn rule to choose from
+				t.truthy(count >= 4, id .. ": the tunnels hold several Creature starts")
 			elseif id == "Level5_Roof" then
 				-- one behind each stair housing's roof door (the run arrives in one of them)
 				t.eq(count, 3, id .. " CreatureSpawn per stair housing")
@@ -849,92 +849,99 @@ return {
 		t.truthy(#triggersOf(layout, "Checkpoint") == 3, "a checkpoint in every exit vestibule candidate")
 	end,
 
-	["the vents connect classrooms on the hallway and science floors"] = function(t: Expect)
-		for _, case in
-			{
-				{ id = "Level1_Hallways", classrooms = 2, lockable = 2 },
-				{ id = "Level2_ScienceHall", classrooms = 3, lockable = 3 },
-			} :: { { id: string, classrooms: number, lockable: number } }
-		do
-			local layout = LAYOUTS[case.id]
-			local rooms = LayoutSchema.indexRooms(layout)
-			local vents = layout.vents
-			t.truthy(vents, case.id .. " vents")
-			if not vents then
-				continue
-			end
-			local served: { [string]: boolean } = {}
-			local count, lockable = 0, 0
-			for _, g in vents.grates do
-				if rooms[g.room].kind == "Classroom" then
-					if not served[g.room] then
-						count += 1
-					end
-					served[g.room] = true
-					if g.lockable then
-						lockable += 1
-					end
-				end
-			end
-			t.truthy(count >= case.classrooms, string.format("%s: grates into %d classrooms", case.id, count))
-			t.truthy(lockable >= case.lockable, string.format("%s: %d lockable classroom grates", case.id, lockable))
-		end
-		-- the scripted classroom has a way out for the Creature; the science floor's lecture hall has a vent
-		local function opensInto(layout: Layout, roomId: string): boolean
-			for _, g in (if layout.vents then layout.vents.grates else {}) :: { LayoutSchema.GrateSpec } do
-				if g.room == roomId then
-					return true
-				end
-			end
-			return false
-		end
+	["the hallway and science floors keep the classic vent only where the script needs it"] = function(t: Expect)
+		-- Tunnel floors escape by crawlways (TunnelPlanner); Level 1 keeps one vent, the gate's bypass, because the
+		-- scare's gate is scripted around it (both runtimes crawl vents; crawlways are not on Roblox yet)
 		local l1 = LAYOUTS.Level1_Hallways
 		local rooms1 = LayoutSchema.indexRooms(l1)
-		for _, d in l1.doors do
-			if d.kind == "Ajar" then
-				for _, roomId in d.rooms do
-					if rooms1[roomId].kind == "Classroom" then
-						t.truthy(opensInto(l1, roomId), "a grate into the scripted classroom " .. roomId)
-					end
-				end
+		local vents = l1.vents
+		t.truthy(vents, "Level 1 keeps the gate's bypass vent")
+		if vents then
+			local sides: { [string]: boolean } = {}
+			for _, g in vents.grates do
+				local node = nodeById(l1, g.node)
+				local chase = node and chaseOf(l1, node)
+				t.truthy(chase and chase.id == "L1_Chase_Gate", g.id .. " opens from the bypass chase")
+				t.truthy(g.criticalPath and not g.lockable, g.id .. " is on the critical path and never locks")
+				sides[g.room] = true
+			end
+			t.truthy(sides.L1_Corridor_East and sides.L1_Corridor_West, "a grate on each side of the gate")
+		end
+		local chases = 0
+		for _, r in l1.rooms do
+			if r.kind == "Chase" then
+				chases += 1
 			end
 		end
-		t.truthy(opensInto(LAYOUTS.Level2_ScienceHall, "L2_LectureHall"), "a grate into the lecture hall")
+		t.eq(chases, 1, "the bypass is Level 1's only chase")
+		-- the scripted classroom's one way in is its ajar door (the Creature leaves it unseen, hidden)
+		for _, d in l1.doors do
+			if d.rooms[1] == "L1_Classroom_108" or d.rooms[2] == "L1_Classroom_108" then
+				t.eq(d.kind, "Ajar", d.id .. " is the scripted classroom's ajar door")
+			end
+		end
+		t.truthy(rooms1.L1_Classroom_108 ~= nil, "the scare classroom")
+		t.falsy(LAYOUTS.Level2_ScienceHall.vents, "no vents in the science wing (crawlways instead)")
+		for _, id in { "Level1_Hallways", "Level2_ScienceHall" } do
+			local crawls = 0
+			for _, r in LAYOUTS[id].rooms do
+				if r.kind == "Crawlway" then
+					crawls += 1
+				end
+			end
+			t.truthy(crawls >= 3, string.format("%s: %d crawlways", id, crawls))
+		end
 	end,
 
-	["science hall: labs, flasks on counters and an extensive vent network"] = function(t: Expect)
+	["science hall: labs, the fume hood, flasks on lab counters and in tunnel caches"] = function(t: Expect)
 		local layout = LAYOUTS.Level2_ScienceHall
+		local rooms = LayoutSchema.indexRooms(layout)
 		local labs = 0
 		for _, r in layout.rooms do
 			if r.kind == "Lab" then
 				labs += 1
 			end
 		end
-		t.truthy(labs >= 6, "chem, bio and prep labs")
+		t.truthy(labs >= 3, "chem prep and two labs")
+		local hoods = anchorsOf(layout, "FumeHood")
+		t.eq(#hoods, 1, "one fume hood")
+		t.eq(hoods[1].room, "L2_ChemPrep_205", "the hood stands in Chem Prep 205")
+		for _, id in { "L2_ChemStore_243", "L2_SpecimenStore_225" } do
+			local held = 0
+			for _, a in anchorsOf(layout, "ReagentCandidate") do
+				if a.room == id then
+					held += 1
+				end
+			end
+			t.truthy(rooms[id] and held >= 1, id .. " holds reagents")
+		end
 		local counters = anchorsOf(layout, "LabCounter")
 		local flasks = anchorsOf(layout, "FlaskCandidate")
 		t.truthy(#counters >= 8, "lab counters")
 		t.truthy(#flasks >= 10, "at least 10 flask candidates")
+		local cached = 0
 		for _, f in flasks do
-			local onCounter = false
+			local onCounter, onShelf = false, false
 			for _, c in counters do
 				if c.room == f.room and math.abs(f.pos.X - c.pos.X) <= 5 and math.abs(f.pos.Z - c.pos.Z) <= 1.75 then
 					onCounter = true
 				end
 			end
-			t.truthy(onCounter and f.pos.Y > 2.5, f.id .. " stands on a lab counter")
-		end
-		local chases = 0
-		for _, r in layout.rooms do
-			if r.kind == "Chase" then
-				chases += 1
+			for _, p in (layout.platforms or {}) :: { LayoutSchema.Platform } do
+				if
+					p.room == f.room
+					and LayoutSchema.rectContains(p.rect, f.pos.X, f.pos.Z)
+					and math.abs(p.top - f.pos.Y) < 1e-3
+				then
+					onShelf = true
+				end
 			end
+			if onShelf then
+				cached += 1
+			end
+			t.truthy((onCounter or onShelf) and f.pos.Y > 2.5, f.id .. " stands on a lab counter or a cache shelf")
 		end
-		t.truthy(chases >= 6, "many chases")
-		local total, lockable, critical = grateCounts(layout)
-		t.truthy(total >= 20, "an extensive network")
-		t.truthy(critical >= 2, "a critical route")
-		t.truthy(lockable >= 4 and lockable * 2 >= total - critical, "at least half the other grates lock")
+		t.truthy(cached >= 3, string.format("%d flasks cached in the tunnels", cached))
 		t.truthy(#anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
 	end,
 

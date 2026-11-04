@@ -16,11 +16,13 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Types = require(ReplicatedStorage.Shared.Types)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local BearTrapBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.BearTrapBuilder)
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local ChemicalFlaskBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.ChemicalFlaskBuilder)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
+local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local PickupBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PickupBuilder)
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
@@ -784,25 +786,45 @@ return {
 		end)
 	end,
 
-	["real layouts: Science Hall flasks stand inside their lab worktops"] = function(t: Expect)
+	["real layouts: Science Hall flasks stand inside their lab worktops or their cache shelves"] = function(t: Expect)
 		quiet(function()
 			local counters = anchorsOf(SCIENCE, "LabCounter")
 			local flasks = anchorsOf(SCIENCE, "FlaskCandidate")
-			if #flasks == 0 then
+			local layout = Builder.getLayout(SCIENCE)
+			if #flasks == 0 or not layout then
 				return -- layout not present
 			end
+			local origin = WorldConfig.levelOrigin(SCIENCE)
 			for i, anchor in flasks do
 				local model = build(planned("ChemicalFlask", anchor.id, SCIENCE, anchor.cframe, i), i)
 				local list = parts(model)
-				local best: CFrame? = nil
+				-- the worktop it stands over: a lab counter's 10 x 3.5 top, else the shelf of its tunnel cache
+				local frame: CFrame? = nil
+				local halfX, halfZ = 5, 1.75
 				for _, counter in counters do
 					local offset = counter.cframe:PointToObjectSpace(anchor.cframe.Position)
 					if math.abs(offset.X) <= 5 and math.abs(offset.Z) <= 1.75 then
-						best = counter.cframe
+						frame = counter.cframe
 					end
 				end
-				assert(best, anchor.id .. " stands over a LabCounter")
-				local worktop = best
+				if not frame then
+					local p = anchor.cframe.Position - origin
+					for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
+						local r = platform.rect
+						if
+							p.X >= r.x
+							and p.X <= r.x + r.w
+							and p.Z >= r.z
+							and p.Z <= r.z + r.d
+							and math.abs(platform.top - p.Y) < 1e-3
+						then
+							frame = CFrame.new(origin + Vector3.new(r.x + r.w / 2, platform.top, r.z + r.d / 2))
+							halfX, halfZ = r.w / 2, r.d / 2
+						end
+					end
+				end
+				assert(frame, anchor.id .. " stands over a LabCounter or a cache shelf")
+				local worktop = frame
 				for _, part in list do
 					local half = part.Size / 2
 					for _, sx in { -1, 1 } do
@@ -810,8 +832,8 @@ return {
 							local corner =
 								worktop:PointToObjectSpace(part.CFrame * Vector3.new(sx * half.X, 0, sz * half.Z))
 							t.truthy(
-								math.abs(corner.X) <= 5 and math.abs(corner.Z) <= 1.75,
-								anchor.id .. " " .. part.Name .. " over the 10 x 3.5 worktop"
+								math.abs(corner.X) <= halfX + 1e-3 and math.abs(corner.Z) <= halfZ + 1e-3,
+								anchor.id .. " " .. part.Name .. " over its worktop"
 							)
 						end
 					end

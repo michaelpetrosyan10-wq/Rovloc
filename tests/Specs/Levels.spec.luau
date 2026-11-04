@@ -30,6 +30,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
+local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 local Level0 = require(ServerScriptService.Services.Levels.Level0_BasementController)
@@ -98,6 +99,70 @@ end
 
 local function localPoint(levelId: string, x: number, y: number, z: number): Vector3
 	return WorldConfig.levelOrigin(levelId) + Vector3.new(x, y, z)
+end
+
+-- Level 1's places, read from its blueprint (level-local): the specs never pin the plan's coordinates.
+type L1Places = {
+	entry: Vector3, -- the middle stair vestibule's arrival (the PlayerSpawn centroid, on the floor)
+	pose: Vector3, -- the Creature's scare pose (root height)
+	glass: LayoutSchema.Rect,
+	glassMid: Vector3, -- the middle of the glass, on the floor
+	hallZ: number, -- the hallway's centre line
+	classroom: LayoutSchema.Rect,
+	gateX: number,
+	nearRoom: string, -- a service tunnel on the near side (east of the gate)
+	creatureStart: Vector3, -- a CreatureSpawn anchor (root height)
+}
+
+local function l1Places(): L1Places
+	local layout = Builder.getLayout(L1)
+	assert(layout, "Level 1 layout")
+	local rooms = LayoutSchema.indexRooms(layout)
+	local pose: Vector3? = nil
+	local start: Vector3? = nil
+	local sum, count = Vector3.zero, 0
+	for _, anchor in layout.anchors do
+		if anchor.kind == "CreatureScarePose" then
+			pose = anchor.pos
+		elseif anchor.kind == "CreatureSpawn" and start == nil then
+			start = anchor.pos
+		elseif anchor.kind == "PlayerSpawn" and anchor.room == layout.entry then
+			sum += Vector3.new(anchor.pos.X, 0, anchor.pos.Z)
+			count += 1
+		end
+	end
+	local glass: LayoutSchema.Rect? = nil
+	for _, trigger in layout.triggers do
+		if trigger.id == "L1_Trigger_GlassStep" then
+			glass = trigger.rect
+		end
+	end
+	local gateX: number? = nil
+	for _, door in layout.doors do
+		if door.scriptedId == "HallwayGate" then
+			local edge = LayoutSchema.sharedEdge(rooms[door.rooms[1]].rect, rooms[door.rooms[2]].rect)
+			gateX = if edge then edge.coord else nil
+		end
+	end
+	local nearRoom: string? = nil
+	for _, room in layout.rooms do
+		if nearRoom == nil and room.kind == "Tunnel" and gateX and room.rect.x > gateX then
+			nearRoom = room.id
+		end
+	end
+	assert(pose and start and glass and gateX and nearRoom and count > 0, "Level 1 places")
+	local hall = rooms.L1_Corridor_East.rect
+	return {
+		entry = sum / count,
+		pose = pose,
+		glass = glass,
+		glassMid = Vector3.new(glass.x + glass.w / 2, 0, glass.z + glass.d / 2),
+		hallZ = hall.z + hall.d / 2,
+		classroom = rooms.L1_Classroom_108.rect,
+		gateX = gateX,
+		nearRoom = nearRoom,
+		creatureStart = start,
+	}
 end
 
 local function firstCall(calls: { Call }, name: string): Call?
@@ -177,20 +242,21 @@ local function newL1World(): L1World
 	spill.Name = "L1_Light_ClassroomGlowSpill"
 	spill:SetAttribute("BaseBrightness", 0.6)
 	spill.Parent = folder
+	local places = l1Places()
 	local world: L1World = {
 		now = 100,
 		calls = {},
 		shots = {},
 		player = newPlayer(9101, "Subject"),
-		-- the east airlock, well away from the classroom
-		eye = localPoint(L1, 232, 3.5 + 1.5, 80),
-		feet = localPoint(L1, 232, 0, 80),
+		-- the middle east stair vestibule, well away from the classroom
+		eye = localPoint(L1, places.entry.X, 3.5 + 1.5, places.entry.Z),
+		feet = localPoint(L1, places.entry.X, 0, places.entry.Z),
 		zone = "L1_AirlockEast",
 		onGlass = false,
 		inVent = false,
 		acquireOk = true,
 		acquired = 0,
-		creature = CFrame.new(localPoint(L1, 220, 5, 12)),
+		creature = CFrame.new(WorldConfig.levelOrigin(L1) + places.creatureStart),
 		hidden = false,
 		sees = function(_from: Vector3, _to: Vector3): boolean
 			return false
@@ -476,18 +542,37 @@ return {
 	["Level 1: the blueprint gives the pose, the glass, the gate line and what lies past it"] = function(t: Expect)
 		local layout = Builder.getLayout(L1)
 		assert(layout, "Level 1 layout")
+		local places = l1Places()
 		local g = Level1.geometry(layout)
-		t.truthy((g.pose.Position - localPoint(L1, 161.5, 5, 43.5)).Magnitude < 1e-3, "the pose anchor")
+		t.truthy((g.pose.Position - (WorldConfig.levelOrigin(L1) + places.pose)).Magnitude < 1e-3, "the pose anchor")
 		local facing = g.pose.LookVector
 		t.truthy(facing.X < -0.6 and facing.Z < -0.6, "facing into the north-west corner")
-		t.eq(g.gateX, 120, "the gate's wall")
-		t.eq(g.glassMinX, 170, "the glass band's west edge")
+		t.eq(g.gateX, places.gateX, "the gate's wall")
+		t.eq(g.glassMinX, places.glass.x, "the glass band's west edge")
+		t.truthy(g.gateX < g.glassMinX, "the gate stands west of the glass (the squad walks east -> west)")
 		t.eq(g.corridor, "L1_Corridor_East")
-		for _, room in { "L1_AirlockWest", "L1_Corridor_West", "L1_Classroom_101", "L1_ArtRoom", "L1_Chase_Gate" } do
+		for _, room in
+			{
+				"L1_AirlockWest",
+				"L1_AirlockNorthWest",
+				"L1_AirlockSouthWest",
+				"L1_Corridor_West",
+				"L1_MainOffice",
+				"L1_JanitorCloset",
+				"L1_Chase_Gate",
+			}
+		do
 			t.truthy(g.beyond[room], room .. " lies past the gate")
 		end
 		for _, room in
-			{ "L1_Corridor_East", "L1_Classroom_108", "L1_AirlockEast", "L1_NorthHall_East", "L1_Restroom_Girls" }
+			{
+				"L1_Corridor_East",
+				"L1_Classroom_108",
+				"L1_AirlockEast",
+				"L1_AirlockNorthEast",
+				"L1_AirlockSouthEast",
+				places.nearRoom,
+			}
 		do
 			t.falsy(g.beyond[room], room .. " is on the near side")
 		end
@@ -499,13 +584,19 @@ return {
 		for _, spot in g.hidingSpots do
 			t.truthy(spot.X - origin.X > g.gateX + 16, "every hiding spot is well east of the gate")
 		end
-		t.truthy((g.alertPoint - localPoint(L1, 175, 0, 80)).Magnitude < 1e-3, "the alert is the middle of the glass")
+		t.truthy(
+			(g.alertPoint - (WorldConfig.levelOrigin(L1) + places.glassMid)).Magnitude < 1e-3,
+			"the alert is the middle of the glass"
+		)
 	end,
 
 	["Level 1: every way in sets it off, nothing from inside a duct or the near side does"] = function(t: Expect)
 		local layout = Builder.getLayout(L1)
 		assert(layout, "Level 1 layout")
 		local g = Level1.geometry(layout)
+		local places = l1Places()
+		local glassX = places.glassMid.X
+		local classroomX = places.classroom.x + places.classroom.w / 2
 		type Row = { sample: Level1.Sample, expected: string? }
 		local function sample(fields: { [string]: any }): Level1.Sample
 			return {
@@ -517,26 +608,27 @@ return {
 				sightline = fields.sightline == true,
 			}
 		end
+		local near = places.nearRoom
 		local rows: { Row } = {
-			{ sample = sample({ onGlass = true, zone = "L1_Corridor_East", localX = 175 }), expected = "Glass" },
-			{ sample = sample({ zone = "L1_Classroom_108", localX = 160 }), expected = "Classroom" },
+			{ sample = sample({ onGlass = true, zone = "L1_Corridor_East", localX = glassX }), expected = "Glass" },
+			{ sample = sample({ zone = "L1_Classroom_108", localX = classroomX }), expected = "Classroom" },
 			{
-				sample = sample({ zone = "L1_NorthHall_East", localX = 162, distance = 10, sightline = true }),
+				sample = sample({ zone = near, localX = classroomX, distance = 10, sightline = true }),
 				expected = "Near",
 			},
 			{
-				sample = sample({ zone = "L1_NorthHall_East", localX = 162, distance = 10, sightline = false }),
+				sample = sample({ zone = near, localX = classroomX, distance = 10, sightline = false }),
 				expected = nil,
 			},
 			{
-				sample = sample({ zone = "L1_Chase_North", inVent = true, distance = 6, sightline = true }),
+				sample = sample({ zone = near, inVent = true, distance = 6, sightline = true }),
 				expected = nil,
 			},
-			{ sample = sample({ zone = "L1_Corridor_East", localX = 165 }), expected = "Slipped" },
-			{ sample = sample({ zone = "L1_Corridor_East", localX = 190 }), expected = nil },
-			{ sample = sample({ zone = "L1_Chase_Gate", inVent = true, localX = 128 }), expected = "Beyond" },
-			{ sample = sample({ zone = "L1_Corridor_West", localX = 100 }), expected = "Beyond" },
-			{ sample = sample({ zone = "L1_AirlockEast", localX = 234 }), expected = nil },
+			{ sample = sample({ zone = "L1_Corridor_East", localX = g.glassMinX - 5 }), expected = "Slipped" },
+			{ sample = sample({ zone = "L1_Corridor_East", localX = glassX + 20 }), expected = nil },
+			{ sample = sample({ zone = "L1_Chase_Gate", inVent = true, localX = g.gateX + 8 }), expected = "Beyond" },
+			{ sample = sample({ zone = "L1_Corridor_West", localX = g.gateX - 20 }), expected = "Beyond" },
+			{ sample = sample({ zone = "L1_AirlockEast", localX = places.entry.X }), expected = nil },
 			{ sample = sample({ zone = nil }), expected = nil },
 		}
 		for index, row in rows do
@@ -582,15 +674,16 @@ return {
 			t.truthy(Level1.IsStaged())
 
 			-- walking the corridor: nothing yet
+			local places = l1Places()
 			world.zone = "L1_Corridor_East"
-			world.eye = localPoint(L1, 200, 5, 80)
+			world.eye = localPoint(L1, places.glassMid.X + 25, 5, places.hallZ)
 			advance(world, world.now + 2)
 			t.eq(sceneShot(world), nil, "no scene east of the glass")
 
 			-- onto the glass, in sight of the corner
 			world.onGlass = true
-			world.eye = localPoint(L1, 175, 5, 78)
-			world.feet = localPoint(L1, 175, 0, 78)
+			world.eye = localPoint(L1, places.glassMid.X, 5, places.hallZ - 2)
+			world.feet = localPoint(L1, places.glassMid.X, 0, places.hallZ - 2)
 			-- they can see into the corner; nobody can see the patrol spots east of here
 			world.sees = function(_a: Vector3, to: Vector3): boolean
 				return (to - g.pose.Position).Magnitude < 6
@@ -694,9 +787,10 @@ return {
 		local layout = Builder.getLayout(L1)
 		assert(layout, "layout")
 		local g = Level1.geometry(layout)
-		-- standing in the classroom doorway with a clear view of the corner
+		local places = l1Places()
+		-- standing in the hallway east of the glass with a clear view of the corner
 		world.zone = "L1_Corridor_East"
-		world.eye = localPoint(L1, 190, 5, 80)
+		world.eye = localPoint(L1, places.glassMid.X + 15, 5, places.hallZ)
 		world.sees = function(_a: Vector3, to: Vector3): boolean
 			return (to - g.pose.Position).Magnitude < 4
 		end
@@ -723,7 +817,7 @@ return {
 			t.truthy(busy.acquired >= 2, "asked again while busy")
 			busy.onGlass = true
 			busy.zone = "L1_Corridor_East"
-			busy.eye = localPoint(L1, 175, 5, 80)
+			busy.eye = localPoint(L1, places.glassMid.X, 5, places.hallZ)
 			advance(busy, busy.now + 0.2)
 			local shot = sceneShot(busy)
 			assert(shot, "the crunch")
@@ -747,8 +841,9 @@ return {
 		startL1(world)
 		local ok, err = pcall(function()
 			advance(world, world.now + 0.2)
+			local room = l1Places().classroom
 			world.zone = "L1_Classroom_108"
-			world.eye = localPoint(L1, 170, 5, 60)
+			world.eye = localPoint(L1, room.x + 12, 5, room.z + 20)
 			advance(world, world.now + 0.2)
 			local shot = sceneShot(world)
 			assert(shot, "started from inside the classroom")

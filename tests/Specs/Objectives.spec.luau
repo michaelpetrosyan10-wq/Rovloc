@@ -42,8 +42,8 @@ local SEEDS = 120
 -- Candidate counts the brief asks for, and the stations every floor has
 local CANDIDATES: { [string]: number } = {
 	Level0_Basement = 14,
-	Level1_Hallways = 10,
-	Level2_ScienceHall = 12,
+	Level1_Hallways = 14,
+	Level2_ScienceHall = 15,
 	Level3_Gymnasium = 32,
 	Level4_FloodedPool = 8,
 	Level5_Roof = 9,
@@ -464,10 +464,19 @@ return {
 				t.truthy(reach[place.room], string.format("%s (%s) reachable", place.id, place.room))
 			end
 		end
-		-- Floor 1: the keys are past the gate, so the bypass vent is the way to them
+		-- Floor 1: the keys are past the gate (west of its wall), so the bypass vent is the way to them
 		local hallways = layoutOf("Level1_Hallways")
+		local hallRooms = LayoutSchema.indexRooms(hallways)
+		local gateX: number? = nil
+		for _, door in hallways.doors do
+			if door.scriptedId == "HallwayGate" then
+				local edge = LayoutSchema.sharedEdge(hallRooms[door.rooms[1]].rect, hallRooms[door.rooms[2]].rect)
+				gateX = if edge then edge.coord else nil
+			end
+		end
+		t.truthy(gateX ~= nil, "the hallway gate's wall")
 		for _, keys in anchorsOf(hallways, "MasterKeyCandidate") do
-			t.truthy(keys.pos.X < 120, keys.id .. " is past the gate")
+			t.truthy(keys.pos.X < (gateX or 0), keys.id .. " is past the gate")
 		end
 	end,
 
@@ -559,9 +568,11 @@ return {
 						)
 					)
 					if spec.floor >= 1 and spec.floor <= 3 then
+						-- (a tunnel floor's barrels and cabinets are hides like its lockers)
+						local tunnelHide = layout.tunnels ~= nil and (hide.kind == "Barrel" or hide.kind == "Cabinet")
 						t.truthy(
-							hide.kind == "Locker" or hide.kind == "Vent",
-							place.id .. " hides in a locker or a vent"
+							hide.kind == "Locker" or hide.kind == "Vent" or tunnelHide,
+							place.id .. " hides in a locker, a vent, or a tunnel's barrel or cabinet"
 						)
 					end
 				end

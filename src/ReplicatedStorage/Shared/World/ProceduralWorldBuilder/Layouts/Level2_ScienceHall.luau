@@ -1,28 +1,37 @@
 --!strict
--- Level 2 · Science Hall. The squad arrives in L2_AirlockWest from Stairwell_1_2 and must reach L2_AirlockEast.
+-- Level 2 · the science wing. The squad climbs out of the hallways into one of the three west stair vestibules (the
+-- run's route picks which) and must cross to one of the three east ones, whose fire doors are chained shut until the
+-- squad burns the chain with acid mixed at the fume hood.
 --
--- Plan (X west -> east, Z north -> south), on the same structural grid as Level 1:
---   z   0..26  north rooms (science library, staff room, chemical store)    z  26..40  north hall
---   z  40..73  chem labs + prep rooms                                       z  73..87  main corridor
---   z  87..120 bio / physics labs, specimen store, darkroom                 z 120..134 south hall
---   z 134..160 lecture hall, botany room, classrooms
--- The main corridor collapsed at x = 120 (a boarded barricade), so the squad detours through the cross halls and
--- the outer halls, or takes the vents. Every pair of labs is separated by a 5-stud fume-extract chase whose duct
--- opens into both labs and both halls; L2_Chase_B behind the prep rooms is the guaranteed (critical) crawl past the
--- barricade, the rest are fair game for the RunDirector to lock. In the outer rows, service chases also open into
--- the classrooms and the lecture hall (L2_Chase_J, L2_Chase_I, L2_Chase_K) as well as the staff rooms and stores.
+-- The labs and stores the objective needs are keep-rooms; TunnelPlanner (seed below) lays the wing's service maze
+-- around them: the utility corridors behind the labs, the fume-duct galleries, the cold-storage tunnels. Barrier lines
+-- fold the floor into one long walk of north-south lanes, and the two labs are the only way from one band to the next:
+--   the prep corridor (x 0..44)    Prep Corridors: the three stair vestibules on the west wall, joined to band A only
+--                                  at its middle (z 144)
+--   band A  (x 44..150)            Cold Storage: up lane A1 (the specimen store off its south end, a cul-de-sac),
+--                                  across its north end, down lane A2 to Chem Lab 203 (the only way on, at the south)
+--   band B  (x 150..256)           Fume Ducts: up lane B1 from the lab, the chemical store off its north end, down lane
+--                                  B2 to Bio Lab 209 (the only way on); Chem Prep 205 and its fume hood open off the lab
+--   band C  (x 256..360)           Utility Corridors: up lane C1, down lane C2
+--   the stair corridor (x 360..400) Chem Stores: C2 joins it at its south end, and it runs north past the three stair
+--                                  vestibules (south z 260, middle 144, north 28)
+-- Crawlways cut the lanes' barriers (shortcuts for whoever dares to crawl), so a culvert the Creature cannot enter is
+-- never more than 60 studs' walk away. Fifteen reagent jars wait on lab worktops and in lab-like niches (five of each
+-- kind), and the stun flasks on the benches and in tunnel caches.
 --
 -- Lab islands: each LabCounter anchor is the floor centre of a 10 x 3.5 worktop whose long axis runs along X (the
--- anchor's RightVector), top at WORKTOP; FlaskCandidate anchors stand on those worktops.
--- Anchor heights otherwise: props on the floor (y = 0), DripPipe under the ceiling, PlayerSpawn at root height plus
--- clearance (3.5), Creature placements at the rig's root height (5). Yaw: 0 faces north (-Z), 90 west, 180 south,
--- -90 east.
+-- anchor's RightVector), top at WORKTOP; FlaskCandidate and ReagentCandidate anchors stand on those worktops (or on a
+-- niche's shelf at the same height). Anchor heights otherwise: props on the floor (y = 0), DripPipe under the
+-- ceiling, PlayerSpawn at root height plus clearance (3.5), Creature placements at the rig's root height (5). Yaw:
+-- 0 faces north (-Z), 90 west, 180 south, -90 east.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local TunnelPlanner = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelPlanner)
+local TunnelRules = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules)
 
 type Room = LayoutSchema.Room
 
@@ -41,28 +50,22 @@ type LightOptions = {
 	color: Color3?,
 	flicker: string?,
 	broken: boolean?,
+	cage: boolean?,
 }
 
 type LightDefaults = { brightness: number, range: number, color: Color3 }
 
-type DoorOptions = { id: string?, width: number?, height: number?, scriptedId: string? }
-
-type GratePlan = {
-	id: string,
-	room: string, -- the room the grate opens into
-	side: LayoutSchema.Side, -- which side of the chase the grate sits on
-	at: number?, -- position along the chase for grates on its long sides
-	lockable: boolean,
-	critical: boolean,
-}
-
-type Stop = { coord: number, node: string }
-
 local PREFIX = "L2"
+local SEED = 20261105
 local HEIGHT = WorldConfig.Levels.Level2_ScienceHall.height
 local WORKTOP = 3.2
 
 local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
+
+-- The stair vestibules and the tunnels their fire doors open onto stand tall enough for the door's KEEP CLOSED sign
+-- over its head casing (DoorBuilder: about 11.7 studs up).
+local VESTIBULE_HEIGHT = 13
+local FIRE_DOOR_CLEARANCE = 12.6
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -74,32 +77,12 @@ local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	BoilerGlow = { brightness = 0.9, range = 16, color = Color3.fromRGB(255, 118, 40) },
 }
 
-local CORRIDOR: Style =
-	{ floor = "Linoleum", wall = "PlasterGreen", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Corridor" }
 local CHEM_LAB: Style =
 	{ floor = "Lab", wall = "TileGreen", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
 local BIO_LAB: Style =
 	{ floor = "Lab", wall = "TileWhite", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local PHYSICS_LAB: Style =
-	{ floor = "Linoleum", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
 local PREP: Style =
 	{ floor = "Lab", wall = "PlasterGreen", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local DARKROOM: Style =
-	{ floor = "ConcreteDark", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Room" }
-local CLASSROOM: Style =
-	{ floor = "Linoleum", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local LIBRARY: Style =
-	{ floor = "Carpet", wall = "WoodPanel", ceiling = "PlasterSchool", surface = "Carpet", acoustic = "Room" }
-local LECTURE: Style =
-	{ floor = "Carpet", wall = "WoodPanel", ceiling = "PlasterSchool", surface = "Carpet", acoustic = "Hall" }
-local BOTANY: Style =
-	{ floor = "TileGreen", wall = "PlasterGreen", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local OFFICE: Style =
-	{ floor = "Carpet", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Carpet", acoustic = "Room" }
-local RESTROOM: Style =
-	{ floor = "TileWhite", wall = "TileWhite", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local STORAGE: Style =
-	{ floor = "ConcreteStained", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Room" }
 local CHEM_STORE: Style = {
 	floor = "ConcreteStained",
 	wall = "MetalGalvanized",
@@ -107,10 +90,12 @@ local CHEM_STORE: Style = {
 	surface = "Concrete",
 	acoustic = "Room",
 }
+local COLD_STORE: Style =
+	{ floor = "TileWhite", wall = "TileWhite", ceiling = "Concrete", surface = "Tile", acoustic = "Room" }
 local AIRLOCK: Style =
 	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Stairwell" }
-local CHASE: Style =
-	{ floor = "ConcreteDark", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Metal", acoustic = "Vent" }
+
+local rgb = Color3.fromRGB
 
 --------------------------------------------------------------------------------
 -- Blueprint helpers
@@ -122,17 +107,25 @@ local doors: { LayoutSchema.Door } = {}
 local anchors: { LayoutSchema.Anchor } = {}
 local anchorCounts: { [string]: number } = {}
 local triggers: { LayoutSchema.Trigger } = {}
+local platforms: { LayoutSchema.Platform } = {}
 local windows: { LayoutSchema.Window } = {}
-local ventNodes: { LayoutSchema.VentNodeSpec } = {}
-local ventEdges: { LayoutSchema.VentEdgeSpec } = {}
-local grates: { LayoutSchema.GrateSpec } = {}
 local lightCount = 0
 
-local function room(id: string, kind: Enums.RoomKind, x: number, z: number, w: number, d: number, style: Style): Room
+local function room(
+	id: string,
+	kind: Enums.RoomKind,
+	x: number,
+	z: number,
+	w: number,
+	d: number,
+	style: Style,
+	height: number?
+): Room
 	local entry: Room = {
 		id = id,
 		kind = kind,
 		rect = LayoutSchema.rect(x, z, w, d),
+		height = height,
 		floor = style.floor,
 		wall = style.wall,
 		ceiling = style.ceiling,
@@ -153,10 +146,10 @@ local function getRoom(id: string): Room
 	return found
 end
 
--- The non-chase room holding (x, z) at least 0.25 studs inside its walls.
+-- The room holding (x, z) at least 0.05 studs inside its walls (never solid ground).
 local function roomAt(x: number, z: number): string
 	for _, candidate in rooms do
-		if candidate.kind ~= "Chase" and LayoutSchema.rectContains(candidate.rect, x, z, 0.25) then
+		if candidate.kind ~= "Solid" and LayoutSchema.rectContains(candidate.rect, x, z, 0.05) then
 			return candidate.id
 		end
 	end
@@ -178,87 +171,32 @@ local function light(roomId: string, kind: Enums.LightKind, x: number, y: number
 			color = o.color or defaults.color,
 			flickerGroup = o.flicker,
 			broken = o.broken,
+			cage = o.cage,
 		})
 	end
 end
 
--- nx * nz ceiling fixtures spread evenly over a room. `pattern` is read cyclically, one character per fixture:
--- "x" = broken, "o" = lit (dim, steady), "f" = lit and flickering with options.flicker.
-local function lightGrid(
-	roomId: string,
-	kind: Enums.LightKind,
-	nx: number,
-	nz: number,
-	pattern: string,
-	options: LightOptions?
-)
-	local target = getRoom(roomId)
-	local rect = target.rect
-	local y = (target.height or HEIGHT) - 0.4
-	local o: LightOptions = options or {}
-	local index = 0
-	for i = 1, nx do
-		for j = 1, nz do
-			index += 1
-			local p = ((index - 1) % #pattern) + 1
-			local mark = string.sub(pattern, p, p)
-			light(roomId, kind, rect.x + rect.w * (i - 0.5) / nx, y, rect.z + rect.d * (j - 0.5) / nz, {
-				brightness = o.brightness,
-				range = o.range,
-				color = o.color,
-				flicker = if mark == "f" then o.flicker else nil,
-				broken = mark == "x",
-			})
-		end
-	end
-end
-
-local function door(kind: Enums.DoorKind, a: string, b: string, at: number?, options: DoorOptions?)
-	local o: DoorOptions = options or {}
-	local roomA, roomB = getRoom(a), getRoom(b)
-	local position: number
-	if at then
-		position = at
-	else
-		local edge = LayoutSchema.sharedEdge(roomA.rect, roomB.rect)
-		position = if edge then (edge.from + edge.to) / 2 else 0
-	end
-	table.insert(doors, {
-		id = o.id or string.format("%s_Door_%02d", PREFIX, #doors + 1),
-		kind = kind,
-		rooms = { a, b },
-		at = position,
-		width = o.width,
-		height = o.height,
-		scriptedId = o.scriptedId,
-	})
-end
-
-local function anchor(kind: Enums.AnchorKind, x: number, y: number, z: number, yaw: number?, id: string?)
+local function anchor(
+	kind: Enums.AnchorKind,
+	x: number,
+	y: number,
+	z: number,
+	yaw: number?,
+	id: string?,
+	ref: string?
+): string
 	local n = (anchorCounts[kind] or 0) + 1
 	anchorCounts[kind] = n
+	local anchorId = id or string.format("%s_%s_%02d", PREFIX, kind, n)
 	table.insert(anchors, {
-		id = id or string.format("%s_%s_%02d", PREFIX, kind, n),
+		id = anchorId,
 		kind = kind,
 		room = roomAt(x, z),
 		pos = Vector3.new(x, y, z),
 		yaw = yaw,
+		ref = ref,
 	})
-end
-
--- Each point is { x, z } or { x, z, yaw }.
-local function scatter(kind: Enums.AnchorKind, y: number, points: { { number } })
-	for _, p in points do
-		anchor(kind, p[1], y, p[2], p[3])
-	end
-end
-
--- A closed patrol loop: waypoint i leads to i + 1 and the last back to the first, each hop within one room or
--- through one doorway.
-local function patrol(loop: string, points: { { number } })
-	for i, p in points do
-		anchor("PatrolWaypoint", p[1], 0, p[2], nil, string.format("%s_WP_%s_%02d", PREFIX, loop, i))
-	end
+	return anchorId
 end
 
 local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number, w: number, d: number, height: number)
@@ -271,15 +209,36 @@ local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number
 	})
 end
 
--- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
+local function platform(
+	id: string,
+	roomId: string,
+	x: number,
+	z: number,
+	w: number,
+	d: number,
+	top: number,
+	thickness: number,
+	material: string
+)
+	getRoom(roomId)
+	table.insert(platforms, {
+		id = id,
+		room = roomId,
+		rect = LayoutSchema.rect(x, z, w, d),
+		top = top,
+		thickness = thickness,
+		material = material,
+	})
+end
+
+-- Evenly spaced boarded windows on one facade side of a room; any that would face a stair tower are left out.
 local function windowRow(
 	roomId: string,
 	side: LayoutSchema.Side,
 	count: number,
 	width: number,
 	height: number,
-	sill: number,
-	boarded: boolean
+	sill: number
 )
 	local rect = getRoom(roomId).rect
 	local alongX = side == "N" or side == "S"
@@ -291,98 +250,17 @@ local function windowRow(
 		if not facesTower then
 			table.insert(
 				windows,
-				{ room = roomId, side = side, at = at, width = width, height = height, sill = sill, boarded = boarded }
+				{ room = roomId, side = side, at = at, width = width, height = height, sill = sill, boarded = true }
 			)
 		end
 	end
 end
 
--- One straight duct along the middle of a chase, a junction under every side grate, end grates as terminals.
--- A duct never leaves its chase, so each chase room carries exactly one run.
-local function chaseRun(chaseId: string, plans: { GratePlan }, submerged: boolean?)
-	local rect = getRoom(chaseId).rect
-	local alongX = rect.w > rect.d
-	local cx, cz = rect.x + rect.w / 2, rect.z + rect.d / 2
-	local stops: { Stop } = {}
-	local stubs: { { string } } = {}
-	local function stop(coord: number, existing: string?): string
-		for _, s in stops do
-			if math.abs(s.coord - coord) < 1e-3 then
-				return s.node
-			end
-		end
-		local nodeId = existing or string.format("%s_J%02d", chaseId, #stops + 1)
-		if not existing then
-			table.insert(ventNodes, { id = nodeId, x = if alongX then coord else cx, z = if alongX then cz else coord })
-		end
-		table.insert(stops, { coord = coord, node = nodeId })
-		return nodeId
-	end
-	for _, plan in plans do
-		local along = plan.at or 0
-		local isEnd = if alongX then plan.side == "W" or plan.side == "E" else plan.side == "N" or plan.side == "S"
-		local x, z = 0, 0
-		if alongX then
-			if plan.side == "N" then
-				x, z = along, rect.z
-			elseif plan.side == "S" then
-				x, z = along, rect.z + rect.d
-			elseif plan.side == "W" then
-				x, z = rect.x, cz
-			else
-				x, z = rect.x + rect.w, cz
-			end
-		else
-			if plan.side == "W" then
-				x, z = rect.x, along
-			elseif plan.side == "E" then
-				x, z = rect.x + rect.w, along
-			elseif plan.side == "N" then
-				x, z = cx, rect.z
-			else
-				x, z = cx, rect.z + rect.d
-			end
-		end
-		local nodeId = plan.id .. "_Node"
-		table.insert(ventNodes, { id = nodeId, x = x, z = z })
-		table.insert(grates, {
-			id = plan.id,
-			node = nodeId,
-			room = plan.room,
-			lockable = plan.lockable,
-			criticalPath = plan.critical,
-		})
-		if isEnd then
-			stop(if alongX then x else z, nodeId)
-		else
-			table.insert(stubs, { nodeId, stop(along) })
-		end
-	end
-	table.sort(stops, function(a: Stop, b: Stop): boolean
-		return a.coord < b.coord
-	end)
-	for i = 1, #stops - 1 do
-		table.insert(ventEdges, { a = stops[i].node, b = stops[i + 1].node, submerged = submerged })
-	end
-	for _, stub in stubs do
-		table.insert(ventEdges, { a = stub[1], b = stub[2], submerged = submerged })
-	end
-end
-
--- columns x rows lab islands evenly set out over a room, with flask candidates at `flaskOffsets` along each
--- worktop (studs from its centre, along X).
-local function labIslands(roomId: string, columns: number, rows: number, flaskOffsets: { number })
-	local rect = getRoom(roomId).rect
-	for i = 1, columns do
-		for j = 1, rows do
-			local fx = if columns == 1 then 0.5 else 0.3 + 0.4 * (i - 1) / (columns - 1)
-			local fz = if rows == 1 then 0.5 else 0.35 + 0.35 * (j - 1) / (rows - 1)
-			local x, z = rect.x + rect.w * fx, rect.z + rect.d * fz
-			anchor("LabCounter", x, 0, z, FACE_N)
-			for _, offset in flaskOffsets do
-				anchor("FlaskCandidate", x + offset, WORKTOP, z)
-			end
-		end
+-- A lab island at (x, z) (a 10 x 3.5 worktop along X) with flasks `offsets` studs along it from its centre.
+local function island(x: number, z: number, flaskOffsets: { number })
+	anchor("LabCounter", x, 0, z, FACE_N)
+	for _, offset in flaskOffsets do
+		anchor("FlaskCandidate", x + offset, WORKTOP, z)
 	end
 end
 
@@ -399,481 +277,463 @@ local function deepFreeze(value: unknown)
 end
 
 --------------------------------------------------------------------------------
--- Rooms
+-- Keep-rooms (the rooms the game needs; the planner tunnels around them)
 --------------------------------------------------------------------------------
 
--- Corridors
-room("L2_NorthHall", "Corridor", 0, 26, 240, 14, CORRIDOR)
-room("L2_SouthHall", "Corridor", 0, 120, 240, 14, CORRIDOR)
-room("L2_Corridor_West", "Corridor", 12, 73, 108, 14, CORRIDOR)
-room("L2_Corridor_East", "Corridor", 120, 73, 108, 14, CORRIDOR)
-room("L2_CrossHall_NW", "Corridor", 81, 40, 14, 33, CORRIDOR)
-room("L2_CrossHall_NE", "Corridor", 150, 40, 14, 33, CORRIDOR)
-room("L2_CrossHall_SW", "Corridor", 81, 87, 14, 33, CORRIDOR)
-room("L2_CrossHall_SE", "Corridor", 150, 87, 14, 33, CORRIDOR)
-
--- Stair vestibules
-room("L2_AirlockWest", "Airlock", 0, 66, 12, 28, AIRLOCK)
-room("L2_AirlockEast", "Airlock", 228, 66, 12, 28, AIRLOCK)
-room("L2_AirlockNorthWest", "Airlock", 0, 0, 12, 26, AIRLOCK)
-room("L2_AirlockSouthWest", "Airlock", 0, 134, 12, 26, AIRLOCK)
-room("L2_AirlockNorthEast", "Airlock", 228, 0, 12, 26, AIRLOCK)
-room("L2_AirlockSouthEast", "Airlock", 228, 134, 12, 26, AIRLOCK)
-
--- Chem wing (north of the main corridor)
-room("L2_Storage_201A", "Storage", 0, 40, 12, 26, STORAGE)
-room("L2_ChemLab_201", "Lab", 12, 40, 32, 33, CHEM_LAB)
-room("L2_Chase_A", "Chase", 44, 40, 5, 33, CHASE)
-room("L2_ChemLab_203", "Lab", 49, 40, 32, 33, CHEM_LAB)
-room("L2_ChemPrep_205", "Lab", 95, 40, 25, 33, PREP)
-room("L2_Chase_B", "Chase", 120, 40, 5, 33, CHASE)
-room("L2_BioPrep_207", "Lab", 125, 40, 25, 33, PREP)
-room("L2_BioLab_209", "Lab", 164, 40, 32, 33, BIO_LAB)
-room("L2_Chase_C", "Chase", 196, 40, 5, 33, CHASE)
-room("L2_BioLab_211", "Lab", 201, 40, 27, 33, BIO_LAB)
-room("L2_Storage_211A", "Storage", 228, 40, 12, 26, STORAGE)
-
--- Bio / physics wing (south of the main corridor)
-room("L2_Storage_221A", "Storage", 0, 94, 12, 26, STORAGE)
-room("L2_BioLab_221", "Lab", 12, 87, 32, 33, BIO_LAB)
-room("L2_Chase_D", "Chase", 44, 87, 5, 33, CHASE)
-room("L2_BioLab_223", "Lab", 49, 87, 32, 33, BIO_LAB)
-room("L2_SpecimenStore_225", "Storage", 95, 87, 25, 33, PREP)
-room("L2_Chase_E", "Chase", 120, 87, 5, 33, CHASE)
-room("L2_DarkRoom_227", "Lab", 125, 87, 25, 33, DARKROOM)
-room("L2_PhysicsLab_229", "Lab", 164, 87, 32, 33, PHYSICS_LAB)
-room("L2_Chase_F", "Chase", 196, 87, 5, 33, CHASE)
-room("L2_ChemLab_231", "Lab", 201, 87, 27, 33, CHEM_LAB)
-room("L2_Storage_231A", "Storage", 228, 94, 12, 26, STORAGE)
-
--- North exterior row
-room("L2_Classroom_241", "Classroom", 12, 0, 18, 26, CLASSROOM)
-room("L2_Restroom_North", "Restroom", 30, 0, 16, 26, RESTROOM)
-room("L2_ScienceLibrary", "Classroom", 46, 0, 60, 26, LIBRARY)
-room("L2_StaffRoom", "Office", 106, 0, 28, 26, OFFICE)
-room("L2_Chase_G", "Chase", 134, 0, 5, 26, CHASE)
-room("L2_ChemStore_243", "Storage", 139, 0, 36, 26, CHEM_STORE)
-room("L2_Classroom_245", "Classroom", 175, 0, 30, 26, CLASSROOM)
-room("L2_Chase_J", "Chase", 205, 0, 5, 26, CHASE)
-room("L2_HeadOfScience", "Office", 210, 0, 18, 26, OFFICE)
-
--- South exterior row
-room("L2_LectureHall", "Classroom", 12, 134, 47, 26, LECTURE)
-room("L2_Chase_K", "Chase", 59, 134, 5, 26, CHASE)
-room("L2_Restroom_South", "Restroom", 64, 134, 16, 26, RESTROOM)
-room("L2_Chase_H", "Chase", 80, 134, 5, 26, CHASE)
-room("L2_BotanyRoom_247", "Lab", 85, 134, 55, 26, BOTANY)
-room("L2_Classroom_249", "Classroom", 140, 134, 36, 26, CLASSROOM)
-room("L2_Chase_I", "Chase", 176, 134, 5, 26, CHASE)
-room("L2_Classroom_251", "Classroom", 181, 134, 25, 26, CLASSROOM)
-room("L2_EquipmentStore", "Storage", 206, 134, 22, 26, STORAGE)
-
---------------------------------------------------------------------------------
--- Doors
---------------------------------------------------------------------------------
-
-door("Airlock", "L2_AirlockWest", "L2_Corridor_West", 80, { id = "L2_Door_AirlockWest" })
-door("Airlock", "L2_Corridor_East", "L2_AirlockEast", 80, { id = "L2_Door_AirlockEast" })
--- The corner stair vestibules open off the outer halls
-door("Airlock", "L2_AirlockNorthWest", "L2_NorthHall", 6, { id = "L2_Door_AirlockNorthWest" })
-door("Airlock", "L2_AirlockSouthWest", "L2_SouthHall", 6, { id = "L2_Door_AirlockSouthWest" })
-door("Airlock", "L2_NorthHall", "L2_AirlockNorthEast", 234, { id = "L2_Door_AirlockNorthEast" })
-door("Airlock", "L2_SouthHall", "L2_AirlockSouthEast", 234, { id = "L2_Door_AirlockSouthEast" })
-door("Boarded", "L2_Corridor_West", "L2_Corridor_East", 80, { id = "L2_Door_CorridorCollapse", width = 12 })
-
-door("Doorway", "L2_CrossHall_NW", "L2_NorthHall", 88, { width = 10 })
-door("Doorway", "L2_CrossHall_NW", "L2_Corridor_West", 88, { width = 10 })
-door("Doorway", "L2_CrossHall_NE", "L2_NorthHall", 157, { width = 10 })
-door("Doorway", "L2_CrossHall_NE", "L2_Corridor_East", 157, { width = 10 })
-door("Doorway", "L2_CrossHall_SW", "L2_Corridor_West", 88, { width = 10 })
-door("Doorway", "L2_CrossHall_SW", "L2_SouthHall", 88, { width = 10 })
-door("Doorway", "L2_CrossHall_SE", "L2_Corridor_East", 157, { width = 10 })
-door("Doorway", "L2_CrossHall_SE", "L2_SouthHall", 157, { width = 10 })
-
-door("Door", "L2_Storage_201A", "L2_NorthHall", 6)
-door("Door", "L2_Corridor_West", "L2_ChemLab_201", 28)
-door("Door", "L2_NorthHall", "L2_ChemLab_201", 20)
-door("Door", "L2_Corridor_West", "L2_ChemLab_203", 65)
-door("Door", "L2_NorthHall", "L2_ChemLab_203", 73)
-door("Door", "L2_CrossHall_NW", "L2_ChemPrep_205", 64)
-door("Door", "L2_Corridor_West", "L2_ChemPrep_205", 108)
-door("Door", "L2_CrossHall_NE", "L2_BioPrep_207", 64)
-door("Door", "L2_Corridor_East", "L2_BioPrep_207", 137)
-door("Door", "L2_Corridor_East", "L2_BioLab_209", 180)
-door("Door", "L2_NorthHall", "L2_BioLab_209", 172)
-door("Door", "L2_Corridor_East", "L2_BioLab_211", 214)
-door("Door", "L2_NorthHall", "L2_BioLab_211", 220)
-door("Door", "L2_Storage_211A", "L2_NorthHall", 234)
-
-door("Door", "L2_Storage_221A", "L2_SouthHall", 6)
-door("Door", "L2_Corridor_West", "L2_BioLab_221", 28)
-door("Door", "L2_SouthHall", "L2_BioLab_221", 20)
-door("Door", "L2_Corridor_West", "L2_BioLab_223", 65)
-door("Door", "L2_SouthHall", "L2_BioLab_223", 73)
-door("Door", "L2_CrossHall_SW", "L2_SpecimenStore_225", 96)
-door("Door", "L2_Corridor_West", "L2_SpecimenStore_225", 108)
-door("Door", "L2_CrossHall_SE", "L2_DarkRoom_227", 96)
-door("Door", "L2_Corridor_East", "L2_DarkRoom_227", 137)
-door("Door", "L2_Corridor_East", "L2_PhysicsLab_229", 180)
-door("Door", "L2_SouthHall", "L2_PhysicsLab_229", 172)
-door("Door", "L2_Corridor_East", "L2_ChemLab_231", 214)
-door("Door", "L2_SouthHall", "L2_ChemLab_231", 220)
-door("Door", "L2_Storage_231A", "L2_SouthHall", 234)
-
-door("Door", "L2_NorthHall", "L2_Classroom_241", 21)
-door("Door", "L2_NorthHall", "L2_Restroom_North", 38)
-door("Doorway", "L2_NorthHall", "L2_ScienceLibrary", 60, { width = 8 })
-door("Doorway", "L2_NorthHall", "L2_ScienceLibrary", 92, { width = 8 })
-door("Door", "L2_NorthHall", "L2_StaffRoom", 120)
-door("Door", "L2_NorthHall", "L2_ChemStore_243", 157)
-door("Door", "L2_NorthHall", "L2_Classroom_245", 192)
-door("Door", "L2_NorthHall", "L2_HeadOfScience", 219)
-
-door("Doorway", "L2_SouthHall", "L2_LectureHall", 20, { width = 8 })
-door("Doorway", "L2_SouthHall", "L2_LectureHall", 48, { width = 8 })
-door("Door", "L2_SouthHall", "L2_Restroom_South", 72)
-door("Door", "L2_SouthHall", "L2_BotanyRoom_247", 112)
-door("Door", "L2_SouthHall", "L2_Classroom_249", 158)
-door("Door", "L2_SouthHall", "L2_Classroom_251", 191)
-door("Door", "L2_SouthHall", "L2_EquipmentStore", 217)
-
---------------------------------------------------------------------------------
--- Vents: one fume-extract chase between every pair of labs, plus service chases in the outer rows.
---------------------------------------------------------------------------------
-
-chaseRun("L2_Chase_A", {
-	{ id = "L2_Grate_A_NorthHall", room = "L2_NorthHall", side = "N", lockable = true, critical = false },
-	{ id = "L2_Grate_A_Corridor", room = "L2_Corridor_West", side = "S", lockable = false, critical = false },
-	{ id = "L2_Grate_A_Lab201", room = "L2_ChemLab_201", side = "W", at = 52, lockable = true, critical = false },
-	{ id = "L2_Grate_A_Lab203", room = "L2_ChemLab_203", side = "E", at = 62, lockable = false, critical = false },
-})
--- The guaranteed crawl past the collapsed corridor: chem prep (west side) -> main corridor (east side).
-chaseRun("L2_Chase_B", {
-	{ id = "L2_Grate_B_NorthHall", room = "L2_NorthHall", side = "N", lockable = true, critical = false },
-	{ id = "L2_Grate_B_Corridor", room = "L2_Corridor_East", side = "S", lockable = false, critical = true },
-	{ id = "L2_Grate_B_ChemPrep", room = "L2_ChemPrep_205", side = "W", at = 56, lockable = false, critical = true },
-	{ id = "L2_Grate_B_BioPrep", room = "L2_BioPrep_207", side = "E", at = 50, lockable = true, critical = false },
-})
-chaseRun("L2_Chase_C", {
-	{ id = "L2_Grate_C_NorthHall", room = "L2_NorthHall", side = "N", lockable = true, critical = false },
-	{ id = "L2_Grate_C_Corridor", room = "L2_Corridor_East", side = "S", lockable = false, critical = false },
-	{ id = "L2_Grate_C_Lab209", room = "L2_BioLab_209", side = "W", at = 56, lockable = true, critical = false },
-	{ id = "L2_Grate_C_Lab211", room = "L2_BioLab_211", side = "E", at = 50, lockable = true, critical = false },
-})
-chaseRun("L2_Chase_D", {
-	{ id = "L2_Grate_D_Corridor", room = "L2_Corridor_West", side = "N", lockable = false, critical = false },
-	{ id = "L2_Grate_D_SouthHall", room = "L2_SouthHall", side = "S", lockable = true, critical = false },
-	{ id = "L2_Grate_D_Lab221", room = "L2_BioLab_221", side = "W", at = 104, lockable = true, critical = false },
-	{ id = "L2_Grate_D_Lab223", room = "L2_BioLab_223", side = "E", at = 96, lockable = false, critical = false },
-})
-chaseRun("L2_Chase_E", {
-	{ id = "L2_Grate_E_Corridor", room = "L2_Corridor_East", side = "N", lockable = true, critical = false },
-	{ id = "L2_Grate_E_SouthHall", room = "L2_SouthHall", side = "S", lockable = true, critical = false },
-	{
-		id = "L2_Grate_E_Specimen",
-		room = "L2_SpecimenStore_225",
-		side = "W",
-		at = 104,
-		lockable = false,
-		critical = false,
-	},
-	{ id = "L2_Grate_E_DarkRoom", room = "L2_DarkRoom_227", side = "E", at = 98, lockable = true, critical = false },
-})
-chaseRun("L2_Chase_F", {
-	{ id = "L2_Grate_F_Corridor", room = "L2_Corridor_East", side = "N", lockable = false, critical = false },
-	{ id = "L2_Grate_F_SouthHall", room = "L2_SouthHall", side = "S", lockable = true, critical = false },
-	{ id = "L2_Grate_F_Physics", room = "L2_PhysicsLab_229", side = "W", at = 104, lockable = true, critical = false },
-	{ id = "L2_Grate_F_Lab231", room = "L2_ChemLab_231", side = "E", at = 96, lockable = true, critical = false },
-})
-chaseRun("L2_Chase_G", {
-	{ id = "L2_Grate_G_NorthHall", room = "L2_NorthHall", side = "S", lockable = false, critical = false },
-	{ id = "L2_Grate_G_StaffRoom", room = "L2_StaffRoom", side = "W", at = 13, lockable = true, critical = false },
-	{ id = "L2_Grate_G_ChemStore", room = "L2_ChemStore_243", side = "E", at = 18, lockable = true, critical = false },
-})
-chaseRun("L2_Chase_H", {
-	{ id = "L2_Grate_H_SouthHall", room = "L2_SouthHall", side = "N", lockable = false, critical = false },
-	{ id = "L2_Grate_H_Restroom", room = "L2_Restroom_South", side = "W", at = 147, lockable = true, critical = false },
-	{ id = "L2_Grate_H_Botany", room = "L2_BotanyRoom_247", side = "E", at = 150, lockable = true, critical = false },
-})
--- Classroom vents in the outer rows
-chaseRun("L2_Chase_J", {
-	{ id = "L2_Grate_J_NorthHall", room = "L2_NorthHall", side = "S", lockable = false, critical = false },
-	{
-		id = "L2_Grate_J_Classroom245",
-		room = "L2_Classroom_245",
-		side = "W",
-		at = 14,
-		lockable = true,
-		critical = false,
-	},
-	{
-		id = "L2_Grate_J_HeadOfScience",
-		room = "L2_HeadOfScience",
-		side = "E",
-		at = 9,
-		lockable = true,
-		critical = false,
-	},
-})
-chaseRun("L2_Chase_I", {
-	{ id = "L2_Grate_I_SouthHall", room = "L2_SouthHall", side = "N", lockable = false, critical = false },
-	{
-		id = "L2_Grate_I_Classroom249",
-		room = "L2_Classroom_249",
-		side = "W",
-		at = 146,
-		lockable = true,
-		critical = false,
-	},
-	{
-		id = "L2_Grate_I_Classroom251",
-		room = "L2_Classroom_251",
-		side = "E",
-		at = 152,
-		lockable = true,
-		critical = false,
-	},
-})
-chaseRun("L2_Chase_K", {
-	{ id = "L2_Grate_K_SouthHall", room = "L2_SouthHall", side = "N", lockable = false, critical = false },
-	{ id = "L2_Grate_K_LectureHall", room = "L2_LectureHall", side = "W", at = 148, lockable = true, critical = false },
-	{ id = "L2_Grate_K_Restroom", room = "L2_Restroom_South", side = "E", at = 141, lockable = true, critical = false },
-})
-
---------------------------------------------------------------------------------
--- Lights: dead tubes, a fume-hood alarm still pulsing, a dying grow lamp.
---------------------------------------------------------------------------------
-
-lightGrid("L2_NorthHall", "Fluorescent", 16, 1, "xxxxxxxfxxxxxxxx", { flicker = "L2_NorthHall", brightness = 0.35 })
-lightGrid("L2_SouthHall", "Fluorescent", 16, 1, "xxxxxxxxxxxfxxxx", { flicker = "L2_SouthHall", brightness = 0.35 })
-lightGrid("L2_Corridor_West", "Fluorescent", 9, 1, "x")
-lightGrid("L2_Corridor_East", "Fluorescent", 9, 1, "xxxxfxxxx", { flicker = "L2_CorridorEast", brightness = 0.3 })
-for _, id in { "L2_CrossHall_NW", "L2_CrossHall_NE", "L2_CrossHall_SW", "L2_CrossHall_SE" } :: { string } do
-	lightGrid(id, "Fluorescent", 1, 3, "x")
+local keep: { TunnelPlanner.KeepRoom } = {}
+local function keepRoom(r: Room, ports: { TunnelPlanner.Port }, region: string?, sign: string?)
+	table.insert(keep, { room = r, ports = ports, region = region, sign = sign })
 end
-for _, id in
+
+local LAB_Z = 237 -- the labs' doors: the walk crosses each lab along this line
+
+-- The three stair vestibules the squad climbs into (route candidates of Stairwell_1_2*), on the west wall
+for _, v in
 	{
-		"L2_ChemLab_201",
-		"L2_ChemLab_203",
-		"L2_BioLab_209",
-		"L2_BioLab_211",
-		"L2_BioLab_221",
-		"L2_BioLab_223",
-		"L2_PhysicsLab_229",
-		"L2_ChemLab_231",
-		"L2_Classroom_245",
-		"L2_Classroom_249",
-	} :: { string }
-do
-	lightGrid(id, "Fluorescent", 2, 3, "x")
-end
-for _, id in
-	{
-		"L2_ChemPrep_205",
-		"L2_BioPrep_207",
-		"L2_SpecimenStore_225",
-		"L2_Classroom_241",
-		"L2_Classroom_251",
-		"L2_StaffRoom",
-		"L2_HeadOfScience",
-		"L2_Restroom_North",
-		"L2_Restroom_South",
-	} :: { string }
-do
-	lightGrid(id, "Fluorescent", 1, 2, "x")
-end
-lightGrid("L2_ScienceLibrary", "Fluorescent", 4, 2, "x")
-lightGrid("L2_LectureHall", "Fluorescent", 4, 2, "xxxxxfxx", { flicker = "L2_Lecture", brightness = 0.3 })
-lightGrid("L2_BotanyRoom_247", "Bulb", 3, 2, "xxxxfx", {
-	flicker = "L2_GrowLamp",
-	brightness = 0.35,
-	range = 16,
-	color = Color3.fromRGB(196, 120, 255),
-})
-for _, id in
-	{
-		"L2_Storage_201A",
-		"L2_Storage_211A",
-		"L2_Storage_221A",
-		"L2_Storage_231A",
-		"L2_EquipmentStore",
-		"L2_ChemStore_243",
-		"L2_DarkRoom_227",
-	} :: { string }
-do
-	lightGrid(id, "Bulb", 1, 1, "x")
-end
-light("L2_ChemLab_203", "EmergencyRed", 77, HEIGHT - 1, 46, { flicker = "L2_FumeAlarm", brightness = 0.4 })
-light(
-	"L2_DarkRoom_227",
-	"EmergencyRed",
-	131,
-	HEIGHT - 1.5,
-	112,
-	{ flicker = "L2_Safelight", brightness = 0.2, range = 12 }
-)
-light("L2_AirlockWest", "EmergencyRed", 6, HEIGHT - 1, 80, { flicker = "L2_AirlockWest", brightness = 0.35 })
-light("L2_AirlockEast", "EmergencyRed", 234, HEIGHT - 1, 80, { flicker = "L2_AirlockEast", brightness = 0.35 })
-for _, spot in
-	{
-		{ "L2_AirlockNorthWest", 6, 13 },
-		{ "L2_AirlockSouthWest", 6, 147 },
-		{ "L2_AirlockNorthEast", 234, 13 },
-		{ "L2_AirlockSouthEast", 234, 147 },
+		{ "L2_AirlockNorthWest", WorldConfig.Towers.NorthWest.openingZ, "L2_Door_AirlockNorthWest" },
+		{ "L2_AirlockWest", WorldConfig.Towers.West.openingZ, "L2_Door_AirlockWest" },
+		{ "L2_AirlockSouthWest", WorldConfig.Towers.SouthWest.openingZ, "L2_Door_AirlockSouthWest" },
 	} :: { { any } }
 do
-	light(spot[1], "EmergencyRed", spot[2], HEIGHT - 1, spot[3], { flicker = spot[1], brightness = 0.35 })
+	keepRoom(
+		room(v[1], "Airlock", 0, v[2] - 12, 14, 24, AIRLOCK, VESTIBULE_HEIGHT),
+		{ { side = "E", at = v[2], kind = "Airlock", id = v[3], runHeight = FIRE_DOOR_CLEARANCE } },
+		"Prep"
+	)
 end
-light("L2_Corridor_West", "ExitSign", 13.5, 11, 80)
-light("L2_Corridor_East", "ExitSign", 226.5, 11, 80)
+-- Band A: the specimen store off lane A1's south end
+keepRoom(
+	room("L2_SpecimenStore_225", "Storage", 44, 268, 32, 20, COLD_STORE, 11.5),
+	{ { side = "N", at = 56, kind = "Door", id = "L2_Door_SpecimenStore" } },
+	"Cold",
+	"SPECIMENS"
+)
+-- The bridges: Chem Lab 203 (band A to band B) and Bio Lab 209 (band B to band C), each straddling its band's wall
+keepRoom(room("L2_ChemLab_203", "Lab", 123, LAB_Z - 15, 48, 30, CHEM_LAB), {
+	{ side = "W", at = LAB_Z, kind = "Door", id = "L2_Door_ChemLabWest" },
+	{ side = "E", at = LAB_Z, kind = "Door", id = "L2_Door_ChemLabEast" },
+}, "Cold", "CHEM LAB 203")
+keepRoom(room("L2_BioLab_209", "Lab", 227, LAB_Z - 15, 48, 30, BIO_LAB), {
+	{ side = "W", at = LAB_Z, kind = "Door", id = "L2_Door_BioLabWest" },
+	{ side = "E", at = LAB_Z, kind = "Door", id = "L2_Door_BioLabEast" },
+}, "Fume", "BIO LAB 209")
+-- Chem Prep 205 opens off Bio Lab 209's north side: the fume hood against its north wall
+keepRoom(room("L2_ChemPrep_205", "Lab", 235, LAB_Z - 15 - 26, 32, 26, PREP), {}, "Fume", "CHEM PREP 205")
+-- Band B: the chemical store off the north end, where lane B1 turns into lane B2
+keepRoom(
+	room("L2_ChemStore_243", "Storage", 195, 0, 34, 18, CHEM_STORE, 11.5),
+	{ { side = "S", at = 212, kind = "Door", id = "L2_Door_ChemStore" } },
+	"Fume",
+	"CHEM STORE"
+)
+-- The three stair vestibules out (route candidates of Stairwell_2_3*), on the east wall
+for _, v in
+	{
+		{ "L2_AirlockNorthEast", WorldConfig.Towers.NorthEast.openingZ, "L2_Door_AirlockNorthEast" },
+		{ "L2_AirlockEast", WorldConfig.Towers.East.openingZ, "L2_Door_AirlockEast" },
+		{ "L2_AirlockSouthEast", WorldConfig.Towers.SouthEast.openingZ, "L2_Door_AirlockSouthEast" },
+	} :: { { any } }
+do
+	-- (no stencil: the fire door's STAIRS sign is SignageBuilder's, beside it on the tunnel side)
+	keepRoom(
+		room(v[1], "Airlock", 386, v[2] - 12, 14, 24, AIRLOCK, VESTIBULE_HEIGHT),
+		{ { side = "W", at = v[2], kind = "Airlock", id = v[3], runHeight = FIRE_DOOR_CLEARANCE } },
+		"Stores"
+	)
+end
 
 --------------------------------------------------------------------------------
--- Anchors
+-- The tunnels
 --------------------------------------------------------------------------------
 
--- Arrival from Stairwell_1_2
-scatter("PlayerSpawn", 3.5, { { 4, 74, FACE_E }, { 8, 74, FACE_E }, { 4, 86, FACE_E }, { 8, 86, FACE_E } })
--- Arrival from Stairwell_1_2_North / _South (the corner vestibules)
-scatter("PlayerSpawn", 3.5, { { 4, 5, FACE_S }, { 8, 5, FACE_S }, { 4, 19, FACE_S }, { 8, 19, FACE_S } })
-scatter("PlayerSpawn", 3.5, { { 4, 141, FACE_N }, { 8, 141, FACE_N }, { 4, 155, FACE_N }, { 8, 155, FACE_N } })
-anchor("CreatureSpawn", 180, 5, 104, FACE_N, "L2_CreatureSpawn")
-
--- Lab islands and the flasks left on them
-labIslands("L2_ChemLab_201", 2, 2, { 2.5 })
-labIslands("L2_ChemLab_203", 2, 2, { -2.5 })
-labIslands("L2_ChemLab_231", 1, 2, { 3 })
-labIslands("L2_ChemPrep_205", 1, 1, { -2.5, 2.5 })
-labIslands("L2_ChemStore_243", 1, 2, { -3, 3 })
-labIslands("L2_BioPrep_207", 1, 1, { 0 })
-labIslands("L2_BioLab_209", 2, 2, { 3 })
-labIslands("L2_BioLab_211", 1, 2, { -3 })
-labIslands("L2_BioLab_221", 2, 2, { -3 })
-labIslands("L2_BioLab_223", 2, 2, { 3 })
-labIslands("L2_PhysicsLab_229", 2, 2, {})
--- The specimen store's sorting bench (its worktop carries a reagent candidate below)
-anchor("LabCounter", 107.5, 0, 103.5, FACE_N)
-
--- Floor objective (BurnChain): twelve labelled reagent jars on lab worktops all over the floor, four of each kind (the
--- candidates cycle through the kinds in this order: nitric, sulfuric, catalyst), clear of each worktop's flasks
--- (RunDirector uses one of each kind, in three different rooms); the fume hood against the chem prep room's north
--- wall (the anchor is the floor point on the wall face, facing into the room); hideable lockers in the rooms and the
--- corridor farther than a vent from their step; the chain on the east stair airlock's fire door (the exit lock: the
--- floor point on the door's corridor face, facing out of the door).
-scatter("ReagentCandidate", WORKTOP, {
-	{ 18.6, 51.55 }, -- chem lab 201 (the bench farthest from the stairwell)
-	{ 61.1, 51.55 }, -- chem lab 203
-	{ 161.3, 9.1 }, -- chem store 243 (past the flask at its east end, so the sink keeps the middle)
-	{ 140.5, 56.5 }, -- bio prep 207
-	{ 105, 103.5 }, -- specimen store 225
-	{ 211.5, 110.1 }, -- chem lab 231
-	{ 37.4, 98.55 }, -- bio lab 221
-	{ 183.4, 63.1 }, -- bio lab 209
-	{ 186.4, 98.55 }, -- physics lab 229
-	{ 217.5, 63.1 }, -- bio lab 211
-	{ 68.4, 98.55 }, -- bio lab 223
-	{ 61.6, 63.1 }, -- chem lab 203, the south bench
+local plan = TunnelPlanner.plan({
+	levelId = "Level2_ScienceHall",
+	prefix = PREFIX,
+	seed = SEED,
+	height = HEIGHT,
+	keepRooms = keep,
+	entry = "L2_AirlockWest",
+	exits = { "L2_AirlockNorthEast", "L2_AirlockEast", "L2_AirlockSouthEast" },
+	barriers = {
+		-- the prep corridor joins band A only at its middle
+		{ x0 = 44, z0 = 0, x1 = 44, z1 = 112 },
+		{ x0 = 44, z0 = 178, x1 = 44, z1 = 288 },
+		-- each band's two lanes meet only at its north end; the bands meet only through the labs
+		{ x0 = 95, z0 = 40, x1 = 95, z1 = 288 },
+		{ x0 = 147, z0 = 0, x1 = 147, z1 = 288 },
+		{ x0 = 199, z0 = 40, x1 = 199, z1 = 288 },
+		{ x0 = 251, z0 = 0, x1 = 251, z1 = 288 },
+		{ x0 = 303, z0 = 40, x1 = 303, z1 = 288 },
+		-- the stair corridor: lane C2 joins it only at its south end
+		{ x0 = 355, z0 = 0, x1 = 355, z1 = 230 },
+	},
+	gridX = { 30, 56, 82, 108, 134, 160, 186, 212, 238, 264, 290, 316, 342, 368 },
+	gridZ = { 28, 52, 76, 100, 124, 144, 168, 192, 214, LAB_Z, 260 },
+	crawlSites = {
+		-- across the lanes' and bands' walls (shortcuts)
+		{ 82, 52, 108, 52 },
+		{ 82, 192, 108, 192 },
+		{ 134, 124, 160, 124 },
+		{ 186, 52, 212, 52 },
+		{ 186, 192, 212, 192 },
+		{ 238, 124, 264, 124 },
+		{ 290, 52, 316, 52 },
+		{ 290, 192, 316, 192 },
+		-- the prep corridor and the stair corridor
+		{ 30, 52, 56, 52 },
+		{ 30, 168, 56, 168 },
+		{ 30, 237, 56, 237 },
+		{ 342, 52, 368, 52 },
+		{ 342, 144, 368, 144 },
+		{ 342, 237, 368, 237 },
+	},
+	style = {
+		width = { 6, 7, 7, 8 },
+		height = { 10.5, 11 },
+		galleryWidth = 9,
+		galleryHeight = { 13, 13.5 },
+		galleryShare = 0.22,
+		galleryMin = 40,
+		pitch = 24,
+		jitter = 3,
+		length = 3400,
+		deadEnds = 6,
+		crawlWidth = 4,
+		crawlAcrossBarriers = true,
+		crawlMouthsPass = true,
+		alcoveWidth = 5,
+		alcoveDepth = 6,
+		alcoveHeight = 10,
+		lightSpacing = { 8, 11 },
+		deadShare = 0.3,
+		flickerShare = 0.12,
+		plateLampEvery = 2,
+		wall = "ConcreteDark",
+		floor = "ConcreteStained",
+		ceiling = "ConcreteDark",
+		acoustic = "Corridor",
+		galleryAcoustic = "Hall",
+		crawlAcoustic = "Vent",
+	},
+	rules = {
+		maxLoop = 200,
+		deadEndCount = 8,
+		deadEndLength = 25,
+		-- about 2.5-3 minutes at walking pace (11 studs/s)
+		crossing = { 1650, 1980 },
+		crawlCrossingSeconds = 40,
+		crawlways = { 3, 16 },
+		crawlLength = 20,
+		crawlHeight = TunnelRules.CrawlClearance,
+		crawlReach = 60,
+		hideReach = 30,
+		objectiveHideReach = 25,
+		regions = { 4, 6 },
+	},
+	regions = {
+		{
+			id = "Prep",
+			medium = "DI WATER",
+			name = "Prep Corridors",
+			x = 28,
+			z = 144,
+			areas = { { 0, 0, 44, 288 } },
+			pipe = rgb(64, 120, 96),
+			band = rgb(226, 222, 206),
+			grime = rgb(18, 24, 20),
+			paint = rgb(236, 230, 210),
+			graffiti = { "EYES FRONT", "WASH YOUR HANDS", "DON'T BREATHE IT", "3 JARS" },
+			wall = "TileGreen",
+			floor = "Lab",
+		},
+		{
+			id = "Cold",
+			medium = "BRINE",
+			name = "Cold Storage",
+			x = 96,
+			z = 140,
+			areas = { { 44, 0, 150, 288 } },
+			pipe = rgb(70, 130, 170),
+			band = rgb(236, 236, 230),
+			grime = rgb(20, 26, 30),
+			paint = rgb(240, 238, 228),
+			graffiti = { "KEEP IT SHUT", "IT'S COLD IN HERE", "HE WAITS IN THE FROST", "LISTEN" },
+			wall = "TileWhite",
+			floor = "ConcreteStained",
+			wet = true,
+		},
+		{
+			id = "Fume",
+			medium = "EXHAUST",
+			name = "Fume Ducts",
+			x = 203,
+			z = 140,
+			areas = { { 150, 0, 256, 288 } },
+			pipe = rgb(132, 132, 112),
+			band = rgb(214, 180, 40),
+			grime = rgb(30, 30, 22),
+			paint = rgb(232, 70, 48),
+			graffiti = { "NO FLAME", "HOOD IS IN PREP", "MIX IT. BURN IT.", "DON'T LOOK AT HIS FACE" },
+			wall = "MetalGalvanized",
+			floor = "ConcreteDark",
+		},
+		{
+			id = "Utility",
+			medium = "STEAM",
+			name = "Utility Corridors",
+			x = 308,
+			z = 140,
+			areas = { { 256, 0, 360, 288 } },
+			pipe = rgb(140, 36, 28),
+			band = rgb(214, 206, 186),
+			grime = rgb(40, 18, 12),
+			paint = rgb(236, 226, 196),
+			graffiti = { "HE HEARS YOU RUN", "WALK. DON'T RUN", "THROW THE FLASKS", "COUNT THE PLATES" },
+			wall = "Brick",
+			floor = "ConcreteStained",
+		},
+		{
+			id = "Stores",
+			medium = "ACID",
+			name = "Chem Stores",
+			x = 372,
+			z = 144,
+			areas = { { 360, 0, 400, 288 } },
+			pipe = rgb(196, 160, 30),
+			band = rgb(30, 28, 24),
+			grime = rgb(34, 30, 14),
+			paint = rgb(240, 236, 220),
+			graffiti = { "BURN THE CHAIN", "ALMOST OUT", "STAIRS EAST", "UP IS OUT" },
+			wall = "ConcreteDark",
+			floor = "Concrete",
+		},
+	},
+	attempts = 6,
+	crossingTarget = 1800,
+	items = {
+		{ kind = "ReagentCandidate" :: Enums.AnchorKind, count = 5, shelf = WORKTOP },
+		{ kind = "FlaskCandidate" :: Enums.AnchorKind, count = 6, shelf = WORKTOP },
+	},
+	hideTargets = {
+		Vector3.new(384, 0, WorldConfig.Towers.NorthEast.openingZ),
+		Vector3.new(384, 0, WorldConfig.Towers.East.openingZ),
+		Vector3.new(384, 0, WorldConfig.Towers.SouthEast.openingZ),
+	},
+	traps = 0,
+	batteries = 10,
+	clutter = 22,
+	corpses = 5,
+	drips = 9,
+	debris = 8,
+	scares = 0,
+	creatureSpawns = 6,
+	creatureBand = { 70, 140 },
+	otherEntries = { "L2_AirlockNorthWest", "L2_AirlockSouthWest" },
 })
-anchor("FumeHood", 107.5, 0, 40.5, FACE_S, "L2_FumeHood")
-scatter("Locker", 0, {
-	{ 173.2, 12, FACE_W }, -- chem store
-	{ 148.2, 48, FACE_W }, -- bio prep
-	{ 226.2, 104, FACE_W }, -- chem lab 231
-	{ 222, 85.2, FACE_N }, -- east corridor, by the stairwell door
-	{ 13.8, 46, FACE_E }, -- chem lab 201
-})
-anchor("ExitLock", 227.5, 0, 80, FACE_W, "L2_ExitLock")
-anchor("ExitLock", 234, 0, 26.5, FACE_S, "L2_ExitLock_North")
-anchor("ExitLock", 234, 0, 133.5, FACE_N, "L2_ExitLock_South")
--- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
-scatter("Locker", 0, { { 226, 38.2, FACE_N }, { 226, 121.8, FACE_S } })
 
-scatter("BatteryCandidate", 0, {
-	{ 6, 50 },
-	{ 128, 6 },
-	{ 224, 6 },
-	{ 100, 4 },
-	{ 224, 156 },
-	{ 145, 116 },
-	{ 234, 116 },
-	{ 16, 4 },
-	{ 16, 156 },
-})
+for _, r in plan.rooms do
+	table.insert(rooms, r)
+	roomById[r.id] = r
+end
+for _, d in plan.doors do
+	table.insert(doors, d)
+end
+for _, a in plan.anchors do
+	table.insert(anchors, a)
+end
+for _, t in plan.triggers do
+	table.insert(triggers, t)
+end
+for _, p in plan.platforms do
+	table.insert(platforms, p)
+end
 
-scatter("Corpse", 0, { { 70, 70, 30 }, { 190, 84, -110 }, { 40, 152, 75 } })
-scatter("DripPipe", HEIGHT - 1.2, { { 40, 78 }, { 196, 82 }, { 140, 30 }, { 100, 46 } })
-scatter("Clutter", 0, {
-	{ 16, 70, 10 },
-	{ 60, 46, -40 },
-	{ 100, 66, 85 },
-	{ 140, 64, 0 },
-	{ 194, 68, 30 },
-	{ 222, 44, -15 },
-	{ 30, 92, 60 },
-	{ 76, 116, 0 },
-	{ 110, 112, 45 },
-	{ 135, 92, -60 },
-	{ 192, 116, 15 },
-	{ 222, 110, 90 },
-	{ 80, 12, 0 },
-	{ 30, 150, 20 },
-	{ 120, 150, -30 },
-	{ 168, 22, 10 },
+-- Chem Prep 205's door into Bio Lab 209 (the walk to the hood goes through the lab)
+table.insert(doors, {
+	id = "L2_Door_ChemPrep",
+	kind = "Door",
+	rooms = { "L2_BioLab_209", "L2_ChemPrep_205" },
+	at = 251,
 })
 
-patrol("NW", { { 28, 80 }, { 28, 70 }, { 20, 44 }, { 20, 33 }, { 88, 33 }, { 88, 56 }, { 88, 80 } })
-patrol("NE", { { 180, 80 }, { 180, 70 }, { 172, 44 }, { 172, 33 }, { 157, 33 }, { 157, 56 }, { 157, 80 } })
-patrol("NX", { { 214, 80 }, { 214, 70 }, { 220, 44 }, { 220, 33 }, { 172, 35 }, { 172, 45 }, { 180, 69 }, { 180, 78 } })
-patrol("SW", { { 28, 84 }, { 28, 90 }, { 20, 116 }, { 20, 127 }, { 88, 127 }, { 88, 104 }, { 88, 84 } })
-patrol("SE", { { 180, 84 }, { 180, 90 }, { 172, 116 }, { 172, 127 }, { 157, 127 }, { 157, 104 }, { 157, 84 } })
-patrol("PR", { { 108, 80 }, { 108, 70 }, { 98, 64 }, { 88, 64 }, { 88, 76 } })
-patrol("NH", { { 10, 33 }, { 120, 33 }, { 230, 33 }, { 175, 35 }, { 60, 35 } })
-patrol("SH", { { 10, 127 }, { 120, 127 }, { 230, 127 }, { 175, 125 }, { 60, 125 } })
-patrol("LH", { { 16, 127 }, { 16, 140 }, { 48, 140 }, { 48, 127 } })
+--------------------------------------------------------------------------------
+-- Keep-room furniture: the store shelving, the specimen racks
+--------------------------------------------------------------------------------
+
+platform("L2_Shelf_ChemStoreA", "L2_ChemStore_243", 196, 1, 14, 2.6, WORKTOP, WORKTOP, "MetalGalvanized")
+platform("L2_Shelf_ChemStoreB", "L2_ChemStore_243", 214, 1, 12, 2.6, WORKTOP, WORKTOP, "MetalGalvanized")
+platform("L2_Rack_SpecimenA", "L2_SpecimenStore_225", 45, 284.4, 13, 2.6, WORKTOP, WORKTOP, "MetalRust")
+platform("L2_Rack_SpecimenB", "L2_SpecimenStore_225", 62, 284.4, 13, 2.6, WORKTOP, WORKTOP, "MetalRust")
+
+--------------------------------------------------------------------------------
+-- Lights: the labs and stores on their own mains, a fume alarm still pulsing, a darkroom safelight in the specimen
+-- store, the vestibules' emergency reds
+--------------------------------------------------------------------------------
+
+-- every keep-room is its own steady mains circuit (a local group: a flicker, the Creature's teleport warning, touches
+-- only that room)
+local function mains(roomId: string): string
+	return "Mains:" .. roomId
+end
+
+for i, p in { { 133, 229 }, { 161, 229 }, { 133, 245 }, { 161, 245 } } do
+	light(
+		"L2_ChemLab_203",
+		"Fluorescent",
+		p[1],
+		HEIGHT - 0.4,
+		p[2],
+		{ flicker = mains("L2_ChemLab_203"), broken = i % 2 == 0 }
+	)
+end
+for i, p in { { 237, 229 }, { 265, 229 }, { 237, 245 }, { 265, 245 } } do
+	light(
+		"L2_BioLab_209",
+		"Fluorescent",
+		p[1],
+		HEIGHT - 0.4,
+		p[2],
+		{ flicker = mains("L2_BioLab_209"), broken = i ~= 2 }
+	)
+end
+light("L2_ChemPrep_205", "Fluorescent", 251, HEIGHT - 0.4, LAB_Z - 28, { flicker = mains("L2_ChemPrep_205") })
+light("L2_ChemPrep_205", "EmergencyRed", 261, HEIGHT - 1, LAB_Z - 37.5, { flicker = "L2_FumeAlarm", brightness = 0.4 })
+light("L2_ChemStore_243", "Bulb", 212, 11.1, 9, { flicker = mains("L2_ChemStore_243"), cage = true })
+light(
+	"L2_SpecimenStore_225",
+	"Bulb",
+	60,
+	11.1,
+	277,
+	{ flicker = mains("L2_SpecimenStore_225"), cage = true, broken = true }
+)
+light(
+	"L2_SpecimenStore_225",
+	"EmergencyRed",
+	72,
+	HEIGHT - 4,
+	272,
+	{ flicker = "L2_Safelight", brightness = 0.2, range = 12 }
+)
+for _, v in
+	{
+		{ "L2_AirlockNorthWest", 7, WorldConfig.Towers.NorthWest.openingZ },
+		{ "L2_AirlockWest", 7, WorldConfig.Towers.West.openingZ },
+		{ "L2_AirlockSouthWest", 7, WorldConfig.Towers.SouthWest.openingZ },
+		{ "L2_AirlockNorthEast", 393, WorldConfig.Towers.NorthEast.openingZ },
+		{ "L2_AirlockEast", 393, WorldConfig.Towers.East.openingZ },
+		{ "L2_AirlockSouthEast", 393, WorldConfig.Towers.SouthEast.openingZ },
+	} :: { { any } }
+do
+	light(v[1], "Fluorescent", v[2], 11.4, v[3], { flicker = mains(v[1]), broken = true })
+	light(v[1], "EmergencyRed", v[2], 12 - 5, v[3] - 8, { brightness = 0.3 })
+end
+
+--------------------------------------------------------------------------------
+-- Keep-room anchors
+--------------------------------------------------------------------------------
+
+-- Arrival from Stairwell_1_2 and its corner candidates: four spawns in each west vestibule, facing east
+for _, z in
+	{
+		WorldConfig.Towers.NorthWest.openingZ,
+		WorldConfig.Towers.West.openingZ,
+		WorldConfig.Towers.SouthWest.openingZ,
+	} :: { number }
+do
+	for _, p in { { 4, z - 4 }, { 10, z - 4 }, { 4, z + 4 }, { 10, z + 4 } } do
+		anchor("PlayerSpawn", p[1], 3.5, p[2], FACE_E)
+	end
+end
+
+-- Lab islands and the flasks left on them: two rows of two in each lab, an aisle along the doors' line between them;
+-- one bench in the prep room
+for _, x in { 135, 159 } do
+	island(x, LAB_Z - 7, { -2.5 })
+	island(x, LAB_Z + 7, { 2.5 })
+end
+for _, x in { 239, 263 } do
+	island(x, LAB_Z - 7, { 2.5 })
+	island(x, LAB_Z + 7, { -2.5 })
+end
+island(251, LAB_Z - 27, { -3, 3 })
+
+-- Floor objective (BurnChain): fifteen labelled reagent jars, five of each kind (the candidates cycle through the kinds
+-- in layout order: nitric, sulfuric, catalyst): the planner's five on niche shelves come first, then the labs' worktops
+-- and the stores' shelves (RunDirector uses one of each kind, in three different rooms); the fume hood against Chem
+-- Prep 205's north wall (the anchor is the floor point on the wall face, facing into the room); hideable lockers in
+-- the rooms keep a hiding spot near every step; the chains on the three east stair vestibules' fire doors (the exit
+-- locks: the floor point on each door's corridor face, facing out of the door).
+for _, p in
+	{
+		{ 138, LAB_Z - 7 }, -- chem lab 203, the north-west island (clear of its flask)
+		{ 156, LAB_Z + 7 }, -- chem lab 203, the south-east island
+		{ 162, LAB_Z - 7 }, -- chem lab 203, the north-east island
+		{ 242, LAB_Z + 7 }, -- bio lab 209, the south-west island
+		{ 260, LAB_Z - 7 }, -- bio lab 209, the north-east island
+		{ 266, LAB_Z + 7 }, -- bio lab 209, the south-east island
+	} :: { { number } }
+do
+	anchor("ReagentCandidate", p[1], WORKTOP, p[2])
+end
+anchor("ReagentCandidate", 201, WORKTOP, 2.3) -- chem store, the west shelving
+anchor("ReagentCandidate", 222, WORKTOP, 2.3) -- chem store, the east shelving
+anchor("ReagentCandidate", 50, WORKTOP, 285.7) -- specimen store, the west rack
+anchor("ReagentCandidate", 68, WORKTOP, 285.7) -- specimen store, the east rack
+anchor("FumeHood", 251, 0, LAB_Z - 40.5, FACE_S, "L2_FumeHood")
+anchor("Locker", 125.05, 0, LAB_Z + 11, FACE_E) -- chem lab 203, west wall
+anchor("Locker", 168.95, 0, LAB_Z + 11, FACE_W) -- chem lab 203, east wall
+anchor("Locker", 229.05, 0, LAB_Z + 11, FACE_E) -- bio lab 209, west wall
+anchor("Locker", 272.95, 0, LAB_Z - 11, FACE_W) -- bio lab 209, east wall
+anchor("Locker", 264.95, 0, LAB_Z - 33, FACE_W) -- chem prep 205, by the hood
+anchor("Locker", 197.05, 0, 11, FACE_E) -- chem store, west wall
+anchor("Locker", 226.95, 0, 11, FACE_W) -- chem store, east wall
+anchor("Locker", 46.05, 0, 278, FACE_E) -- specimen store, west wall
+anchor("Locker", 73.95, 0, 278, FACE_W) -- specimen store, east wall
+anchor("ExitLock", 385.5, 0, WorldConfig.Towers.East.openingZ, FACE_W, "L2_ExitLock")
+anchor("ExitLock", 385.5, 0, WorldConfig.Towers.NorthEast.openingZ, FACE_W, "L2_ExitLock_North")
+anchor("ExitLock", 385.5, 0, WorldConfig.Towers.SouthEast.openingZ, FACE_W, "L2_ExitLock_South")
+for i, z in
+	{
+		WorldConfig.Towers.NorthEast.openingZ,
+		WorldConfig.Towers.East.openingZ,
+		WorldConfig.Towers.SouthEast.openingZ,
+	} :: { number }
+do
+	-- the stair vestibules: a steel cabinet by the far wall
+	anchor("Cabinet", 398.6, 0, z + 9, FACE_W, string.format("%s_Cabinet_Stairs%d", PREFIX, i))
+end
+
+anchor("Corpse", 149, 0, LAB_Z + 12, -110)
+anchor("Corpse", 58, 0, 280, 30)
+anchor("DripPipe", 251, HEIGHT - 1.2, LAB_Z + 2)
+anchor("Clutter", 245, 0, LAB_Z - 22, 30)
+anchor("Clutter", 221, 0, 12, -15)
+anchor("Clutter", 147, 0, LAB_Z + 1, 75)
+anchor("BatteryCandidate", 205, 0, 14)
+anchor("BatteryCandidate", 72, 0, 271)
 
 --------------------------------------------------------------------------------
 -- Triggers
 --------------------------------------------------------------------------------
 
-trigger("L2_Trigger_GlassCorridor", "FloorDebris", 170, 75, 6, 10, 4)
-trigger("L2_Trigger_GlassLab203", "FloorDebris", 60, 66, 8, 5, 4)
-trigger("L2_Trigger_DebrisNorthHall", "FloorDebris", 100, 28, 6, 10, 4)
-trigger("L2_Trigger_DebrisSouthHall", "FloorDebris", 140, 122, 6, 10, 4)
-trigger("L2_Trigger_Checkpoint", "Checkpoint", 229, 67, 10, 26, 10)
-trigger("L2_Trigger_CheckpointNorthEast", "Checkpoint", 229, 1, 10, 24, 10)
-trigger("L2_Trigger_CheckpointSouthEast", "Checkpoint", 229, 135, 10, 24, 10)
+trigger("L2_Trigger_GlassLab203", "FloorDebris", 141, LAB_Z - 2, 8, 4, 4)
+trigger("L2_Trigger_GlassLab209", "FloorDebris", 245, LAB_Z - 2, 8, 4, 4)
+trigger("L2_Trigger_Checkpoint", "Checkpoint", 387, WorldConfig.Towers.East.openingZ - 11, 12, 22, 11)
+trigger("L2_Trigger_CheckpointNorthEast", "Checkpoint", 387, WorldConfig.Towers.NorthEast.openingZ - 11, 12, 22, 11)
+trigger("L2_Trigger_CheckpointSouthEast", "Checkpoint", 387, WorldConfig.Towers.SouthEast.openingZ - 11, 12, 22, 11)
 
 --------------------------------------------------------------------------------
 -- Boarded windows on the facade
 --------------------------------------------------------------------------------
 
-windowRow("L2_Classroom_241", "N", 2, 7, 6, 3.5, true)
-windowRow("L2_Restroom_North", "N", 1, 4, 3, 7, true)
-windowRow("L2_ScienceLibrary", "N", 4, 7, 6, 3.5, true)
-windowRow("L2_StaffRoom", "N", 2, 7, 6, 3.5, true)
-windowRow("L2_ChemStore_243", "N", 2, 4, 3, 7, true)
-windowRow("L2_Classroom_245", "N", 2, 7, 6, 3.5, true)
-windowRow("L2_HeadOfScience", "N", 2, 7, 6, 3.5, true)
-windowRow("L2_LectureHall", "S", 4, 7, 6, 3.5, true)
-windowRow("L2_Restroom_South", "S", 1, 4, 3, 7, true)
-windowRow("L2_BotanyRoom_247", "S", 4, 9, 8, 2.5, true)
-windowRow("L2_Classroom_249", "S", 2, 7, 6, 3.5, true)
-windowRow("L2_Classroom_251", "S", 2, 7, 6, 3.5, true)
-windowRow("L2_EquipmentStore", "S", 2, 4, 3, 7, true)
-windowRow("L2_NorthHall", "W", 1, 6, 6, 3.5, true)
-windowRow("L2_Storage_201A", "W", 1, 4, 4, 5, true)
-windowRow("L2_Storage_221A", "W", 1, 4, 4, 5, true)
-windowRow("L2_SouthHall", "W", 1, 6, 6, 3.5, true)
-windowRow("L2_NorthHall", "E", 1, 6, 6, 3.5, true)
-windowRow("L2_Storage_211A", "E", 1, 4, 4, 5, true)
-windowRow("L2_Storage_231A", "E", 1, 4, 4, 5, true)
-windowRow("L2_SouthHall", "E", 1, 6, 6, 3.5, true)
+windowRow("L2_ChemStore_243", "N", 2, 4, 3, 7)
+windowRow("L2_SpecimenStore_225", "S", 2, 4, 3, 7)
 
 --------------------------------------------------------------------------------
 
 local layout: LayoutSchema.LevelLayout = {
 	id = "Level2_ScienceHall",
-	-- still the 240 x 160 plan: rebuilt on TunnelPlanner in the next wave (docs/MAPS.md)
-	legacy = true,
 	height = HEIGHT,
 	acoustic = "Corridor",
 	ambience = "DroneScience",
@@ -881,10 +741,11 @@ local layout: LayoutSchema.LevelLayout = {
 	exit = "L2_AirlockEast",
 	rooms = rooms,
 	doors = doors,
-	vents = { nodes = ventNodes, edges = ventEdges, grates = grates },
 	anchors = anchors,
 	triggers = triggers,
+	platforms = platforms,
 	windows = windows,
+	tunnels = plan.tunnels,
 }
 
 deepFreeze(layout)

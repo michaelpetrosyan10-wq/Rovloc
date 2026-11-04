@@ -1,31 +1,43 @@
 --!strict
--- Level 1 · Main Hallways (street level). The squad climbs out of the basement into L1_AirlockEast and must reach
--- L1_AirlockWest.
+-- Level 1 · the street-level hallways, turned into a maze by collapses, barricades and service corridors. The squad
+-- climbs out of the basement into one of the three east stair vestibules (the run's route picks which) and must cross
+-- to one of the three west ones, whose fire doors the janitor's master keys unlock.
 --
--- Plan (X runs west -> east, Z runs north -> south):
---   z   0..26  north rooms (library, classrooms, music room)        z  26..40  north hall (barricaded at x = 120)
---   z  40..73  classrooms / restrooms / offices                     z  73..87  MAIN CORRIDOR (gate at x = 120)
---   z  87..120 classrooms / art room                                z 120..134 south hall (barricaded at x = 120)
---   z 134..160 cafeteria, kitchen, offices
--- Everything west of x = 120 is sealed from everything east of it except through the HallwayGate and the gate
--- bypass vent (L1_Chase_Gate). The scripted encounter runs east -> west: the pale glow spills from the ajar door of
--- L1_Classroom_108 (a second glow fixture just inside the door lights the corridor floor through the opening), the
--- corridor outside it is strewn with glass (ScareStep), and the Creature crouches in the room's north-west corner
--- facing the wall, so a squad walking west sees it diagonally through the ajar door while on the glass. Once the
--- gate slams the only way on is the wall vent beside it.
--- Two classroom chases east of the gate (L1_Chase_North behind the nurse's office, L1_Chase_South between
--- classrooms 134 and 136) give the Creature vents into the classrooms (108 included) and the halls; their grates
--- may be locked, never the gate bypass.
+-- The near side (east of the gate, x 290..400): the middle vestibule opens straight onto a short stretch of the old
+-- checkerboard hallway (L1_Corridor_East, lockers smashed along its walls); the north and south vestibules come in
+-- through the service corridors behind the locker banks and join it at its east end. Every way west runs down that
+-- hallway, past Classroom 108: its door stands ajar, a pale glow spills from it onto broken glass (ScareStep
+-- L1_Trigger_GlassStep), and the Creature crouches in the room's north-west corner facing the wall, so a squad walking
+-- west sees it diagonally through the doorway from the glass. Then the scare, and the HallwayGate at the hallway's
+-- west end slams shut: it seals east from west (the gate line x = 290 is a barrier the tunnels never cross, and no
+-- crawlway cuts it). The only way on is the wall vent beside it (L1_Chase_Gate: two grates that never lock, one on
+-- each side of the gate), a classic vent both runtimes support.
 --
--- Anchor heights: props rest on the floor (y = 0); DripPipe sits at pipe height under the ceiling; PlayerSpawn is at
--- HumanoidRootPart height plus clearance (3.5) and Creature placements at the rig's root height (5). Yaw is degrees
--- about +Y: 0 faces north (-Z), 90 west, 180 south, -90 east.
+-- The far side (west of the gate) is TunnelPlanner's (seed below): the collapsed school folded into five lanes
+-- walked in turn, then the exit corridor along the west wall:
+--   the hub       (x 230..290, z 0..180) Offices & Records: from the gate's west hall north to lane N1
+--   lane N1       (z 0..64)   Offices & Records, then Library Stacks: west, past the main office
+--   lane N2       (z 64..112) Library Stacks: back east (N1 turns into it at its west end, x < 70)
+--   lane M        (z 112..180) Collapsed Main Hall: west again (N2 turns into it at its east end, x 200..230)
+--   lane S1       (z 180..227) Kitchen Service: east (M turns into it at its west end)
+--   lane S2       (z 227..288) Kitchen Service: west, past the janitor's closet (S1 turns into it at its east end)
+--   the exit run  (x 0..44)   Kitchen Service in the south, Library Stacks in the north: S2 joins it at its south end,
+--                             and it runs north past the three stair vestibules (south z 260, middle 144, north 28)
+-- Crawlways cut the lanes' barriers (shortcuts for whoever dares to crawl), so a culvert the Creature cannot enter is
+-- never more than 60 studs' walk away. The master keys hang on a nail in one of twelve places past the gate: the
+-- janitor's closet, the main office, and hooks in niches all over the far side.
+--
+-- Anchor heights: props rest on the floor (y = 0) or on a shelf (its top); the keys' nails are 4.6 up the wall;
+-- DripPipe sits under the ceiling; PlayerSpawn is at HumanoidRootPart height plus clearance (3.5) and Creature
+-- placements at the rig's root height (5). Yaw is degrees about +Y: 0 faces north (-Z), 90 west, 180 south, -90 east.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local TunnelPlanner = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelPlanner)
+local TunnelRules = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules)
 
 type Room = LayoutSchema.Room
 
@@ -44,6 +56,7 @@ type LightOptions = {
 	color: Color3?,
 	flicker: string?,
 	broken: boolean?,
+	cage: boolean?,
 }
 
 type LightDefaults = { brightness: number, range: number, color: Color3 }
@@ -62,9 +75,20 @@ type GratePlan = {
 type Stop = { coord: number, node: string }
 
 local PREFIX = "L1"
+local SEED = 20261104
 local HEIGHT = WorldConfig.Levels.Level1_Hallways.height
 
 local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
+
+-- The stair vestibules and the tunnels their fire doors open onto stand tall enough for the door's KEEP CLOSED sign
+-- over its head casing (DoorBuilder: about 11.7 studs up).
+local VESTIBULE_HEIGHT = 13
+local FIRE_DOOR_CLEARANCE = 12.6
+
+-- The gate line: everything east of it is the near side (the scare), everything west the far side (the keys).
+local GATE_X = 290
+-- The checkerboard hallway's centre line (the middle stair tower's opening)
+local HALL_Z = WorldConfig.Towers.East.openingZ
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -80,31 +104,16 @@ local CORRIDOR: Style =
 	{ floor = "Linoleum", wall = "PlasterGreen", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Corridor" }
 local CLASSROOM: Style =
 	{ floor = "Linoleum", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local ART: Style = {
-	floor = "ConcreteStained",
-	wall = "PlasterSchool",
-	ceiling = "PlasterSchool",
-	surface = "Concrete",
-	acoustic = "Room",
-}
-local LIBRARY: Style =
-	{ floor = "Carpet", wall = "WoodPanel", ceiling = "PlasterSchool", surface = "Carpet", acoustic = "Room" }
 local OFFICE: Style =
 	{ floor = "Carpet", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Carpet", acoustic = "Room" }
-local MUSIC: Style =
-	{ floor = "WoodPanel", wall = "WoodPanel", ceiling = "PlasterSchool", surface = "Wood", acoustic = "Hall" }
-local RESTROOM: Style =
-	{ floor = "TileWhite", wall = "TileWhite", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local KITCHEN: Style =
-	{ floor = "TileWhite", wall = "TileGreen", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
-local CAFETERIA: Style =
-	{ floor = "Linoleum", wall = "Brick", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Hall" }
 local STORAGE: Style =
 	{ floor = "ConcreteStained", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Room" }
 local AIRLOCK: Style =
 	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Stairwell" }
 local CHASE: Style =
 	{ floor = "ConcreteDark", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Metal", acoustic = "Vent" }
+
+local rgb = Color3.fromRGB
 
 --------------------------------------------------------------------------------
 -- Blueprint helpers
@@ -116,17 +125,28 @@ local doors: { LayoutSchema.Door } = {}
 local anchors: { LayoutSchema.Anchor } = {}
 local anchorCounts: { [string]: number } = {}
 local triggers: { LayoutSchema.Trigger } = {}
+local platforms: { LayoutSchema.Platform } = {}
 local windows: { LayoutSchema.Window } = {}
 local ventNodes: { LayoutSchema.VentNodeSpec } = {}
 local ventEdges: { LayoutSchema.VentEdgeSpec } = {}
 local grates: { LayoutSchema.GrateSpec } = {}
 local lightCount = 0
 
-local function room(id: string, kind: Enums.RoomKind, x: number, z: number, w: number, d: number, style: Style): Room
+local function room(
+	id: string,
+	kind: Enums.RoomKind,
+	x: number,
+	z: number,
+	w: number,
+	d: number,
+	style: Style,
+	height: number?
+): Room
 	local entry: Room = {
 		id = id,
 		kind = kind,
 		rect = LayoutSchema.rect(x, z, w, d),
+		height = height,
 		floor = style.floor,
 		wall = style.wall,
 		ceiling = style.ceiling,
@@ -147,10 +167,14 @@ local function getRoom(id: string): Room
 	return found
 end
 
--- The non-chase room holding (x, z) at least 0.25 studs inside its walls.
+-- The walkable room holding (x, z) at least 0.05 studs inside its walls (never solid ground or a chase).
 local function roomAt(x: number, z: number): string
 	for _, candidate in rooms do
-		if candidate.kind ~= "Chase" and LayoutSchema.rectContains(candidate.rect, x, z, 0.25) then
+		if
+			candidate.kind ~= "Solid"
+			and candidate.kind ~= "Chase"
+			and LayoutSchema.rectContains(candidate.rect, x, z, 0.05)
+		then
 			return candidate.id
 		end
 	end
@@ -172,86 +196,53 @@ local function light(roomId: string, kind: Enums.LightKind, x: number, y: number
 			color = o.color or defaults.color,
 			flickerGroup = o.flicker,
 			broken = o.broken,
+			cage = o.cage,
 		})
 	end
 end
 
--- nx * nz ceiling fixtures spread evenly over a room. `pattern` is read cyclically, one character per fixture:
--- "x" = broken, "o" = lit (dim, steady), "f" = lit and flickering with options.flicker.
-local function lightGrid(
-	roomId: string,
-	kind: Enums.LightKind,
-	nx: number,
-	nz: number,
-	pattern: string,
-	options: LightOptions?
-)
-	local target = getRoom(roomId)
-	local rect = target.rect
-	local y = (target.height or HEIGHT) - 0.4
-	local o: LightOptions = options or {}
-	local index = 0
-	for i = 1, nx do
-		for j = 1, nz do
-			index += 1
-			local p = ((index - 1) % #pattern) + 1
-			local mark = string.sub(pattern, p, p)
-			light(roomId, kind, rect.x + rect.w * (i - 0.5) / nx, y, rect.z + rect.d * (j - 0.5) / nz, {
-				brightness = o.brightness,
-				range = o.range,
-				color = o.color,
-				flicker = if mark == "f" then o.flicker else nil,
-				broken = mark == "x",
-			})
-		end
-	end
-end
-
-local function door(kind: Enums.DoorKind, a: string, b: string, at: number?, options: DoorOptions?)
+local function door(kind: Enums.DoorKind, a: string, b: string, at: number, options: DoorOptions?)
 	local o: DoorOptions = options or {}
-	local roomA, roomB = getRoom(a), getRoom(b)
-	local position: number
-	if at then
-		position = at
-	else
-		local edge = LayoutSchema.sharedEdge(roomA.rect, roomB.rect)
-		position = if edge then (edge.from + edge.to) / 2 else 0
-	end
+	getRoom(a)
+	getRoom(b)
 	table.insert(doors, {
 		id = o.id or string.format("%s_Door_%02d", PREFIX, #doors + 1),
 		kind = kind,
 		rooms = { a, b },
-		at = position,
+		at = at,
 		width = o.width,
 		height = o.height,
 		scriptedId = o.scriptedId,
 	})
 end
 
-local function anchor(kind: Enums.AnchorKind, x: number, y: number, z: number, yaw: number?, id: string?)
+local function anchor(
+	kind: Enums.AnchorKind,
+	x: number,
+	y: number,
+	z: number,
+	yaw: number?,
+	id: string?,
+	ref: string?
+): string
 	local n = (anchorCounts[kind] or 0) + 1
 	anchorCounts[kind] = n
+	local anchorId = id or string.format("%s_%s_%02d", PREFIX, kind, n)
 	table.insert(anchors, {
-		id = id or string.format("%s_%s_%02d", PREFIX, kind, n),
+		id = anchorId,
 		kind = kind,
 		room = roomAt(x, z),
 		pos = Vector3.new(x, y, z),
 		yaw = yaw,
+		ref = ref,
 	})
+	return anchorId
 end
 
 -- Each point is { x, z } or { x, z, yaw }.
 local function scatter(kind: Enums.AnchorKind, y: number, points: { { number } })
 	for _, p in points do
 		anchor(kind, p[1], y, p[2], p[3])
-	end
-end
-
--- A closed patrol loop: waypoint i leads to i + 1 and the last back to the first, each hop within one room or
--- through one doorway.
-local function patrol(loop: string, points: { { number } })
-	for i, p in points do
-		anchor("PatrolWaypoint", p[1], 0, p[2], nil, string.format("%s_WP_%s_%02d", PREFIX, loop, i))
 	end
 end
 
@@ -265,15 +256,36 @@ local function trigger(id: string, kind: Enums.TriggerKind, x: number, z: number
 	})
 end
 
--- Evenly spaced windows on one side of a room; any that would face a stair tower are left out.
+local function platform(
+	id: string,
+	roomId: string,
+	x: number,
+	z: number,
+	w: number,
+	d: number,
+	top: number,
+	thickness: number,
+	material: string
+)
+	getRoom(roomId)
+	table.insert(platforms, {
+		id = id,
+		room = roomId,
+		rect = LayoutSchema.rect(x, z, w, d),
+		top = top,
+		thickness = thickness,
+		material = material,
+	})
+end
+
+-- Evenly spaced boarded windows on one facade side of a room; any that would face a stair tower are left out.
 local function windowRow(
 	roomId: string,
 	side: LayoutSchema.Side,
 	count: number,
 	width: number,
 	height: number,
-	sill: number,
-	boarded: boolean
+	sill: number
 )
 	local rect = getRoom(roomId).rect
 	local alongX = side == "N" or side == "S"
@@ -285,7 +297,7 @@ local function windowRow(
 		if not facesTower then
 			table.insert(
 				windows,
-				{ room = roomId, side = side, at = at, width = width, height = height, sill = sill, boarded = boarded }
+				{ room = roomId, side = side, at = at, width = width, height = height, sill = sill, boarded = true }
 			)
 		end
 	end
@@ -293,7 +305,7 @@ end
 
 -- One straight duct along the middle of a chase, a junction under every side grate, end grates as terminals.
 -- A duct never leaves its chase, so each chase room carries exactly one run.
-local function chaseRun(chaseId: string, plans: { GratePlan }, submerged: boolean?)
+local function chaseRun(chaseId: string, plans: { GratePlan })
 	local rect = getRoom(chaseId).rect
 	local alongX = rect.w > rect.d
 	local cx, cz = rect.x + rect.w / 2, rect.z + rect.d / 2
@@ -356,10 +368,10 @@ local function chaseRun(chaseId: string, plans: { GratePlan }, submerged: boolea
 		return a.coord < b.coord
 	end)
 	for i = 1, #stops - 1 do
-		table.insert(ventEdges, { a = stops[i].node, b = stops[i + 1].node, submerged = submerged })
+		table.insert(ventEdges, { a = stops[i].node, b = stops[i + 1].node })
 	end
 	for _, stub in stubs do
-		table.insert(ventEdges, { a = stub[1], b = stub[2], submerged = submerged })
+		table.insert(ventEdges, { a = stub[1], b = stub[2] })
 	end
 end
 
@@ -376,172 +388,334 @@ local function deepFreeze(value: unknown)
 end
 
 --------------------------------------------------------------------------------
--- Rooms
+-- Keep-rooms (the rooms the game needs; the planner tunnels around them)
 --------------------------------------------------------------------------------
 
--- Corridors
-room("L1_NorthHall_West", "Corridor", 0, 26, 120, 14, CORRIDOR)
-room("L1_NorthHall_East", "Corridor", 120, 26, 120, 14, CORRIDOR)
-room("L1_Corridor_West", "Corridor", 12, 73, 108, 14, CORRIDOR)
-room("L1_Corridor_East", "Corridor", 120, 73, 108, 14, CORRIDOR)
-room("L1_SouthHall_West", "Corridor", 0, 120, 120, 14, CORRIDOR)
-room("L1_SouthHall_East", "Corridor", 120, 120, 120, 14, CORRIDOR)
-room("L1_CrossHall_NW", "Corridor", 40, 40, 14, 33, CORRIDOR)
-room("L1_CrossHall_NE", "Corridor", 186, 40, 14, 33, CORRIDOR)
-room("L1_CrossHall_SW", "Corridor", 40, 87, 14, 33, CORRIDOR)
-room("L1_CrossHall_SE", "Corridor", 186, 87, 14, 33, CORRIDOR)
+local keep: { TunnelPlanner.KeepRoom } = {}
+local function keepRoom(r: Room, ports: { TunnelPlanner.Port }, region: string?, sign: string?)
+	table.insert(keep, { room = r, ports = ports, region = region, sign = sign })
+end
 
--- Stair vestibules
-room("L1_AirlockWest", "Airlock", 0, 66, 12, 28, AIRLOCK)
-room("L1_AirlockNorthWest", "Airlock", 0, 0, 12, 26, AIRLOCK)
-room("L1_AirlockSouthWest", "Airlock", 0, 134, 12, 26, AIRLOCK)
-room("L1_AirlockNorthEast", "Airlock", 228, 0, 12, 26, AIRLOCK)
-room("L1_AirlockSouthEast", "Airlock", 228, 134, 12, 26, AIRLOCK)
-room("L1_AirlockEast", "Airlock", 228, 66, 12, 28, AIRLOCK)
+-- The near side: the three stair vestibules the squad climbs into (route candidates of Stairwell_0_1*), the
+-- checkerboard hallway the middle one opens onto, and the scare classroom off the hallway's north side
+local hallEast = room("L1_Corridor_East", "Corridor", GATE_X, HALL_Z - 7, 386 - GATE_X, 14, CORRIDOR)
+keepRoom(hallEast, {
+	{ side = "N", at = 370, kind = "Doorway", width = 8, id = "L1_Door_HallNorth" },
+	{ side = "S", at = 370, kind = "Doorway", width = 8, id = "L1_Door_HallSouth" },
+}, "Lockers")
+keepRoom(room("L1_AirlockEast", "Airlock", 386, HALL_Z - 12, 14, 24, AIRLOCK, VESTIBULE_HEIGHT), {}, "Lockers")
+for _, v in
+	{
+		{ "L1_AirlockNorthEast", WorldConfig.Towers.NorthEast.openingZ, "L1_Door_AirlockNorthEast" },
+		{ "L1_AirlockSouthEast", WorldConfig.Towers.SouthEast.openingZ, "L1_Door_AirlockSouthEast" },
+	} :: { { any } }
+do
+	keepRoom(
+		room(v[1], "Airlock", 386, v[2] - 12, 14, 24, AIRLOCK, VESTIBULE_HEIGHT),
+		{ { side = "W", at = v[2], kind = "Airlock", id = v[3], runHeight = FIRE_DOOR_CLEARANCE } },
+		"Lockers"
+	)
+end
+-- Classroom 108: the ajar door sits 14 studs along its south wall, the glass spans the hallway outside it, the
+-- Creature crouches 3.5 studs out of its north-west corner (the old plan's sightlines, moved here whole)
+local CLASS_X, CLASS_Z = 318, HALL_Z - 7 - 33
+keepRoom(room("L1_Classroom_108", "Classroom", CLASS_X, CLASS_Z, 28, 33, CLASSROOM), {}, "Lockers", "108")
 
--- Between the north hall and the main corridor
-room("L1_JanitorCloset_W", "Storage", 0, 40, 12, 26, STORAGE)
-room("L1_Classroom_101", "Classroom", 12, 40, 28, 33, CLASSROOM)
-room("L1_Classroom_103", "Classroom", 54, 40, 28, 33, CLASSROOM)
-room("L1_TeachersLounge", "Office", 82, 40, 22, 33, OFFICE)
-room("L1_Restroom_Boys", "Restroom", 104, 40, 16, 28, RESTROOM)
-room("L1_Chase_Gate", "Chase", 104, 68, 32, 5, CHASE)
-room("L1_Restroom_Girls", "Restroom", 120, 40, 16, 28, RESTROOM)
-room("L1_NurseOffice", "Office", 136, 40, 17, 33, OFFICE)
-room("L1_Chase_North", "Chase", 153, 40, 5, 33, CHASE)
-room("L1_Classroom_108", "Classroom", 158, 40, 28, 33, CLASSROOM)
-room("L1_Classroom_110", "Classroom", 200, 40, 28, 33, CLASSROOM)
-room("L1_JanitorCloset_E", "Storage", 228, 40, 12, 26, STORAGE)
+-- The far side: the gate's west hall (a short stretch of the old hallway past the gate, its west end caved in to a
+-- rubble passage), the main office and the janitor's closet, and the three exit vestibules on the west wall
+local hallWest = room("L1_Corridor_West", "Corridor", 262, HALL_Z - 7, GATE_X - 262, 14, CORRIDOR)
+keepRoom(hallWest, { { side = "W", at = HALL_Z, kind = "Doorway", width = 8, id = "L1_Door_HallWest" } }, "Offices")
+keepRoom(
+	room("L1_MainOffice", "Office", 136, 0, 40, 18, OFFICE, 12),
+	{ { side = "S", at = 160, kind = "Door", id = "L1_Door_MainOffice" } },
+	"Offices",
+	"MAIN OFFICE"
+)
+keepRoom(
+	room("L1_JanitorCloset", "Storage", 98, 270, 20, 18, STORAGE, 11.5),
+	{ { side = "N", at = 108, kind = "Door", id = "L1_Door_JanitorCloset" } },
+	"Kitchen",
+	"JANITOR"
+)
+for _, v in
+	{
+		{ "L1_AirlockNorthWest", WorldConfig.Towers.NorthWest.openingZ, "L1_Door_AirlockNorthWest" },
+		{ "L1_AirlockWest", WorldConfig.Towers.West.openingZ, "L1_Door_AirlockWest" },
+		{ "L1_AirlockSouthWest", WorldConfig.Towers.SouthWest.openingZ, "L1_Door_AirlockSouthWest" },
+	} :: { { any } }
+do
+	-- (no stencil: the fire door's STAIRS sign is SignageBuilder's, beside it on the tunnel side)
+	keepRoom(
+		room(v[1], "Airlock", 0, v[2] - 12, 14, 24, AIRLOCK, VESTIBULE_HEIGHT),
+		{ { side = "E", at = v[2], kind = "Airlock", id = v[3], runHeight = FIRE_DOOR_CLEARANCE } }
+	)
+end
 
--- North exterior row
-room("L1_Library", "Classroom", 12, 0, 44, 26, LIBRARY)
-room("L1_Classroom_113", "Classroom", 56, 0, 28, 26, CLASSROOM)
-room("L1_Classroom_115", "Classroom", 84, 0, 28, 26, CLASSROOM)
-room("L1_BookStore", "Storage", 112, 0, 8, 26, STORAGE)
-room("L1_RecordsStore", "Storage", 120, 0, 8, 26, STORAGE)
-room("L1_Classroom_120", "Classroom", 128, 0, 28, 26, CLASSROOM)
-room("L1_Classroom_122", "Classroom", 156, 0, 28, 26, CLASSROOM)
-room("L1_MusicRoom", "Classroom", 184, 0, 44, 26, MUSIC)
-
--- Between the main corridor and the south hall
-room("L1_Storage_131A", "Storage", 0, 94, 12, 26, STORAGE)
-room("L1_Classroom_131", "Classroom", 12, 87, 28, 33, CLASSROOM)
-room("L1_Classroom_133", "Classroom", 54, 87, 28, 33, CLASSROOM)
-room("L1_ArtRoom", "Classroom", 82, 87, 38, 33, ART)
-room("L1_Classroom_134", "Classroom", 120, 87, 33, 33, CLASSROOM)
-room("L1_Chase_South", "Chase", 153, 87, 5, 33, CHASE)
-room("L1_Classroom_136", "Classroom", 158, 87, 28, 33, CLASSROOM)
-room("L1_Classroom_138", "Classroom", 200, 87, 28, 33, CLASSROOM)
-room("L1_Storage_140A", "Storage", 228, 94, 12, 26, STORAGE)
-
--- South exterior row
-room("L1_Cafeteria", "Classroom", 12, 134, 72, 26, CAFETERIA)
-room("L1_Kitchen", "Storage", 84, 134, 36, 26, KITCHEN)
-room("L1_MainOffice", "Office", 120, 134, 40, 26, OFFICE)
-room("L1_PrincipalOffice", "Office", 160, 134, 24, 26, OFFICE)
-room("L1_Classroom_142", "Classroom", 184, 134, 28, 26, CLASSROOM)
-room("L1_Restroom_Staff", "Restroom", 212, 134, 16, 26, RESTROOM)
+-- The gate's bypass vent: a service chase in the hallway's north wall, straddling the gate
+local chase = room("L1_Chase_Gate", "Chase", GATE_X - 16, HALL_Z - 12, 32, 5, CHASE)
 
 --------------------------------------------------------------------------------
--- Doors
+-- The tunnels
 --------------------------------------------------------------------------------
 
-door("Airlock", "L1_AirlockEast", "L1_Corridor_East", 80, { id = "L1_Door_AirlockEast" })
-door("Airlock", "L1_Corridor_West", "L1_AirlockWest", 80, { id = "L1_Door_AirlockWest" })
--- The corner stair vestibules open off the outer halls (the west ones inside the sealed west half)
-door("Airlock", "L1_AirlockNorthEast", "L1_NorthHall_East", 234, { id = "L1_Door_AirlockNorthEast" })
-door("Airlock", "L1_AirlockSouthEast", "L1_SouthHall_East", 234, { id = "L1_Door_AirlockSouthEast" })
-door("Airlock", "L1_NorthHall_West", "L1_AirlockNorthWest", 6, { id = "L1_Door_AirlockNorthWest" })
-door("Airlock", "L1_SouthHall_West", "L1_AirlockSouthWest", 6, { id = "L1_Door_AirlockSouthWest" })
+local plan = TunnelPlanner.plan({
+	levelId = "Level1_Hallways",
+	prefix = PREFIX,
+	seed = SEED,
+	height = HEIGHT,
+	keepRooms = keep,
+	entry = "L1_AirlockEast",
+	exits = { "L1_AirlockNorthWest", "L1_AirlockWest", "L1_AirlockSouthWest" },
+	exclusions = { chase.rect },
+	links = {
+		-- the middle vestibule opens straight onto the hallway; the gate joins the hallway's two halves
+		{ a = "L1_AirlockEast", b = "L1_Corridor_East" },
+		{ a = "L1_Corridor_East", b = "L1_Corridor_West" },
+	},
+	barriers = {
+		-- the gate line: nothing but the hallway (and its vent) crosses it
+		{ x0 = GATE_X, z0 = 0, x1 = GATE_X, z1 = 288 },
+		-- the far side's lanes: N1 | N2 (open at the west end), N2 | M (open at the east end), M | S1 (open at the west
+		-- end), S1 | S2 (open at the east end); the hub's west wall; the exit run's east wall (open at the south)
+		{ x0 = 70, z0 = 64, x1 = 230, z1 = 64 },
+		{ x0 = 44, z0 = 114, x1 = 200, z1 = 114 },
+		{ x0 = 70, z0 = 180, x1 = GATE_X, z1 = 180 },
+		{ x0 = 44, z0 = 223, x1 = 258, z1 = 223 },
+		{ x0 = 230, z0 = 64, x1 = 230, z1 = 180 },
+		{ x0 = 44, z0 = 0, x1 = 44, z1 = 230 },
+		-- collapses and barricades across one row of a lane at a time: the walk zigzags between the rows
+		{ x0 = 121, z0 = 0, x1 = 121, z1 = 40 },
+		{ x0 = 230, z0 = 40, x1 = 230, z1 = 64 },
+		{ x0 = 95, z0 = 64, x1 = 95, z1 = 91 },
+		{ x0 = 147, z0 = 91, x1 = 147, z1 = 114 },
+		{ x0 = 121, z0 = 114, x1 = 121, z1 = 156 },
+		{ x0 = 173, z0 = 134, x1 = 173, z1 = 180 },
+		{ x0 = 95, z0 = 180, x1 = 95, z1 = 200 },
+		{ x0 = 199, z0 = 200, x1 = 199, z1 = 223 },
+	},
+	gridX = { 30, 54, 82, 108, 134, 160, 186, 214, 246, 272, 322, 346, 370 },
+	gridZ = { 28, 52, 78, 104, 124, 144, 168, 190, 210, 236, 260 },
+	crawlSites = {
+		-- across the lanes' barriers (shortcuts), two or three per barrier
+		{ 134, 52, 134, 78 },
+		{ 214, 52, 214, 78 },
+		{ 82, 104, 82, 124 },
+		{ 186, 104, 186, 124 },
+		{ 134, 168, 134, 190 },
+		{ 214, 168, 214, 190 },
+		{ 82, 210, 82, 236 },
+		{ 160, 210, 160, 236 },
+		{ 246, 210, 246, 236 },
+		-- into the exit run, and the hub's south end
+		{ 30, 52, 54, 52 },
+		{ 30, 144, 54, 144 },
+		{ 30, 236, 54, 236 },
+		{ 246, 124, 272, 124 },
+		{ 246, 52, 272, 52 },
+		-- the near side's service corridors
+		{ 346, 52, 370, 52 },
+		{ 346, 78, 370, 78 },
+		{ 346, 190, 370, 190 },
+		{ 346, 236, 370, 236 },
+	},
+	style = {
+		width = { 7, 8, 8, 9 },
+		height = { 11, 12 },
+		galleryWidth = 10,
+		galleryHeight = { 13, 13.5 },
+		galleryShare = 0.2,
+		galleryMin = 40,
+		pitch = 26,
+		jitter = 3,
+		length = 4000,
+		deadEnds = 6,
+		crawlWidth = 4,
+		crawlAcrossBarriers = true,
+		crawlMouthsPass = true,
+		alcoveWidth = 5,
+		alcoveDepth = 6,
+		alcoveHeight = 10,
+		lightSpacing = { 9, 12 },
+		deadShare = 0.3,
+		flickerShare = 0.12,
+		plateLampEvery = 2,
+		wall = "PlasterGreen",
+		floor = "Linoleum",
+		ceiling = "PlasterSchool",
+		acoustic = "Corridor",
+		galleryAcoustic = "Hall",
+		crawlAcoustic = "Vent",
+	},
+	rules = {
+		maxLoop = 200,
+		deadEndCount = 8,
+		deadEndLength = 25,
+		-- about 2.5-3 minutes at walking pace (11 studs/s)
+		crossing = { 1650, 1980 },
+		crawlCrossingSeconds = 40,
+		crawlways = { 3, 18 },
+		crawlLength = 20,
+		crawlHeight = TunnelRules.CrawlClearance,
+		crawlReach = 60,
+		hideReach = 30,
+		objectiveHideReach = 25,
+		regions = { 4, 6 },
+	},
+	regions = {
+		{
+			id = "Lockers",
+			medium = "HEAT",
+			name = "Locker Banks",
+			x = 340,
+			z = 144,
+			areas = { { GATE_X, 0, 400, 288 } },
+			pipe = rgb(70, 96, 74),
+			band = rgb(214, 206, 170),
+			grime = rgb(20, 26, 20),
+			paint = rgb(232, 228, 210),
+			graffiti = { "DON'T GO IN 108", "IT WATCHES THE GLASS", "WALK SOFT", "LOCKERS ARE EMPTY" },
+			wall = "PlasterGreen",
+			floor = "Linoleum",
+			-- the locker banks: their niches hold hideable lockers
+			hides = { "Locker" },
+		},
+		{
+			id = "Offices",
+			medium = "PHONE",
+			name = "Offices & Records",
+			x = 250,
+			z = 60,
+			areas = { { 230, 0, GATE_X, 180 }, { 160, 0, 230, 64 } },
+			pipe = rgb(126, 102, 70),
+			band = rgb(40, 34, 28),
+			grime = rgb(30, 26, 20),
+			paint = rgb(224, 60, 48),
+			graffiti = { "KEYS ON A NAIL", "OFFICE IS NORTH", "SIGN OUT", "NO HALL PASS" },
+			wall = "PlasterSchool",
+			floor = "Carpet",
+		},
+		{
+			id = "Library",
+			medium = "DATA",
+			name = "Library Stacks",
+			x = 120,
+			z = 80,
+			areas = { { 44, 0, 160, 64 }, { 44, 64, 230, 112 } },
+			pipe = rgb(96, 60, 92),
+			band = rgb(220, 200, 160),
+			grime = rgb(24, 18, 14),
+			paint = rgb(236, 230, 200),
+			graffiti = { "QUIET", "HE HEARS THE PAGES", "OVERDUE", "SHH" },
+			wall = "WoodPanel",
+			floor = "Carpet",
+		},
+		{
+			id = "MainHall",
+			medium = "WATER",
+			name = "Collapsed Main Hall",
+			x = 130,
+			z = 146,
+			areas = { { 44, 112, 230, 180 } },
+			pipe = rgb(40, 70, 118),
+			band = rgb(226, 226, 220),
+			grime = rgb(22, 22, 24),
+			paint = rgb(240, 236, 220),
+			graffiti = { "THE ROOF CAME DOWN", "DON'T LOOK UP", "IT CAME THROUGH HERE", "CLIMB" },
+			wall = "Brick",
+			floor = "ConcreteStained",
+			wet = true,
+		},
+		{
+			id = "Kitchen",
+			medium = "GAS",
+			name = "Kitchen Service",
+			x = 160,
+			z = 240,
+			areas = { { 44, 180, GATE_X, 288 }, { 0, 0, 44, 288 } },
+			pipe = rgb(176, 136, 24),
+			band = rgb(30, 28, 24),
+			grime = rgb(34, 30, 16),
+			paint = rgb(232, 70, 48),
+			graffiti = { "LUNCH IS CANCELLED", "NO FLAME", "STAIRS WEST", "ALMOST OUT" },
+			wall = "TileGreen",
+			floor = "TileWhite",
+		},
+	},
+	attempts = 6,
+	crossingTarget = 1780,
+	items = {
+		{
+			kind = "MasterKeyCandidate" :: Enums.AnchorKind,
+			count = 10,
+			shelf = 4.6,
+			wall = true,
+			areas = { { 0, 0, GATE_X - 8, 288 } },
+		},
+	},
+	hideTargets = {
+		Vector3.new(16, 0, WorldConfig.Towers.NorthWest.openingZ),
+		Vector3.new(16, 0, WorldConfig.Towers.West.openingZ),
+		Vector3.new(16, 0, WorldConfig.Towers.SouthWest.openingZ),
+		Vector3.new(264, 0, HALL_Z),
+	},
+	traps = 0,
+	batteries = 10,
+	clutter = 22,
+	corpses = 5,
+	drips = 9,
+	debris = 8,
+	scares = 0,
+	creatureSpawns = 6,
+	creatureBand = { 70, 140 },
+	otherEntries = { "L1_AirlockNorthEast", "L1_AirlockSouthEast" },
+})
+
+for _, r in plan.rooms do
+	table.insert(rooms, r)
+	roomById[r.id] = r
+end
+for _, d in plan.doors do
+	table.insert(doors, d)
+end
+for _, a in plan.anchors do
+	table.insert(anchors, a)
+end
+for _, t in plan.triggers do
+	table.insert(triggers, t)
+end
+for _, p in plan.platforms do
+	table.insert(platforms, p)
+end
+
+--------------------------------------------------------------------------------
+-- The hallway's own doors: the middle vestibule's fire door, the ajar classroom door, the gate
+--------------------------------------------------------------------------------
+
+door("Airlock", "L1_AirlockEast", "L1_Corridor_East", HALL_Z, { id = "L1_Door_AirlockEast" })
+door(
+	"Ajar",
+	"L1_Corridor_East",
+	"L1_Classroom_108",
+	CLASS_X + 14,
+	{ id = "L1_Door_Classroom108", scriptedId = "ClassroomDoor" }
+)
 door(
 	"Gate",
 	"L1_Corridor_East",
 	"L1_Corridor_West",
-	80,
+	HALL_Z,
 	{ id = "L1_Door_HallwayGate", width = 12, scriptedId = "HallwayGate" }
 )
-door("Boarded", "L1_NorthHall_East", "L1_NorthHall_West", 33, { id = "L1_Door_NorthBarricade", width = 12 })
-door("Boarded", "L1_SouthHall_East", "L1_SouthHall_West", 127, { id = "L1_Door_SouthBarricade", width = 12 })
 
--- Cross halls
-door("Doorway", "L1_CrossHall_NW", "L1_NorthHall_West", 47, { width = 10 })
-door("Doorway", "L1_CrossHall_NW", "L1_Corridor_West", 47, { width = 10 })
-door("Doorway", "L1_CrossHall_NE", "L1_NorthHall_East", 193, { width = 10 })
-door("Doorway", "L1_CrossHall_NE", "L1_Corridor_East", 193, { width = 10 })
-door("Doorway", "L1_CrossHall_SW", "L1_Corridor_West", 47, { width = 10 })
-door("Doorway", "L1_CrossHall_SW", "L1_SouthHall_West", 47, { width = 10 })
-door("Doorway", "L1_CrossHall_SE", "L1_Corridor_East", 193, { width = 10 })
-door("Doorway", "L1_CrossHall_SE", "L1_SouthHall_East", 193, { width = 10 })
-
--- North of the main corridor
-door("Door", "L1_JanitorCloset_W", "L1_NorthHall_West", 6)
-door("Door", "L1_Corridor_West", "L1_Classroom_101", 18)
-door("Door", "L1_Corridor_West", "L1_Classroom_101", 34)
-door("Door", "L1_NorthHall_West", "L1_Classroom_101", 26)
-door("Door", "L1_Corridor_West", "L1_Classroom_103", 60)
-door("Door", "L1_Corridor_West", "L1_Classroom_103", 76)
-door("Door", "L1_Corridor_West", "L1_TeachersLounge", 93)
-door("Door", "L1_NorthHall_West", "L1_Restroom_Boys", 112)
-door("Door", "L1_NorthHall_East", "L1_Restroom_Girls", 128)
-door("Door", "L1_Corridor_East", "L1_NurseOffice", 147)
-door("Ajar", "L1_Corridor_East", "L1_Classroom_108", 172, { id = "L1_Door_Classroom108", scriptedId = "ClassroomDoor" })
-door("Door", "L1_Corridor_East", "L1_Classroom_110", 206)
-door("Door", "L1_Corridor_East", "L1_Classroom_110", 222)
-door("Door", "L1_NorthHall_East", "L1_Classroom_110", 214)
-door("Door", "L1_JanitorCloset_E", "L1_NorthHall_East", 234)
-
--- North exterior row
-door("Doorway", "L1_NorthHall_West", "L1_Library", 18)
-door("Doorway", "L1_NorthHall_West", "L1_Library", 42)
-door("Door", "L1_NorthHall_West", "L1_Classroom_113", 70)
-door("Door", "L1_NorthHall_West", "L1_Classroom_115", 98)
-door("Door", "L1_NorthHall_West", "L1_BookStore", 116)
-door("Door", "L1_NorthHall_East", "L1_RecordsStore", 124)
-door("Door", "L1_NorthHall_East", "L1_Classroom_120", 142)
-door("Door", "L1_NorthHall_East", "L1_Classroom_122", 170)
-door("Door", "L1_NorthHall_East", "L1_MusicRoom", 198)
-door("Door", "L1_NorthHall_East", "L1_MusicRoom", 220)
-
--- South of the main corridor
-door("Door", "L1_Storage_131A", "L1_SouthHall_West", 6)
-door("Door", "L1_Corridor_West", "L1_Classroom_131", 18)
-door("Door", "L1_Corridor_West", "L1_Classroom_131", 34)
-door("Door", "L1_SouthHall_West", "L1_Classroom_131", 26)
-door("Door", "L1_Corridor_West", "L1_Classroom_133", 60)
-door("Door", "L1_Corridor_West", "L1_Classroom_133", 76)
-door("Door", "L1_Corridor_West", "L1_ArtRoom", 90)
-door("Door", "L1_Corridor_West", "L1_ArtRoom", 112)
-door("Door", "L1_SouthHall_West", "L1_ArtRoom", 101)
-door("Door", "L1_Corridor_East", "L1_Classroom_134", 128)
-door("Door", "L1_Corridor_East", "L1_Classroom_134", 146)
-door("Door", "L1_Corridor_East", "L1_Classroom_136", 164)
-door("Door", "L1_Corridor_East", "L1_Classroom_136", 180)
-door("Door", "L1_Corridor_East", "L1_Classroom_138", 206)
-door("Door", "L1_Corridor_East", "L1_Classroom_138", 222)
-door("Door", "L1_SouthHall_East", "L1_Classroom_138", 214)
-door("Door", "L1_Storage_140A", "L1_SouthHall_East", 234)
-
--- South exterior row
-door("Doorway", "L1_SouthHall_West", "L1_Cafeteria", 20, { width = 8 })
-door("Doorway", "L1_SouthHall_West", "L1_Cafeteria", 64, { width = 8 })
-door("Door", "L1_SouthHall_West", "L1_Kitchen", 102)
-door("Door", "L1_Cafeteria", "L1_Kitchen", 147)
-door("Door", "L1_SouthHall_East", "L1_MainOffice", 140)
-door("Door", "L1_MainOffice", "L1_PrincipalOffice", 147)
-door("Door", "L1_SouthHall_East", "L1_Classroom_142", 198)
-door("Door", "L1_SouthHall_East", "L1_Restroom_Staff", 220)
-
---------------------------------------------------------------------------------
--- The first wall vent: a service chase in the corridor's north wall, straddling the gate. Both corridor grates are
--- the guaranteed bypass; the restroom grates give the Creature (and the brave) a second way in and out.
---------------------------------------------------------------------------------
-
+-- The bypass vent: a grate into the hallway ten studs east of the gate and one into the west hall ten studs west of
+-- it, the duct between them in the wall. Neither ever locks (the critical path); the director has nothing here to
+-- lock.
 chaseRun("L1_Chase_Gate", {
 	{
 		id = "L1_Grate_CorridorEast",
 		room = "L1_Corridor_East",
 		side = "S",
-		at = 130,
+		at = GATE_X + 10,
 		lockable = false,
 		critical = true,
 	},
@@ -549,335 +723,182 @@ chaseRun("L1_Chase_Gate", {
 		id = "L1_Grate_CorridorWest",
 		room = "L1_Corridor_West",
 		side = "S",
-		at = 110,
+		at = GATE_X - 10,
 		lockable = false,
 		critical = true,
 	},
-	{
-		id = "L1_Grate_RestroomBoys",
-		room = "L1_Restroom_Boys",
-		side = "N",
-		at = 114,
-		lockable = false,
-		critical = false,
-	},
-	{
-		id = "L1_Grate_RestroomGirls",
-		room = "L1_Restroom_Girls",
-		side = "N",
-		at = 126,
-		lockable = false,
-		critical = false,
-	},
-})
-
--- Classroom vents east of the gate. Classroom 108's grate (beside the Creature's corner) never locks: it is the
--- Creature's way out of the scripted room.
-chaseRun("L1_Chase_North", {
-	{ id = "L1_Grate_N_NorthHall", room = "L1_NorthHall_East", side = "N", lockable = true, critical = false },
-	{ id = "L1_Grate_N_Nurse", room = "L1_NurseOffice", side = "W", at = 62, lockable = true, critical = false },
-	{
-		id = "L1_Grate_N_Classroom108",
-		room = "L1_Classroom_108",
-		side = "E",
-		at = 56,
-		lockable = false,
-		critical = false,
-	},
-})
-chaseRun("L1_Chase_South", {
-	{ id = "L1_Grate_S_Corridor", room = "L1_Corridor_East", side = "N", lockable = false, critical = false },
-	{
-		id = "L1_Grate_S_Classroom134",
-		room = "L1_Classroom_134",
-		side = "W",
-		at = 100,
-		lockable = true,
-		critical = false,
-	},
-	{
-		id = "L1_Grate_S_Classroom136",
-		room = "L1_Classroom_136",
-		side = "E",
-		at = 108,
-		lockable = true,
-		critical = false,
-	},
-	{ id = "L1_Grate_S_SouthHall", room = "L1_SouthHall_East", side = "S", lockable = true, critical = false },
 })
 
 --------------------------------------------------------------------------------
--- Lights: pitch dark except the pale classroom glow, a few dying tubes and the exit signs.
+-- Keep-room furniture: the office counter, the janitor's shelving
 --------------------------------------------------------------------------------
 
-lightGrid("L1_NorthHall_West", "Fluorescent", 8, 1, "xxxxxfxx", { flicker = "L1_NorthHall" })
-lightGrid("L1_NorthHall_East", "Fluorescent", 8, 1, "xxfxxxxx", { flicker = "L1_NorthHall" })
-lightGrid("L1_Corridor_West", "Fluorescent", 9, 1, "x")
-lightGrid("L1_Corridor_East", "Fluorescent", 9, 1, "x")
-lightGrid("L1_SouthHall_West", "Fluorescent", 8, 1, "xxxfxxxx", { flicker = "L1_SouthHall" })
-lightGrid("L1_SouthHall_East", "Fluorescent", 8, 1, "x")
-lightGrid("L1_CrossHall_NW", "Fluorescent", 1, 3, "x")
-lightGrid("L1_CrossHall_NE", "Fluorescent", 1, 3, "x")
-lightGrid("L1_CrossHall_SW", "Fluorescent", 1, 3, "xfx", { flicker = "L1_CrossSW" })
-lightGrid("L1_CrossHall_SE", "Fluorescent", 1, 3, "x")
-for _, id in
-	{
-		"L1_Classroom_101",
-		"L1_Classroom_103",
-		"L1_Classroom_108",
-		"L1_Classroom_110",
-		"L1_Classroom_113",
-		"L1_Classroom_115",
-		"L1_Classroom_120",
-		"L1_Classroom_122",
-		"L1_Classroom_131",
-		"L1_Classroom_133",
-		"L1_Classroom_136",
-		"L1_Classroom_138",
-		"L1_Classroom_142",
-		"L1_ArtRoom",
-		"L1_Kitchen",
-	} :: { string }
-do
-	lightGrid(id, "Fluorescent", 2, 2, "x")
-end
-lightGrid("L1_Classroom_134", "Fluorescent", 2, 2, "xfxx", { flicker = "L1_Classroom134", brightness = 0.35 })
-lightGrid("L1_Library", "Fluorescent", 3, 2, "x")
-lightGrid("L1_MusicRoom", "Fluorescent", 3, 2, "x")
-lightGrid("L1_Cafeteria", "Fluorescent", 4, 2, "xxxxxxfx", { flicker = "L1_Cafeteria", brightness = 0.3 })
-lightGrid("L1_MainOffice", "Fluorescent", 2, 1, "x")
-lightGrid("L1_TeachersLounge", "Fluorescent", 1, 2, "x")
-lightGrid("L1_NurseOffice", "Fluorescent", 1, 2, "x")
-lightGrid("L1_Restroom_Boys", "Fluorescent", 1, 2, "x")
-lightGrid("L1_Restroom_Girls", "Fluorescent", 1, 2, "fx", { flicker = "L1_RestroomGirls", brightness = 0.3 })
-lightGrid("L1_Restroom_Staff", "Fluorescent", 1, 1, "x")
-lightGrid("L1_PrincipalOffice", "Bulb", 1, 1, "x")
-for _, id in
-	{
-		"L1_JanitorCloset_W",
-		"L1_JanitorCloset_E",
-		"L1_BookStore",
-		"L1_RecordsStore",
-		"L1_Storage_131A",
-		"L1_Storage_140A",
-	} :: { string }
-do
-	lightGrid(id, "Bulb", 1, 1, "x")
+platform("L1_Shelf_Janitor", "L1_JanitorCloset", 99, 284.6, 12, 2.4, 4.2, 4.2, "MetalRust")
+platform("L1_Counter_Office", "L1_MainOffice", 140, 10, 14, 2.6, 3.4, 3.4, "WoodPanel")
+
+--------------------------------------------------------------------------------
+-- Lights: the hallway dark but for the classroom's glow (LightingMood keeps it so), keep-rooms on their own mains,
+-- the vestibules' emergency reds
+--------------------------------------------------------------------------------
+
+-- every keep-room is its own steady mains circuit (a local group: a flicker, the Creature's teleport warning, touches
+-- only that room)
+local function mains(roomId: string): string
+	return "Mains:" .. roomId
 end
 
--- The pale glow from the ajar classroom (P6 bursts every ClassroomGlow in L1_Classroom_108 when the Creature turns):
--- the room light over the Creature's corner, and a narrow spill fixture just inside the ajar door whose downward
--- cone leaves the room under the door lintel and lays a pale pool on the corridor floor. Both cast shadows, so the
--- glow reaches the corridor only through the doorway.
-light("L1_Classroom_108", "ClassroomGlow", 170, HEIGHT - 1.5, 52, { id = "L1_Light_ClassroomGlow" })
+-- The hallway's dead tubes (LightingMood keeps them dark for the scare) and an exit sign at each end
+for i = 1, 6 do
+	local x = GATE_X + (386 - GATE_X) * (i - 0.5) / 6
+	light(
+		"L1_Corridor_East",
+		"Fluorescent",
+		x,
+		HEIGHT - 0.4,
+		HALL_Z,
+		{ flicker = mains("L1_Corridor_East"), broken = true }
+	)
+end
+light("L1_Corridor_East", "ExitSign", 384.5, 11, HALL_Z)
+light("L1_Corridor_West", "Fluorescent", 276, HEIGHT - 0.4, HALL_Z, { flicker = mains("L1_Corridor_West") })
+light("L1_Corridor_West", "EmergencyRed", 264, HEIGHT - 1.5, HALL_Z + 6.4, { brightness = 0.35 })
+
+-- The pale glow from the ajar classroom (the scare bursts every ClassroomGlow in L1_Classroom_108 when the Creature
+-- turns): the room light over the Creature's corner, and a narrow spill fixture just inside the ajar door whose
+-- downward cone leaves the room under the door lintel and lays a pale pool on the hallway floor. Both cast shadows,
+-- so the glow reaches the hallway only through the doorway.
+light("L1_Classroom_108", "ClassroomGlow", CLASS_X + 12, HEIGHT - 1.5, CLASS_Z + 12, { id = "L1_Light_ClassroomGlow" })
 light(
 	"L1_Classroom_108",
 	"ClassroomGlow",
-	172,
+	CLASS_X + 14,
 	HEIGHT - 1.5,
-	70,
+	CLASS_Z + 30,
 	{ id = "L1_Light_ClassroomGlowSpill", brightness = 0.6, range = 18 }
 )
+for i, p in { { 8, 24 }, { 20, 24 } } do
+	light(
+		"L1_Classroom_108",
+		"Fluorescent",
+		CLASS_X + p[1],
+		HEIGHT - 0.4,
+		CLASS_Z + p[2],
+		{ flicker = mains("L1_Classroom_108"), broken = i == 1 }
+	)
+end
 
-light("L1_AirlockEast", "EmergencyRed", 234, HEIGHT - 1, 80, { flicker = "L1_AirlockEast", brightness = 0.35 })
-light("L1_AirlockWest", "EmergencyRed", 6, HEIGHT - 1, 80, { flicker = "L1_AirlockWest", brightness = 0.35 })
-for _, spot in
+light("L1_MainOffice", "Fluorescent", 148, 11.6, 9, { flicker = mains("L1_MainOffice") })
+light("L1_MainOffice", "Fluorescent", 166, 11.6, 9, { flicker = mains("L1_MainOffice"), broken = true })
+light("L1_JanitorCloset", "Bulb", 108, 11.1, 279, { flicker = mains("L1_JanitorCloset"), cage = true })
+
+for _, v in
 	{
-		{ "L1_AirlockNorthWest", 6, 13 },
-		{ "L1_AirlockSouthWest", 6, 147 },
-		{ "L1_AirlockNorthEast", 234, 13 },
-		{ "L1_AirlockSouthEast", 234, 147 },
+		{ "L1_AirlockNorthEast", 393, WorldConfig.Towers.NorthEast.openingZ },
+		{ "L1_AirlockEast", 393, HALL_Z },
+		{ "L1_AirlockSouthEast", 393, WorldConfig.Towers.SouthEast.openingZ },
+		{ "L1_AirlockNorthWest", 7, WorldConfig.Towers.NorthWest.openingZ },
+		{ "L1_AirlockWest", 7, WorldConfig.Towers.West.openingZ },
+		{ "L1_AirlockSouthWest", 7, WorldConfig.Towers.SouthWest.openingZ },
 	} :: { { any } }
 do
-	light(spot[1], "EmergencyRed", spot[2], HEIGHT - 1, spot[3], { flicker = spot[1], brightness = 0.35 })
+	light(v[1], "Fluorescent", v[2], 11.4, v[3], { flicker = mains(v[1]), broken = true })
+	light(v[1], "EmergencyRed", v[2], 12 - 5, v[3] - 8, { brightness = 0.3 })
 end
-light("L1_Corridor_East", "ExitSign", 226.5, 11, 80)
-light("L1_Corridor_West", "ExitSign", 13.5, 11, 80)
-light("L1_Corridor_West", "EmergencyRed", 24, HEIGHT - 1.5, 74.5, { flicker = "L1_ExitWest", brightness = 0.3 })
 
 --------------------------------------------------------------------------------
--- Anchors
+-- Keep-room anchors
 --------------------------------------------------------------------------------
 
--- Arrival from Stairwell_0_1
-scatter("PlayerSpawn", 3.5, { { 232, 74, FACE_W }, { 236, 74, FACE_W }, { 232, 86, FACE_W }, { 236, 86, FACE_W } })
--- Arrival from Stairwell_0_1_North / _South (the corner vestibules)
-scatter("PlayerSpawn", 3.5, { { 232, 5, FACE_S }, { 236, 5, FACE_S }, { 232, 19, FACE_S }, { 236, 19, FACE_S } })
-scatter("PlayerSpawn", 3.5, { { 232, 141, FACE_N }, { 236, 141, FACE_N }, { 232, 155, FACE_N }, { 236, 155, FACE_N } })
+-- Arrival from Stairwell_0_1 and its corner candidates: four spawns in each east vestibule, facing west
+for _, z in
+	{
+		WorldConfig.Towers.NorthEast.openingZ,
+		HALL_Z,
+		WorldConfig.Towers.SouthEast.openingZ,
+	} :: { number }
+do
+	for _, p in { { 390, z - 4 }, { 396, z - 4 }, { 390, z + 4 }, { 396, z + 4 } } do
+		anchor("PlayerSpawn", p[1], 3.5, p[2], FACE_W)
+	end
+end
 
--- The scripted classroom: the Creature hunched in the far (north-west) corner, facing into the corner. From the
--- glass outside the ajar door a westbound squad looks diagonally through the doorway straight at it.
-anchor("CreatureScarePose", 161.5, 5, 43.5, 45, "L1_ScarePose_Classroom108")
-anchor("CreatureSpawn", 220, 5, 12, FACE_S, "L1_CreatureSpawn")
+-- The scripted classroom: the Creature hunched in the far (north-west) corner, facing into the corner. From the glass
+-- outside the ajar door a westbound squad looks diagonally through the doorway straight at it.
+anchor("CreatureScarePose", CLASS_X + 3.5, 5, CLASS_Z + 3.5, 45, "L1_ScarePose_Classroom108")
 
--- Ragdoll corpses
-scatter("Corpse", 0, {
-	{ 150, 85, 20 },
-	{ 70, 85, 160 },
-	{ 104, 77, -70 },
-	{ 165, 37, 110 },
-	{ 28, 148, 45 },
-	{ 140, 104, -135 },
-	{ 22, 8, 80 },
-})
-
--- Smashed lockers lining the main corridor walls (kept clear of doors and the vent grates)
-scatter("SmashedLocker", 0, {
-	{ 141, 74.2, FACE_S },
-	{ 156, 74.2, FACE_S },
-	{ 165, 74.2, FACE_S },
-	{ 179, 74.2, FACE_S },
-	{ 214, 74.2, FACE_S },
-	{ 139, 85.8, FACE_N },
-	{ 83, 85.8, FACE_N },
-	{ 172, 85.8, FACE_N },
-	{ 212, 85.8, FACE_N },
-	{ 26, 74.2, FACE_S },
-	{ 68, 74.2, FACE_S },
-	{ 86, 74.2, FACE_S },
-	{ 100, 74.2, FACE_S },
-	{ 26, 85.8, FACE_N },
-	{ 68, 85.8, FACE_N },
-	{ 101, 85.8, FACE_N },
-})
-
--- Floor objective (MasterKeys): the janitor's master keys hang on a nail in one of ten rooms past the gate (the
--- anchor is the nail on the wall face, facing into the room); hideable lockers in each of those rooms or the hall
--- outside, and in classroom 101 a door away from the stairwell door, keep a hiding spot near every step; the exit
--- lock on the west stair airlock's fire door (the floor point on its corridor face, facing out of the door).
+-- Floor objective (MasterKeys): the janitor's master keys hang on a nail in one of twelve places past the gate (the
+-- anchor is the nail on the wall face, facing into the room): two in the janitor's closet, two in the main office,
+-- and the planner's ten on hooks in niches all over the far side; hideable lockers in the two rooms keep a hiding
+-- spot near every step. The exit locks on the three west stair vestibules' fire doors (the floor point on each door's
+-- corridor face, facing out of the door).
 local KEY_HOOK_Y = 4.6
-scatter("MasterKeyCandidate", KEY_HOOK_Y, {
-	{ 11.5, 52, FACE_W }, -- janitor's closet
-	{ 93, 40.5, FACE_S }, -- teachers' lounge
-	{ 112.5, 20, FACE_E }, -- book store (the records)
-	{ 11.5, 104, FACE_W }, -- the store by classroom 131
-	{ 119.5, 150, FACE_W }, -- kitchen
-	{ 56.5, 16, FACE_E }, -- classroom 113, by the teacher's desk
-	{ 28, 134.5, FACE_S }, -- cafeteria, inside the hall doors
-	{ 119.5, 104, FACE_W }, -- art room, by the supply shelves
-	{ 28, 25.5, FACE_N }, -- library, by the issue desk
-	{ 12.5, 110, FACE_E }, -- classroom 131
-})
-scatter("Locker", 0, {
-	{ 2.05, 58, FACE_E }, -- janitor's closet
-	{ 83.8, 52, FACE_E }, -- teachers' lounge
-	{ 100, 38.2, FACE_N }, -- north hall, outside the lounge and the book store
-	{ 2.05, 112, FACE_E }, -- the store by classroom 131
-	{ 102, 157.95, FACE_N }, -- kitchen
-	{ 13.8, 68, FACE_E }, -- classroom 101, a door away from the stairwell door
-	{ 58.05, 6, FACE_E }, -- classroom 113
-	{ 14.05, 140, FACE_E }, -- cafeteria
-	{ 118.2, 112, FACE_W }, -- art room
-	{ 34, 23.95, FACE_N }, -- library
-	{ 13.8, 100, FACE_E }, -- classroom 131
-})
-anchor("ExitLock", 12.5, 0, 80, FACE_E, "L1_ExitLock")
-anchor("ExitLock", 6, 0, 26.5, FACE_S, "L1_ExitLock_North")
-anchor("ExitLock", 6, 0, 133.5, FACE_N, "L1_ExitLock_South")
--- A hideable locker by each corner exit's fire door, so its lock keeps a hiding spot within reach
-scatter("Locker", 0, { { 15, 38.2, FACE_N } })
+anchor("MasterKeyCandidate", 117.5, KEY_HOOK_Y, 279, FACE_W) -- janitor's closet, east wall
+anchor("MasterKeyCandidate", 102, KEY_HOOK_Y, 270.5, FACE_S) -- janitor's closet, beside the door
+anchor("MasterKeyCandidate", 136.5, KEY_HOOK_Y, 8, FACE_E) -- main office, behind the counter
+anchor("MasterKeyCandidate", 175.5, KEY_HOOK_Y, 12, FACE_W) -- main office, the key cabinet's wall
+anchor("Locker", 115.95, 0, 284, FACE_W) -- janitor's closet
+anchor("Locker", 173.95, 0, 4, FACE_W) -- main office, by the key cabinet
+anchor("Locker", 138.05, 0, 14, FACE_E) -- main office, behind the counter
+anchor("Locker", 284, 0, HALL_Z + 7 - 2.05, FACE_N) -- the gate's west hall, out of the vent
+anchor("ExitLock", 14.5, 0, WorldConfig.Towers.West.openingZ, FACE_E, "L1_ExitLock")
+anchor("ExitLock", 14.5, 0, WorldConfig.Towers.NorthWest.openingZ, FACE_E, "L1_ExitLock_North")
+anchor("ExitLock", 14.5, 0, WorldConfig.Towers.SouthWest.openingZ, FACE_E, "L1_ExitLock_South")
+for i, z in
+	{
+		WorldConfig.Towers.NorthWest.openingZ,
+		WorldConfig.Towers.West.openingZ,
+		WorldConfig.Towers.SouthWest.openingZ,
+	} :: { number }
+do
+	-- the stair vestibules: a steel cabinet by the far wall
+	anchor("Cabinet", 1.4, 0, z + 9, FACE_E, string.format("%s_Cabinet_Stairs%d", PREFIX, i))
+end
 
--- Burst overhead pipes
-scatter("DripPipe", HEIGHT - 1.2, {
-	{ 134, 84 },
-	{ 160, 76 },
-	{ 204, 83 },
-	{ 30, 78 },
-	{ 84, 82 },
-	{ 210, 30 },
-	{ 60, 128 },
-	{ 100, 150 },
-	{ 128, 50 },
+-- Smashed locker banks along the hallway walls (clear of its doorways, the vent grate and the glass)
+local NORTH_WALL, SOUTH_WALL = HALL_Z - 7 + 1.2, HALL_Z + 7 - 1.2
+scatter("SmashedLocker", 0, {
+	{ 315, NORTH_WALL, FACE_S },
+	{ 350, NORTH_WALL, FACE_S },
+	{ 270, NORTH_WALL, FACE_S },
+	{ 306, SOUTH_WALL, FACE_N },
+	{ 322, SOUTH_WALL, FACE_N },
+	{ 346, SOUTH_WALL, FACE_N },
+	{ 354, SOUTH_WALL, FACE_N },
+	{ 270, SOUTH_WALL, FACE_N },
 })
 
-scatter("BatteryCandidate", 0, {
-	{ 16, 44 },
-	{ 224, 44 },
-	{ 150, 44 },
-	{ 16, 22 },
-	{ 124, 156 },
-	{ 116, 156 },
-	{ 234, 44 },
-	{ 224, 4 },
-	{ 182, 116 },
-	{ 6, 116 },
-})
-
+scatter("DripPipe", HEIGHT - 1.2, { { 344, HALL_Z }, { 310, HALL_Z - 3 }, { 276, HALL_Z } })
 scatter("Clutter", 0, {
-	{ 26, 60, 15 },
-	{ 68, 55, -30 },
-	{ 210, 52, 75 },
-	{ 20, 100, 120 },
-	{ 70, 110, 200 },
-	{ 100, 95, 10 },
-	{ 135, 110, -60 },
-	{ 172, 100, 35 },
-	{ 214, 112, 160 },
-	{ 40, 14, 5 },
-	{ 50, 150, 90 },
-	{ 96, 140, -15 },
-	{ 150, 154, 45 },
-	{ 210, 14, -100 },
-	{ 165, 62, 0 },
-	{ 113, 57, 30 },
+	{ 377, HALL_Z - 4, 20 },
+	{ 104, 276, 10 },
+	{ 150, 6, -20 },
 })
-
--- Patrol loops (east half first: the Creature hunts the squad back toward the gate)
-patrol("EN", { { 214, 80 }, { 214, 56 }, { 214, 33 }, { 193, 33 }, { 193, 56 }, { 193, 80 } })
-patrol("ES", { { 196, 82 }, { 193, 104 }, { 193, 127 }, { 214, 127 }, { 214, 104 }, { 214, 84 } })
-patrol("EC", { { 222, 78 }, { 172, 78 }, { 126, 78 }, { 150, 84 }, { 200, 84 } })
-patrol("EF", { { 226, 33 }, { 226, 12 }, { 198, 12 }, { 198, 33 } })
-patrol("WN", { { 26, 80 }, { 26, 56 }, { 26, 33 }, { 47, 33 }, { 47, 56 }, { 47, 80 } })
-patrol("WS", { { 47, 84 }, { 47, 104 }, { 47, 127 }, { 26, 127 }, { 26, 104 }, { 26, 84 } })
-patrol("WA", { { 90, 80 }, { 90, 100 }, { 112, 100 }, { 112, 80 } })
-patrol("WC", { { 110, 78 }, { 70, 78 }, { 20, 78 }, { 40, 84 }, { 90, 84 } })
-patrol("WF", { { 20, 127 }, { 20, 145 }, { 64, 145 }, { 64, 127 } })
+scatter("BatteryCandidate", 0, { { 360, HALL_Z + 5 }, { 112, 284 } })
 
 --------------------------------------------------------------------------------
 -- Triggers
 --------------------------------------------------------------------------------
 
--- Broken glass and cans across the full corridor width outside the ajar classroom, over the band of the corridor
--- from which the Creature's corner is in sight through the doorway (x about 169.5..181.5 at standing eye height).
-trigger("L1_Trigger_GlassStep", "ScareStep", 170, 73, 10, 14, 4)
-trigger("L1_Trigger_DebrisWest", "FloorDebris", 60, 75, 6, 10, 4)
-trigger("L1_Trigger_DebrisNorth", "FloorDebris", 150, 28, 6, 10, 4)
-trigger("L1_Trigger_DebrisSouth", "FloorDebris", 70, 122, 6, 10, 4)
-trigger("L1_Trigger_Checkpoint", "Checkpoint", 1, 67, 10, 26, 10)
-trigger("L1_Trigger_CheckpointNorthWest", "Checkpoint", 1, 1, 10, 24, 10)
-trigger("L1_Trigger_CheckpointSouthWest", "Checkpoint", 1, 135, 10, 24, 10)
+-- Broken glass and cans across the full hallway width outside the ajar classroom, over the band of the hallway from
+-- which the Creature's corner is in sight through the doorway (x about 11.5..23.5 east of the classroom's west wall
+-- at standing eye height).
+trigger("L1_Trigger_GlassStep", "ScareStep", CLASS_X + 12, HALL_Z - 7, 10, 14, 4)
+trigger("L1_Trigger_DebrisHall", "FloorDebris", 300, HALL_Z - 5, 6, 10, 4)
+trigger("L1_Trigger_Checkpoint", "Checkpoint", 1, WorldConfig.Towers.West.openingZ - 11, 12, 22, 11)
+trigger("L1_Trigger_CheckpointNorthWest", "Checkpoint", 1, WorldConfig.Towers.NorthWest.openingZ - 11, 12, 22, 11)
+trigger("L1_Trigger_CheckpointSouthWest", "Checkpoint", 1, WorldConfig.Towers.SouthWest.openingZ - 11, 12, 22, 11)
 
 --------------------------------------------------------------------------------
 -- Boarded windows on the facade
 --------------------------------------------------------------------------------
 
-windowRow("L1_Library", "N", 4, 7, 6, 3.5, true)
-windowRow("L1_Classroom_113", "N", 2, 7, 6, 3.5, true)
-windowRow("L1_Classroom_115", "N", 2, 7, 6, 3.5, true)
-windowRow("L1_Classroom_120", "N", 2, 7, 6, 3.5, true)
-windowRow("L1_Classroom_122", "N", 2, 7, 6, 3.5, true)
-windowRow("L1_MusicRoom", "N", 4, 7, 6, 3.5, true)
-windowRow("L1_Cafeteria", "S", 5, 8, 6, 3.5, true)
-windowRow("L1_Kitchen", "S", 2, 6, 4, 5, true)
-windowRow("L1_MainOffice", "S", 2, 7, 6, 3.5, true)
-windowRow("L1_PrincipalOffice", "S", 1, 7, 6, 3.5, true)
-windowRow("L1_Classroom_142", "S", 2, 7, 6, 3.5, true)
-windowRow("L1_Restroom_Staff", "S", 1, 4, 3, 7, true)
-windowRow("L1_NorthHall_West", "W", 1, 6, 6, 3.5, true)
-windowRow("L1_JanitorCloset_W", "W", 1, 4, 4, 5, true)
-windowRow("L1_SouthHall_West", "W", 1, 6, 6, 3.5, true)
-windowRow("L1_Storage_131A", "W", 1, 4, 4, 5, true)
-windowRow("L1_NorthHall_East", "E", 1, 6, 6, 3.5, true)
-windowRow("L1_JanitorCloset_E", "E", 1, 4, 4, 5, true)
-windowRow("L1_Storage_140A", "E", 1, 4, 4, 5, true)
-windowRow("L1_SouthHall_East", "E", 1, 6, 6, 3.5, true)
+windowRow("L1_MainOffice", "N", 3, 7, 6, 3.5)
+windowRow("L1_JanitorCloset", "S", 1, 4, 4, 5)
 
 --------------------------------------------------------------------------------
 
 local layout: LayoutSchema.LevelLayout = {
 	id = "Level1_Hallways",
-	-- still the 240 x 160 plan: rebuilt on TunnelPlanner in the next wave (docs/MAPS.md)
-	legacy = true,
 	height = HEIGHT,
 	acoustic = "Corridor",
 	ambience = "DroneHallways",
@@ -888,7 +909,9 @@ local layout: LayoutSchema.LevelLayout = {
 	vents = { nodes = ventNodes, edges = ventEdges, grates = grates },
 	anchors = anchors,
 	triggers = triggers,
+	platforms = platforms,
 	windows = windows,
+	tunnels = plan.tunnels,
 }
 
 deepFreeze(layout)
