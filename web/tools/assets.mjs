@@ -6,13 +6,15 @@
 //     script, `rv-manifest`) naming every asset; it boots on the 256 px set (the Potato colour maps: the first
 //     fetches, a few hundred KB) and streams the tier's own set in the background (src/engine/textures.js), so a
 //     Chromebook on Potato downloads only light assets. Hashed names never change for the same bytes: they cache
-//     forever (vercel.json); index.html revalidates.
+//     forever (vercel.json); index.html revalidates. Every reference is relative to the page (`assets/<name>`), so
+//     the site works from whatever path its directory is served at (the beta at /beta/).
 //   * A single file (writeSingleFile): the same page with every byte inline (base64 in non-executed script tags,
 //     `inline:<id>` in the manifest): the offline "lite" build (dist/Rovloc-lite.html: the Low and Potato sets) and
 //     the headless test pages. It runs from file:// with no request at all.
 //
 // The texture sets come from build/textures/textures.json (tools/textures.py: `tiers[size].maps`); the atlases from
-// world.json (meta.textures entries with `atlas`).
+// world.json (meta.textures entries with `atlas`). A build may carry a stamp (`stamp` in the manifest, build.mjs
+// --stamp "BETA 10 NOV"): the title screen shows it, so a player can tell which build is on screen.
 
 import { build } from 'esbuild';
 import crypto from 'node:crypto';
@@ -122,11 +124,26 @@ function scriptJson(value) {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
+export const STAMP_LIMIT = 24;
+
+/**
+ * A build stamp as the title screen shows it ("BETA 10 NOV"): trimmed, one line of printable characters, at most
+ * STAMP_LIMIT of them. Null for no stamp; throws on one the title cannot show.
+ */
+export function buildStamp(text) {
+  if (text === null || text === undefined) return null;
+  const stamp = String(text).trim();
+  if (!stamp) return null;
+  if (stamp.length > STAMP_LIMIT) throw new Error(`the build stamp "${stamp}" is longer than ${STAMP_LIMIT} characters`);
+  if (/[^\x20-\x7e]/.test(stamp)) throw new Error(`the build stamp "${stamp}" has characters outside printable ASCII`);
+  return stamp;
+}
+
 /**
  * One self-contained page: world and the texture sets of `inlineSizes` inline.
  * @returns {{bytes: number, sets: Record<string, number>}}
  */
-export function writeSingleFile({ out, js, world, buildDir, textures, inlineSizes, realtimeHost = null, title = 'Rovloc', policy = true, defaultTier = null }) {
+export function writeSingleFile({ out, js, world, buildDir, textures, inlineSizes, realtimeHost = null, title = 'Rovloc', policy = true, defaultTier = null, stamp = null }) {
   const tags = [];
   const tag = (id, content) => tags.push(`<script type="application/x-rovloc" id="${id}">${content}</script>`);
   tag('rv-world-json', world.jsonGz.toString('base64'));
@@ -156,12 +173,15 @@ export function writeSingleFile({ out, js, world, buildDir, textures, inlineSize
   }
   const atlases = {};
   for (const [id, a] of Object.entries(textures.atlases)) atlases[id] = { color: ref(a.color) };
+  const mark = buildStamp(stamp);
   const manifest = {
     version: 2,
     world: { json: 'inline:rv-world-json', bin: 'inline:rv-world-bin' },
     textures: { boot: Math.min(...sizes.map(Number)), sets, atlases },
     // the Graphics tier a player without a saved choice starts on (the lite build: Potato, it is for Chromebooks)
     ...(defaultTier ? { defaultTier } : {}),
+    // the build's stamp, shown small on the title screen (a beta names itself; nothing without one)
+    ...(mark ? { stamp: mark } : {}),
   };
   const safeJs = js.replace(/<\/script/gi, '<\\/script');
   const html = `<!doctype html>
@@ -192,11 +212,11 @@ function hashed(buf, name) {
 }
 
 /**
- * The multi-file site in `dir`: index.html + assets/ (content-hashed). Assets of earlier builds that this one no
- * longer names are removed from assets/.
+ * The multi-file site in `dir`: index.html + assets/ (content-hashed, referenced relative to the page). Assets of
+ * earlier builds that this one no longer names are removed from assets/.
  * @returns {{files: number, bytes: number, boot: Record<string, number>, sets: Record<string, number>, js: number, world: number}}
  */
-export function writeSite({ dir, js, world, buildDir, textures, realtimeHost = null, title = 'Rovloc' }) {
+export function writeSite({ dir, js, world, buildDir, textures, realtimeHost = null, title = 'Rovloc', stamp = null }) {
   const assetsDir = path.join(dir, 'assets');
   fs.mkdirSync(assetsDir, { recursive: true });
   const written = new Set();
@@ -233,10 +253,12 @@ export function writeSite({ dir, js, world, buildDir, textures, realtimeHost = n
     atlases[id] = { color: put(buf, path.basename(a.color)) };
   }
   const boot = bootSize(textures.sets);
+  const mark = buildStamp(stamp);
   const manifest = {
     version: 2,
     world: { json: worldJson, bin: worldBin, bytes: { json: world.jsonGz.length, bin: world.binGz.length } },
     textures: { boot, sets, atlases },
+    ...(mark ? { stamp: mark } : {}),
   };
   const html = `<!doctype html>
 <html lang="en">

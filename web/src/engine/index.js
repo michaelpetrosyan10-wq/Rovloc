@@ -19,6 +19,7 @@
 //   engine.save       localStorage JSON with versioning
 //   engine.lighting   flicker groups, overrides, bursts, lightning, dynamic lights, the level film
 //   engine.settings   the player's settings (SettingsSchema)
+//   engine.buildStamp the build's stamp ("BETA 10 NOV": build.mjs --stamp), '' on a build without one
 
 import * as THREE from 'three';
 import { Audio } from './audio/audio.js';
@@ -59,7 +60,9 @@ const LEVEL_BEDS = {
  *   textures.boot                     the set the page boots with (256: the Potato colour maps)
  *   textures.sets[size].maps[id][kind] every surface texture per size (2048, 1024, 512, 256); `inline` sets came with the page
  *   textures.atlases[id].color        the decal and wear atlases (every tier)
- * @typedef {{version: number, world: {json: string, bin: string}, textures: any}} Manifest
+ *   defaultTier                       the Graphics tier a player without a saved choice starts on (the lite build)
+ *   stamp                             the build's stamp, shown on the title screen (a beta build)
+ * @typedef {{version: number, world: {json: string, bin: string}, textures: any, defaultTier?: string, stamp?: string}} Manifest
  */
 
 /** Base64 -> bytes. */
@@ -194,6 +197,8 @@ export class Engine {
       this.settings.values.Graphics = Settings.sanitize('Graphics', assets.manifest.defaultTier) || this.settings.values.Graphics;
     }
     this.quality = new Quality(this.settings, this.save);
+    /** The build's stamp ("BETA 10 NOV"), which the title screen shows; '' on a build without one. */
+    this.buildStamp = assets.manifest && typeof assets.manifest.stamp === 'string' ? assets.manifest.stamp : '';
     this.loop = new Loop();
     this.shared = createSharedUniforms((decoded.meta.flickerGroups || []).length);
 

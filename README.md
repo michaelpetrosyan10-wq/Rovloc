@@ -39,10 +39,11 @@ world builder in Lune).
 cd web
 npm ci
 npm run data      # export the world (Lune) -> pack the textures -> bake world.json + world.bin
-npm run build     # -> dist/Rovloc.html, the whole game in one file
+npm run build     # -> ../site/beta/ (the website's build in testing) and dist/Rovloc-lite.html (one offline file)
 ```
 
-Open `web/dist/Rovloc.html` to play. To deploy, copy it to `site/index.html` and push.
+Open `web/dist/Rovloc-lite.html` to play. The website serves `site/`: the published game at the root and the build in
+testing at `/beta/` ([`site/README.md`](site/README.md) has the steps to publish one).
 
 ## Checks
 

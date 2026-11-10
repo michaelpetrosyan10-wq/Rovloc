@@ -2,11 +2,22 @@
 //
 //   node tools/check.mjs [--shots <dir>] [--quick] [--no-perf] [--perf-only]
 //
-// 1. The website (site/, served over HTTP as Vercel serves it): boots, renders a non-black image (pixels read back from
-//    the canvas), logs no console or page error, and fetches nothing but its own assets (same origin; anything else
-//    fails). What a Chromebook on Potato downloads (the Graphics setting saved as Potato before the page loads) and
-//    what Max streams after boot are measured from the page's resource timings: Potato must not fetch a texture
-//    bigger than its 256 px set, nor any normal map.
+// 1. The website: site/ served over HTTP as Vercel serves it (the test server applies site/vercel.json: its
+//    trailingSlash redirect and its header rules), with the build under test at /beta/ (site/beta/, where build.mjs
+//    writes the site) and the published stable page at /.
+//    * The files: the page names only relative assets (assets/<hashed name>), every one present and none left over,
+//      so it works from the path it is served at; vercel.json caches the assets forever and revalidates the page;
+//      /beta redirects to /beta/ (a page at /beta would resolve its assets against the root).
+//    * The two pages share an origin, so they share the saved game: the stable page boots, then the beta on the save
+//      it wrote, then the stable page on the save the beta wrote.
+//    * The beta boots, renders a non-black image (pixels read back from the canvas), logs no console or page error,
+//      and requests nothing but its own files under /beta/ (anything else fails), none of them failing. Its title
+//      shows the build's stamp (build.mjs --stamp) when it has one, and no stamp otherwise.
+//    * What a Chromebook on Potato downloads (the Graphics setting saved as Potato before the page loads) and what
+//      Max streams after boot are measured from the page's resource timings: Potato must not fetch a texture bigger
+//      than its 256 px set, nor any normal map. On Potato a solo run is then played: PLAY, the walkthrough skipped,
+//      onto a ready pad in the lobby, the countdown, deployed into Level 0; still nothing but light assets.
+//    * No dev control without ?dev: the pause menu lists no dev shortcut and F3 shows no stats (with ?dev both do).
 // 1b. The lite build (dist/Rovloc-lite.html) from file://: boots and renders with no request at all.
 // 1c. Co-op's network rule on the site: nothing but its own assets until the player presses HOST or JOIN, then only the
 //    Supabase project's host (the page's CSP allows no other) and the STUN servers (WebRTC, outside CSP and request
@@ -53,7 +64,10 @@ const noPerf = argv.includes('--no-perf');
 // --perf-only: the tier measurements and screenshots alone (the sandbox site is built and served as usual)
 const perfOnly = argv.includes('--perf-only');
 const shotsDir = path.resolve(opt('--shots', path.join(web, 'build/cache/shots')));
-const siteDir = path.resolve(web, '..', 'site');
+// what Vercel serves, and in it the build under test: build.mjs writes the site to site/beta/, served at /beta/
+const siteRoot = path.resolve(web, '..', 'site');
+const SITE_PATH = '/beta/';
+const siteDir = path.join(siteRoot, 'beta');
 const liteFile = path.join(web, 'dist/Rovloc-lite.html');
 const sandboxDir = path.join(web, 'build/cache/check-sandbox');
 const TIERS = ['Max', 'High', 'Medium', 'Low', 'Potato'];
@@ -92,36 +106,94 @@ function report(ok, name, detail = '') {
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json',
   '.gz': 'application/gzip', '.webp': 'image/webp', '.png': 'image/png', '.md': 'text/plain' };
 
-/** A static server for the site (/) and the sandbox site (/sandbox/), as Vercel serves site/. */
+/**
+ * A vercel.json `source` as a RegExp. Vercel compiles a source with path-to-regexp, strict and case-sensitive: text
+ * is literal and a parenthesised group is a regular expression. Named parameters and modifiers are not modelled: a
+ * source that uses one throws, so no rule is served differently from what Vercel would do without the check failing.
+ */
+function sourceRegex(source) {
+  let out = '';
+  let depth = 0;
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === '\\') {
+      out += ch + (source[++i] || '');
+      continue;
+    }
+    if (ch === '(') depth++;
+    if (depth > 0) out += ch;
+    else if (/[:*+?{}]/.test(ch)) throw new Error(`vercel.json: the source "${source}" uses path-to-regexp syntax the test server does not model ("${ch}")`);
+    else out += ch.replace(/[.^$|[\]]/g, '\\$&');
+    if (ch === ')') depth--;
+  }
+  return new RegExp(`^${out}$`);
+}
+
+/**
+ * A static server for site/ as Vercel serves it: a directory's index.html, vercel.json's `trailingSlash` redirect and
+ * its `headers` rules (every rule whose source matches the path applies; a later rule overrides an earlier one's
+ * key). The sandbox site is mounted at /sandbox/ and never cached.
+ */
 function serve() {
-  const roots = [['/sandbox/', sandboxDir], ['/', siteDir]];
+  const config = JSON.parse(fs.readFileSync(path.join(siteRoot, 'vercel.json'), 'utf8'));
+  const rules = (config.headers || []).map((rule) => ({ source: sourceRegex(rule.source), headers: rule.headers }));
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://local');
-    const [prefix, root] = roots.find(([p]) => url.pathname.startsWith(p));
-    let rel = decodeURIComponent(url.pathname.slice(prefix.length));
+    const pathname = decodeURIComponent(url.pathname);
+    const sandbox = pathname.startsWith('/sandbox/');
+    const root = sandbox ? sandboxDir : siteRoot;
+    const headers = {};
+    if (sandbox) {
+      headers['cache-control'] = 'no-store';
+    } else {
+      if (config.trailingSlash === true) {
+        // Vercel: a path without an extension gains its slash, a file's path loses it (308)
+        const bare = /^\/((?:[^/]+\/)*[^/.]+)$/.exec(pathname);
+        const file = /^\/((?:[^/]+\/)*[^/]+\.\w+)\/$/.exec(pathname);
+        if (bare || file) {
+          res.writeHead(308, { location: `${bare ? `/${bare[1]}/` : `/${file[1]}`}${url.search}` });
+          res.end();
+          return;
+        }
+      }
+      for (const rule of rules) {
+        if (rule.source.test(pathname)) for (const h of rule.headers) headers[h.key.toLowerCase()] = h.value;
+      }
+    }
+    let rel = pathname.slice(sandbox ? '/sandbox/'.length : 1);
     if (!rel || rel.endsWith('/')) rel += 'index.html';
-    const file = path.resolve(root, rel);
+    let file = path.resolve(root, rel);
+    // without trailingSlash, Vercel serves a directory's index at the bare path too
+    if (file.startsWith(root + path.sep) && fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
     if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
-      res.writeHead(404);
+      res.writeHead(404, headers);
       res.end();
       return;
     }
-    res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
+    res.writeHead(200, { ...headers, 'content-type': TYPES[path.extname(file)] || 'application/octet-stream' });
     fs.createReadStream(file).pipe(res);
   });
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, origin: `http://127.0.0.1:${server.address().port}` })));
 }
 
-/** Opens a page with the request / console / error guards: `allowed(url)` marks the requests a page may make. */
-async function open(browser, url, { allowed = () => false, viewport = { width: 1280, height: 720 }, init = null } = {}) {
-  const page = await browser.newPage({ viewport });
+/**
+ * Opens a page with the request / console / error guards: `allowed(url)` marks the requests a page may make, and
+ * `guard.failed` lists the requests that failed or were answered with an error status. `context` opens the page in a
+ * browser context shared with others (one saved game, as two pages of one origin share it); else it gets its own.
+ */
+async function open(browser, url, { allowed = () => false, viewport = { width: 1280, height: 720 }, init = null, context = null } = {}) {
+  const page = context ? await context.newPage() : await browser.newPage({ viewport });
   if (init) await page.addInitScript(init);
-  const guard = { external: [], errors: [], warnings: [], own: 0 };
+  const guard = { external: [], failed: [], errors: [], warnings: [], own: 0 };
   page.on('request', (r) => {
     const u = r.url();
     if (/^(data|blob):/i.test(u)) return;
     if (allowed(u)) guard.own++;
     else guard.external.push(u);
+  });
+  page.on('requestfailed', (r) => guard.failed.push(`${r.url()} (${r.failure() ? r.failure().errorText : 'failed'})`));
+  page.on('response', (r) => {
+    if (r.status() >= 400) guard.failed.push(`${r.url()} (HTTP ${r.status()})`);
   });
   page.on('console', (m) => {
     if (m.type() === 'error') guard.errors.push(m.text());
@@ -188,6 +260,83 @@ async function texturesSettled(page, ms = 180000) {
 /** Holds the page's own frame loop (headless WebGL draws in software: frames are stepped by the checks). */
 const hold = (page) => page.evaluate(() => window.__rovloc.engine && window.__rovloc.engine.loop.stop());
 
+/** Steps a held page `seconds` of game time at 30 frames a second without drawing them. */
+const advance = (page, seconds) => page.evaluate(async (s) => {
+  const e = window.__rovloc.engine;
+  const skip = e.skipRender;
+  e.skipRender = true;
+  for (let i = 0; i < Math.round(s * 30); i++) {
+    e.loop.stepManual(1 / 30);
+    await null; // the game's promises (a deploy's fade) settle between frames
+  }
+  e.skipRender = skip;
+}, seconds);
+
+/**
+ * What a held page shows of the dev tools: F3 is pressed and a frame stepped (the stats line is drawn by the frame),
+ * then the pause menu opened and its buttons read.
+ */
+async function devControls(page) {
+  await page.keyboard.press('F3');
+  await advance(page, 1 / 30);
+  return page.evaluate(() => {
+    const e = window.__rovloc.engine;
+    const stats = e.showStats || e.ui.statsEl.style.display !== 'none';
+    e.ui.openMenu();
+    const buttons = [...e.ui.menuEl.querySelectorAll('.rv-menu-panel > button')].map((b) => b.textContent);
+    e.ui.closeMenu();
+    return { buttons, dev: buttons.filter((b) => /^dev\b/i.test(b)), stats };
+  });
+}
+
+/**
+ * From the title into the lobby, as a player does: PLAY, and the walkthrough skipped if it opens (a first visit).
+ * Entering writes the saved game (the walkthrough marked done), flushed here.
+ */
+const enterLobby = (page) => page.evaluate(() => {
+  const g = window.__rovlocGame.game;
+  const o = g.onboarding;
+  const title = o.mode;
+  o.playBtn.click();
+  const walkthrough = o.mode === 'Walkthrough';
+  if (walkthrough) o.skipBtn.click();
+  window.__rovloc.engine.save.flush();
+  return { title, walkthrough, mode: o.mode, phase: g.phase, saved: (localStorage.getItem('rovloc.save') || '').length };
+});
+
+/**
+ * A solo run on a held page standing in the lobby: up the bus's rear step onto the nearest ready pad, the countdown,
+ * the deploy into Level 0.
+ */
+async function soloRun(page) {
+  const distance = await page.evaluate(() => {
+    const g = window.__rovlocGame.game;
+    const e = g.lobby.bus.entrance;
+    const pad = g.lobby.pads.map((x) => x.centre).sort((a, b) => Math.hypot(a.x - e.x, a.z - e.z) - Math.hypot(b.x - e.x, b.z - e.z))[0];
+    g.env.teleport({ position: { x: e.x, y: e.y + 3, z: e.z }, yaw: Math.atan2(-(pad.x - e.x), -(pad.z - e.z)) });
+    return Math.hypot(pad.x - e.x, pad.z - e.z);
+  });
+  await advance(page, 0.2);
+  await page.keyboard.down('KeyW');
+  await advance(page, Math.max(0.1, distance / 11));
+  await page.keyboard.up('KeyW');
+  await advance(page, 0.3);
+  const pad = await page.evaluate(() => {
+    const g = window.__rovlocGame.game;
+    return { phase: g.phase, ready: g.lobby.ready };
+  });
+  const playing = () => page.evaluate(() => {
+    const g = window.__rovlocGame.game;
+    return { phase: g.phase, level: g.level, active: !!g.levelActive, life: g.life.state, seed: g.run ? g.run.seed : null };
+  });
+  let run = await playing();
+  for (let i = 0; i < 40 && !(run.phase === 'InRun' && run.active); i++) {
+    await advance(page, 1);
+    run = await playing();
+  }
+  return { pad, run };
+}
+
 const mb = (n) => (n / 1048576).toFixed(2);
 
 async function main() {
@@ -198,40 +347,157 @@ async function main() {
   }
   fs.mkdirSync(shotsDir, { recursive: true });
   const { server, origin } = await serve();
+  const siteUrl = `${origin}${SITE_PATH}`;
   const own = (u) => u.startsWith(`${origin}/`);
+  // the build under test may request its own files, under /beta/, and nothing else
+  const ownSite = (u) => u.startsWith(siteUrl);
   const browser = await chromium.launch(LAUNCH);
+  const siteHtml = fs.readFileSync(path.join(siteDir, 'index.html'), 'utf8');
+  const manifest = JSON.parse((/<script type="application\/json" id="rv-manifest">([\s\S]*?)<\/script>/.exec(siteHtml) || [])[1] || 'null');
+  if (!manifest) throw new Error(`${path.join(siteDir, 'index.html')} has no asset manifest: it is not a site build.mjs wrote`);
+  const stamp = manifest.stamp || '';
+  console.log(`INFO  the build under test: ${path.relative(path.resolve(web, '..'), siteDir)}/ served at ${SITE_PATH}, ` +
+    `${stamp ? `stamped "${stamp}"` : 'without a build stamp'}`);
+  // a first visit with Graphics saved as Potato (which also keeps the software rasterizer quick). The pointer lock is
+  // never requested: the solo run steers with keys, headless Chromium drops a granted lock at random moments, and a
+  // lost lock opens the pause menu
+  const potatoSaved = () => {
+    Element.prototype.requestPointerLock = function requestPointerLock() {
+      return Promise.resolve();
+    };
+    localStorage.setItem('rovloc.save', JSON.stringify({ version: 1, data: { settings: { Graphics: 'Potato' } } }));
+  };
 
   // ------------------------------------------------------------------ 1. the website
   if (!perfOnly) {
-    const { page, guard, bootMs, bootError } = await open(browser, `${origin}/`, { allowed: own, viewport: SMALL });
-    report(!bootError, 'website boots (served site/)', bootError ? bootError : `${bootMs} ms`);
+    // the files: every reference relative to the page, so the site works from the path its directory is served at
+    const refs = [...siteHtml.matchAll(/\s(?:src|href)="([^"]*)"/g)].map((m) => m[1]);
+    const collect = (v) => {
+      if (typeof v === 'string') refs.push(v);
+      else if (v && typeof v === 'object') Object.values(v).forEach(collect);
+    };
+    collect(manifest.world);
+    collect(manifest.textures);
+    const files = fs.readdirSync(path.join(siteDir, 'assets'));
+    const wrong = refs.filter((r) => !/^assets\/[\w.-]+$/.test(r) || !files.includes(r.slice('assets/'.length)));
+    const unused = files.filter((f) => !refs.includes(`assets/${f}`));
+    report(refs.length > 2 && wrong.length === 0 && unused.length === 0,
+      'the site names only relative assets (assets/<name>), every one present and none left over',
+      wrong.length || unused.length ? `wrong: ${wrong.slice(0, 3).join(' ') || 'none'}; unused: ${unused.slice(0, 3).join(' ') || 'none'}`
+        : `${new Set(refs).size} assets`);
+
+    // vercel.json, read back from the server that applies it
+    const head = async (p) => {
+      const r = await fetch(`${origin}${p}`, { method: 'HEAD', redirect: 'manual' });
+      return { status: r.status, cache: r.headers.get('cache-control') || '', sniff: r.headers.get('x-content-type-options') || '',
+        location: r.headers.get('location') || '' };
+    };
+    const pages = [await head(SITE_PATH), await head(`${SITE_PATH}index.html`)];
+    report(pages.every((h) => h.status === 200 && /max-age=0\b/.test(h.cache) && /must-revalidate/.test(h.cache) && h.sniff === 'nosniff'),
+      'vercel.json: the beta page is revalidated on every visit', pages.map((h) => `${h.status} ${h.cache}`).join(' | '));
+    const assets = [];
+    for (const f of files) assets.push(await head(`${SITE_PATH}assets/${f}`));
+    const loose = assets.filter((h) => h.status !== 200 || !/max-age=31536000\b/.test(h.cache) || !/immutable/.test(h.cache) || h.sniff !== 'nosniff');
+    report(assets.length > 0 && loose.length === 0, 'vercel.json: the beta\'s hashed assets are cached forever',
+      `${assets.length} files, ${loose.length ? `${loose.length} not: ${loose[0].status} ${loose[0].cache}` : assets[0].cache}`);
+    const bare = await head(SITE_PATH.replace(/\/$/, ''));
+    report([301, 302, 307, 308].includes(bare.status) && bare.location === SITE_PATH,
+      'vercel.json: /beta redirects to /beta/ (the page\'s assets are relative to it)', `${bare.status} ${bare.location}`);
+
+    // the stable page at / and the beta are one origin, so one saved game: each boots on the save the other wrote
+    if (fs.existsSync(path.join(siteRoot, 'index.html'))) {
+      const stable = await head('/');
+      report(stable.status === 200 && /must-revalidate/.test(stable.cache) && !/immutable/.test(stable.cache) && stable.sniff === 'nosniff',
+        'vercel.json: the stable page at / keeps its own rule (revalidated, never immutable)', `${stable.status} ${stable.cache}`);
+      const context = await browser.newContext({ viewport: SMALL });
+      const visit = async (name, url, allowed) => {
+        const { page, guard, bootMs, bootError } = await open(browser, url, { allowed, context });
+        await hold(page);
+        const lobby = bootError ? null : await enterLobby(page);
+        report(!bootError && lobby.title === 'Title' && lobby.mode === 'Hidden' && lobby.phase === 'Lobby' && lobby.saved > 0 &&
+          guard.external.length === 0 && guard.failed.length === 0 && guard.errors.length === 0, name,
+        bootError || [...guard.external, ...guard.failed, ...guard.errors].slice(0, 3).join(' | ') ||
+          `${bootMs} ms, title -> lobby, ${lobby.saved} bytes saved`);
+        await page.close();
+      };
+      const stableOnly = (u) => own(u) && !ownSite(u) && !u.startsWith(`${origin}/sandbox/`);
+      await visit('the stable page at / boots and plays into its lobby, requesting nothing but itself', `${origin}/`, stableOnly);
+      await visit('the beta boots on the save the stable page wrote', siteUrl, ownSite);
+      await visit('the stable page boots on the save the beta wrote', `${origin}/`, stableOnly);
+      await context.close();
+    }
+
+    // the beta, as a first visit: Max
+    const { page, guard, bootMs, bootError } = await open(browser, siteUrl, { allowed: ownSite, viewport: SMALL });
+    report(!bootError, `website boots (site/ served as Vercel serves it, the build at ${SITE_PATH})`, bootError ? bootError : `${bootMs} ms`);
     await page.waitForTimeout(1500);
     await hold(page);
     const m = await page.evaluate(() => window.__rovloc.engine && window.__rovloc.engine.measure());
     report(!!m && m.litShare > 0.004 && m.mean > 0.5, 'website renders a non-black image',
       m ? `mean ${m.mean.toFixed(1)}/255, ${(m.litShare * 100).toFixed(1)}% lit` : 'no engine');
-    report(guard.external.length === 0, 'website fetches nothing but its own assets', guard.external.slice(0, 5).join(' '));
-    report(guard.errors.length === 0, 'website has no console errors', guard.errors.slice(0, 5).join(' | '));
+    const title = await page.evaluate(() => {
+      const o = window.__rovlocGame.game.onboarding;
+      const r = o.stamp ? o.stamp.getBoundingClientRect() : null;
+      return { mode: o.mode, stamp: o.stamp ? o.stamp.textContent : null,
+        shown: !!r && r.width > 0 && r.height > 0 && r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight };
+    });
+    report(title.mode === 'Title' && (stamp ? title.stamp === stamp && title.shown : title.stamp === null),
+      stamp ? 'the title screen shows the build\'s stamp' : 'the title screen of a build without a stamp shows none', JSON.stringify(title));
     await page.screenshot({ path: path.join(shotsDir, 'deliverable.png'), timeout: 180000 });
     await texturesSettled(page);
     const max = await downloads(page);
     const tex = await page.evaluate(() => ({ current: window.__rovloc.engine.textures.current, stats: window.__rovloc.engine.textures.stats }));
     report(tex.current === 2048 && max.normals > 0, 'Max streams its 2048 texture set in the background',
       `${mb(max.total)} MB in all (world ${mb(max.world)}, js ${mb(max.js)}, textures ${mb(max.textures)}, atlases ${mb(max.atlases)}); set ${tex.current}`);
+    report(guard.external.length === 0, 'website fetches nothing but its own assets', guard.external.slice(0, 5).join(' '));
+    report(guard.failed.length === 0, 'none of the website\'s requests fails', guard.failed.slice(0, 5).join(' | '));
+    report(guard.errors.length === 0, 'website has no console errors', guard.errors.slice(0, 5).join(' | '));
     await page.close();
   }
   {
-    const init = () => localStorage.setItem('rovloc.save', JSON.stringify({ version: 1, data: { settings: { Graphics: 'Potato' } } }));
-    const { page, guard, bootError } = await open(browser, `${origin}/`, { allowed: own, init, viewport: SMALL });
+    const { page, guard, bootError } = await open(browser, siteUrl, { allowed: ownSite, init: potatoSaved, viewport: SMALL });
     await page.waitForTimeout(1500);
     await hold(page);
     await texturesSettled(page, 30000);
-    const d = await downloads(page);
-    const tier = await page.evaluate(() => window.__rovloc.engine.quality.tier);
-    report(!bootError && tier === 'Potato' && d.biggestTexture <= 256 && d.normals === 0 && guard.external.length === 0,
-      'Potato downloads only light assets (the 256 colour set, no normal maps)',
-      `${mb(d.total)} MB: world ${mb(d.world)}, js ${mb(d.js)}, textures ${mb(d.textures)}, atlases ${mb(d.atlases)}; biggest texture ${d.biggestTexture}px`);
+    const light = async (name) => {
+      const d = await downloads(page);
+      const tier = await page.evaluate(() => window.__rovloc.engine.quality.tier);
+      report(!bootError && tier === 'Potato' && d.biggestTexture > 0 && d.biggestTexture <= 256 && d.normals === 0 && guard.external.length === 0 &&
+        guard.failed.length === 0, name,
+      `${mb(d.total)} MB: world ${mb(d.world)}, js ${mb(d.js)}, textures ${mb(d.textures)}, atlases ${mb(d.atlases)}; biggest texture ${d.biggestTexture}px` +
+        `${guard.failed.length ? `; failed: ${guard.failed.slice(0, 3).join(' | ')}` : ''}`);
+      return d;
+    };
+    const d = await light('Potato downloads only light assets (the 256 colour set, no normal maps)');
     console.log(`INFO  Potato downloads ${mb(d.total)} MB (${d.list.length} files)`);
+    if (!perfOnly && !bootError) {
+      // a solo run, as a first visit plays it: the title, PLAY, the walkthrough skipped, a ready pad, Level 0
+      const lobby = await enterLobby(page);
+      report(lobby.title === 'Title' && lobby.walkthrough && lobby.mode === 'Hidden' && lobby.phase === 'Lobby',
+        'solo: PLAY on the title, the walkthrough skipped, into the lobby', JSON.stringify(lobby));
+      const quiet = await devControls(page);
+      const { pad, run } = await soloRun(page);
+      report(pad.phase === 'Countdown' && pad.ready, 'solo: stepping onto a ready pad starts the countdown', JSON.stringify(pad));
+      report(run.phase === 'InRun' && run.level === 'Level0_Basement' && run.active && run.life === 'Alive',
+        'solo: deployed into Level 0', JSON.stringify(run));
+      const inRun = await devControls(page);
+      report(quiet.dev.length === 0 && inRun.dev.length === 0 && !quiet.stats && !inRun.stats && quiet.buttons.length > 0 && inRun.buttons.length > 0,
+        'no dev control without ?dev: the pause menu lists no dev shortcut, F3 shows no stats',
+        `lobby: ${quiet.buttons.join(', ')}; in the run: ${inRun.buttons.join(', ')}`);
+      await texturesSettled(page, 30000);
+      await light('solo: a run on Potato still downloads only light assets');
+      report(guard.errors.length === 0, 'solo: no console errors from the title to Level 0', guard.errors.slice(0, 5).join(' | '));
+    }
+    await page.close();
+  }
+  if (!perfOnly) {
+    // the same page with ?dev does list them: the check above can tell
+    const { page, guard, bootError } = await open(browser, `${siteUrl}?dev`, { allowed: ownSite, init: potatoSaved, viewport: SMALL });
+    await hold(page);
+    const lobby = bootError ? null : await enterLobby(page);
+    const shown = bootError ? null : await devControls(page);
+    report(!!shown && lobby.phase === 'Lobby' && shown.dev.length > 0 && shown.stats && guard.errors.length === 0,
+      'with ?dev the pause menu lists the dev shortcuts and F3 shows the stats', bootError || `${shown.dev.join(', ')}; stats ${shown.stats}`);
     await page.close();
   }
 
@@ -255,15 +521,13 @@ async function main() {
   // Nothing but its own assets until HOST / JOIN; then only the Supabase project's host (this sandbox cannot reach it,
   // as a school filter would not: the friends sheet says multiplayer cannot connect and single-player still works).
   if (!perfOnly) {
-    const html = fs.readFileSync(path.join(siteDir, 'index.html'), 'utf8');
-    const csp = (/http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html) || [])[1] || '';
+    const csp = (/http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(siteHtml) || [])[1] || '';
     const connect = (/connect-src ([^;]+)/.exec(csp) || [])[1] || '';
     const hosts = connect.split(/\s+/).filter((s) => /^(wss|https):/.test(s)).map((s) => new URL(s).host);
     report(hosts.length === 2 && new Set(hosts).size === 1 && /\.supabase\.co$/.test(hosts[0]) && /'self'/.test(connect),
       'the page may connect to its own origin and one other host only (the Supabase project), by its CSP', connect);
     // the network rule holds on every tier; Potato keeps the software rasterizer quick
-    const init = () => localStorage.setItem('rovloc.save', JSON.stringify({ version: 1, data: { settings: { Graphics: 'Potato' } } }));
-    const { page, guard, bootError } = await open(browser, `${origin}/`, { allowed: own, init, viewport: SMALL });
+    const { page, guard, bootError } = await open(browser, siteUrl, { allowed: ownSite, init: potatoSaved, viewport: SMALL });
     const sockets = [];
     page.on('websocket', (ws) => sockets.push(ws.url()));
     await page.waitForTimeout(1500);

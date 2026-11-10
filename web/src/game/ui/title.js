@@ -4,7 +4,8 @@
 //             SETTINGS, the saved credits and escapes; behind it the camera drifts through the boiler room (a
 //             Cutscene camera override along TutorialConfig.TitleDrift, Catmull-Rom, one loop per 64 s). While it is
 //             up the HUD is hidden, the cursor is free, the Menu input context is pushed; keyboard, gamepad and touch
-//             all drive it. PLAY goes into the lobby, the first time through the walkthrough.
+//             all drive it. PLAY goes into the lobby, the first time through the walkthrough. A stamped build (a
+//             beta: tools/build.mjs --stamp) names itself in the corner, small; any other build shows nothing there.
 //   Walkthrough  TutorialConfig.Pages on a taped sheet, a drawn illustration each, page count and dots, BACK / SKIP /
 //             NEXT (GOT IT on the last); arrows / bumpers page, Enter goes on, B / Escape skips. Finishing or
 //             skipping saves TutorialDone. openWalkthrough() replays it from the lobby and returns there.
@@ -112,6 +113,16 @@ export class Onboarding {
     this.hint = el('div', 'rg-caps', col, '');
     this.hint.style.marginTop = '8px';
 
+    // the build's stamp ("BETA 10 NOV"), in the corner of the title only: which build this is, for a player testing one
+    /** @type {HTMLElement|null} */
+    this.stamp = null;
+    const stamp = this.env.buildStamp();
+    if (stamp) {
+      this.stamp = el('div', 'rg-caps rg-outline', this.root, stamp);
+      Object.assign(this.stamp.style, { position: 'absolute', right: '16px', bottom: '12px', color: Palette.Ash,
+        pointerEvents: 'none' });
+    }
+
     // walkthrough sheet
     this.walk = el('div', 'rg-screen rg-hidden', this.root);
     this.walk.style.background = 'rgba(0,0,0,0.55)';
@@ -183,6 +194,7 @@ export class Onboarding {
     this.root.classList.remove('rg-hidden');
     this.walk.classList.add('rg-hidden');
     this.titleCol.style.display = '';
+    if (this.stamp) this.stamp.style.display = '';
     this.shade.style.display = '';
     const p = this.game.profile;
     this.stats.textContent = S('Title.Stats', p.credits, p.escapes);
@@ -219,6 +231,7 @@ export class Onboarding {
     this.root.classList.remove('rg-hidden');
     this.walk.classList.remove('rg-hidden');
     this.titleCol.style.display = 'none';
+    if (this.stamp) this.stamp.style.display = 'none';
     this.shade.style.display = from === 'Hidden' ? 'none' : '';
     this.game.nav.remove(this.group);
     this.game.nav.push(this.walkGroup);

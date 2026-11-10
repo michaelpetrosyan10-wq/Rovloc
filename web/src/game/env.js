@@ -24,7 +24,8 @@
 //   engine.lighting   setOverride(lightId, brightness), setGroupFactor(groupId, factor), setGroupStutter(groupId,
 //                     factor), burst(lightId), lightning({intensity, stages}), setStormEnabled, resetForRun, addLight
 //   engine.save / engine.settings   localStorage blob (get / set / update / flush / persistent) and the settings
-//   engine            setCurrentLevel, setAmbienceEnabled, menuEnabled, syringes, renderer.camera / height, spawnPoints
+//   engine            setCurrentLevel, setAmbienceEnabled, menuEnabled, syringes, renderer.camera / height, spawnPoints,
+//                     buildStamp
 
 import * as THREE from 'three';
 import { CameraConfig, WalkSpeeds } from '../engine/config.js';
@@ -772,6 +773,11 @@ export class Env {
 
   onSettingChanged(fn) {
     return this.engine.settings.changed.connect(fn);
+  }
+
+  /** The build's stamp ("BETA 10 NOV": tools/build.mjs --stamp), '' on a build without one. */
+  buildStamp() {
+    return this.engine.buildStamp || '';
   }
 
   // ---------------------------------------------------------------------------------------------------- effects

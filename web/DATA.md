@@ -24,7 +24,7 @@ The bake takes these options:
 - `--raw`, `--out`.
 
 build.mjs (through `tools/assets.mjs`) ships `world.json` and `world.bin` gzipped (inflated with DecompressionStream),
-the texture sets and the atlases two ways: the site (`site/index.html` + content-hashed `site/assets/*`, fetched) and
+the texture sets and the atlases two ways: the site (`site/beta/index.html` + content-hashed `site/beta/assets/*`, fetched) and
 single files (the lite build and the test pages: base64 in non-executed script tags). The page's asset manifest (an
 inline JSON script, `rv-manifest`) names every asset by URL or by `inline:<script id>`. `build/cache/` holds
 intermediates and is not shipped.

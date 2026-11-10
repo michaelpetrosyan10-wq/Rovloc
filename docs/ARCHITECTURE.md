@@ -50,7 +50,7 @@ It is the same game on both, with every feature on both. Neither platform embeds
 | `test.project.json` | The same tree plus `tests/` under `ServerScriptService.Tests`, for Lune, luau-lsp and Studio spec runs. |
 | `syncback.project.json` | The script folders only, for `rojo syncback` (keeps the pins out of syncback). |
 | `.github/workflows/` | `ci.yml` (the gates and a `Rovloc.rbxl` artifact), `publish.yml` (Open Cloud place publishing) and `textures.yml` (texture generation and upload). |
-| `site/` | The deployed website, written by `npm run build`: `index.html`, the content-hashed `assets/` and `vercel.json`. |
+| `site/` | What Vercel serves: `index.html` (the published stable game, one file, which no build writes), `beta/` (the build in testing, written by `npm run build`: its `index.html` and content-hashed `assets/`) and `vercel.json`. |
 | `docs/` | This file, `LIGHTING-PARITY.md` (the Roblox look fitted to the web's), `PLACE_SETUP.md` (what Rojo can't set, and publishing) and `store/` (promo art and store copy). |
 
 ## 2. What both platforms share (`src/ReplicatedStorage/Shared/`)
@@ -438,7 +438,7 @@ Zone culling (the bake's PVS, `meta.visibility`) runs on every tier.
 ```text
 src/ (Luau world builder) ──rojo build──▶ place ──Lune export──▶ world-raw.json ──bake──▶ world.json + world.bin
                                                                      textures ──┘                      │
-                       site/ (index.html + hashed assets/) ◀── build ┘ ──▶ Vercel;  dist/Rovloc-lite.html (offline)
+                  site/beta/ (index.html + hashed assets/) ◀── build ┘ ──▶ Vercel;  dist/Rovloc-lite.html (offline)
 ```
 
 | Step | Command (in `web/`) | What happens |
@@ -446,8 +446,8 @@ src/ (Luau world builder) ──rojo build──▶ place ──Lune export─�
 | Export | `npm run export` | `tools/export-world.luau` builds `default.project.json` with Rojo and loads it in Lune through `tools/lune/harness.luau`. It then does what a run's server does at the fixed seed 20251029 on Standard: builds the school, the run's plan with props and fixtures, a prop on every other candidate anchor a run may pick, the cosmetic dressing, the Creature rig and the moonlight windows. It writes `build/cache/world-raw.json`, and RunDirector's plans for a spread of seeds to `build/cache/run-plans.json` (the data test replays them on the web's port). |
 | Textures | `npm run textures` | `tools/textures.py` packs the generator's maps (`tools/textures/`) into WebP, one set per graphics tier: 2048 (generated at 2048), 1024, 512 and 256. |
 | Bake | `npm run bake` | `tools/bake.mjs` tessellates every part and bakes vertex light (BVH shadows, AO, sky, probes). It packs the result into `build/world.json` (metadata) and `build/world.bin` (quantised streams). See `web/DATA.md`. |
-| Build | `npm run build` | `tools/build.mjs` bundles `src/` with esbuild and writes the site to `site/` (`index.html` + content-hashed `assets/`: the bundle, the gzipped world, every texture set, the atlases; the page boots on the 256 set and streams its tier's) and the offline lite build `dist/Rovloc-lite.html` (one file, the Low and Potato sets inline). |
-| Deploy | — | Push `site/`; Vercel serves it at rovloc.vercel.app (`vercel.json`: `assets/` cached forever, `index.html` revalidated). |
+| Build | `npm run build` | `tools/build.mjs` bundles `src/` with esbuild and writes the site to `site/beta/` (`index.html` + content-hashed `assets/`: the bundle, the gzipped world, every texture set, the atlases; the page boots on the 256 set and streams its tier's; every reference is relative, so it works from `/beta/`) and the offline lite build `dist/Rovloc-lite.html` (one file, the Low and Potato sets inline). `--stamp "BETA 10 NOV"` names the build in the corner of its title screen; a build without it shows nothing. |
+| Deploy | — | Push `site/`; Vercel serves it at rovloc.vercel.app: the stable game at `/` (`site/index.html`, which no build writes) and the build in testing at `/beta/`. `vercel.json` keeps the stable page's hour of cache, caches `beta/assets/` forever, revalidates `beta/index.html` and redirects `/beta` to `/beta/`. The two pages are one origin and share the saved game. `site/README.md` has the steps. |
 
 `npm run data` runs the export, textures and bake in order. Every step is deterministic. Two runs differ only in the
 bake's timing (`stats.bakeSeconds`).
@@ -549,7 +549,7 @@ checks, in order:
 | Command | Checks |
 | --- | --- |
 | `node tools/data-test.mjs` | The world data codec round trip and structural checks of the baked world. |
-| `npm run check` | Builds the site and the lite file, then loads them headless: the site served as Vercel serves it fetches nothing but its own assets (Potato only the light ones), the lite file boots from `file://` with no request; no console errors; frame times per graphics tier at 4x CPU throttle; screenshots per tier. |
+| `npm run check` | Builds the site and the lite file, then loads them headless. `site/` is served as Vercel serves it (`vercel.json`'s redirect and header rules applied): the beta at `/beta/` names only relative assets, fetches nothing but its own files and none fails (Potato only the light ones, through a solo run from the title into Level 0), shows its build stamp and no dev control without `?dev`; the stable page at `/` still boots, and each page boots on the game the other saved. The lite file boots from `file://` with no request. No console errors; frame times per graphics tier at 4x CPU throttle; screenshots per tier. |
 | `node tools/tier-parity.mjs` | The same scripted run at Max and Potato (20 and 144 fps render loops): identical gameplay every tick. |
 | `node tools/game-smoke.mjs` | The game played headless from the title through each floor's signature moment. |
 | `node tools/creature-sim.mjs` | The Creature's scenarios on the real world, on a fake clock. |

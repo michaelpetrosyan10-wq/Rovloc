@@ -147,6 +147,9 @@ try {
 
   // ------------------------------------------------------------------------------------------- title + lobby
   check('title screen', (await G((g) => g.onboarding.mode)) === 'Title');
+  // this page was built without --stamp: only a stamped build (a beta) names itself on the title
+  const stamped = await G((g) => ({ stamp: g.env.buildStamp(), shown: g.onboarding.stamp ? g.onboarding.stamp.textContent : null }));
+  check('a build without a stamp shows none on the title', stamped.stamp === '' && stamped.shown === null, stamped);
   shotsTaken.push(await shot('01-title.png'));
   await G((g) => g.env.setSetting('TutorialDone', false));
   await tab.keyboard.press('Enter');
