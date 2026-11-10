@@ -180,7 +180,7 @@ When the planner fails or a rule does not hold:
 ExitLocks). The arrival is the old checkerboard hallway, kept short (`L1_Corridor_East`, 96 × 14) with Classroom 108
 off its north side (the ajar door, the glow lights, the glass ScareStep, the Creature's scare pose) and the HallwayGate
 at its west end sealing it from `L1_Corridor_West`. The gate's bypass is a vent kept as a vent (both runtimes crawl
-vents; crawlways are web-only): a grate low in the hallway's north wall ten studs east of the gate, one in the west
+vents, and crouch through crawlways): a grate low in the hallway's north wall ten studs east of the gate, one in the west
 hall ten studs west of it, the duct in the chase behind them; neither ever locks. Regions: Locker Banks (east; its hide
 niches hold lockers), Offices & Records, Library Stacks, Collapsed Main Hall, Kitchen Service. Keep-rooms: the
 janitor's closet and the main office. The master keys: 14 candidates, all west of the gate: ten on hooks in tunnel

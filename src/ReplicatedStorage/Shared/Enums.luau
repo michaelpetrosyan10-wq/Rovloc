@@ -37,17 +37,29 @@ export type ControlLock = "None" | "Trap" | "Locker" | "Jumpscare" | "Cutscene" 
 
 export type LockMode = "Anchor" | "ServerOwned"
 
-export type CollisionMode = "Normal" | "Vent" | "Locked"
+-- Crouch: a crouched player collides only through the parts below a crawlway's mouth (CollisionService).
+export type CollisionMode = "Normal" | "Crouch" | "Vent" | "Locked"
 
+-- Patrol is the Stalk and WallChase the Chase (docs/MONSTER.md). The Creature never enters a duct: there is no
+-- VentChase. Search (the hiding spots near the last seen point), HidingResponse (it saw someone climb into a hiding
+-- spot) and Teleport (the warp beside a player, then the stalk) are the Tall Man's.
 export type MonsterState =
 	"Dormant"
 	| "Patrol"
 	| "InvestigateNoise"
 	| "WallChase"
-	| "VentChase"
+	| "Search"
+	| "HidingResponse"
+	| "Teleport"
 	| "Stunned"
 	| "AquaticStalk"
 	| "Scripted"
+
+-- The view contract's one-shot actions (docs/MONSTER.md section 12): the Creature's Action attribute.
+export type CreatureAction = "Stare" | "ReachIn" | "LookAway" | "FadeOut" | "FadeIn" | "Jumpscare"
+
+-- A hiding spot's kind (tag Hideable, attribute HideKind).
+export type HideKind = "Locker" | "Barrel" | "Cabinet"
 
 export type PoseMode = "Biped" | "Hunched" | "Quadruped" | "Swim"
 
@@ -95,6 +107,12 @@ export type NoiseKind =
 	| "ObjectiveWork"
 	| "ObjectiveClunk"
 	| "GeneratorStart"
+	-- the Tall Man's ears (docs/MONSTER.md 3.1): a landing after a fall, getting into a hiding spot (quietly, or
+	-- straight off a sprint), co-op text chat
+	| "JumpLand"
+	| "HideEnter"
+	| "HideEnterHurried"
+	| "ChatMessage"
 
 export type NoiseMedium = "Air" | "Vent" | "Water"
 
@@ -114,6 +132,8 @@ export type OneShotKind =
 	| "CreatureVanish"
 	| "CreatureReveal"
 	| "LungeTelegraph"
+	-- a teleport's warning (args: spot, target, seconds): the lights near the spot stutter, a hiss rises there
+	| "TeleportWarning"
 
 export type JumpscareKind = "Hallway" | "Vent" | "Locker" | "Underwater"
 
@@ -148,6 +168,8 @@ export type PromptKind =
 	| "CutChain"
 	| "Locked"
 	| "Search"
+	-- a teammate drags a hider out of their hiding spot (THRESHOLD's throw)
+	| "PullOut"
 
 export type Audience = "Self" | "Others" | "All"
 
@@ -256,6 +278,10 @@ export type AcousticPreset =
 	| "Stairwell"
 	| "Basement"
 	| "Lobby"
+	-- the tunnel floors: a narrow pipe run, a tall gallery, a culvert you crawl through
+	| "Tunnel"
+	| "Gallery"
+	| "Crawlway"
 
 export type AudioBus = "Ambience" | "World" | "Monster" | "Player" | "Body" | "UI"
 
@@ -303,7 +329,21 @@ export type ProjectilePhase = "Spawn" | "Resolve"
 
 export type ProjectileHitKind = "World" | "Creature" | "Water" | "Expired"
 
-export type CueKind = "BreathCheck" | "Struggle" | "JumpscareVictim" | "TrapLeg" | "Toast" | "Terminal"
+-- Scare: a moment for one player alone (args.scare: ScareKind): a teleport's reveal, a fake-out, the stare's sting,
+-- the chase starting or giving up on them, the torch stuttering in a teleport's warning, a hiding spot's warning knock
+-- or its shove out.
+export type CueKind = "BreathCheck" | "Struggle" | "JumpscareVictim" | "TrapLeg" | "Toast" | "Terminal" | "Scare"
+
+export type ScareKind =
+	"Reveal"
+	| "Fakeout"
+	| "Stare"
+	| "ChaseStart"
+	| "ChaseEnd"
+	| "GiveUp"
+	| "TorchStutter"
+	| "HideWarn"
+	| "HideKick"
 
 -- The roof jump (Player.Parachute, ParachuteService): None (no pack), Packed (a pack on the back, still on the roof),
 -- Freefall (off the edge with a pack, cord not pulled), Canopy (descending under the canopy), Landed (down below,
@@ -358,18 +398,25 @@ Enums.ControlLock = table.freeze({
 
 Enums.LockMode = table.freeze({ "Anchor", "ServerOwned" } :: { LockMode })
 
-Enums.CollisionMode = table.freeze({ "Normal", "Vent", "Locked" } :: { CollisionMode })
+Enums.CollisionMode = table.freeze({ "Normal", "Crouch", "Vent", "Locked" } :: { CollisionMode })
 
 Enums.MonsterState = table.freeze({
 	"Dormant",
 	"Patrol",
 	"InvestigateNoise",
 	"WallChase",
-	"VentChase",
+	"Search",
+	"HidingResponse",
+	"Teleport",
 	"Stunned",
 	"AquaticStalk",
 	"Scripted",
 } :: { MonsterState })
+
+Enums.CreatureAction =
+	table.freeze({ "Stare", "ReachIn", "LookAway", "FadeOut", "FadeIn", "Jumpscare" } :: { CreatureAction })
+
+Enums.HideKind = table.freeze({ "Locker", "Barrel", "Cabinet" } :: { HideKind })
 
 Enums.PoseMode = table.freeze({ "Biped", "Hunched", "Quadruped", "Swim" } :: { PoseMode })
 
@@ -427,6 +474,10 @@ Enums.NoiseKind = table.freeze({
 	"ObjectiveWork",
 	"ObjectiveClunk",
 	"GeneratorStart",
+	"JumpLand",
+	"HideEnter",
+	"HideEnterHurried",
+	"ChatMessage",
 } :: { NoiseKind })
 
 Enums.NoiseMedium = table.freeze({ "Air", "Vent", "Water" } :: { NoiseMedium })
@@ -447,6 +498,7 @@ Enums.OneShotKind = table.freeze({
 	"CreatureVanish",
 	"CreatureReveal",
 	"LungeTelegraph",
+	"TeleportWarning",
 } :: { OneShotKind })
 
 Enums.JumpscareKind = table.freeze({ "Hallway", "Vent", "Locker", "Underwater" } :: { JumpscareKind })
@@ -481,6 +533,7 @@ Enums.PromptKind = table.freeze({
 	"CutChain",
 	"Locked",
 	"Search",
+	"PullOut",
 } :: { PromptKind })
 
 Enums.Audience = table.freeze({ "Self", "Others", "All" } :: { Audience })
@@ -597,6 +650,9 @@ Enums.AcousticPreset = table.freeze({
 	"Stairwell",
 	"Basement",
 	"Lobby",
+	"Tunnel",
+	"Gallery",
+	"Crawlway",
 } :: { AcousticPreset })
 
 -- Body = sounds inside the listener (heartbeat, breathing, EMF static): EQ only, never room reverb.
@@ -665,7 +721,20 @@ Enums.CueKind = table.freeze({
 	"TrapLeg",
 	"Toast",
 	"Terminal", -- a lobby terminal opened for this player (args.terminal = its AnchorId)
+	"Scare",
 } :: { CueKind })
+
+Enums.ScareKind = table.freeze({
+	"Reveal",
+	"Fakeout",
+	"Stare",
+	"ChaseStart",
+	"ChaseEnd",
+	"GiveUp",
+	"TorchStutter",
+	"HideWarn",
+	"HideKick",
+} :: { ScareKind })
 
 Enums.ParachuteState =
 	table.freeze({ "None", "Packed", "Freefall", "Canopy", "Landed", "Falling" } :: { ParachuteState })

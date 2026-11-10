@@ -90,7 +90,7 @@ local function speedFor(ctx: Context, lunging: boolean): number
 		return ctx.speedOf(NAME)
 	end
 	local spec = DifficultyConfig[ctx.difficulty] or DifficultyConfig.Standard
-	return CreatureConfig.Speeds.AquaticLunge * spec.creatureSpeedMultiplier
+	return math.min(CreatureConfig.SpeedCap, CreatureConfig.Speeds.AquaticLunge * spec.creatureSpeedMultiplier)
 end
 
 function AquaticStalk.enter(ctx: Context, _from: Enums.MonsterState)

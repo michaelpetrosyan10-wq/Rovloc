@@ -28,9 +28,9 @@ export const PASSTHROUGH = {
       ],
     },
     "Level3_Gymnasium": {
-      vertexCount: 19820, indexCount: 133116, fingerprint: 2477319751,
+      vertexCount: 19818, indexCount: 133116, fingerprint: 2604037161,
       runs: [
-        478, 6216, 11695, 1431,
+        478, 6216, 11695, 1429,
       ],
     },
     "Level2_ScienceHall": {

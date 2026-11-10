@@ -25,10 +25,8 @@ function Dormant.enter(ctx: Context, _from: Enums.MonsterState)
 	ctx.body:SetWalkSpeed(0)
 	ctx.body:Face(nil)
 	local medium = ctx.mover:Medium()
-	if medium ~= "Vent" then
-		ctx.body:SetAnchored(true)
-		ctx.body:SetPose(if medium == "Water" then "Swim" else "Biped")
-	end
+	ctx.body:SetAnchored(true)
+	ctx.body:SetPose(if medium == "Water" then "Swim" else "Biped")
 end
 
 function Dormant.update(_ctx: Context, _dt: number) end

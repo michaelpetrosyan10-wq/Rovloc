@@ -1,5 +1,6 @@
 --!strict
--- Creature: the Creature's animation profile (CreatureRigBuilder's 8.5-stud rig) and its one-shot action layers.
+-- Creature: the Creature's animation profile (the Tall Man: CreatureRigBuilder's 11-stud rig, 41 jointed parts with its
+-- fingers and tatters; docs/MONSTER-LOOK.md, the website's web/src/creature/profile.js) and its action layers.
 --
 -- Every length comes from the rig's JointMap (bone lengths, pivots, the floor under the Humanoid, how far the claws
 -- and toes reach, measured from the welded detail parts), so the profile follows the rig if its proportions change.
@@ -36,13 +37,22 @@
 --   Scripted     neutral: upright and still, staring at its target; scripted beats drive it with actions. A scripted
 --                hold in PoseMode Hunched poses Dormant instead (the corner crouch a cutscene stages it in).
 --
--- Actions (one-shot layers over whatever state is posing; started with `playAction` on the rig's JointMap at an
--- animator clock time, which CreatureController feeds with server time so every client plays them together):
+-- Actions (layers over whatever state is posing; started with `playAction` on the rig's JointMap at an animator clock
+-- time, which CreatureController feeds with server time so every client plays them together). The view contract's
+-- held actions (Stare, LookAway, ReachIn) run until `releaseAction`, then let go over HeldRelease; FadeOut / FadeIn are
+-- the warp's dissolve poses; Jumpscare is the Lunge:
+--   Stare      frozen, leaning in, the head cocking slowly over with a jolt at the start, the fingers flexing.
+--   LookAway   the head turns 112 degrees down the tunnel (the waist helps 28), a slow drift; it snaps back on release.
+--   ReachIn    leans in, the right arm sliding into the gap toward the hider (setLookTarget), fingers splayed, curling.
+--   FadeOut    rises as it goes: chest up, head back, arms drifting out, a glitch. FadeIn: forms folded, unfolds,
+--              the head snapping onto its target at the end.
 --   NeckSnap   the upper torso and head wrench 180 degrees round (Waist and Neck) in 0.12 s with an overshoot,
 --              shudder to rest facing straight behind, hold the stare, then grind back round in three jerks.
---   Lunge      the jumpscare: a recoil, then the arms thrown forward, the hands pouncing palm-down beside the face
---              (inside the frame of the camera locked on it), the head driven forward along its face and the jaw
---              dropped wide, held shaking (CreatureConfig.Jumpscare timings).
+--   Lunge      the jumpscare (= Jumpscare): a flinch, then it bows to the victim (loomSolve: the knees fold, the
+--              chest bends far forward, the long neck reaches down, the body stepping back off its root) until the
+--              mask, aimed into their eye, hangs level with it LOOM_DISTANCE off, cocked over; the elbows rise like a
+--              mantis and the hands come down beside the mask; the hinge parts only 1.2 degrees (the maw is the
+--              JumpscareController's), held shaking (CreatureConfig.Jumpscare timings).
 --   LockerRip  reach, grip and wrench a locker door away with a twist of the whole body.
 --   DoorSmash  wind up and smash through a door with the right forearm.
 --   Vanish     a violent glitch of every joint, ending with the head wrenched sideways (it is hidden right after).
@@ -90,7 +100,19 @@ export type StateName =
 	| "Swim"
 	| "Scripted"
 
-export type ActionName = "NeckSnap" | "Lunge" | "LockerRip" | "DoorSmash" | "Vanish" | "Reveal"
+export type ActionName =
+	"NeckSnap"
+	| "Lunge"
+	| "Jumpscare"
+	| "LockerRip"
+	| "DoorSmash"
+	| "Vanish"
+	| "Reveal"
+	| "Stare"
+	| "LookAway"
+	| "ReachIn"
+	| "FadeOut"
+	| "FadeIn"
 
 --------------------------------------------------------------------------------
 -- Names
@@ -154,7 +176,21 @@ local STATE_NAMES: { StateName } = {
 	"Scripted",
 }
 
-local ACTION_NAMES: { ActionName } = { "NeckSnap", "Lunge", "LockerRip", "DoorSmash", "Vanish", "Reveal" }
+local ACTION_NAMES: { ActionName } = {
+	"NeckSnap",
+	"Lunge",
+	"Jumpscare",
+	"LockerRip",
+	"DoorSmash",
+	"Vanish",
+	"Reveal",
+	"Stare",
+	"LookAway",
+	"ReachIn",
+	"FadeOut",
+	"FadeIn",
+}
+local FINGER_NAMES: { string } = { "Index", "Middle", "Ring", "Pinky", "Thumb" }
 
 --------------------------------------------------------------------------------
 -- Constants
@@ -190,16 +226,29 @@ local SNAP_SETTLE = 0.45
 local SNAP_HOLD = 2.4
 local SNAP_RELEASE = 1.3
 local SNAP_WAIST = rad(75)
+local DUCT_SNAP = 0 -- share of the snap's turn a duct leaves room for (none: the Tall Man's skull fills the bore)
 local LUNGE = CreatureConfig.Jumpscare.LungeSeconds
 local LUNGE_HOLD = CreatureConfig.Jumpscare.HoldSeconds
-local LUNGE_WIND = 0.1
+local LUNGE_WIND = 0.05 -- the flinch back before it strikes ...
+local LUNGE_THRUST = 0.2 -- ... and the strike: bowed and level with the eye this soon
 local LUNGE_RELEASE = 0.5
--- The claws close in beside the face, inside the jumpscare camera's frame (it sits FaceDistance ahead of the eyes).
-local LUNGE_REACH = CreatureConfig.Jumpscare.FaceDistance * 0.4
 local RIP = 1.35
 local SMASH = 0.95
 local VANISH = 0.36
 local REVEAL = 0.75
+local FADE_OUT = CreatureConfig.Teleport.FadeOutSeconds
+local FADE_IN = CreatureConfig.Teleport.FadeInSeconds
+local LOOM_DISTANCE = 1.6 -- the jumpscare brings the mask this far from the victim's eye ...
+local LOOM_ELEVATION = rad(2) -- ... level with it, staring straight into it: it bows, the long neck reaching down
+local LOOM_BACK = 2.6 -- how far the body may step back off its root to get there
+local LOOM_PITCH = rad(8) -- the search's steps: the chest bends forward up to LOOM_PITCH x 12 ...
+local LOOM_DROP = 0.045 -- ... the knees fold up to LOOM_DROP x 10 legs
+local LOOM_RESOLVE = 0.25
+local LOOM_TILT = rad(24) -- the head cocks over as it snaps in, settling to LOOM_TILT_HOLD
+local LOOM_TILT_HOLD = rad(13)
+local LUNGE_JAW = rad(1.2) -- the hinge parts a little as the slit tears (the maw is the JumpscareController's)
+local HEAD_REST_PITCH = rad(8) -- the mask looks this far down at rest (CreatureRigBuilder HEAD_PITCH)
+local FINGER_REST = rad(8) -- the long fingers' rest curl
 
 local DURATIONS: { [string]: number } = {
 	NeckSnap = SNAP_SETTLE + SNAP_HOLD + SNAP_RELEASE,
@@ -208,7 +257,15 @@ local DURATIONS: { [string]: number } = {
 	DoorSmash = SMASH,
 	Vanish = VANISH + 0.05,
 	Reveal = REVEAL,
+	FadeOut = FADE_OUT + 0.1,
+	FadeIn = FADE_IN + 0.1,
+	Stare = math.huge,
+	LookAway = math.huge,
+	ReachIn = math.huge,
 }
+DURATIONS.Jumpscare = DURATIONS.Lunge
+-- Held actions run until released; this is how long each takes to let go.
+local HELD_RELEASE: { [string]: number } = { Stare = 0.4, LookAway = 0.32, ReachIn = 0.6 }
 
 --------------------------------------------------------------------------------
 -- Measurements (per rig, cached)
@@ -223,6 +280,10 @@ type HairSegment = {
 }
 
 type Bounds = { min: Vector3, max: Vector3 }
+
+-- A finger's joint: curl turns it about `curlAxis` (its rest direction x inward), spread about `spreadAxis`; `fan`
+-- spreads the fingers apart (index -1.5 .. pinky 1.5, the thumb 2.5), `phase` staggers their wave.
+type Finger = { joint: string, curlAxis: Vector3, spreadAxis: Vector3, fan: number, phase: number }
 
 type Measure = {
 	ground: number, -- rig-space floor (biped)
@@ -243,6 +304,7 @@ type Measure = {
 	handCorners: { [string]: { Vector3 } },
 	footCorners: { [string]: { Vector3 } },
 	hair: { { HairSegment } },
+	fingers: { [string]: { Finger } }, -- per side
 }
 
 local measured: { [JointMap]: Measure } = setmetatable({} :: any, { __mode = "k" })
@@ -374,6 +436,34 @@ local function measure(map: JointMap): Measure
 		behind = math.min(behind, along)
 		ahead = math.max(ahead, along)
 	end
+	local fingers: { [string]: { Finger } } = { Left = {}, Right = {} }
+	for _, side in SIDES do
+		local inward = Vector3.new(-SIGN[side], 0, 0)
+		for index, name in FINGER_NAMES do
+			local joint = map.joints[side .. name]
+			local rest = joint and map.rest[joint.part1Name]
+			if not (joint and rest) then
+				continue
+			end
+			local along = rest.Position - joint.pivot
+			if along.Magnitude < 1e-4 then
+				continue
+			end
+			along = along.Unit
+			local curlAxis = along:Cross(inward)
+			if curlAxis.Magnitude < 1e-4 then
+				continue
+			end
+			curlAxis = curlAxis.Unit
+			table.insert(fingers[side], {
+				joint = joint.name,
+				curlAxis = curlAxis,
+				spreadAxis = along:Cross(curlAxis).Unit,
+				fan = index - 2.5,
+				phase = index * 1.3 + SIGN[side],
+			})
+		end
+	end
 	local head = map.parts[HEAD]
 	local face = head:FindFirstChild("FaceFrontAttachment")
 	local faceInHead = if face and face:IsA("Attachment") then face.CFrame else CFrame.new(0, 0, -0.4)
@@ -395,6 +485,7 @@ local function measure(map: JointMap): Measure
 		handCorners = handCorners,
 		footCorners = footCorners,
 		hair = hairChains(map),
+		fingers = fingers,
 	}
 	measured[map] = result
 	return result
@@ -516,11 +607,15 @@ end
 -- Per-rig runtime: actions, hunch, focus, gaze, hair
 --------------------------------------------------------------------------------
 
+type Loom = { drop: number, pitch: number, back: number, score: number, at: number }
+
 type ActionRun = {
 	name: ActionName,
 	startAt: number?, -- animator clock; nil binds to the next step
 	sign: number, -- side the action turns toward (+1 left), fixed when it binds
 	seed: number,
+	releaseAt: number?, -- a held action let go at this clock time
+	looms: { [string]: Loom }?, -- the Lunge's bow, solved per base state
 }
 
 type Gaze = {
@@ -550,6 +645,8 @@ type Runtime = {
 	gaze: Gaze,
 	hair: { [string]: HairDynamics },
 	serial: number,
+	target: Vector3?, -- rig-space point the Jumpscare / ReachIn aim at (the view's look target)
+	jawOverride: number?, -- the jumpscare's maw: the hinge held this far open (radians) over every pose
 }
 
 local runtimes: { [JointMap]: Runtime } = setmetatable({} :: any, { __mode = "k" })
@@ -582,6 +679,8 @@ local function runtimeOf(map: JointMap): Runtime
 		},
 		hair = {},
 		serial = 0,
+		target = nil,
+		jawOverride = nil,
 	}
 	runtimes[map] = runtime
 	return runtime
@@ -661,7 +760,9 @@ local function stepRuntime(runtime: Runtime, ctx: Ctx)
 		if run.sign == 0 then
 			run.sign = if ctx.lookYaw < -0.2 then -1 else 1
 		end
-		if ctx.time - (startAt :: number) > DURATIONS[run.name] then
+		local releaseAt = run.releaseAt
+		local released = releaseAt ~= nil and ctx.time - releaseAt > (HELD_RELEASE[run.name] or 0)
+		if ctx.time - (startAt :: number) > DURATIONS[run.name] or released then
 			table.remove(runtime.actions, index)
 		end
 	end
@@ -722,6 +823,17 @@ local function jawOpen(pose: Pose): number
 	return -rx
 end
 
+-- Curls (`curl`, radians; the thumb half as much) and spreads (`spread`, fanned) the fingers of `side`, with a `wave`
+-- running through them at time `t`.
+local function fingers(pose: Pose, m: Measure, side: string, curl: number, spread: number, wave: number, t: number)
+	for _, f in m.fingers[side] do
+		local thumb = f.fan > 2
+		local c = (if thumb then 0.5 else 1) * curl + wave * math.sin(t * 2.3 + f.phase)
+		local a = if thumb then spread * 0.5 else spread * f.fan * 0.5
+		pose:set(f.joint, CFrame.fromAxisAngle(f.curlAxis, c) * CFrame.fromAxisAngle(f.spreadAxis, a))
+	end
+end
+
 type HairStyle = {
 	gravity: number, -- 0..1: share of the hang that falls straight down (the rest keeps the clump's own lie)
 	stream: number, -- water: the hair streams back from the face instead of falling
@@ -739,7 +851,7 @@ local function clampTip(pivot: Vector3, direction: Vector3, length: number, floo
 		d = horizontal * math.sqrt(math.max(0, 1 - y * y)) + Vector3.new(0, y, 0)
 	end
 	if bore then
-		local limit = BORE_HALF - BORE_MARGIN - 0.06
+		local limit = BORE_HALF - BORE_MARGIN - 0.18 -- the stray strand (longer than its clump) inside the margin
 		local tip = pivot + d * length
 		local clamped = Vector3.new(math.clamp(tip.X, -limit, limit), math.clamp(tip.Y, -limit, limit), tip.Z)
 		if (clamped - tip).Magnitude > 1e-4 then
@@ -1181,6 +1293,9 @@ local applyActions: (ctx: Ctx, pose: Pose, m: Measure) -> ()
 local UPRIGHT_HAIR: HairStyle = { gravity = 0.55, stream = 0, sway = 0.05, bore = false }
 
 local function finishUpright(ctx: Ctx, pose: Pose, m: Measure)
+	for _, side in SIDES do
+		fingers(pose, m, side, FINGER_REST, 0, 0, 0)
+	end
 	applyActions(ctx, pose, m)
 	hair(ctx, pose, m, UPRIGHT_HAIR, m.ground)
 end
@@ -1394,9 +1509,12 @@ local CRAWL_PLANT: { [string]: number } = {
 
 local BORE_HAIR: HairStyle = { gravity = 0.75, stream = 0.35, sway = 0.03, bore = true }
 local QUADRUPED: { [string]: boolean } = { VentCrawl = true, VentRetreat = true }
+local CRAWL_CURL = rad(95)
+local LEG_TRAIL = 0.8 -- the feet trail this share of the leg behind the hips in a duct
 local HEAD_PARTS: { string } = { HEAD, JAW }
 local BODY_PARTS: { string } = { "LowerTorso", UPPER }
 local FIT_STEP = rad(5)
+local NECK_DRAW = 0.38 -- the most the neck draws the head in to clear a duct
 
 -- Rig-space extent of some parts (with their details) under the pose so far: top, bottom, right, left.
 local function spanOf(pose: Pose, m: Measure, parts: { string }): (number, number, number, number)
@@ -1414,23 +1532,56 @@ end
 
 -- Turns the head about its pivot, a step at a time, until it clears the duct: rolled back off a wall, the face
 -- tipped down from the ceiling (or up off the floor).
-local function headInBore(pose: Pose, m: Measure, limit: number)
-	for _ = 1, 12 do
+local function headInBore(pose: Pose, m: Measure, limit: number, canDuck: boolean?)
+	for step = 1, 30 do
 		local top, bottom, right, left = spanOf(pose, m, HEAD_PARTS)
-		local turn: CFrame
-		if right > limit then
-			turn = CFrame.Angles(0, 0, FIT_STEP)
-		elseif left < -limit then
-			turn = CFrame.Angles(0, 0, -FIT_STEP)
-		elseif top > limit then
-			turn = CFrame.Angles(-FIT_STEP, 0, 0)
-		elseif bottom < -limit then
-			turn = CFrame.Angles(FIT_STEP, 0, 0)
-		else
+		-- the worst side first; a face swung into a wall turns back toward the duct (alternately rolled off it)
+		local overRight, overLeft = right - limit, -limit - left
+		local overTop, overBottom = top - limit, -limit - bottom
+		local worst = math.max(overRight, overLeft, overTop, overBottom)
+		if worst <= 0 then
 			return
+		end
+		local swing = step % 2 == 1
+		local turn: CFrame
+		if worst == overRight then
+			turn = if swing then CFrame.Angles(0, FIT_STEP, 0) else CFrame.Angles(0, 0, FIT_STEP)
+		elseif worst == overLeft then
+			turn = if swing then CFrame.Angles(0, -FIT_STEP, 0) else CFrame.Angles(0, 0, -FIT_STEP)
+		elseif worst == overTop then
+			turn = CFrame.Angles(-FIT_STEP, 0, 0)
+		else
+			turn = CFrame.Angles(FIT_STEP, 0, 0)
 		end
 		headTo(pose, turn * pose:delta(HEAD), true)
 	end
+	-- the Tall Man's skull and mask are big for a duct: what turning cannot clear, the body ducks under (before the
+	-- limbs are placed, while the belly has room) and the long neck draws in
+	local top, bottom, right, left = spanOf(pose, m, HEAD_PARTS)
+	if canDuck and (top > limit or bottom < -limit) then
+		local back, belly = spanOf(pose, m, BODY_PARTS)
+		local shift = 0
+		if top > limit then
+			shift = -math.min(top - limit, math.max(0, belly + limit))
+		else
+			shift = math.min(-limit - bottom, math.max(0, limit - back))
+		end
+		if math.abs(shift) > 1e-4 then
+			shiftBody(pose, Vector3.new(0, shift, 0))
+			top, bottom, right, left = spanOf(pose, m, HEAD_PARTS)
+		end
+	end
+	local dx = math.min(0, limit - right) + math.max(0, -limit - left)
+	local dy = math.min(0, limit - top) + math.max(0, -limit - bottom)
+	if math.abs(dx) + math.abs(dy) < 1e-4 then
+		return
+	end
+	local neck = pose:get(NECK)
+	local drawn = neck.Position + pose:delta(UPPER):Inverse() * Vector3.new(dx, dy, 0)
+	if drawn.Magnitude > NECK_DRAW then
+		drawn = drawn.Unit * NECK_DRAW
+	end
+	pose:set(NECK, CFrame.new(drawn) * neck.Rotation)
 end
 
 local ARM_POLES: { [string]: { Vector3 } } = {}
@@ -1443,6 +1594,10 @@ for _, side in SIDES do
 		Vector3.new(s * 0.35, 1, 0.3),
 		Vector3.new(s * 1, 0.1, 0.4),
 		Vector3.new(0, 1, 0.6),
+		-- the Tall Man's long arms fold along the bore like a mantis's when the duct is too narrow to bow them out
+		Vector3.new(s * 0.2, 0.35, 1),
+		Vector3.new(0, 0.1, 1),
+		Vector3.new(s * 0.2, 0.2, -1),
 	}
 	LEG_POLES[side] = {
 		Vector3.new(s * 0.8, 1, -0.3),
@@ -1450,7 +1605,66 @@ for _, side in SIDES do
 		Vector3.new(s * 0.5, 1, 0.2),
 		Vector3.new(s * 1, -0.2, 0),
 		Vector3.new(0, 1, -0.6),
+		-- the long legs fold along the bore when it is too narrow to splay them up the walls
+		Vector3.new(s * 0.2, 0.35, -1),
+		Vector3.new(0, 0.1, -1),
+		Vector3.new(s * 0.2, 0.2, 1),
+		Vector3.new(s * 0.3, -0.4, -1),
+		Vector3.new(s * 0.6, -0.5, 0.5),
+		Vector3.new(s * 1, -0.6, -0.4),
 	}
+end
+
+-- the joints lag their pose a little at a fast cadence: the legs keep this much more room
+local LEG_SLACK = 0.12
+
+-- How far the boxes of `parts` (welded details included) poke out of the bore under the pose so far.
+local function partsExcess(pose: Pose, m: Measure, parts: { string }): number
+	local worst = 0
+	for _, part in parts do
+		for _, corner in boxCorners(pose:frame(part), m.bounds[part]) do
+			worst = math.max(worst, boreExcess(corner, LEG_SLACK))
+		end
+	end
+	return worst
+end
+
+local LEG_PARTS: { [string]: { string } } = {
+	Left = { "LeftUpperLeg", "LeftLowerLeg", "LeftFoot" },
+	Right = { "RightUpperLeg", "RightLowerLeg", "RightFoot" },
+}
+
+-- Re-bends a leg already solved by limbInBore when its thigh or shin boxes still leave the bore: the pole whose boxes
+-- poke out least wins.
+local function legInBore(pose: Pose, m: Measure, side: string, ankle: Vector3, foot: CFrame)
+	local parts = LEG_PARTS[side]
+	if partsExcess(pose, m, parts) <= 0 then
+		return
+	end
+	-- every bend, then (folded too tight for any: a fast swing passing under the hip) the foot a little further back,
+	-- until one clears; the least poking pose (foot included) wins
+	local bestPole: Vector3? = nil
+	local bestGoal = ankle
+	local bestExcess = math.huge
+	for k = 0, 6 do
+		local goal = ankle + Vector3.new(0, 0, 0.1 * k)
+		for _, pole in LEG_POLES[side] do
+			pose:limb(LEG[side], goal, pole, foot)
+			local excess = partsExcess(pose, m, parts)
+			if excess < bestExcess - 1e-6 then
+				bestPole, bestGoal, bestExcess = pole, goal, excess
+			end
+			if bestExcess <= 0 then
+				break
+			end
+		end
+		if bestExcess <= 0 then
+			break
+		end
+	end
+	if bestPole then
+		pose:limb(LEG[side], bestGoal, bestPole, foot)
+	end
 end
 
 local function crawl(ctx: Ctx, pose: Pose, style: CrawlStyle, thrash: number)
@@ -1485,9 +1699,10 @@ local function crawl(ctx: Ctx, pose: Pose, style: CrawlStyle, thrash: number)
 	headTo(
 		pose,
 		lookRotation(
-			gaze.yaw * 0.55 + thrash * rad(35) * noise(t * 3.4, seed + 3),
-			style.face + gaze.pitch * 0.4 + thrash * rad(10) * noise(t * 2.6, seed + 4),
-			gaze.roll * 1.3 + thrash * rad(25) * noise(t * 2.9, seed + 5)
+			-- the Tall Man's big skull has little room to thrash in a duct
+			gaze.yaw * 0.55 + thrash * rad(18) * noise(t * 3.4, seed + 3),
+			style.face + gaze.pitch * 0.4 + thrash * rad(6) * noise(t * 2.6, seed + 4),
+			gaze.roll * 1.3 + thrash * rad(10) * noise(t * 2.9, seed + 5)
 		),
 		true
 	)
@@ -1501,7 +1716,7 @@ local function crawl(ctx: Ctx, pose: Pose, style: CrawlStyle, thrash: number)
 			shiftBody(pose, Vector3.new(0, -drop, 0))
 		end
 	end
-	headInBore(pose, m, ceiling)
+	headInBore(pose, m, ceiling, true)
 
 	-- Arms: walking on the claws beside the head, elbows jutting up toward the ceiling corners. Waiting, a hand now
 	-- and then lifts and taps its claws on the steel.
@@ -1553,13 +1768,22 @@ local function crawl(ctx: Ctx, pose: Pose, style: CrawlStyle, thrash: number)
 		local ankle = Vector3.new(
 			s * math.min(style.footOut, limit - outward),
 			floor + FLOOR_PAD - lowest + cycle.lift,
-			hip.Z + style.footBack - direction * along
+			-- the Tall Man's long legs trail well back (folded short they would bulge out of the bore)
+			hip.Z + math.max(style.footBack, m.leg * LEG_TRAIL) - direction * along
 		)
 		limbInBore(pose, LEG[side], HIP[side], m.thigh, m.shin, ankle, LEG_POLES[side], 0.3, foot)
+		-- the Tall Man's knee caps stand proud of the joint: pick the bend by the real boxes when the pivot test passed
+		-- one that still scrapes the duct
+		legInBore(pose, m, side, ankle, foot)
 		pose:plant(side, cycle.stance)
 	end
 
-	setJaw(pose, rad(10) + rad(6) * math.max(0, oscillation) * move + thrash * rad(25))
+	-- the hinge only ever parts a few degrees (2.5..9.5 in a duct: docs/MONSTER-LOOK.md)
+	setJaw(pose, rad(2.5) + rad(3.5) * math.max(0, oscillation) * move + thrash * rad(3.5))
+	-- the long fingers fold under the palm: it walks on its knuckles, the tips clear of the duct walls
+	for _, side in SIDES do
+		fingers(pose, m, side, CRAWL_CURL, 0, 0, 0)
+	end
 	applyActions(ctx, pose, m)
 	headInBore(pose, m, ceiling)
 	hair(ctx, pose, m, BORE_HAIR, floor)
@@ -1569,7 +1793,7 @@ local VENT: CrawlStyle = {
 	duty = 0.56,
 	stride = 1.9,
 	handLift = 0.32,
-	footLift = 0.22,
+	footLift = 0.16, -- the Tall Man's long shins: a lower swing keeps the knees off the duct's ceiling
 	reach = 1.05,
 	handOut = 1.2,
 	footBack = 1.0,
@@ -1591,7 +1815,7 @@ RETREAT.duty = 0.62
 RETREAT.stride = 1.2
 RETREAT.stutter = 1
 RETREAT.hover = 0.3
-RETREAT.face = rad(-12)
+RETREAT.face = rad(-8)
 
 local function ventCrawl(ctx: Ctx, pose: Pose)
 	crawl(ctx, pose, VENT, 0)
@@ -1676,7 +1900,8 @@ local function snapShudder(elapsed: number): number
 end
 
 local function neckSnap(ctx: Ctx, pose: Pose, _m: Measure, elapsed: number, run: ActionRun)
-	local s = snapProgress(elapsed)
+	-- in a duct the Tall Man's big skull cannot swing round: there it holds still
+	local s = snapProgress(elapsed) * (if QUADRUPED[ctx.state] then DUCT_SNAP else 1)
 	if s <= 0 then
 		return
 	end
@@ -1720,67 +1945,6 @@ local ARM_JOINTS: { [string]: { string } } = {
 	Left = { SHOULDER.Left, ELBOW.Left, WRIST.Left },
 	Right = { SHOULDER.Right, ELBOW.Right, WRIST.Right },
 }
-
-local function lunge(ctx: Ctx, pose: Pose, m: Measure, elapsed: number, run: ActionRun)
-	local weight = envelope(elapsed, DURATIONS.Lunge, LUNGE_WIND * 0.6, LUNGE_RELEASE)
-	if weight <= 0 then
-		return
-	end
-	-- Recoil, then thrown forward.
-	local recoil = smoothstep(0, LUNGE_WIND, elapsed) * (1 - smoothstep(LUNGE_WIND, LUNGE_WIND + 0.08, elapsed))
-	local thrust = if elapsed < LUNGE_WIND
-		then 0
-		else outBack((elapsed - LUNGE_WIND) / math.max(0.05, LUNGE - LUNGE_WIND), 1.6)
-	local tremor = smoothstep(LUNGE, LUNGE + 0.1, elapsed) * stepped(ctx.time, 24, run.seed)
-	-- The chest is thrown forward only when it stands upright (in a duct it would dig into the floor).
-	local standing = clamp01(pose:frame(UPPER).UpVector.Y)
-	pose:set(
-		WAIST,
-		euler((rad(-22) * thrust + rad(14) * recoil) * weight * standing, 0, rad(3) * tremor * weight) * pose:get(WAIST)
-	)
-	-- Head driven forward along its face, chin up toward its victim; the jaw drops wide and shudders.
-	local rx, ry, rz = pose:delta(HEAD):ToEulerAnglesYXZ()
-	local push = pose:delta(UPPER):Inverse() * (faceFrame(pose, m).LookVector * (0.14 * thrust * weight))
-	pose:set(NECK, CFrame.new(push) * pose:get(NECK))
-	headTo(
-		pose,
-		euler(lerp(rx, rad(10) - rad(14) * recoil, weight), lerp(ry, 0, weight), lerp(rz, rad(6) * tremor, weight)),
-		true
-	)
-	-- Arms: thrown out past the face, the claws closing in on either side of the victim's head.
-	local face = faceFrame(pose, m)
-	local bore = QUADRUPED[ctx.state] == true
-	for _, side in SIDES do
-		local s = SIGN[side]
-		blendJoints(pose, ARM_JOINTS[side], weight, function()
-			local shoulder = pose:pivot(SHOULDER[side])
-			local target = face
-				* Vector3.new(
-					s * lerp(0.45, 0.8, thrust),
-					-0.05 * thrust - 0.4 * recoil,
-					-lerp(0.3, LUNGE_REACH, thrust)
-				)
-			local toward = target - shoulder
-			if toward.Magnitude > m.arm * 0.97 then
-				target = shoulder + toward.Unit * m.arm * 0.97
-			end
-			-- The hands pounce: palms down, fingers forward, the hooked claws coming down at the victim's eyes.
-			local grab = face.Rotation
-				* CFrame.Angles(0, s * rad(15), 0)
-				* CFrame.Angles(-rad(20), 0, 0)
-				* CFrame.fromMatrix(Vector3.zero, Vector3.new(0, s, 0), Vector3.new(0, 0, 1), Vector3.new(s, 0, 0))
-			if bore then
-				local limit = BORE_HALF - BORE_MARGIN - 0.3
-				target = Vector3.new(math.clamp(target.X, -limit, limit), math.clamp(target.Y, -limit, limit), target.Z)
-				limbInBore(pose, ARM[side], SHOULDER[side], m.upperArm, m.forearm, target, ARM_POLES[side], 0.24, grab)
-			else
-				pose:limb(ARM[side], target, face:VectorToWorldSpace(Vector3.new(s, -0.4, 0)), grab)
-			end
-		end)
-	end
-	local open = rad(68) * smoothstep(LUNGE_WIND * 0.5, LUNGE, elapsed) + rad(4) * tremor
-	setJaw(pose, lerp(jawOpen(pose), open, weight))
-end
 
 -- Ripping and smashing need the body upright (nothing to rip from inside a duct).
 local function lockerRip(ctx: Ctx, pose: Pose, m: Measure, elapsed: number, _run: ActionRun)
@@ -1875,8 +2039,13 @@ local function glitch(pose: Pose, t: number, seed: number, amount: number, limbs
 	pose:set(JAW, CFrame.Angles(-jaw, 0, 0) * pose:get(JAW))
 end
 
+-- In a duct the Tall Man's big skull has no room to thrash: the vanish and the reveal hold its body still there (their
+-- glitches and wrenches run at this share).
+local DUCT_GLITCH = 0
+
 local function vanish(ctx: Ctx, pose: Pose, _m: Measure, elapsed: number, run: ActionRun)
-	local amount = smoothstep(0, 0.06, elapsed) * (if elapsed <= VANISH then 1 else 0)
+	local duct = if QUADRUPED[ctx.state] then DUCT_GLITCH else 1
+	local amount = smoothstep(0, 0.06, elapsed) * (if elapsed <= VANISH then 1 else 0) * duct
 	glitch(pose, ctx.time, run.seed, amount * (0.6 + 0.4 * smoothstep(0.1, VANISH, elapsed)), not QUADRUPED[ctx.state])
 	-- It ends with the head wrenched sideways.
 	local wrench = smoothstep(VANISH * 0.65, VANISH, elapsed) * amount
@@ -1885,24 +2054,387 @@ end
 
 local function reveal(ctx: Ctx, pose: Pose, _m: Measure, elapsed: number, run: ActionRun)
 	-- A spasm, one hard jerk, then locked still; the jerk's cocked head eases out.
-	glitch(pose, ctx.time, run.seed, 1 - smoothstep(0, 0.28, elapsed), not QUADRUPED[ctx.state])
+	local duct = if QUADRUPED[ctx.state] then DUCT_GLITCH else 1
+	glitch(pose, ctx.time, run.seed, (1 - smoothstep(0, 0.28, elapsed)) * duct, not QUADRUPED[ctx.state])
 	local jerk = impulse(elapsed - 0.34, 0.03, 9)
-	local cock = if elapsed > 0.32 then math.max(jerk, 1 - smoothstep(0.38, REVEAL, elapsed)) else 0
+	local cock = (if elapsed > 0.32 then math.max(jerk, 1 - smoothstep(0.38, REVEAL, elapsed)) else 0) * duct
 	pose:set(NECK, euler(rad(6) * cock, run.sign * rad(14) * cock, run.sign * rad(34) * cock) * pose:get(NECK))
+end
+
+-- The look target in rig space (the victim's eye for a jumpscare, the hider for a ReachIn), else a point ahead at a
+-- player's eye height.
+local function targetPoint(ctx: Ctx, m: Measure, fallbackAhead: number): Vector3
+	local target = runtimeOf(ctx.map).target
+	if target then
+		return target
+	end
+	return Vector3.new(0, m.ground + 4.6, -fallbackAhead)
+end
+
+-- Drops the pelvis by `drop` with the feet kept where they are (the knees bend).
+local function crouch(pose: Pose, _m: Measure, drop: number)
+	if drop <= 1e-3 then
+		return
+	end
+	local feet: { [string]: { at: Vector3, turn: CFrame } } = {}
+	for _, side in SIDES do
+		feet[side] = { at = pose:pivot(ANKLE[side]), turn = pose:delta(FOOT_PART[side]) }
+	end
+	shiftBody(pose, Vector3.new(0, -drop, 0))
+	for _, side in SIDES do
+		pose:limb(LEG[side], feet[side].at, Vector3.new(SIGN[side] * 0.35, 0, -1), feet[side].turn)
+	end
+end
+
+-- Aims the head (the face frame's look) at a rig-space point, past the neck limits.
+local function aimHead(pose: Pose, m: Measure, point: Vector3, roll: number)
+	-- the face sits off the skull's pivot, so turning moves it: aim, then aim again from where it went
+	for _ = 1, 3 do
+		local aim = point - faceFrame(pose, m).Position
+		if aim.Magnitude < 1e-3 then
+			return
+		end
+		local yaw = math.atan2(-aim.X, -aim.Z)
+		local pitch = math.atan2(aim.Y, math.sqrt(aim.X * aim.X + aim.Z * aim.Z)) + HEAD_REST_PITCH
+		headTo(pose, lookRotation(yaw, pitch, roll), true)
+	end
+end
+
+-- How it bows to a victim's eye at `target`: the crouch (studs), the chest's bend (radians) and the step back off its
+-- root (studs) that hang its mask, aimed at the eye, LOOM_DISTANCE in front of it and level with it (the jumpscare's
+-- camera then sits between them, looking level into the mask). A coarse search, then a finer one round the best.
+local function loomSolve(pose: Pose, m: Measure, target: Vector3): Loom
+	local saved = { pose:get(ROOT), pose:get(WAIST), pose:get(NECK) }
+	local function restore()
+		pose:set(ROOT, saved[1])
+		pose:set(WAIST, saved[2])
+		pose:set(NECK, saved[3])
+	end
+	local function evaluate(drop: number, pitch: number): Loom
+		restore()
+		shiftBody(pose, Vector3.new(0, -drop, 0))
+		pose:set(WAIST, euler(-pitch, 0, 0) * saved[2])
+		aimHead(pose, m, target, 0)
+		local face = faceFrame(pose, m).Position
+		-- it steps back off its root (up to LOOM_BACK) so the mask hangs in front of the eye, not past it; stepping
+		-- moves the aim, so it is measured again after
+		local rise0 = face.Y - target.Y
+		local want = math.sqrt(math.max(LOOM_DISTANCE * LOOM_DISTANCE - rise0 * rise0, 0.04))
+		local back = math.clamp(want - (face.Z - target.Z), 0, LOOM_BACK)
+		if back > 0.01 then
+			shiftBody(pose, Vector3.new(0, 0, back))
+			aimHead(pose, m, target, 0)
+			face = faceFrame(pose, m).Position
+		end
+		local rise = face.Y - target.Y
+		local horizontal = math.sqrt((face.X - target.X) ^ 2 + (face.Z - target.Z) ^ 2)
+		local distance = math.sqrt(horizontal * horizontal + rise * rise)
+		local elevation = math.atan2(rise, horizontal)
+		local score = (distance - LOOM_DISTANCE) ^ 2
+			+ 2 * (elevation - LOOM_ELEVATION) ^ 2
+			+ 0.004 * pitch
+			+ 0.006 * drop
+			+ 0.01 * back
+		return { drop = drop, pitch = pitch, back = back, score = score, at = 0 }
+	end
+	local best: Loom = { drop = 0, pitch = 0, back = 0, score = math.huge, at = 0 }
+	local dropStep = m.leg * LOOM_DROP
+	for i = 0, 10, 2 do
+		for k = 0, 12, 2 do
+			local r = evaluate(dropStep * i, LOOM_PITCH * k)
+			if r.score < best.score then
+				best = r
+			end
+		end
+	end
+	local coarse = best
+	for i = -1, 1 do
+		for k = -1, 1 do
+			if i == 0 and k == 0 then
+				continue
+			end
+			local drop = math.clamp(coarse.drop + dropStep * i, 0, dropStep * 10)
+			local pitch = math.clamp(coarse.pitch + LOOM_PITCH * k, 0, LOOM_PITCH * 12)
+			local r = evaluate(drop, pitch)
+			if r.score < best.score then
+				best = r
+			end
+		end
+	end
+	restore()
+	return best
+end
+
+-- The jumpscare (Lunge = Jumpscare): a flinch, then it bows to the victim (the knees fold, the chest bends far forward,
+-- the long neck reaches down) until the mask, aimed into their eye, hangs level with it LOOM_DISTANCE off, cocked over;
+-- a jolt as the slit tears, a shudder through the hold; the elbows rise over the head like a mantis and the hands come
+-- down beside the mask, the long fingers spread and curling. The hinge parts only a little (the maw is the mask's: the
+-- JumpscareController parts it further on its own timeline).
+local function lunge(ctx: Ctx, pose: Pose, m: Measure, elapsed: number, run: ActionRun)
+	local weight = envelope(elapsed, DURATIONS.Lunge, LUNGE_WIND * 0.6, LUNGE_RELEASE)
+	if weight <= 0 then
+		return
+	end
+	local recoil = smoothstep(0, LUNGE_WIND, elapsed) * (1 - smoothstep(LUNGE_WIND, LUNGE_WIND + 0.08, elapsed))
+	local thrust = if elapsed < LUNGE_WIND then 0 else outBack((elapsed - LUNGE_WIND) / LUNGE_THRUST, 1.6)
+	local strike = clamp01(thrust)
+	local jolt = impulse(elapsed - 0.36, 0.03, 9)
+	local tremor = smoothstep(LUNGE, LUNGE + 0.1, elapsed)
+		* stepped(ctx.time, 24, run.seed)
+		* (1 + 1.5 * smoothstep(0.85, 1.0, elapsed) * (1 - smoothstep(1.25, 1.45, elapsed)))
+	local bore = QUADRUPED[ctx.state] == true
+	local swimming = ctx.state == "Swim"
+	local target = targetPoint(ctx, m, 4.2)
+	if not bore and not swimming then
+		-- solved on each state's base pose before the bow (the animator blends states, each posing the actions on its
+		-- own base), again every LOOM_RESOLVE seconds (the base pose may change under it)
+		local looms = run.looms
+		if not looms then
+			looms = {}
+			run.looms = looms
+		end
+		local loomTable = looms :: { [string]: Loom }
+		local cached = loomTable[ctx.state]
+		local solved: Loom
+		if cached and ctx.time - cached.at <= LOOM_RESOLVE then
+			solved = cached
+		else
+			solved = loomSolve(pose, m, target)
+			solved.at = ctx.time
+			loomTable[ctx.state] = solved
+		end
+		local k = math.min(thrust, 1.08) * weight
+		shiftBody(pose, Vector3.new(0, 0, solved.back * k))
+		crouch(pose, m, solved.drop * k)
+		pose:set(
+			WAIST,
+			euler(-solved.pitch * k + rad(8) * recoil * weight + rad(3) * jolt * weight, 0, rad(2) * tremor * weight)
+				* pose:get(WAIST)
+		)
+	end
+	-- the mask stares straight into the victim's eye, cocked over as it snaps in, trembling through the hold
+	local tilt = run.sign * lerp(LOOM_TILT, LOOM_TILT_HOLD, smoothstep(0.15, 0.6, elapsed)) * strike
+	if not bore then
+		local rx, ry, rz = pose:delta(HEAD):ToEulerAnglesYXZ()
+		aimHead(pose, m, target, tilt + rad(4) * tremor + run.sign * rad(6) * jolt)
+		local ax, ay, az = pose:delta(HEAD):ToEulerAnglesYXZ()
+		headTo(pose, euler(lerp(rx, ax - rad(10) * recoil, weight), lerp(ry, ay, weight), lerp(rz, az, weight)), true)
+	end
+	-- the hands come up around the victim's head, the long fingers spread, curling as it holds
+	local face = faceFrame(pose, m)
+	for _, side in SIDES do
+		local s = SIGN[side]
+		if bore then
+			-- in a duct the long arms shoot straight out along it, the claws ahead of the face, at the height the crawl
+			-- walks its hands (so the folded fingers stay off the floor); blended in the hands' path, not the joints'
+			local shoulder = pose:pivot(SHOULDER[side])
+			local wrist = pose:pivot(WRIST[side])
+			local limit = BORE_HALF - BORE_MARGIN - 0.3
+			local ahead = Vector3.new(shoulder.X + s * 0.25, wrist.Y, shoulder.Z - m.arm * lerp(0.7, 0.92, strike))
+			local goal = wrist:Lerp(ahead, weight)
+			goal = Vector3.new(math.clamp(goal.X, -limit, limit), math.clamp(goal.Y, -limit, limit), goal.Z)
+			limbInBore(
+				pose,
+				ARM[side],
+				SHOULDER[side],
+				m.upperArm,
+				m.forearm,
+				goal,
+				ARM_POLES[side],
+				0.24,
+				pose:delta(HAND_PART[side])
+			)
+		else
+			blendJoints(pose, ARM_JOINTS[side], weight, function()
+				local shoulder = pose:pivot(SHOULDER[side])
+				-- beside the mask, just outside its outline and a little in front of it: the fingers frame it
+				local goal = face
+					* Vector3.new(
+						s * lerp(1.05, 0.95, strike),
+						lerp(-0.7, -0.12, strike) - 0.3 * recoil,
+						-lerp(0, 0.12, strike)
+					)
+				local reach = goal - shoulder
+				if reach.Magnitude > m.arm * 0.97 then
+					goal = shoulder + reach.Unit * m.arm * 0.97
+				end
+				-- the elbows up over the head like a mantis, so the forearms come down past the mask's sides
+				pose:limb(ARM[side], goal, face:VectorToWorldSpace(Vector3.new(s * 0.45, 1, 0.35)), nil)
+				pose:set(WRIST[side], euler(-rad(20) * strike, -s * rad(18) * strike, 0) * pose:get(WRIST[side]))
+			end)
+		end
+		if bore then
+			-- in a duct the long fingers stay folded: there is no room to spread them
+			fingers(pose, m, side, CRAWL_CURL, 0, 0, 0)
+		else
+			fingers(
+				pose,
+				m,
+				side,
+				lerp(rad(-14), rad(38), smoothstep(LUNGE, LUNGE + 0.6, elapsed)) * weight,
+				rad(22) * weight,
+				rad(6) * weight,
+				ctx.time * 4
+			)
+		end
+	end
+	-- the hinge parts a little as the slit tears
+	local tear = if elapsed < 0.36 then 0 else 0.35 + 0.65 * smoothstep(0.36, 0.78, elapsed)
+	local open = LUNGE_JAW * tear + rad(1) * tremor
+	setJaw(pose, lerp(jawOpen(pose), open, weight))
+end
+
+-- A held action's weight: in over `fadeIn` seconds, out over its HeldRelease once released.
+local function heldWeight(ctx: Ctx, run: ActionRun, fadeIn: number): number
+	local w = smoothstep(0, fadeIn, ctx.time - (run.startAt or ctx.time))
+	local releaseAt = run.releaseAt
+	if releaseAt ~= nil then
+		w *= 1 - smoothstep(0, HELD_RELEASE[run.name] or 0.3, ctx.time - releaseAt)
+	end
+	return w
+end
+
+-- Frozen: the chest still and leaning a little toward what it stares at, the head cocking slowly over with a jolt at
+-- the start, the fingers flexing.
+local function stare(ctx: Ctx, pose: Pose, m: Measure, elapsed: number, run: ActionRun)
+	local w = heldWeight(ctx, run, 0.22)
+	if w <= 0 then
+		return
+	end
+	local cock = run.sign * (rad(31) * (1 - math.exp(-elapsed * 1.4)) + rad(9) * impulse(elapsed, 0.04, 7))
+	pose:set(WAIST, euler(-rad(5) * w, 0, 0) * pose:get(WAIST))
+	local current = pose:delta(HEAD)
+	local desired = lookRotation(ctx.lookYaw, ctx.lookPitch - rad(3), cock)
+	headTo(pose, current:Lerp(desired, w))
+	for _, side in SIDES do
+		local flex = 0.5 + 0.5 * math.sin(elapsed * 1.25 + SIGN[side] * 1.7)
+		fingers(pose, m, side, (rad(4) + rad(30) * flex) * w, rad(12) * w, 0, 0)
+	end
+end
+
+-- The head turns away down the tunnel (the chest helps), a slow drift while it looks.
+local function lookAway(ctx: Ctx, pose: Pose, _m: Measure, elapsed: number, run: ActionRun)
+	local w = heldWeight(ctx, run, 0.45)
+	if w <= 0 then
+		return
+	end
+	local drift = rad(6) * math.sin(elapsed * 0.9)
+	pose:set(WAIST, euler(0, run.sign * rad(28) * w, 0) * pose:get(WAIST))
+	local current = pose:delta(HEAD)
+	local away = lookRotation(run.sign * rad(112) + drift, rad(4), -run.sign * rad(9))
+	headTo(pose, current:Lerp(away, w))
+end
+
+-- It leans in and slides its right arm into the gap toward the hider, the fingers splayed, then curling shut; a small
+-- search wiggle; the head tips toward the gap.
+local function reachIn(ctx: Ctx, pose: Pose, m: Measure, elapsed: number, run: ActionRun)
+	local w = heldWeight(ctx, run, 0.3)
+	if w <= 0 then
+		return
+	end
+	local target = targetPoint(ctx, m, 3)
+	local lean = smoothstep(0, 0.7, elapsed)
+	local push = smoothstep(0.45, 1.7, elapsed)
+	local grab = smoothstep(1.6, 2.2, elapsed)
+	local search = math.sin(elapsed * 2.6) * (1 - grab)
+	local chest = pose:frame(UPPER).Position
+	local flatTo = Vector3.new(target.X - chest.X, 0, target.Z - chest.Z)
+	local turn = if flatTo.Magnitude > 1e-3 then math.atan2(-flatTo.X, -flatTo.Z) else 0
+	local down = math.clamp(math.atan2(chest.Y - target.Y, math.max(flatTo.Magnitude, 0.5)), 0, rad(55))
+	pose:set(
+		WAIST,
+		euler(-(rad(8) + down * 0.6) * lean * w, math.clamp(turn, -rad(40), rad(40)) * 0.6 * lean * w, 0)
+			* pose:get(WAIST)
+	)
+	blendJoints(pose, ARM_JOINTS.Right, w, function()
+		local shoulder = pose:pivot(SHOULDER.Right)
+		local toward = target - shoulder
+		local distance = toward.Magnitude
+		local reach = math.min(distance, m.arm * 0.98)
+		local direction = if distance > 1e-6 then toward.Unit else FORWARD
+		local into = shoulder
+			+ direction * lerp(reach * 0.5, reach, push)
+			+ Vector3.new(0.05 * search, 0.04 * search, 0)
+		pose:limb(ARM.Right, into, Vector3.new(1, -0.2, 0.4), nil)
+		pose:set(WRIST.Right, euler(-rad(12) * push, 0, rad(10) * search) * pose:get(WRIST.Right))
+	end)
+	fingers(
+		pose,
+		m,
+		"Right",
+		lerp(rad(-18), rad(62), grab) * w,
+		rad(24) * (1 - grab) * w,
+		rad(10) * (1 - grab) * w,
+		elapsed * 3
+	)
+	local current = pose:delta(HEAD)
+	local aim = target - faceFrame(pose, m).Position
+	local yaw = math.atan2(-aim.X, -aim.Z)
+	local pitch = math.atan2(aim.Y, math.sqrt(aim.X * aim.X + aim.Z * aim.Z))
+	headTo(pose, current:Lerp(lookRotation(yaw, pitch, run.sign * rad(20)), w * 0.8))
+end
+
+-- It rises as it goes: the chest lifts, the head tips back and away, the arms drift up and out, fingers splayed.
+local function fadeOut(ctx: Ctx, pose: Pose, m: Measure, elapsed: number, run: ActionRun)
+	local u = clamp01(elapsed / FADE_OUT)
+	local w = smoothstep(0, 0.1, elapsed) * (if elapsed <= FADE_OUT + 0.1 then 1 else 0)
+	if w <= 0 then
+		return
+	end
+	pose:set(WAIST, euler(rad(12) * u * w, 0, 0) * pose:get(WAIST))
+	for _, side in SIDES do
+		local s = SIGN[side]
+		pose:set(SHOULDER[side], euler(rad(22) * u * w, 0, s * rad(24) * u * w) * pose:get(SHOULDER[side]))
+		pose:set(ELBOW[side], euler(-rad(10) * u * w, 0, 0) * pose:get(ELBOW[side]))
+		fingers(pose, m, side, rad(-20) * u * w, rad(30) * u * w, 0, 0)
+	end
+	local current = pose:delta(HEAD)
+	headTo(pose, current:Lerp(lookRotation(ctx.lookYaw * 0.5 + run.sign * rad(20), rad(32), run.sign * rad(16)), u * w))
+	glitch(pose, ctx.time, run.seed, 0.3 * u * w, not QUADRUPED[ctx.state])
+end
+
+-- It forms folded over, unfolds upward, and the head comes up last, snapping onto its target.
+local function fadeIn(ctx: Ctx, pose: Pose, m: Measure, elapsed: number, run: ActionRun)
+	local u = clamp01(elapsed / FADE_IN)
+	local fold = 1 - smoothstep(0.05, 0.85, u)
+	if elapsed > FADE_IN + 0.1 then
+		return
+	end
+	if not QUADRUPED[ctx.state] then
+		crouch(pose, m, m.leg * 0.22 * fold)
+	end
+	pose:set(WAIST, euler(-rad(40) * fold, 0, 0) * pose:get(WAIST))
+	for _, side in SIDES do
+		local s = SIGN[side]
+		pose:set(SHOULDER[side], euler(rad(18) * fold, 0, s * rad(6) * fold) * pose:get(SHOULDER[side]))
+		fingers(pose, m, side, rad(45) * fold, rad(10) * fold, 0, 0)
+	end
+	local current = pose:delta(HEAD)
+	local hang = lookRotation(ctx.lookYaw * 0.3, -rad(60), run.sign * rad(25))
+	local snap = smoothstep(0.82, 0.92, u)
+	headTo(pose, current:Lerp(hang, (1 - snap) * smoothstep(0, 0.1, elapsed)))
+	glitch(pose, ctx.time, run.seed, 0.4 * fold, not QUADRUPED[ctx.state])
 end
 
 local ACTIONS: { [string]: ActionFn } = {
 	NeckSnap = neckSnap,
 	Lunge = lunge,
+	Jumpscare = lunge,
 	LockerRip = lockerRip,
 	DoorSmash = doorSmash,
 	Vanish = vanish,
 	Reveal = reveal,
+	Stare = stare,
+	LookAway = lookAway,
+	ReachIn = reachIn,
+	FadeOut = fadeOut,
+	FadeIn = fadeIn,
 }
 
--- Applies every running action on top of the state's pose, in start order.
+-- Applies every running action on top of the state's pose, in start order (then the jumpscare's maw, if held).
 function applyActions(ctx: Ctx, pose: Pose, m: Measure)
-	for _, run in runtimeOf(ctx.map).actions do
+	local runtime = runtimeOf(ctx.map)
+	for _, run in runtime.actions do
 		local startAt = run.startAt
 		if startAt == nil then
 			continue
@@ -1911,6 +2443,10 @@ function applyActions(ctx: Ctx, pose: Pose, m: Measure)
 		if elapsed >= 0 and elapsed <= DURATIONS[run.name] then
 			ACTIONS[run.name](ctx, pose, m, elapsed, run)
 		end
+	end
+	local maw = runtime.jawOverride
+	if maw then
+		setJaw(pose, maw)
 	end
 end
 
@@ -2068,6 +2604,8 @@ Creature.Profile = profile
 Creature.States = table.freeze(table.clone(STATE_NAMES))
 Creature.Actions = table.freeze(table.clone(ACTION_NAMES))
 Creature.ActionDurations = table.freeze(table.clone(DURATIONS))
+Creature.HeldRelease = table.freeze(table.clone(HELD_RELEASE))
+Creature.LoomDistance = LOOM_DISTANCE
 Creature.BoreHalf = BORE_HALF
 -- NeckSnap timing (seconds): the turn, the end of its settle, the hold after it, the release.
 Creature.NeckSnapTiming = table.freeze({
@@ -2094,11 +2632,19 @@ function Creature.resolveState(monsterState: unknown, poseMode: unknown, inVent:
 	if poseMode == "Swim" then
 		return if monsterState == "Stunned" then "Stunned" else "Swim"
 	end
-	if monsterState == "Patrol" or monsterState == "AquaticStalk" then
+	if poseMode == "Stunned" then
+		return "Stunned"
+	end
+	if
+		monsterState == "Patrol"
+		or monsterState == "AquaticStalk"
+		or monsterState == "Teleport"
+		or monsterState == "HidingResponse"
+	then
 		return "Patrol"
-	elseif monsterState == "InvestigateNoise" then
+	elseif monsterState == "InvestigateNoise" or monsterState == "Search" then
 		return "Investigate"
-	elseif monsterState == "WallChase" or monsterState == "VentChase" then
+	elseif monsterState == "WallChase" then
 		return "Chase"
 	elseif monsterState == "Stunned" then
 		return "Stunned"
@@ -2137,6 +2683,36 @@ function Creature.playAction(map: JointMap, name: string, startAt: number?): boo
 		seed = runtime.serial * 97 + #name,
 	})
 	return true
+end
+
+-- Lets a held action (Stare, LookAway, ReachIn) go over its HeldRelease from clock time `at`; any other action ends
+-- at once.
+function Creature.releaseAction(map: JointMap, name: string, at: number)
+	if HELD_RELEASE[name] == nil then
+		Creature.stopAction(map, name)
+		return
+	end
+	for _, run in runtimeOf(map).actions do
+		if run.name == name and run.releaseAt == nil then
+			run.releaseAt = at
+		end
+	end
+end
+
+-- Holds the hinge `angle` radians open over every pose (the victim's maw in a jumpscare; Roblox parts cannot be painted
+-- with a hole, so the tear opens the hinge: the black cap, sleeve and throat and the MawShard teeth show), nil lets go.
+function Creature.setJawOverride(map: JointMap, angle: number?)
+	runtimeOf(map).jawOverride = if angle and MathUtil.isFinite(angle) then math.max(0, angle) else nil
+end
+
+-- Whether `name` is a held action (it runs until released).
+function Creature.isHeld(name: string): boolean
+	return HELD_RELEASE[name] ~= nil
+end
+
+-- The rig-space point the Jumpscare and ReachIn aim at (nil: their defaults).
+function Creature.setLookTarget(map: JointMap, point: Vector3?)
+	runtimeOf(map).target = if point and MathUtil.isFiniteVector(point) then point else nil
 end
 
 -- Ends `name` (every action when nil) at once.
@@ -2201,6 +2777,7 @@ function Creature.measure(map: JointMap): { [string]: number }
 		standHip = m.standHip,
 		ground = m.ground,
 		hairChains = #m.hair,
+		fingers = #m.fingers.Left + #m.fingers.Right,
 	}
 end
 

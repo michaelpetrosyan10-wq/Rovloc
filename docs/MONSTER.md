@@ -677,6 +677,9 @@ Published every frame (`snapshot()` / `viewState()`):
 - **The world packet:** carries position, yaw, state, pose, hidden and target at the state rate. The exact state and
   the action (with its age) also go reliably on every change, so a client's puppet publishes the same contract fields.
 - **Snaps:** positions are never interpolated across a hidden sample. A teleport (it always moves while hidden) snaps.
+- **The puppet's pose and eye** (the web's clients; Roblox replicates the server's attributes): the same rules as the
+  host's, section 2. It hunches by the same head-room rule, its look-ahead read along the host's positions ahead of
+  the one drawn, then along its heading; its eye is the rig's for that pose, 0.6 forward.
 - **Events to everyone:** a teleport's warning (the flicker and the hiss on every page; the torch stutter only on the
   target's page), the grunt, a give-up.
 - **Events to their target only:** a reveal scare, a stare's sting.

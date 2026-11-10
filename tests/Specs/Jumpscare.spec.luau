@@ -54,7 +54,7 @@ local NAMES = CreatureRigBuilder.PartNames
 local MAX = GameConfig.MaxHealth
 local LUNGE = J.LungeSeconds
 local HOLD = J.HoldSeconds
-local FACE = J.FaceDistance
+local FACE = J.HoldDistance -- the camera's lock off the mask (docs/MONSTER-LOOK.md HOLD_DISTANCE)
 local KINDS: { Enums.JumpscareKind } = { "Hallway", "Vent", "Locker", "Underwater" }
 local NOT_PLAYING: { Enums.LifeState } = { "Lobby", "Dead", "Spectating" }
 local VICTIM_ROOT_HEIGHT = 3 -- a standing victim's root above the floor (hip 2 + half the 2-stud root)
@@ -320,7 +320,7 @@ return {
 		t.eq(verdict(JumpscareHandler.validate(baseCheck({ distance = math.huge }))), "TooFar", "no root to measure")
 		t.eq(verdict(JumpscareHandler.validate(baseCheck({ distance = 0 / 0 }))), "TooFar", "a non-finite distance")
 		t.truthy(JumpscareHandler.MaxReach > CreatureConfig.Senses.CatchDistance, "the reach covers a floor catch")
-		t.truthy(JumpscareHandler.MaxReach > CreatureConfig.Senses.VentCatchDistance, "and a duct catch")
+		t.truthy(JumpscareHandler.MaxReach > CreatureConfig.Hiding.CatchRange, "and stepping out of a hiding spot")
 	end,
 
 	["rules: the first catch downs; every later catch executes"] = function(t: Expect)
@@ -379,8 +379,9 @@ return {
 				return JumpscareHandler.facePair(victim, CFrame.new(victim.Position + offset), kind)
 			end
 
-			-- From further out: pulled in to the spacing, along the line between them, at its own height.
-			local offset = Vector3.new(3.1, 1.7, -2.6)
+			-- From further out (the Tall Man's spacings are 2-4.4: this is 8): pulled in to the spacing, along the line
+			-- between them, at its own height.
+			local offset = Vector3.new(6.2, 1.7, -5.2)
 			local v, c = pair(offset)
 			t.truthy(near(v.Position, victim.Position, 1e-6), kind .. ": the victim is never moved")
 			t.truthy(facesToward(v, c.Position), kind .. ": the victim faces the Creature")
@@ -427,7 +428,11 @@ return {
 		local faceWorld = (face.Parent :: BasePart).CFrame * face.CFrame
 		local offset = JumpscareHandler.faceOffset(rig.root.CFrame, faceWorld, "Biped")
 		t.near(offset.Position.Y, CreatureConfig.EyeHeightAboveRoot.Biped, 0.01, "at the eyes above the root")
-		t.truthy(-offset.Position.Z >= 0 and -offset.Position.Z <= 1, "at most a stud ahead of the root")
+		-- the Tall Man's mask juts out from its bowed head: its face is ahead of the root, but within two studs
+		t.truthy(
+			-offset.Position.Z >= 1 and -offset.Position.Z <= 2,
+			"a little ahead of the root: " .. -offset.Position.Z
+		)
 		t.near(offset.Position.X, 0, 0.01, "centred")
 		t.truthy(offset.LookVector:Dot(Vector3.new(0, 0, -1)) > 0.95, "looking where the Creature faces")
 		t.truthy(near((rig.root.CFrame * offset).Position, faceWorld.Position, 1e-4), "round trip")
@@ -443,7 +448,8 @@ return {
 	["live: a catch holds the moment, then downs the victim when the hold ends"] = function(t: Expect)
 		local victim, victimRoot = fakePlayer(victimAt(0, 0, 90))
 		local other = fakePlayer(victimAt(20, 0, 0))
-		local creatureFloor = CFrame.new(3.2, 0, -2.4) * CFrame.Angles(0, math.rad(160), 0)
+		-- 6.4 studs out: further than the Hallway spacing (4.2), so the catch pulls it in
+		local creatureFloor = CFrame.new(5.12, 0, -3.84) * CFrame.Angles(0, math.rad(160), 0)
 		inRun({ victim, other }, creatureFloor, function(rig: Rig, clock: FakeClock)
 			recordFinishes(function(finishes: { Finish })
 				local spacing = JumpscareHandler.spacing("Hallway")
@@ -768,6 +774,39 @@ return {
 			local toFace = (face.Position - shaken.Position).Unit
 			t.truthy(shaken.LookVector:Dot(toFace) > math.cos(math.rad(15)), "shaken, the face stays in view")
 		end
+	end,
+
+	["sequence: the maw tears open 0.36-0.78, static floods in before the black at 1.6, held through the outcome"] = function(
+		t: Expect
+	)
+		t.eq(JumpscareController.maw(0), 0, "shut at the snap")
+		t.eq(JumpscareController.maw(0.36), 0, "the tear starts at 0.36")
+		t.near(JumpscareController.maw(0.78), JumpscareController.MawAngle, 1e-9, "torn open by 0.78")
+		t.near(JumpscareController.MawAngle, math.rad(14), 1e-9, "about 14 degrees (docs/MONSTER-LOOK.md)")
+		t.truthy(
+			JumpscareController.maw(0.6) > 0 and JumpscareController.maw(0.6) < JumpscareController.MawAngle,
+			"tearing"
+		)
+		local cutAt, beat = JumpscareController.cutFor(LUNGE + HOLD)
+		t.eq(cutAt, JumpscareController.SequenceBlack, "the black lands at 1.6")
+		t.near(
+			beat,
+			JumpscareController.Beat + (LUNGE + HOLD - 1.6),
+			1e-9,
+			"and holds through the outcome and the beat"
+		)
+		local early, earlyBeat = JumpscareController.cutFor(1.2)
+		t.eq(early, 1.2, "an earlier outcome cuts sooner")
+		t.eq(earlyBeat, JumpscareController.Beat)
+		local function static(elapsed: number): number
+			return JumpscareController.overlay(elapsed, 1, cutAt, beat).static
+		end
+		t.eq(static(0.5), 0, "no static early on")
+		t.eq(static(1.1), 0, "nor at 1.1")
+		t.truthy(static(1.3) > 0 and static(1.3) < 1, "rising from 1.18")
+		t.near(static(1.5), 1, 1e-9, "filling the frame for the last 0.13 s")
+		t.eq(static(cutAt), 0, "under the black, nothing")
+		t.eq(JumpscareController.overlay(0.2, 1, 0.3, 0.2).static, 0, "an early abort never shows the static")
 	end,
 
 	["overlay: flashes follow FlashScale; a hard cut to black at the end, a beat, then a fade"] = function(t: Expect)

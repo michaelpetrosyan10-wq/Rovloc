@@ -256,10 +256,10 @@ ObjectiveConfig.Tuning = table.freeze({
 	DropSpread = 1.2, -- studs between the items a carrier drops
 })
 
--- Where the Creature starts on Levels 2 and 3, and its grace there (Level 1 keeps its scripted scare, Level 4 its
--- pool, Level 5 the roof door, whose wait uses Grace too).
+-- Where the Creature starts on Levels 0, 2 and 3, and its grace there (Level 1 keeps its scripted scare, Level 4 its
+-- pool, Level 5 the roof door, whose wait uses Grace too). The basement has the Creature too (docs/MONSTER.md 5).
 ObjectiveConfig.Spawn = table.freeze({
-	Levels = table.freeze({ "Level2_ScienceHall", "Level3_Gymnasium" } :: { string }),
+	Levels = table.freeze({ "Level0_Basement", "Level2_ScienceHall", "Level3_Gymnasium" } :: { string }),
 	MinDistance = 70, -- studs walked from the entry (ObjectivePlaces.walkDistance)
 	MaxDistance = 140,
 	Grace = table.freeze({ Standard = 20, Nightmare = 12 } :: { [string]: number }),

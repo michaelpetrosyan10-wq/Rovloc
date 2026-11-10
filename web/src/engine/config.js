@@ -245,7 +245,10 @@ export const SettingsList = Object.freeze([
   { key: 'UIVolume', kind: 'Number', label: 'Settings.UIVolume', min: 0, max: 1, step: 0.05, default: 0.8 },
   { key: 'Captions', kind: 'Bool', label: 'Settings.Captions', default: false },
   { key: 'ShowHints', kind: 'Bool', label: 'Settings.ShowHints', default: true },
-  { key: 'Quality', kind: 'Choice', label: 'Settings.Quality', options: ['Auto', 'Low', 'Medium', 'High'], default: 'Auto' },
+  // How much this page renders, best first (quality.js tiers; GraphicsConfig on Roblox). Visual only.
+  { key: 'Graphics', kind: 'Choice', label: 'Settings.Graphics', options: ['Max', 'High', 'Medium', 'Low', 'Potato'], default: 'Max' },
+  // Max+: Max rendered at 150 % and scaled down (supersampling); only shown and only used at Max
+  { key: 'Supersample', kind: 'Bool', label: 'Settings.Supersample', default: false },
   { key: 'TutorialDone', kind: 'Bool', label: 'Settings.TutorialDone', hidden: true, default: false },
   { key: 'HintBearTrap', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
   { key: 'HintVentGrate', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },

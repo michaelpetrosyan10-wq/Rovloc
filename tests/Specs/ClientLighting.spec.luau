@@ -371,4 +371,26 @@ return {
 		t.eq(Volumetrics.dustRate(1, 0), 0, "nor does air without dust")
 		t.truthy(Volumetrics.dustRate(1, 1.4) > Volumetrics.dustRate(0.4, 1.4))
 	end,
+
+	["layers: a tunnel's mains burn steady, its circuits flicker; a stutter only dims, then lets go"] = function(
+		t: Expect
+	)
+		t.truthy(LightingController.steadyGroup("Mains:3"), "a mains group is steady (the power switch holds it)")
+		t.falsy(LightingController.steadyGroup("Circuit:3"), "a circuit flickers")
+		t.falsy(LightingController.steadyGroup("HallA"), "so does any other group")
+		t.falsy(LightingController.steadyGroup(nil), "no group, no hold")
+		local dropped = 0
+		for i = 0, 159 do
+			local value = LightingController.stutterFactor(3, 100, 1.6, 100 + i / 100)
+			t.truthy(value > 0 and value <= 1, "a stutter only dims")
+			t.eq(value, LightingController.stutterFactor(3, 100, 1.6, 100 + i / 100), "the same on every client")
+			if value < 0.5 then
+				dropped += 1
+			end
+		end
+		t.truthy(dropped > 30, "it stutters (" .. dropped .. " dark frames of 160)")
+		t.eq(LightingController.stutterFactor(3, 100, 1.6, 99.9), 1, "not before the warning")
+		t.eq(LightingController.stutterFactor(3, 100, 1.6, 101.61), 1, "nor after it")
+		t.truthy(LightingController.stutterFactor(3, 100, 1.6, 101.59) > 0.9, "easing back by the end")
+	end,
 }

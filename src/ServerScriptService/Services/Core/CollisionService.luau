@@ -8,8 +8,11 @@
 --
 -- Character modes. Each tracked character has a mode stack keyed by token: PushMode(character, token, mode) adds or
 -- replaces that token's entry, PopMode(character, token) removes it, and the highest mode wins
--- (Normal < Vent < Locked). So a jumpscare lock that ends inside a duct falls back to Vent, never to Players.
+-- (Normal < Crouch < Vent < Locked). So a jumpscare lock that ends inside a duct falls back to Vent, never to Players.
 --   Normal: every body part "Players"; the VentCollider ball "NoCollide" with CanCollide off.
+--   Crouch: (PlayerStateService, while Crouching on foot) only the parts that stay under a crawlway's 4.3-stud mouth
+--           collide ("Players": the HumanoidRootPart, whose top is 4 studs up, the LowerTorso and the legs); the
+--           head, the upper torso and the arms are "NoCollide", so a crouched player fits through a crawlway.
 --   Vent:   every body part "NoCollide"; the VentCollider ball "VentCollider" with CanCollide on (the only collider).
 --   Locked: every part "NoCollide" (VentCollider included, CanCollide off).
 -- Parts added later (accessories, tools) get the current mode's group as they arrive. Collision groups are used
@@ -43,8 +46,21 @@ local VENT_COLLIDER_NAME = "VentCollider"
 -- Higher wins.
 local MODE_RANK: { [string]: number } = {
 	Normal = 1,
+	Crouch = 1.5,
 	Vent = 2,
 	Locked = 3,
+}
+
+-- The parts a crouched body collides through (everything else rises above a crawlway's mouth).
+local CROUCH_COLLIDERS: { [string]: boolean } = {
+	HumanoidRootPart = true,
+	LowerTorso = true,
+	LeftUpperLeg = true,
+	LeftLowerLeg = true,
+	LeftFoot = true,
+	RightUpperLeg = true,
+	RightLowerLeg = true,
+	RightFoot = true,
 }
 
 local CollisionService = {}
@@ -80,6 +96,9 @@ function CollisionService.groupFor(partName: string, mode: Enums.CollisionMode):
 	end
 	if mode == "Normal" then
 		return CollisionGroups.Players, nil
+	end
+	if mode == "Crouch" then
+		return if CROUCH_COLLIDERS[partName] then CollisionGroups.Players else CollisionGroups.NoCollide, nil
 	end
 	return CollisionGroups.NoCollide, nil
 end

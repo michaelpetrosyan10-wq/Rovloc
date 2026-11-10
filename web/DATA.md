@@ -13,7 +13,7 @@ node tools/data-test.mjs      # decoder round trip + structural checks
 | Step | Tool | Output |
 | --- | --- | --- |
 | export | `tools/export-world.luau` | `build/cache/world-raw.json`: every part, light, SurfaceGui, volume, attachment, entity, graph and layout of a real run's world at RunSeed 20251029 / Standard, built by the game's own builders in the Lune harness |
-| textures | `tools/textures.py` | `build/textures/<Id>_{color,normal,orm}.webp` + `textures.json` (cached; reruns are instant) |
+| textures | `tools/textures.py` | `build/textures/<size>/<Id>_{color,normal,orm}.webp` per graphics tier (2048, 1024, 512, 256) + `textures.json` (cached; reruns are instant) |
 | bake | `tools/bake.mjs` (+ `tools/bake/*.mjs`) | `build/world.json`, `build/world.bin`, `build/textures/{decals,wear}_N.webp`, `build/cache/golden.json` |
 
 The bake takes these options:
@@ -23,8 +23,11 @@ The bake takes these options:
 - `--threads N`;
 - `--raw`, `--out`.
 
-build.mjs inlines `world.json`, `world.bin` (gzip, then base64; inflate with DecompressionStream) and every
-`build/textures/*.webp`. `build/cache/` holds intermediates and is not inlined.
+build.mjs (through `tools/assets.mjs`) ships `world.json` and `world.bin` gzipped (inflated with DecompressionStream),
+the texture sets and the atlases two ways: the site (`site/index.html` + content-hashed `site/assets/*`, fetched) and
+single files (the lite build and the test pages: base64 in non-executed script tags). The page's asset manifest (an
+inline JSON script, `rv-manifest`) names every asset by URL or by `inline:<script id>`. `build/cache/` holds
+intermediates and is not shipped.
 
 ## Conventions
 
@@ -128,13 +131,23 @@ Faces buried in other solid static parts are culled. Large faces are subdivided 
 
 The key is `<Material>` or `<Material>/<Texture>`.
 
-`meta.textures[id]` holds `{ studsPerTile, reference, maps: { color, normal?, orm? } }`, with paths relative to
-`build/`:
+`meta.textures[id]` holds `{ studsPerTile, reference, maps: { color, normal?, orm? }, tiers }`, with paths relative
+to `build/`. `tiers[size].maps` are the graphics tiers' texture sets (`maps` is the 1024 set); the engine takes its
+images through the asset manifest, by texture id:
 
-- `color`: lossy WebP q85, 512 px, sRGB. Multiply it by the vertex colour. The part colour was already divided by
-  `reference`, as Roblox's MaterialVariant tint does.
-- `normal`: lossless, 384 px. R = x, G = y in the OpenGL convention; B is stored as 1 (normalize after perturbing).
-- `orm`: lossless, 256 px. G = roughness, B = metalness.
+| set | tiers | color (lossy WebP q85, sRGB) | normal (lossless) | orm (lossless) |
+| --- | --- | --- | --- | --- |
+| 2048 | Max | 2048 px (generated at 2048: `generate.py --size 2048`) | 2048 | 1024 |
+| 1024 | High, Medium | 1024 (the 1024 masters Roblox uploads) | 1024 | 512 |
+| 512 | Low | 512 | none | none |
+| 256 | Potato (the boot set) | 256 | none | none |
+
+- `color`: multiply it by the vertex colour. The part colour was already divided by `reference`, as Roblox's
+  MaterialVariant tint does.
+- `normal`: R = x, G = y in the OpenGL convention; B is stored as 1 (normalize after perturbing).
+- `orm`: G = roughness, B = metalness.
+
+The page boots on the 256 set and streams its tier's set in the background (`src/engine/textures.js`).
 
 The atlases `Decals<N>` and `Wear<N>` have `atlas: true` and `studsPerTile` 1.
 
@@ -437,6 +450,7 @@ The Tall Man (CreatureRigBuilder): an 11-stud shadow figure with a porcelain mas
 | `stairwells` | WorldConfig.Stairwells: all 15 candidates (`id, pair, slot, tower, from, to, fromRoom, toRoom`), see "Routes" |
 | `worldConfig` | WorldConfig as data |
 | `windows` | the moonlight window specs (Volumetrics.windowSpecs) |
+| `emitters` | the particle emitters the web draws (`src/engine/particles.js`): `[{ id, kind: 'Steam', level, pos, dir, detail }]`, one per SteamVent nozzle (TunnelDressingBuilder) at its `Mouth` attachment, `dir` the plume's way (the mouth's look vector). Decorative only |
 | `plan` | the director's plan for the seed (props, lockedGrates) |
 | `layouts` | the raw layout blueprints, level-local as authored |
 | `film.levels[key]` | LightingMood.film (exposure, contrast, saturation, lift, bloom, Atmosphere density / offset / haze / glare / colour / decay, sun rays, DOF, vignette, shafts, dust, moon). `film.base` is the base film; `film.levels.Outdoor` is the storm outside |
@@ -450,7 +464,8 @@ inside the zone, plus a 6-stud grid over the floor at eye height) against the st
 non-glass static parts without `Detail`: walls, floors, ceilings, solid furniture). Doors and every other entity
 count as open and glass as clear, so the set is conservative; one clear ray makes the pair visible both ways. A
 renderer may skip whatever lies in zones outside the camera zone's set (dynamic lights, entities, particles,
-decorative chunks); static chunks are one per level and stay.
+decorative chunks); static chunks are one per level, so the engine sorts each one's triangles by the zone they face at
+boot (`src/engine/pvs.js`) and draws only the visible zones' ranges.
 
 ## Tunnel floors
 

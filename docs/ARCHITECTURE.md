@@ -3,7 +3,8 @@
 Rovloc is a first-person survival horror game for 1–4 players in a pitch-black school. It ships natively on two
 platforms:
 
-- **the website**, [rovloc.vercel.app](https://rovloc.vercel.app): one HTML file, with co-op over room codes;
+- **the website**, [rovloc.vercel.app](https://rovloc.vercel.app): a static site (one page and its hashed assets), with
+  co-op over room codes, and a single-file "lite" build for offline Chromebooks;
 - **a Roblox game**, built from this repository with Rojo.
 
 It is the same game on both, with every feature on both. Neither platform embeds the other.
@@ -43,13 +44,13 @@ It is the same game on both, with every feature on both. Neither platform embeds
 | `src/MaterialService/RovlocTextures.model.json` | The MaterialVariants of the generated PBR textures. With `Config/TextureAssets.luau` they decide which surfaces are textured on both platforms. |
 | `tests/` | The specs (`Specs/*.spec.luau`), their runner (`SpecRunner.luau`) and the Studio entry (`Runner.server.luau`). |
 | `web/src/` | The web game: engine, creature, game, co-op and net (§4). |
-| `web/tools/` | The export, the bake, the single-file build and the headless tests (§6, §7). `web/DATA.md` documents the world data. |
+| `web/tools/` | The export, the bake, the texture packer, the site and lite builds and the headless tests (§6, §7). `web/DATA.md` documents the world data. |
 | `tools/` | `verify.sh` (the Luau gates), `capscan.py`, the Lune harness and checks, and the texture generator and uploader. See `tools/README.md`. |
 | `default.project.json` | The Roblox game: the Rojo tree and the engine pins. It is what ships and what the web export builds. |
 | `test.project.json` | The same tree plus `tests/` under `ServerScriptService.Tests`, for Lune, luau-lsp and Studio spec runs. |
 | `syncback.project.json` | The script folders only, for `rojo syncback` (keeps the pins out of syncback). |
 | `.github/workflows/` | `ci.yml` (the gates and a `Rovloc.rbxl` artifact), `publish.yml` (Open Cloud place publishing) and `textures.yml` (texture generation and upload). |
-| `site/` | The deployed web page (`index.html`) and `vercel.json`. |
+| `site/` | The deployed website, written by `npm run build`: `index.html`, the content-hashed `assets/` and `vercel.json`. |
 | `docs/` | This file, `LIGHTING-PARITY.md` (the Roblox look fitted to the web's), `PLACE_SETUP.md` (what Rojo can't set, and publishing) and `store/` (promo art and store copy). |
 
 ## 2. What both platforms share (`src/ReplicatedStorage/Shared/`)
@@ -111,10 +112,55 @@ The API surface is checked against the Roblox API dump. Scripts never touch depr
 
 ### 3.2 The place
 
-`default.project.json` pins what scripts can't set: `StreamingEnabled = false`, `SignalBehavior = Deferred`,
+`default.project.json` pins what scripts can't set: `StreamingEnabled = false` (below), `SignalBehavior = Deferred`,
 `CharacterAutoLoads = false`, the R15 avatar settings, the legacy character controller, the sound service and the
 Future lighting. `docs/PLACE_SETUP.md` lists the settings Rojo can't write. At boot `ServerMain` checks the ones scripts
 can read and sets `BootError` if any is wrong.
+
+**Why no streaming.** Measured in Lune on the 400 × 288 tunnel floors (Nov 2026):
+
+| What a client holds | Parts |
+| --- | --- |
+| The authoritative school, built once at boot | 60,326: Level 0 10,764, Level 1 12,738, Level 2 11,432, Level 3 10,961, Level 4 13,134, the roof 271, the stairwells 672, the exterior 70, the lobby 284 |
+| A run's fixtures and props (`Workspace.Runtime`) | about 19,150: 3,400 to 4,300 per tunnel floor, 148 on the roof |
+| The client's own cosmetic dressing | 3,437 |
+| **In all** | **82,915 parts, 170,954 instances**, 2,066 lights, 7,653 SurfaceGuis (31,306 Frames and 20,544 UIGradients of painted wear and signs) |
+
+- **Size.** The whole of it serializes to a 4.0 MB binary place, a rough measure of what a join replicates.
+- **Memory.** Roblox does not publish a per-instance cost. At an assumed 1–2 KB per part and a few hundred bytes per other
+  instance, the world costs a client roughly 110–200 MB, plus the SurfaceGuis' paint. Low and Potato switch off 5,876 of
+  those (the wear and damage paint), and Potato also hides the 19,849 `Detail` parts (24 %). Confirm the figure in the
+  Developer Console's Memory tab on a phone.
+- **ZoneService.** The index holds 1,054 zones and 77 trigger volumes and builds in 22 ms. A lookup costs 10 µs when the
+  root is still in last tick's zone and 76 µs from scratch; the volume test costs 19 µs (interpreted Luau, in Lune).
+  The worst case at 10 Hz, four players and the Creature all looked up from scratch, is 0.46 ms a tick: 0.5 % of
+  one server core.
+
+`StreamingEnabled` stays off, because streaming cannot both save memory here and keep the game identical:
+
+- **The default radius saves nothing.** The floors are stacked: the school spans 400 × 288 × 130 studs, and from
+  anywhere in it all of it lies within about 510 studs. At the default `StreamingTargetRadius` of 1024, every client
+  would still hold the whole school.
+- **A small radius changes the game.** A radius small enough to save memory (under about 250 studs) streams out parts
+  of the floor the player stands on. The client-side rules read that world:
+  - `LoadingCurtain` counts the school's parts against `WorldPartCount` before it acknowledges the world;
+  - `VentController` builds its duct rails from the level's VentNodes;
+  - `LightingController` keeps every fixture's hold, override and stutter layers, so a circuit the power switch cut
+    must stay dark when it streams back in;
+  - `AudioController`'s zone index gives the acoustics, the area grade and the footsteps;
+  - `MovementController` probes the ceiling for its crouch prediction under a crawlway;
+  - `CreatureController` and `CreatureCuesController` show the Creature and its warnings anywhere on the floor, since
+    the teleports and the chases cross it.
+
+  Making each of these streaming-safe, or pinning them Persistent, would give back most of the saving.
+
+So phones and Chromebooks (the Roblox Android app) hold the whole school. What they render is bounded by the Graphics
+tiers rather than by streaming:
+- Potato lights the 10 nearest fixtures, with no fixture shadows;
+- it hides the Detail parts and the wear paint;
+- it closes the haze at 120 studs.
+
+The engine's frustum culling and the stacked slabs keep the other floors out of view.
 
 ```text
 game
@@ -150,14 +196,21 @@ script, no passive regen).
   - `AudioService` sends audio cues;
   - `RunStatsService` counts each run's stats;
   - `DevToolsService` runs the dev commands.
-- **Player:** `PlayerStateService` (move state, meters), `MovementAuthority` (speed, displacement and noclip checks),
+- **Player:** `PlayerStateService` (move state, meters; a low ceiling keeps a player on foot crouched, and a crouched
+  body collides only through the parts under a crawlway's 4.3-stud mouth: `CollisionService`'s Crouch mode),
+  `MovementAuthority` (speed, displacement and noclip checks),
   `LifeStateService` (the only writer of health and life state), `InteractionService` (prompts and channels),
   `FlashlightService` and `LoadoutService`.
 - **Vents:** `VentNetworkService`: grates, crawling and occupancy.
-- **Monster:** `MonsterAIService`. A 10 Hz brain drives the states (Dormant, Patrol, InvestigateNoise, WallChase,
-  VentChase, Stunned, AquaticStalk and Scripted). Its inputs are `Perception` and `Hearing`. It moves with
-  `Locomotion` and catches with `JumpscareHandler`.
-- **Mechanics:** `DoorService`, `BearTrapService`, `ChemicalProjectileService`, `LockerHidingService`,
+- **Monster:** `MonsterAIService` (the Tall Man, `docs/MONSTER.md`; the website's `web/src/creature` is the reference).
+  A 10 Hz brain (`Brain.decide`) drives the states: Dormant, Patrol (the stalk), InvestigateNoise, Search,
+  WallChase (the chase, giving up after 22 s), HidingResponse (the saw-you-hide rule: LookAway escapes, a ReachIn at
+  30 s), Teleport (out of sight, 12-24 studs of walking from its target, after a 1.6 s warning), Stunned,
+  AquaticStalk and Scripted. Its inputs are `Perception` (lit from the server's fixtures: `LightField`) and `Hearing`.
+  It walks the level's zone graph (`FloorNav`: never a crawlway, a duct or a pool's water) with `Locomotion`, warps
+  (FadeOut / FadeIn) for teleports, give-ups and the pool, publishes the view contract (Action, ActionAt, Fade) and
+  catches with `JumpscareHandler`. It hunts from the basement on.
+- **Mechanics:** `DoorService`, `BearTrapService`, `ChemicalProjectileService`, `HideSpotService` (lockers, barrels and cabinets),
   `FloodedPoolService` and `ParachuteService`.
 - **Levels:** `ObjectiveService` (the floor objectives, from `ObjectiveConfig`) and the per-floor controllers,
   `Level0_BasementController` … `Level5_RoofController`.
@@ -187,10 +240,13 @@ It announces each run with `OnRunStarted` / `OnRunEnded`. The controllers:
   - `DevToolsController` draws the dev overlays.
 - **FirstPerson:** `FirstPersonController`: the camera stack, body and hands, view bob, panic effects and the dual-cone
   flashlight.
-- **Characters:** `CharacterAnimationController`, `CreatureController` and `RemoteFlashlightRenderer`.
+- **Characters:** `CharacterAnimationController`, `CreatureController` (the Tall Man's profile, the view contract's
+  actions and dissolve) and `RemoteFlashlightRenderer`.
 - **HUD:** the HUD on `UIKit` (procedural UI, no images): status bars, prompts, captions, the objective tracker, the
   squad panel, first-time hints, touch controls and the `SettingsMenu`.
-- **Gameplay:** vents, jumpscares, bear traps, doors, flasks, level scenes, lockers, swimming and the struggle.
+- **Gameplay:** vents, jumpscares, the Creature's cues (`CreatureCuesController`: reveal scares, stings, the chase
+  music, the rattle, the torch stutter), bear traps, doors, flasks, level scenes, hiding spots, swimming and the
+  struggle.
 - **Match:** the lobby, onboarding, airlocks, downed, spectating, the parachute and the escape summary.
 
 ### 3.5 Networking, physics and contracts
@@ -216,9 +272,9 @@ The 71db8fd version of this file has the original phase-by-phase design of every
 
 ## 4. The web runtime (`web/src/`)
 
-`main.js` shows the loading screen, inflates the world data embedded in the page, creates the engine, then calls
-`start(engine)` from `game/index.js`. Without a game module (or with `?sandbox`), the build links the engine
-sandbox: a free walk through the school.
+`main.js` shows the loading screen, loads the world data through the page's asset manifest (the site's hashed assets,
+or base64 inside a single-file build), creates the engine, then calls `start(engine)` from `game/index.js`. Without a
+game module (or with `?sandbox`), the build links the engine sandbox: a free walk through the school.
 
 ### Engine (`engine/`)
 
@@ -228,11 +284,17 @@ sandbox: a free walk through the school.
   cell, with level culling. It also gives per-level collision BVHs (three-mesh-bvh) and the queries (`raycast`,
   `lineClear`, `probeAt`, `zoneAt`, `levelAt`).
 - **Rendering:**
-  - `renderer.js`: WebGL2 with dynamic resolution, the torch shadow pass, the viewmodel pass, bloom and the post grade;
-  - `materials.js`: the baked vertex light, the dynamic lights, flicker and fog;
+  - `renderer.js`: WebGL2 at the tier's render scale: the torch shadow pass, the fixture shadow atlas, SSAO, the
+    ray-marched torch cone, the viewmodel pass, the bloom chain and the post (FXAA, grade, vignette, grain, the scares'
+    tear);
+  - `materials.js`: the baked vertex light, the dynamic lights, the torch's soft shadows, the fixtures' shadows of the
+    Creature, flicker and fog;
+  - `pvs.js`: zone culling from the bake's potentially visible sets;
+  - `textures.js`: the tier's texture set, streamed in the background;
+  - `particles.js`: GPU particles (steam vents, drips, ceiling grit, torch motes);
   - `lighting.js`: flicker, blackouts, lightning and the light budget;
   - `volumetrics.js`, `sky.js`;
-  - `quality.js`: the quality tiers, auto-detected (§5).
+  - `quality.js`: the five graphics tiers, Max to Potato, and dynamic resolution (§5).
 - **Player:** `player.js` (MoveState machine, meters, first-person camera), `physics.js` (a floating capsule),
   `camera.js`, `viewmodel.js`, `flashlight.js`, `panic.js`.
 - **Systems:**
@@ -341,24 +403,51 @@ On Roblox:
   It puts a real level through every tier and back to Max, and asserts that every part's `CanCollide`, `CanQuery`,
   `Size`, `CFrame` and `CollisionGroup` never change and that Max restores the exact build.
 
-On the web, `engine/quality.js` still has its own Low / Medium / High tiers, auto-detected, with dynamic resolution.
-It will move to the same five tiers.
+On the web (`web/src/engine/quality.js`), the same five tiers and names, the Graphics setting saved with the settings
+(Max by default; a save from before the tiers keeps its old Low / Medium / High). The settings menu shows them as a row
+of segments with the picked tier's one-line description (the Roblox strings: Potato reads "For school Chromebooks"),
+and Max+ (150 % supersampling) while Max is picked. A pick applies live: render targets resize, materials recompile,
+the tier's texture set streams in the background and swaps in. There is no automatic switching: when the frame rate
+stays under 30 for 12 s, a toast and the menu suggest Potato. Everything is visual: `web/tools/tier-parity.mjs` plays
+the same run at Max and Potato, at 20 and 144 frames a second, and asserts identical gameplay every tick.
+
+| Web | Max | High | Medium | Low | Potato |
+| --- | --- | --- | --- | --- | --- |
+| Render scale | 100 % (Max+ 150 %) | 85-100 %, ≤ 1440 rows | 70-100 %, ≤ 1080 | 60-85 % of ≤ 720 | 50-70 % of 720p |
+| Torch shadow | 2048, 16-tap soft PCF | 1024, 8-tap soft | 1024, 3 x 3 | 512, 4 taps | none |
+| Fixture shadows of the Creature | 4 nearest (1024) | 3 (1024) | 2 (512) | none | none |
+| SSAO | full resolution, 16 samples | half, 10 | no | no | no |
+| Torch cone | ray-marched, 28 steps, shadowed | ray-marched, 14 | haze ribbons | no | no |
+| Bloom | 3 levels | 2 | 1 | no | no |
+| Fixture shafts / dust | 20 / 12 | 14 / 8 | 6 / 3 | 0 / 0 | 0 / 0 |
+| GPU particles | x1 | x1 | x0.7 | x0.4 | off |
+| AA, grain, chromatic aberration | FXAA, grain, CA | FXAA, grain, CA 0.6 | FXAA, grain | grain | none |
+| Depth of field (panic) | yes | yes | no | no | no |
+| Grade | full | full | full | full | flat (each pixel keeps the tint's luminance) |
+| Textures (colour, normal, roughness) | 2048, 2048, 1024 | 1024, 1024, 512 | 1024, 1024, 512 | 512 colour | 256 colour |
+| Wear decals | yes | yes | yes | no | no |
+| `Detail` chunks drawn | 1-3 | 1-3 | 1-2 | 1 | none |
+| Haze closes at (darkened) | the level's own | 300 studs | 220 | 160 | 120 |
+| Teammates' torch beams | yes | yes | yes | no | no |
+| Creature look (`look.js`) | Max | Max | Max | Potato | Potato |
+
+Zone culling (the bake's PVS, `meta.visibility`) runs on every tier.
 
 ## 6. The map pipeline
 
 ```text
 src/ (Luau world builder) ──rojo build──▶ place ──Lune export──▶ world-raw.json ──bake──▶ world.json + world.bin
                                                                      textures ──┘                      │
-                                     site/index.html ◀── copy ── dist/Rovloc.html ◀── single-file build ┘ ──▶ Vercel
+                       site/ (index.html + hashed assets/) ◀── build ┘ ──▶ Vercel;  dist/Rovloc-lite.html (offline)
 ```
 
 | Step | Command (in `web/`) | What happens |
 | --- | --- | --- |
 | Export | `npm run export` | `tools/export-world.luau` builds `default.project.json` with Rojo and loads it in Lune through `tools/lune/harness.luau`. It then does what a run's server does at the fixed seed 20251029 on Standard: builds the school, the run's plan with props and fixtures, every objective's candidate spots, the cosmetic dressing, the Creature rig and the moonlight windows. It writes `build/cache/world-raw.json`. |
-| Textures | `npm run textures` | `tools/textures.py` packs the generator's maps (`tools/textures/`) into WebP. |
+| Textures | `npm run textures` | `tools/textures.py` packs the generator's maps (`tools/textures/`) into WebP, one set per graphics tier: 2048 (generated at 2048), 1024, 512 and 256. |
 | Bake | `npm run bake` | `tools/bake.mjs` tessellates every part and bakes vertex light (BVH shadows, AO, sky, probes). It packs the result into `build/world.json` (metadata) and `build/world.bin` (quantised streams). See `web/DATA.md`. |
-| Build | `npm run build` | `tools/build.mjs` bundles `src/` with esbuild and inlines the gzipped world and textures into `dist/Rovloc.html`. |
-| Deploy | — | Copy `dist/Rovloc.html` to `site/index.html` and push; Vercel serves `site/` at rovloc.vercel.app. |
+| Build | `npm run build` | `tools/build.mjs` bundles `src/` with esbuild and writes the site to `site/` (`index.html` + content-hashed `assets/`: the bundle, the gzipped world, every texture set, the atlases; the page boots on the 256 set and streams its tier's) and the offline lite build `dist/Rovloc-lite.html` (one file, the Low and Potato sets inline). |
+| Deploy | — | Push `site/`; Vercel serves it at rovloc.vercel.app (`vercel.json`: `assets/` cached forever, `index.html` revalidated). |
 
 `npm run data` runs the export, textures and bake in order. Every step is deterministic. Two runs differ only in the
 bake's timing (`stats.bakeSeconds`) and in eight `worldConfig` function entries that the export writes as their
@@ -419,7 +508,8 @@ checks, in order:
 | Command | Checks |
 | --- | --- |
 | `node tools/data-test.mjs` | The world data codec round trip and structural checks of the baked world. |
-| `npm run check` | Builds `dist/Rovloc.html`, then loads it headless: it boots from `file://`, makes no stray requests or console errors, and renders. |
+| `npm run check` | Builds the site and the lite file, then loads them headless: the site served as Vercel serves it fetches nothing but its own assets (Potato only the light ones), the lite file boots from `file://` with no request; no console errors; frame times per graphics tier at 4x CPU throttle; screenshots per tier. |
+| `node tools/tier-parity.mjs` | The same scripted run at Max and Potato (20 and 144 fps render loops): identical gameplay every tick. |
 | `node tools/game-smoke.mjs` | The game played headless from the title through each floor's signature moment. |
 | `node tools/creature-sim.mjs` | The Creature's scenarios on the real world, on a fake clock. |
 | `node tools/objective-run.mjs` | Every floor's objective played through, for each seed. |

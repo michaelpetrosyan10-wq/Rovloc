@@ -814,7 +814,7 @@ function PromptRenderer.mount(ctx: Context): PromptRenderer
 			table.insert(exclude, creature)
 		end
 		table.insert(exclude, Instances.cosmetic())
-		for _, locker in CollectionService:GetTagged(Tags.HideableLocker) do
+		for _, locker in CollectionService:GetTagged(Tags.Hideable) do
 			table.insert(exclude, locker)
 		end
 		for _, record in records do

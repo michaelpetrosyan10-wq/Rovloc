@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterPlayer = game:GetService("StarterPlayer")
 local Workspace = game:GetService("Workspace")
 
+local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GraphicsConfig = require(ReplicatedStorage.Shared.Config.GraphicsConfig)
@@ -402,6 +403,17 @@ return {
 				end
 			end
 		end
+	end,
+
+	["the steam vents follow the particle budget, and Detail is the world's Detail attribute"] = function(t: Expect)
+		t.eq(GraphicsConfig.DetailAttribute, Attributes.World.Detail, "the builders' Detail attribute")
+		for _, tier: GraphicsConfig.Tier in GraphicsConfig.Tiers do
+			local scale = tier.budget.particleScale
+			local rate = LightingController.steamRate(12, scale)
+			t.near(rate, 12 * scale, 1e-9, tier.name .. ": steam at the tier's particle scale")
+		end
+		t.eq(LightingController.steamRate(12, 0), 0, "no steam without particles (Potato)")
+		t.eq(LightingController.steamRate(0, 1), 0, "an emitter that never steamed stays off")
 	end,
 
 	["only unshadowed fixtures past the tier's fill radius go dark"] = function(t: Expect)

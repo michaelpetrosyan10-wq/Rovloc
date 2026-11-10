@@ -642,6 +642,369 @@ define("JumpscareSting", {
 	},
 })
 
+---------------------------------------------------------------- the Tall Man (the website's creature/sounds.js)
+
+local TALL_COMP = compressor(-14, 12, 0.001, 0.25, 6)
+
+-- The static hiss rising at a teleport's spot through its warning (3D).
+define("TeleportHiss", {
+	bus = "Monster",
+	priority = 85,
+	maxVoices = 2,
+	rollOff = r(6, 70),
+	caption = "Caption.TeleportHiss",
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.9,
+			speed = 2.8,
+			region = r(0.1, 1.1),
+			duration = 1.7,
+			looped = true,
+			envelope = env(1.3, 0.25, 0.15),
+			glide = glide(1.35, 1.6),
+			effects = { distortion(0.85), tremolo(19, 0.8, 0.35), eq(-30, 0, 6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = 0.22,
+			region = r(0.01, 0.05),
+			duration = 1.6,
+			looped = true,
+			envelope = env(1.2, 0.3, 0.1),
+			glide = glide(0.4, 1.6),
+			effects = { distortion(0.6), eq(6, -4, -12) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.35,
+			volumeJitter = 0.5,
+			speed = 3,
+			region = r(0, 0.3),
+			delay = 0.3,
+			grains = grains(6, 10, 0.05, 0.14),
+			effects = { distortion(0.9), eq(-24, 2, 6) },
+		},
+	},
+})
+
+-- The loud sting of a teleport reveal or a fake-out (2D, the target's own).
+define("RevealSting", {
+	bus = "Monster",
+	priority = 95,
+	maxVoices = 1,
+	caption = "Caption.RevealSting",
+	duck = { duck("Ambience", 0.15, 0.01, 0.8, 1.4), duck("World", 0.5, 0.01, 0.5, 1) },
+	space = { reverb(1.6, -6) },
+	layers = {
+		{
+			sample = "Explosion",
+			volume = 1.2,
+			speed = 1.25,
+			region = r(0, 0.5),
+			effects = { distortion(0.6), TALL_COMP },
+		},
+		{
+			-- the website's 0.9 x an octave up: played at 1.8 instead, so the stock voice is never near its own pitch
+			sample = "Ouch",
+			volume = 0.8,
+			speed = 1.8,
+			region = r(0.05, 0.3),
+			duration = 0.55,
+			looped = true,
+			envelope = env(0.004, nil, 0.3),
+			glide = glide(1.35, 0.5),
+			effects = { distortion(0.8), eq(-18, 2, 6) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = 1.7,
+			region = r(0.01, 0.05),
+			delay = 0.02,
+			duration = 0.5,
+			looped = true,
+			envelope = env(0.002, nil, 0.35),
+			effects = { flanger(7, 0.9, 0.5), distortion(0.5) },
+		},
+	},
+})
+
+-- The shriek inside a fake-out hiding spot (2D, the one who opened it).
+define("FakeoutShriek", {
+	bus = "Monster",
+	priority = 90,
+	maxVoices = 1,
+	caption = "Caption.FakeoutShriek",
+	duck = { duck("Ambience", 0.2, 0.02, 0.6, 1.2) },
+	space = { reverb(0.8, -8) },
+	layers = {
+		{
+			-- the website's 0.85 x PitchShift 1.8, as 1.8 x 0.85: the same shriek, the stock voice far from its pitch
+			sample = "Ouch",
+			volume = 1.1,
+			speed = 1.8,
+			region = r(0.04, 0.3),
+			duration = 0.9,
+			looped = true,
+			envelope = env(0.01, nil, 0.45),
+			glide = glide(1.5, 0.8),
+			effects = { pitch(0.85), distortion(0.7), tremolo(15, 0.5), eq(-14, 3, 6) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.9,
+			speed = 0.8,
+			region = r(0, 0.1),
+			effects = { eq(4, 4, -6), echo(0.02, 0.35, -8) },
+		},
+	},
+})
+
+-- A held stare caught its attention: the chase starts (2D, the starer's).
+define("StareSting", {
+	bus = "Monster",
+	priority = 90,
+	maxVoices = 1,
+	caption = "Caption.StareSting",
+	duck = { duck("Ambience", 0.3, 0.02, 0.6, 1.2) },
+	space = { reverb(2.2, -6) },
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.6,
+			speed = 0.55,
+			region = r(0.01, 0.05),
+			duration = 0.8,
+			looped = true,
+			envelope = env(0.005, 0.2, 0.5),
+			glide = glide(0.5, 0.7),
+			effects = { distortion(0.7), flanger(2.5, 0.8, 0.5), eq(4, 2, -6) },
+		},
+		{
+			sample = "Explosion",
+			volume = 0.9,
+			speed = 0.8,
+			region = r(0, 0.4),
+			effects = { distortion(0.4), eq(8, -2, -10), TALL_COMP },
+		},
+	},
+})
+
+-- The chase music's hit as a chase starts on you (2D).
+define("ChaseSting", {
+	bus = "Ambience",
+	priority = 80,
+	maxVoices = 1,
+	space = { reverb(1.8, -8) },
+	layers = {
+		{
+			sample = "Explosion",
+			volume = 1.1,
+			speed = 0.62,
+			region = r(0, 0.6),
+			effects = { distortion(0.35), eq(9, -4, -14), TALL_COMP },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.45,
+			speed = 0.36,
+			region = r(0.01, 0.05),
+			delay = 0.02,
+			duration = 0.7,
+			looped = true,
+			envelope = env(0.01, 0.25, 0.4),
+			effects = { distortion(0.5), tremolo(9, 0.6), eq(6, 0, -14) },
+		},
+	},
+})
+
+-- The chase music layer: a driving low pulse while it chases you (2D loop).
+define("ChasePulse", {
+	bus = "Ambience",
+	priority = 70,
+	maxVoices = 1,
+	looped = true,
+	["repeat"] = pulse(0.42, 0),
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.32,
+			speed = 0.18,
+			region = r(0.01, 0.05),
+			looped = true,
+			effects = { tremolo(2.4, 0.45), distortion(0.3), eq(8, -6, -26) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 1.1,
+			speed = r(0.36, 0.4),
+			envelope = env(0.003, 0.08, 0.18),
+			effects = { eq(10, -10, -40), TALL_COMP },
+		},
+		{
+			sample = "JumpLand",
+			volume = 0.55,
+			speed = 0.48,
+			delay = 0.21,
+			chance = 0.7,
+			envelope = env(0.003, 0.05, 0.12),
+			effects = { eq(8, -10, -40) },
+		},
+	},
+})
+
+-- The reverse swell as a chase gives up and it dissolves (2D for the one it chased).
+define("GiveUpSwell", {
+	bus = "Ambience",
+	priority = 75,
+	maxVoices = 1,
+	caption = "Caption.GiveUpSwell",
+	space = { reverb(3.5, -4) },
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.8,
+			speed = 0.5,
+			region = r(0.1, 1.1),
+			duration = 1.4,
+			looped = true,
+			envelope = env(1.25, 0, 0.05),
+			glide = glide(1.6, 1.3),
+			effects = { flanger(0.4, 0.7, 0.5), eq(4, 0, -10) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.4,
+			speed = 0.2,
+			region = r(0.01, 0.05),
+			duration = 1.3,
+			looped = true,
+			envelope = env(1.2, 0, 0.05),
+			glide = glide(0.7, 1.3),
+			effects = { distortion(0.4), eq(6, -2, -18) },
+		},
+	},
+})
+
+-- The low grunt before a LookAway (3D): the tell that it is about to turn its head away.
+define("CreatureGrunt", {
+	bus = "Monster",
+	priority = 70,
+	maxVoices = 2,
+	rollOff = r(6, 60),
+	caption = "Caption.CreatureGrunt",
+	layers = {
+		{
+			sample = "Oof",
+			volume = 1.2,
+			speed = r(0.3, 0.34),
+			region = r(0.04, 0.3),
+			duration = 0.6,
+			looped = true,
+			envelope = env(0.05, 0.2, 0.3),
+			glide = glide(0.8, 0.5),
+			effects = { pitch(0.6), distortion(0.5), eq(8, -2, -16) },
+		},
+		{
+			sample = "Explosion",
+			volume = 0.4,
+			speed = 0.35,
+			region = r(0, 0.3),
+			effects = { eq(6, -6, -30) },
+		},
+	},
+})
+
+-- The low rattle in its throat while it stalks close by (3D).
+define("CreatureRattle", {
+	bus = "Monster",
+	priority = 55,
+	maxVoices = 2,
+	rollOff = r(5, 40),
+	layers = {
+		{
+			sample = "Oof",
+			volume = 0.8,
+			speed = r(0.26, 0.3),
+			region = r(0.04, 0.3),
+			duration = 1.1,
+			looped = true,
+			envelope = env(0.2, 0.5, 0.4),
+			effects = { tremolo(20, 0.8, 0.4), distortion(0.45), eq(6, 0, -14) },
+		},
+	},
+})
+
+-- A hiding spot's warning knock at 35 s: you cannot stay much longer (2D).
+define("HideWarn", {
+	bus = "Body",
+	priority = 70,
+	maxVoices = 1,
+	caption = "Caption.HideWarn",
+	space = { reverb(1.2, -10) },
+	layers = {
+		{
+			sample = "FootstepsPlastic",
+			volume = 1.8,
+			speed = 0.7,
+			region = r(0, 0.1),
+			grains = grains(3, 3, 0.22, 0.26),
+			effects = { eq(8, 4, -10), echo(0.02, 0.3, -10) },
+		},
+		{
+			sample = "JumpLand",
+			volume = 0.9,
+			speed = 0.6,
+			grains = grains(3, 3, 0.22, 0.26),
+			effects = { eq(8, 0, -14) },
+		},
+	},
+})
+
+-- Shoved out of a hiding spot at 45 s, or pulled out by a teammate (2D).
+define("HideKick", {
+	bus = "Body",
+	priority = 75,
+	maxVoices = 1,
+	caption = "Caption.HideKick",
+	layers = {
+		{
+			sample = "JumpLand",
+			volume = 1.2,
+			speed = 0.7,
+			effects = { eq(6, 2, -10), TALL_COMP },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.8,
+			speed = 0.9,
+			region = r(0, 0.12),
+			delay = 0.04,
+			effects = { eq(-2, 6, -4) },
+		},
+	},
+})
+
+-- The torch's filament crackling as it stutters in a teleport's warning (2D).
+define("TorchStutter", {
+	bus = "Body",
+	priority = 60,
+	maxVoices = 1,
+	layers = {
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.35,
+			volumeJitter = 0.6,
+			speed = 2.8,
+			region = r(0, 0.04),
+			grains = grains(6, 10, 0.06, 0.2),
+			effects = { distortion(0.9), eq(-30, 2, 8) },
+		},
+	},
+})
+
 ---------------------------------------------------------------- the player's body
 
 -- Lub-dub: the landing thump slowed into a chest thud with the low end boosted; the second beat follows by a

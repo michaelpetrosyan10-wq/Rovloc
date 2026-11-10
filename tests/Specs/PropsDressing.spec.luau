@@ -981,14 +981,20 @@ return {
 	)
 		local budget = FurnitureBuilder.Budget
 		local boards, desks = 0, 0
-		-- the rooms that face a board (classrooms and labs) and the classrooms that seat pupils (not the halls)
+		-- the rooms that face a board (classrooms and labs) and the classrooms that seat pupils (not the halls, nor a
+		-- room furnished round a table of its own: Level 3's team room)
 		local boarded, seated = 0, 0
 		for _, id: Enums.LayoutId in Enums.LayoutId do
-			for _, room in layoutOf(id).rooms do
+			local layout = layoutOf(id)
+			local tabled: { [string]: boolean } = {}
+			for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
+				tabled[platform.room] = true
+			end
+			for _, room in layout.rooms do
 				if room.kind == "Classroom" or room.kind == "Lab" then
 					boarded += 1
 				end
-				if room.kind == "Classroom" and room.rect.w * room.rect.d < 1300 then
+				if room.kind == "Classroom" and room.rect.w * room.rect.d < 1300 and not tabled[room.id] then
 					seated += 1
 				end
 			end
@@ -1112,11 +1118,26 @@ return {
 		t: Expect
 	)
 		local falls, tiles, puddles, damage, papers = 0, 0, 0, 0, 0
+		-- every ruined drop ceiling (ruin 0.3 and up: Finishes.planCeiling takes tiles out of it) drops at least one
+		local ruined = 0
 		for _, id: Enums.LayoutId in Enums.LayoutId do
 			local layout = layoutOf(id)
 			local decay = props(id):FindFirstChild("Decay_" .. id)
 			local holes = SchoolShellBuilder.ceilingFalls(layout)
 			falls += #holes
+			local fallen: { [string]: number } = {}
+			for _, hole in holes do
+				fallen[hole.room] = (fallen[hole.room] or 0) + 1
+			end
+			for _, room in layout.rooms do
+				if
+					Finishes.dropCeiling(room, SchoolShellBuilder.ceilingKey(room))
+					and Finishes.ruin(id, room.id) >= 0.3
+				then
+					ruined += 1
+					t.truthy((fallen[room.id] or 0) >= 1, room.id .. "'s ruined ceiling drops a tile")
+				end
+			end
 			if not decay then
 				continue
 			end
@@ -1149,11 +1170,38 @@ return {
 				end
 			end
 		end
-		t.truthy(falls >= 20, string.format("ruined ceilings drop their tiles (%d holes)", falls))
+		t.truthy(
+			ruined > 0 and falls >= ruined,
+			string.format("ruined ceilings drop their tiles (%d holes in %d ruined ceilings)", falls, ruined)
+		)
 		t.truthy(tiles >= falls / 2, string.format("most holes have their tile below (%d of %d)", tiles, falls))
 		t.truthy(puddles >= 10, string.format("standing water in the wet rooms (%d)", puddles))
-		t.truthy(damage >= 10, string.format("plaster has come away (%d sites)", damage))
-		t.truthy(papers >= 30, string.format("paper on the floors (%d)", papers))
+		-- DecayBuilder's rules (the tunnel floors keep few plastered or papered rooms; the tunnels have their own
+		-- dressing): plaster damage in the plastered corridors, classrooms and offices, ruin x 2.4 sites (one more down
+		-- a long corridor); paper across the corridors, classrooms, offices, labs and stores, a few sheets each
+		local damageKinds: { [string]: boolean } = { Corridor = true, Classroom = true, Office = true }
+		local paperLeast: { [string]: number } = { Corridor = 2, Classroom = 0, Office = 1, Lab = 0, Storage = 0 }
+		local planned, leastPaper = 0, 0
+		for _, id: Enums.LayoutId in Enums.LayoutId do
+			for _, room in layoutOf(id).rooms do
+				local wallKey = SchoolShellBuilder.wallKey(room)
+				if damageKinds[room.kind] and string.sub(wallKey, 1, 7) == "Plaster" then
+					planned += math.floor(Finishes.ruin(id, room.id) * 2.4) + (if room.kind == "Corridor"
+							and room.rect.w + room.rect.d >= 90
+						then 1
+						else 0)
+				end
+				leastPaper += paperLeast[room.kind] or 0
+			end
+		end
+		t.truthy(
+			planned > 0 and damage >= math.ceil(0.75 * planned),
+			string.format("plaster has come away (%d of %d sites)", damage, planned)
+		)
+		t.truthy(
+			leastPaper > 0 and papers >= leastPaper,
+			string.format("paper on the floors (%d, at least %d)", papers, leastPaper)
+		)
 	end,
 
 	["signage keeps off the chalkboards, noticeboards, cabinets and plaster damage"] = function(t: Expect)

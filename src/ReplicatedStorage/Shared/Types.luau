@@ -176,7 +176,7 @@ export type MovementValidator = (player: Player, root: BasePart, dt: number) -> 
 
 export type LockerVerdict = "Empty" | "HiddenSafe" | "Caught"
 
--- Registered with MonsterAIService by LockerHidingService.
+-- Registered with MonsterAIService by HideSpotService (lockers, barrels and cabinets alike).
 export type LockerInspector = (locker: Instance) -> LockerVerdict
 
 -- Registered with MonsterAIService by FloodedPoolService. Returns true when the grab started.

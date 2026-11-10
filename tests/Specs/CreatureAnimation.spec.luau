@@ -227,8 +227,11 @@ return {
 			{ monster = "Patrol", pose = "Hunched", vent = false, expected = "Patrol" },
 			{ monster = "InvestigateNoise", pose = "Biped", vent = false, expected = "Investigate" },
 			{ monster = "WallChase", pose = "Biped", vent = false, expected = "Chase" },
-			{ monster = "VentChase", pose = "Biped", vent = false, expected = "Chase" },
-			{ monster = "VentChase", pose = "Quadruped", vent = true, expected = "VentCrawl" },
+			{ monster = "Search", pose = "Biped", vent = false, expected = "Investigate" },
+			{ monster = "Search", pose = "Hunched", vent = false, expected = "Investigate" },
+			{ monster = "Teleport", pose = "Biped", vent = false, expected = "Patrol" },
+			{ monster = "HidingResponse", pose = "Hunched", vent = false, expected = "Patrol" },
+			{ monster = "WallChase", pose = "Stunned", vent = false, expected = "Stunned" },
 			{ monster = "Patrol", pose = "Quadruped", vent = false, expected = "VentCrawl" },
 			{ monster = "WallChase", pose = "Biped", vent = true, expected = "VentCrawl" },
 			{ monster = "Stunned", pose = "Biped", vent = false, expected = "Stunned" },
@@ -516,27 +519,126 @@ return {
 		end
 	end,
 
-	["Lunge: arms thrown out past the face, the jaw dropped wide"] = function(t: Expect)
-		for _, base in { "Chase", "VentCrawl" } do
-			local rig = animated(base, 0, false, 0)
-			run(rig, 1)
-			Creature.playAction(rig.animator.Map, "Lunge")
-			run(rig, CreatureConfig.Jumpscare.LungeSeconds + 0.3)
-			local jaw = rig.animator.Map.joints.Jaw.motor :: Motor6D
-			local open = -jaw.Transform:ToEulerAnglesXYZ()
-			t.truthy(open > math.rad(55), string.format("%s: the jaw hangs open (%.1f deg)", base, math.deg(open)))
-			local frames = posedFrames(rig)
-			local head = rig.model:FindFirstChild(NAMES.Head) :: BasePart
-			local face = frames[NAMES.Head] * (head:FindFirstChild(NAMES.FaceAttachment) :: Attachment).CFrame
-			for _, side in { "Left", "Right" } do
-				local hand = face:PointToObjectSpace(frames[side .. "Hand"].Position)
+	["Jumpscare: it bows the mask level with the victim's eye, hands framing it, the hinge barely parted"] = function(
+		t: Expect
+	)
+		-- the victim's eye 4.6 over the floor, at the Hallway spacing in front of the root
+		for _, base in { "Chase", "Patrol", "Scripted" } do
+			for _, name in { "Lunge", "Jumpscare" } do
+				local rig = animated(base, 0, false, 0)
+				local floor = CreatureRigBuilder.Metrics.RootHeight
+				local eye = Vector3.new(0, 4.6 - floor, -CreatureConfig.Jumpscare.Spacing.Hallway)
+				Creature.setLookTarget(rig.animator.Map, eye)
+				run(rig, 1)
+				Creature.playAction(rig.animator.Map, name)
+				run(rig, CreatureConfig.Jumpscare.LungeSeconds + 0.4)
+				local jaw = rig.animator.Map.joints.Jaw.motor :: Motor6D
+				local open = -jaw.Transform:ToEulerAnglesXYZ()
 				t.truthy(
-					hand.Z < -0.5,
-					string.format("%s: the %s hand reaches out past the face (%.2f)", base, side, hand.Z)
+					open >= 0 and open < math.rad(4),
+					string.format("%s %s: the hinge parts only a little (%.1f deg)", base, name, math.deg(open))
 				)
+				local frames = posedFrames(rig)
+				local head = rig.model:FindFirstChild(NAMES.Head) :: BasePart
+				local face = frames[NAMES.Head] * (head:FindFirstChild(NAMES.FaceAttachment) :: Attachment).CFrame
+				local eyeWorld = eye -- the posed frames are rig space
+				local gap = (face.Position - eyeWorld).Magnitude
+				t.truthy(
+					math.abs(gap - Creature.LoomDistance) < 0.45,
+					string.format(
+						"%s %s: the mask hangs %.2f from the eye (%.1f)",
+						base,
+						name,
+						gap,
+						Creature.LoomDistance
+					)
+				)
+				t.truthy(
+					math.abs(face.Position.Y - eyeWorld.Y) < 0.8, -- within its own mask's height of the eye
+					string.format("%s %s: level with it (%.2f)", base, name, face.Position.Y - eyeWorld.Y)
+				)
+				t.truthy(
+					face.LookVector:Dot((eyeWorld - face.Position).Unit) > 0.85,
+					base .. " " .. name .. ": staring into it"
+				)
+				for _, side in { "Left", "Right" } do
+					local hand = face:PointToObjectSpace(frames[side .. "Hand"].Position)
+					t.truthy(
+						math.abs(hand.X) > 0.4 and math.abs(hand.X) < 2.2,
+						string.format("%s: the %s hand beside the mask (%.2f)", base, side, hand.X)
+					)
+					t.truthy(
+						hand.Z < 1.2,
+						string.format("%s: the %s hand not behind the head (%.2f)", base, side, hand.Z)
+					)
+				end
+				release(rig)
 			end
-			release(rig)
 		end
+	end,
+
+	["view actions: Stare, LookAway and ReachIn hold until released; FadeOut and FadeIn run their dissolve"] = function(
+		t: Expect
+	)
+		t.eq(Creature.HeldRelease.Stare, 0.4)
+		t.eq(Creature.HeldRelease.LookAway, 0.32)
+		t.eq(Creature.HeldRelease.ReachIn, 0.6)
+		t.truthy(Creature.isHeld("Stare") and Creature.isHeld("LookAway") and Creature.isHeld("ReachIn"), "held")
+		t.falsy(Creature.isHeld("FadeOut") or Creature.isHeld("Lunge"), "the rest run their length")
+		t.near(
+			Creature.ActionDurations.FadeOut,
+			CreatureConfig.Teleport.FadeOutSeconds + 0.1,
+			1e-9,
+			"FadeOut 0.6 + 0.1"
+		)
+		t.near(Creature.ActionDurations.FadeIn, CreatureConfig.Teleport.FadeInSeconds + 0.1, 1e-9, "FadeIn 0.8 + 0.1")
+		-- LookAway: the head turns far round down the tunnel, and back once released
+		local rig = animated("Patrol", 0, false, 0)
+		run(rig, 1)
+		local before = flat(facing(rig))
+		Creature.playAction(rig.animator.Map, "LookAway")
+		run(rig, 1.2)
+		local away = flat(facing(rig))
+		t.truthy(away:Dot(before) < -0.1, string.format("LookAway turns the head past square (%.2f)", away:Dot(before)))
+		local lookedAt = Creature.actionStart(rig.animator.Map, "LookAway") or 0
+		Creature.releaseAction(rig.animator.Map, "LookAway", lookedAt + 1.2)
+		run(rig, Creature.HeldRelease.LookAway + 0.4)
+		t.eq(#Creature.activeActions(rig.animator.Map), 0, "released: the LookAway ends")
+		t.truthy(flat(facing(rig)):Dot(before) > 0.5, "the head snaps back")
+		release(rig)
+		-- ReachIn: the right hand goes to the gap
+		local reacher = animated("Patrol", 0, false, 0)
+		local gap = Vector3.new(0.3, 0.2, -3.2)
+		Creature.setLookTarget(reacher.animator.Map, gap)
+		run(reacher, 0.5)
+		local restHand = (posedFrames(reacher).RightHand.Position - gap).Magnitude
+		Creature.playAction(reacher.animator.Map, "ReachIn")
+		run(reacher, 2)
+		local reached = (posedFrames(reacher).RightHand.Position - gap).Magnitude
+		t.truthy(
+			reached < restHand - 1,
+			string.format("the right hand reaches into the gap (%.2f -> %.2f)", restHand, reached)
+		)
+		t.truthy(reached < 1.5, string.format("right to it (%.2f)", reached))
+		release(reacher)
+		-- the fingers are posed: they curl in a Stare
+		local starer = animated("Scripted", 0, false, 0)
+		run(starer, 0.5)
+		Creature.playAction(starer.animator.Map, "Stare")
+		run(starer, 1)
+		local curled = 0
+		for _, joint in starer.animator.Map.order do
+			if string.find(joint.name, "Index", 1, true) or string.find(joint.name, "Ring", 1, true) then
+				local motor = joint.motor :: Motor6D
+				local angle = select(2, motor.Transform:ToAxisAngle())
+				if math.abs(angle) > math.rad(3) then
+					curled += 1
+				end
+			end
+		end
+		t.truthy(curled >= 4, "the long fingers move (" .. curled .. " of 4)")
+		t.eq(Creature.measure(starer.animator.Map).fingers, 10, "five fingers a hand")
+		release(starer)
 	end,
 
 	["every action plays on two legs and four with finite transforms; unknown ones are refused"] = function(t: Expect)
@@ -547,7 +649,16 @@ return {
 				t.truthy(Creature.playAction(rig.animator.Map, action), action .. " starts")
 				t.eq(Creature.activeActions(rig.animator.Map)[1], action, action .. " is running")
 				local bad: string? = nil
-				run(rig, Creature.ActionDurations[action] + 0.1, function()
+				local seconds = Creature.ActionDurations[action]
+				if Creature.isHeld(action) then
+					-- a held action runs until the view lets it go
+					run(rig, 1.5)
+					t.eq(Creature.activeActions(rig.animator.Map)[1], action, action .. " holds")
+					local startAt = Creature.actionStart(rig.animator.Map, action) or 0
+					Creature.releaseAction(rig.animator.Map, action, startAt + 1.5)
+					seconds = Creature.HeldRelease[action]
+				end
+				run(rig, seconds + 0.1, function()
 					for _, joint in rig.animator.Map.order do
 						if not finiteFrame((joint.motor :: Motor6D).Transform) then
 							bad = joint.name

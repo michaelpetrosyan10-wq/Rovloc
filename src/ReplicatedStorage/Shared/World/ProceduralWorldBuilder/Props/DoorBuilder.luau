@@ -1889,6 +1889,9 @@ local function buildStatics(ctx: PropKit.StaticContext): number
 
 	local random = ctx.random
 	local built, skipped = 0, 0
+	-- a crooked hang drawn for a door that cannot hang crooked where it stands passes to the level's next door that
+	-- can, so a floor with few ordinary doors still shows its seeded share of crooked ones
+	local owed = false
 	for _, site in sites do
 		if site.door.kind ~= "Door" then
 			continue
@@ -1921,7 +1924,7 @@ local function buildStatics(ctx: PropKit.StaticContext): number
 		end
 		local hingeFirst = if random:NextNumber() < 0.5 then -1 else 1
 		local angle = random:NextNumber(STATIC_MIN_ANGLE, STATIC_MAX_ANGLE)
-		local crooked = random:NextNumber() < CROOKED_CHANCE
+		local crooked = random:NextNumber() < CROOKED_CHANCE or owed
 		local tilt = random:NextNumber(CROOKED_TILT_MIN, CROOKED_TILT_MAX)
 		local lean = random:NextNumber(CROOKED_LEAN_MIN, CROOKED_LEAN_MAX)
 
@@ -1962,6 +1965,7 @@ local function buildStatics(ctx: PropKit.StaticContext): number
 			end
 		end
 		local leaf = chosen
+		owed = crooked and not (leaf and leaf.tilt ~= 0)
 		if not leaf then
 			log.warn("%s: door %s has no room to stand open; not built", layout.id, site.door.id)
 			skipped += 1

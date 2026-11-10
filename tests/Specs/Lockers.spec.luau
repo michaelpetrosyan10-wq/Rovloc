@@ -1,5 +1,5 @@
 --!strict
--- Lockers. LockerMotion (schedules, the lungs, the calm threshold, the fairness margin), LockerHidingService's pure
+-- Lockers. LockerMotion (schedules, the lungs, the calm threshold, the fairness margin), HideSpotService's pure
 -- rules (canHide, canExit, the judge's verdict table, exit spots, peek length) and the whole service on a fake clock
 -- with every dependency injected and a real built locker: climbing in (lock, override, torch off, the door's open /
 -- shut motions and poses, the body moved inside, settled, RunStats), teammates refused, the chased refused, every
@@ -27,7 +27,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local LockerBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.LockerBuilder)
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
 
-local LockerHidingService = require(ServerScriptService.Services.Mechanics.LockerHidingService)
+local HideSpotService = require(ServerScriptService.Services.Mechanics.HideSpotService)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
 local LockerController = require(StarterPlayer.StarterPlayerScripts.Controllers.Gameplay.LockerController)
@@ -164,12 +164,12 @@ end
 local function advance(world: World, to: number)
 	while world.now < to - 1e-9 do
 		world.now = math.min(to, world.now + STEP)
-		LockerHidingService.Step(world.now)
+		HideSpotService.Step(world.now)
 	end
 end
 
 local function install(world: World)
-	LockerHidingService.SetDependencies({
+	HideSpotService.SetDependencies({
 		now = function(): number
 			return world.now
 		end,
@@ -264,6 +264,17 @@ local function install(world: World)
 	})
 end
 
+-- The Gasp noises made (getting in is heard too: HideEnter).
+local function gasps(world: World): { { kind: Enums.NoiseKind, source: Player? } }
+	local out = {}
+	for _, noise in world.noises do
+		if noise.kind == "Gasp" then
+			table.insert(out, noise)
+		end
+	end
+	return out
+end
+
 -- Runs `body` with a tracked locker and a player standing in front of it, on a fake clock; always tears down.
 local function withLocker(body: (world: World) -> ())
 	local model = buildLocker()
@@ -289,7 +300,7 @@ local function withLocker(body: (world: World) -> ())
 		player = player,
 	}
 	install(world)
-	LockerHidingService.BeginRun({
+	HideSpotService.BeginRun({
 		runId = "locker-spec",
 		seed = 99,
 		difficulty = "Standard",
@@ -298,13 +309,13 @@ local function withLocker(body: (world: World) -> ())
 	})
 	local failure: string? = nil
 	xpcall(function()
-		assert(LockerHidingService.Track(model), "the built locker is tracked")
+		assert(HideSpotService.Track(model), "the built locker is tracked")
 		body(world)
 	end, function(err: any)
 		failure = tostring(err) .. "\n" .. debug.traceback()
 	end)
-	LockerHidingService.EndRun()
-	LockerHidingService.SetDependencies(nil)
+	HideSpotService.EndRun()
+	HideSpotService.SetDependencies(nil)
 	model:Destroy()
 	if failure ~= nil then
 		error(failure, 0)
@@ -313,9 +324,9 @@ end
 
 -- Hides the world's player and lets the door shut behind them.
 local function hideAndSettle(world: World)
-	assert(LockerHidingService.Hide(world.player, world.model), "hidden")
+	assert(HideSpotService.Hide(world.player, world.model), "hidden")
 	advance(world, world.now + LockerMotion.OpenSeconds + LockerMotion.StepInSeconds + LockerMotion.CloseSeconds + 0.5)
-	assert(LockerHidingService.GetState(world.model) == "Hidden", "settled")
+	assert(HideSpotService.GetState(world.model) == "Hidden", "settled")
 end
 
 -- The Creature at the door, peeking: Inspect runs in its own thread the way InvestigateNoise calls it. When the
@@ -326,7 +337,7 @@ local function peek(world: World, catches: boolean): { verdict: Types.LockerVerd
 	world.creature = anchor(world.model, "ExitAnchor").Position
 	local out: { verdict: Types.LockerVerdict? } = { verdict = nil }
 	local thread = coroutine.create(function()
-		local verdict: Types.LockerVerdict = LockerHidingService.Inspect(world.model)
+		local verdict: Types.LockerVerdict = HideSpotService.Inspect(world.model)
 		out.verdict = verdict
 		if verdict == "Caught" and catches then
 			world.victim = world.player
@@ -394,7 +405,7 @@ return {
 	end,
 
 	["judge: every outcome of a breath check"] = function(t: Expect)
-		local function view(breath: LockerMotion.Breath): LockerHidingService.CheckView
+		local function view(breath: LockerMotion.Breath): HideSpotService.CheckView
 			return { startedAt = 10, windowStart = 11, windowEnd = 15, breath = breath }
 		end
 		local grace = LockerMotion.ReholdGrace
@@ -473,7 +484,7 @@ return {
 			},
 		}
 		for index, row in rows do
-			local verdict, reason, at = LockerHidingService.judge(view(row.breath), row.now)
+			local verdict, reason, at = HideSpotService.judge(view(row.breath), row.now)
 			t.eq(verdict, row.verdict, "row " .. index .. " verdict")
 			t.eq(reason, row.reason, "row " .. index .. " reason")
 			if row.at then
@@ -483,7 +494,7 @@ return {
 	end,
 
 	["canHide / canExit, exit spots, the peek's length"] = function(t: Expect)
-		local function check(overrides: { [string]: any }): LockerHidingService.HideCheck
+		local function check(overrides: { [string]: any }): HideSpotService.HideCheck
 			local base: { [string]: any } = {
 				live = true,
 				lifeState = "Alive",
@@ -497,46 +508,44 @@ return {
 			for key, value in overrides do
 				base[key] = value
 			end
-			return (base :: any) :: LockerHidingService.HideCheck
+			return (base :: any) :: HideSpotService.HideCheck
 		end
-		t.truthy((LockerHidingService.canHide(check({}))))
-		t.truthy((LockerHidingService.canHide(check({ moveState = "Crouching" }))))
-		t.truthy((LockerHidingService.canHide(check({ moveState = "Sprinting" }))))
+		t.truthy((HideSpotService.canHide(check({}))))
+		t.truthy((HideSpotService.canHide(check({ moveState = "Crouching" }))))
+		t.truthy((HideSpotService.canHide(check({ moveState = "Sprinting" }))))
 		local refusals: { { overrides: { [string]: any }, reason: string } } = {
 			{ overrides = { live = false }, reason = "NotLive" },
 			{ overrides = { lifeState = "Downed" }, reason = "LifeState" },
 			{ overrides = { hasBody = false }, reason = "NoBody" },
 			{ overrides = { hiding = true }, reason = "Hiding" },
-			{ overrides = { lockerState = "Hidden" }, reason = LockerHidingService.OccupiedHint },
-			{ overrides = { lockerState = "Entering" }, reason = LockerHidingService.OccupiedHint },
-			{ overrides = { lockerState = "Smashed" }, reason = LockerHidingService.OccupiedHint },
+			{ overrides = { lockerState = "Hidden" }, reason = HideSpotService.OccupiedHint },
+			{ overrides = { lockerState = "Entering" }, reason = HideSpotService.OccupiedHint },
+			{ overrides = { lockerState = "Smashed" }, reason = HideSpotService.OccupiedHint },
 			{ overrides = { controlLock = "Trap" }, reason = "Locked" },
 			{ overrides = { moveState = "VentCrawling" }, reason = "Posture" },
 			{ overrides = { moveState = "Treading" }, reason = "Posture" },
-			{ overrides = { chasedBy = true }, reason = LockerHidingService.SeenHint },
+			{ overrides = { chasedBy = true }, reason = HideSpotService.SeenHint },
 		}
 		for _, row in refusals do
-			local ok, reason = LockerHidingService.canHide(check(row.overrides))
+			local ok, reason = HideSpotService.canHide(check(row.overrides))
 			t.falsy(ok, row.reason)
 			t.eq(reason, row.reason)
 		end
-		for _, key in
-			{ LockerHidingService.OccupiedHint, LockerHidingService.SeenHint, LockerHidingService.BlockedHint }
-		do
+		for _, key in { HideSpotService.OccupiedHint, HideSpotService.SeenHint, HideSpotService.BlockedHint } do
 			t.truthy(Strings.has(key), key .. " is a Strings key")
 		end
 
 		local exitOk = {
-			lockerState = "Hidden" :: LockerHidingService.LockerState,
+			lockerState = "Hidden" :: HideSpotService.LockerState,
 			occupant = true,
 			checking = false,
 			spotFound = true,
 		}
-		t.truthy((LockerHidingService.canExit(exitOk)))
+		t.truthy((HideSpotService.canExit(exitOk)))
 		t.eq(
 			select(
 				2,
-				LockerHidingService.canExit({
+				HideSpotService.canExit({
 					lockerState = "Hidden",
 					occupant = false,
 					checking = false,
@@ -548,7 +557,7 @@ return {
 		t.eq(
 			select(
 				2,
-				LockerHidingService.canExit({
+				HideSpotService.canExit({
 					lockerState = "Entering",
 					occupant = true,
 					checking = false,
@@ -560,7 +569,7 @@ return {
 		t.eq(
 			select(
 				2,
-				LockerHidingService.canExit({
+				HideSpotService.canExit({
 					lockerState = "Hidden",
 					occupant = true,
 					checking = true,
@@ -572,38 +581,34 @@ return {
 		t.eq(
 			select(
 				2,
-				LockerHidingService.canExit({
+				HideSpotService.canExit({
 					lockerState = "Hidden",
 					occupant = true,
 					checking = false,
 					spotFound = false,
 				})
 			),
-			LockerHidingService.BlockedHint
+			HideSpotService.BlockedHint
 		)
 
 		local exitAnchor = CFrame.new(5, 0, 5) * CFrame.Angles(0, math.rad(90), 0)
-		local spots = LockerHidingService.exitCandidates(exitAnchor)
+		local spots = HideSpotService.exitCandidates(exitAnchor)
 		t.eq(#spots, 4)
 		t.truthy(spots[1] == exitAnchor, "the anchor first")
-		t.near((spots[2].Position - exitAnchor.Position).Magnitude, LockerHidingService.ExitSide, 1e-6, "a step aside")
-		t.near(
-			(spots[4].Position - exitAnchor.Position):Dot(exitAnchor.LookVector),
-			LockerHidingService.ExitFurther,
-			1e-6
-		)
+		t.near((spots[2].Position - exitAnchor.Position).Magnitude, HideSpotService.ExitSide, 1e-6, "a step aside")
+		t.near((spots[4].Position - exitAnchor.Position):Dot(exitAnchor.LookVector), HideSpotService.ExitFurther, 1e-6)
 		for _, spot in spots do
 			t.truthy(spot.LookVector:Dot(exitAnchor.LookVector) > 0.999, "facing away from the locker")
 		end
-		local root = LockerHidingService.rootCFrameAt(exitAnchor, 3)
+		local root = HideSpotService.rootCFrameAt(exitAnchor, 3)
 		t.near(root.Position.Y, 3, 1e-6)
 
 		local source = Random.new(5)
 		for _ = 1, 200 do
-			local seconds = LockerHidingService.peekSeconds(source)
+			local seconds = HideSpotService.peekSeconds(source)
 			t.truthy(seconds >= LockerMotion.PeekMin and seconds <= LockerMotion.PeekMax, "3.5-6 s")
 		end
-		t.eq(LockerHidingService.peekSeconds(Random.new(9)), LockerHidingService.peekSeconds(Random.new(9)), "seeded")
+		t.eq(HideSpotService.peekSeconds(Random.new(9)), HideSpotService.peekSeconds(Random.new(9)), "seeded")
 		for _, preset in { "LockerDoor", "LockerRip", "CreatureSniff", "Gasp", "BreathExhale" } do
 			t.truthy(SynthPresets.has(preset), preset)
 		end
@@ -615,21 +620,24 @@ return {
 		withLocker(function(world: World)
 			local model = world.model
 			local hide = anchor(model, "HideAnchor")
-			t.eq(LockerHidingService.GetState(model), "Free")
+			t.eq(HideSpotService.GetState(model), "Free")
 			t.eq(model:GetAttribute(W.DoorOpen), false)
-			local handler = LockerHidingService.HideHandler
+			local handler = HideSpotService.HideHandler
 			local filter = handler.filter
 			assert(filter, "filter")
 			t.truthy(filter(model, Instance.new("ProximityPrompt")), "serves a free locker")
 
 			local started = world.now
-			t.truthy(LockerHidingService.Hide(world.player, model))
+			t.truthy(HideSpotService.Hide(world.player, model))
 			t.eq(model:GetAttribute(W.OccupantUserId), world.player.UserId, "OccupantUserId")
 			t.eq(model:GetAttribute(W.DoorOpen), true, "DoorOpen from the start of the opening")
 			t.eq(count(world, "Lock"), 1, "Anchor lock")
 			t.eq(count(world, "PushOverride"), 1, "Hiding override")
 			t.eq(count(world, "TorchOff"), 1, "torch off")
-			t.eq(LockerHidingService.GetLockerOf(world.player), model)
+			t.eq(#world.noises, 1, "getting in is heard")
+			t.eq(world.noises[1].kind, "HideEnter", "quietly: no sprint before it")
+			t.eq(world.noises[1].source, world.player)
+			t.eq(HideSpotService.GetLockerOf(world.player), model)
 			local enter = shotsOf(world, "Enter")[1]
 			assert(enter, "an Enter door motion")
 			t.eq(enter.kind, "Door")
@@ -653,10 +661,10 @@ return {
 				"on the HideAnchor"
 			)
 			t.truthy(into.LookVector:Dot(hide.LookVector) > 0.999, "facing out through the slits")
-			t.eq(LockerHidingService.GetState(model), "Entering")
+			t.eq(HideSpotService.GetState(model), "Entering")
 
 			advance(world, schedule.settledAt + 0.05)
-			t.eq(LockerHidingService.GetState(model), "Hidden")
+			t.eq(HideSpotService.GetState(model), "Hidden")
 			t.near(doorAngle(model), 0, 1e-4, "shut")
 			t.eq(model:GetAttribute(W.DoorOpen), false, "DoorOpen once the shut landed")
 			t.eq(#shotsOf(world, "Shut"), 1, "one shut motion")
@@ -674,20 +682,20 @@ return {
 			assert(canUse, "canUse")
 			local ok, reason = canUse(mate, Instance.new("ProximityPrompt"), model)
 			t.falsy(ok)
-			t.eq(reason, LockerHidingService.OccupiedHint)
-			t.falsy(LockerHidingService.Hide(world.player, model), "already hiding")
+			t.eq(reason, HideSpotService.OccupiedHint)
+			t.falsy(HideSpotService.Hide(world.player, model), "already hiding")
 		end)
 	end,
 
 	["a chased player cannot hide; nor a crawler"] = function(t: Expect)
 		withLocker(function(world: World)
 			world.chaser = world.player
-			t.falsy(LockerHidingService.Hide(world.player, world.model))
+			t.falsy(HideSpotService.Hide(world.player, world.model))
 			world.chaser = nil
 			world.move = "VentCrawling"
-			t.falsy(LockerHidingService.Hide(world.player, world.model))
+			t.falsy(HideSpotService.Hide(world.player, world.model))
 			world.move = "Standing"
-			t.truthy(LockerHidingService.Hide(world.player, world.model))
+			t.truthy(HideSpotService.Hide(world.player, world.model))
 		end)
 	end,
 
@@ -697,27 +705,27 @@ return {
 			local inspectAt = world.now
 			local result = peek(world, true)
 			t.eq(result.verdict, nil, "the inspector waits")
-			t.truthy(LockerHidingService.IsChecking())
+			t.truthy(HideSpotService.IsChecking())
 			local window = windowOf(world)
 			t.near(window.args[LockerMotion.CueArgs.WarnAt] :: number, inspectAt, 1e-9, "warned at once")
 			t.near(window.startAt, inspectAt + LockerMotion.WarnSeconds, 1e-9, "the window after the warning")
 			local length = (window.endsAt :: number) - window.startAt
 			t.truthy(length >= LockerMotion.PeekMin and length <= LockerMotion.PeekMax, "a 3.5-6 s peek")
 			t.eq(played(world, "CreatureSniff"), 1, "it breathes at the slits")
-			t.falsy(LockerHidingService.RequestExit(world.player), "no leaving while it is at the door")
+			t.falsy(HideSpotService.RequestExit(world.player), "no leaving while it is at the door")
 
 			advance(world, inspectAt + 0.4)
-			t.truthy(LockerHidingService.SetHeld(world.player, true))
+			t.truthy(HideSpotService.SetHeld(world.player, true))
 			local meters = cuesOf(world, LockerMotion.CuePhases.Meter)
 			t.eq(meters[#meters].args[LockerMotion.CueArgs.Held], true, "the server's lungs go to the client")
 			advance(world, window.endsAt :: number + 0.05)
 			t.eq(result.verdict, "HiddenSafe")
 			t.eq((resultOf(world)), "HiddenSafe")
 			t.eq(played(world, "Gasp"), 0)
-			t.eq(#world.noises, 0)
+			t.eq(#gasps(world), 0)
 			t.eq(count(world, "StopSound"), 1, "the breathing at the slits stops")
-			t.eq(LockerHidingService.GetState(world.model), "Hidden", "still hidden")
-			t.falsy(LockerHidingService.IsChecking())
+			t.eq(HideSpotService.GetState(world.model), "Hidden", "still hidden")
+			t.falsy(HideSpotService.IsChecking())
 		end)
 	end,
 
@@ -728,11 +736,11 @@ return {
 			local result = peek(world, false)
 			local window = windowOf(world)
 			advance(world, start + 0.5)
-			LockerHidingService.SetHeld(world.player, true)
+			HideSpotService.SetHeld(world.player, true)
 			advance(world, window.startAt + 1)
-			LockerHidingService.SetHeld(world.player, false) -- plenty left: a quiet breath out
+			HideSpotService.SetHeld(world.player, false) -- plenty left: a quiet breath out
 			advance(world, window.startAt + 1 + LockerMotion.ReholdGrace * 0.6)
-			LockerHidingService.SetHeld(world.player, true)
+			HideSpotService.SetHeld(world.player, true)
 			advance(world, window.endsAt :: number + 0.05)
 			t.eq(result.verdict, "HiddenSafe", "re-held within the grace")
 
@@ -740,9 +748,9 @@ return {
 			local second = peek(world, false)
 			local again = windowOf(world)
 			advance(world, world.now + 0.3)
-			LockerHidingService.SetHeld(world.player, true)
+			HideSpotService.SetHeld(world.player, true)
 			advance(world, again.startAt + 0.8)
-			LockerHidingService.SetHeld(world.player, false)
+			HideSpotService.SetHeld(world.player, false)
 			advance(world, again.startAt + 0.8 + LockerMotion.ReholdGrace + 0.05)
 			t.eq(second.verdict, "Caught")
 			t.eq(select(2, resultOf(world)), "Breathing")
@@ -760,24 +768,23 @@ return {
 			t.eq(result.verdict, "Caught")
 			t.eq(select(2, resultOf(world)), "Breathing")
 			t.eq(played(world, "Gasp"), 1, "a loud gasp at the slits")
-			t.eq(#world.noises, 1)
-			t.eq(world.noises[1].kind, "Gasp")
-			t.eq(world.noises[1].source, world.player, "made by the occupant")
+			t.eq(#gasps(world), 1)
+			t.eq(gasps(world)[1].source, world.player, "made by the occupant")
 
 			-- the catch took the occupant: torn door, locks released, the locker smashed
 			local model = world.model
-			t.eq(LockerHidingService.GetState(model), "Smashed")
+			t.eq(HideSpotService.GetState(model), "Smashed")
 			t.eq(model:GetAttribute(W.OccupantUserId), nil)
 			t.eq(model:GetAttribute(W.DoorOpen), true)
 			t.eq(count(world, "Unlock"), 1, "the Locker lock released (the catch holds the body)")
 			t.eq(count(world, "PopOverride"), 1, "the Hiding override released")
-			t.eq(LockerHidingService.GetLockerOf(world.player), nil)
+			t.eq(HideSpotService.GetLockerOf(world.player), nil)
 			local rip = shotsOf(world, "Rip")[1]
 			assert(rip, "the rip")
 			t.eq(rip.kind, "LockerRip")
 			t.eq(rip.subject, model)
 			t.eq(played(world, "LockerRip"), 1)
-			local filter = LockerHidingService.HideHandler.filter
+			local filter = HideSpotService.HideHandler.filter
 			assert(filter, "filter")
 			t.falsy(filter(model, Instance.new("ProximityPrompt")), "never usable again this run")
 			local rest = PropKit.leafTransform(model, LockerBuilder.DoorLeaf) :: CFrame
@@ -788,12 +795,12 @@ return {
 			-- the catch ends with the victim downed: put down outside the locker
 			world.life = "Downed"
 			local before = count(world, "Teleport")
-			LockerHidingService.CatchFinished(world.player, "Locker", "Downed")
+			HideSpotService.CatchFinished(world.player, "Locker", "Downed")
 			t.eq(count(world, "Teleport"), before + 1, "out to the exit spot")
 			local out = (lastCall(world, "Teleport") :: Call).value :: CFrame
 			local exit = anchor(model, "ExitAnchor")
 			t.truthy((out.Position - (exit.Position + Vector3.new(0, ROOT_HEIGHT, 0))).Magnitude < 1e-4)
-			LockerHidingService.CatchFinished(world.player, "Locker", "Downed")
+			HideSpotService.CatchFinished(world.player, "Locker", "Downed")
 			t.eq(count(world, "Teleport"), before + 1, "only once")
 		end)
 	end,
@@ -801,19 +808,19 @@ return {
 	["a gasp on release with the lungs nearly spent; running out at the door"] = function(t: Expect)
 		withLocker(function(world: World)
 			hideAndSettle(world)
-			LockerHidingService.SetHeld(world.player, true)
+			HideSpotService.SetHeld(world.player, true)
 			advance(world, world.now + 4.5) -- held long before it came
 			local result = peek(world, false)
 			local window = windowOf(world)
 			advance(world, window.startAt + 0.2)
-			LockerHidingService.SetHeld(world.player, false)
+			HideSpotService.SetHeld(world.player, false)
 			t.eq(result.verdict, "Caught")
 			t.eq(select(2, resultOf(world)), "Gasp")
-			t.eq(LockerHidingService.GetState(world.model), "Hidden", "no catch followed: still hidden")
-			t.eq(#world.noises, 1, "the gasp is still a noise (it will come back)")
+			t.eq(HideSpotService.GetState(world.model), "Hidden", "no catch followed: still hidden")
+			t.eq(#gasps(world), 1, "the gasp is still a noise (it will come back)")
 
 			advance(world, world.now + 12)
-			LockerHidingService.SetHeld(world.player, true)
+			HideSpotService.SetHeld(world.player, true)
 			advance(world, world.now + 5)
 			local second = peek(world, false)
 			advance(world, world.now + 3)
@@ -850,11 +857,11 @@ return {
 	["the lungs give out with nobody at the door: a gasp all the same"] = function(t: Expect)
 		withLocker(function(world: World)
 			hideAndSettle(world)
-			LockerHidingService.SetHeld(world.player, true)
+			HideSpotService.SetHeld(world.player, true)
 			advance(world, world.now + GameConfig.BreathHoldMaxSeconds + 0.1)
 			t.eq(played(world, "Gasp"), 1)
-			t.eq(#world.noises, 1)
-			t.near(LockerHidingService.GetBreath(world.player) :: number, 0.1 * GameConfig.BreathRecoverPerSecond, 0.05)
+			t.eq(#gasps(world), 1)
+			t.near(HideSpotService.GetBreath(world.player) :: number, 0.1 * GameConfig.BreathRecoverPerSecond, 0.05)
 		end)
 	end,
 
@@ -864,12 +871,12 @@ return {
 		withLocker(function(world: World)
 			hideAndSettle(world)
 			world.clear = false
-			local ok, reason = LockerHidingService.RequestExit(world.player)
+			local ok, reason = HideSpotService.RequestExit(world.player)
 			t.falsy(ok)
-			t.eq(reason, LockerHidingService.BlockedHint)
-			t.eq(world.notes[#world.notes], LockerHidingService.BlockedHint, "told why")
+			t.eq(reason, HideSpotService.BlockedHint)
+			t.eq(world.notes[#world.notes], HideSpotService.BlockedHint, "told why")
 			world.clear = true
-			t.truthy(LockerHidingService.RequestExit(world.player))
+			t.truthy(HideSpotService.RequestExit(world.player))
 			local exitShot = shotsOf(world, "Exit")[1]
 			assert(exitShot, "an Exit door motion")
 			t.eq(exitShot.args[LockerMotion.Args.Occupant], world.player.UserId)
@@ -882,29 +889,29 @@ return {
 			t.eq(world.model:GetAttribute(W.OccupantUserId), nil)
 			t.eq(count(world, "Unlock"), 1)
 			t.eq(count(world, "PopOverride"), 1)
-			t.eq(LockerHidingService.GetLockerOf(world.player), nil)
+			t.eq(HideSpotService.GetLockerOf(world.player), nil)
 			advance(world, schedule.settledAt + 0.05)
-			t.eq(LockerHidingService.GetState(world.model), "Free")
+			t.eq(HideSpotService.GetState(world.model), "Free")
 			t.eq(world.model:GetAttribute(W.DoorOpen), false)
 			t.near(doorAngle(world.model), 0, 1e-4)
-			t.truthy(LockerHidingService.Hide(world.player, world.model), "usable again")
+			t.truthy(HideSpotService.Hide(world.player, world.model), "usable again")
 		end)
 	end,
 
 	["a release lets the occupant out at once; the run's end lets every inspector go"] = function(t: Expect)
 		withLocker(function(world: World)
 			hideAndSettle(world)
-			t.truthy(LockerHidingService.Release(world.player))
-			t.eq(LockerHidingService.GetLockerOf(world.player), nil)
+			t.truthy(HideSpotService.Release(world.player))
+			t.eq(HideSpotService.GetLockerOf(world.player), nil)
 			t.eq(count(world, "Unlock"), 1)
 			t.eq(count(world, "PopOverride"), 1)
 			t.eq(world.model:GetAttribute(W.OccupantUserId), nil)
 			advance(world, world.now + 2)
-			t.eq(LockerHidingService.GetState(world.model), "Free")
+			t.eq(HideSpotService.GetState(world.model), "Free")
 
 			hideAndSettle(world)
 			local result = peek(world, false)
-			LockerHidingService.EndRun()
+			HideSpotService.EndRun()
 			t.eq(result.verdict, "Empty", "the waiting inspector is answered")
 			t.eq(count(world, "Unlock"), 2, "and the occupant let go")
 		end)

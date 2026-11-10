@@ -22,8 +22,11 @@
 // handle's look). The world packet carries the states the codec knows (Search and HidingResponse go as
 // InvestigateNoise, Teleport as Patrol); the exact state and the view contract's action go reliably beside it
 // ({t: 'cst', st, a, ago} on every change), so a client's puppet publishes the same {state, speed, poseMode, action,
-// actionStartedAt, fade} as the host's Creature. Positions are never interpolated across a hidden sample (a teleport
-// snaps). The host relays its events: a teleport's warning to everyone ({t: 'cwarn'}: the flicker and the hiss; the
+// actionStartedAt, fade} as the host's Creature. Its poseMode and eye follow the host's rules: hunched by the same
+// head-room rule (FloorNav.headroomAlong: at its root and along the way it walks, read from the host's positions
+// ahead of the one drawn, then its heading), and the eye at the rig's height for that pose (creatureMetrics,
+// Perception.creatureEyeAt). Positions are never interpolated across a hidden sample (a teleport snaps). The host
+// relays its events: a teleport's warning to everyone ({t: 'cwarn'}: the flicker and the hiss; the
 // torch stutter on its target's page), the grunt before a LookAway ({t: 'cgrunt'}), a chase giving up ({t: 'cgive'}),
 // and to their target only a reveal scare ({t: 'creveal'}) and a stare's sting ({t: 'cstare'}). Hiding spots: a
 // teammate's Pull ({t: 'hpull'} to the host -> {t: 'hpulled'} to the hider, the brain told it was a pull), a fake-out
@@ -31,6 +34,9 @@
 
 import * as THREE from 'three';
 import { CFrame } from '../../creature/cframe.js';
+import { CreatureConfig } from '../../creature/config.js';
+import { HEAD_LEAD, HUNCH_LEAD_SECONDS } from '../../creature/nav.js';
+import { creatureEyeAt } from '../../creature/perception.js';
 import { NetConfig } from '../../net/config.js';
 import { PoseFlags } from '../../net/codec.js';
 import { lerpAngle } from './squad.js';
@@ -40,8 +46,9 @@ const DEDUPE_RADIUS = 4;
 const WIRE_STATE = { Search: 'InvestigateNoise', HidingResponse: 'InvestigateNoise', Teleport: 'Patrol' };
 const FADE_OUT = 0.6;
 const FADE_IN = 0.8;
-const HUNCH_BELOW = 12.5;
 const SPEED_DAMP = 10;
+const SNAP_SQ = 144; // a jump this long between two of the host's samples is a teleport, never a walk
+const STILL = 0.05; // studs: a step shorter than this gives no heading
 const DEDUPE_SECONDS = 1.5;
 const BUFFER = 10;
 const SWIM_STATES = new Set(['Treading', 'Freestyle', 'Underwater', 'Grabbed']);
@@ -96,8 +103,11 @@ export class CreatureNet {
     this.fx = null;
     this.puppetSpeed = 0;
     this.puppetLast = null;
+    /** client: the puppet's way of travel (flat unit vector) while it walks, else null */
+    this.heading = null;
+    /** client: the time (performance.now() seconds) of the host's state the puppet is drawn at */
+    this.sampleTime = 0;
     this.clearance = Infinity;
-    this.clearanceAt = -Infinity;
   }
 
   /** The W3 Creature object (createCreature's) behind the game's adapter, or null. */
@@ -437,6 +447,7 @@ export class CreatureNet {
     const b = this.buffer;
     if (!b.length) return null;
     const at = performance.now() / 1000 - NetConfig.InterpDelay;
+    this.sampleTime = at;
     let i = b.length - 1;
     while (i > 0 && b[i - 1].t > at) i--;
     const next = b[i];
@@ -482,20 +493,57 @@ export class CreatureNet {
       service.state = state;
       service.stateChanged.fire(state, previous);
     }
-    // the contract's speed (a snap reads as still) and head room
+    // the contract's speed (a snap reads as still) and its way of travel
     const now = this.env.now();
     if (this.puppetLast && !moved) {
       const dt = Math.max(1e-3, now - this.puppetLast.t);
-      const v = Math.hypot(at.x - this.puppetLast.x, at.z - this.puppetLast.z) / dt;
-      this.puppetSpeed += (v - this.puppetSpeed) * Math.min(1, dt * SPEED_DAMP);
-    } else this.puppetSpeed = 0;
-    if (this.puppetSpeed < 0.05) this.puppetSpeed = 0;
-    this.puppetLast = { x: at.x, z: at.z, t: now };
-    if (now - this.clearanceAt >= 0.2) {
-      this.clearanceAt = now;
-      const nav = s.level && service._nav ? service._nav(s.level) : null;
-      this.clearance = nav ? nav.clearanceAt(at) : Infinity;
+      const dx = at.x - this.puppetLast.x;
+      const dz = at.z - this.puppetLast.z;
+      const step = Math.hypot(dx, dz);
+      this.puppetSpeed += (step / dt - this.puppetSpeed) * Math.min(1, dt * SPEED_DAMP);
+      if (step > STILL) this.heading = new THREE.Vector3(dx / step, 0, dz / step);
+    } else {
+      this.puppetSpeed = 0;
+      this.heading = null;
     }
+    if (this.puppetSpeed < 0.05) {
+      this.puppetSpeed = 0;
+      this.heading = null;
+    }
+    this.puppetLast = { x: at.x, z: at.z, t: now };
+    // the head room, by the host's hunch rule every tick (FloorNav.headroomAlong): at its root and along the way it
+    // walks, its head's lead plus what its pace covers while it bends; off the floor (swimming) there is none
+    const nav = s.level && s.pose !== 'Swim' && service._nav ? service._nav(s.level) : null;
+    this.clearance = nav ? nav.headroomAlong(at, this._routeAhead(at), this.puppetSpeed) : Infinity;
+  }
+
+  /**
+   * Client: the way the puppet walks next, for the hunch's look-ahead (the host's planned route is not sent): the
+   * host's positions newer than the one drawn (the buffer runs InterpDelay ahead of it, up to a hidden sample or a
+   * teleport), then on along its heading as far as the look-ahead reaches. Empty while it stands still.
+   * @param {THREE.Vector3} at the puppet's root
+   */
+  _routeAhead(at) {
+    const out = [];
+    let last = at;
+    let dir = this.heading;
+    for (const e of this.buffer) {
+      if (e.t <= this.sampleTime || !e.s) continue;
+      if (e.s.hidden) break;
+      const dx = e.s.x - last.x;
+      const dz = e.s.z - last.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > SNAP_SQ) break;
+      if (d2 <= STILL * STILL) continue;
+      const d = Math.sqrt(d2);
+      dir = new THREE.Vector3(dx / d, 0, dz / d);
+      last = new THREE.Vector3(e.s.x, at.y, e.s.z);
+      out.push(last);
+    }
+    if (dir && this.puppetSpeed > 0) {
+      out.push(last.clone().addScaledVector(dir, HEAD_LEAD + this.puppetSpeed * HUNCH_LEAD_SECONDS));
+    }
+    return out;
   }
 
   /** The host's exact state: the reliable one when it agrees with the packet's (the codec's coarser) state. */
@@ -519,7 +567,7 @@ export class CreatureNet {
     let poseMode = 'Biped';
     if (state === 'Stunned') poseMode = 'Stunned';
     else if (s && s.pose === 'Swim') poseMode = 'Swim';
-    else if ((s && s.pose === 'Hunched') || this.clearance < HUNCH_BELOW) poseMode = 'Hunched';
+    else if ((s && s.pose === 'Hunched') || this.clearance < CreatureConfig.HunchBelow) poseMode = 'Hunched';
     return { state, speed: this.puppetSpeed, poseMode, action, actionStartedAt, fade };
   }
 
@@ -528,7 +576,9 @@ export class CreatureNet {
     const s = this.state;
     const body = c.service.body;
     const position = body.getPosition();
-    const eyeLift = { Biped: 3.1, Hunched: 2.2, Quadruped: 1.2, Swim: 0.6 }[body.pose] ?? 3.1;
+    const view = this._viewState();
+    // the host's eye: the rig's eye height for the pose it stands in (hunched under a low lintel), 0.6 forward
+    const eye = creatureEyeAt(body.getCFrame(), view.poseMode, c.service.metrics ? c.service.metrics.eyeHeights : undefined);
     return {
       running: !!s && !!this.game.run,
       state: s ? s.state : 'Dormant',
@@ -547,8 +597,8 @@ export class CreatureNet {
       catching: !!this.catching,
       pacing: null,
       position,
-      eye: new THREE.Vector3(position.x, position.y + eyeLift, position.z),
-      ...this._viewState(),
+      eye,
+      ...view,
     };
   }
 
@@ -707,6 +757,8 @@ export class CreatureNet {
     this.sentFx = null;
     this.puppetLast = null;
     this.puppetSpeed = 0;
+    this.heading = null;
+    this.clearance = Infinity;
   }
 }
 

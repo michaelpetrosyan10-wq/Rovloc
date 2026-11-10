@@ -1,5 +1,6 @@
 --!strict
--- Core services' pure logic. Collision: the highest mode on a character's stack wins (Normal < Vent < Locked), each
+-- Core services' pure logic. Collision: the highest mode on a character's stack wins (Normal < Crouch < Vent <
+-- Locked), a crouched body collides only through the parts under a crawlway's mouth, each
 -- mode maps body parts and the VentCollider ball to the right groups, and Init lands the whole CollisionGroups
 -- matrix in PhysicsService. Locks: the ControlLock shown is the highest-priority held reason and any Anchor lock
 -- anchors. Avatars: layered clothing and head accessories are filtered out. Spawning: spawn slots sit on the entry
@@ -61,6 +62,38 @@ return {
 		t.eq(CollisionService.resolveMode({ crawl = "Vent", scare = "Locked" }), "Locked")
 		t.eq(CollisionService.resolveMode({ base = "Normal", crawl = "Vent" }), "Vent")
 		t.eq(CollisionService.resolveMode({ a = "Normal", b = "Normal" }), "Normal")
+		t.eq(CollisionService.resolveMode({ base = "Normal", crouch = "Crouch" }), "Crouch")
+		t.eq(CollisionService.resolveMode({ crouch = "Crouch", crawl = "Vent" }), "Vent")
+		t.eq(CollisionService.resolveMode({ crouch = "Crouch", scare = "Locked" }), "Locked")
+	end,
+
+	["collision: a crouched body collides only below a crawlway's mouth"] = function(t: Expect)
+		-- R15, root centre 3 up: the root (top 4 up), the lower torso and the legs stay under a 4.3-stud mouth
+		for _, name in
+			{
+				"HumanoidRootPart",
+				"LowerTorso",
+				"LeftUpperLeg",
+				"LeftLowerLeg",
+				"LeftFoot",
+				"RightUpperLeg",
+				"RightLowerLeg",
+				"RightFoot",
+			}
+		do
+			t.eq((CollisionService.groupFor(name, "Crouch")), "Players", name .. " collides while crouched")
+		end
+		for _, name in
+			{ "Head", "UpperTorso", "LeftUpperArm", "LeftLowerArm", "LeftHand", "RightUpperArm", "RightHand" }
+		do
+			t.eq((CollisionService.groupFor(name, "Crouch")), "NoCollide", name .. " passes a crawlway's lintel")
+		end
+		local ball, collide = CollisionService.groupFor(CollisionService.VentColliderName, "Crouch")
+		t.eq(ball, "NoCollide", "no vent ball on foot")
+		t.eq(collide, false)
+		-- a crouched body still stands on the floor and meets walls
+		t.truthy(CollisionGroups.collides((CollisionService.groupFor("LeftFoot", "Crouch")), "Default"))
+		t.truthy(CollisionGroups.collides((CollisionService.groupFor("HumanoidRootPart", "Crouch")), "Default"))
 	end,
 
 	["collision: each mode maps body parts and the vent collider"] = function(t: Expect)

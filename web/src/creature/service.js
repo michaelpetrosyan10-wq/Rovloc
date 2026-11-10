@@ -116,13 +116,6 @@ const TUNNEL_KINDS = new Set(['Corridor', 'Tunnel', 'Gallery', 'Hallway']); // n
 const WARP_WAIT = 3; // a spot still in view this long after it was picked is swapped for another
 const WARP_GIVE_UP = 12; // hidden this long: any spot out of sight will do
 const MURK_RANGE = 10; // a swimmer under the surface is seen only this close
-// The hunch comes before the lintel: the head room counts this far along its way ahead, its head's lead on its root
-// (the mask hangs about 1.6 studs ahead of it, more in a chase) plus what its pace covers while it bends (the rig's
-// hunch settles in about half a second), sampled every HEADROOM_STEP studs.
-const HEAD_LEAD = 2;
-const HUNCH_LEAD_SECONDS = 0.5;
-const HEADROOM_STEP = 1;
-const _ahead = new THREE.Vector3();
 const STAGE_LIFTS = [-1, 0, 1]; // the walker's body (its root box) from the root: a catch's staging step clears it
 const SPEED_DAMP = 10;
 const LOUD_RANK = 3;
@@ -1885,29 +1878,15 @@ export class MonsterAI {
 
   /**
    * The head room it walks under (the contract's poseMode, and its eye, hunch below CreatureConfig.HunchBelow): the
-   * lowest nav clearance at its root and along the way it walks, HEAD_LEAD + its pace x HUNCH_LEAD_SECONDS ahead, so it
-   * is down before its head reaches a lintel or a tunnel's ceiling. Infinity off the floor.
+   * lowest nav clearance at its root and along its planned route, HEAD_LEAD + its pace x HUNCH_LEAD_SECONDS ahead
+   * (FloorNav.headroomAlong, the rule a co-op client's puppet shares), so it is down before its head reaches a lintel or
+   * a tunnel's ceiling. Infinity off the floor.
    */
   _headroom(root) {
     const m = this.mover;
     const nav = m && m.getMedium() === 'Floor' ? this._nav(this.creatureLevel) : null;
     if (!nav) return Infinity;
-    let clearance = nav.clearanceAt(root);
-    let left = HEAD_LEAD + Math.max(0, this.body.walkSpeed) * HUNCH_LEAD_SECONDS;
-    let from = root;
-    for (const to of m.routeAhead()) {
-      const leg = Math.hypot(to.x - from.x, to.z - from.z);
-      const span = Math.min(leg, left);
-      for (let s = HEADROOM_STEP; s < span + HEADROOM_STEP; s += HEADROOM_STEP) {
-        const k = Math.min(s, span) / leg;
-        _ahead.set(from.x + (to.x - from.x) * k, from.y, from.z + (to.z - from.z) * k);
-        clearance = Math.min(clearance, nav.clearanceAt(_ahead));
-      }
-      left -= leg;
-      if (left <= 0) break;
-      from = to;
-    }
-    return clearance;
+    return nav.headroomAlong(root, m.routeAhead(), this.body.walkSpeed);
   }
 
   /** The 30 Hz game tick: the catch, motion every tick, the brain at ServerTickHz. @param {number} dt */

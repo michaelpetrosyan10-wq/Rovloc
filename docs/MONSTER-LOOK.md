@@ -173,7 +173,7 @@ cavities hold it back; the torch and the point lights saturate, so the relief re
 
 Tiers only toggle visual layers; the skeleton, animation, timings, hitboxes and metrics never change.
 
-| Layer | Max (default) | Potato (the engine's Low tier, school Chromebooks) |
+| Layer | Max (the Max, High and Medium graphics tiers) | Potato (the Low and Potato tiers: weak GPUs, school Chromebooks) |
 | --- | --- | --- |
 | shadow body | rim, saturating torch sheen, smoke crawling over the skin, dithered edge haze | rim and sheen only |
 | mask | the sculpt (geometric relief), occlusion, grime, cracks, streaks, chip, detail normal map (crazing, pitting), glaze roughness, grooved cracks, parallax eye holes | the same sculpt, silhouette and painted layout; flat eye holes, no detail map |
@@ -182,6 +182,7 @@ Tiers only toggle visual layers; the skeleton, animation, timings, hitboxes and 
 | smoke | up to 300 dense puffs, the full shroud | up to 14 plain puffs, a thin shroud |
 | pinprick halos | off (no cute glowing dots) | off |
 | torch shadow | it casts one (where the engine draws the torch shadow) | none |
+| fixture shadows | the nearest lamps cast its shadow on the walls and floor (Max 4, High 3, Medium 2) | none |
 
 ## The jumpscare and the reveal (jumpscareView.js, jumpscare.js, view.js, mask.js)
 

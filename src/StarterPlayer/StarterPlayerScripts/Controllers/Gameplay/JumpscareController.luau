@@ -11,8 +11,8 @@
 --     with an almost instant blend in. The camera snaps onto the Creature's FaceFrontAttachment (the live, animated
 --     head, so the face stays framed through the Lunge CreatureController plays for the same OneShot; the cue's face
 --     point turned toward the eye while the rig is not there) at startDistance (where the eye was, clamped) and lunges
---     in to CreatureConfig.Jumpscare.FaceDistance over LungeSeconds on an overshooting ease: the face slams in past
---     FaceDistance and recoils to it (faceLockCFrame). On top, a violent shake (shakeOffset: noise rotation of up to
+--     in to CreatureConfig.Jumpscare.HoldDistance (1.35: the Tall Man's mask fills about 80 % of the frame) over
+--     LungeSeconds on an overshooting ease: the face slams in past it and recoils to it (faceLockCFrame). On top, a violent shake (shakeOffset: noise rotation of up to
 --     CameraConfig.Shake.JumpscareAmplitude times the envelope, peaking at the slam and sustained through the hold,
 --     plus a positional jitter).
 --   * The school is dark and the torch beam follows the player's own look, not the override, so a local PointLight
@@ -22,6 +22,11 @@
 --     a pulsing red vignette through the hold (overlay), and a hard cut to black at the end. Under the black the
 --     override is popped (instantly), the face light goes out and the look is turned toward the Creature, the way the
 --     server turned the body.
+--   * The sequence (docs/MONSTER-LOOK.md, the website's jumpscareView.js): 0.36-0.78 the slit tears into the maw (Roblox
+--     parts the hinge to MawAngle, 14 degrees: CreatureController.SetJawOverride, so the black cap, sleeve and throat
+--     and the MawShard teeth show); a cold light low and to one side of the camera rakes across the mask; 1.18-1.47
+--     static floods the frame, full for the last 0.13 s; the cut to black lands at SequenceBlack (1.6) and holds
+--     through the outcome (the cue's endsAt) and the beat.
 --   * After a beat in black, input, HUD and panic are handed back and the black fades out.
 --   MotionScale scales the shake and the lunge's travel (0: a still camera held at FaceDistance); FlashScale scales
 --   the flashes, the vignette's pulse and the light's stutter (0: no flashes, a steady vignette and a steady light; the
@@ -57,6 +62,7 @@ local CreatureRigBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorl
 
 local Controllers = script.Parent.Parent
 local AudioController = require(Controllers.Core.AudioController)
+local CreatureController = require(Controllers.Characters.CreatureController)
 local InputController = require(Controllers.Core.InputController)
 local SettingsController = require(Controllers.Core.SettingsController)
 local FirstPersonController = require(Controllers.FirstPerson.FirstPersonController)
@@ -80,14 +86,20 @@ local FACE_ATTACHMENT = CreatureRigBuilder.PartNames.FaceAttachment
 local TAU = math.pi * 2
 local LUNGE = J.LungeSeconds
 local HOLD = J.HoldSeconds
-local FACE_DISTANCE = J.FaceDistance
+local FACE_DISTANCE = J.HoldDistance
+local SEQUENCE_BLACK = 1.6 -- seconds after startAt the cut to black lands (the outcome comes later, under it)
+local STATIC_LEAD = 0.42 -- the static rises from this long before the cut ...
+local STATIC_FULL = 0.13 -- ... and fills the frame for this long before it
+local MAW_FROM = 0.36 -- the slit starts to tear here ...
+local MAW_FULL = 0.78 -- ... and is torn open by here
+local MAW_ANGLE = math.rad(14)
 local FOV = CameraConfig.FieldOfView.JumpscareFov
 
 -- Lunge: where it starts and how it lands.
 local MIN_START_DISTANCE = FACE_DISTANCE + 0.9
 local MAX_START_DISTANCE = 5.5
 local OVERSHOOT = 2.2 -- back-ease tension: the face slams about 15% of the travel past FaceDistance, then recoils
-local CLOSEST = FACE_DISTANCE * 0.6 -- the slam never brings the camera nearer the face than this
+local CLOSEST = FACE_DISTANCE * 0.5 -- the slam never brings the camera nearer the face than this
 -- The slam (the overshoot's deepest point) as a share of the lunge: where u = t - 1 minimises the back ease.
 local SLAM_SHARE = 1 - 2 * OVERSHOOT / (3 * (OVERSHOOT + 1))
 local SLAM_AT = LUNGE * SLAM_SHARE
@@ -118,6 +130,7 @@ local WHITE = Color3.fromRGB(255, 247, 238)
 local BLOOD = Color3.fromRGB(150, 6, 4)
 local BLOOD_EDGE = Color3.fromRGB(60, 0, 0)
 local BLACK = Color3.new(0, 0, 0)
+local STATIC_GREY = Color3.fromRGB(150, 150, 156)
 local PAINT_EPSILON = 0.002
 
 -- Face light (PointLight brightness).
@@ -129,7 +142,8 @@ local LIGHT_STUTTER = 0.35 -- share the stutter takes away at its deepest (times
 local LIGHT_STUTTER_HZ = 6
 local LIGHT_RANGE = 7
 local LIGHT_COLOR = Color3.fromRGB(206, 220, 255)
-local LIGHT_RISE = 0.25 -- studs above the camera, so the brow throws the sockets into shadow
+-- camera space: low and to one side of the camera, so it rakes across the mask and its relief throws shadows
+local LIGHT_OFFSET = CFrame.new(0.85, -0.55, -0.55)
 
 -- Timing guards.
 local MAX_LEAD = 1 -- seconds a cue may be scheduled ahead (clock skew guard)
@@ -147,13 +161,14 @@ local STING_VOLUME = 0.65
 local WITNESS_PANIC = 0.7
 local WITNESS_PANIC_SECONDS = 3
 
-export type Overlay = { flash: number, tint: number, vignette: number, black: number }
+export type Overlay = { flash: number, tint: number, vignette: number, black: number, static: number }
 
 type Paint = {
 	gui: ScreenGui,
 	edges: { Frame },
 	tint: Frame,
 	flash: Frame,
+	static: Frame,
 	black: Frame,
 	written: { [Frame]: number },
 }
@@ -194,6 +209,8 @@ JumpscareController.Fade = FADE
 JumpscareController.LightHold = LIGHT_HOLD
 JumpscareController.LightStutter = LIGHT_STUTTER
 JumpscareController.WitnessRadius = WITNESS_RADIUS
+JumpscareController.SequenceBlack = SEQUENCE_BLACK
+JumpscareController.MawAngle = MAW_ANGLE
 JumpscareController.StingRadius = STING_RADIUS
 
 local serviceTrove = Trove.new()
@@ -320,7 +337,7 @@ function JumpscareController.overlay(elapsed: number, flashScale: number, cutAt:
 	local cut = math.max(finiteOr(cutAt, LUNGE + HOLD), 0)
 	local hold = math.max(finiteOr(beat, BEAT), 0)
 	if t < 0 then
-		return { flash = 0, tint = 0, vignette = 0, black = 0 }
+		return { flash = 0, tint = 0, vignette = 0, black = 0, static = 0 }
 	end
 	if t >= cut then
 		return {
@@ -328,15 +345,33 @@ function JumpscareController.overlay(elapsed: number, flashScale: number, cutAt:
 			tint = 0,
 			vignette = 0,
 			black = 1 - MathUtil.smoothstep(cut + hold, cut + hold + FADE, t),
+			static = 0,
 		}
 	end
 	local trough = 0.5 - 0.5 * math.cos(TAU * VIGNETTE_HZ * t)
+	-- the static tears in over the last moments before the cut (only a full sequence's: never in its first half second)
+	local static = if cut > 0.5 then MathUtil.smoothstep(cut - STATIC_LEAD, cut - STATIC_FULL, t) else 0
 	return {
 		flash = FLASH_PEAK * scale * spike(t, 0),
 		tint = SLAM_TINT * scale * spike(t, SLAM_AT),
 		vignette = VIGNETTE_PEAK * MathUtil.smoothstep(0, VIGNETTE_RISE, t) * (1 - VIGNETTE_PULSE * scale * trough),
 		black = 0,
+		static = static,
 	}
+end
+
+-- The maw `elapsed` seconds into the moment: the hinge parted (radians) as the slit tears, held to the cut.
+function JumpscareController.maw(elapsed: number): number
+	local t = finiteOr(elapsed, 0)
+	return MAW_ANGLE * MathUtil.smoothstep(MAW_FROM, MAW_FULL, t)
+end
+
+-- When the cut to black lands and how long the black holds, for an outcome `resolveAt` seconds in: the sequence's
+-- black at SequenceBlack (sooner when the outcome is), held through the outcome and the beat.
+function JumpscareController.cutFor(resolveAt: number): (number, number)
+	local resolve = math.max(finiteOr(resolveAt, LUNGE + HOLD), 0)
+	local cut = math.min(resolve, SEQUENCE_BLACK)
+	return cut, BEAT + (resolve - cut)
 end
 
 -- The face light's brightness `elapsed` seconds after startAt, for a cut `cutAt` seconds in: a flare at the snap and
@@ -516,7 +551,8 @@ local function buildPaint(): Paint?
 		edges = edges,
 		tint = layer(screen, "Tint", BLOOD, 2),
 		flash = layer(screen, "Flash", WHITE, 3),
-		black = layer(screen, "Black", BLACK, 4),
+		static = layer(screen, "Static", STATIC_GREY, 4),
+		black = layer(screen, "Black", BLACK, 5),
 		written = {},
 	}
 	screen.Parent = playerGui
@@ -544,6 +580,9 @@ local function applyOverlay(current: Session, elapsed: number)
 	end
 	setOpacity(paint, paint.tint, o.tint)
 	setOpacity(paint, paint.flash, o.flash)
+	-- static: the grey sheet flickering frame to frame (bands slipping), under the black
+	local flicker = 0.7 + 0.3 * math.noise(elapsed * 60, current.seed * 0.37)
+	setOpacity(paint, paint.static, o.static * flicker)
 	setOpacity(paint, paint.black, o.black)
 end
 
@@ -639,6 +678,7 @@ end
 -- Under the black: the override goes (instantly) and the look turns the way the server turned the body.
 local function cut(current: Session)
 	current.cut = true
+	CreatureController.SetJawOverride(nil)
 	local toward = faceFrame(current).Position - FirstPersonController.GetEyeCFrame().Position
 	FirstPersonController.PopOverride(OVERRIDE)
 	dropLight(current)
@@ -665,6 +705,7 @@ local function endSession(current: Session)
 	if current.begun and not current.cut then
 		current.cut = true
 		FirstPersonController.PopOverride(OVERRIDE)
+		CreatureController.SetJawOverride(nil)
 	end
 	if current.begun and not current.restored then
 		restore(current)
@@ -712,10 +753,13 @@ local function step(current: Session)
 		restore(current)
 	end
 	applyOverlay(current, elapsed)
+	if not current.cut then
+		CreatureController.SetJawOverride(JumpscareController.maw(elapsed))
+	end
 	local light = current.light
 	local carrier = if light then light.Parent else nil
 	if light and carrier and carrier:IsA("BasePart") then
-		carrier.CFrame = cameraFor(current) * CFrame.new(0, LIGHT_RISE, 0)
+		carrier.CFrame = cameraFor(current) * LIGHT_OFFSET
 		light.Brightness = JumpscareController.faceLight(elapsed, current.flashScale, current.cutAt)
 	end
 	if elapsed >= current.cutAt + current.beat + FADE then
@@ -745,10 +789,11 @@ local function startSession(args: { [string]: any }, startAt: unknown, endsAt: u
 	local start = if type(startAt) == "number" and MathUtil.isFinite(startAt)
 		then math.min(startAt, now + MAX_LEAD)
 		else now
-	local cutAt = JumpscareController.holdLength(start, if type(endsAt) == "number" then endsAt else nil)
-	if now - start >= cutAt then
+	local resolveAt = JumpscareController.holdLength(start, if type(endsAt) == "number" then endsAt else nil)
+	if now - start >= resolveAt then
 		return -- arrived after the hold: the moment is gone
 	end
+	local cutAt, beat = JumpscareController.cutFor(resolveAt)
 	local existing = session
 	if existing then
 		endSession(existing)
@@ -759,7 +804,7 @@ local function startSession(args: { [string]: any }, startAt: unknown, endsAt: u
 		kind = if type(kind) == "string" then kind else "Hallway",
 		startAt = start,
 		cutAt = cutAt,
-		beat = BEAT,
+		beat = beat,
 		facePoint = if typeof(face) == "Vector3" and MathUtil.isFiniteVector(face) then face else nil,
 		face = nil,
 		faceResolvedAt = -math.huge,

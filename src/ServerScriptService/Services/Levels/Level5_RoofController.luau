@@ -1058,8 +1058,14 @@ local function roofCommand(_player: Player, args: { string }): string?
 	)
 end
 
+-- The roof's phases in which the Creature never teleports (docs/MONSTER.md 7.2): the door, the chase, the finale.
+local NO_TELEPORT: { [string]: boolean } = { Smash = true, Chase = true, FinaleWait = true, Finale = true, Done = true }
+
 function Level5.Init()
 	DevToolsService.Register("roof", "roof [smash|finale]: the roof door sequence or the finale now", roofCommand)
+	MonsterAIService.RegisterTeleportBlock(function(): boolean
+		return active and NO_TELEPORT[phase] == true
+	end)
 	NoiseAndDirectorService.NoiseEmitted:Connect(Level5.HeardNoise)
 	ObjectiveService.Unlocked:Connect(function(levelId: Enums.LevelId, _actor: Player?)
 		if levelId == LEVEL then

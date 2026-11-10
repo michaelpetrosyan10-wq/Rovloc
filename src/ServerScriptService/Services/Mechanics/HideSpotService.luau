@@ -1,59 +1,65 @@
 --!strict
--- LockerHidingService: the Level 3 hideable lockers and the hold-breath check (spec, Level 3; ARCHITECTURE §4c). The
--- only writer of a HideableLocker's OccupantUserId and DoorOpen and of its door leaf's pose after the build.
+-- HideSpotService: every hiding spot (docs/MONSTER.md 8; the website's web/src/game/mechanics/lockers.js and
+-- hidespots.js): lockers, and the tunnels' barrels and steel cabinets. The only writer of a spot's OccupantUserId,
+-- OwnerUserId and DoorOpen and of its leaf's pose after the build.
 --
--- Lockers. Every HideableLocker-tagged Model under Workspace.Runtime is tracked (CollectionService added / removed,
--- plus a scan at BeginRun: WorldService rebuilds the run's fixtures in its own BeginRun before this one). A locker is
--- Free, Entering, Hidden (one occupant), Exiting or Smashed (its door torn off by the Creature: never usable again this
--- run). The Hide prompt (InteractionService, its 0.25 s hold) serves every unsmashed locker, except one that Floor 3's
--- key search holds ajar (SetSearchOpen: ObjectiveService swings a Free locker's door to SearchOpen and back).
+-- Spots. Every Hideable-tagged Model under Workspace.Runtime (LockerBuilder, HideBuilder; HideKind "Locker" | "Barrel" |
+-- "Cabinet", missing: Locker) is tracked (CollectionService added / removed, plus a scan at BeginRun: WorldService
+-- rebuilds the run's fixtures in its own BeginRun before this one). They share one convention: the ExitAnchor,
+-- HideAnchor and PeekAnchor attachments and a Hide prompt (a 0.25 s hold); the leaf (a locker's door, a barrel's lid, a
+-- cabinet's door) swings by LockerMotion. A spot is Free, Entering, Hidden (one occupant), Exiting or Smashed (its leaf
+-- torn off by the Creature: never usable again this run). The Hide prompt serves every unsmashed spot, except one Floor
+-- 3's key search holds ajar (SetSearchOpen).
 --
 -- Getting in (canHide: the run is live, Alive with a living body, no control lock, on foot (Standing / Sprinting /
--- Crouching), not hiding already, the locker Free, and the Creature not chasing this player; refusals that matter
--- are told with Hud.LockerOccupied / Hud.LockerSeen). At once: OccupantUserId, CharacterService.Lock(player,
--- "Locker", "Anchor"), the "Hiding" MoveState override (WalkSpeed 0, never seen by the Creature), the torch switched
--- off (FlashlightService.ForceOff: its beam would only blind the slits), and the door swinging open from
--- GameConfig.OneShotLead from now (LockerMotion.enterSchedule). When it is open the body is moved inside (the
--- HideAnchor, facing out through the slits); then the door swings shut and the occupant is settled (RunStats
--- LockersHidden). Teammates cannot enter an occupied or moving locker.
+-- Crouching), not hiding already, the spot Free, and the Creature not chasing this player; refusals that matter are
+-- told with Hud.LockerOccupied / Hud.LockerSeen). At once: OccupantUserId, CharacterService.Lock(player, "Locker",
+-- "Anchor"), the "Hiding" MoveState override, the torch off, the leaf opening from GameConfig.OneShotLead from now. It is
+-- heard: the HideEnter noise (8) at the door, HideEnterHurried (14) when they sprinted within Hiding.HurriedWindow. When
+-- the leaf is open the body is moved inside (the HideAnchor, facing out); then it shuts and the occupant is settled
+-- (RunStats LockersHidden).
 --
--- Getting out (ExitHide, or the prompt key in the client's Locker context): only while settled and not under a
--- check, and only to a clear spot (the ExitAnchor 2.2 studs in front of the door, else a step to either side, else
--- one further out; none clear refuses with Hud.LockerBlocked). The door opens, the body is moved out facing away from
--- the locker, the lock and override are released and OccupantUserId cleared; then the door shuts and the locker is
--- Free again. Dying, going Downed, losing the character, leaving, the run ending or the locker disappearing releases
--- the occupant the same way (out to a clear spot when there is a living body, else where they are).
+-- The stay limit (DOORS' Hide). Hiding.KickOutWarning (35 s) after getting in, the warning knock (PrivateCue Scare
+-- HideWarn, the Hud.HideWarn hint); at Hiding.KickOutSeconds (45 s) they are shoved out to the spot's exit, unhurt
+-- (Scare HideKick). A running breath check holds the shove until it ends.
 --
--- Doors are server-stepped on Heartbeat (collision follows them) and announced on OneShot "Door" / "LockerRip" with
--- DoorMotion args (+ LockerMotion.Args phase / occupant), so every client renders the same motion smoothly. DoorOpen
--- is true from the start of an opening until a shut has landed (and for good once ripped). LockerDoor cues at the door.
+-- Fake-outs (DOORS' Jack). Spot `AnchorId` holds one this run when its own seeded stream ("Fakeout|<seed>|<id>")
+-- rolls under 1 / CreatureConfig.FakeoutOneIn (each id its own stream: adding spots never reshuffles the rest). At most one per floor per player: getting into an
+-- armed spot within that player's budget, FAKEOUT_DELAY after the leaf starts to open, the player alone gets the reveal
+-- scare and the FakeoutShriek (MonsterAIService.Reveal: PrivateCue Scare Fakeout), and nothing else. The spot is then
+-- ordinary for the rest of the run, for everyone.
 --
--- The inspector (MonsterAIService.RegisterLockerInspector; InvestigateNoise calls it in its own thread when it stands
--- hunched at the door). Inspect yields until it has a verdict:
+-- The pull-out (co-op, THRESHOLD's throw). A "Pull out" prompt (PromptKind PullOut, a Hiding.PullSeconds hold, the Hide
+-- prompt's distance) on every spot, shown to the others (OwnerUserId = the occupant, audience "Others") while a
+-- teammate hides inside. The puller must be Alive, on foot, not hiding, and within Hiding.PullReach of the spot's exit
+-- (canPull). The hider is thrown out beside the puller (the puller's x / z at the exit's floor height, facing away from
+-- the spot) when that spot is clear, else to the spot's own exit; the brain is told (MonsterAIService.NotePulled: no
+-- exit catch, a startle if it was watching them).
+--
+-- Getting out (ExitHide, or the prompt key in the client's Locker context): only while settled and not under a check,
+-- and only to a clear spot (the ExitAnchor, else a step to either side, else one further out; none clear refuses with
+-- Hud.LockerBlocked). Dying, going Downed, losing the character, leaving, the run ending or the spot disappearing
+-- releases the occupant the same way (out to a clear spot when there is a living body, else where they are).
+--
+-- Leaves are server-stepped on Heartbeat (collision follows them) and announced on OneShot "Door" / "LockerRip" with
+-- DoorMotion args (+ LockerMotion.Args phase / occupant), so every client renders the same motion smoothly.
+--
+-- The inspector (MonsterAIService.RegisterLockerInspector; Search and InvestigateNoise call it in their own thread when
+-- the Creature stands hunched at the front). Inspect yields until it has a verdict:
 --   * Empty (nobody inside, or the occupant already on the way out): "Empty" after LockerMotion.EmptyPeekSeconds.
---   * Occupied: the hold-breath check. The Creature's peek lasts a seeded LockerMotion.PeekMin..PeekMax; the window
---     opens LockerMotion.WarnSeconds after the check starts (after the occupant is settled, for one still climbing
---     in). PrivateCue "BreathCheck" Window (startAt / endsAt = the window, args warnAt, the server's lungs) to the
---     occupant; the CreatureSniff loop at the slits outside for everyone. The occupant holds (BreathInput held = true):
---     their lungs drain while held and recover while released (LockerMotion; judged on the server's clock as the
---     inputs arrive). judge decides: a held breath running out from the check's start on ("OutOfBreath"), a release
---     inside the window with less than CalmFraction left ("Gasp"), or not holding inside the window for longer than
---     ReholdGrace (a late start, or a quiet breath held too long: "Breathing") is caught; holding through the window
---     is "HiddenSafe". The Creature leaving the door (no longer InvestigateNoise: a stun, a louder noise) ends the
---     check safe.
---   * Caught: the gasp (Gasp cue at the slits for everyone, the Gasp noise from the occupant), a Result cue, and
---     "Caught". InvestigateNoise then calls tryCatch; right after, if JumpscareHandler is catching this occupant (the
---     catch took over), the door is ripped off (OneShot "LockerRip", LockerRip cue, the Smash pose stepped over
---     LockerMotion.RipSeconds), the Locker lock and the override are released (the catch's own Jumpscare lock holds the
---     body), OccupantUserId is cleared and the locker is Smashed. When that catch finishes with the victim still
---     playing, they are put down outside the locker (a clear spot). A catch that did not take (pacing, a stun) leaves
---     the occupant hidden: the gasp is still a noise, so it comes back.
--- Holding a breath to empty outside a check is a gasp too (the cue and the noise): the lungs give out.
+--   * Occupied: the hold-breath check (LockerMotion: the warning WarnSeconds after the check starts, a seeded
+--     PeekMin..PeekMax window; judge). The Creature leaving the front (no longer in InvestigateNoise, Search or
+--     HidingResponse, or more than AT_DOOR from it) ends the check safe.
+--   * Caught: the gasp (the Gasp cue and noise) and "Caught": the brain's ReachIn follows. When the Creature's catch
+--     takes over (MonsterAIService.Caught, kind Locker: a ReachIn's, or the sniff's), the leaf is ripped off (OneShot
+--     "LockerRip"), the Locker lock and the override are released (the catch holds the body), and the spot is Smashed;
+--     when that catch ends with the victim still playing, they are put down outside it.
+-- The brain also reads the spots through RegisterHideSpots: a level's spots (their ExitAnchor fronts), who is in which.
 --
--- Dev commands: hide (the nearest free locker on your level), unhide, breathcheck [seconds] (a scripted check on your
--- locker, as if the Creature were at the door), lockers (read-only summary).
+-- Dev commands: hide (the nearest free spot on your level), unhide, breathcheck [seconds], lockers (read-only).
 --
--- Pure rules (tests/Specs/Lockers.spec.luau): canHide, canExit, judge, peekSeconds, exitCandidates, rootCFrameAt.
+-- Pure rules (tests/Specs/Lockers.spec.luau, tests/Specs/HideSpots.spec.luau): canHide, canExit, judge, peekSeconds,
+-- exitCandidates, rootCFrameAt, isFakeout, stayVerdict, canPull, hurried, pullSpot.
 -- SetDependencies swaps the clock, the body moves, locks, overrides, the senders, the audio, the noise bus, the
 -- Creature's state and the catch probe, so specs hide, check and catch on a fake clock.
 
@@ -66,6 +72,7 @@ local Workspace = game:GetService("Workspace")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
+local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local DoorMotion = require(ReplicatedStorage.Shared.Sequence.DoorMotion)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
@@ -81,6 +88,8 @@ local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
 
+local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
+
 local AudioService = require(ServerScriptService.Services.Core.AudioService)
 local CharacterService = require(ServerScriptService.Services.Core.CharacterService)
 local DevToolsService = require(ServerScriptService.Services.Core.DevToolsService)
@@ -94,7 +103,7 @@ local PlayerStateService = require(ServerScriptService.Services.Player.PlayerSta
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 local JumpscareHandler = require(ServerScriptService.Services.Monster.MonsterAIService.JumpscareHandler)
 
-local log = Log.new("Lockers")
+local log = Log.new("HideSpots")
 
 local P = Attributes.Player
 local M = Attributes.Match
@@ -102,14 +111,18 @@ local W = Attributes.World
 local ARGS = LockerMotion.Args
 local CUE = LockerMotion.CueArgs
 local CUE_PHASE = LockerMotion.CuePhases
+local H = CreatureConfig.Hiding
 
 local LOCK_REASON: Enums.ControlLock = "Locker"
 local LOCK_MODE: Enums.LockMode = "Anchor"
 local OVERRIDE_TOKEN = "Locker"
 local HIDING: Enums.MoveState = "Hiding"
 local HIDE_KIND: Enums.PromptKind = "Hide"
+local PULL_KIND: Enums.PromptKind = "PullOut"
 local HIDDEN_STAT: Enums.StatKey = "LockersHidden"
 local GASP_NOISE: Enums.NoiseKind = "Gasp"
+local ENTER_NOISE: Enums.NoiseKind = "HideEnter"
+local HURRIED_NOISE: Enums.NoiseKind = "HideEnterHurried"
 local DOOR_ONESHOT: Enums.OneShotKind = "Door"
 local RIP_ONESHOT: Enums.OneShotKind = "LockerRip"
 local CHECK_CUE: Enums.CueKind = "BreathCheck"
@@ -121,11 +134,13 @@ local RIP_PRESET = "LockerRip"
 local OCCUPIED_HINT = "Hud.LockerOccupied"
 local SEEN_HINT = "Hud.LockerSeen"
 local BLOCKED_HINT = "Hud.LockerBlocked"
+local WARN_HINT = "Hud.HideWarn"
 local DEFAULT_LEVEL: Enums.LevelId = "Level3_Gymnasium"
 
 local HIDE_ANCHOR = "HideAnchor"
 local PEEK_ANCHOR = "PeekAnchor"
 local EXIT_ANCHOR = "ExitAnchor"
+local PROMPT_HOST = "HidePrompt"
 
 local LEAD = GameConfig.OneShotLead
 local SEARCH_OPEN = ObjectiveConfig.Tuning.SearchOpen
@@ -136,15 +151,23 @@ local CLEAR_SIZE = Vector3.new(1.8, 4.2, 1.1) -- a standing body, from just abov
 local CLEAR_LIFT = 0.5
 local DEFAULT_ROOT_HEIGHT = 3 -- R15: HipHeight 2 + half the 2-stud root
 local DEV_CHECK_SECONDS = 5
-local AT_DOOR = 8 -- the Creature farther than this from the exit anchor has left the door (InvestigateNoise reach)
+local AT_DOOR = 8 -- the Creature farther than this from the exit anchor has left the door
+local FAKEOUT_DELAY = 0.12 -- after the leaf starts to open, the fake-out leaps out
+local PULL_DISTANCE = 7 -- the Pull out prompt's MaxActivationDistance (the Hide prompt's)
 
 local ON_FOOT: { [string]: boolean } = { Standing = true, Sprinting = true, Crouching = true }
 local LIVE_PHASES: { [string]: boolean } = { Deploying = true, InRun = true }
-local CHASES: { [string]: boolean } = { WallChase = true, VentChase = true }
+local CHASES: { [string]: boolean } = { WallChase = true }
+-- the Creature's states that stand at a spot sniffing (the breath check runs while it is there)
+local AT_SPOT_STATES: { [string]: boolean } = { InvestigateNoise = true, Search = true, HidingResponse = true }
+local OBJECT_TEXT: { [string]: string } =
+	{ Locker = "Prompt.Locker", Barrel = "Prompt.Barrel", Cabinet = "Prompt.Cabinet" }
 
 export type LockerState = "Free" | "Entering" | "Hidden" | "Exiting" | "Smashed"
 
 export type Reason = "OutOfBreath" | "Gasp" | "Breathing" | "Held" | "Left" | "Gone"
+
+export type StayVerdict = "Warn" | "KickOut"
 
 -- Everything canHide looks at (gathered from the world; specs build it by hand).
 export type HideCheck = {
@@ -153,16 +176,25 @@ export type HideCheck = {
 	hasBody: boolean,
 	controlLock: Enums.ControlLock,
 	moveState: Enums.MoveState,
-	hiding: boolean, -- already in (or on the way into / out of) a locker
+	hiding: boolean, -- already in (or on the way into / out of) a spot
 	lockerState: LockerState,
 	chasedBy: boolean, -- the Creature is chasing this player
 }
 
 export type ExitCheck = {
 	lockerState: LockerState,
-	occupant: boolean, -- the asker is this locker's occupant
+	occupant: boolean, -- the asker is this spot's occupant
 	checking: boolean, -- a breath check is running on it
 	spotFound: boolean,
+}
+
+-- Everything canPull looks at.
+export type PullCheck = {
+	alive: boolean,
+	onFoot: boolean,
+	hiding: boolean, -- the puller hides somewhere themselves
+	occupiedByOther: boolean, -- a teammate hides in the spot
+	distance: number, -- the puller's root to the spot's exit
 }
 
 -- What judge looks at: the check's times and the occupant's lungs (changed last at breath.at).
@@ -203,6 +235,8 @@ export type Dependencies = {
 	stat: ((player: Player, key: Enums.StatKey) -> ())?,
 	refresh: ((host: Instance) -> ())?,
 	torchOff: ((player: Player) -> ())?,
+	reveal: ((player: Player, kind: string) -> ())?, -- a fake-out's scare (MonsterAIService.Reveal)
+	pulled: ((player: Player) -> ())?, -- the brain is told of a pull-out (MonsterAIService.NotePulled)
 }
 
 type Check = {
@@ -221,9 +255,16 @@ type Check = {
 
 type Peek = { locker: Locker, resolveAt: number, waiters: { thread } }
 
+-- The time in a spot: the warning at KickOutWarning, the shove at KickOutSeconds (held while a check runs).
+type Stay = { since: number, warned: boolean, out: boolean }
+
+type Fakeout = { at: number, locker: Locker, player: Player }
+
 export type Locker = {
 	model: Model,
 	base: BasePart,
+	kind: Enums.HideKind,
+	id: string, -- AnchorId (the fake-out's stream)
 	levelId: string?,
 	state: LockerState,
 	occupant: Player?,
@@ -234,30 +275,46 @@ export type Locker = {
 	closing: boolean, -- the schedule's shut was sent
 	exitSpot: CFrame?, -- where the occupant leaving is put (root CFrame)
 	check: Check?,
+	stay: Stay?,
 	searchOpen: boolean?, -- Floor 3's key search holds the door ajar (no hiding while it stands open)
 }
 
-local LockerHidingService = {}
+local HideSpotService = {}
 
-LockerHidingService.Name = "LockerHidingService"
-LockerHidingService.OverrideToken = OVERRIDE_TOKEN
-LockerHidingService.LockReason = LOCK_REASON
-LockerHidingService.OccupiedHint = OCCUPIED_HINT
-LockerHidingService.SeenHint = SEEN_HINT
-LockerHidingService.BlockedHint = BLOCKED_HINT
-LockerHidingService.ExitSide = EXIT_SIDE
-LockerHidingService.ExitFurther = EXIT_FURTHER
+HideSpotService.Name = "HideSpotService"
+HideSpotService.OverrideToken = OVERRIDE_TOKEN
+HideSpotService.LockReason = LOCK_REASON
+HideSpotService.OccupiedHint = OCCUPIED_HINT
+HideSpotService.SeenHint = SEEN_HINT
+HideSpotService.BlockedHint = BLOCKED_HINT
+HideSpotService.WarnHint = WARN_HINT
+HideSpotService.ExitSide = EXIT_SIDE
+HideSpotService.ExitFurther = EXIT_FURTHER
+HideSpotService.FakeoutDelay = FAKEOUT_DELAY
+HideSpotService.KickOutWarning = H.KickOutWarning
+HideSpotService.KickOutSeconds = H.KickOutSeconds
+HideSpotService.PullSeconds = H.PullSeconds
+HideSpotService.PullReach = H.PullReach
 
 local hidden: Signal.Signal<Player, Model> = Signal.new()
 local left: Signal.Signal<Player, Model> = Signal.new()
 local checked: Signal.Signal<Player, Model, Types.LockerVerdict> = Signal.new()
+local kicked: Signal.Signal<Player, Model> = Signal.new()
+local pulledOut: Signal.Signal<Player, Model, Player> = Signal.new()
+local fakedOut: Signal.Signal<Player, Model> = Signal.new()
 
--- (player, locker) once a player is settled inside.
-LockerHidingService.Hidden = hidden
--- (player, locker) once an occupant is out (or was released).
-LockerHidingService.Left = left
--- (occupant, locker, verdict) when a breath check ends ("HiddenSafe" or "Caught").
-LockerHidingService.Checked = checked
+-- (player, spot) once a player is settled inside.
+HideSpotService.Hidden = hidden
+-- (player, spot) once an occupant is out (or was released).
+HideSpotService.Left = left
+-- (occupant, spot, verdict) when a breath check ends ("HiddenSafe" or "Caught").
+HideSpotService.Checked = checked
+-- (player, spot) the stay limit shoved them out.
+HideSpotService.Kicked = kicked
+-- (hider, spot, puller) a teammate pulled them out.
+HideSpotService.PulledOut = pulledOut
+-- (player, spot) a fake-out played for them.
+HideSpotService.FakedOut = fakedOut
 
 local serviceTrove = Trove.new()
 local deps: Dependencies = {}
@@ -266,18 +323,24 @@ local occupancy: { [Player]: Locker } = {}
 local breaths: { [Player]: LockerMotion.Breath } = {}
 local peeks: { Peek } = {}
 local taken: { [Player]: Locker } = {} -- victims handed to a Locker catch, put down outside when it ends
+local lastSprintAt: { [Player]: number } = {}
+local fakeoutBudget: { [Player]: { [string]: boolean } } = {}
+local fakeoutsSpent: { [string]: boolean } = {} -- spot ids whose fake-out has played (ordinary for everyone after)
+local pendingFakeouts: { Fakeout } = {}
 local running = false
 local live = false
+local runSeed = 0
+local participants: { Player } = {}
 local random = Random.new(1)
 local oneShotSeq = 0
 local initialized = false
 
 --------------------------------------------------------------------------------
--- Pure rules (specs: tests/Specs/Lockers.spec.luau)
+-- Pure rules (specs: tests/Specs/Lockers.spec.luau, tests/Specs/HideSpots.spec.luau)
 --------------------------------------------------------------------------------
 
--- Whether a player may climb into a locker, and why not.
-function LockerHidingService.canHide(check: HideCheck): (boolean, string?)
+-- Whether a player may climb into a spot, and why not.
+function HideSpotService.canHide(check: HideCheck): (boolean, string?)
 	if not check.live then
 		return false, "NotLive"
 	end
@@ -306,7 +369,7 @@ function LockerHidingService.canHide(check: HideCheck): (boolean, string?)
 end
 
 -- Whether an occupant may step out now, and why not.
-function LockerHidingService.canExit(check: ExitCheck): (boolean, string?)
+function HideSpotService.canExit(check: ExitCheck): (boolean, string?)
 	if not check.occupant then
 		return false, "NotOccupant"
 	end
@@ -322,9 +385,48 @@ function LockerHidingService.canExit(check: ExitCheck): (boolean, string?)
 	return true, nil
 end
 
+-- Whether `puller` may drag the hider out of a spot (THRESHOLD's throw).
+function HideSpotService.canPull(check: PullCheck): boolean
+	return check.alive and check.onFoot and not check.hiding and check.occupiedByOther and check.distance <= H.PullReach
+end
+
+-- Whether getting in was hurried (the louder HideEnterHurried noise): sprinting at most HurriedWindow before.
+function HideSpotService.hurried(lastSprint: number?, now: number): boolean
+	return lastSprint ~= nil and now - lastSprint <= H.HurriedWindow
+end
+
+-- Whether spot `id` holds a fake-out in the run of `seed` (each id its own seeded stream).
+function HideSpotService.isFakeout(seed: number, id: string): boolean
+	-- the seed hashed with the key (FNV-1a), so neighbouring seeds draw unrelated streams
+	local stream = Random.new(MathUtil.hash("Fakeout|" .. tostring(math.floor(seed)) .. "|" .. id))
+	return stream:NextNumber() < 1 / CreatureConfig.FakeoutOneIn
+end
+
+-- What the stay clock says at `now` for a stay begun at `since`: "Warn" (once), "KickOut" (once, held while a breath
+-- check runs) or nil. `warned` / `out` say what already happened.
+function HideSpotService.stayVerdict(
+	since: number,
+	now: number,
+	warned: boolean,
+	out: boolean,
+	checking: boolean
+): StayVerdict?
+	if out then
+		return nil
+	end
+	local held = now - since
+	if not warned and held >= H.KickOutWarning then
+		return "Warn"
+	end
+	if held >= H.KickOutSeconds and not checking then
+		return "KickOut"
+	end
+	return nil
+end
+
 -- The verdict of a breath check at server time `now`, if it has one: (verdict, reason, the instant it was decided).
 -- The occupant's lungs are unchanged since breath.at (call it before and after every change of hold).
-function LockerHidingService.judge(view: CheckView, now: number): (Types.LockerVerdict?, Reason?, number?)
+function HideSpotService.judge(view: CheckView, now: number): (Types.LockerVerdict?, Reason?, number?)
 	local breath = view.breath
 	local empty = LockerMotion.emptyAt(breath)
 	if empty and empty <= now and empty >= view.startedAt and empty < view.windowEnd then
@@ -349,14 +451,14 @@ function LockerHidingService.judge(view: CheckView, now: number): (Types.LockerV
 	return nil, nil, nil
 end
 
--- How long the Creature peeks through the slits (seeded).
-function LockerHidingService.peekSeconds(source: Random): number
+-- How long the Creature peeks through the gap (seeded).
+function HideSpotService.peekSeconds(source: Random): number
 	return source:NextNumber(LockerMotion.PeekMin, LockerMotion.PeekMax)
 end
 
 -- Where a leaving occupant may stand, best first: the exit anchor, a step to either side, one further out (floor
--- CFrames facing away from the locker).
-function LockerHidingService.exitCandidates(exitAnchor: CFrame): { CFrame }
+-- CFrames facing away from the spot).
+function HideSpotService.exitCandidates(exitAnchor: CFrame): { CFrame }
 	return {
 		exitAnchor,
 		exitAnchor * CFrame.new(EXIT_SIDE, 0, 0),
@@ -366,8 +468,20 @@ function LockerHidingService.exitCandidates(exitAnchor: CFrame): { CFrame }
 end
 
 -- The root CFrame of a body standing at floor point `floor` (its facing kept), `rootHeight` above it.
-function LockerHidingService.rootCFrameAt(floor: CFrame, rootHeight: number): CFrame
+function HideSpotService.rootCFrameAt(floor: CFrame, rootHeight: number): CFrame
 	return floor * CFrame.new(0, rootHeight, 0)
+end
+
+-- Where a pulled hider lands: at the puller's x / z on the exit's floor, facing away from the spot (from the exit
+-- toward the puller); nil when the puller stands on the exit itself.
+function HideSpotService.pullSpot(exitAnchor: CFrame, pullerRoot: Vector3): CFrame?
+	local exit = exitAnchor.Position
+	local at = Vector3.new(pullerRoot.X, exit.Y, pullerRoot.Z)
+	local toward = Vector3.new(at.X - exit.X, 0, at.Z - exit.Z)
+	if toward.Magnitude < 1e-2 then
+		return nil
+	end
+	return CFrame.lookAt(at, at + toward.Unit)
 end
 
 --------------------------------------------------------------------------------
@@ -461,7 +575,7 @@ local function characters(): { Instance }
 end
 
 -- Whether a standing body fits at floor point `floor` (nothing a player collides with in the way; characters, the
--- Creature and the locker itself ignored).
+-- Creature and the spot itself ignored).
 local function spotClear(floor: CFrame, locker: Model): boolean
 	local fake = deps.clear
 	if fake then
@@ -599,13 +713,36 @@ local function torchOff(player: Player)
 	end
 end
 
+local function revealFor(player: Player, kind: string)
+	local fake = deps.reveal
+	if fake then
+		fake(player, kind)
+	else
+		MonsterAIService.Reveal(player, kind)
+	end
+end
+
+local function tellPulled(player: Player)
+	local fake = deps.pulled
+	if fake then
+		fake(player)
+	else
+		MonsterAIService.NotePulled(player)
+	end
+end
+
+-- A moment for one player (PrivateCue Scare): the stay limit's knock and shove, a pull-out.
+local function scare(player: Player, kind: Enums.ScareKind)
+	sendCue(player, { kind = "Scare", startAt = serverNow(), endsAt = nil, args = { scare = kind } })
+end
+
 -- Swaps in fakes (nil restores every real dependency).
-function LockerHidingService.SetDependencies(fake: Dependencies?)
+function HideSpotService.SetDependencies(fake: Dependencies?)
 	deps = fake or {}
 end
 
 --------------------------------------------------------------------------------
--- Locker geometry
+-- Spot geometry
 --------------------------------------------------------------------------------
 
 local function anchorWorld(locker: Locker, name: string): CFrame?
@@ -616,12 +753,12 @@ local function anchorWorld(locker: Locker, name: string): CFrame?
 	return nil
 end
 
--- The hidden player's eye behind the slits (looking out).
+-- The hidden player's eye behind the gap (looking out).
 local function peekOf(locker: Locker): CFrame
 	return anchorWorld(locker, PEEK_ANCHOR) or locker.base.CFrame
 end
 
--- The slits' outer face: where the Creature breathes in at you.
+-- The gap's outer face: where the Creature breathes in at you.
 local function slitOf(locker: Locker): Vector3
 	local peek = peekOf(locker)
 	return (peek * CFrame.new(0, 0, -SLIT_OUT)).Position
@@ -634,6 +771,14 @@ end
 local function levelOf(model: Model): string?
 	local value = model:GetAttribute(W.LevelId)
 	return if type(value) == "string" then value else nil
+end
+
+local function kindOf(model: Model): Enums.HideKind
+	local value = model:GetAttribute(W.HideKind)
+	if type(value) == "string" and Enums.has(Enums.HideKind, value) then
+		return value :: Enums.HideKind
+	end
+	return "Locker"
 end
 
 local function playerLevel(player: Player): Enums.LevelId
@@ -651,23 +796,23 @@ local function findExitSpot(locker: Locker, rootHeight: number): CFrame?
 	if not exit then
 		return nil
 	end
-	for _, floor in LockerHidingService.exitCandidates(exit) do
+	for _, floor in HideSpotService.exitCandidates(exit) do
 		if spotClear(floor, locker.model) then
-			return LockerHidingService.rootCFrameAt(floor, rootHeight)
+			return HideSpotService.rootCFrameAt(floor, rootHeight)
 		end
 	end
 	return nil
 end
 
 --------------------------------------------------------------------------------
--- Doors
+-- Leaves
 --------------------------------------------------------------------------------
 
 local function setDoorOpen(locker: Locker, open: boolean)
 	Attributes.set(locker.model, W.DoorOpen, open)
 end
 
--- Starts a door motion `from` -> `to` at `startAt`, stepped here and announced to every client.
+-- Starts a leaf motion `from` -> `to` at `startAt`, stepped here and announced to every client.
 local function startDoor(
 	locker: Locker,
 	mode: DoorMotion.Mode,
@@ -708,7 +853,7 @@ local function startDoor(
 	playAt(preset, doorPoint(locker), { delay = math.max(0, startAt - serverNow()) })
 end
 
--- Poses every moving door at server time `now`.
+-- Poses every moving leaf at server time `now`.
 local function stepDoors(now: number)
 	for _, locker in lockers do
 		local motion = locker.motion
@@ -748,7 +893,7 @@ local function wake(waiters: { thread }, verdict: Types.LockerVerdict)
 		if coroutine.status(thread) == "suspended" then
 			local ok, err = coroutine.resume(thread, verdict)
 			if not ok then
-				log.warnThrottled("inspector", 10, "locker inspector failed after its verdict: %s", tostring(err))
+				log.warnThrottled("inspector", 10, "hiding spot inspector failed after its verdict: %s", tostring(err))
 			end
 		end
 	end
@@ -826,16 +971,24 @@ end
 
 local releaseOccupant: (locker: Locker, outside: boolean) -> ()
 
--- The catch took over: the door is torn off and the body handed to JumpscareHandler.
+-- The catch took over: the leaf is torn off and the body handed to JumpscareHandler.
 local function handOver(locker: Locker, occupant: Player, now: number)
+	local check = locker.check
 	locker.state = "Smashed"
 	locker.schedule = nil
 	locker.check = nil
+	locker.stay = nil
+	if check and check.verdict == nil then
+		check.verdict = "Caught"
+		stopSniff(check)
+		wake(check.waiters, "Caught")
+	end
 	startDoor(locker, "Smash", 0, 1, LockerMotion.RipSeconds, now + LEAD, "Rip", occupant)
 	occupancy[occupant] = nil
 	breaths[occupant] = nil
 	locker.occupant = nil
 	Attributes.set(locker.model, W.OccupantUserId, nil)
+	Attributes.set(locker.model, W.OwnerUserId, nil)
 	letGo(occupant)
 	taken[occupant] = locker
 	refreshPrompt(locker)
@@ -860,24 +1013,19 @@ local function finishCheck(check: Check, verdict: Types.LockerVerdict, reason: R
 	if locker.check == check then
 		locker.check = nil
 	end
-	-- The inspector returns now: InvestigateNoise tries the catch in that same thread.
+	-- The inspector returns now: the brain's ReachIn follows (the rip waits for its catch: onCaught).
 	wake(check.waiters, verdict)
 	if verdict ~= "Empty" then
 		checked:Fire(occupant, locker.model, verdict)
 	end
-	if verdict ~= "Caught" or check.scripted then
-		return
-	end
-	if catchVictim() == occupant and occupancy[occupant] == locker then
+	if verdict == "Caught" and not check.scripted and catchVictim() == occupant and occupancy[occupant] == locker then
 		handOver(locker, occupant, serverNow())
-	else
-		log.debug("%s gasped in %s but no catch followed", occupant.Name, locker.model.Name)
 	end
 end
 
--- Whether the Creature is still peeking: investigating, and standing at the door.
+-- Whether the Creature is still peeking: in a sniffing state, and standing at the front.
 local function creatureAtDoor(locker: Locker): boolean
-	if monsterState() ~= "InvestigateNoise" then
+	if not AT_SPOT_STATES[monsterState()] then
 		return false
 	end
 	local at = creaturePosition()
@@ -906,7 +1054,7 @@ local function advanceCheck(check: Check, now: number)
 	if not check.cued and now >= check.startedAt then
 		windowCue(check, breathOf(occupant, now))
 	end
-	local verdict, reason, at = LockerHidingService.judge({
+	local verdict, reason, at = HideSpotService.judge({
 		startedAt = check.startedAt,
 		windowStart = check.windowStart,
 		windowEnd = check.windowEnd,
@@ -960,12 +1108,31 @@ local function enter(player: Player, locker: Locker)
 	occupancy[player] = locker
 	breaths[player] = LockerMotion.fullBreath(now)
 	Attributes.set(locker.model, W.OccupantUserId, player.UserId)
+	Attributes.set(locker.model, W.OwnerUserId, player.UserId)
 	hold(player)
 	torchOff(player)
 	local startAt = now + LEAD
 	locker.schedule = LockerMotion.enterSchedule(startAt)
 	startDoor(locker, "Swing", 0, 1, LockerMotion.OpenSeconds, startAt, "Enter", player)
-	log.debug("%s climbs into %s", player.Name, locker.model.Name)
+	-- heard getting in (louder straight off a sprint); the stay limit starts; a fake-out leaps out as it opens
+	local noise: Enums.NoiseKind = if HideSpotService.hurried(lastSprintAt[player], now)
+		then HURRIED_NOISE
+		else ENTER_NOISE
+	emitNoise(doorPoint(locker), noise, player, locker.levelId)
+	locker.stay = { since = now, warned = false, out = false }
+	local level = locker.levelId or ""
+	local budget = fakeoutBudget[player]
+	if not budget then
+		budget = {}
+		fakeoutBudget[player] = budget
+	end
+	if not fakeoutsSpent[locker.id] and not budget[level] and HideSpotService.isFakeout(runSeed, locker.id) then
+		budget[level] = true
+		fakeoutsSpent[locker.id] = true
+		table.insert(pendingFakeouts, { at = startAt + FAKEOUT_DELAY, locker = locker, player = player })
+	end
+	refreshPrompt(locker)
+	log.debug("%s climbs into %s (%s)", player.Name, locker.model.Name, locker.kind)
 end
 
 -- Starts getting `locker`'s occupant out to `spot` (nil: they stay where they are).
@@ -980,6 +1147,7 @@ local function beginExit(locker: Locker, spot: CFrame?)
 	locker.exitSpot = spot
 	locker.moved = false
 	locker.closing = false
+	locker.stay = nil
 	local startAt = now + LEAD
 	locker.schedule = LockerMotion.exitSchedule(startAt)
 	local motion = locker.motion
@@ -987,11 +1155,13 @@ local function beginExit(locker: Locker, spot: CFrame?)
 	startDoor(locker, "Swing", from, 1, LockerMotion.OpenSeconds * (1 - from), startAt, "Exit", occupant)
 end
 
--- The occupant is out of the locker (moved out, or let go where they are).
+-- The occupant is out of the spot (moved out, or let go where they are).
 local function vacate(locker: Locker)
 	local occupant = locker.occupant
 	locker.occupant = nil
+	locker.stay = nil
 	Attributes.set(locker.model, W.OccupantUserId, nil)
+	Attributes.set(locker.model, W.OwnerUserId, nil)
 	if occupant then
 		if occupancy[occupant] == locker then
 			occupancy[occupant] = nil
@@ -1000,36 +1170,41 @@ local function vacate(locker: Locker)
 		letGo(occupant)
 		left:Fire(occupant, locker.model)
 	end
+	refreshPrompt(locker)
 end
 
--- Lets the occupant go at once: out to a clear spot when `outside` and they have a living body, else where they are.
--- The door opens behind them and shuts again.
-releaseOccupant = function(locker: Locker, outside: boolean)
+-- Lets the occupant go at once: out to `spot` when given, else to a clear spot when `outside` and they have a living
+-- body, else where they are. The leaf opens behind them and shuts again.
+local function releaseTo(locker: Locker, outside: boolean, spot: CFrame?)
 	local occupant = locker.occupant
 	if not occupant then
 		return
 	end
-	local spot: CFrame? = nil
-	if outside then
+	local target = spot
+	if not target and outside then
 		local root, height = livingBody(occupant)
 		if root then
-			spot = findExitSpot(locker, height)
+			target = findExitSpot(locker, height)
 		end
 	end
 	if locker.state ~= "Exiting" then
-		beginExit(locker, spot)
+		beginExit(locker, target)
 	end
 	if not locker.moved then
 		locker.moved = true
-		local target = spot or locker.exitSpot
-		if target then
-			teleport(occupant, target)
+		local destination = target or locker.exitSpot
+		if destination then
+			teleport(occupant, destination)
 		end
 		vacate(locker)
 	end
 end
 
--- Lets the occupant go where they are (no body to move: it died, left, or the run is ending). A door left open swings
+releaseOccupant = function(locker: Locker, outside: boolean)
+	releaseTo(locker, outside, nil)
+end
+
+-- Lets the occupant go where they are (no body to move: it died, left, or the run is ending). A leaf left open swings
 -- shut while the run is live.
 local function drop(locker: Locker)
 	local now = serverNow()
@@ -1065,7 +1240,7 @@ local function stepSchedule(locker: Locker, now: number)
 			local hide = anchorWorld(locker, HIDE_ANCHOR)
 			local _, height = livingBody(occupant)
 			if hide then
-				teleport(occupant, LockerHidingService.rootCFrameAt(hide, height))
+				teleport(occupant, HideSpotService.rootCFrameAt(hide, height))
 			end
 		elseif locker.state == "Exiting" then
 			local spot = locker.exitSpot
@@ -1103,6 +1278,26 @@ local function stepSchedule(locker: Locker, now: number)
 	end
 end
 
+-- The stay limit: the knock at KickOutWarning, the shove at KickOutSeconds (held while a check runs).
+local function stepStay(locker: Locker, now: number)
+	local stay = locker.stay
+	local occupant = locker.occupant
+	if not (stay and occupant) or locker.state ~= "Hidden" then
+		return
+	end
+	local verdict = HideSpotService.stayVerdict(stay.since, now, stay.warned, stay.out, locker.check ~= nil)
+	if verdict == "Warn" then
+		stay.warned = true
+		scare(occupant, "HideWarn")
+		notify(occupant, WARN_HINT)
+	elseif verdict == "KickOut" then
+		stay.out = true
+		scare(occupant, "HideKick")
+		kicked:Fire(occupant, locker.model)
+		releaseOccupant(locker, true)
+	end
+end
+
 --------------------------------------------------------------------------------
 -- Interaction
 --------------------------------------------------------------------------------
@@ -1125,7 +1320,20 @@ local function hideCheckFor(player: Player, locker: Locker): HideCheck
 	}
 end
 
-LockerHidingService.HideHandler = {
+local function pullCheckFor(player: Player, locker: Locker): PullCheck
+	local root = livingBody(player)
+	local exit = anchorWorld(locker, EXIT_ANCHOR)
+	local occupant = locker.occupant
+	return {
+		alive = lifeStateOf(player) == "Alive" and root ~= nil,
+		onFoot = ON_FOOT[moveStateOf(player)] == true,
+		hiding = occupancy[player] ~= nil,
+		occupiedByOther = occupant ~= nil and occupant ~= player and locker.state == "Hidden",
+		distance = if root and exit then MathUtil.horizontalDistance(root.Position, exit.Position) else math.huge,
+	}
+end
+
+HideSpotService.HideHandler = {
 	kind = HIDE_KIND,
 	filter = function(host: Instance, _prompt: ProximityPrompt): boolean
 		local locker = lockerOf(host)
@@ -1136,12 +1344,67 @@ LockerHidingService.HideHandler = {
 		if not locker then
 			return false, "Unknown"
 		end
-		return LockerHidingService.canHide(hideCheckFor(player, locker))
+		return HideSpotService.canHide(hideCheckFor(player, locker))
 	end,
 	onComplete = function(player: Player, _prompt: ProximityPrompt, host: Instance)
 		local locker = lockerOf(host)
-		if locker and LockerHidingService.canHide(hideCheckFor(player, locker)) then
+		if locker and HideSpotService.canHide(hideCheckFor(player, locker)) then
 			enter(player, locker)
+		end
+	end,
+} :: InteractionService.Handler
+
+-- Drags `locker`'s occupant out beside `puller` (see the header). False when the rules refuse it.
+local function pull(puller: Player, locker: Locker): boolean
+	if not (live and HideSpotService.canPull(pullCheckFor(puller, locker))) then
+		return false
+	end
+	local hider = locker.occupant
+	local exit = anchorWorld(locker, EXIT_ANCHOR)
+	if not (hider and exit) then
+		return false
+	end
+	local spot: CFrame? = nil
+	local pullerRoot = livingBody(puller)
+	local _, height = livingBody(hider)
+	local floor = if pullerRoot then HideSpotService.pullSpot(exit, pullerRoot.Position) else nil
+	if floor and spotClear(floor, locker.model) then
+		spot = HideSpotService.rootCFrameAt(floor, height)
+	end
+	if not spot then
+		spot = findExitSpot(locker, height)
+	end
+	tellPulled(hider)
+	scare(hider, "HideKick")
+	releaseTo(locker, true, spot)
+	pulledOut:Fire(hider, locker.model, puller)
+	log.debug("%s pulled %s out of %s", puller.Name, hider.Name, locker.model.Name)
+	return true
+end
+
+HideSpotService.PullHandler = {
+	kind = PULL_KIND,
+	filter = function(host: Instance, _prompt: ProximityPrompt): boolean
+		local locker = lockerOf(host)
+		return locker ~= nil and locker.state == "Hidden" and locker.occupant ~= nil
+	end,
+	audience = function(_prompt: ProximityPrompt, _host: Instance): Enums.Audience
+		return "Others"
+	end,
+	canUse = function(player: Player, _prompt: ProximityPrompt, host: Instance): (boolean, string?)
+		local locker = lockerOf(host)
+		if not locker then
+			return false, "Unknown"
+		end
+		return HideSpotService.canPull(pullCheckFor(player, locker)), nil
+	end,
+	holdSeconds = function(_player: Player, _prompt: ProximityPrompt, _host: Instance): number
+		return H.PullSeconds
+	end,
+	onComplete = function(player: Player, _prompt: ProximityPrompt, host: Instance)
+		local locker = lockerOf(host)
+		if locker then
+			pull(player, locker)
 		end
 	end,
 } :: InteractionService.Handler
@@ -1169,18 +1432,40 @@ local function forget(model: Instance)
 	lockers[model] = nil
 end
 
--- Tracks a HideableLocker model (WorldService's fixtures; specs track a built one). False when it is not a locker.
-function LockerHidingService.Track(model: Model): boolean
+-- The Pull out prompt beside the Hide prompt (created once per spot; the builders make only the Hide prompt).
+local function ensurePullPrompt(locker: Locker)
+	local model = locker.model
+	if PropKit.findPrompt(model, PULL_KIND) then
+		return
+	end
+	local host = locker.base:FindFirstChild(PROMPT_HOST)
+	if not host then
+		return
+	end
+	PropKit.prompt(host, {
+		kind = PULL_KIND,
+		action = "Prompt.PullOut",
+		object = OBJECT_TEXT[locker.kind] or "Prompt.Locker",
+		hold = H.PullSeconds,
+		distance = PULL_DISTANCE,
+		offset = Vector2.new(0, 64),
+	}, model)
+end
+
+-- Tracks a Hideable model (WorldService's fixtures; specs track a built one). False when it is not a hiding spot.
+function HideSpotService.Track(model: Model): boolean
 	if lockers[model] then
 		return true
 	end
 	local base = model.PrimaryPart
-	if not (base and model:HasTag(Tags.HideableLocker)) then
+	if not (base and (model:HasTag(Tags.Hideable) or model:HasTag(Tags.HideableLocker))) then
 		return false
 	end
 	local locker: Locker = {
 		model = model,
 		base = base,
+		kind = kindOf(model),
+		id = Attributes.getString(model, W.AnchorId, model.Name),
 		levelId = levelOf(model),
 		state = "Free",
 		occupant = nil,
@@ -1191,27 +1476,32 @@ function LockerHidingService.Track(model: Model): boolean
 		closing = false,
 		exitSpot = nil,
 		check = nil,
+		stay = nil,
 	}
 	lockers[model] = locker
 	Attributes.set(model, W.DoorOpen, false)
 	Attributes.set(model, W.OccupantUserId, nil)
+	Attributes.set(model, W.OwnerUserId, nil)
+	ensurePullPrompt(locker)
 	refreshPrompt(locker)
 	return true
 end
 
-local function onLockerTagged(instance: Instance)
+local function onSpotTagged(instance: Instance)
 	if running and instance:IsA("Model") and inRuntime(instance) then
-		LockerHidingService.Track(instance)
+		HideSpotService.Track(instance)
 	end
 end
 
-local function onLockerUntagged(instance: Instance)
+local function onSpotUntagged(instance: Instance)
 	forget(instance)
 end
 
 local function scan()
-	for _, instance in CollectionService:GetTagged(Tags.HideableLocker) do
-		onLockerTagged(instance)
+	for _, tag in { Tags.Hideable, Tags.HideableLocker } do
+		for _, instance in CollectionService:GetTagged(tag) do
+			onSpotTagged(instance)
+		end
 	end
 end
 
@@ -1220,7 +1510,7 @@ end
 --------------------------------------------------------------------------------
 
 -- The inspector MonsterAIService calls (in its own thread) when the Creature peeks into `instance` (see the header).
-function LockerHidingService.Inspect(instance: Instance): Types.LockerVerdict
+function HideSpotService.Inspect(instance: Instance): Types.LockerVerdict
 	local locker = lockers[instance]
 	if not (locker and live) then
 		return "Empty"
@@ -1232,7 +1522,7 @@ function LockerHidingService.Inspect(instance: Instance): Types.LockerVerdict
 	end
 	local occupant = locker.occupant
 	if occupant and (locker.state == "Hidden" or locker.state == "Entering") then
-		local check = startCheck(locker, occupant, now, LockerHidingService.peekSeconds(random), false)
+		local check = startCheck(locker, occupant, now, HideSpotService.peekSeconds(random), false)
 		if check.verdict ~= nil then
 			return check.verdict :: Types.LockerVerdict
 		end
@@ -1243,9 +1533,9 @@ function LockerHidingService.Inspect(instance: Instance): Types.LockerVerdict
 	return await(peek.waiters)
 end
 
--- Starts a scripted breath check of `seconds` on `player`'s locker (no Creature needed; dev). False when they are
--- not settled in one or one is already running.
-function LockerHidingService.StartCheck(player: Player, seconds: number?): boolean
+-- Starts a scripted breath check of `seconds` on `player`'s spot (no Creature needed; dev). False when they are not
+-- settled in one or one is already running.
+function HideSpotService.StartCheck(player: Player, seconds: number?): boolean
 	local locker = occupancy[player]
 	if not (locker and live and locker.state == "Hidden" and locker.check == nil) then
 		return false
@@ -1255,16 +1545,32 @@ function LockerHidingService.StartCheck(player: Player, seconds: number?): boole
 	return true
 end
 
--- One step at server time `now`: door poses, the moves in and out, the checks and empty peeks (every Heartbeat;
--- specs drive it on a fake clock).
-function LockerHidingService.Step(at: number?)
+-- One step at server time `now`: leaf poses, the moves in and out, the stay limits, the fake-outs, the checks and
+-- empty peeks (every Heartbeat; specs drive it on a fake clock).
+function HideSpotService.Step(at: number?)
 	if not running then
 		return
 	end
 	local now = at or serverNow()
+	for _, player in participants do
+		if moveStateOf(player) == "Sprinting" then
+			lastSprintAt[player] = now
+		end
+	end
 	stepDoors(now)
 	for _, locker in lockers do
 		stepSchedule(locker, now)
+		stepStay(locker, now)
+	end
+	for index = #pendingFakeouts, 1, -1 do
+		local fake = pendingFakeouts[index]
+		if now >= fake.at then
+			table.remove(pendingFakeouts, index)
+			if occupancy[fake.player] == fake.locker then
+				revealFor(fake.player, "Fakeout")
+				fakedOut:Fire(fake.player, fake.locker.model)
+			end
+		end
 	end
 	for player, breath in table.clone(breaths) do
 		local locker = occupancy[player]
@@ -1292,8 +1598,8 @@ function LockerHidingService.Step(at: number?)
 	end
 end
 
--- The occupant's hold changed (BreathInput; specs call it). False when they are not in a locker.
-function LockerHidingService.SetHeld(player: Player, held: boolean): boolean
+-- The occupant's hold changed (BreathInput; specs call it). False when they are not in a spot.
+function HideSpotService.SetHeld(player: Player, held: boolean): boolean
 	local locker = occupancy[player]
 	if not locker or locker.state == "Exiting" or locker.state == "Smashed" then
 		return false
@@ -1322,14 +1628,14 @@ function LockerHidingService.SetHeld(player: Player, held: boolean): boolean
 end
 
 -- The occupant asks to step out (ExitHide; specs call it). False (with a reason) when refused.
-function LockerHidingService.RequestExit(player: Player): (boolean, string?)
+function HideSpotService.RequestExit(player: Player): (boolean, string?)
 	local locker = occupancy[player]
 	if not locker then
 		return false, "NotOccupant"
 	end
 	local _, height = livingBody(player)
 	local spot = if locker.state == "Hidden" and locker.check == nil then findExitSpot(locker, height) else nil
-	local ok, reason = LockerHidingService.canExit({
+	local ok, reason = HideSpotService.canExit({
 		lockerState = locker.state,
 		occupant = locker.occupant == player,
 		checking = locker.check ~= nil,
@@ -1345,9 +1651,9 @@ function LockerHidingService.RequestExit(player: Player): (boolean, string?)
 	return true, nil
 end
 
--- Releases `player` from any locker at once (out to a clear spot when they have a living body). False when they
--- were not in one.
-function LockerHidingService.Release(player: Player): boolean
+-- Releases `player` from any spot at once (out to a clear spot when they have a living body). False when they were
+-- not in one.
+function HideSpotService.Release(player: Player): boolean
 	local locker = occupancy[player]
 	if not locker then
 		return false
@@ -1357,37 +1663,50 @@ function LockerHidingService.Release(player: Player): boolean
 end
 
 -- Puts `player` into `model` as if the prompt completed (dev / scripted). False when refused.
-function LockerHidingService.Hide(player: Player, model: Model): boolean
+function HideSpotService.Hide(player: Player, model: Model): boolean
 	local locker = lockers[model]
-	if not locker or not LockerHidingService.canHide(hideCheckFor(player, locker)) then
+	if not locker or not HideSpotService.canHide(hideCheckFor(player, locker)) then
 		return false
 	end
 	enter(player, locker)
 	return true
 end
 
-function LockerHidingService.GetLockerOf(player: Player): Model?
+-- `puller` drags the hider out of `model` as if the Pull out prompt completed (specs). False when refused.
+function HideSpotService.Pull(puller: Player, model: Model): boolean
+	local locker = lockers[model]
+	return locker ~= nil and pull(puller, locker)
+end
+
+function HideSpotService.GetLockerOf(player: Player): Model?
 	local locker = occupancy[player]
 	return if locker then locker.model else nil
 end
 
-function LockerHidingService.GetOccupant(model: Model): Player?
+HideSpotService.GetSpotOf = HideSpotService.GetLockerOf
+
+function HideSpotService.GetOccupant(model: Model): Player?
 	local locker = lockers[model]
 	return if locker then locker.occupant else nil
 end
 
-function LockerHidingService.GetState(model: Model): LockerState?
+function HideSpotService.GetState(model: Model): LockerState?
 	local locker = lockers[model]
 	return if locker then locker.state else nil
 end
 
-function LockerHidingService.GetBreath(player: Player): number?
+function HideSpotService.GetKind(model: Model): Enums.HideKind?
+	local locker = lockers[model]
+	return if locker then locker.kind else nil
+end
+
+function HideSpotService.GetBreath(player: Player): number?
 	local breath = breaths[player]
 	return if breath then LockerMotion.breathAt(breath, serverNow()) else nil
 end
 
 -- Whether a breath check (or an empty peek) is running anywhere.
-function LockerHidingService.IsChecking(): boolean
+function HideSpotService.IsChecking(): boolean
 	if #peeks > 0 then
 		return true
 	end
@@ -1400,7 +1719,7 @@ function LockerHidingService.IsChecking(): boolean
 end
 
 -- The window of the check running on `player`, if any: (warnAt, windowStart, windowEnd).
-function LockerHidingService.GetCheck(player: Player): (number?, number?, number?)
+function HideSpotService.GetCheck(player: Player): (number?, number?, number?)
 	local locker = occupancy[player]
 	local check = if locker then locker.check else nil
 	if not check then
@@ -1410,9 +1729,9 @@ function LockerHidingService.GetCheck(player: Player): (number?, number?, number
 end
 
 -- Floor 3's key search: swings a Free locker's door ajar (`open`: ObjectiveConfig.Tuning.SearchOpen of fully open, the
--- LockerDoor creak) or shut again; its Hide prompt waits while it stands open. False when the locker is not Free or
+-- LockerDoor creak) or shut again; its Hide prompt waits while it stands open. False when the spot is not Free or
 -- already so.
-function LockerHidingService.SetSearchOpen(model: Model, open: boolean): boolean
+function HideSpotService.SetSearchOpen(model: Model, open: boolean): boolean
 	local locker = lockers[model]
 	if not locker or locker.state ~= "Free" or (locker.searchOpen == true) == open then
 		return false
@@ -1428,12 +1747,12 @@ function LockerHidingService.SetSearchOpen(model: Model, open: boolean): boolean
 end
 
 -- Whether Floor 3's key search holds the locker ajar.
-function LockerHidingService.IsSearchOpen(model: Model): boolean
+function HideSpotService.IsSearchOpen(model: Model): boolean
 	local locker = lockers[model]
 	return locker ~= nil and locker.searchOpen == true
 end
 
-function LockerHidingService.GetLockers(): { Model }
+function HideSpotService.GetLockers(): { Model }
 	local out: { Model } = {}
 	for model in lockers do
 		table.insert(out, model :: Model)
@@ -1441,13 +1760,45 @@ function LockerHidingService.GetLockers(): { Model }
 	return out
 end
 
+HideSpotService.GetSpots = HideSpotService.GetLockers
+
+-- The brain's view (MonsterAIService.RegisterHideSpots): the unsmashed spots of a level with their fronts.
+local function spotsOn(levelId: string): { MonsterAIService.HideSpotEntry }
+	local out: { MonsterAIService.HideSpotEntry } = {}
+	for model, locker in lockers do
+		if locker.state == "Smashed" or (locker.levelId ~= nil and locker.levelId ~= levelId) then
+			continue
+		end
+		local front = anchorWorld(locker, EXIT_ANCHOR)
+		if front then
+			table.insert(out, { id = model, kind = locker.kind, front = front })
+		end
+	end
+	table.sort(out, function(a, b)
+		return a.front.Position.X < b.front.Position.X
+			or (a.front.Position.X == b.front.Position.X and a.front.Position.Z < b.front.Position.Z)
+	end)
+	return out
+end
+
+HideSpotService.SpotsOn = spotsOn
+
 --------------------------------------------------------------------------------
 -- Catches, players, run
 --------------------------------------------------------------------------------
 
--- JumpscareHandler.Finished: a victim handed over from a locker is put down outside it while still playing (Init
+-- MonsterAIService.Caught: a Locker catch on a hider takes the spot (the leaf is torn off, the body handed over).
+function HideSpotService.CatchStarted(victim: Player, kind: Enums.JumpscareKind)
+	local locker = occupancy[victim]
+	if kind ~= CATCH_KIND or not locker or locker.state == "Smashed" then
+		return
+	end
+	handOver(locker, victim, serverNow())
+end
+
+-- JumpscareHandler.Finished: a victim handed over from a spot is put down outside it while still playing (Init
 -- connects it; specs call it).
-function LockerHidingService.CatchFinished(victim: Player, kind: Enums.JumpscareKind, _outcome: string)
+function HideSpotService.CatchFinished(victim: Player, kind: Enums.JumpscareKind, _outcome: string)
 	local locker = taken[victim]
 	if not locker or kind ~= CATCH_KIND then
 		return
@@ -1497,11 +1848,11 @@ local function onPhaseChanged(phase: Enums.MatchPhase)
 end
 
 local function onBreathInput(player: Player, payload: Types.BreathInputPayload)
-	LockerHidingService.SetHeld(player, payload.held == true)
+	HideSpotService.SetHeld(player, payload.held == true)
 end
 
 local function onExitHide(player: Player, _payload: any)
-	LockerHidingService.RequestExit(player)
+	HideSpotService.RequestExit(player)
 end
 
 local function clearRun()
@@ -1516,6 +1867,10 @@ local function clearRun()
 	table.clear(occupancy)
 	table.clear(breaths)
 	table.clear(taken)
+	table.clear(lastSprintAt)
+	table.clear(fakeoutBudget)
+	table.clear(fakeoutsSpent)
+	table.clear(pendingFakeouts)
 end
 
 --------------------------------------------------------------------------------
@@ -1547,18 +1902,18 @@ local function hideCommand(player: Player, _args: { string }): string?
 	end
 	local locker = nearestFree(player)
 	if not locker then
-		return "no free locker on your level"
+		return "no free hiding spot on your level"
 	end
-	local ok, reason = LockerHidingService.canHide(hideCheckFor(player, locker))
+	local ok, reason = HideSpotService.canHide(hideCheckFor(player, locker))
 	if not ok then
 		return "cannot hide now: " .. tostring(reason)
 	end
 	enter(player, locker)
-	return "hiding in " .. locker.model.Name
+	return "hiding in " .. locker.model.Name .. " (" .. locker.kind .. ")"
 end
 
 local function unhideCommand(player: Player, _args: { string }): string?
-	return if LockerHidingService.Release(player) then "out of the locker" else "you are not in a locker"
+	return if HideSpotService.Release(player) then "out of the hiding spot" else "you are not hiding"
 end
 
 local function checkCommand(player: Player, args: { string }): string?
@@ -1566,17 +1921,19 @@ local function checkCommand(player: Player, args: { string }): string?
 	if args[1] and (seconds == nil or not MathUtil.isFinite(seconds :: number)) then
 		return "usage: breathcheck [seconds]"
 	end
-	if not LockerHidingService.StartCheck(player, seconds) then
-		return "settle into a locker first (hide), with no check running"
+	if not HideSpotService.StartCheck(player, seconds) then
+		return "settle into a hiding spot first (hide), with no check running"
 	end
 	return "breath check starting: hold your breath when warned"
 end
 
 local function lockersCommand(_player: Player, _args: { string }): string?
 	local counts: { [string]: number } = {}
+	local kinds: { [string]: number } = {}
 	local hiding: { string } = {}
 	for _, locker in lockers do
 		counts[locker.state] = (counts[locker.state] or 0) + 1
+		kinds[locker.kind] = (kinds[locker.kind] or 0) + 1
 		local occupant = locker.occupant
 		if occupant then
 			table.insert(hiding, string.format("%s in %s", occupant.Name, locker.model.Name))
@@ -1584,7 +1941,10 @@ local function lockersCommand(_player: Player, _args: { string }): string?
 	end
 	table.sort(hiding)
 	return string.format(
-		"free %d, hidden %d, moving %d, smashed %d | %s",
+		"lockers %d, barrels %d, cabinets %d | free %d, hidden %d, moving %d, smashed %d | %s",
+		kinds.Locker or 0,
+		kinds.Barrel or 0,
+		kinds.Cabinet or 0,
 		counts.Free or 0,
 		counts.Hidden or 0,
 		(counts.Entering or 0) + (counts.Exiting or 0),
@@ -1594,64 +1954,82 @@ local function lockersCommand(_player: Player, _args: { string }): string?
 end
 
 local function registerDevCommands()
-	DevToolsService.Register("hide", "hide: climb into the nearest free locker on your level", hideCommand)
-	DevToolsService.Register("unhide", "unhide: get out of your locker at once", unhideCommand)
+	DevToolsService.Register("hide", "hide: climb into the nearest free hiding spot on your level", hideCommand)
+	DevToolsService.Register("unhide", "unhide: get out of your hiding spot at once", unhideCommand)
 	DevToolsService.Register(
 		"breathcheck",
-		"breathcheck [seconds]: a hold-breath check on your locker, as if the Creature were at the door",
+		"breathcheck [seconds]: a hold-breath check on your hiding spot, as if the Creature were at the door",
 		checkCommand
 	)
-	DevToolsService.Register("lockers", "lockers: locker states and who is hiding", lockersCommand, true)
+	DevToolsService.Register("lockers", "lockers: hiding spots and who is hiding", lockersCommand, true)
 end
 
 --------------------------------------------------------------------------------
 -- Lifecycle
 --------------------------------------------------------------------------------
 
-function LockerHidingService.Init()
+function HideSpotService.Init()
 	if initialized then
 		return
 	end
 	initialized = true
 	Net.Server.on("BreathInput", onBreathInput)
 	Net.Server.on("ExitHide", onExitHide)
-	serviceTrove:Add(InteractionService.Register(LockerHidingService.HideHandler))
-	serviceTrove:Connect(CollectionService:GetInstanceAddedSignal(Tags.HideableLocker), onLockerTagged)
-	serviceTrove:Connect(CollectionService:GetInstanceRemovedSignal(Tags.HideableLocker), onLockerUntagged)
+	serviceTrove:Add(InteractionService.Register(HideSpotService.HideHandler))
+	serviceTrove:Add(InteractionService.Register(HideSpotService.PullHandler))
+	for _, tag in { Tags.Hideable, Tags.HideableLocker } do
+		serviceTrove:Connect(CollectionService:GetInstanceAddedSignal(tag), onSpotTagged)
+		serviceTrove:Connect(CollectionService:GetInstanceRemovedSignal(tag), onSpotUntagged)
+	end
 	serviceTrove:Add(RunLifecycleService.PhaseChanged:Connect(onPhaseChanged))
 	serviceTrove:Add(LifeStateService.StateChanged:Connect(onLifeStateChanged))
 	serviceTrove:Add(CharacterService.CharacterRemoving:Connect(onCharacterRemoving))
-	serviceTrove:Add(JumpscareHandler.Finished:Connect(LockerHidingService.CatchFinished))
-	MonsterAIService.RegisterLockerInspector(LockerHidingService.Inspect)
+	serviceTrove:Add(JumpscareHandler.Finished:Connect(HideSpotService.CatchFinished))
+	serviceTrove:Add(MonsterAIService.Caught:Connect(HideSpotService.CatchStarted))
+	MonsterAIService.RegisterLockerInspector(HideSpotService.Inspect)
+	MonsterAIService.RegisterHideSpots({
+		spotsOn = spotsOn,
+		occupant = function(spot: Instance): Player?
+			local locker = lockers[spot]
+			return if locker then locker.occupant else nil
+		end,
+		spotOf = function(player: Player): Instance?
+			local locker = occupancy[player]
+			return if locker then locker.model else nil
+		end,
+	})
 	registerDevCommands()
 end
 
-function LockerHidingService.Start()
+function HideSpotService.Start()
 	serviceTrove:Connect(RunService.Heartbeat, function()
 		if not running then
 			return
 		end
-		xpcall(LockerHidingService.Step, function(err: any)
-			log.warnThrottled("step", 10, "locker step failed: %s\n%s", tostring(err), debug.traceback())
+		xpcall(HideSpotService.Step, function(err: any)
+			log.warnThrottled("step", 10, "hiding spot step failed: %s\n%s", tostring(err), debug.traceback())
 		end, nil)
 	end)
 end
 
-function LockerHidingService.BeginRun(ctx: Types.RunContext)
+function HideSpotService.BeginRun(ctx: Types.RunContext)
 	clearRun()
+	runSeed = ctx.seed
+	participants = table.clone(ctx.participants)
 	random = MathUtil.seededRandom(ctx.seed, "LockerPeek")
 	running = true
 	live = true
 	scan()
 end
 
-function LockerHidingService.EndRun()
+function HideSpotService.EndRun()
 	live = false
 	clearRun()
 	running = false
+	participants = {}
 end
 
-function LockerHidingService.OnPlayerRemoving(player: Player)
+function HideSpotService.OnPlayerRemoving(player: Player)
 	local locker = occupancy[player]
 	if locker then
 		drop(locker)
@@ -1659,6 +2037,12 @@ function LockerHidingService.OnPlayerRemoving(player: Player)
 	occupancy[player] = nil
 	breaths[player] = nil
 	taken[player] = nil
+	lastSprintAt[player] = nil
+	fakeoutBudget[player] = nil
+	local index = table.find(participants, player)
+	if index then
+		table.remove(participants, index)
+	end
 end
 
-return LockerHidingService
+return HideSpotService

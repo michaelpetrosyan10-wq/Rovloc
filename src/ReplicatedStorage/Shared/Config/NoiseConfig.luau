@@ -14,25 +14,34 @@ export type NoiseSpec = {
 
 local NoiseConfig = {}
 
+-- The Tall Man's ears (docs/MONSTER.md 3.1): it hears a sprint from far away, a walk from the next junction, a crouch
+-- only when it is all but on you.
 NoiseConfig.Kinds = table.freeze({
-	CrouchWalk = { radius = 8, priority = "Low", medium = "Air", interval = 0.6 },
+	CrouchWalk = { radius = 5, priority = "Low", medium = "Air", interval = 0.6 },
 	SlowVentCrawl = { radius = 8, priority = "Low", medium = "Vent", interval = 0.7 },
 	GrateUnscrew = { radius = 10, priority = "Low", medium = "Air", interval = 0.9 },
 	Treading = { radius = 12, priority = "Low", medium = "Water", interval = 0.8 },
-	Walk = { radius = 30, priority = "Normal", medium = "Air", interval = 0.45 },
+	Walk = { radius = 22, priority = "Normal", medium = "Air", interval = 0.45 },
 	Gasp = { radius = 40, priority = "High", medium = "Air", interval = 0 },
 	FlaskShatter = { radius = 50, priority = "High", medium = "Air", interval = 0 },
-	Sprint = { radius = 65, priority = "High", medium = "Air", interval = 0.3 },
+	Sprint = { radius = 60, priority = "High", medium = "Air", interval = 0.3 },
+	-- any landing after a fall of JumpLandAirborne seconds or more, on foot
+	JumpLand = { radius = 26, priority = "Normal", medium = "Air", interval = 0 },
+	-- climbing into a hiding spot (a locker, a barrel, a cabinet): quietly, or hurried (sprinting a moment before)
+	HideEnter = { radius = 8, priority = "Low", medium = "Air", interval = 0 },
+	HideEnterHurried = { radius = 14, priority = "Normal", medium = "Air", interval = 0 },
 	Freestyle = { radius = 75, priority = "High", medium = "Water", interval = 0.35 },
 	Splash = { radius = 75, priority = "High", medium = "Water", interval = 0 },
 	VentScurry = { radius = 90, priority = "High", medium = "Vent", interval = 0.3 },
 	GrateKick = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
 	FloorDebris = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
 	TrapSnap = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
-	DoorSlam = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
+	DoorSlam = { radius = 90, priority = "Critical", medium = "Air", interval = 0 },
 	-- Something knocked loose (a scripted Level 0 ambience beat): a quiet clatter, heard like any other noise.
 	FallingObject = { radius = 24, priority = "Low", medium = "Air", interval = 0 },
 	Scripted = { radius = 0, priority = "Low", medium = "Air", interval = 0 },
+	-- co-op text chat (the website's; Roblox chat is never heard)
+	ChatMessage = { radius = 25, priority = "Normal", medium = "Air", interval = 0 },
 	-- Floor objectives (ObjectiveConfig): a working hold (keys in a lock, the mix, the valve, the cutters) at its start
 	-- and once a second while it runs; a loud single action (the main breaker, an exit unlocking, the crate chain
 	-- snapping); the gym generator starting.
@@ -70,6 +79,9 @@ NoiseConfig.SplashMeter = table.freeze({
 	grabThreshold = 6,
 	rearmBelow = 4,
 })
+
+-- A landing heard as JumpLand: airborne at least this long, on foot.
+NoiseConfig.JumpLandAirborne = 0.32
 
 -- Wall occlusion used by Hearing: each solid wall between source and listener scales the radius.
 NoiseConfig.WallOcclusion = 0.6

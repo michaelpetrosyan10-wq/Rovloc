@@ -17,7 +17,7 @@
 --   * Never at a bad moment (allowed): only for an Alive player in a run, with Settings "First-time hints" on, the HUD
 --     visible, no onboarding screen up, outside the Cutscene / Menu / Struggle / Locker / Trapped / Parachute input
 --     contexts (a locker, a trap and the jump show their own lines), under no Cutscene /
---     Jumpscare / Drag control lock, not while the Creature is chasing this player (WallChase, VentChase, AquaticStalk
+--     Jumpscare / Drag control lock, not while the Creature is chasing this player (WallChase, AquaticStalk
 --     with TargetUserId = me) and not while the panic is above HintPanicMax. A hint that is due while held back waits
 --     (it shows once the moment passes, if it is still due); a card already up fades out early when the moment turns.
 --
@@ -95,7 +95,7 @@ local BLOCKED_CONTEXTS: { [string]: boolean } =
 	{ Cutscene = true, Menu = true, Struggle = true, Locker = true, Trapped = true, Parachute = true }
 local AIRLOCK_HINT_RADIUS = 22 -- the airlock hint also shows this close to an idle checkpoint
 local BLOCKED_LOCKS: { [string]: boolean } = { Cutscene = true, Jumpscare = true, Drag = true }
-local CHASE_STATES: { [string]: boolean } = { WallChase = true, VentChase = true, AquaticStalk = true }
+local CHASE_STATES: { [string]: boolean } = { WallChase = true, AquaticStalk = true }
 local WATER_STATES: { [string]: boolean } = { Treading = true, Freestyle = true, Underwater = true }
 local GRATE_SHUT: { [string]: boolean } = { Closed = true, Unscrewing = true, Locked = true }
 
@@ -379,7 +379,7 @@ local function scanDue(player: Player, seen: { [string]: boolean })
 		end)
 	end
 	if not seen.Locker then
-		due.Locker = anyNear(Tags.HideableLocker, level, from, radiusOf("Locker"), function(_locker: Instance): boolean
+		due.Locker = anyNear(Tags.Hideable, level, from, radiusOf("Locker"), function(_locker: Instance): boolean
 			return true
 		end)
 	end

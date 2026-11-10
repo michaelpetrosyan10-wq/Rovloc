@@ -1,6 +1,6 @@
 --!strict
 -- Level3_GymnasiumController: the gymnasium and its locker rooms (spec, Level 3: acoustic stealth, lockers, ducts; the
--- gym is where the Creature stalks at high speed). The lockers themselves are LockerHidingService's; this controller
+-- gym is where the Creature stalks at high speed). The lockers themselves are HideSpotService's; this controller
 -- tunes the Creature through MonsterAIService's public API and plays the locker rooms' ambience.
 --
 -- Stalking. At SPEED_HZ, while the Creature is on Level 3 and inside the gymnasium (the L3_Gymnasium room's
@@ -14,7 +14,7 @@
 --          checks), wherever in the room the squad really hides.
 --   Prowl  once it has patrolled outside the gym for PROWL_AWAY seconds with nobody on the court, every PROWL_MIN..
 --          PROWL_MAX seconds it is called back to a seeded point on the court: the gym is its ground.
--- Neither fires while a breath check runs (LockerHidingService.IsChecking) or within CHECK_GAP seconds of one.
+-- Neither fires while a breath check runs (HideSpotService.IsChecking) or within CHECK_GAP seconds of one.
 -- Ambience beats (Scenes, Floor 3), same style as the basement's: a seeded director plays one every INTERVAL_MIN..
 -- INTERVAL_MAX seconds, never the same kind twice in a row, at a point no participant can see, within the kind's band
 -- (horizontal studs) of a randomly drawn playing participant:
@@ -47,7 +47,7 @@ local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local DevToolsService = require(ServerScriptService.Services.Core.DevToolsService)
 local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
-local LockerHidingService = require(ServerScriptService.Services.Mechanics.LockerHidingService)
+local HideSpotService = require(ServerScriptService.Services.Mechanics.HideSpotService)
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 
 local LevelKit = require(script.Parent.LevelKit)
@@ -104,7 +104,7 @@ local GRID = 8
 local INSET = 3
 local FLOOR_LIFT = 0.3
 local LATCH_HEIGHT = 3.6
-local LOCKER_FRONT = 2.2 -- studs out from a locker anchor to the floor before its door
+
 local COURT_GRID = 14
 local COURT_INSET = 8
 local LEAD = GameConfig.OneShotLead
@@ -119,7 +119,11 @@ local BANDS: { [string]: Band } = {
 	BallBounce = { min = 34, max = 90 },
 }
 
-local HUNTING: { [string]: boolean } = { Patrol = true, InvestigateNoise = true, WallChase = true }
+local HUNTING: { [string]: boolean } =
+	{ Patrol = true, InvestigateNoise = true, WallChase = true, Search = true, Teleport = true }
+-- The floor before a hiding spot's front, out from its anchor: a locker's anchor is its back wall; a barrel's and a
+-- cabinet's is the middle of their footprint (HideBuilder: radius 1.65, depth 2.4, the exit 2.2 out).
+local SPOT_FRONT: { [string]: number } = { Locker = 2.2, Barrel = 3.85, Cabinet = 3.5 }
 
 local Level3 = {}
 
@@ -180,12 +184,13 @@ function Level3.candidates(layout: LayoutSchema.LevelLayout): Candidates
 	return out
 end
 
--- Every hideable locker's front (the floor before its door) with its room.
+-- Every hiding spot's front (the floor before its leaf: lockers, barrels, cabinets) with its room.
 function Level3.lockerFronts(layout: LayoutSchema.LevelLayout): { LockerSpot }
 	local out: { LockerSpot } = {}
 	for _, anchor in layout.anchors do
-		if anchor.kind == "Locker" then
-			table.insert(out, { room = anchor.room, front = anchorFront(layout.id, anchor, LOCKER_FRONT, 0) })
+		local front = SPOT_FRONT[anchor.kind]
+		if front then
+			table.insert(out, { room = anchor.room, front = anchorFront(layout.id, anchor, front, 0) })
 		end
 	end
 	return out
@@ -320,7 +325,7 @@ local function realDependencies(): Dependencies
 		end,
 		setSpeedScale = MonsterAIService.SetSpeedScale,
 		alert = MonsterAIService.Alert,
-		checking = LockerHidingService.IsChecking,
+		checking = HideSpotService.IsChecking,
 	}
 end
 

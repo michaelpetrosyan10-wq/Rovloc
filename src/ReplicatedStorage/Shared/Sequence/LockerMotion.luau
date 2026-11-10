@@ -1,14 +1,16 @@
 --!strict
--- LockerMotion: a hideable locker's moments on server time, shared by LockerHidingService (the server steps the door
--- leaf on Heartbeat for collision, moves the body and judges the hold-breath check) and LockerController (every
--- client renders the same door motion every PreRender, flies the hidden player's camera in and out, and predicts their
--- lungs between the server's meter cues).
+-- LockerMotion: a hiding spot's moments on server time (lockers, and the tunnels' barrels and cabinets: HideKind),
+-- shared by HideSpotService (the server steps the leaf on Heartbeat for collision, moves the body and judges the
+-- hold-breath check) and LockerController (every client renders the same leaf motion every PreRender, flies the hidden
+-- player's camera in and out, and predicts their lungs between the server's meter cues).
 --
 -- Door motions travel as DoorMotion messages (Shared/Sequence/DoorMotion: from, to, seconds, ease, motionId, startAt =
 -- the OneShot's) on OneShot "Door" (open / shut) and "LockerRip" (the Creature tearing the door off), with the locker
 -- model as the subject and two extra args: `phase` (Phase) and `occupant` (the UserId the motion is about, 0 for
--- none). DoorController ignores them (a locker has no DoorId). Swing poses LockerBuilder.setDoor (openness 0 shut ..
--- 1 open), Smash poses LockerBuilder.setRipped (0 shut .. 1 torn off and lying on the floor).
+-- none). DoorController ignores them (a hiding spot has no DoorId). Swing poses the spot's leaf (openness 0 shut .. 1
+-- open): a locker's door (LockerBuilder.setDoor), a barrel's lid (HideBuilder.lidTransform), a cabinet's door
+-- (HideBuilder.doorTransform). Smash poses it torn off (0 shut .. 1 lying on the floor): LockerBuilder.setRipped, or a
+-- barrel's lid / a cabinet's door wrenched open and flung in an arc to its "<Leaf>Landing".
 --
 -- Getting in (enterSchedule, from the open's startAt `s`): the door swings open over OpenSeconds; at s + OpenSeconds
 -- the body is moved inside (the HideAnchor, facing out); StepInSeconds later the door swings shut over CloseSeconds;
@@ -19,7 +21,7 @@
 -- one second per second; letting go recovers GameConfig.BreathRecoverPerSecond per second. A change of `held` is
 -- recorded with the value at that instant, so the meter is exact at any later time.
 --
--- The check (LockerHidingService judges; the numbers live here so the client draws the same thresholds): the
+-- The check (HideSpotService judges; the numbers live here so the client draws the same thresholds): the
 -- BreathCheck cue lands WarnSeconds before the Creature's eye is at the slits (the window opens), the window lasts a
 -- seeded PeekMin..PeekMax; WarnSeconds + PeekMax stays under the longest hold, so a player who starts holding when
 -- warned always has the breath to outlast the peek. A release during the window with less than CalmFraction of the
@@ -33,7 +35,9 @@ local DoorMotion = require(ReplicatedStorage.Shared.Sequence.DoorMotion)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 
+local HideBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.HideBuilder)
 local LockerBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.LockerBuilder)
+local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
 
 export type Phase = "Enter" | "Shut" | "Exit" | "Rip"
 
@@ -83,7 +87,7 @@ LockerMotion.CueArgs = table.freeze({
 	BreathAt = "breathAt",
 	WarnAt = "warnAt", -- server time the warning began (Window)
 	Verdict = "verdict", -- Result: "HiddenSafe" | "Caught" | "Ended"
-	Reason = "reason", -- Result: why (see LockerHidingService.Reason)
+	Reason = "reason", -- Result: why (see HideSpotService.Reason)
 })
 
 LockerMotion.CuePhases = table.freeze({
@@ -163,7 +167,40 @@ end
 
 -- Poses `model`'s door for a motion of `mode` at `value` (Swing: openness; Smash: rip progress). False when the model
 -- is not a locker.
+local LEAF_WRENCH = 0.3 -- the share of a rip spent wrenching the leaf open
+local LEAF_ARC = 1.2 -- studs the torn leaf rises over its flight
+
+-- A barrel's lid or a cabinet's door `t` of the way through being torn off (0 shut .. 1 lying at its Landing).
+local function rippedLeaf(model: Model, leaf: string, open: CFrame, t: number): boolean
+	local base = model.PrimaryPart
+	local rest = PropKit.leafRest(model, leaf)
+	local landing = if base then base:FindFirstChild(leaf .. "Landing") else nil
+	local progress = math.clamp(t, 0, 1)
+	if not (base and rest and landing and landing:IsA("Attachment")) then
+		return PropKit.poseLeaf(model, leaf, CFrame.new():Lerp(open, progress))
+	end
+	local landed = rest:ToObjectSpace(base.CFrame * landing.CFrame)
+	if progress <= LEAF_WRENCH then
+		local s = progress / LEAF_WRENCH
+		return PropKit.poseLeaf(model, leaf, CFrame.new():Lerp(open, 1 - (1 - s) * (1 - s)))
+	end
+	local s = (progress - LEAF_WRENCH) / (1 - LEAF_WRENCH)
+	return PropKit.poseLeaf(model, leaf, CFrame.new(0, 4 * LEAF_ARC * s * (1 - s), 0) * open:Lerp(landed, s))
+end
+
 function LockerMotion.pose(model: Model, mode: DoorMotion.Mode, value: number): boolean
+	local kind = model:GetAttribute("HideKind")
+	if kind == "Barrel" then
+		if mode == "Smash" then
+			return rippedLeaf(model, "Lid", HideBuilder.lidTransform(1), value)
+		end
+		return PropKit.poseLeaf(model, "Lid", HideBuilder.lidTransform(value))
+	elseif kind == "Cabinet" then
+		if mode == "Smash" then
+			return rippedLeaf(model, "Door", HideBuilder.doorTransform(1), value)
+		end
+		return PropKit.poseLeaf(model, "Door", HideBuilder.doorTransform(value))
+	end
 	if mode == "Smash" then
 		return LockerBuilder.setRipped(model, value)
 	end

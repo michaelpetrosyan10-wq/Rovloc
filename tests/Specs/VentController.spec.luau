@@ -180,7 +180,15 @@ local function realGraphs(t: Expect): { VentGraph.Graph }
 		end
 	end
 	Geometry.setYieldEvery(previous)
-	t.truthy(#out >= 3, "the levels with ducts")
+	-- a tunnel floor keeps a duct only where its script needs one: Level 1's gate bypass and Level 4's flooded duct
+	local levels: { [string]: boolean } = {}
+	for _, graph in out do
+		levels[graph.levelId] = true
+	end
+	t.truthy(
+		#out == #realLayouts() and levels.Level1_Hallways and levels.Level4_FloodedPool,
+		string.format("the levels with ducts (%d graphs)", #out)
+	)
 	builtGraphs = out
 	return out
 end

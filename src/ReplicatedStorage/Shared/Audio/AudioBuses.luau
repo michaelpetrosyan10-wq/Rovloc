@@ -157,6 +157,20 @@ local ENVIRONMENTS: { [Enums.AcousticPreset]: EnvironmentSpec } = {
 	Stairwell = environment(eq(0, 1, -2), NO_CHORUS, reverb(2.6, -9, 0, 1, 0.6), echo(0.14, 0.35, -13, 0), FLAT, 1),
 	-- Basement: concrete everywhere, long and dark.
 	Basement = environment(eq(2, 0, -3), NO_CHORUS, reverb(3.2, -8, 0, 1, 0.75), echo(0.2, 0.25, -18, 0), FLAT, 1),
+	-- Service tunnels (the planner's runs, 10-11 high): a long concrete tail and a flutter between the close walls.
+	Tunnel = environment(eq(1, 0, -2), NO_CHORUS, reverb(2.4, -9, 0, 1, 0.65), echo(0.07, 0.3, -16, 0), FLAT, 1),
+	-- A gallery where tunnels open out: a big, slow tail and a late slap off the far wall.
+	Gallery = environment(eq(1, 0, -2), NO_CHORUS, reverb(3.6, -8, 0, 1, 0.8), echo(0.22, 0.22, -18, 0), FLAT, 1),
+	-- A crawlway (4.3 high): close and boxy, a tight ring off the low ceiling; your own body sounds hemmed in.
+	Crawlway = environment(
+		eq(-2, 3, -6),
+		NO_CHORUS,
+		reverb(0.5, -9, 0, 0.5, 0.3),
+		echo(0.025, 0.35, -14, 0),
+		eq(-2, -1, -6),
+		1,
+		eq(1, 0, -3)
+	),
 	-- Boiler-room lobby: warm and enclosed, no slap.
 	Lobby = environment(
 		eq(2, 0, -2),

@@ -51,7 +51,7 @@ local PlayerStateService = require(ServerScriptService.Services.Player.PlayerSta
 local BearTrapService = require(ServerScriptService.Services.Mechanics.BearTrapService)
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
 local ChemicalProjectileService = require(ServerScriptService.Services.Mechanics.ChemicalProjectileService)
-local LockerHidingService = require(ServerScriptService.Services.Mechanics.LockerHidingService)
+local HideSpotService = require(ServerScriptService.Services.Mechanics.HideSpotService)
 local FloodedPoolService = require(ServerScriptService.Services.Mechanics.FloodedPoolService)
 local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
 
@@ -173,9 +173,10 @@ end
 --                            VentNetworkService's graphs and grates; EndRun (early, in reverse) lets it go.
 --   ChemicalProjectileService Level 2 flasks: BeginRun tracks the flasks WorldService built above; pickups, throws,
 --                            stepped server flights, stun clouds (VentNetworkService's graphs, MonsterAIService.Stun).
---   LockerHidingService      Level 3 lockers: BeginRun tracks the lockers WorldService rebuilt above; Hide prompt,
---                            Anchor-locked hiding, server-stepped doors, the hold-breath check (MonsterAIService's
---                            locker inspector), the LockerRip hand-over to JumpscareHandler; EndRun lets everyone out.
+--   HideSpotService          Every hiding spot (lockers, barrels, cabinets): BeginRun tracks the spots WorldService
+--                            rebuilt above; Hide and Pull out prompts, Anchor-locked hiding, server-stepped leaves, the
+--                            hold-breath check (MonsterAIService's inspector and hide-spot hooks), the stay limit,
+--                            fake-outs, the LockerRip hand-over to JumpscareHandler; EndRun lets everyone out.
 --   FloodedPoolService       Level 4 water: who swims (Swim mode), oxygen rates, the Swim validator, the Creature's
 --                            grab (MonsterAIService's PoolGrabber), drag, struggle, flask / floodlight release, drowning.
 --   ParachuteService         The roof jump: the crate's packs (InteractionService), the leap off the edge, the cord /
@@ -190,7 +191,7 @@ end
 --   Levels                   The Level 0-5 controllers (registered with LevelDirector in Init): basement beats,
 --                            the Floor 1 classroom scare (MonsterAIService.AcquireScripted, DoorService's gate), Level 2
 --                            flask restock (ChemicalProjectileService), the Level 3 gym (MonsterAIService.SetSpeedScale /
---                            Alert, LockerHidingService's checks), the Level 4 pool (the Creature called to the water,
+--                            Alert, HideSpotService's checks), the Level 4 pool (the Creature called to the water,
 --                            the floodlight switch, FloodedPoolService.ReleaseGrab), the Level 5 roof (the door smash,
 --                            the final sprint, the finale over ParachuteService; Levels.Level5.Escaped); EndRun (early,
 --                            in reverse) lets the Creature go.
@@ -347,12 +348,12 @@ local SERVICES: { Types.Service } = {
 		OnPlayerRemoving = ChemicalProjectileService.OnPlayerRemoving,
 	},
 	{
-		Name = LockerHidingService.Name,
-		Init = LockerHidingService.Init,
-		Start = LockerHidingService.Start,
-		BeginRun = LockerHidingService.BeginRun,
-		EndRun = LockerHidingService.EndRun,
-		OnPlayerRemoving = LockerHidingService.OnPlayerRemoving,
+		Name = HideSpotService.Name,
+		Init = HideSpotService.Init,
+		Start = HideSpotService.Start,
+		BeginRun = HideSpotService.BeginRun,
+		EndRun = HideSpotService.EndRun,
+		OnPlayerRemoving = HideSpotService.OnPlayerRemoving,
 	},
 	{
 		Name = FloodedPoolService.Name,

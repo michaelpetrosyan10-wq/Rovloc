@@ -10,9 +10,14 @@
 //     row is the button.
 //   * Toasts (top centre, max 3, repeats refresh), the hint line and captions (centre column; captions only with
 //     the Captions setting; creature sounds carry a blood tick), floor cards, fades to black, the pause / settings
-//     menu (every visible SettingsSchema entry + Quality) and the loading screen.
+//     menu (every visible SettingsSchema entry) and the loading screen.
+//   * Graphics (the settings menu's first block, as Roblox's SettingsMenu draws it): the five tiers as a row of
+//     segments, Max to Potato, the picked tier's one-line description under them, Max+ (supersampling) while Max is
+//     picked, and the Auto hint's suggestion when the frame rate has stayed low. A pick applies at once (quality.js);
+//     it is saved with the settings.
 
 import { InputBindings } from '../config.js';
+import { Tiers } from '../quality.js';
 import { Settings } from '../settings.js';
 import { getString } from '../strings.js';
 import { CSS, Palette } from './style.js';
@@ -109,12 +114,14 @@ export class UI {
       if (key === 'Captions' && !this.settings.get('Captions')) this.clearCaptions();
     });
     this.input.padPressed.connect((button) => this._padMenu(button));
+    // the Auto hint shows in the menu while it is open
+    if (this.quality && this.quality.hinted) this.quality.hinted.connect(() => this._refreshGraphics());
   }
 
   /** Gamepad menu navigation: d-pad up / down moves, left / right adjusts, A activates, B closes. */
   _padMenu(button) {
     if (!this.menuOpen) return;
-    const items = [...this.menuEl.querySelectorAll('.rv-btn, input[type=range], .rv-toggle, select')];
+    const items = [...this.menuEl.querySelectorAll('.rv-btn, .rv-seg.on, input[type=range], .rv-toggle, select')];
     if (!items.length) return;
     let i = items.indexOf(document.activeElement);
     const focus = (k) => {
@@ -129,6 +136,17 @@ export class UI {
     else if ((button === 14 || button === 15) && cur && cur.type === 'range') {
       cur.value = String(Number(cur.value) + (button === 15 ? 1 : -1) * Number(cur.step));
       cur.dispatchEvent(new Event('input'));
+    } else if ((button === 14 || button === 15) && cur && cur.classList.contains('rv-seg')) {
+      const segs = [...cur.parentElement.querySelectorAll('.rv-seg')];
+      const next = segs[Math.max(0, Math.min(segs.length - 1, segs.indexOf(cur) + (button === 15 ? 1 : -1)))];
+      if (next && next !== cur) {
+        next.click();
+        const picked = this.menuEl.querySelector('.rv-seg.on');
+        if (picked) {
+          picked.tabIndex = 0;
+          picked.focus();
+        }
+      }
     } else if ((button === 14 || button === 15) && cur && cur.tagName === 'SELECT') {
       cur.selectedIndex = Math.max(0, Math.min(cur.options.length - 1, cur.selectedIndex + (button === 15 ? 1 : -1)));
       cur.dispatchEvent(new Event('change'));
@@ -519,9 +537,11 @@ export class UI {
       btn.addEventListener('click', () => b.onClick());
     }
     el('div', 'rv-caps', panel, getString('Settings.Title')).style.margin = '16px 0 6px';
+    this._graphicsBlock(panel);
     for (const s of Settings.visible()) {
+      if (s.key === 'Graphics' || s.key === 'Supersample') continue;
       const row = el('label', 'rv-setting', panel);
-      el('span', '', row, s.key === 'Quality' ? 'Graphics quality' : getString(s.label));
+      el('span', '', row, getString(s.label));
       if (s.kind === 'Number') {
         const range = el('input', '', row);
         range.type = 'range';
@@ -545,7 +565,7 @@ export class UI {
       } else if (s.kind === 'Choice') {
         const sel = el('select', '', row);
         for (const o of s.options) {
-          const opt = el('option', '', sel, o === 'Auto' ? `Auto (${this.quality.tier})` : o);
+          const opt = el('option', '', sel, o);
           opt.value = o;
         }
         sel.value = this.settings.get(s.key);
@@ -553,6 +573,61 @@ export class UI {
         el('span', '', row);
       }
     }
+  }
+
+  /**
+   * The Graphics block: Max .. Potato as segments, the picked tier's description, Max+ at Max, the Auto hint.
+   * @param {HTMLElement} panel
+   */
+  _graphicsBlock(panel) {
+    const block = el('div', 'rv-graphics', panel);
+    el('div', 'rv-graphics-label', block, getString('Settings.Graphics'));
+    const row = el('div', 'rv-segs', block);
+    this.graphicsEl = { block, row, segs: new Map() };
+    for (const tier of Tiers) {
+      const seg = el('button', 'rv-seg', row, getString(`Settings.Graphics.${tier}`));
+      seg.type = 'button';
+      seg.dataset.tier = tier;
+      seg.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.settings.set('Graphics', tier);
+        this._refreshGraphics();
+      });
+      this.graphicsEl.segs.set(tier, seg);
+    }
+    this.graphicsEl.info = el('div', 'rv-graphics-info', block, '');
+    const plus = el('label', 'rv-setting rv-graphics-plus', block);
+    el('span', '', plus, 'Max+ (150 % supersampling)');
+    const toggle = el('div', 'rv-toggle', plus);
+    el('span', '', plus);
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.settings.set('Supersample', !this.settings.get('Supersample'));
+      this._refreshGraphics();
+    });
+    this.graphicsEl.plus = plus;
+    this.graphicsEl.toggle = toggle;
+    this.graphicsEl.hint = el('div', 'rv-graphics-hint', block, '');
+    this._refreshGraphics();
+  }
+
+  /** Redraws the Graphics block from the settings and the quality's hint. */
+  _refreshGraphics() {
+    const g = this.graphicsEl;
+    if (!g || !g.block.isConnected) return;
+    const picked = this.settings.get('Graphics');
+    const hint = this.quality ? this.quality.hint : null;
+    for (const [tier, seg] of g.segs) {
+      seg.classList.toggle('on', tier === picked);
+      seg.classList.toggle('suggested', tier === hint && tier !== picked);
+      seg.setAttribute('aria-pressed', tier === picked ? 'true' : 'false');
+    }
+    g.info.textContent = getString(`Settings.Graphics.${picked}.Info`);
+    g.plus.style.display = picked === 'Max' ? '' : 'none';
+    g.toggle.classList.toggle('on', !!this.settings.get('Supersample'));
+    const fps = this.quality && this.quality.fps ? Math.round(this.quality.fps) : 0;
+    g.hint.textContent = hint && hint !== picked ? `Running at ${fps} fps here. ${hint} is suggested: ${getString(`Settings.Graphics.${hint}.Info`).split(':')[0]}.` : '';
+    g.hint.style.display = g.hint.textContent ? '' : 'none';
   }
 
   // ------------------------------------------------------------------ loading

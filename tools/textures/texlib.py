@@ -7,6 +7,13 @@ every map tiles with no seam, in both directions, by construction.
 Conventions: arrays are float32 indexed [row, col]; row grows downward in the image. Height fields are in pixels
 (a slope of 1 is 45 degrees). Normal maps are tangent space, OpenGL / Roblox convention: +X right (red), +Y up the
 image (green), +Z out of the surface (blue); a flat texel is (128, 128, 255).
+
+Sizes. Recipes are written for the design size (1024): every length a recipe passes (blur sigmas, stroke lengths and
+widths, splat radii, drip runs, warp offsets, the distances worley and the grids return) is in design pixels, and a
+Field built larger (Field(seed, 2048)) scales them by `unit` = n / design. Positions drawn with `rng.uniform(0, n)`
+stay in real pixels. At a larger size the same seed gives the same texture: every random draw of the design size is
+made in the same order (spectral noise draws the design size's white noise and adds the finer octaves from a second
+stream), so the 2048 map is the 1024 map with real detail in the octave the 1024 map cannot hold.
 """
 
 from __future__ import annotations
@@ -19,9 +26,13 @@ F32 = np.float32
 class Field:
     """Deterministic field synthesis on an n x n torus."""
 
-    def __init__(self, seed: int, n: int = 1024):
+    def __init__(self, seed: int, n: int = 1024, design: int = 1024):
         self.n = n
+        self.design = design
+        self.unit = n / design
         self.rng = np.random.default_rng(seed)
+        # the octaves above the design size: their own stream, so the design draws stay in step
+        self.fine_rng = np.random.default_rng([seed, n])
         fy = np.fft.fftfreq(n) * n
         fx = np.fft.rfftfreq(n) * n
         self._fx = fx[None, :].astype(np.float64)
@@ -46,9 +57,37 @@ class Field:
         horizontally. `angle` (radians) rotates the anisotropy. Integer frequencies keep it perfectly periodic.
         """
         n = self.n
-        white = self.rng.standard_normal((n, n))
-        spectrum = np.fft.rfft2(white)
-        fx, fy = self._fx, self._fy
+        d = self.design
+        if n == d:
+            white = self.rng.standard_normal((n, n))
+            spectrum = np.fft.rfft2(white)
+            amp = self._amplitude(self._fx, self._fy, beta, fmin, fmax, stretch, angle)
+            out = np.fft.irfft2(spectrum * amp, s=(n, n))
+            out -= out.mean()
+            std = out.std()
+            return (out / (std if std > 0 else 1.0)).astype(F32)
+        # larger than the design size: the design field's own spectrum (the same draws), the finer octaves on top
+        low = np.fft.rfft2(self.rng.standard_normal((d, d)))
+        fy_d = (np.fft.fftfreq(d) * d)[:, None]
+        fx_d = (np.fft.rfftfreq(d) * d)[None, :]
+        amp_d = self._amplitude(fx_d, fy_d, beta, fmin, fmax, stretch, angle)
+        design_field = np.fft.irfft2(low * amp_d, s=(d, d))
+        design_std = (design_field - design_field.mean()).std()
+        spectrum = np.fft.rfft2(self.fine_rng.standard_normal((n, n)))
+        h = d // 2
+        ratio = n / d  # white noise spectra grow with the size: E|S|^2 = size^2
+        spectrum[:h, :h] = low[:h, :h] * ratio
+        spectrum[n - h + 1:, :h] = low[h + 1:, :h] * ratio
+        amp = self._amplitude(self._fx, self._fy, beta, fmin, fmax, stretch, angle)
+        out = np.fft.irfft2(spectrum * amp, s=(n, n))
+        out -= out.mean()
+        # the design field's band lands at (d / n) of its amplitude: normalise by its std there, so that band is
+        # exactly the design size's field (interpolated) and the new octaves ride on it at their natural strength
+        scale = design_std * (d / n)
+        return (out / (scale if scale > 0 else 1.0)).astype(F32)
+
+    @staticmethod
+    def _amplitude(fx, fy, beta, fmin, fmax, stretch, angle):
         if angle:
             c, s = np.cos(angle), np.sin(angle)
             fx, fy = fx * c - fy * s, fx * s + fy * c
@@ -59,25 +98,25 @@ class Field:
         if fmax is not None:
             amp *= np.exp(-((fr / fmax) ** 2))
         amp[0, 0] = 0.0
-        out = np.fft.irfft2(spectrum * amp, s=(n, n))
-        out -= out.mean()
-        std = out.std()
-        return (out / (std if std > 0 else 1.0)).astype(F32)
+        return amp
 
     def fbm01(self, beta: float = 2.0, fmin: float = 1.0, fmax: float | None = None, **kw) -> np.ndarray:
         """Spectral noise remapped to 0..1 by its own 0.5 / 99.5 percentiles."""
         return norm01(self.spectral(beta, fmin, fmax, **kw))
 
     def blur(self, img: np.ndarray, sigma: float) -> np.ndarray:
-        """Periodic Gaussian blur (sigma in pixels)."""
+        """Periodic Gaussian blur (sigma in design pixels)."""
         if sigma <= 0:
             return img
+        sigma *= self.unit
         n = self.n
         g = np.exp(-2.0 * (np.pi**2) * (sigma**2) * ((self._fx / n) ** 2 + (self._fy / n) ** 2))
         return np.fft.irfft2(np.fft.rfft2(img) * g, s=(n, n)).astype(F32)
 
     def directional_blur(self, img: np.ndarray, sigma_x: float, sigma_y: float) -> np.ndarray:
-        """Periodic anisotropic Gaussian blur."""
+        """Periodic anisotropic Gaussian blur (sigmas in design pixels)."""
+        sigma_x *= self.unit
+        sigma_y *= self.unit
         n = self.n
         g = np.exp(-2.0 * (np.pi**2) * ((sigma_x * self._fx / n) ** 2 + (sigma_y * self._fy / n) ** 2))
         return np.fft.irfft2(np.fft.rfft2(img) * g, s=(n, n)).astype(F32)
@@ -85,8 +124,8 @@ class Field:
     def worley(self, cells: int, jitter: float = 0.9, aspect: float = 1.0):
         """Toroidal cellular noise with one feature point per cell of a cells x (cells*aspect) lattice.
 
-        Returns (f1, f2, cell_value): distances in pixels to the nearest and second nearest points, and a random
-        0..1 value per nearest cell (stable per cell)."""
+        Returns (f1, f2, cell_value): distances in design pixels to the nearest and second nearest points, and a
+        random 0..1 value per nearest cell (stable per cell)."""
         n = self.n
         cx, cy = cells, max(1, int(round(cells * aspect)))
         sx, sy = n / cx, n / cy
@@ -115,18 +154,25 @@ class Field:
                 f2 = np.where(closer, f1, np.minimum(f2, d))
                 v1 = np.where(closer, val[wy, wx], v1)
                 f1 = np.where(closer, d, f1)
+        if self.unit != 1:
+            f1 = (f1 / self.unit).astype(F32)
+            f2 = (f2 / self.unit).astype(F32)
         return f1, f2, v1
 
     def warp(self, img: np.ndarray, dx: np.ndarray, dy: np.ndarray) -> np.ndarray:
-        """Samples img at (x + dx, y + dy) with periodic bilinear interpolation."""
-        return sample(img, self.x - 0.5 + dx, self.y - 0.5 + dy)
+        """Samples img at (x + dx, y + dy) with periodic bilinear interpolation (offsets in design pixels)."""
+        u = self.unit
+        return sample(img, self.x - 0.5 + dx * u, self.y - 0.5 + dy * u)
 
     # -- splats -----------------------------------------------------------------------------------------------
 
     def splat(self, xs, ys, weights, radius: float, sigma: float | None = None) -> np.ndarray:
-        """Sums a Gaussian dab of `sigma` (default radius/2) per point, wrapped. xs/ys/weights are 1-D arrays."""
+        """Sums a Gaussian dab of `sigma` (default radius/2) per point, wrapped. xs/ys/weights are 1-D arrays; the
+        points are in real pixels, radius and sigma in design pixels."""
         n = self.n
         sigma = sigma if sigma is not None else max(radius / 2.0, 0.5)
+        radius *= self.unit
+        sigma *= self.unit
         r = int(np.ceil(radius))
         out = np.zeros(n * n, np.float64)
         xs = np.asarray(xs, np.float64)
@@ -156,18 +202,19 @@ class Field:
         intensity: tuple[float, float] = (0.5, 1.0),
         step: float = 0.7,
     ) -> np.ndarray:
-        """Thin wandering lines (scratches, cracks, fibres). Lengths and widths in pixels."""
+        """Thin wandering lines (scratches, cracks, fibres). Lengths and widths in design pixels."""
         xs, ys, ws = [], [], []
         rng = self.rng
         max_w = width[1]
+        u = self.unit
         for _ in range(count):
             ln = rng.uniform(*length)
             steps = max(2, int(ln / step))
             a0 = rng.uniform(*angle)
             turn = np.cumsum(rng.normal(0, wobble, steps)) if wobble > 0 else np.zeros(steps)
             a = a0 + turn
-            px = rng.uniform(0, self.n) + np.cumsum(np.cos(a) * step)
-            py = rng.uniform(0, self.n) + np.cumsum(np.sin(a) * step)
+            px = rng.uniform(0, self.n) + np.cumsum(np.cos(a) * step * u)
+            py = rng.uniform(0, self.n) + np.cumsum(np.sin(a) * step * u)
             t = np.linspace(0, 1, steps)
             prof = np.sin(np.pi * t) ** 0.6 if taper else np.ones(steps)
             xs.append(px)
@@ -187,8 +234,10 @@ class Field:
     ) -> np.ndarray:
         """Water / rust runs: lines that start at a point and run down the image, fading and thinning.
 
-        `sources` optionally fixes the start points (xs, ys). Returns intensity ~0..1 (overlaps add)."""
+        `sources` optionally fixes the start points (xs, ys; real pixels). Lengths and widths in design pixels.
+        Returns intensity ~0..1 (overlaps add)."""
         rng = self.rng
+        u = self.unit
         xs, ys, ws = [], [], []
         if sources is not None:
             sx, sy = sources
@@ -200,8 +249,8 @@ class Field:
             y0 = sy[i] if sources is not None else rng.uniform(0, self.n)
             drift = np.cumsum(rng.normal(0, wobble, steps))
             drift = np.convolve(drift, np.ones(9) / 9, mode="same")
-            px = x0 + drift
-            py = y0 + np.arange(steps, dtype=np.float64)
+            px = x0 + drift * u
+            py = y0 + np.arange(steps, dtype=np.float64) * u
             t = np.linspace(0, 1, steps)
             fade = (1 - t) ** 1.3 * (0.6 + 0.4 * head * np.exp(-t * 12))
             pulse = np.convolve(rng.random(steps + 40), np.ones(41) / 41, mode="valid")[:steps]
@@ -296,8 +345,9 @@ class Grid:
         return values[self.id]
 
 
-def tile_grid(n: int, cols: int, rows: int, row_shift: float = 0.0) -> Grid:
-    """cols x rows rectangular tiles; each row shifted by row_shift * tile width (0.5 = running bond)."""
+def tile_grid(n: int, cols: int, rows: int, row_shift: float = 0.0, unit: float = 1.0) -> Grid:
+    """cols x rows rectangular tiles; each row shifted by row_shift * tile width (0.5 = running bond). `edge` is in
+    design pixels (real pixels / unit)."""
     y = np.arange(n, dtype=F32)[:, None] + 0.5
     x = np.arange(n, dtype=F32)[None, :] + 0.5
     th = n / rows
@@ -307,13 +357,15 @@ def tile_grid(n: int, cols: int, rows: int, row_shift: float = 0.0) -> Grid:
     c = np.floor(xs / tw).astype(np.int64) % cols
     u = xs - c * tw
     v = np.broadcast_to(y - r * th, (n, n))
-    edge = np.minimum(np.minimum(u, tw - u), np.minimum(v, th - v))
+    edge = np.minimum(np.minimum(u, tw - u), np.minimum(v, th - v)) / unit
     tile_id = (np.broadcast_to(r, (n, n)) * cols + c).astype(np.int64)
     return Grid(tile_id, edge.astype(F32), (u / tw).astype(F32), (v / th).astype(F32), rows * cols)
 
 
-def plank_grid(n: int, rows: int, rng: np.random.Generator, length: tuple[float, float]) -> Grid:
-    """Rows of planks running along x with random lengths and staggered joints (all wrap-safe)."""
+def plank_grid(n: int, rows: int, rng: np.random.Generator, length: tuple[float, float], unit: float = 1.0) -> Grid:
+    """Rows of planks running along x with random lengths (design pixels) and staggered joints (all wrap-safe). `edge`
+    is in design pixels."""
+    length = (length[0] * unit, length[1] * unit)
     th = n / rows
     y = np.arange(n, dtype=F32) + 0.5
     r = np.floor(y / th).astype(np.int64)
@@ -341,7 +393,7 @@ def plank_grid(n: int, rows: int, rng: np.random.Generator, length: tuple[float,
         tile_id[sel, :] = count + seg[None, :]
         ue = np.minimum(past, lengths - past)
         ve = np.minimum(v_row[sel], th - v_row[sel])
-        edge[sel, :] = np.minimum(ue[None, :], ve[:, None])
+        edge[sel, :] = np.minimum(ue[None, :], ve[:, None]) / unit
         u[sel, :] = (past / lengths)[None, :]
         count += len(cuts)
     v = np.broadcast_to((v_row / th)[:, None], (n, n)).astype(F32)

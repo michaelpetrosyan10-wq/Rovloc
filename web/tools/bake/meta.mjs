@@ -53,6 +53,28 @@ function entityId(e) {
  * @param {any} raw world-raw.json
  * @param {any} r bake results
  */
+/**
+ * The particle emitters the web draws itself (particles.js): the tunnels' leaking relief valves, parts tagged
+ * SteamVent (TunnelDressingBuilder), each at its nozzle's Mouth attachment, blowing along the mouth's look vector.
+ * Decorative only (the nozzle carries its Detail level); nothing in the game reads them.
+ */
+function steamEmitters(raw) {
+  const mouths = new Map();
+  for (const a of arr(raw.attachments)) if (a.name === 'Mouth' && a.parent) mouths.set(a.parent, a);
+  const out = [];
+  for (const p of arr(raw.parts)) {
+    if (!arr(p.tags).includes('SteamVent')) continue;
+    const mouth = mouths.get(p.name);
+    const cf = mouth ? mouth.cframe : p.cf;
+    const look = [-cf[5], -cf[8], -cf[11]];
+    out.push({
+      id: p.name, kind: 'Steam', level: p.level, pos: [r3(cf[0]), r3(cf[1]), r3(cf[2])], dir: look.map(r3),
+      detail: Number(obj(p.attributes).Detail) || 0,
+    });
+  }
+  return out;
+}
+
 export function buildMeta(raw, r) {
   const levelKeys = [...new Set([...raw.layoutIds, 'Stairwells', 'Exterior'])];
   const levels = {};
@@ -363,6 +385,8 @@ export function buildMeta(raw, r) {
     // neighbours through any opening included); pairs farther apart than pvs.MAX_DISTANCE are never listed
     visibility: r.visibility || {},
     visibilityInfo: { maxDistance: PVS_MAX_DISTANCE, method: 'rays between opening + floor samples through static colliding opaque non-Detail parts; doors and entities open, glass clear', levels: r.visibilityStats || {} },
+    // particle emitters the web draws (particles.js): the steam vents' nozzle mouths (pos, dir = the plume's way)
+    emitters: steamEmitters(raw),
     layouts: raw.layouts,
     creature,
   };

@@ -21,10 +21,10 @@
 //   * Drawn detail (the Fabric chunk: the parts Roblox renders the detail with) and the Neon pupils: hidden.
 //   * Dissolve on every chunk: a noise threshold rising from the feet (the mask goes last, forms first), per-pixel
 //     static and an emissive cold edge, driven by `fade` (1 whole .. 0 gone); at Max a finer octave and embers.
-// Graphics tiers (LookTiers, chosen from the engine's quality tier by lookTierFor): Max is the default, everything on;
-// Potato (the Low tier: a school Chromebook) drops only visual layers (no haze, no skin smoke, no detail map, flat eye
-// holes, a plain dissolve, sparse smoke and shards, no torch shadow): the mask keeps its sculpt, its silhouette and
-// all its painted layout. A tier never touches the rig's skeleton, its animation, its hitboxes or anything gameplay
+// Graphics tiers (LookTiers, chosen from the engine's graphics tier by lookTierFor: the budget's `look`): Max on the
+// Max, High and Medium tiers, everything on; Potato on the Low and Potato tiers (weak GPUs, school Chromebooks) drops
+// only visual layers (no haze, no skin smoke, no detail map, flat eye holes, a plain dissolve, sparse smoke and shards,
+// no torch shadow): the mask keeps its sculpt, its silhouette and all its painted layout. A tier never touches the rig's skeleton, its animation, its hitboxes or anything gameplay
 // reads.
 
 import * as THREE from 'three';
@@ -80,8 +80,12 @@ export const LookTiers = Object.freeze({
   }),
 });
 
-/** The look tier for the engine's quality budget: Potato on the Low tier (a school Chromebook), else Max. */
+/**
+ * The look tier for the engine's graphics budget (quality.js): its `look` (Max on Max / High / Medium, Potato on Low /
+ * Potato); a budget without one reads its tier name the same way.
+ */
 export function lookTierFor(budget) {
+  if (budget && LookTiers[budget.look]) return budget.look;
   const tier = budget && budget.tier;
   return tier === 'Low' || tier === 'Potato' ? 'Potato' : 'Max';
 }
@@ -687,7 +691,7 @@ export function applyCreatureLook(model, meta, budget) {
     setBudget(b) {
       if (!b) return;
       const name = lookTierFor(b);
-      const next = `${name}|${b.pointLights}|${b.flashlightShadow}`;
+      const next = `${name}|${b.pointLights}|${b.flashlightShadow}|${b.shadowTaps}`;
       if (next === key) return;
       key = next;
       this.tierName = name;
@@ -700,6 +704,7 @@ export function applyCreatureLook(model, meta, budget) {
       for (const mat of drawn) {
         const d = mat.defines;
         d.NUM_POINT = String(b.pointLights ?? d.NUM_POINT);
+        d.SHADOW_TAPS = String(b.shadowTaps || 9);
         flag(d, 'USE_SHADOW', !!b.flashlightShadow);
         const shadowBody = mat.userData.creature === 'Shadow';
         flag(d, 'CREATURE_HAZE', shadowBody && t.haze);
@@ -712,6 +717,6 @@ export function applyCreatureLook(model, meta, budget) {
       this._casting();
     },
   };
-  look.setBudget(budget || { tier: 'High', pointLights: 4, flashlightShadow: true });
+  look.setBudget(budget || { tier: 'Max', look: 'Max', pointLights: 4, flashlightShadow: true });
   return look;
 }

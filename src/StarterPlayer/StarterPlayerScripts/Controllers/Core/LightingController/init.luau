@@ -14,6 +14,12 @@
 --     blackouts (with a stuttering recovery) scheduled in fixed time slots. Everything is a pure function of
 --     (RunSeed or 1, group, server time), so every client sees the same flicker on the same frame. Only lights in
 --     the active set are animated.
+--   * Three layers per group (the website's lighting: groupLevel): override (SetOverride) > hold (the power switch)
+--     > stutter. A tunnel floor's "Mains:<n>" groups burn steady (no flicker) and follow the power hold; its
+--     "Circuit:<n>" groups flicker; any other group flickers as above. A stutter only ever dims: OneShot
+--     "TeleportWarning" { spot, seconds, radius } stutters every fixture within `radius` of the spot for `seconds`
+--     (stutterFactor: seeded dropouts, never brighter than the fixture's own level), so the lights near where the
+--     Creature is about to form give it away.
 --   * The basement's power (Floor 0's objective, ObjectiveService): while ReplicatedStorage PowerOffLevel names a level,
 --     its mains fixtures (Bulb and Fluorescent ones in a flicker group) burn at ObjectiveConfig.Tuning.PowerOffFactor;
 --     from PowerOnAt (the main breaker thrown) each group stutters back on over PowerOnSeconds (powerFactor: seeded
@@ -56,7 +62,9 @@
 --     glow stays, so distant tubes and exit signs still read; overridden and bursting fixtures always burn). No
 --     gameplay rule reads these client lights: the server's rules read BaseBrightness and the torches' state.
 --     SetGraphics hands the tier's post to Film (bloom, sun rays, flat grade, render distance) and switches the area
---     grade; burst sparks follow the budget's particle scale.
+--     grade; burst sparks follow the budget's particle scale, and so do the tunnels' steam vents (TunnelDressingBuilder:
+--     a "Steam" ParticleEmitter under each SteamVent nozzle, its authored rate kept as its BaseRate attribute; none on
+--     Potato).
 
 local CollectionService = game:GetService("CollectionService")
 local Lighting = game:GetService("Lighting")
@@ -279,6 +287,10 @@ local seedBase = 1
 local powerOffLevel: string? = nil -- the level whose mains are out (ObjectiveService)
 local powerOnAt: number? = nil -- when they start coming back on
 local MAINS: { [string]: boolean } = { Bulb = true, Fluorescent = true }
+local MAINS_PREFIX = "Mains:" -- steady groups, held by the power switch
+local STUTTER_HZ = 16 -- the teleport warning's stutter slots per second
+local STUTTER_DIM = 0.08 -- a stutter's dropout level (share of the fixture's own)
+local STUTTER_SHARE = 0.5 -- share of its slots a stutter drops out
 local groups: { [string]: GroupState } = {}
 local frameId = 0
 
@@ -781,6 +793,71 @@ function LightingController.powerFactor(seed: number, group: string, onAt: numbe
 	return if lit then 1.25 else tuning.PowerOffFactor
 end
 
+-- A steam vent's emitter rate for its authored `base` under the budget's particle `scale` (0: no steam).
+function LightingController.steamRate(base: number, scale: number): number
+	if not (base > 0 and scale > 0) then
+		return 0
+	end
+	return base * scale
+end
+
+local STEAM_BASE = "BaseRate"
+
+-- Scales a steam vent's emitters to the particle budget (their authored rate kept on the emitter).
+local function scaleSteam(nozzle: Instance)
+	for _, descendant in nozzle:GetDescendants() do
+		if descendant:IsA("ParticleEmitter") then
+			local base = descendant:GetAttribute(STEAM_BASE)
+			if type(base) ~= "number" then
+				base = descendant.Rate
+				descendant:SetAttribute(STEAM_BASE, base)
+			end
+			local rate = LightingController.steamRate(base :: number, particleScale)
+			descendant.Rate = rate
+			descendant.Enabled = rate > 0
+		end
+	end
+end
+
+-- Whether a flicker group burns steady (a tunnel floor's mains: only the power hold moves it).
+function LightingController.steadyGroup(group: string?): boolean
+	return group ~= nil and string.sub(group, 1, #MAINS_PREFIX) == MAINS_PREFIX
+end
+
+-- The stutter layer at server time `t` for a stutter that started at `startAt` and runs `seconds`, seeded: 1 outside
+-- it, seeded dropouts to STUTTER_DIM inside (a stutter only dims), easing out over its last fifth.
+function LightingController.stutterFactor(seed: number, startAt: number, seconds: number, t: number): number
+	local elapsed = t - startAt
+	if not (elapsed >= 0 and elapsed < seconds) then
+		return 1
+	end
+	local slot = math.floor(elapsed * STUTTER_HZ)
+	local roll = (math.sin((slot + seed * 0.618) * 12.9898 + 78.233) * 43758.5453) % 1
+	local tail = MathUtil.smoothstep(seconds * 0.8, seconds, elapsed)
+	local level = if roll < STUTTER_SHARE then STUTTER_DIM else 1
+	return math.min(1, level + (1 - level) * tail)
+end
+
+type Stutter = { spot: Vector3, radius: number, startAt: number, seconds: number, seed: number }
+
+local stutters: { Stutter } = {}
+
+-- The stutters' factor for a fixture at `position` (the dimmest one running wins).
+local function stutterAt(position: Vector3, t: number): number
+	local factor = 1
+	for index = #stutters, 1, -1 do
+		local s = stutters[index]
+		if t > s.startAt + s.seconds then
+			table.remove(stutters, index)
+			continue
+		end
+		if (position - s.spot).Magnitude <= s.radius then
+			factor = math.min(factor, LightingController.stutterFactor(s.seed, s.startAt, s.seconds, t))
+		end
+	end
+	return factor
+end
+
 -- The primary light's brightness for this frame.
 local function entryBrightness(entry: Entry, t: number, now: number): number
 	local burstStart = entry.burstStart
@@ -802,17 +879,19 @@ local function entryBrightness(entry: Entry, t: number, now: number): number
 	if entry.dead or entry.base <= 0 then
 		return 0
 	end
+	-- the hold (the power switch), then the group's own flicker (steady mains have none), then the stutter
+	local stutter = if #stutters > 0 then stutterAt(entry.fixture.Position, t) else 1
 	local group = entry.group
 	if group and powerOffLevel ~= nil and entry.layoutId == powerOffLevel and MAINS[entry.kind] then
 		local factor = LightingController.powerFactor(seedBase, group, powerOnAt, t)
 		if factor ~= 1 then
-			return entry.base * factor
+			return entry.base * factor * stutter
 		end
 	end
-	if group then
-		return entry.base * groupFactor(group, t)
+	if group and not LightingController.steadyGroup(group) then
+		return entry.base * groupFactor(group, t) * stutter
 	end
-	return entry.base
+	return entry.base * stutter
 end
 
 local function updateEntry(entry: Entry, t: number, now: number)
@@ -1454,12 +1533,26 @@ local function onOneShot(payload: any)
 	end
 	local event = payload :: { [string]: any }
 	local kind = event.kind
-	if kind ~= "Lightning" and kind ~= "LightBurst" then
+	if kind ~= "Lightning" and kind ~= "LightBurst" and kind ~= "TeleportWarning" then
 		return
 	end
 	local args: { [string]: any } = if type(event.args) == "table" then event.args else {}
 	local now = Workspace:GetServerTimeNow()
 	local startAt = if type(event.startAt) == "number" and MathUtil.isFinite(event.startAt) then event.startAt else now
+	if kind == "TeleportWarning" then
+		local spot = args.spot
+		if typeof(spot) == "Vector3" and MathUtil.isFiniteVector(spot) then
+			table.insert(stutters, {
+				spot = spot,
+				radius = argNumber(args, "radius", 20),
+				startAt = startAt,
+				seconds = argNumber(args, "seconds", 1.6),
+				seed = (#stutters + 1) * 7 + math.floor(startAt * 10) % 97,
+			})
+			dirty = true
+		end
+		return
+	end
 	local lead = math.min(startAt - now, MAX_SCHEDULE_AHEAD)
 	local late = math.max(0, -lead)
 
@@ -1584,6 +1677,10 @@ function LightingController.Start()
 	zoneSignalsHooked = true
 	serviceTrove:Connect(CollectionService:GetInstanceAddedSignal(Tags.Zone), dropZones)
 	serviceTrove:Connect(CollectionService:GetInstanceRemovedSignal(Tags.Zone), dropZones)
+	serviceTrove:Connect(CollectionService:GetInstanceAddedSignal(Tags.SteamVent), scaleSteam)
+	for _, nozzle in CollectionService:GetTagged(Tags.SteamVent) do
+		scaleSteam(nozzle)
+	end
 	serviceTrove:Connect(CollectionService:GetInstanceAddedSignal(Tags.LevelLight), register)
 	serviceTrove:Connect(CollectionService:GetInstanceRemovedSignal(Tags.LevelLight), unregister)
 	for _, instance in CollectionService:GetTagged(Tags.LevelLight) do
@@ -1608,6 +1705,7 @@ end
 function LightingController.OnRunEnded()
 	runTrove:Clean()
 	table.clear(flashes)
+	table.clear(stutters)
 	endFlash()
 	table.clear(overrides)
 	for _, entry in entryList do
@@ -1665,6 +1763,9 @@ function LightingController.SetEffectsBudget(budget: EffectsBudget)
 	local scale = budget.particleScale
 	if type(scale) == "number" and scale == scale then
 		particleScale = math.max(0, scale)
+	end
+	for _, nozzle in CollectionService:GetTagged(Tags.SteamVent) do
+		scaleSteam(nozzle)
 	end
 	Volumetrics.SetBudget({
 		windowLights = budget.windowLights,

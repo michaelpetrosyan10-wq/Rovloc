@@ -1,28 +1,31 @@
 --!strict
--- Perception: what the Creature sees. Pure rules over injected raycasts; MonsterAIService's brain calls scan() once
--- per tick and reads the Sightings (best first).
+-- Perception: what the Creature sees, and who is looking at it (docs/MONSTER.md 3.2 and 3.3; the website's
+-- web/src/creature/perception.js). Pure rules over an injected line test; MonsterAIService builds the Viewer and the
+-- Observations and calls scan() once per brain tick.
 --
--- Eyes (ARCHITECTURE §4b). The Creature's eye is its root + CreatureConfig.EyeHeightAboveRoot[PoseMode] in the
--- root's own frame, nudged EyeForward studs along the facing (where the pupils sit). The nudge stays inside the
--- root's half depth, so the eye can never poke through a wall or a closed grate the root is pressed against. A
--- player's EyePoint is their root + CameraConfig.EyeHeightAboveRoot[MoveState]. Sight runs eye to EyePoint only:
--- the server never sees client poses, so limbs are never tested. The default line test is SpatialQuery.lineClear
--- with SpatialQuery.losParams (Default group, every character and the Creature excluded), so walls, lockers, desks
--- and debris block sight and nothing is ever seen through them.
+-- Eyes. The Creature's eye is its root + CreatureConfig.EyeHeightAboveRoot[PoseMode] in the root's own frame, nudged
+-- EyeForward studs along the facing (inside the root's half depth, so the eye never pokes through a wall the root
+-- touches). Its eye is the one of the pose it stands in: hunched under a low clearance, never the standing eye inside a
+-- tunnel's ceiling. A player's eye is their root + CameraConfig.EyeHeightAboveRoot[MoveState]. Sight runs eye to eye
+-- (SpatialQuery.lineClear with losParams: the Default group, every character and the Creature excluded); walls,
+-- lockers, desks and debris block it.
 --
--- Who can be seen (judge). A player is a candidate only while LifeStateService says they are playing (Alive or
--- Downed: a Downed player is seen). Never seen: MoveState Hiding (a locker hides you completely); a player in a vent
--- unless the Creature is in a vent too and on the same duct edge or one sharing a node with it (a mouth stub counts
--- as its node); an Underwater player unless the Creature is swimming (PoseMode Swim or MonsterState AquaticStalk).
--- Then range: SightRange x the difficulty's sightRangeMultiplier for a player whose flashlight is on (lit), that
--- x DarknessSightMultiplier for one in the dark; then the view cone (SightHalfAngle either side of the facing, or
--- anything within PeripheralRange whatever the facing); then the line of sight.
+-- Who can be seen: only a playing player (Alive or Downed). Never: MoveState Hiding; a player in a duct or a crawlway
+-- (it never goes in after them); an Underwater player unless the Creature swims (PoseMode Swim or AquaticStalk).
+-- How far: SightTorch with their torch on, SightLit with it off in a lit pool (the fixture light at their chest,
+-- LightField, above LitIrradiance), SightDark with it off in the dark; crouched (or crawling downed) x CrouchFactor;
+-- times the difficulty's sightRangeMultiplier. The view cone is SightHalfAngle (MovingHalfAngle while they move), and
+-- anything within PeripheralRange (MovingPeripheralRange) is felt whatever the facing; while it looks away
+-- (HidingResponse's LookAway) the peripheral sense is off. Then the line of sight.
+-- The cone and the peripheral range are measured about its upright axis (the bearing from its facing, the distance
+-- along the floor): it stands 11 studs tall and bends its long neck to look down, so whoever is at its feet, standing
+-- or downed, is in front of it and felt, not under its field of view.
+-- Score: closeness + InCone + Lit + Target - Downed; ties: nearer, then lower UserId.
 --
--- Score (rank). closeness (1 at the eye, 0 at the full lit range) + InCone + Lit + Target (the current TargetUserId,
--- so the Creature does not flip between equally good targets) + Downed (negative: it prefers a standing victim
--- over finishing a downed one when both are in view). Ties: nearer first, then lower UserId.
+-- The stare: stareAngle() is the angle between a player's view centre and the Creature's head; within Stare.HalfAngle,
+-- within stareRange (LitRange when it stands lit or their torch is on, else DarkRange) and with a clear line it counts
+-- toward the second that starts a chase.
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -32,65 +35,53 @@ local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local DifficultyConfig = require(ReplicatedStorage.Shared.Config.DifficultyConfig)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local Instances = require(ReplicatedStorage.Shared.Instances)
-local SpatialQuery = require(ReplicatedStorage.Shared.Util.SpatialQuery)
-local VentGraph = require(ReplicatedStorage.Shared.Vents.VentGraph)
 
-local FlashlightService = require(ServerScriptService.Services.Player.FlashlightService)
-local LifeStateService = require(ServerScriptService.Services.Player.LifeStateService)
 local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
-local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
-
-export type SightContext = {
-	difficulty: Enums.Difficulty,
-	creatureInVent: boolean,
-	creatureSegment: string?,
-	-- returns true when the line is clear (default: SpatialQuery.lineClear with losParams)
-	raycast: ((from: Vector3, to: Vector3) -> boolean)?,
-}
 
 export type Sighting = {
 	player: Player,
 	eye: Vector3,
 	distance: number,
 	inCone: boolean,
-	lit: boolean,
+	lit: boolean, -- their torch is on or they stand lit
 	score: number,
 }
 
--- One player as the rules need them (observe() reads it from the player services).
+-- One player as the rules need them (MonsterAIService gathers it).
 export type Observation = {
 	player: Player,
 	eye: Vector3,
 	playing: boolean,
 	downed: boolean,
 	moveState: Enums.MoveState,
-	lit: boolean,
-	inVent: boolean,
-	rail: VentGraph.RailPoint?, -- where on the duct rail a player in a vent is
+	torch: boolean,
+	lit: boolean, -- they stand in a lit pool (LightField)
+	moving: boolean, -- their speed is above Senses.MovingSpeed
+	inVent: boolean, -- in a duct or a crawlway
 }
 
--- The Creature's side of a scan (viewer() reads it from the model and the context).
+-- The Creature's side of a scan.
 export type Viewer = {
 	eye: Vector3,
 	facing: Vector3,
 	difficulty: Enums.Difficulty,
-	inVent: boolean,
-	ventNodes: { string }?, -- the duct edge's end nodes (one for a mouth stub) under the Creature; nil = unknown
 	aquatic: boolean,
 	targetUserId: number?,
+	blindPeripheral: boolean?, -- looking away: no peripheral sense
 	raycast: (from: Vector3, to: Vector3) -> boolean,
 }
 
+-- Someone looking: their eye, their view direction and their torch.
+export type Looker = { eye: Vector3, look: Vector3, torch: boolean }
+
 local C = Attributes.Creature
 local SENSES = CreatureConfig.Senses
+local STARE = CreatureConfig.Stare
 
--- Studs the eye sits ahead of the root along its facing: the pupils' place on the hunched face, and less than the
--- root's half depth (RootSize.Z / 2), so the eye never ends up inside a wall the root touches.
+-- Studs the eye sits ahead of the root along its facing: less than the root's half depth (RootSize.Z / 2), so the eye
+-- never ends up inside a wall the root touches.
 local EYE_FORWARD = 0.6
 local SAME_SPOT = 1e-6
--- How far from the rail the Creature's root may be when its VentSegmentId is unknown and its duct edge is found by
--- projecting the root onto the rail instead.
-local RAIL_SNAP = 4
 
 local ScoreWeights = table.freeze({
 	Closeness = 1,
@@ -110,33 +101,37 @@ Perception.ScoreWeights = ScoreWeights
 --------------------------------------------------------------------------------
 
 local function difficultySpec(difficulty: Enums.Difficulty): DifficultyConfig.DifficultySpec
-	if difficulty == "Nightmare" then
-		return DifficultyConfig.Nightmare
-	end
-	return DifficultyConfig.Standard
+	return if difficulty == "Nightmare" then DifficultyConfig.Nightmare else DifficultyConfig.Standard
 end
 
--- The Creature's eye for a root frame and PoseMode (see the header).
+-- The Creature's eye for a root frame and PoseMode (the contract's: Biped, Hunched, Swim, Stunned).
 function Perception.creatureEyeAt(rootCFrame: CFrame, poseMode: string): Vector3
 	local height = CreatureConfig.EyeHeightAboveRoot[poseMode] or CreatureConfig.EyeHeightAboveRoot.Biped
 	return (rootCFrame * CFrame.new(0, height, -EYE_FORWARD)).Position
 end
 
--- A player's EyePoint for a root position and MoveState.
+-- A player's eye point for a root position and MoveState.
 function Perception.playerEyeAt(rootPosition: Vector3, moveState: string): Vector3
 	local height = CameraConfig.EyeHeightAboveRoot[moveState] or CameraConfig.EyeHeightAboveRoot.Standing
 	return rootPosition + Vector3.new(0, height, 0)
 end
 
--- How far the Creature sees a player: full range when their flashlight is lit, DarknessSightMultiplier of it in
--- the dark; both scaled by the difficulty.
-function Perception.visibleRange(lit: boolean, difficulty: Enums.Difficulty): number
-	local range = SENSES.SightRange * difficultySpec(difficulty).sightRangeMultiplier
-	return if lit then range else range * SENSES.DarknessSightMultiplier
+-- How far the Creature sees a player: by their torch, the light they stand in and their posture.
+function Perception.sightRange(o: Observation, difficulty: Enums.Difficulty): number
+	local range = if o.torch then SENSES.SightTorch elseif o.lit then SENSES.SightLit else SENSES.SightDark
+	if o.moveState == "Crouching" or o.moveState == "DownedCrawling" then
+		range *= SENSES.CrouchFactor
+	end
+	return range * difficultySpec(difficulty).sightRangeMultiplier
 end
 
--- Whether `target` is inside the cone of `halfAngleDeg` around `facing` from `eye`, or within `peripheral` studs
--- of the eye whatever the facing. A zero facing has no cone (only the peripheral sphere counts).
+-- The longest sight range on a difficulty (the score's closeness scale).
+function Perception.fullRange(difficulty: Enums.Difficulty): number
+	return SENSES.SightTorch * difficultySpec(difficulty).sightRangeMultiplier
+end
+
+-- Inside the cone of `halfAngleDeg` around `facing`, or within `peripheral` of the eye, both about the upright axis:
+-- the bearing from the flat facing and the distance along the floor.
 function Perception.inViewCone(
 	eye: Vector3,
 	facing: Vector3,
@@ -144,83 +139,45 @@ function Perception.inViewCone(
 	halfAngleDeg: number,
 	peripheral: number
 ): boolean
-	local offset = target - eye
-	local distance = offset.Magnitude
+	local ox, oz = target.X - eye.X, target.Z - eye.Z
+	local distance = math.sqrt(ox * ox + oz * oz)
 	if distance <= peripheral or distance < SAME_SPOT then
 		return true
 	end
-	if facing.Magnitude < SAME_SPOT then
+	local fl = math.sqrt(facing.X * facing.X + facing.Z * facing.Z)
+	if fl < SAME_SPOT then
 		return false
 	end
-	return facing.Unit:Dot(offset / distance) >= math.cos(math.rad(halfAngleDeg)) - 1e-9
-end
-
--- The duct edge (its two end nodes) whose VentShaft SegmentId is `segmentId`, or nil when no edge carries it.
-function Perception.segmentNodes(graph: VentGraph.Graph, segmentId: string): { string }?
-	local ids: { string } = {}
-	for id in graph.nodes do
-		table.insert(ids, id)
-	end
-	table.sort(ids)
-	for _, id in ids do
-		for _, other in graph.nodes[id].links do
-			if graph.segments[VentGraph.pairKey(id, other)] == segmentId then
-				return { id, other }
-			end
-		end
-	end
-	return nil
-end
-
--- The nodes of the duct piece under `position` (an edge's two ends, or a mouth stub's one node), nil off the rail.
-function Perception.railNodes(graph: VentGraph.Graph, position: Vector3): { string }?
-	local rail = VentGraph.nearest(graph, position, RAIL_SNAP)
-	if not rail then
-		return nil
-	end
-	local b = rail.b
-	return if b then { rail.a, b } else { rail.a }
-end
-
--- Same or adjacent duct: the rail piece a player is on shares a node with the Creature's edge.
-function Perception.ventsAdjacent(creatureNodes: { string }, rail: VentGraph.RailPoint): boolean
-	if table.find(creatureNodes, rail.a) ~= nil then
-		return true
-	end
-	local b = rail.b
-	return b ~= nil and table.find(creatureNodes, b) ~= nil
+	local dot = (facing.X * ox + facing.Z * oz) / (fl * distance)
+	return dot >= math.cos(math.rad(halfAngleDeg)) - 1e-9
 end
 
 -- Why a player is out of the candidate set before any geometry is tested (nil = still a candidate).
-function Perception.excluded(viewer: Viewer, observation: Observation): string?
-	if not observation.playing then
+function Perception.excluded(viewer: Viewer, o: Observation): string?
+	if not o.playing then
 		return "NotPlaying"
 	end
-	if observation.moveState == "Hiding" then
+	if o.moveState == "Hiding" then
 		return "Hiding"
 	end
-	if observation.moveState == "Underwater" and not viewer.aquatic then
+	if o.moveState == "Underwater" and not viewer.aquatic then
 		return "Underwater"
 	end
-	if observation.inVent then
-		local nodes = viewer.ventNodes
-		local rail = observation.rail
-		if not viewer.inVent or nodes == nil or rail == nil or not Perception.ventsAdjacent(nodes, rail) then
-			return "InVent"
-		end
+	if o.inVent then
+		return "InVent"
 	end
 	return nil
 end
 
 function Perception.score(
 	distance: number,
-	fullRange: number,
+	range: number,
 	inCone: boolean,
 	lit: boolean,
 	isTarget: boolean,
 	downed: boolean
 ): number
-	local closeness = if fullRange > 0 then math.clamp(1 - distance / fullRange, 0, 1) else 0
+	local closeness = if range > 0 then math.clamp(1 - distance / range, 0, 1) else 0
 	local score = closeness * ScoreWeights.Closeness
 	if inCone then
 		score += ScoreWeights.InCone
@@ -237,46 +194,36 @@ function Perception.score(
 	return score
 end
 
--- The Sighting of one player, or nil when the Creature cannot see them (see the header for the order of tests;
--- the raycast runs last, only for players every cheaper rule lets through).
-function Perception.judge(viewer: Viewer, observation: Observation): Sighting?
-	if Perception.excluded(viewer, observation) ~= nil then
+-- The Sighting of one player, or nil (the line test runs last).
+function Perception.judge(viewer: Viewer, o: Observation): Sighting?
+	if Perception.excluded(viewer, o) ~= nil then
 		return nil
 	end
-	local distance = (observation.eye - viewer.eye).Magnitude
-	if distance > Perception.visibleRange(observation.lit, viewer.difficulty) then
+	local distance = (o.eye - viewer.eye).Magnitude
+	if distance > Perception.sightRange(o, viewer.difficulty) then
 		return nil
 	end
-	if
-		not Perception.inViewCone(
-			viewer.eye,
-			viewer.facing,
-			observation.eye,
-			SENSES.SightHalfAngle,
-			SENSES.PeripheralRange
-		)
-	then
+	local half = if o.moving then SENSES.MovingHalfAngle else SENSES.SightHalfAngle
+	local peripheral = if viewer.blindPeripheral
+		then 0
+		elseif o.moving then SENSES.MovingPeripheralRange
+		else SENSES.PeripheralRange
+	if not Perception.inViewCone(viewer.eye, viewer.facing, o.eye, half, peripheral) then
 		return nil
 	end
-	if not viewer.raycast(viewer.eye, observation.eye) then
+	if not viewer.raycast(viewer.eye, o.eye) then
 		return nil
 	end
-	local inCone = Perception.inViewCone(viewer.eye, viewer.facing, observation.eye, SENSES.SightHalfAngle, 0)
-	local isTarget = viewer.targetUserId ~= nil and viewer.targetUserId == observation.player.UserId
+	local inCone = Perception.inViewCone(viewer.eye, viewer.facing, o.eye, half, 0)
+	local isTarget = viewer.targetUserId ~= nil and viewer.targetUserId == o.player.UserId
+	local shown = o.torch or o.lit
 	return {
-		player = observation.player,
-		eye = observation.eye,
+		player = o.player,
+		eye = o.eye,
 		distance = distance,
 		inCone = inCone,
-		lit = observation.lit,
-		score = Perception.score(
-			distance,
-			Perception.visibleRange(true, viewer.difficulty),
-			inCone,
-			observation.lit,
-			isTarget,
-			observation.downed
-		),
+		lit = shown,
+		score = Perception.score(distance, Perception.fullRange(viewer.difficulty), inCone, shown, isTarget, o.downed),
 	}
 end
 
@@ -294,6 +241,51 @@ function Perception.rank(sightings: { Sighting }): { Sighting }
 	return sightings
 end
 
+-- Every observed player the viewer can see, best first.
+function Perception.scan(viewer: Viewer, observations: { Observation }): { Sighting }
+	local out: { Sighting } = {}
+	for _, o in observations do
+		local sighting = Perception.judge(viewer, o)
+		if sighting then
+			table.insert(out, sighting)
+		end
+	end
+	return Perception.rank(out)
+end
+
+-- Degrees between a look direction from `eye` and the direction to `head` (180 when degenerate).
+function Perception.stareAngle(eye: Vector3, look: Vector3, head: Vector3): number
+	local offset = head - eye
+	local d = offset.Magnitude
+	local l = look.Magnitude
+	if d < SAME_SPOT or l < SAME_SPOT then
+		return 180
+	end
+	return math.deg(math.acos(math.clamp(look:Dot(offset) / (d * l), -1, 1)))
+end
+
+-- How far a stare reaches: LitRange when the Creature stands lit or the player's torch is on, else DarkRange.
+function Perception.stareRange(torchOn: boolean, creatureLit: boolean): number
+	return if torchOn or creatureLit then STARE.LitRange else STARE.DarkRange
+end
+
+-- Whether a look counts toward the stare this tick.
+function Perception.staring(
+	looker: Looker,
+	head: Vector3,
+	creatureLit: boolean,
+	lineClear: (from: Vector3, to: Vector3) -> boolean,
+	halfAngle: number?
+): boolean
+	if (looker.eye - head).Magnitude > Perception.stareRange(looker.torch, creatureLit) then
+		return false
+	end
+	if Perception.stareAngle(looker.eye, looker.look, head) > (halfAngle or STARE.HalfAngle) then
+		return false
+	end
+	return lineClear(looker.eye, head)
+end
+
 --------------------------------------------------------------------------------
 -- Reading the world
 --------------------------------------------------------------------------------
@@ -307,21 +299,24 @@ local function creatureRoot(creature: Model): BasePart?
 	return if root and root:IsA("BasePart") then root else nil
 end
 
-local function poseModeOf(creature: Model): Enums.PoseMode
+-- The contract's pose of a Creature model: PoseMode (Biped / Hunched / Swim / Quadruped), Stunned while its
+-- MonsterState is.
+function Perception.poseOf(creature: Model): string
+	if creature:GetAttribute(C.MonsterState) == "Stunned" then
+		return "Stunned"
+	end
 	local value = creature:GetAttribute(C.PoseMode)
-	for _, mode: Enums.PoseMode in Enums.PoseMode do
-		if value == mode then
-			return mode
-		end
+	if type(value) == "string" and Enums.has(Enums.PoseMode, value) then
+		return value
 	end
 	return "Biped"
 end
 
--- root + EyeHeightAboveRoot[PoseMode] (+ EyeForward along the facing); the model's pivot stands in for a missing root.
+-- root + EyeHeightAboveRoot[pose] (+ EyeForward along the facing); the model's pivot stands in for a missing root.
 function Perception.creatureEye(creature: Model): Vector3
 	local root = creatureRoot(creature)
 	local frame = if root then root.CFrame else creature.WorldPivot
-	return Perception.creatureEyeAt(frame, poseModeOf(creature))
+	return Perception.creatureEyeAt(frame, Perception.poseOf(creature))
 end
 
 -- root + CameraConfig.EyeHeightAboveRoot[MoveState]; nil without a character root.
@@ -331,108 +326,6 @@ function Perception.playerEye(player: Player): Vector3?
 		return nil
 	end
 	return Perception.playerEyeAt(root.CFrame.Position, PlayerStateService.GetMoveState(player))
-end
-
--- Everything judge() needs about `player`, read from the player services; nil without a character root.
-function Perception.observe(player: Player): Observation?
-	local eye = Perception.playerEye(player)
-	if not eye then
-		return nil
-	end
-	local inVent = VentNetworkService.IsInVent(player)
-	return {
-		player = player,
-		eye = eye,
-		playing = LifeStateService.IsPlaying(player),
-		downed = LifeStateService.GetState(player) == "Downed",
-		moveState = PlayerStateService.GetMoveState(player),
-		lit = FlashlightService.IsOn(player),
-		inVent = inVent,
-		rail = if inVent then VentNetworkService.GetRailPoint(player) else nil,
-	}
-end
-
--- Line of sight with the §4b rules: Default group, every character (the scanned players' too) and the Creature
--- excluded.
-local function defaultRaycast(creature: Model, players: { Player }): (from: Vector3, to: Vector3) -> boolean
-	local exclude: { Instance } = { creature }
-	local seen: { [Instance]: boolean } = { [creature] = true }
-	local function addCharacter(player: Player)
-		local character = player.Character
-		if character and not seen[character] then
-			seen[character] = true
-			table.insert(exclude, character)
-		end
-	end
-	for _, player in Players:GetPlayers() do
-		addCharacter(player)
-	end
-	for _, player in players do
-		addCharacter(player)
-	end
-	local params = SpatialQuery.losParams(exclude)
-	return function(from: Vector3, to: Vector3): boolean
-		return SpatialQuery.lineClear(from, to, params, nil)
-	end
-end
-
--- The duct edge under the Creature: its VentSegmentId's edge when the graph knows it, else the rail piece its root
--- projects onto (ducts whose fittings meet end to end carry no SegmentId).
-local function creatureVentNodes(creature: Model, ctx: SightContext): { string }?
-	if not ctx.creatureInVent then
-		return nil
-	end
-	local levelId = creature:GetAttribute(C.LevelId)
-	if type(levelId) ~= "string" then
-		return nil
-	end
-	local graph = VentNetworkService.GetGraph(levelId)
-	if not graph then
-		return nil
-	end
-	local segment = ctx.creatureSegment
-	local nodes = if segment then Perception.segmentNodes(graph, segment) else nil
-	if nodes then
-		return nodes
-	end
-	local root = creatureRoot(creature)
-	return if root then Perception.railNodes(graph, root.CFrame.Position) else nil
-end
-
--- The Creature's side of a scan, read from its model (root, PoseMode, MonsterState, TargetUserId, LevelId).
-function Perception.viewer(creature: Model, ctx: SightContext, players: { Player }?): Viewer
-	local root = creatureRoot(creature)
-	local frame = if root then root.CFrame else creature.WorldPivot
-	local target = creature:GetAttribute(C.TargetUserId)
-	local poseMode = poseModeOf(creature)
-	local state = creature:GetAttribute(C.MonsterState)
-	return {
-		eye = Perception.creatureEyeAt(frame, poseMode),
-		facing = frame.LookVector,
-		difficulty = ctx.difficulty,
-		inVent = ctx.creatureInVent,
-		ventNodes = creatureVentNodes(creature, ctx),
-		aquatic = poseMode == "Swim" or state == "AquaticStalk",
-		targetUserId = if type(target) == "number" and target > 0 then target else nil,
-		raycast = ctx.raycast or defaultRaycast(creature, players or {}),
-	}
-end
-
--- Every player in `players` the Creature can see now, best first.
-function Perception.scan(creature: Model, players: { Player }, ctx: SightContext): { Sighting }
-	local viewer = Perception.viewer(creature, ctx, players)
-	local sightings: { Sighting } = {}
-	for _, player in players do
-		local observation = Perception.observe(player)
-		if not observation then
-			continue
-		end
-		local sighting = Perception.judge(viewer, observation)
-		if sighting then
-			table.insert(sightings, sighting)
-		end
-	end
-	return Perception.rank(sightings)
 end
 
 return table.freeze(Perception)

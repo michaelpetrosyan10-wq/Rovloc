@@ -19,8 +19,14 @@
 --     OneShots play them too: CreatureVanish -> Vanish, CreatureReveal -> Reveal, Jumpscare -> Lunge, and
 --     LockerRip / DoorSmash when the Creature is near their subject. The same action at the same moment from two
 --     sources plays once. Actions asked for before the Creature exists wait for it (while they would still run).
+--   * The view contract (docs/MONSTER.md 12): Action (Stare, LookAway, ReachIn, FadeOut, FadeIn; "" for none) at
+--     ActionAt plays the profile's action at that server time; a held one (Stare, LookAway, ReachIn) is let go when
+--     the Action changes. The look target (the TargetUserId's eyes, in rig space) is what the ReachIn and the
+--     Jumpscare aim at. Fade (0..1) dissolves it: each part's seeded threshold mixed with its height (the feet go
+--     first on a FadeOut, the mask last; the mask forms first on a FadeIn), a soft edge across it.
 --   * Hidden: LocalTransparencyModifier 1 on every part of the Creature (this controller is its only writer of it),
 --     its sounds silenced; back to 0 when it reappears.
+--   * The jumpscare's maw: SetJawOverride(angle) holds the hinge open over every pose (JumpscareController).
 --   * Pupils: the pinprick Neon pupils are faint in the light and brighten (less transparent, slightly larger) while
 --     the Creature is in a duct or in darkness (the summed falloff of the LevelLight fixtures' lit lights at its eyes).
 --   * Audio (AudioController.PlayLocal, SynthPresets names): while InVent, looped VentScrape + VentBreathing follow
@@ -95,7 +101,13 @@ local SKITTER_VOLUME = 0.6
 local SUBJECT_REACH = 24 -- LockerRip / DoorSmash OneShots animate the Creature only this close to their subject
 local DUPLICATE_WINDOW = 0.05 -- the same action within this many seconds of a running one is the same moment
 local QUADRUPED_STATES: { [string]: boolean } = { VentCrawl = true, VentRetreat = true }
-local CHASE_STATES: { [string]: boolean } = { WallChase = true, VentChase = true }
+local CHASE_STATES: { [string]: boolean } = { WallChase = true }
+-- The view contract's actions the profile plays (the Jumpscare comes through the OneShot as the Lunge).
+local CONTRACT_ACTIONS: { [string]: boolean } =
+	{ Stare = true, LookAway = true, ReachIn = true, FadeOut = true, FadeIn = true }
+local DISSOLVE_EDGE = 0.12 -- the fade's soft edge (share of the fade a part takes to go)
+local DISSOLVE_HEIGHT = 0.65 -- how much a part's height orders the dissolve (the rest is its seeded noise)
+local RIG_FLOOR = -CreatureConfig.Rig.HipHeight - CreatureConfig.Rig.RootSize.Y / 2
 local ONESHOT_ACTIONS: { [string]: string } = {
 	CreatureVanish = "Vanish",
 	CreatureReveal = "Reveal",
@@ -127,6 +139,10 @@ type Entry = {
 	growlSlot: number, -- the last growl slot dealt with
 	growlPlan: number, -- the slot `growlAt` was drawn for
 	growlAt: number?,
+	contractAction: string, -- the view contract's Action being played
+	contractAt: number,
+	fade: number, -- the contract's Fade (1 shown)
+	thresholds: { [BasePart]: number }, -- each part's dissolve threshold
 }
 
 type Pending = { name: string, startAt: number }
@@ -395,16 +411,64 @@ local function feed(entry: Entry, animator: ProceduralAnimator.Animator, dt: num
 		lookPitch = pitch or 0,
 		time = Workspace:GetServerTimeNow(),
 	})
+	-- the ReachIn and the Jumpscare aim at the target's eyes
+	Creature.setLookTarget(animator.Map, if eyes then root.CFrame:PointToObjectSpace(eyes) else nil)
+	-- the view contract's action
+	local actionName = Attributes.getString(model, C.Action, "")
+	local actionAt = Attributes.getNumber(model, C.ActionAt, 0)
+	if actionName ~= entry.contractAction or actionAt ~= entry.contractAt then
+		local previous = entry.contractAction
+		if CONTRACT_ACTIONS[previous] and Creature.isHeld(previous) then
+			Creature.releaseAction(animator.Map, previous, Workspace:GetServerTimeNow())
+		end
+		entry.contractAction, entry.contractAt = actionName, actionAt
+		if CONTRACT_ACTIONS[actionName] then
+			Creature.playAction(animator.Map, actionName, actionAt)
+		end
+	end
+end
+
+-- The dissolve threshold of a part: low parts high (they go first as the fade falls, form last as it rises), mixed
+-- with a seeded per-part noise.
+function CreatureController.dissolveThreshold(height: number, noise: number): number
+	local h = MathUtil.clamp01((height - RIG_FLOOR) / CreatureConfig.Rig.Height)
+	return DISSOLVE_HEIGHT * (1 - h) + (1 - DISSOLVE_HEIGHT) * MathUtil.clamp01(noise)
+end
+
+-- A part's LocalTransparencyModifier at `fade` (1 shown, 0 gone) for its `threshold`.
+function CreatureController.dissolveModifier(fade: number, threshold: number): number
+	if fade >= 1 then
+		return 0
+	elseif fade <= 0 then
+		return 1
+	end
+	return 1 - MathUtil.clamp01((fade - threshold) / DISSOLVE_EDGE + 0.5)
 end
 
 --------------------------------------------------------------------------------
 -- Visibility, pupils, audio
 --------------------------------------------------------------------------------
 
+local function thresholdOf(entry: Entry, part: BasePart): number
+	local existing = entry.thresholds[part]
+	if existing then
+		return existing
+	end
+	local height = entry.root.CFrame:PointToObjectSpace(part.Position).Y
+	local noise = (math.sin(#part.Name * 12.9898 + string.byte(part.Name, 1) * 4.1414 + height * 7.7) * 43758.5453) % 1
+	local threshold = CreatureController.dissolveThreshold(height, noise)
+	entry.thresholds[part] = threshold
+	return threshold
+end
+
 local function writeHidden(entry: Entry)
-	local value = if entry.hidden then 1 else 0
+	local fade = entry.fade
 	for _, part in entry.parts do
-		if part.LocalTransparencyModifier ~= value then
+		local value = if entry.hidden
+			then 1
+			elseif fade >= 1 then 0
+			else CreatureController.dissolveModifier(fade, thresholdOf(entry, part))
+		if math.abs(part.LocalTransparencyModifier - value) > 1e-3 then
 			part.LocalTransparencyModifier = value
 		end
 	end
@@ -651,6 +715,10 @@ local function tryAttach(model: Model): boolean
 		growlSlot = math.floor(Workspace:GetServerTimeNow() / GROWL_SLOT),
 		growlPlan = -1,
 		growlAt = nil,
+		contractAction = "",
+		contractAt = 0,
+		fade = Attributes.getNumber(model, C.Fade, 1),
+		thresholds = {},
 	}
 	current = entry
 
@@ -681,6 +749,10 @@ local function tryAttach(model: Model): boolean
 		if entry.hidden then
 			stopLoops(entry, 0.1)
 		end
+	end)
+	trove:Connect(model:GetAttributeChangedSignal(C.Fade), function()
+		entry.fade = Attributes.getNumber(model, C.Fade, 1)
+		writeHidden(entry)
 	end)
 	trove:Connect(model.DescendantAdded, function(descendant: Instance)
 		if descendant:IsA("BasePart") and table.find(entry.parts, descendant) == nil then
@@ -791,6 +863,14 @@ function CreatureController.PlayAction(name: string, startAt: number?): boolean
 	end
 	table.insert(pending, { name = name, startAt = at })
 	return true
+end
+
+-- Holds the Creature's hinge `angle` radians open over every pose (the jumpscare's maw); nil lets go.
+function CreatureController.SetJawOverride(angle: number?)
+	local entry = current
+	if entry then
+		Creature.setJawOverride(entry.animator.Map, angle)
+	end
 end
 
 -- Ends `name` (every action when nil) on the Creature now.

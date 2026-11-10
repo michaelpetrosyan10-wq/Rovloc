@@ -10,9 +10,11 @@
 --   1. Lock. CharacterService.Lock(victim, "Jumpscare", "Anchor"): collision Locked, the root anchored by the server.
 --   2. Face to face (facePair, pure). The victim's root turns in place to face the Creature (CharacterService.Teleport,
 --      so the move is announced); the Creature's root is anchored for the moment (kinematic) and set on the line
---      between them at the kind's spacing (FaceDistance plus how far that pose carries its face ahead of its root, for
---      Hallway / Locker / Vent / Underwater), facing the victim, at its own height. It only ever closes in, unless it
---      stands closer than the kind's minimum, where it is eased back out to it.
+--      between them at the kind's spacing (CreatureConfig.Jumpscare.Spacing: Hallway 4.2, Locker 4.4, far enough back
+--      for the Tall Man's bow to bring its mask level with the victim's eye; Vent and Underwater lunge straight in),
+--      facing the victim, at its own height. It only ever closes in, unless it stands closer than the kind's minimum
+--      (MinSpacing), where it is eased back out to it. The step is the brain's to bound (SetStager): only as far as its
+--      body clears the walls, so the root never ends in or behind one (the rig's bow steps back the rest, on screen).
 --   3. Moments, all at startAt = now + GameConfig.OneShotLead (schedule, pure): OneShot "Jumpscare" (subject = the
 --      victim's character; args kind, userId, position) for every client (CreatureController plays the Lunge,
 --      JumpscareController shakes and stings everyone nearby); PrivateCue "JumpscareVictim" (args kind, face: the
@@ -122,16 +124,16 @@ type Sequence = {
 	settled: boolean,
 }
 
-local SPACING: { [string]: Spacing } = {
-	-- Standing: the hunched face rides up to a stud ahead of the root.
-	Hallway = { distance = J.FaceDistance + 0.8, minimum = J.FaceDistance + 0.3 },
-	-- Reaching in through the ripped-open door: the door frame stands between the two roots.
-	Locker = { distance = J.FaceDistance + 1.4, minimum = J.FaceDistance + 0.8 },
-	-- On all fours in the bore: the head leads the body down the duct.
-	Vent = { distance = J.FaceDistance + 1.2, minimum = J.FaceDistance + 0.7 },
-	-- Swimming level: the head leads the long body through the water.
-	Underwater = { distance = J.FaceDistance + 1.0, minimum = J.FaceDistance + 0.4 },
-}
+-- Root to root (docs/MONSTER.md 9). On its feet it bows to the victim: the chest folds far forward and the long neck
+-- reaches down until the mask hangs level with their eye about 1.3 studs off (the Creature profile's Lunge), so it
+-- stands well back. In a duct (Vent) and in the water it lunges straight in.
+local SPACING: { [string]: Spacing } = {}
+for kind, distance in J.Spacing do
+	SPACING[kind] = { distance = distance, minimum = J.MinSpacing[kind] or distance }
+end
+
+-- The brain's bound on the staging step (MonsterAIService: the body's walls); identity without one.
+local stager: ((from: CFrame, to: CFrame) -> CFrame)? = nil
 
 local JumpscareHandler = {}
 
@@ -495,6 +497,10 @@ local function begin(
 	if not CharacterService.Teleport(victim, victimTarget) then
 		log.debug("%s has no managed character to turn; held as they stand", victim.Name)
 	end
+	local stage = stager
+	if stage then
+		creatureTarget = stage(creatureRoot.CFrame, creatureTarget)
+	end
 	if not creatureRoot.Anchored then
 		creatureRoot.Anchored = true
 	end
@@ -560,6 +566,11 @@ function JumpscareHandler.Catch(creature: Model, player: Player, kind: Enums.Jum
 	end
 	begin(creature, creatureRoot, player, victimRoot, kind)
 	return true
+end
+
+-- The brain's bound on the staging step: `fn(from, to)` returns where the root may really go (nil removes it).
+function JumpscareHandler.SetStager(fn: ((from: CFrame, to: CFrame) -> CFrame)?)
+	stager = fn
 end
 
 -- Whether a catch is running.

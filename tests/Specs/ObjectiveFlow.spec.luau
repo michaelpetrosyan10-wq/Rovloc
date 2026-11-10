@@ -39,7 +39,7 @@ local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetwor
 local ChemicalProjectileService = require(ServerScriptService.Services.Mechanics.ChemicalProjectileService)
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
 local FloodedPoolService = require(ServerScriptService.Services.Mechanics.FloodedPoolService)
-local LockerHidingService = require(ServerScriptService.Services.Mechanics.LockerHidingService)
+local HideSpotService = require(ServerScriptService.Services.Mechanics.HideSpotService)
 local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
 local ObjectiveService = require(ServerScriptService.Services.Levels.ObjectiveService)
 local Brain = require(ServerScriptService.Services.Monster.MonsterAIService.Brain)
@@ -197,8 +197,8 @@ local function inRun(levelId: Enums.LevelId, count: number, body: (world: World)
 		LifeStateService.BeginRun(ctx)
 		DoorService.Init()
 		DoorService.BeginRun(ctx)
-		LockerHidingService.Init()
-		LockerHidingService.BeginRun(ctx)
+		HideSpotService.Init()
+		HideSpotService.BeginRun(ctx)
 		ChemicalProjectileService.Init()
 		ChemicalProjectileService.BeginRun(ctx)
 		ObjectiveService.BeginRun(ctx)
@@ -213,14 +213,14 @@ local function inRun(levelId: Enums.LevelId, count: number, body: (world: World)
 	ObjectiveService.EndRun()
 	ObjectiveService.SetClock(nil)
 	ChemicalProjectileService.EndRun()
-	LockerHidingService.EndRun()
+	HideSpotService.EndRun()
 	DoorService.EndRun()
 	LifeStateService.EndRun()
 	PlayerStateService.EndRun()
 	RunStatsService.EndRun()
 	for _, player in players do
 		ChemicalProjectileService.OnPlayerRemoving(player)
-		LockerHidingService.OnPlayerRemoving(player)
+		HideSpotService.OnPlayerRemoving(player)
 		LifeStateService.OnPlayerRemoving(player)
 		PlayerStateService.OnPlayerRemoving(player)
 	end
@@ -463,8 +463,9 @@ return {
 		t.eq(NoiseConfig.Kinds.ObjectiveClunk.priority, "High")
 		t.eq(NoiseConfig.Kinds.GeneratorStart.radius, 170)
 		t.eq(NoiseConfig.Kinds.GeneratorStart.priority, "Critical")
-		t.near(DifficultyConfig.Standard.hearingMultiplier, 1.15, EPS)
-		t.near(DifficultyConfig.Nightmare.hearingMultiplier, 1.4375, EPS)
+		-- the Tall Man's radii (NoiseConfig, docs/MONSTER.md 3.1) are the Standard reach; Nightmare hears 1.25 x
+		t.near(DifficultyConfig.Standard.hearingMultiplier, 1, EPS)
+		t.near(DifficultyConfig.Nightmare.hearingMultiplier, 1.25, EPS)
 		t.near(DifficultyConfig.Standard.catchCooldownSeconds, 14.4, EPS)
 		t.near(DifficultyConfig.Nightmare.catchCooldownSeconds, 8.8, EPS)
 		t.eq(DifficultyConfig.Standard.batteriesPerLevel, 2)
@@ -493,10 +494,10 @@ return {
 		local check: Brain.CatchCheck = {
 			horizontal = 2,
 			vertical = 0,
-			distance = 2,
-			creatureInVent = false,
+			reach = CreatureConfig.Rig.Reach,
 			targetInVent = false,
 			lineClear = true,
+			bodyClear = true,
 			playing = true,
 			hiding = false,
 			canHunt = true,
@@ -511,24 +512,27 @@ return {
 		check.targetSwimming = true
 		t.eq(Brain.catchKind(check), nil, "a swimmer: none")
 		local summary: Brain.Summary = {
-			state = "WallChase",
+			state = "Patrol",
 			elapsed = 1,
 			scripted = false,
 			stunned = false,
 			awake = true,
 			catching = false,
+			warping = false,
 			canHunt = true,
-			inVent = false,
 			sees = true,
-			seesInVent = false,
-			ventQuarry = false,
+			stared = false,
+			hidingWatch = false,
 			heard = 0,
 			investigating = 0,
-			memoryAge = 0,
-			breakChase = false,
+			chaseSeconds = 0,
+			lostSeconds = 0,
+			maxChase = DifficultyConfig.Standard.maxChaseSeconds,
+			chaseLost = DifficultyConfig.Standard.chaseLostSeconds,
 			swimmer = true,
 			inWater = true,
 			retreating = false,
+			teleportDue = false,
 			stateDone = false,
 		}
 		t.eq(Brain.decide(summary).state, "AquaticStalk", "a swimmer in sight from the water is stalked, not chased")
@@ -541,7 +545,7 @@ return {
 		assert(info, "pool info")
 		t.truthy(#info.basins > 0, "the pool has water")
 		for _, basin in info.basins do
-			t.eq(basin.ventExitOnly, true, basin.id .. " is left only through its vent route")
+			t.eq(basin.fadeOnly, true, basin.id .. " is entered and left only by a fade, never the vents or the deck")
 		end
 	end,
 
@@ -898,13 +902,13 @@ return {
 			end
 			assert(empty and keyed and keyLocker, "a key locker and an empty one")
 			use(t, world, player, "Search", empty.locker, empty.prompt, "an empty locker")
-			t.truthy(LockerHidingService.IsSearchOpen(empty.locker), "it swings ajar")
+			t.truthy(HideSpotService.IsSearchOpen(empty.locker), "it swings ajar")
 			t.falsy(serves("Search", empty.locker, empty.prompt), "searched once")
-			local hideFilter = LockerHidingService.HideHandler.filter
+			local hideFilter = HideSpotService.HideHandler.filter
 			assert(hideFilter, "the Hide filter")
 			t.falsy(hideFilter(empty.locker, promptOf(empty.locker, "Hide")), "no hiding while it stands open")
 			advance(world, T.SearchEmptySeconds + 0.1)
-			t.falsy(LockerHidingService.IsSearchOpen(empty.locker), "and shuts again")
+			t.falsy(HideSpotService.IsSearchOpen(empty.locker), "and shuts again")
 			use(t, world, player, "Search", keyed.locker, keyed.prompt, "the key's locker")
 			t.truthy(key:IsDescendantOf(game:GetService("Workspace")), "the key shows")
 			use(t, world, player, "Pickup", key, promptOf(key, "Pickup"), "the coach's key")
