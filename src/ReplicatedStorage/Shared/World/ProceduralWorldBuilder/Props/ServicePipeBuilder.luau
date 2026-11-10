@@ -14,12 +14,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 
 local PropKit = require(script.Parent.PropKit)
 local SchoolShellBuilder = require(script.Parent.Parent.SchoolShellBuilder)
 local SetDressingBuilder = require(script.Parent.SetDressingBuilder)
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Room = LayoutSchema.Room
 type Piece = SetDressingBuilder.Piece
@@ -140,14 +141,7 @@ local function findRun(
 	return nil
 end
 
-local function pipePieces(
-	info: LevelInfo,
-	room: Room,
-	run: Run,
-	ceiling: number,
-	random: Random,
-	index: number
-): { Piece }
+local function pipePieces(info: LevelInfo, room: Room, run: Run, ceiling: number, random: Rng, index: number): { Piece }
 	local origin = info.origin
 	local kind = run.kind
 	local name = string.format("%s%d", kind.name, index)
@@ -229,7 +223,7 @@ local function buildServicePipes(ctx: PropKit.StaticContext): number
 			continue
 		end
 		local ceiling = SchoolShellBuilder.ceilingBottom(layout, room)
-		local random = MathUtil.seededRandom(1, layout.id .. ":pipes:" .. room.id)
+		local random = Rng.seeded(1, layout.id .. ":pipes:" .. room.id)
 		local blocked = obstacles(info, room, ceiling)
 		local axisX = inner.w >= inner.d -- runs follow the long walls
 		local faces: { { number } } = if axisX

@@ -1279,7 +1279,7 @@ function ChemicalProjectileService.SpawnFlask(levelId: Enums.LevelId, cframe: CF
 		cframe = cframe,
 		variant = wholeVariant(variant),
 	}
-	local built = Builder.BuildProp(plan, parent, MathUtil.seededRandom(runSeed, "ChemicalFlask:" .. plan.anchorId))
+	local built = Builder.BuildProp(plan, parent)
 	if not (built and built:IsA("Model")) then
 		return nil
 	end

@@ -7,6 +7,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Geometry = require(script.Parent.Geometry)
@@ -24,6 +25,7 @@ local BURIED = 12 -- towers start this far below street level, so they never flo
 SkylineBuilder.InnerRadius = INNER_RADIUS
 SkylineBuilder.OuterRadius = OUTER_RADIUS
 
+type Rng = Rng.Rng
 type Footprint = { x: number, z: number, r: number }
 
 local function cosmetic(part: BasePart): BasePart
@@ -95,14 +97,7 @@ local function facingNormal(cframe: CFrame, target: Vector3): Vector3
 	return Vector3.new(0, 0, if localDir.Z > 0 then 1 else -1)
 end
 
-local function buildTower(
-	parent: Instance,
-	index: number,
-	random: Random,
-	x: number,
-	z: number,
-	target: Vector3
-): number
+local function buildTower(parent: Instance, index: number, random: Rng, x: number, z: number, target: Vector3): number
 	local count = 0
 	local distance = (Vector2.new(x, z) - Vector2.new(target.X, target.Z)).Magnitude
 	local width = random:NextNumber(18, 46)
@@ -210,7 +205,7 @@ end
 
 -- Builds the skyline into `parent`. Same seed -> identical skyline. Returns parts created.
 function SkylineBuilder.build(seed: number, parent: Instance): number
-	local random = MathUtil.seededRandom(seed, "Skyline")
+	local random = Rng.seeded(seed, "Skyline")
 	local size = WorldConfig.FootprintSize
 	local centre = Vector2.new(size.X / 2, size.Y / 2)
 	local target = Vector3.new(centre.X, WorldConfig.GroundY, centre.Y)

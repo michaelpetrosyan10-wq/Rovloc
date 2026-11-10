@@ -4,8 +4,9 @@
 --   Objectives     each floor's objective item (ObjectiveConfig): item.count of the layout's fair item.candidate
 --                  anchors (objectiveCandidates: at least EntryClearance studs walked from the floor's entry, never in
 --                  the room of a CreatureScarePose), with item.slots one candidate of each kind (the candidates cycle
---                  through the kinds in layout order), as props of kind item.prop, each with its slot (pick order,
---                  1..count; with kinds, the kind: a reagent's colour), listed in plan.objectives[levelId]
+--                  through the kinds in layout order), as props of kind item.prop (with kinds, each with its slot:
+--                  the kind, a reagent's colour; without, none, so the prop is the same on every run that uses its
+--                  anchor), listed in plan.objectives[levelId]
 --                  (RunDirector.objectiveOf). Several items lie in different rooms, at least PickSpacing studs apart,
 --                  and (three or more) in at least PickQuarters quarters of the floor: a seeded pass takes the first
 --                  shuffled candidate that keeps those rules, and a pass that falls short or bunches up is
@@ -29,10 +30,11 @@
 --                  fewer than MinCreatureSpawns Creature starts CreatureBand studs from its entry vestibule, out of
 --                  sight and outside every objective room. The unused candidates are jammed shut for the run.
 --
--- Pure: no instances, no clocks, no global random. Every decision draws from its own
--- MathUtil.seededRandom(seed, <decision key>) stream and walks layouts, anchors and grates in list order, so the
--- same inputs always produce an identical plan, and changing one decision (say the trap count) never shifts another
--- (the grate locks). Plans are frozen.
+-- Pure: no instances, no clocks, no global random. Every decision draws from its own Rng.seeded(seed, <decision key>)
+-- stream (Shared/Util/Rng: the same numbers in Lune, on Roblox and in the web's port, web/src/game/worldData.js) and
+-- walks layouts, anchors and grates in list order, so the same inputs always produce an identical plan on every
+-- platform, and changing one decision (say the trap count) never shifts another (the grate locks). A run picks
+-- where props go, never how they look: a prop's variant is fixed per anchor (variantOf). Plans are frozen.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -44,12 +46,14 @@ local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuild
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local ObjectivePlaces = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local ZoneGraph = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph)
 
 local log = Log.new("RunDirector")
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Anchor = LayoutSchema.Anchor
 type GrateSpec = LayoutSchema.GrateSpec
@@ -191,11 +195,11 @@ end
 local function spacedPass(
 	candidates: { Anchor },
 	count: number,
-	random: Random,
+	random: Rng,
 	spacing: number,
 	fixed: { Anchor }?
 ): ({ Anchor }, { Anchor })
-	local order = MathUtil.shuffle(table.clone(candidates), random)
+	local order = Rng.shuffle(table.clone(candidates), random)
 	local chosen: { Anchor } = {}
 	local passed: { Anchor } = {}
 	for _, anchor in order do
@@ -216,7 +220,7 @@ end
 local function chooseSpaced(
 	candidates: { Anchor },
 	count: number,
-	random: Random,
+	random: Rng,
 	spacing: number,
 	fixed: { Anchor }?
 ): { Anchor }
@@ -237,7 +241,7 @@ local function chooseSpaced(
 end
 
 -- Seeded choice of up to `count` anchors that prefers `spacing` but fills from the closer ones when it must.
-local function choosePreferSpaced(candidates: { Anchor }, count: number, random: Random, spacing: number): { Anchor }
+local function choosePreferSpaced(candidates: { Anchor }, count: number, random: Rng, spacing: number): { Anchor }
 	if count <= 0 or #candidates == 0 then
 		return {}
 	end
@@ -264,23 +268,30 @@ local function inLayoutOrder(layout: Layout, chosen: { Anchor }): { Anchor }
 	return sorted
 end
 
-local function plannedProp(seed: number, kind: string, layout: Layout, anchor: Anchor, slot: number?): Types.PlannedProp
-	local variantRandom = MathUtil.seededRandom(seed, "Variant|" .. kind .. "|" .. layout.id .. "|" .. anchor.id)
+-- The look variant of a `kind` prop on `anchorId` (1..VARIANT_RANGE): fixed per anchor, never per run, so the prop
+-- a run places on an anchor looks the same on every run and platform (the web exports one per candidate anchor).
+function RunDirector.variantOf(kind: string, layoutId: string, anchorId: string): number
+	return Rng.seeded(1, "Variant|" .. kind .. "|" .. layoutId .. "|" .. anchorId):NextInteger(1, VARIANT_RANGE)
+end
+
+-- The planned prop of `kind` on `anchor`, exactly as a run plans it (`slot`: a floor objective item's kind,
+-- RunDirector.itemSlot).
+function RunDirector.plannedProp(kind: string, layout: Layout, anchor: Anchor, slot: number?): Types.PlannedProp
 	local prop: Types.PlannedProp = {
 		kind = kind,
 		anchorId = anchor.id,
 		levelId = layout.id,
 		cframe = Builder.anchorCFrame(layout.id, anchor),
-		variant = variantRandom:NextInteger(1, VARIANT_RANGE),
+		variant = RunDirector.variantOf(kind, layout.id, anchor.id),
 		slot = slot,
 	}
 	table.freeze(prop)
 	return prop
 end
 
-local function addProps(props: { Types.PlannedProp }, seed: number, kind: string, layout: Layout, chosen: { Anchor })
+local function addProps(props: { Types.PlannedProp }, kind: string, layout: Layout, chosen: { Anchor })
 	for _, anchor in inLayoutOrder(layout, chosen) do
-		table.insert(props, plannedProp(seed, kind, layout, anchor))
+		table.insert(props, RunDirector.plannedProp(kind, layout, anchor))
 	end
 end
 
@@ -312,6 +323,29 @@ end
 function RunDirector.candidateSlot(spec: ObjectiveConfig.FloorSpec, index: number): number
 	local slots = spec.item.slots
 	return if slots then (index - 1) % slots + 1 else index
+end
+
+-- The slot a run gives the item on the `index`-th candidate (layout order) when it picks that candidate: its kind on a
+-- floor of kinds (a reagent's colour), else none. A pick's order is never part of the prop, so the prop a run builds
+-- on an anchor is the same on every run (and the web's export, which builds one per candidate, matches it).
+function RunDirector.itemSlot(spec: ObjectiveConfig.FloorSpec, index: number): number?
+	return if spec.item.slots then RunDirector.candidateSlot(spec, index) else nil
+end
+
+-- The planned prop of `spec`'s item on its candidate `anchor` of `layout`, exactly as every run that picks the anchor
+-- plans it (and as the web's export builds it on every candidate): the anchor's own variant, and its slot from the
+-- anchor's place among the floor's candidates in layout order (RunDirector.itemSlot), never from the pick's order.
+function RunDirector.objectiveProp(layout: Layout, spec: ObjectiveConfig.FloorSpec, anchor: Anchor): Types.PlannedProp
+	local slot: number? = nil
+	if spec.item.slots then
+		for index, candidate in anchorsOfKind(layout, spec.item.candidate, nil) do
+			if candidate.id == anchor.id then
+				slot = RunDirector.itemSlot(spec, index)
+				break
+			end
+		end
+	end
+	return RunDirector.plannedProp(spec.item.prop, layout, anchor, slot)
 end
 
 -- The item candidates of `layout` a run may use for `spec` (layout order): at least ObjectiveConfig.EntryClearance
@@ -384,7 +418,7 @@ function RunDirector.pickObjective(
 	spec: ObjectiveConfig.FloorSpec
 ): ({ Anchor }, { Anchor })
 	local candidates = RunDirector.objectiveCandidates(layout, spec)
-	local random = MathUtil.seededRandom(seed, "Objective|" .. layout.id)
+	local random = Rng.seeded(seed, "Objective|" .. layout.id)
 	local slots = spec.item.slots
 	local count = if slots then math.min(slots, spec.item.count) else math.min(spec.item.count, #candidates)
 	local groups: { { Anchor } } = {}
@@ -410,7 +444,7 @@ function RunDirector.pickObjective(
 		if slots then
 			-- kind by kind, the first shuffled candidate that keeps apart from the kinds already taken
 			for k = 1, count do
-				for _, anchor in MathUtil.shuffle(table.clone(groups[k]), random) do
+				for _, anchor in Rng.shuffle(table.clone(groups[k]), random) do
 					if keepsApart(anchor, pass) then
 						table.insert(pass, anchor)
 						break
@@ -418,7 +452,7 @@ function RunDirector.pickObjective(
 				end
 			end
 		else
-			for _, anchor in MathUtil.shuffle(table.clone(candidates), random) do
+			for _, anchor in Rng.shuffle(table.clone(candidates), random) do
 				if #pass >= count then
 					break
 				end
@@ -582,7 +616,7 @@ function RunDirector.pickRoute(seed: number, layouts: { Layout }?): { [string]: 
 		for _, check in RunDirector.routeChecks(layout, entry or layout.entry, byId) do
 			fair[check.stairwellId] = check.fair
 		end
-		local random = MathUtil.seededRandom(seed, "Route|" .. from)
+		local random = Rng.seeded(seed, "Route|" .. from)
 		local pick: WorldConfig.StairwellSpec? = nil
 		for _ = 1, ROUTE_ATTEMPTS do
 			local candidate = candidates[random:NextInteger(1, #candidates)]
@@ -635,10 +669,10 @@ local function lockGrates(
 		log.error("%s is unsolvable with its gates shut before any grate locks; no grate is locked", layout.id)
 		return {}, 0
 	end
-	local random = MathUtil.seededRandom(seed, "Grates|" .. layout.id)
+	local random = Rng.seeded(seed, "Grates|" .. layout.id)
 	local rerolls = 0
 	for attempt = 0, MAX_REROLLS do
-		local order = MathUtil.shuffle(table.clone(lockable), random)
+		local order = Rng.shuffle(table.clone(lockable), random)
 		local chosen: { GrateSpec } = {}
 		local blocked = table.clone(gates)
 		for i = 1, count do
@@ -708,11 +742,12 @@ function RunDirector.plan(
 		warnShort(floor.item.prop, layout, #picks, floor.item.count)
 		guardsByLevel[layout.id] = guards
 		local anchorIds: { string } = {}
-		for slot, anchor in picks do
+		for _, anchor in picks do
 			table.insert(anchorIds, anchor.id)
-			table.insert(objectiveProps, plannedProp(runSeed, floor.item.prop, layout, anchor, slot))
+			-- the anchor's own prop: with kinds its slot is the candidate's kind (the picks come one per kind in kind
+			-- order, so a full pick's place in the list is that kind too); without kinds, no slot
+			table.insert(objectiveProps, RunDirector.objectiveProp(layout, floor, anchor))
 		end
-		-- (with slots the picks come one per kind in kind order, so a pick's place in the list is its kind)
 		local guardIds: { string } = {}
 		for _, guard in guards do
 			table.insert(guardIds, guard.id)
@@ -739,14 +774,14 @@ function RunDirector.plan(
 				table.insert(candidates, anchor)
 			end
 		end
-		local random = MathUtil.seededRandom(runSeed, "Traps|" .. basement.id)
+		local random = Rng.seeded(runSeed, "Traps|" .. basement.id)
 		local fill = math.max(0, spec.trapCount - #guards)
 		local chosen = chooseSpaced(candidates, fill, random, MIN_TRAP_SPACING, guards)
 		for _, guard in guards do
 			table.insert(chosen, guard)
 		end
 		warnShort("bear traps", basement, #chosen, spec.trapCount)
-		addProps(props, runSeed, RunDirector.PropKinds.BearTrap, basement, chosen)
+		addProps(props, RunDirector.PropKinds.BearTrap, basement, chosen)
 	end
 
 	-- Chemical flasks
@@ -760,10 +795,10 @@ function RunDirector.plan(
 			continue
 		end
 		local candidates = anchorsOfKind(layout, "FlaskCandidate", nil)
-		local random = MathUtil.seededRandom(runSeed, "Flasks|" .. layout.id)
+		local random = Rng.seeded(runSeed, "Flasks|" .. layout.id)
 		local chosen = choosePreferSpaced(candidates, entry.count, random, FLASK_SPACING)
 		warnShort("chemical flasks", layout, #chosen, entry.count)
-		addProps(props, runSeed, RunDirector.PropKinds.ChemicalFlask, layout, chosen)
+		addProps(props, RunDirector.PropKinds.ChemicalFlask, layout, chosen)
 	end
 
 	-- Batteries
@@ -775,10 +810,10 @@ function RunDirector.plan(
 		if #candidates == 0 then
 			continue
 		end
-		local random = MathUtil.seededRandom(runSeed, "Batteries|" .. layout.id)
+		local random = Rng.seeded(runSeed, "Batteries|" .. layout.id)
 		local chosen = choosePreferSpaced(candidates, spec.batteriesPerLevel, random, BATTERY_SPACING)
 		warnShort("batteries", layout, #chosen, spec.batteriesPerLevel)
-		addProps(props, runSeed, RunDirector.PropKinds.Battery, layout, chosen)
+		addProps(props, RunDirector.PropKinds.Battery, layout, chosen)
 	end
 
 	-- Grate locks

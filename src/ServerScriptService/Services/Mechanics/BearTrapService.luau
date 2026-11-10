@@ -977,7 +977,7 @@ local function spawnTestTrap(player: Player, root: BasePart, humanoid: Humanoid)
 		cframe = CFrame.new(BearTrapService.footPoint(root.CFrame, root.Size, humanoid.HipHeight)),
 		variant = devTrapCount,
 	}
-	local built = Builder.BuildProp(plan, parent, MathUtil.seededRandom(devTrapCount, "DevTrap"))
+	local built = Builder.BuildProp(plan, parent)
 	if not (built and built:IsA("Model") and BearTrapService.Track(built)) then
 		return nil
 	end

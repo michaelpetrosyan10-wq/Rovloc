@@ -580,7 +580,7 @@ function LightingMood.cast(layoutId: string, roomId: string, kind: Enums.LightKi
 	if not target then
 		return base
 	end
-	return base:Lerp(target, CAST_AMOUNT)
+	return MathUtil.lerpColor(base, target, CAST_AMOUNT)
 end
 
 local WHITE = Color3.new(1, 1, 1)

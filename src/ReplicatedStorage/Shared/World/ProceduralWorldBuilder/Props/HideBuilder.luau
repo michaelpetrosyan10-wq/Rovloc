@@ -30,11 +30,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local CameraConfig = require(ReplicatedStorage.Shared.Config.CameraConfig)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 
 local Geometry = require(script.Parent.Parent.Geometry)
 local PropKit = require(script.Parent.PropKit)
 
+type Rng = Rng.Rng
 type PartOptions = Geometry.PartOptions
 
 export type HideSpec = {
@@ -149,7 +152,7 @@ local function detail(part: BasePart?): BasePart?
 end
 
 local function weathered(paint: Color3, rust: number): Color3
-	return paint:Lerp(RUST, 0.1 + 0.35 * rust):Lerp(GRIME, 0.12 * rust)
+	return MathUtil.lerpColor(MathUtil.lerpColor(paint, RUST, 0.1 + 0.35 * rust), GRIME, 0.12 * rust)
 end
 
 local function eyeHeight(floorY: number, crouched: boolean): number
@@ -208,7 +211,7 @@ function HideBuilder.lidTransform(openness: number): CFrame
 	return CFrame.Angles(LID_OPEN_ANGLE * math.clamp(openness, 0, 1), 0, 0)
 end
 
-function HideBuilder.buildBarrel(parent: Instance, spec: HideSpec, random: Random): Model
+function HideBuilder.buildBarrel(parent: Instance, spec: HideSpec, random: Rng): Model
 	local frame = spec.cframe
 	local model = PropKit.model(parent, spec.anchorId, frame)
 	local rust = random:NextNumber()
@@ -223,7 +226,11 @@ function HideBuilder.buildBarrel(parent: Instance, spec: HideSpec, random: Rando
 		frame * CFrame.new(0, BARREL_FLOOR / 2, 0) * CFrame.Angles(0, 0, math.rad(90)),
 		Vector3.new(BARREL_FLOOR, BARREL_RADIUS * 2 - 0.1, BARREL_RADIUS * 2 - 0.1),
 		"MetalRust",
-		{ shape = Enum.PartType.Cylinder, material = Enum.Material.CorrodedMetal, color = paint:Lerp(GRIME, 0.5) }
+		{
+			shape = Enum.PartType.Cylinder,
+			material = Enum.Material.CorrodedMetal,
+			color = MathUtil.lerpColor(paint, GRIME, 0.5),
+		}
 	)
 	model.PrimaryPart = base
 
@@ -258,7 +265,10 @@ function HideBuilder.buildBarrel(parent: Instance, spec: HideSpec, random: Rando
 				Vector3.new(staveWidth + 0.02, 0.16, 0.08),
 				"MetalRust",
 				if hazard and k == 2
-					then { material = Enum.Material.SmoothPlastic, color = HAZARD:Lerp(GRIME, 0.2 * rust) }
+					then {
+						material = Enum.Material.SmoothPlastic,
+						color = MathUtil.lerpColor(HAZARD, GRIME, 0.2 * rust),
+					}
 					else body
 			)
 			detail(band)
@@ -272,7 +282,11 @@ function HideBuilder.buildBarrel(parent: Instance, spec: HideSpec, random: Rando
 			frame * CFrame.new(0, BARREL_FLOOR + 0.01, 0) * CFrame.Angles(0, 0, math.rad(90)),
 			Vector3.new(0.02, BARREL_RADIUS * 2 - 0.4, BARREL_RADIUS * 2 - 0.4),
 			"MetalRust",
-			{ shape = Enum.PartType.Cylinder, material = Enum.Material.CorrodedMetal, color = paint:Lerp(GRIME, 0.7) }
+			{
+				shape = Enum.PartType.Cylinder,
+				material = Enum.Material.CorrodedMetal,
+				color = MathUtil.lerpColor(paint, GRIME, 0.7),
+			}
 		)
 	)
 	-- lugs on the rim the lid rests on (the slot between them is the peep)
@@ -302,7 +316,7 @@ function HideBuilder.buildBarrel(parent: Instance, spec: HideSpec, random: Rando
 		frame * CFrame.new(0, lidY + LID_T / 2, 0) * CFrame.Angles(0, 0, math.rad(90)),
 		Vector3.new(LID_T, BARREL_RADIUS * 2 + 0.12, BARREL_RADIUS * 2 + 0.12),
 		"MetalRust",
-		{ shape = Enum.PartType.Cylinder, material = material, color = paint:Lerp(GRIME, 0.15) }
+		{ shape = Enum.PartType.Cylinder, material = material, color = MathUtil.lerpColor(paint, GRIME, 0.15) }
 	)
 	detail(
 		Geometry.part(
@@ -363,14 +377,14 @@ function HideBuilder.doorTransform(openness: number): CFrame
 	return CFrame.Angles(0, DOOR_OPEN_ANGLE * math.clamp(openness, 0, 1), 0)
 end
 
-function HideBuilder.buildCabinet(parent: Instance, spec: HideSpec, random: Random): Model
+function HideBuilder.buildCabinet(parent: Instance, spec: HideSpec, random: Rng): Model
 	local frame = spec.cframe
 	local model = PropKit.model(parent, spec.anchorId, frame)
 	local rust = random:NextNumber()
 	local paint = weathered(CABINET_PAINTS[random:NextInteger(1, #CABINET_PAINTS)], rust)
 	local material = if rust > 0.65 then Enum.Material.CorrodedMetal else Enum.Material.Metal
 	local body: PartOptions = { material = material, color = paint }
-	local inside: PartOptions = { material = material, color = paint:Lerp(GRIME, 0.4) }
+	local inside: PartOptions = { material = material, color = MathUtil.lerpColor(paint, GRIME, 0.4) }
 	local half = CABINET_WIDTH / 2
 	local inner = half - CAB_T
 	local back = CABINET_DEPTH / 2
@@ -385,7 +399,7 @@ function HideBuilder.buildCabinet(parent: Instance, spec: HideSpec, random: Rand
 		"MetalRust",
 		{
 			material = Enum.Material.CorrodedMetal,
-			color = paint:Lerp(GRIME, 0.5),
+			color = MathUtil.lerpColor(paint, GRIME, 0.5),
 		}
 	)
 	model.PrimaryPart = base
@@ -454,7 +468,7 @@ function HideBuilder.buildCabinet(parent: Instance, spec: HideSpec, random: Rand
 	local doorTop = 7.0
 	local rest = frame * CFrame.new(hingeX, 0, front)
 	local door = PropKit.leaf(model, "Door", rest)
-	local doorColor = paint:Lerp(GRIME, 0.08)
+	local doorColor = MathUtil.lerpColor(paint, GRIME, 0.08)
 	local doorOptions: PartOptions = { material = material, color = doorColor }
 	local eye = eyeHeight(CAB_FLOOR, false)
 	local band = SLATS * SLAT_GAP + (SLATS - 1) * SLAT_H

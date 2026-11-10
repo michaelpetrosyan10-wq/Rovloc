@@ -19,7 +19,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -131,7 +131,7 @@ function ChemicalFlaskBuilder.liquidColor(variant: number): Color3
 end
 
 local function lookOf(variant: number): Look
-	local random = MathUtil.seededRandom(wholeVariant(variant), "ChemicalFlask:look")
+	local random = Rng.seeded(wholeVariant(variant), "ChemicalFlask:look")
 	-- Every draw is made unconditionally, so the stream (and so each value) never depends on another value.
 	local fill = random:NextNumber(FILL_MIN, FILL_MAX)
 	local cracked = random:NextNumber() < CRACK_CHANCE

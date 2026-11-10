@@ -14,13 +14,15 @@
 // The plan (RunDirector.plan, ported rule for rule over the export's candidate anchors): the objective picks
 // (pickObjective: one seeded shuffle per level, "Objective|<level>"), bear traps (the guard traps of the first fuses
 // picked, then the difficulty's count spaced from them), chemical flasks, batteries and rusted grates, every one from
-// its own seeded stream of the run seed. The export built entities for one plan only, so a run's chosen anchors are
-// served by those entities moved there (placements: entity id -> world pivot), as many as the export built.
+// its own stream of the run seed. The streams are Rng (util.js), the world's generator bit for bit, so a seed picks
+// what the export's RunDirector and a live Roblox server pick (data-test.mjs replays the export's plans). The export
+// built a prop on every candidate anchor (a prop's look is its anchor's, never the run's), so a run shows the entities
+// on its chosen anchors; placements (entity id -> world pivot) move a spare onto an anchor only if one was missing.
 
 import * as THREE from 'three';
 import { DifficultyConfig, LevelOrder, nextLevel } from './config.js';
 import { compassOf } from './objectives/config.js';
-import { cfMatrix, cfPos, horizontalDistance, inVolume, list, seededRandom, shuffle } from './util.js';
+import { Rng, cfMatrix, cfPos, horizontalDistance, inVolume, list, shuffle } from './util.js';
 
 /**
  * @typedef {{id: string, kind: string, level: string, room: string|null, cframe: number[], attributes: Record<string, any>, tags: string[]}} Anchor
@@ -34,6 +36,7 @@ import { cfMatrix, cfPos, horizontalDistance, inVolume, list, seededRandom, shuf
  *   checkpointVolumes: Trigger[], spawnAnchors: Anchor[], lockEntity: string|null, creatureSpawn: string|null,
  *   compass: string|null, exitPoint: THREE.Vector3}} Route
  * @typedef {{levelId: string, anchors: string[], guards: string[], slots: Record<string, number>}} ObjectivePicks
+ *   (slots: a floor of kinds only, anchor id -> its kind)
  * @typedef {{difficulty: string, seed: number, props: Set<string>, placements: Map<string, THREE.Matrix4>,
  *   lockedGrates: Set<string>, objectives: Record<string, ObjectivePicks>, short: Record<string, number>}} Plan
  */
@@ -46,6 +49,17 @@ const MAX_REROLLS = 64;
 const TRAP_LEVEL = 'Level0_Basement';
 const WALK_DOOR_KINDS = new Set(['Doorway', 'Door', 'Airlock', 'Ajar', 'Gate', 'RoofDoor']);
 const MAX_SEED = 2 ** 31 - 2;
+const VARIANT_RANGE = 1000000;
+
+/**
+ * RunDirector.variantOf: the look variant (1..VARIANT_RANGE) of a `kind` prop on anchor `anchorId` of `levelId`, fixed
+ * per anchor and never per run. The export built every candidate's prop with it, and a live server builds the prop and
+ * hands its holder the same one (ChemicalProjectileService: the held flask's look), so a prop looks the same in the
+ * world, in the hand and on both platforms.
+ */
+export function variantOf(kind, levelId, anchorId) {
+  return Rng.seeded(1, `Variant|${kind}|${levelId}|${anchorId}`).integer(1, VARIANT_RANGE);
+}
 
 /** RunLifecycleService.normalizeSeed: a whole seed in [1, 2^31 - 2], or null. */
 export function normalizeSeed(seed) {
@@ -89,6 +103,16 @@ export class WorldData {
   /** Anchors of a kind (optionally on one level), in export order. */
   anchors(kind, level) {
     return this.meta.anchors.filter((a) => a.kind === kind && (!level || a.level === level));
+  }
+
+  /**
+   * A level's anchors of `kind` in the order its layout lists them (meta.layouts: the order RunDirector walks; the
+   * export's anchor list is in the built world's order, which is not the same).
+   */
+  layoutAnchors(kind, level) {
+    const layout = this.meta.layouts && this.meta.layouts[level];
+    const order = new Map(list(layout && layout.anchors).map((a, i) => [a.id, i]));
+    return this.anchors(kind, level).sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
   }
 
   /**
@@ -187,8 +211,8 @@ export class WorldData {
    * THE seam where a floor's exit is chosen (RunDirector.pickRoute): a draw over the floor's candidates in slot order
    * (North, Middle, South) from the run seed's stream "Route|<level>", kept when it is fair for `entryRoom` (the room the
    * floor is entered by: meta.routeRule.checks[level][entryRoom]), else drawn again from the same stream, up to
-   * routeRule.attempts draws; then the first fair candidate in slot order, else the middle one. The web stream is not
-   * Roblox's, so the picks differ from a live server's for the same seed; the rule is the same.
+   * routeRule.attempts draws; then the first fair candidate in slot order, else the middle one. The stream is Rng, so the
+   * picks are a live server's for the same seed.
    * @returns {Route|null}
    */
   chooseRoute(level, seed, entryRoom) {
@@ -200,7 +224,7 @@ export class WorldData {
     // a way in without precomputed verdicts (none today) counts every candidate fair
     const fair = (c) => !checks || checks.some((k) => k.stairwellId === c.stairwellId && k.fair);
     const attempts = Number.isFinite(rule.attempts) && rule.attempts > 0 ? rule.attempts : 8;
-    const random = seededRandom(seed, `Route|${level}`);
+    const random = Rng.seeded(seed, `Route|${level}`);
     for (let i = 0; i < attempts; i++) {
       const candidate = candidates[random.integer(0, candidates.length - 1)];
       if (fair(candidate)) return candidate;
@@ -476,9 +500,10 @@ export class WorldData {
    * item: the first of a shuffle. Several (meta.objectives.rules): up to pickAttempts passes on the same stream, each
    * taking candidates (fuses: in shuffled order; reagents: kind by kind, the first of each kind's shuffle) that lie in
    * another room than the items taken so far and pickSpacing from each of them; a pass stands when it is full and its
-   * three or more items lie in at least pickQuarters quarters of the floor, else the first fullest pass is used. Slot =
-   * pick order (reagents: the kind). The guard traps: the TrapCandidate `ref` of each of the first item.guarded picks
-   * that is outside the trap-free rooms and MinTrapSpacing from the guards before it.
+   * three or more items lie in at least pickQuarters quarters of the floor, else the first fullest pass is used. Slots
+   * (RunDirector.itemSlot): a floor of kinds gives each pick its kind (a reagent's colour); other items have none. The
+   * guard traps: the TrapCandidate `ref` of each of the first item.guarded picks that is outside the trap-free rooms
+   * and MinTrapSpacing from the guards before it.
    * @returns {ObjectivePicks}
    */
   pickObjective(seed, spec) {
@@ -488,7 +513,7 @@ export class WorldData {
     const spacing = rules.pickSpacing ?? 25;
     const quarters = rules.pickQuarters ?? 2;
     const attempts = rules.pickAttempts ?? 24;
-    const random = seededRandom(seed, `Objective|${spec.levelId}`);
+    const random = Rng.seeded(seed, `Objective|${spec.levelId}`);
     const kinds = spec.item.slots;
     const count = kinds ? Math.min(kinds, spec.item.count) : Math.min(spec.item.count, candidates.length);
     const groups = [];
@@ -523,7 +548,7 @@ export class WorldData {
       }
     }
     const slots = {};
-    picks.forEach((c, i) => (slots[c.anchorId] = kinds ? c.slot : i + 1));
+    if (kinds) for (const c of picks) slots[c.anchorId] = c.slot;
     const guards = [];
     const wanted = spec.item.guarded || 0;
     if (wanted > 0) {
@@ -556,14 +581,14 @@ export class WorldData {
 
   /**
    * The run's spawn plan (RunDirector.plan) for a difficulty and seed: the objective picks, which traps, flasks and
-   * batteries are live and where (props: live entity ids; placements: the world pivot each one is moved to), which
-   * grates are rusted shut. `short` counts anchors chosen beyond the entities the export built (per kind).
+   * batteries are live and where (props: live entity ids; placements: the world pivot of an entity moved onto an anchor
+   * without one of its own, none with today's export), which grates are rusted shut. `short` counts anchors chosen
+   * beyond the entities the export built (per kind).
    * @param {string} difficulty
    * @param {number} seed
-   * @param {Record<string, Route>} [routes]
    * @returns {Plan}
    */
-  plan(difficulty, seed, routes) {
+  plan(difficulty, seed) {
     const spec = DifficultyConfig[difficulty] || DifficultyConfig.Standard;
     const s = normalizeSeed(seed) ?? 1;
     const props = new Set();
@@ -578,31 +603,31 @@ export class WorldData {
     const excluded = this.trapExcludedRooms(TRAP_LEVEL);
     const guardIds = new Set(objectives[TRAP_LEVEL] ? objectives[TRAP_LEVEL].guards : []);
     const guards = [...guardIds].map((id) => this.anchor(id)).filter(Boolean).map(withPos);
-    const trapCandidates = this.anchors('TrapCandidate', TRAP_LEVEL)
+    const trapCandidates = this.layoutAnchors('TrapCandidate', TRAP_LEVEL)
       .filter((a) => !excluded.has(a.room) && !guardIds.has(a.id)).map(withPos);
     const fill = Math.max(0, spec.trapCount - guards.length);
-    const traps = chooseSpaced(trapCandidates, fill, seededRandom(s, `Traps|${TRAP_LEVEL}`), MIN_TRAP_SPACING, guards);
+    const traps = chooseSpaced(trapCandidates, fill, Rng.seeded(s, `Traps|${TRAP_LEVEL}`), MIN_TRAP_SPACING, guards);
     this._assign('BearTrap', TRAP_LEVEL, [...traps, ...guards], props, placements, short);
 
     // chemical flasks
     for (const [level, count] of [['Level2_ScienceHall', spec.flasksScienceHall], ['Level4_FloodedPool', spec.flasksPool]]) {
-      const candidates = this.anchors('FlaskCandidate', level).map(withPos);
-      const chosen = choosePreferSpaced(candidates, count, seededRandom(s, `Flasks|${level}`), FLASK_SPACING);
+      const candidates = this.layoutAnchors('FlaskCandidate', level).map(withPos);
+      const chosen = choosePreferSpaced(candidates, count, Rng.seeded(s, `Flasks|${level}`), FLASK_SPACING);
       this._assign('ChemicalFlask', level, chosen, props, placements, short);
     }
 
     // batteries
     for (const level of LevelOrder) {
-      const candidates = this.anchors('BatteryCandidate', level).map(withPos);
+      const candidates = this.layoutAnchors('BatteryCandidate', level).map(withPos);
       if (!candidates.length) continue;
-      const chosen = choosePreferSpaced(candidates, spec.batteriesPerLevel, seededRandom(s, `Batteries|${level}`), BATTERY_SPACING);
+      const chosen = choosePreferSpaced(candidates, spec.batteriesPerLevel, Rng.seeded(s, `Batteries|${level}`), BATTERY_SPACING);
       this._assign('Battery', level, chosen, props, placements, short);
     }
 
     // grate locks
     const lockedGrates = new Set();
     for (const level of LevelOrder) {
-      for (const id of this._lockGrates(s, spec.lockedGrateFraction, level, routes)) lockedGrates.add(id);
+      for (const id of this._lockGrates(s, spec.lockedGrateFraction, level)) lockedGrates.add(id);
     }
     return { difficulty, seed: s, props, placements, lockedGrates, objectives, short };
   }
@@ -643,32 +668,40 @@ export class WorldData {
     return cfMatrix(anchor.cframe).multiply(rel);
   }
 
-  _lockGrates(seed, fraction, level, routes) {
-    const graph = this.ventGraph(level);
-    if (!graph) return [];
-    const lockable = Object.values(graph.grates).filter((g) => g.lockable && !g.criticalPath)
-      .sort((a, b) => (a.id < b.id ? -1 : 1));
+  /**
+   * RunDirector.lockGrates: round(fraction x lockable) of the level's Lockable, non-CriticalPath grates in layout order
+   * (RunDirector.lockableGrates), shuffled by the stream "Grates|<level>" and re-rolled from it while the level would be
+   * unsolvable with every Gate shut, up to MAX_REROLLS times (then none).
+   */
+  _lockGrates(seed, fraction, level) {
+    const layout = this.meta.layouts && this.meta.layouts[level];
+    const specs = layout && layout.vents ? list(layout.vents.grates) : [];
+    const lockable = specs.filter((g) => g.lockable && !g.criticalPath);
     const count = lockable.length ? Math.max(0, Math.min(lockable.length, Math.round(fraction * lockable.length))) : 0;
     if (count === 0) return [];
     const gates = new Set(this.meta.layoutDoors.filter((d) => d.level === level && d.kind === 'Gate').map((d) => d.id));
-    if (!this.levelSolvable(level, gates, routes)) return [];
-    const rng = seededRandom(seed, `Grates|${level}`);
+    if (!this.levelSolvable(level, gates)) return [];
+    const rng = Rng.seeded(seed, `Grates|${level}`);
     for (let attempt = 0; attempt <= MAX_REROLLS; attempt++) {
       const order = shuffle(lockable.slice(), rng);
       const blocked = new Set(gates);
       const chosen = order.slice(0, count).map((g) => g.id);
       for (const id of chosen) blocked.add(id);
-      if (this.levelSolvable(level, blocked, routes)) return chosen;
+      if (this.levelSolvable(level, blocked)) return chosen;
     }
     return [];
   }
 
-  /** ZoneGraph.isLevelSolvable: the level's entry room reaches its exit without crossing a blocked portal. */
-  levelSolvable(level, blocked, routes) {
+  /**
+   * ZoneGraph.isLevelSolvable: the layout's entry room reaches the layout's exit room without crossing a blocked portal
+   * (the rule RunDirector re-rolls grate locks by).
+   */
+  levelSolvable(level, blocked) {
     const zg = this.meta.zoneGraph;
-    const entryRoom = this.entryRoom(level, routes);
-    const exitRoom = this.exitRoom(level, routes) || (level === 'Level5_Roof' ? 'L5_JumpGap' : null);
-    if (!zg || !entryRoom || !exitRoom) return true;
+    const layout = this.meta.layouts && this.meta.layouts[level];
+    const entryRoom = layout ? layout.entry : null;
+    const exitRoom = layout ? layout.exit : null;
+    if (!zg || !entryRoom || !exitRoom) return false;
     const entry = `room:${level}:${entryRoom}`;
     const exit = `room:${level}:${exitRoom}`;
     if (!zg.nodes[entry] || !zg.nodes[exit]) return false;

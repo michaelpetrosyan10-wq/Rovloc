@@ -31,6 +31,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 
 local Geometry = require(script.Parent.Geometry)
 local Palette = require(script.Parent.Palette)
@@ -428,7 +429,7 @@ function Finishes.planCeiling(
 ): CeilingPlan
 	local cols, rows = Finishes.ceilingGrid(size.X, size.Z)
 	local ruin = Finishes.ruin(layoutId, room.id)
-	local random = MathUtil.seededRandom(1, layoutId .. ":" .. room.id .. ":ceiling")
+	local random = Rng.seeded(1, layoutId .. ":" .. room.id .. ":ceiling")
 	local missing = if ruin < 0.3 then 0 else math.floor(1 + (ruin - 0.3) / 0.7 * 7)
 	local holes: { Cell } = {}
 	if missing > 0 then
@@ -489,7 +490,7 @@ function Finishes.decorateCeiling(
 	local cols, rows = plan.cols, plan.rows
 	local gui, pps =
 		SurfaceArt.gui(part, Enum.NormalId.Bottom, { name = "Finish", pixelsPerStud = 8, maxDistance = 150 })
-	local base = part.Color
+	local base = Palette.colorFor("CeilingTile") -- what the part stores (never read back: Palette.dress)
 	local seam = Color3.new(base.R * 0.58, base.G * 0.58, base.B * 0.56)
 	local thickness = math.max(1, math.floor(pps * 0.14 + 0.5))
 	local painted = 0
@@ -565,7 +566,7 @@ function Finishes.decorateWall(spec: WallFace): number
 	local cornerLo = if onFloor then spec.cornerLo else nil
 	local cornerHi = if onFloor then spec.cornerHi else nil
 	local ruin = Finishes.ruin(spec.layoutId, spec.room.id)
-	local random = MathUtil.seededRandom(1, spec.layoutId .. ":" .. part.Name .. ":" .. spec.face.Name)
+	local random = Rng.seeded(1, spec.layoutId .. ":" .. part.Name .. ":" .. spec.face.Name)
 	local runs = if underCeiling and studs.X >= 2 then random:NextInteger(0, if ruin > 0.5 then 2 else 1) else 0
 	local cracked = random:NextNumber() < 0.18 + ruin * 0.3 and studs.Y >= 3 and studs.X >= 2
 	if not (foot or underCeiling or cornerLo or cornerHi or runs > 0 or cracked) then
@@ -639,7 +640,7 @@ local function weatherBand(part: BasePart, face: Enum.NormalId, seed: string)
 		face,
 		{ name = "Wear", pixelsPerStud = Finishes.WearPixelsPerStud, maxDistance = Finishes.WearDistance }
 	)
-	local random = MathUtil.seededRandom(1, seed)
+	local random = Rng.seeded(1, seed)
 	SurfaceArt.edgeBand(gui, "Grime", false, 0, math.min(studs.Y, 1.6) * pps, GRIME, random:NextNumber(0.5, 0.68), 1)
 	if studs.X >= 3 and random:NextNumber() < 0.3 then
 		SurfaceArt.streak(

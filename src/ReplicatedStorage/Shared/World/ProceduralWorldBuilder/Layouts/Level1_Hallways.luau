@@ -75,6 +75,8 @@ type GratePlan = {
 type Stop = { coord: number, node: string }
 
 local PREFIX = "L1"
+-- TunnelPlanner draws from Rng (the same plan in Lune and on Roblox); this seed, the first tried, passes every rule
+-- and spec
 local SEED = 20261104
 local HEIGHT = WorldConfig.Levels.Level1_Hallways.height
 
@@ -801,8 +803,9 @@ for _, v in
 		{ "L1_AirlockSouthWest", 7, WorldConfig.Towers.SouthWest.openingZ },
 	} :: { { any } }
 do
-	light(v[1], "Fluorescent", v[2], 11.4, v[3], { flicker = mains(v[1]), broken = true })
-	light(v[1], "EmergencyRed", v[2], 12 - 5, v[3] - 8, { brightness = 0.3 })
+	-- both fixtures fast to the ceiling (buildLight lifts none: a fixture set low hangs in the air)
+	light(v[1], "Fluorescent", v[2], VESTIBULE_HEIGHT - 0.4, v[3], { flicker = mains(v[1]), broken = true })
+	light(v[1], "EmergencyRed", v[2], VESTIBULE_HEIGHT - 0.4, v[3] - 8, { brightness = 0.3 })
 end
 
 --------------------------------------------------------------------------------

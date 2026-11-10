@@ -20,6 +20,7 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local LockerMotion = require(ReplicatedStorage.Shared.Sequence.LockerMotion)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local SynthPresets = require(ReplicatedStorage.Shared.Audio.SynthPresets)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -92,7 +93,7 @@ local function buildLocker(): Model
 		number = 1,
 		wallGap = nil,
 		paint = Color3.fromRGB(58, 86, 84),
-	}, Random.new(3))
+	}, Rng.new(3))
 end
 
 local function anchor(model: Model, name: string): CFrame

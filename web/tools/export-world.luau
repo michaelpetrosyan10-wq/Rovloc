@@ -7,18 +7,25 @@
 --   * WorldService.Start: ProceduralWorldBuilder.BuildAuthoritative() (lobby, the six levels with their statics,
 --     stair towers, exterior) and the LightingRig baseline;
 --   * WorldService.BeginRun: the director's plan (RunDirector.plan over ZoneGraph.build) -> BuildProp for every
---     planned prop and BuildFixtures for every level (grates with the plan's locks, doors, gate, lockers, crate,
---     floodlight switch, the floor objectives' stations and locks) into Workspace.Runtime; plus every floor
---     objective's unpicked candidates and the fume hood's acid flask (attribute Planned = false), so the web can pick
---     per run;
---   * the client's CosmeticWorldController: BuildCosmetic(seed) (skyline + anchor dressing);
+--     planned prop and BuildFixtures for every level (grates in both looks, doors, gate, lockers, crate,
+--     floodlight switch, the floor objectives' stations and locks) into Workspace.Runtime; plus a prop on every other
+--     candidate anchor a run may pick (every floor objective's item candidates, every TrapCandidate, FlaskCandidate
+--     and BatteryCandidate: attribute Planned = false) and the fume hood's acid flask, so the web picks per run by
+--     showing the props on its picks;
+--   * the client's CosmeticWorldController: BuildCosmetic (skyline + anchor dressing);
 --   * the Creature rig (CreatureRigBuilder) at the origin, for the rig export;
 --   * the client LightingController's moonlight windows (Volumetrics.windowSpecs) for every layout.
 -- Everything the web build needs is written as plain JSON (CFrames as 12 numbers x,y,z,R00..R22, colours as 0..1
 -- floats, enums by name). web/tools/bake.mjs turns it into the packed runtime data (see web/DATA.md).
 --
--- Known difference from Roblox: the harness's Random is a deterministic xorshift, not Roblox's PCG32, so seeded
--- choices (which traps, which dead tubes revive) are the same on every export but not the same as on a live server.
+-- The same world as a live Roblox server's: every seeded choice of the builders, the layouts and RunDirector draws from
+-- Shared/Util/Rng (pure Luau, the same numbers in Lune and on Roblox), and everything built is seeded from the
+-- builder's world seed, never a run's (a run varies only its plan: the web replays RunDirector's picks with the same
+-- generator, web/src/game/worldData.js), so a prop or fixture exported here is the one a live run builds there. Every
+-- choice, count, name, attribute and part colour (written on the 8-bit grid a part stores) is the server's exactly;
+-- positions match to within the engines' float rounding, at most 2e-4 studs (Roblox stores CFrames in float32 and
+-- inverts a rotation by transposing it, Lune stores them to 1/65536 and inverts the full matrix), and no build decision
+-- turns on a difference that small.
 
 local fs = require("@lune/fs")
 local process = require("@lune/process")
@@ -54,7 +61,6 @@ local Instances = h.require("ReplicatedStorage.Shared.Instances")
 local LightingMood = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingMood")
 local LightingRig = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LightingRig")
 local FixtureGlow = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.FixtureGlow")
-local MathUtil = h.require("ReplicatedStorage.Shared.Util.MathUtil")
 local Palette = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Palette")
 local TextureAssets = h.require("ReplicatedStorage.Shared.Config.TextureAssets")
 local WorldConfig = h.require("ReplicatedStorage.Shared.Config.WorldConfig")
@@ -76,18 +82,19 @@ Instances.ensureRuntime()
 local layouts = Builder.layouts()
 local plan = RunDirector.plan(RUN_SEED, DIFFICULTY, layouts, ZoneGraph.build(layouts))
 for _, prop in plan.props do
-	local parent = Instances.runtimeLevel(prop.levelId, true)
-	local random = MathUtil.seededRandom(plan.seed, "prop:" .. prop.kind .. ":" .. prop.anchorId)
-	Builder.BuildProp(prop, parent, random)
+	local built = Builder.BuildProp(prop, Instances.runtimeLevel(prop.levelId, true))
+	if built then
+		built:SetAttribute("Planned", true)
+	end
 end
 for _, levelId in Enums.LevelId do
-	Builder.BuildFixtures(levelId, Instances.runtimeLevel(levelId, true), plan, plan.seed)
+	Builder.BuildFixtures(levelId, Instances.runtimeLevel(levelId, true), plan)
 end
 
 local cosmetic = roblox.Instance.new("Folder")
 cosmetic.Name = "Cosmetic"
 cosmetic.Parent = Workspace
-Builder.BuildCosmetic(RUN_SEED, cosmetic)
+Builder.BuildCosmetic(cosmetic)
 
 local rigFolder = roblox.Instance.new("Folder")
 rigFolder.Name = "RigExport"
@@ -121,6 +128,26 @@ end
 
 local function c3(c): { number }
 	return { r4(c.R), r4(c.G), r4(c.B) }
+end
+
+-- A part's colour as the engine keeps it. Roblox stores BasePart.Color as Color3uint8 and Lune as floats, so the
+-- builders write every part colour on the 8-bit grid (MathUtil.color8): stored exactly by both, and the bake's 8-bit
+-- rounding lands on the same byte. A colour off the grid could round differently in the engine than in the bake (and
+-- read back differently in a builder), so the export refuses the world (listed, exit 3).
+local offGrid: { string } = {}
+local offGridCount = 0
+local function partColor(part): { number }
+	local c = part.Color
+	for _, v in { c.R, c.G, c.B } do
+		if math.abs(v * 255 - math.round(v * 255)) > 1e-3 then
+			offGridCount += 1
+			if #offGrid < 20 then
+				table.insert(offGrid, string.format("%s %s", part:GetFullName(), tostring(c)))
+			end
+			break
+		end
+	end
+	return c3(c)
 end
 
 -- Any Luau / Roblox value -> JSON-safe value (tables recursively; Vector3/CFrame/Color3/... as arrays; enums by name).
@@ -179,9 +206,15 @@ local function toJson(value: any, depth: number?): any
 		end
 		local out = {}
 		for key, item in pairs(value) do
-			out[tostring(key)] = toJson(item, d + 1)
+			-- functions are code, not data (their tostring is an address: the export would differ run to run)
+			if type(item) ~= "function" then
+				out[tostring(key)] = toJson(item, d + 1)
+			end
 		end
 		return out
+	end
+	if kind == "function" then
+		return nil
 	end
 	return tostring(value)
 end
@@ -235,6 +268,21 @@ local PropKit = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder
 local objectiveData = {
 	floors = toJson(ObjectiveConfig.Floors),
 	hideReach = ObjectiveConfig.HideReach,
+	-- a guarded item's guard and standing spot (ObjectivePlaces.carelessWalk and standingSpot: the guard traps' rules,
+	-- see web/DATA.md)
+	stand = {
+		near = ObjectivePlaces.StandNear,
+		reach = ObjectivePlaces.StandReach,
+		trapClear = ObjectivePlaces.TrapClear,
+		panReach = r6(ObjectivePlaces.PanReach),
+		panCore = r6(ObjectivePlaces.PanCore),
+		promptReach = ObjectivePlaces.PromptReach,
+		approachRun = ObjectivePlaces.ApproachRun,
+		body = ObjectivePlaces.BodyRadius,
+		step = ObjectivePlaces.StepHeight,
+		eye = ObjectivePlaces.StandEye,
+		bodyHeight = ObjectivePlaces.BodyHeight,
+	},
 	-- the fairness and spread rules RunDirector.pickObjective applies (see web/DATA.md)
 	rules = {
 		entryClearance = ObjectiveConfig.EntryClearance,
@@ -260,18 +308,11 @@ for _, spec in ObjectiveConfig.Floors do
 			continue
 		end
 		index += 1
-		local slot = picked[anchor.id] or RunDirector.candidateSlot(spec, index)
 		local name = spec.item.prop .. "_" .. anchor.id
 		if not picked[anchor.id] then
-			local prop = {
-				kind = spec.item.prop,
-				anchorId = anchor.id,
-				levelId = spec.levelId,
-				cframe = Builder.anchorCFrame(spec.levelId, anchor),
-				variant = 1,
-				slot = slot,
-			}
-			Builder.BuildProp(prop, parent, MathUtil.seededRandom(plan.seed, "prop:" .. prop.kind .. ":" .. prop.anchorId))
+			-- exactly the prop a run that picks this anchor builds (RunDirector.objectiveProp, the plan's own): its
+			-- variant, look and slot (a reagent's kind, else none) are the anchor's
+			Builder.BuildProp(RunDirector.objectiveProp(layout, spec, anchor), parent)
 		end
 		local model = parent:FindFirstChild(name)
 		if model then
@@ -279,6 +320,10 @@ for _, spec in ObjectiveConfig.Floors do
 		end
 		local place = { id = anchor.id, kind = anchor.kind, room = anchor.room, pos = anchor.pos }
 		local hide = ObjectivePlaces.nearestHide(layout, place)
+		-- a guarded item: the careless walk in its guard lies on, where a careful player stands to take it and the walk
+		-- there round every trap spot
+		local approach = if spec.item.guarded then ObjectivePlaces.carelessWalk(layout, anchor) else nil
+		local stand = if spec.item.guarded then ObjectivePlaces.standingSpot(layout, anchor) else nil
 		table.insert(candidates, {
 			anchorId = anchor.id,
 			room = anchor.room,
@@ -290,6 +335,17 @@ for _, spec in ObjectiveConfig.Floors do
 			quarter = ObjectivePlaces.quarter(anchor.pos),
 			hide = if hide then { kind = hide.kind, id = hide.id, distance = math.floor(hide.distance * 10 + 0.5) / 10 } else nil,
 			eligible = table.find(RunDirector.objectiveCandidates(layout, spec), anchor) ~= nil,
+			careless = if approach
+				then { door = approach.door, walks = toJson(approach.walks), guardGap = toJson(approach.guardGap) }
+				else nil,
+			stand = if stand
+				then {
+					pos = toJson(stand.pos),
+					reach = toJson(stand.reach),
+					trapClear = toJson(stand.trapClear),
+					path = toJson(stand.path),
+				}
+				else nil,
 		})
 	end
 	local entryPoint = ObjectivePlaces.entryPoint(layout)
@@ -330,74 +386,82 @@ for _, hood in (Instances.runtimeLevel("Level2_ScienceHall", true):FindFirstChil
 end
 
 --------------------------------------------------------------------------------
--- Bear traps: the hardest difficulty's count of trap entities
+-- Plan props: one on every candidate anchor a run may pick
 --------------------------------------------------------------------------------
 
--- The run built this seed's Standard traps; the web moves trap entities onto each run's anchors and needs as many as the
--- largest trapCount (Nightmare), so the Nightmare plan's other traps are built too (attribute Planned = false; the
--- Standard ones true), then any TrapCandidate in layout order until there are enough.
+-- A run picks which TrapCandidate / FlaskCandidate / BatteryCandidate anchors hold a prop, but a prop's look is its
+-- anchor's own (RunDirector.plannedProp: the variant and Builder.propRandom take no run seed), so the web keeps one
+-- entity per candidate anchor, exactly the prop a live run builds there, and shows a run's picks
+-- (worldData.plan replays RunDirector's draws). Attribute Planned: this seed's Standard picks.
 local DifficultyConfig = h.require("ReplicatedStorage.Shared.Config.DifficultyConfig")
 do
-	local trapLevel = RunDirector.TrapLevel
-	local parent = Instances.runtimeLevel(trapLevel, true)
-	local wanted = 0
+	local planned: { [string]: boolean } = {}
+	for _, prop in plan.props do
+		planned[prop.kind .. "|" .. prop.anchorId] = true
+	end
+	local trapLayout = Builder.getLayout(RunDirector.TrapLevel)
+	local sets = {
+		{
+			kind = RunDirector.PropKinds.BearTrap,
+			candidate = "TrapCandidate",
+			levels = { RunDirector.TrapLevel },
+			-- RunDirector never arms a trap in these (airlocks, the entry and exit rooms, spawn rooms)
+			skip = RunDirector.trapExcludedRooms(trapLayout),
+			most = 0,
+		},
+		{
+			kind = RunDirector.PropKinds.ChemicalFlask,
+			candidate = "FlaskCandidate",
+			levels = { RunDirector.ScienceLevel, RunDirector.PoolLevel },
+			skip = {},
+			most = 0,
+		},
+		{
+			kind = RunDirector.PropKinds.Battery,
+			candidate = "BatteryCandidate",
+			levels = WorldConfig.LevelOrder,
+			skip = {},
+			most = 0,
+		},
+	}
 	for _, name in Enums.Difficulty do
 		local spec = DifficultyConfig[name]
 		if spec then
-			wanted = math.max(wanted, spec.trapCount)
+			sets[1].most = math.max(sets[1].most, spec.trapCount)
+			sets[2].most = math.max(sets[2].most, spec.flasksScienceHall, spec.flasksPool)
+			sets[3].most = math.max(sets[3].most, spec.batteriesPerLevel)
 		end
 	end
-	local built: { [string]: boolean } = {}
-	for _, prop in RunDirector.propsOf(plan, "BearTrap", trapLevel) do
-		built[prop.anchorId] = true
-	end
-	local count = 0
-	for _, child in parent:GetDescendants() do
-		if child:IsA("Model") and child:HasTag("BearTrap") then
-			child:SetAttribute("Planned", true)
-			count += 1
-		end
-	end
-	local extra: { any } = {}
-	local nightmare = RunDirector.plan(RUN_SEED, "Nightmare", layouts, ZoneGraph.build(layouts))
-	for _, prop in RunDirector.propsOf(nightmare, "BearTrap", trapLevel) do
-		if not built[prop.anchorId] then
-			table.insert(extra, prop)
-		end
-	end
-	local trapLayout = Builder.getLayout(trapLevel)
-	for _, anchor in trapLayout.anchors do
-		if anchor.kind == "TrapCandidate" and not built[anchor.id] then
-			table.insert(extra, {
-				kind = "BearTrap",
-				anchorId = anchor.id,
-				levelId = trapLevel,
-				cframe = Builder.anchorCFrame(trapLevel, anchor),
-				variant = 1,
-			})
-		end
-	end
-	for _, prop in extra do
-		if count >= wanted then
-			break
-		end
-		if built[prop.anchorId] then
-			continue
-		end
-		built[prop.anchorId] = true
-		local before: { [Instance]: boolean } = {}
-		for _, child in parent:GetDescendants() do
-			before[child] = true
-		end
-		Builder.BuildProp(prop, parent, MathUtil.seededRandom(plan.seed, "prop:BearTrap:" .. prop.anchorId))
-		for _, child in parent:GetDescendants() do
-			if not before[child] and child:IsA("Model") and child:HasTag("BearTrap") then
-				child:SetAttribute("Planned", false)
+	for _, set in sets do
+		local count, picked = 0, 0
+		for _, levelId in set.levels do
+			local layout = Builder.getLayout(levelId)
+			local parent = Instances.runtimeLevel(levelId, true)
+			for _, anchor in layout.anchors do
+				if anchor.kind ~= set.candidate or set.skip[anchor.room] then
+					continue
+				end
+				count += 1
+				if planned[set.kind .. "|" .. anchor.id] then
+					picked += 1
+					continue
+				end
+				local built = Builder.BuildProp(RunDirector.plannedProp(set.kind, layout, anchor), parent)
+				if built then
+					built:SetAttribute("Planned", false)
+				end
 			end
 		end
-		count += 1
+		print(
+			string.format(
+				"%s entities: %d, one per candidate anchor (%d this seed's picks; a run needs at most %d per level)",
+				set.kind,
+				count,
+				picked,
+				set.most
+			)
+		)
 	end
-	print(string.format("bear trap entities: %d (the largest trapCount is %d)", count, wanted))
 end
 
 --------------------------------------------------------------------------------
@@ -412,6 +476,19 @@ for _, levelId in Enums.LevelId do
 	for _, child in Instances.runtimeLevel(levelId, true):GetDescendants() do
 		if child:IsA("Model") and child:GetAttribute("StairwellId") ~= nil then
 			DoorBuilder.showJam(child, true)
+		end
+	end
+end
+
+-- Every grate is built in both looks over the same boxes (VentGrateBuilder: galvanized, and rusted shut in sub-Models
+-- "Rusted" of the grate, its panel and each screw) and this seed's plan shows one (setLocked). The web locks grates per
+-- run, so both looks are exported shown; the web shows the one each run's plan picks (src/game/mechanics/vents.js).
+local VentGrateBuilder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.VentGrateBuilder")
+for _, levelId in Enums.LevelId do
+	for _, child in Instances.runtimeLevel(levelId, true):GetDescendants() do
+		if child:IsA("Model") and child:HasTag("VentGrate") then
+			assert(VentGrateBuilder.showLook(child, "Galvanized", true), child.Name .. ": no galvanized look")
+			assert(VentGrateBuilder.showLook(child, "Rusted", true), child.Name .. ": no rusted look")
 		end
 	end
 end
@@ -526,7 +603,7 @@ end
 local routeRule = {
 	stream = "Route|<from>",
 	order = "candidates in slot order North, Middle, South (meta.routes[from])",
-	draw = "NextInteger(1, #candidates) per draw from seededRandom(seed, 'Route|' .. from)",
+	draw = "NextInteger(1, #candidates) per draw from Rng.seeded(seed, 'Route|' .. from)",
 	attempts = RunDirector.RouteAttempts,
 	fallback = "the first fair candidate in slot order, else the Middle one",
 	entry = "Level0 starts at its layout entry; every later floor at the previous pick's toRoom",
@@ -877,7 +954,7 @@ local function exportPart(part, owner: any)
 		shape = shapeOf(part),
 		material = part.Material.Name,
 		texture = textureOf(part),
-		color = c3(part.Color),
+		color = partColor(part),
 		transparency = r4(part.Transparency),
 		reflectance = r4(part.Reflectance),
 		canCollide = part.CanCollide,
@@ -951,7 +1028,8 @@ local function exportPart(part, owner: any)
 end
 
 for _, d in Workspace:GetDescendants() do
-	if not d:IsA("BasePart") then
+	-- (Workspace.Terrain is a BasePart too: the place's, never part of the built world)
+	if not d:IsA("BasePart") or d:IsA("Terrain") then
 		continue
 	end
 	local entity = entityIndexOf(d)
@@ -964,7 +1042,7 @@ for _, d in Workspace:GetDescendants() do
 end
 
 for _, d in Workspace:GetDescendants() do
-	if d:IsA("BasePart") and isVolume(d) then
+	if d:IsA("BasePart") and not d:IsA("Terrain") and isVolume(d) then
 		local tags = tagsOf(d)
 		local attrs = attributes(d)
 		if #tags > 0 or next(attrs) then
@@ -1218,7 +1296,7 @@ if creatureRig then
 				shape = shapeOf(d),
 				material = d.Material.Name,
 				texture = textureOf(d),
-				color = c3(d.Color),
+				color = partColor(d),
 				transparency = r4(d.Transparency),
 				reflectance = r4(d.Reflectance),
 				canCollide = d.CanCollide,
@@ -1301,6 +1379,49 @@ if creatureRig then
 end
 
 --------------------------------------------------------------------------------
+-- RunDirector's plans for a spread of seeds: web/tools/data-test.mjs replays each with the web's port (worldData.plan
+-- and routes, on Rng) and requires the same picks, slots and prop variants, so a seed plays the same run on the web as
+-- on a live server.
+--------------------------------------------------------------------------------
+
+local PLAN_SEEDS = { 1, 2, 3, 1029, 4242, 5150, 65537, RUN_SEED, 123456789, 2147483646 }
+local runPlans: { any } = {}
+for _, seed in PLAN_SEEDS do
+	for _, difficulty in { "Standard", "Nightmare" } do
+		local planned = RunDirector.plan(seed, difficulty, layouts, zoneGraph)
+		local objectives = {}
+		for levelId, picks in planned.objectives or {} do
+			objectives[levelId] = { anchors = table.clone(picks.anchors), guards = table.clone(picks.guards) }
+		end
+		local props = {}
+		for _, prop in planned.props do
+			table.insert(props, {
+				kind = prop.kind,
+				anchorId = prop.anchorId,
+				levelId = prop.levelId,
+				variant = prop.variant,
+				slot = prop.slot,
+			})
+		end
+		local locked = {}
+		for id in planned.lockedGrates do
+			table.insert(locked, id)
+		end
+		table.sort(locked)
+		table.insert(runPlans, {
+			seed = seed,
+			difficulty = difficulty,
+			objectives = objectives,
+			props = props,
+			lockedGrates = locked,
+			route = table.clone(planned.route or {}),
+		})
+	end
+end
+fs.writeFile(cacheDir .. "/run-plans.json", serde.encode("json", runPlans, true))
+print(string.format("RunDirector plans for %d seeds x 2 difficulties -> %s/run-plans.json", #PLAN_SEEDS, cacheDir))
+
+--------------------------------------------------------------------------------
 -- Write
 --------------------------------------------------------------------------------
 
@@ -1360,6 +1481,14 @@ local out = {
 	windows = windows,
 	creature = creature,
 }
+
+if offGridCount > 0 then
+	print(string.format("%d part colour(s) off the 8-bit grid a part stores (write them with MathUtil.color8):", offGridCount))
+	for _, line in offGrid do
+		print("  " .. line)
+	end
+	process.exit(3)
+end
 
 fs.writeFile(outPath, serde.encode("json", out))
 print(

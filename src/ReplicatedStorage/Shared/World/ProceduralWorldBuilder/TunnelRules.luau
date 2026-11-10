@@ -396,7 +396,15 @@ function TunnelRules.walkGraph(layout: LayoutLike, crawl: boolean, timed: boolea
 		end
 	end
 	local slow = TunnelRules.WalkSpeed / TunnelRules.CrouchSpeed
-	for id, list in g.members do
+	-- rooms in id order (never the table's hash order), so every link list, and with it every distance and tie, is the
+	-- same in every Luau build
+	local ids: { string } = {}
+	for id in g.members do
+		table.insert(ids, id)
+	end
+	table.sort(ids)
+	for _, id in ids do
+		local list = g.members[id]
 		local room = rooms[id]
 		local factor = if timed and room and room.kind == "Crawlway" then slow else 1
 		for i = 1, #list do
@@ -510,7 +518,10 @@ function TunnelRules.samples(layout: LayoutLike, step: number?): { Sample }
 		local length = (b - a).Magnitude
 		local n = math.max(1, math.ceil(length / s))
 		for i = 0, n do
-			table.insert(out, { room = seg.room, p = a:Lerp(b, i / n), region = seg.region, kind = seg.kind :: string })
+			-- a + (b - a) * f in Luau's doubles, never the engine's Lerp: the same point on every platform
+			local f = i / n
+			local p = Vector2.new(a.X + (b.X - a.X) * f, a.Y + (b.Y - a.Y) * f)
+			table.insert(out, { room = seg.room, p = p, region = seg.region, kind = seg.kind :: string })
 		end
 	end
 	return out

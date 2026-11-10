@@ -1,10 +1,13 @@
 --!strict
 -- Floor objectives' shared world data: ObjectiveConfig, the layouts' objective anchors (counts per floor, real surfaces,
 -- clearances, reachability with every gate shut and every lockable grate locked, a hiding spot within HideReach of
--- every step), RunDirector's seeded picks (deterministic, difficulty-free, the right kinds and counts, reagent slots,
--- the basement's guard traps inside the trap count) and the builders (items as plan props, stations and locks as
--- fixtures: names, tags, attributes, attachments, leaves and their poses, disabled prompts with the configured holds,
--- part budgets, collision presets, determinism).
+-- every step, every guarded item's guard on the careless walk in from its room's arrival doorway to where its prompt
+-- first answers, whichever way a door's leaf hangs (the squad arriving by that doorway, from that side of it, on foot
+-- and crawling alike), and the item taken from a spot beside it clear of every trap spot, walked to round its guard
+-- with no foot on a pan), RunDirector's seeded picks (deterministic, difficulty-free, the right kinds and counts,
+-- reagent slots, the basement's guard traps inside the trap count) and the builders (items as plan props, stations and
+-- locks as fixtures: names, tags, attributes, attachments, leaves and their poses, disabled prompts with the configured
+-- holds, part budgets, collision presets, determinism).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -29,6 +32,7 @@ local PickupBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuil
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
 local RunDirector = require(ReplicatedStorage.Shared.World.RunDirector)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
+local TunnelRules = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules)
 local ZoneGraph = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph)
 
 type Expect = SpecRunner.Expect
@@ -214,7 +218,7 @@ local function runtime(): { [string]: Folder }
 		for _, id: Enums.LevelId in Enums.LevelId do
 			local folder = Instance.new("Folder")
 			folder.Name = id
-			Builder.BuildFixtures(id, folder, nil, 99)
+			Builder.BuildFixtures(id, folder, nil)
 			out[id] = folder
 		end
 		return true
@@ -223,7 +227,7 @@ local function runtime(): { [string]: Folder }
 	return out
 end
 
-local function buildItem(kind: string, anchor: Anchor, levelId: Enums.LayoutId, slot: number, seed: number): Model
+local function buildItem(kind: string, anchor: Anchor, levelId: Enums.LayoutId, slot: number): Model
 	local folder = Instance.new("Folder")
 	local plan: Types.PlannedProp = {
 		kind = kind,
@@ -234,7 +238,7 @@ local function buildItem(kind: string, anchor: Anchor, levelId: Enums.LayoutId, 
 		slot = slot,
 	}
 	local built = quiet(function()
-		return Builder.BuildProp(plan, folder, Random.new(seed))
+		return Builder.BuildProp(plan, folder)
 	end)
 	assert(built and built:IsA("Model"), kind .. " builds a model")
 	return built
@@ -550,6 +554,290 @@ return {
 		end
 	end,
 
+	["layouts: every guarded item is taken from beside it, clear of every trap spot, walked to round its guard"] = function(
+		t: Expect
+	)
+		local body = ObjectivePlaces.BodyRadius
+		local expected, checked = 0, 0
+		for _, spec in ObjectiveConfig.Floors do
+			if not spec.item.guarded then
+				continue
+			end
+			local layout = layoutOf(spec.levelId)
+			local rooms = LayoutSchema.indexRooms(layout)
+			local origin = WorldConfig.levelOrigin(spec.levelId)
+			-- every trap spot a run may arm: the guards of whichever items it picks and the seeded rest
+			local traps: { Vector2 } = {}
+			for _, a in anchorsOf(layout, "TrapCandidate") do
+				table.insert(traps, Vector2.new(a.pos.X, a.pos.Z))
+			end
+			local function trapGap(p: Vector2): number
+				local best = math.huge
+				for _, trap in traps do
+					best = math.min(best, (trap - p).Magnitude)
+				end
+				return best
+			end
+			for slot, item in anchorsOf(layout, spec.item.candidate) do
+				expected += 1
+				local guard = anchorById(layout, item.ref)
+				t.truthy(guard ~= nil and guard.kind == "TrapCandidate", item.id .. " is guarded")
+				local stand = ObjectivePlaces.standingSpot(layout, item)
+				t.truthy(stand ~= nil, item.id .. " has a spot beside it clear of every trap spot, walked to")
+				if not stand then
+					continue
+				end
+				checked += 1
+				local spot = Vector2.new(stand.pos.X, stand.pos.Z)
+				local reach = (spot - Vector2.new(item.pos.X, item.pos.Z)).Magnitude
+				t.truthy(
+					reach >= ObjectivePlaces.StandNear - EPS and reach <= ObjectivePlaces.StandReach + EPS,
+					string.format("%s: the spot is %.2f studs off it", item.id, reach)
+				)
+				t.truthy(
+					trapGap(spot) >= ObjectivePlaces.TrapClear - EPS,
+					string.format("%s: the spot is %.2f studs from the nearest trap spot", item.id, trapGap(spot))
+				)
+				-- the item's own Pickup prompt answers there (measured from the standing root)
+				local model = buildItem(spec.item.prop, item, spec.levelId :: Enums.LayoutId, (slot - 1) % 3 + 1)
+				local point = PropKit.findAttachment(model, "PromptPoint")
+				local prompt: ProximityPrompt? = prompts(model)[1]
+				t.truthy(point ~= nil and prompt ~= nil, item.id .. " has its Pickup prompt")
+				if point and prompt then
+					local root = origin + Vector3.new(spot.X, ObjectivePlaces.StandEye - 1.5, spot.Y)
+					local distance = (PropKit.attachmentWorld(point).Position - root).Magnitude
+					t.truthy(
+						distance <= prompt.MaxActivationDistance,
+						string.format("%s: its prompt reaches the spot (%.2f studs)", item.id, distance)
+					)
+				end
+				(model.Parent :: Instance):Destroy()
+				-- the walk: from just inside one of the room's doorways, straight legs along the grid inside the room's
+				-- walls (a body's width off them), never a foot on a trap's pan, ending on the spot
+				local room = rooms[item.room]
+				local path = stand.path
+				t.truthy(#path >= 1 and (path[#path] - spot).Magnitude < EPS, item.id .. " the walk ends on the spot")
+				local first = path[1]
+				local inDoorway = false
+				for _, door in layout.doors do
+					local other = if door.rooms[1] == room.id
+						then rooms[door.rooms[2]]
+						elseif door.rooms[2] == room.id then rooms[door.rooms[1]]
+						else nil
+					local edge = if other and door.kind ~= "Boarded"
+						then LayoutSchema.sharedEdge(room.rect, other.rect)
+						else nil
+					if edge then
+						local along = if edge.axis == "X" then first.Y else first.X
+						local into = math.abs((if edge.axis == "X" then first.X else first.Y) - edge.coord)
+						if
+							math.abs(along - door.at) <= LayoutSchema.doorWidth(door) / 2 - body + EPS
+							and into <= body + WorldConfig.WallThickness + EPS
+						then
+							inDoorway = true
+						end
+					end
+				end
+				t.truthy(inDoorway, item.id .. " the walk starts in a doorway of its room")
+				for i = 1, #path - 1 do
+					local a, b = path[i], path[i + 1]
+					t.truthy(math.abs(a.X - b.X) < EPS or math.abs(a.Y - b.Y) < EPS, item.id .. " legs along the grid")
+					local steps = math.max(1, math.ceil((b - a).Magnitude / 0.25))
+					for k = 0, steps do
+						local p = a + (b - a) * (k / steps)
+						t.truthy(
+							trapGap(p) > ObjectivePlaces.PanReach,
+							string.format(
+								"%s: the walk at (%.2f, %.2f) keeps the foot off every pan",
+								item.id,
+								p.X,
+								p.Y
+							)
+						)
+						t.truthy(
+							LayoutSchema.rectContains(room.rect, p.X, p.Y, WorldConfig.WallThickness / 2 + body - EPS),
+							string.format("%s: the walk at (%.2f, %.2f) stays clear of the walls", item.id, p.X, p.Y)
+						)
+					end
+				end
+			end
+		end
+		t.truthy(expected > 0 and checked == expected, string.format("%d of %d guarded items", checked, expected))
+	end,
+
+	["layouts: every guarded item's guard lies on the careless walk in, whichever way a door's leaf hangs"] = function(
+		t: Expect
+	)
+		local body = ObjectivePlaces.BodyRadius
+		local wall = WorldConfig.WallThickness
+		local expected, checked = 0, 0
+		for _, spec in ObjectiveConfig.Floors do
+			if not spec.item.guarded then
+				continue
+			end
+			local layout = layoutOf(spec.levelId)
+			local rooms = LayoutSchema.indexRooms(layout)
+			local origin = WorldConfig.levelOrigin(spec.levelId)
+			-- studs walked from the nearest way in to the floor, on a tunnel floor on foot (crawlways shut) and for a squad
+			-- that takes the crawlways too: the careless arrive the same way either way
+			type Measure = { how: string, at: (roomId: string, p: Vector2) -> number }
+			local measures: { Measure } = {}
+			for _, crawling in { false, true } do
+				local graph = TunnelRules.walkGraph(layout :: any, crawling)
+				local seeds: { { number } } = {}
+				for _, entry in ObjectivePlaces.entries(layout) do
+					for _, seed in TunnelRules.seedsAt(graph, entry.room, Vector2.new(entry.pos.X, entry.pos.Z)) do
+						table.insert(seeds, seed)
+					end
+				end
+				local fromEntries = TunnelRules.distances(graph, seeds)
+				table.insert(measures, {
+					how = if crawling then "crawling" else "on foot",
+					at = function(roomId: string, p: Vector2): number
+						if not layout.tunnels then
+							return ObjectivePlaces.entryDistance(
+								layout,
+								{ id = "", kind = "TrapCandidate", room = roomId, pos = Vector3.new(p.X, 0, p.Y) }
+							)
+						end
+						return TunnelRules.reach(graph, fromEntries, roomId, p)
+					end,
+				})
+			end
+			for slot, item in anchorsOf(layout, spec.item.candidate) do
+				expected += 1
+				local guard = anchorById(layout, item.ref)
+				local approach = ObjectivePlaces.carelessWalk(layout, item)
+				t.truthy(guard ~= nil and approach ~= nil, item.id .. " is guarded and walked in to")
+				if not (guard and approach) then
+					continue
+				end
+				local room = rooms[item.room]
+				-- the arrival doorway: of the room's ways in on foot, the one nearest the floor's ways in (on foot and
+				-- crawling alike)
+				local door: LayoutSchema.Door? = nil
+				for _, d in layout.doors do
+					if d.id == approach.door then
+						door = d
+					end
+				end
+				assert(door, item.id .. " arrival doorway " .. approach.door)
+				local beyond = rooms[if door.rooms[1] == room.id then door.rooms[2] else door.rooms[1]]
+				local edge = LayoutSchema.sharedEdge(room.rect, beyond.rect)
+				assert(edge, item.id .. " its doorway joins two rooms")
+				local function doorPoint(d: LayoutSchema.Door, e: LayoutSchema.SharedEdge): Vector2
+					return if e.axis == "X" then Vector2.new(e.coord, d.at) else Vector2.new(d.at, e.coord)
+				end
+				for _, measure in measures do
+					local arrival = measure.at(beyond.id, doorPoint(door, edge))
+					for _, d in layout.doors do
+						if d == door or d.kind == "Boarded" or d.kind == "Gate" or #d.rooms ~= 2 then
+							continue
+						end
+						if d.rooms[1] ~= room.id and d.rooms[2] ~= room.id then
+							continue
+						end
+						local other = rooms[if d.rooms[1] == room.id then d.rooms[2] else d.rooms[1]]
+						local e = LayoutSchema.sharedEdge(room.rect, other.rect)
+						if e and not LayoutSchema.doorCrawlOnly(layout, d) then
+							t.truthy(
+								measure.at(other.id, doorPoint(d, e)) >= arrival - EPS,
+								string.format(
+									"%s: walked in by %s, not by %s nearer the way in (%s)",
+									item.id,
+									door.id,
+									d.id,
+									measure.how
+								)
+							)
+						end
+					end
+				end
+				-- an ordinary door's leaf hangs on the far face or beside either jamb: a walk for each
+				t.eq(#approach.walks, if door.kind == "Door" then 3 else 1, item.id .. " a walk per way the leaf hangs")
+				-- the item's own Pickup prompt: where it answers
+				local model = buildItem(spec.item.prop, item, spec.levelId :: Enums.LayoutId, (slot - 1) % 3 + 1)
+				local point = PropKit.findAttachment(model, "PromptPoint")
+				local prompt: ProximityPrompt? = prompts(model)[1]
+				assert(point and prompt, item.id .. " has its Pickup prompt")
+				local maxDistance = prompt.MaxActivationDistance
+				t.near(maxDistance, ObjectivePlaces.PromptReach, EPS, item.id .. " prompt reach")
+				local promptAt = PropKit.attachmentWorld(point).Position;
+				(model.Parent :: Instance):Destroy()
+				local function answers(p: Vector2): number
+					local root = origin + Vector3.new(p.X, ObjectivePlaces.StandEye - 1.5, p.Y)
+					return (promptAt - root).Magnitude - maxDistance
+				end
+				local g = Vector2.new(guard.pos.X, guard.pos.Z)
+				local worst = 0
+				for v, walk in approach.walks do
+					local label = string.format("%s walk %d", item.id, v)
+					t.truthy(#walk >= 2, label .. " goes somewhere")
+					if #walk < 2 then
+						continue
+					end
+					-- it starts out in the room beyond, ApproachRun back from the doorway at most, on the side the squad
+					-- comes from (no nearer the floor's way in mirrored across the doorway)
+					local start = walk[1]
+					local mouth = doorPoint(door, edge)
+					t.truthy(
+						LayoutSchema.rectContains(beyond.rect, start.X, start.Y, wall / 2 + body - EPS),
+						label .. " starts in " .. beyond.id
+					)
+					t.truthy(
+						(start - mouth).Magnitude <= ObjectivePlaces.ApproachRun * math.sqrt(2) + EPS,
+						label .. " starts by the doorway"
+					)
+					local mirrored = if edge.axis == "X"
+						then Vector2.new(start.X, 2 * mouth.Y - start.Y)
+						else Vector2.new(2 * mouth.X - start.X, start.Y)
+					for _, measure in measures do
+						t.truthy(
+							measure.at(beyond.id, start) <= measure.at(beyond.id, mirrored) + EPS,
+							string.format("%s comes from the side nearer the way in (%s)", label, measure.how)
+						)
+					end
+					-- every step inside the room, the room beyond or the doorway between, a body clear of the walls;
+					-- the prompt answers only at its end
+					local near = math.huge
+					for i = 1, #walk - 1 do
+						local a, b = walk[i], walk[i + 1]
+						local steps = math.max(1, math.ceil((b - a).Magnitude / 0.1))
+						for k = 0, steps do
+							local p = a + (b - a) * (k / steps)
+							near = math.min(near, (p - g).Magnitude)
+							local inside = LayoutSchema.rectContains(room.rect, p.X, p.Y, wall / 2 + body - EPS)
+								or LayoutSchema.rectContains(beyond.rect, p.X, p.Y, wall / 2 + body - EPS)
+							local along = if edge.axis == "X" then p.Y else p.X
+							local across = math.abs((if edge.axis == "X" then p.X else p.Y) - edge.coord)
+							local inDoor = math.abs(along - door.at) <= LayoutSchema.doorWidth(door) / 2 - body + EPS
+								and across <= wall / 2 + body + EPS
+							t.truthy(
+								inside or inDoor,
+								string.format("%s at (%.2f, %.2f) on the floor", label, p.X, p.Y)
+							)
+							if i < #walk - 1 or k < steps then
+								t.truthy(
+									answers(p) > -0.05,
+									string.format("%s at (%.2f, %.2f): the prompt waits for its end", label, p.X, p.Y)
+								)
+							end
+						end
+					end
+					t.truthy(answers(walk[#walk]) <= 0.05, label .. " ends where the prompt answers")
+					worst = math.max(worst, near)
+					t.truthy(
+						near <= ObjectivePlaces.PanCore,
+						string.format("%s passes %.2f studs from %s: its foot on the pan", label, near, guard.id)
+					)
+				end
+				t.near(approach.guardGap, worst, 0.05, item.id .. " guard gap")
+				checked += 1
+			end
+		end
+		t.truthy(expected > 0 and checked == expected, string.format("%d of %d guarded items", checked, expected))
+	end,
+
 	["layouts: a hiding spot within reach of every objective step"] = function(t: Expect)
 		for _, spec in ObjectiveConfig.Floors do
 			local layout = layoutOf(spec.levelId)
@@ -655,24 +943,35 @@ return {
 						string.format("seed %d: %s picks spread over the floor", seed, spec.levelId)
 					)
 				end
-				-- the plan's props of this floor are its picks, slots 1..count in pick order
+				-- the plan's props of this floor are its picks, each built exactly as the export builds its candidate
+				-- (RunDirector.itemSlot): with kinds, slot k is the k-th pick and the candidate's own kind; without
+				-- kinds, no slot, so the prop on an anchor is the same on every run
 				local props = RunDirector.propsOf(plan, spec.item.prop, spec.levelId)
 				t.eq(#props, spec.item.count, spec.levelId .. " props")
 				local slots: { [number]: boolean } = {}
+				local propAnchors: { [string]: boolean } = {}
 				local candidates = anchorsOf(layout, spec.item.candidate)
 				for _, prop in props do
-					local slot = prop.slot or 0
-					t.eq(picks.anchors[slot], prop.anchorId, prop.anchorId .. " slot " .. slot)
-					t.falsy(slots[slot], "slots distinct")
-					slots[slot] = true
-					slotsSeen += 1
-					if spec.item.slots then
-						-- one of each kind: the slot is the candidate's own kind
-						for i, candidate in candidates do
-							if candidate.id == prop.anchorId then
-								t.eq(RunDirector.candidateSlot(spec, i), slot, prop.anchorId .. " is its kind")
-							end
+					t.truthy(table.find(picks.anchors, prop.anchorId) ~= nil, prop.anchorId .. " is a pick")
+					t.falsy(propAnchors[prop.anchorId], prop.anchorId .. " built once")
+					propAnchors[prop.anchorId] = true
+					local index = 0
+					for i, candidate in candidates do
+						if candidate.id == prop.anchorId then
+							index = i
 						end
+					end
+					t.eq(prop.slot, RunDirector.itemSlot(spec, index), prop.anchorId .. ": the candidate's own slot")
+					if spec.item.slots then
+						-- one of each kind: the slot is the candidate's own kind, in pick order
+						local slot = prop.slot or 0
+						t.eq(picks.anchors[slot], prop.anchorId, prop.anchorId .. " slot " .. slot)
+						t.eq(RunDirector.candidateSlot(spec, index), slot, prop.anchorId .. " is its kind")
+						t.falsy(slots[slot], "slots distinct")
+						slots[slot] = true
+						slotsSeen += 1
+					else
+						t.eq(prop.slot, nil, prop.anchorId .. ": an item without kinds has no slot")
 					end
 				end
 			end
@@ -721,8 +1020,8 @@ return {
 		for _, spec in ObjectiveConfig.Floors do
 			local layout = layoutOf(spec.levelId)
 			for slot, anchor in anchorsOf(layout, spec.item.candidate) do
-				local model = buildItem(spec.item.prop, anchor, spec.levelId :: Enums.LayoutId, (slot - 1) % 3 + 1, 7)
-				local twin = buildItem(spec.item.prop, anchor, spec.levelId :: Enums.LayoutId, (slot - 1) % 3 + 1, 7)
+				local model = buildItem(spec.item.prop, anchor, spec.levelId :: Enums.LayoutId, (slot - 1) % 3 + 1)
+				local twin = buildItem(spec.item.prop, anchor, spec.levelId :: Enums.LayoutId, (slot - 1) % 3 + 1)
 				t.eq(model.Name, spec.item.prop .. "_" .. anchor.id, "name")
 				t.truthy(model.PrimaryPart ~= nil, "PrimaryPart")
 				t.truthy(model:HasTag(Tags.ObjectiveItem) and model:HasTag(Tags.Interactable), anchor.id .. " tags")
@@ -764,7 +1063,7 @@ return {
 		-- the reagent slots colour the jars, and the wheel has its hub
 		t.truthy(ObjectiveItemBuilder.slotColor(1) ~= ObjectiveItemBuilder.slotColor(2), "slot colours differ")
 		local pool = layoutOf("Level4_FloodedPool")
-		local wheel = buildItem("ValveWheel", anchorsOf(pool, "ValveWheelCandidate")[1], "Level4_FloodedPool", 1, 3)
+		local wheel = buildItem("ValveWheel", anchorsOf(pool, "ValveWheelCandidate")[1], "Level4_FloodedPool", 1)
 		t.truthy(PropKit.findAttachment(wheel, "Hub") ~= nil, "the valve wheel's Hub");
 		(wheel.Parent :: Instance):Destroy()
 	end,
@@ -830,7 +1129,7 @@ return {
 			t.truthy(#prompts(model) >= 1, entry.folder .. " prompts")
 			-- rebuilding replaces, never duplicates
 			quiet(function()
-				Builder.BuildFixtures(entry.level, built[entry.level], nil, 98)
+				Builder.BuildFixtures(entry.level, built[entry.level], nil)
 				return true
 			end)
 			t.eq(#(built[entry.level]:FindFirstChild(entry.folder) :: Instance):GetChildren(), 1, "rebuilt once")

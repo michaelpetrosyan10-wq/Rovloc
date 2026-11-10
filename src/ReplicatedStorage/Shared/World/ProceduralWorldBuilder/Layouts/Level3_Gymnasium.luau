@@ -65,9 +65,15 @@ type LightDefaults = { brightness: number, range: number, color: Color3 }
 type DoorOptions = { id: string?, width: number?, height: number?, scriptedId: string? }
 
 local PREFIX = "L3"
-local SEED = 20261122
+-- TunnelPlanner draws from Rng (the same plan in Lune and on Roblox): the first seed from 20261122 up whose plan
+-- passes every rule and spec (20261122..20261133 leave too many dead ends, one over 25 studs, or a tunnel point over 30
+-- from a hide)
+local SEED = 20261134
 local HEIGHT = WorldConfig.Levels.Level3_Gymnasium.height
 local LOW = 14 -- every room but the gym (the vestibules, the locker rooms and their annexes, the store)
+-- The tunnels the stair vestibules' fire doors open onto stand tall enough for the door's KEEP CLOSED sign over its
+-- head casing (DoorBuilder: about 11.7 studs up).
+local FIRE_DOOR_CLEARANCE = 12.6
 
 local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
 
@@ -341,7 +347,7 @@ do
 	-- (no stencil: the fire door's STAIRS sign is SignageBuilder's, beside it on the tunnel side)
 	keepRoom(
 		room(v[1], "Airlock", 386, v[2], 14, 24, AIRLOCK, LOW),
-		{ { side = "W", at = v[3], kind = "Airlock", id = v[4] } },
+		{ { side = "W", at = v[3], kind = "Airlock", id = v[4], runHeight = FIRE_DOOR_CLEARANCE } },
 		"Boiler"
 	)
 end
@@ -354,7 +360,7 @@ for _, v in
 do
 	keepRoom(
 		room(v[1], "Airlock", 0, v[2], 14, 24, AIRLOCK, LOW),
-		{ { side = "E", at = v[3], kind = "Airlock", id = v[4] } },
+		{ { side = "E", at = v[3], kind = "Airlock", id = v[4], runHeight = FIRE_DOOR_CLEARANCE } },
 		"Shafts"
 	)
 end
@@ -683,8 +689,9 @@ for _, v in
 		{ "L3_AirlockSouthWest", 7, 260 },
 	} :: { { any } }
 do
+	-- both fixtures fast to the ceiling (buildLight lifts none: a fixture set low hangs in the air)
 	light(v[1], "Fluorescent", v[2], LOW - 0.6, v[3], { flicker = mains(v[1]), broken = true })
-	light(v[1], "EmergencyRed", v[2], LOW - 3, v[3] - 8, { brightness = 0.3 })
+	light(v[1], "EmergencyRed", v[2], LOW - 0.4, v[3] - 8, { brightness = 0.3 })
 end
 
 --------------------------------------------------------------------------------

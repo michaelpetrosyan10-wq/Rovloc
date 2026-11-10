@@ -6,7 +6,11 @@
 -- ApplyLighting() sets the storm-night baseline. Per run, BuildProp() places the director's planned props and
 -- BuildFixtures() rebuilds each level's stateful set pieces (grates, fire doors, lockers, ...) into
 -- Workspace.Runtime.<level>, so every run starts fresh.
--- Client: BuildCosmetic(seed, parent) adds the ruined skyline plus the cosmetic-anchor dressing.
+-- Client: BuildCosmetic(parent) adds the ruined skyline plus the cosmetic-anchor dressing.
+-- Everything built draws from Rng streams of WORLD_SEED and its own key, never from a run's seed: the school, its
+-- statics, each run's fixtures and props and every client's dressing come out the same on every server, client and
+-- run, and the same as the web's export, which builds them once. A run varies only its plan (RunDirector: which
+-- anchors hold props, which grates lock, the route), never the look or the collision of what stands at an anchor.
 -- The registries (RegisterProp / RegisterFixture / RegisterStatic / RegisterRig / RegisterCosmeticAnchor) are filled
 -- at load by the Props catalog and CreatureRigBuilder (see Props/PropKit for the builder kinds); later phases may
 -- register more kinds or replace one.
@@ -19,7 +23,7 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
@@ -37,6 +41,7 @@ local VentShaftBuilder = require(script.VentShaftBuilder)
 
 local log = Log.new("WorldBuilder")
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 
 export type BuildOptions = {
@@ -59,6 +64,7 @@ export type StaticBuilder = PropKit.StaticBuilder
 export type StaticContext = PropKit.StaticContext
 
 local DEFAULT_YIELD_EVERY = 600
+local WORLD_SEED = 1
 local SKYLINE_FOLDER = "Skyline"
 local DRESSING_FOLDER = "Dressing"
 
@@ -167,8 +173,13 @@ function Builder.RegisterProp(kind: string, builder: Types.PropBuilder)
 	propBuilders[kind] = builder
 end
 
+-- The stream a planned prop is built from: its kind and anchor only, so a prop looks the same on every run.
+function Builder.propRandom(plan: Types.PlannedProp): Rng
+	return Rng.seeded(WORLD_SEED, "prop:" .. plan.kind .. ":" .. plan.anchorId)
+end
+
 -- Builds one planned prop. Returns nil (and warns) when no builder is registered for its kind or it fails.
-function Builder.BuildProp(plan: Types.PlannedProp, parent: Instance, random: Random): Instance?
+function Builder.BuildProp(plan: Types.PlannedProp, parent: Instance): Instance?
 	local builder = propBuilders[plan.kind]
 	if not builder then
 		log.warnThrottled("prop:" .. plan.kind, 30, "no prop builder registered for %q", plan.kind)
@@ -176,7 +187,7 @@ function Builder.BuildProp(plan: Types.PlannedProp, parent: Instance, random: Ra
 	end
 	local built: Instance? = nil
 	xpcall(function()
-		built = builder({ prop = plan, parent = parent, random = random })
+		built = builder({ prop = plan, parent = parent, random = Builder.propRandom(plan) })
 	end, function(err: any)
 		log.error("prop %s at %s failed: %s", plan.kind, plan.anchorId, tostring(err))
 	end)
@@ -199,8 +210,9 @@ function Builder.HasFixture(kind: string): boolean
 end
 
 -- Rebuilds every registered fixture kind of `layoutId` into `parent` (Workspace.Runtime.<layoutId>) for one run.
--- Returns the number of fixtures built. Each kind is isolated: one failing builder never stops the others.
-function Builder.BuildFixtures(layoutId: string, parent: Instance, plan: Types.SpawnPlan?, seed: number): number
+-- Returns the number of fixtures built. Each kind is isolated: one failing builder never stops the others. The plan
+-- only sets their state (the grates it locks, the stairwells its route jams); their geometry is the same every run.
+function Builder.BuildFixtures(layoutId: string, parent: Instance, plan: Types.SpawnPlan?): number
 	local layout = Builder.getLayout(layoutId)
 	if not layout then
 		return 0
@@ -213,7 +225,7 @@ function Builder.BuildFixtures(layoutId: string, parent: Instance, plan: Types.S
 			levelRoot = levelRoot,
 			parent = parent,
 			plan = plan,
-			random = MathUtil.seededRandom(seed, layoutId .. ":fixture:" .. kind),
+			random = Rng.seeded(WORLD_SEED, layoutId .. ":fixture:" .. kind),
 		}
 		local built = 0
 		xpcall(function()
@@ -312,7 +324,7 @@ local function buildStatics(layout: Layout, root: Model)
 			layout = layout,
 			root = root,
 			parent = folder,
-			random = MathUtil.seededRandom(1, layout.id .. ":static:" .. kind),
+			random = Rng.seeded(WORLD_SEED, layout.id .. ":static:" .. kind),
 		}
 		guarded("static " .. kind .. " for " .. layout.id, function()
 			staticBuilders[kind](ctx)
@@ -410,9 +422,10 @@ function Builder.BuildAuthoritative(options: BuildOptions?): BuildResult
 end
 
 -- Client: skyline (once per cosmetic tree) + registered cosmetic-anchor dressing. Returns parts created.
--- The skyline is skipped when an ancestor of `parent` already holds one, so a run-seeded rebuild into a
--- sub-folder only adds the run-varying dressing; the dressing folder under `parent` is replaced on every call.
-function Builder.BuildCosmetic(seed: number, parent: Instance): number
+-- The skyline is skipped when an ancestor of `parent` already holds one (a Folder of that name: a player's character
+-- may share the name), so a rebuild into a sub-folder only adds the dressing; the dressing folder under `parent` is
+-- replaced on every call.
+function Builder.BuildCosmetic(parent: Instance): number
 	local before = countParts(parent)
 	local previousYield = Geometry.getYieldEvery()
 	Geometry.setYieldEvery(DEFAULT_YIELD_EVERY)
@@ -420,7 +433,8 @@ function Builder.BuildCosmetic(seed: number, parent: Instance): number
 	local ancestorSkyline = false
 	local cursor = parent.Parent
 	while cursor do
-		if cursor:FindFirstChild(SKYLINE_FOLDER) then
+		local found = cursor:FindFirstChild(SKYLINE_FOLDER)
+		if found and found:IsA("Folder") then
 			ancestorSkyline = true
 			break
 		end
@@ -434,7 +448,7 @@ function Builder.BuildCosmetic(seed: number, parent: Instance): number
 		local skyline = Instance.new("Folder")
 		skyline.Name = SKYLINE_FOLDER
 		guarded("skyline", function()
-			SkylineBuilder.build(seed, skyline)
+			SkylineBuilder.build(WORLD_SEED, skyline)
 		end)
 		skyline.Parent = parent
 	end
@@ -451,7 +465,7 @@ function Builder.BuildCosmetic(seed: number, parent: Instance): number
 			if not builder then
 				continue
 			end
-			local random = MathUtil.seededRandom(seed, layout.id .. ":" .. anchor.id)
+			local random = Rng.seeded(WORLD_SEED, layout.id .. ":" .. anchor.id)
 			local cframe = Builder.anchorCFrame(layout.id, anchor)
 			xpcall(builder, function(err: any)
 				log.error("cosmetic %s at %s failed: %s", anchor.kind, anchor.id, tostring(err))

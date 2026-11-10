@@ -835,7 +835,7 @@ return {
 						cframe = CFrame.new(index * 2, 0, -3),
 						variant = variant,
 					}
-					local built = Builder.BuildProp(plan, folder, Random.new(index))
+					local built = Builder.BuildProp(plan, folder)
 					assert(built and built:IsA("Model"), "the flask builder builds a Model")
 					t.truthy(ChemicalProjectileService.Track(built))
 					local found = PropKit.findPrompt(built, "Pickup")

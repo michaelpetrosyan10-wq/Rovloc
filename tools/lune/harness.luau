@@ -61,8 +61,10 @@ end
 -- Datatype shims
 --------------------------------------------------------------------------------
 
--- Deterministic PCG-style generator with the Roblox Random API. Sequences differ from Roblox's own PCG32,
--- so specs assert determinism and ranges, never exact Roblox values.
+-- A stand-in for the engine's Random (the Roblox runtime's own randomness, run by the specs): xorshift32 with the
+-- Random API. Its sequences are not Roblox's (closed and engine-specific), so specs assert determinism and ranges,
+-- never exact Roblox values. The world never draws from it: everything that builds or plans the world uses
+-- Shared/Util/Rng, the same numbers on every platform (tests/Specs/WorldDeterminism.spec.luau lints it).
 local function makeRandom(seed)
 	local state = math.floor(seed or os.clock() * 1e6) % 4294967296
 	if state == 0 then
@@ -100,8 +102,13 @@ local function makeRandom(seed)
 		end
 	end
 	function rng:Clone()
+		-- a copy of the current state, as Roblox's Clone (the copy then draws what this one would)
 		local copy = makeRandom(1)
+		copy._setState(state)
 		return copy
+	end
+	function rng._setState(value)
+		state = value
 	end
 	return rng
 end
@@ -384,6 +391,13 @@ function Harness.load(placePath, options)
 	current = h
 
 	local workspace = game:GetService("Workspace")
+	-- Every live place has Workspace.Terrain (a rojo-built file has none): the world's builders look for it (the storm
+	-- cloud deck, LightingRig) and must find what a live server finds.
+	if not workspace:FindFirstChildOfClass("Terrain") then
+		local terrain = roblox.Instance.new("Terrain")
+		terrain.Name = "Terrain"
+		terrain.Parent = workspace
+	end
 	local env -- shared global environment for every module
 
 	local function requireModule(module)

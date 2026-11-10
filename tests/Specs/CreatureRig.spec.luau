@@ -45,6 +45,8 @@ local FLOOR = BASE.Position:Dot(UP)
 local POSITION_EPS = 2e-3
 local AXIS_EPS = 1e-4
 local SIZE_EPS = 1e-4 -- sizes are stored at single precision
+local SHELL_SLACK = 3e-3 -- a mask strip's end off its half's shell: its lift (at most 1.5e-3) and float rounding
+local SIGNS: { number } = { -1, 1 }
 
 local R15_JOINTS: { { string } } = {
 	{ "Root", "HumanoidRootPart", "LowerTorso" },
@@ -775,6 +777,46 @@ return {
 			t.eq(part.Material, Enum.Material.Marble, part.Name .. " is porcelain")
 			t.truthy(part.Parent == head or part.Parent == jaw, part.Name .. " rides the mask")
 		end
+		-- every crack and streak piece rides the half of the mask it lies on and hugs that half's shell at both ends, a
+		-- seam end too (never placed by the side of the slit a float rounding lands on): the upper mask's cylinder or
+		-- brow dome on the Head, the jaw ball or the chin on the Jaw
+		local maskTop, maskRadius = maskInFace.Y + mask.Size.X / 2, mask.Size.Y / 2
+		local chinInFace, chinRadius = faceFrame:PointToObjectSpace(chinTip.CFrame.Position), chinTip.Size.X / 2
+		local function offShell(part: BasePart, width: number): number
+			local half = (part.Size.Z - width * 0.5) / 2
+			local worst = 0
+			for _, sign in SIGNS do
+				local e = faceFrame:PointToObjectSpace(part.CFrame.Position + part.CFrame.ZVector * (sign * half))
+				local off: number
+				if part.Parent == jaw then
+					off = math.min(
+						math.abs((e - jawInFace).Magnitude - jawRadius),
+						math.abs((e - chinInFace).Magnitude - chinRadius)
+					)
+				elseif e.Y > maskTop then
+					off = math.abs((e - Vector3.new(maskInFace.X, maskTop, maskInFace.Z)).Magnitude - maskRadius)
+				else
+					off = math.abs(Vector2.new(e.X - maskInFace.X, e.Z - maskInFace.Z).Magnitude - maskRadius)
+				end
+				worst = math.max(worst, off)
+			end
+			return worst
+		end
+		-- (the attributes' own types are checked where it is called)
+		local function onItsHalf(part: BasePart, from: unknown, to: unknown, width: unknown)
+			if typeof(from) == "Vector2" and typeof(to) == "Vector2" and type(width) == "number" then
+				t.eq(
+					part.Parent,
+					if (from.Y + to.Y) / 2 < slit then jaw else head,
+					part.Name .. " rides the half it lies on"
+				)
+				local off = offShell(part, width)
+				t.truthy(
+					off < SHELL_SLACK,
+					string.format("%s hugs its half's shell at both ends (%.4f off)", part.Name, off)
+				)
+			end
+		end
 		local cracks, streaks, shards, widestCrack = 0, 0, 0, 0
 		for _, part in baseParts(model) do
 			if string.find(part.Name, "^MaskCrack") then
@@ -786,12 +828,15 @@ return {
 				t.truthy(type(width) == "number" and width > 0, part.Name .. " CrackWidth")
 				widestCrack = math.max(widestCrack, if type(width) == "number" then width else 0)
 				t.truthy(part.Parent == head or part.Parent == jaw, part.Name .. " rides the mask")
+				onItsHalf(part, part:GetAttribute("CrackFrom"), part:GetAttribute("CrackTo"), width)
 			elseif string.find(part.Name, "^MaskStreak") then
 				streaks += 1
 				t.eq(part.Material, Enum.Material.Fabric, part.Name .. " is drawn detail")
 				t.truthy(typeof(part:GetAttribute("StreakFrom")) == "Vector2", part.Name .. " StreakFrom")
 				t.truthy(typeof(part:GetAttribute("StreakTo")) == "Vector2", part.Name .. " StreakTo")
 				t.truthy(type(part:GetAttribute("StreakWidth")) == "number", part.Name .. " StreakWidth")
+				local from, to = part:GetAttribute("StreakFrom"), part:GetAttribute("StreakTo")
+				onItsHalf(part, from, to, part:GetAttribute("StreakWidth"))
 			elseif string.find(part.Name, "^MawShard") then
 				shards += 1
 				t.eq(part.Material, Enum.Material.Marble, part.Name .. " is porcelain")

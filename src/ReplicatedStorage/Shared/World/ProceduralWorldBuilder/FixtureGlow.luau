@@ -12,6 +12,10 @@
 -- is pure (no instance lookups beyond the part handed in), so the specs can check the curve and the server build and
 -- every client agree on what a fixture looks like at a given brightness.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+
 local FixtureGlow = {}
 
 FixtureGlow.PartPrefix = "Glow"
@@ -45,7 +49,7 @@ local WHITE = Color3.new(1, 1, 1)
 
 -- The colour a fixture of `kind` glows when its light (`lightColor`) burns at full brightness.
 function FixtureGlow.litColor(kind: string, lightColor: Color3): Color3
-	return lightColor:Lerp(WHITE, WHITEN[kind] or 0.3)
+	return MathUtil.lerpColor(lightColor, WHITE, WHITEN[kind] or 0.3)
 end
 
 -- Glow level in [0, 1] of a fixture whose light burns at `brightness` and whose working brightness is `base`
@@ -64,7 +68,7 @@ function FixtureGlow.look(lit: Color3, level: number): (Enum.Material, Color3)
 		return FixtureGlow.OffMaterial, FixtureGlow.OffColor
 	end
 	-- a gentle gamma: a stuttering tube still reads lit through its shallow dips
-	return FixtureGlow.OnMaterial, FixtureGlow.DimColor:Lerp(lit, math.clamp(level, 0, 1) ^ 0.8)
+	return FixtureGlow.OnMaterial, MathUtil.lerpColor(FixtureGlow.DimColor, lit, math.clamp(level, 0, 1) ^ 0.8)
 end
 
 -- GlowGui brightness at `level`.
@@ -117,13 +121,14 @@ function FixtureGlow.isGlowGui(instance: Instance): boolean
 	return instance:IsA("SurfaceGui") and instance.Name == FixtureGlow.GuiName
 end
 
--- Writes the look at `level` onto a glow part (only the properties that change).
+-- Writes the look at `level` onto a glow part (only the properties that change), its colour as the part stores it
+-- (MathUtil.color8: the same on the live server and in the web's export).
 function FixtureGlow.apply(part: BasePart, lit: Color3, level: number)
 	local material, color = FixtureGlow.look(lit, level)
 	if part.Material ~= material then
 		part.Material = material
 	end
-	part.Color = color
+	part.Color = MathUtil.color8(color)
 end
 
 return table.freeze(FixtureGlow)

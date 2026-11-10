@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
@@ -357,7 +358,7 @@ return {
 
 	["barrels and cabinets follow the locker's conventions"] = function(t: Expect)
 		local holder = Instance.new("Folder")
-		local random = Random.new(3)
+		local random = Rng.new(3)
 		local spec: HideBuilder.HideSpec = {
 			cframe = CFrame.new(10, 0, 10),
 			anchorId = "Spec_Hide",
@@ -414,8 +415,8 @@ return {
 				exit = exit :: "Left" | "Right",
 			}
 			local models: { [string]: Model } = {
-				Barrel = HideBuilder.buildBarrel(holder, spec, Random.new(1)),
-				Cabinet = HideBuilder.buildCabinet(holder, spec, Random.new(1)),
+				Barrel = HideBuilder.buildBarrel(holder, spec, Rng.new(1)),
+				Cabinet = HideBuilder.buildCabinet(holder, spec, Rng.new(1)),
 			}
 			for kind, model in models do
 				local anchor = model:FindFirstChild("ExitAnchor", true)

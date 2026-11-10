@@ -6,8 +6,9 @@
 //   title -> walkthrough -> lobby -> onto a ready pad -> countdown -> deploy -> Level 0: walk onto a bear trap ->
 //   look down and pry free -> walk into the stairwell airlock -> it seals -> Level 1 starts;
 // then each floor's signature moment:
-//   Level 1 the classroom scare (walking into Classroom 108), the gate slamming, and the bypass vent (kick the grate,
-//   crouch in, crawl the duct, kick the far grate, out beyond the gate), Escape pausing the clock and closing again;
+//   Level 1 the classroom scare (walking into Classroom 108), the gate slamming, and the bypass vent (kick the grate:
+//   its panel and screws land in both looks; crouch in, crawl the duct, kick the far grate, out beyond the gate),
+//   Escape pausing the clock and closing again;
 //   then, by the dev level skip with the Creature
 //   told to ignore the player (so a hunt cannot end the run before every moment is checked): Level 2 a flask (held,
 //   wound up with the aim arc, thrown, the shatter cloud), Level 3 a locker check (hiding, HOLD YOUR BREATH, held
@@ -183,7 +184,22 @@ try {
   // ------------------------------------------------------------------------------------------- Level 0: a trap
   const trap = await G((g) => {
     const t = g.traps.traps.find((x) => x.state === 'Armed' && x.level === g.level);
-    g.env.teleport({ position: { x: t.floor.x, y: t.floor.y + 3, z: t.floor.z + 2.5 }, yaw: 0 });
+    // walk at it from a side with clear floor (a guard trap stands in a bay's mouth): the first of eight headings whose
+    // start 2.5 studs off and the floor 2.5 studs past the trap are in clear line of it, at the shin and the chest
+    const V = t.floor.constructor;
+    const clear = (a, b) => [1, 3].every((h) => g.env.lineClear(new V(a.x, a.y + h, a.z), new V(b.x, b.y + h, b.z)));
+    let from = null;
+    for (let k = 0; k < 8 && !from; k++) {
+      const a = (k * Math.PI) / 4;
+      const dx = Math.sin(a);
+      const dz = Math.cos(a);
+      const start = new V(t.floor.x + dx * 2.5, t.floor.y, t.floor.z + dz * 2.5);
+      const past = new V(t.floor.x - dx * 2.5, t.floor.y, t.floor.z - dz * 2.5);
+      if (clear(start, t.floor) && clear(t.floor, past)) from = start;
+    }
+    from = from || new V(t.floor.x, t.floor.y, t.floor.z + 2.5);
+    const yaw = Math.atan2(-(t.floor.x - from.x), -(t.floor.z - from.z));
+    g.env.teleport({ position: { x: from.x, y: from.y + 3, z: from.z }, yaw });
     g.traps.noteTeleport();
     return t.id;
   });
@@ -272,8 +288,20 @@ try {
   await ff(0.3);
   await tab.keyboard.press('KeyR');
   await ff(0.6);
-  s = await G((g, dev, id) => ({ state: g.vents.stateOf(id), ms: g.env.moveState() }), vent.east);
+  s = await G((g, dev, id) => {
+    // the panel and the screws landed in both looks: each leaf's Rusted twin (hidden on this never-locked grate) posed
+    // with it, so a run that shows the rusted look sees it move the same way
+    const e = g.env.entity(id);
+    const apart = ['Panel', 'Screw1', 'Screw2', 'Screw3', 'Screw4'].filter((leaf) => {
+      const a = e.nodes.get(leaf);
+      const b = e.nodes.get(`${leaf}/Rusted`);
+      return !a || !b || !a.matrix.elements.every((v, i) => Math.abs(v - b.matrix.elements[i]) < 1e-4) || !b.hidden || a.hidden;
+    });
+    const moved = !e.nodes.get('Panel').matrix.equals(e.nodes.get('Panel').restWorld);
+    return { state: g.vents.stateOf(id), ms: g.env.moveState(), apart, moved };
+  }, vent.east);
   check('kicking the bypass vent grate open', s.state === 'Kicked', s);
+  check('the kicked panel and screws landed in both looks (the galvanized one shown)', s.moved && s.apart.length === 0, s);
   await walk(1.2);
   s = await G((g) => ({ inVent: g.vents.inVent(), ms: g.env.moveState(), ctx: g.env.context() }));
   check('crouching into the open grate starts the crawl', s.inVent && s.ctx === 'Vent', s);

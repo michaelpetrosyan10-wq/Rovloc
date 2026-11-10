@@ -28,6 +28,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
@@ -35,6 +36,7 @@ local Geometry = require(script.Parent.Parent.Geometry)
 local PropKit = require(script.Parent.PropKit)
 local SurfaceArt = require(script.Parent.Parent.SurfaceArt)
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Room = LayoutSchema.Room
 type Region = LayoutSchema.TunnelRegion
@@ -100,7 +102,7 @@ type Run = {
 	gallery: boolean,
 	busy: { [number]: { Span } }, -- per side: spans along the wall taken by openings and landmarks
 	floorBusy: { { x0: number, z0: number, x1: number, z1: number } }, -- level-local: anchors, triggers, openings
-	random: Random,
+	random: Rng,
 }
 
 -- The inner face coordinate of `room`'s wall on `side` (-1 low, +1 high) across axis `axis` (the run's long axis).
@@ -194,7 +196,7 @@ local function buildRuns(layout: Layout, regions: { [string]: Region }): { Run }
 			gallery = seg.kind == "Gallery",
 			busy = {},
 			floorBusy = {},
-			random = MathUtil.seededRandom(1, layout.id .. ":dress:" .. room.id),
+			random = Rng.seeded(1, layout.id .. ":dress:" .. room.id),
 		}
 		table.insert(out, run)
 		byRoom[room.id] = run
@@ -275,7 +277,7 @@ type Pipe = {
 }
 
 local function pipesOf(run: Run, ceiling: number): { Pipe }
-	local paint = run.region.pipe:Lerp(Color3.new(0, 0, 0), run.random:NextNumber(0, 0.15))
+	local paint = MathUtil.lerpColor(run.region.pipe, Color3.new(0, 0, 0), run.random:NextNumber(0, 0.15))
 	return {
 		{
 			name = "Main",
@@ -292,7 +294,7 @@ local function pipesOf(run: Run, ceiling: number): { Pipe }
 			d = 0.45,
 			y = ceiling - 2.05,
 			off = 0.4,
-			color = paint:Lerp(IRON, 0.35),
+			color = MathUtil.lerpColor(paint, IRON, 0.35),
 			banded = false,
 			key = "PipeCopper",
 			level = MEDIUM,
@@ -589,7 +591,11 @@ local function grime(parent: Instance, origin: Vector3, run: Run, side: number, 
 						"ConcreteDark",
 						{
 							material = Enum.Material.SmoothPlastic,
-							color = run.region.grime:Lerp(Color3.fromRGB(70, 40, 24), run.random:NextNumber(0, 0.5)),
+							color = MathUtil.lerpColor(
+								run.region.grime,
+								Color3.fromRGB(70, 40, 24),
+								run.random:NextNumber(0, 0.5)
+							),
 							transparency = run.random:NextNumber(0.25, 0.5),
 							castShadow = false,
 						}
@@ -631,7 +637,7 @@ local function paintLandmark(
 	origin: Vector3,
 	landmark: Landmark,
 	region: Region?,
-	random: Random
+	random: Rng
 ): number
 	local paint = if region then region.paint else Color3.fromRGB(230, 226, 210)
 	local kind = landmark.kind
@@ -725,15 +731,17 @@ local function grate(parent: Instance, origin: Vector3, x: number, z: number, na
 	end
 end
 
-local function puddle(parent: Instance, origin: Vector3, x: number, z: number, random: Random, name: string)
+local function puddle(parent: Instance, origin: Vector3, x: number, z: number, random: Rng, name: string)
 	local centre = origin + Vector3.new(x, 0.004, z)
 	local d = random:NextNumber(2.2, 3.8)
+	-- a Cylinder's face is round on every engine (Roblox draws the smaller of its Y and Z): sized round, as drawn
+	local across = d * random:NextNumber(0.6, 1)
 	decor(
 		Geometry.part(
 			parent,
 			name,
 			CFrame.new(centre + Vector3.new(0, 0.015, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-			Vector3.new(0.03, d, d * random:NextNumber(0.6, 1)),
+			Vector3.new(0.03, across, across),
 			"Water",
 			{
 				shape = Enum.PartType.Cylinder,
@@ -750,7 +758,7 @@ local function lumps(
 	origin: Vector3,
 	x: number,
 	z: number,
-	random: Random,
+	random: Rng,
 	name: string,
 	key: string,
 	color: Color3
@@ -796,7 +804,7 @@ local function debrisHeap(parent: Instance, origin: Vector3, run: Run, side: num
 					size,
 					"Brick",
 					{
-						color = BRICK:Lerp(Color3.new(0, 0, 0), random:NextNumber(0, 0.3)),
+						color = MathUtil.lerpColor(BRICK, Color3.new(0, 0, 0), random:NextNumber(0, 0.3)),
 					}
 				),
 				SMALL
@@ -838,7 +846,7 @@ local function debrisHeap(parent: Instance, origin: Vector3, run: Run, side: num
 						* CFrame.Angles(random:NextNumber(-0.06, 0.06), 0, 0),
 					Vector3.new(random:NextNumber(0.6, 0.85), 0.01, random:NextNumber(0.8, 1.1)),
 					"PaperSheet",
-					{ color = PAPER:Lerp(Color3.fromRGB(110, 96, 70), random:NextNumber(0, 0.6)) }
+					{ color = MathUtil.lerpColor(PAPER, Color3.fromRGB(110, 96, 70), random:NextNumber(0, 0.6)) }
 				),
 				SMALL
 			)
@@ -884,7 +892,7 @@ local function build(ctx: PropKit.StaticContext): number
 	local count = 0
 	-- landmarks first: the dressing on the walls keeps clear of them
 	for _, landmark in tunnels.landmarks do
-		local random = MathUtil.seededRandom(1, layout.id .. ":landmark:" .. landmark.id)
+		local random = Rng.seeded(1, layout.id .. ":landmark:" .. landmark.id)
 		count += paintLandmark(model, origin, landmark, regions[landmark.region], random)
 	end
 	-- pipes (galleries: both walls), markers, vents, trays, grime
@@ -915,7 +923,7 @@ local function build(ctx: PropKit.StaticContext): number
 				origin,
 				node.x,
 				node.z,
-				MathUtil.seededRandom(1, node.id),
+				Rng.seeded(1, node.id),
 				"Rubble_" .. node.id,
 				"Rubble",
 				Color3.fromRGB(84, 80, 72)
@@ -925,7 +933,7 @@ local function build(ctx: PropKit.StaticContext): number
 	end
 	for _, run in runs do
 		local region = run.region
-		local random = MathUtil.seededRandom(1, layout.id .. ":floor:" .. run.room.id)
+		local random = Rng.seeded(1, layout.id .. ":floor:" .. run.room.id)
 		local length = run.hi - run.lo
 		local function at(t: number, across: number): (number, number)
 			local u = run.lo + length * t

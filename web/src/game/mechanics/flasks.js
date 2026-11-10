@@ -1,7 +1,8 @@
 // flasks.js: the Science Hall's volatile chemical flasks (ChemicalProjectileService + ChemicalThrowController), for
 // the one player. Level 2 keeps them in stock (level2.js).
 //
-// World flasks: the run's planned ChemicalFlask props (the export's entities; their look is the plan's variant). The
+// World flasks: the run's planned ChemicalFlask props (the export's entities, one per FlaskCandidate anchor; a flask's
+// look is its anchor's variant, RunDirector.variantOf, in the world, in the hand and in flight, as on Roblox). The
 // Pickup prompt (0.35 s hold, 7 studs) serves an untaken flask to an Alive player with a free hand (a second one is
 // refused with Hud.FlaskHandsFull); taking it plays the Pickup cue there and lifts the prop out of the world. One
 // flask at a time: it rides the right hand in the "Flask" pose (carried low in the right of the view, drawn back
@@ -33,8 +34,9 @@ import * as THREE from 'three';
 import { GameConfig } from '../config.js';
 import { S } from '../strings.js';
 import { cfMatrix, clamp01, frameAt, smoothstep } from '../util.js';
+import { variantOf } from '../worldData.js';
 import * as Ballistics from './ballistics.js';
-import { FlaskEffects, FlaskModel, FlaskCentreY, GripY, liquidColor } from './flaskFx.js';
+import { AcidFlaskModel, FlaskEffects, FlaskModel, FlaskCentreY, GripY, liquidColor } from './flaskFx.js';
 
 const PICKUP_HOLD = 0.35;
 const STEP_SECONDS = 1 / 60;
@@ -127,13 +129,13 @@ export class Flasks {
     this.name = 'Flasks';
     this.game = game;
     this.env = game.env;
-    const variants = new Map((game.world.meta.plan?.props || []).map((p) => [p.anchorId, p.variant]));
     /** @type {Map<string, any>} */
     this.flasks = new Map();
     for (const info of game.world.entities('ChemicalFlask')) {
       const rest = cfMatrix(info.pivot);
       const grip = info.attachments.Grip ? cfMatrix(info.attachments.Grip) : null;
-      const variant = variants.get(info.id) ?? 0;
+      // the anchor's own look (each candidate anchor has its own entity, built with this variant)
+      const variant = variantOf('ChemicalFlask', info.level, info.attributes.AnchorId ?? info.id);
       this.flasks.set(info.id, {
         id: info.id,
         info,
@@ -223,7 +225,7 @@ export class Flasks {
       t: 0,
       level: d.level,
       axis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
-      model: tinted(new FlaskModel(variant), ghost.tint),
+      model: modelOf(ghost),
       done: false,
     };
     flight.model.group.matrixAutoUpdate = false;
@@ -266,7 +268,7 @@ export class Flasks {
       this.env.removeFromScene(this.heldModel.group);
       this.heldModel.dispose();
     }
-    this.heldModel = tinted(new FlaskModel(flask.variant), flask.tint);
+    this.heldModel = modelOf(flask);
     // the flask's Grip in the fist (ChemicalThrowController.heldPivot), in the turned fist's frame
     this.heldModel.group.matrixAutoUpdate = false;
     this.heldModel.group.matrix.copy(FIST_TO_NECK).invert().multiply(HAND_GRIP).multiply(_m.copy(flask.gripOffset).invert());
@@ -438,7 +440,7 @@ export class Flasks {
       t: 0,
       level: game.level,
       axis: new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize(),
-      model: tinted(new FlaskModel(flask.variant), flask.tint),
+      model: modelOf(flask),
       done: false,
     };
     flight.model.group.matrixAutoUpdate = false;
@@ -740,9 +742,9 @@ export class Flasks {
   // ---------------------------------------------------------------------------------------------------- dev
 
   /**
-   * An objective flask in a free hand (Floor 2's acid): `flask` carries {id, variant, color, tint, gripOffset,
-   * objective: true, onShatter(point, hit), onLost()}; it is held, aimed and thrown like a chemical flask. False when the
-   * hand is full or the player cannot hold one now.
+   * An objective flask in a free hand (Floor 2's acid, AcidFlaskModel): `flask` carries {id, variant, color, tint (its
+   * colour for a teammate's page), gripOffset, objective: true, onShatter(point, hit), onLost()}; it is held, aimed and
+   * thrown like a chemical flask. False when the hand is full or the player cannot hold one now.
    */
   holdObjective(flask) {
     if (this.held || !this.game.run || this.game.life.state !== 'Alive') return false;
@@ -776,10 +778,12 @@ export class Flasks {
   }
 }
 
-/** A flask model with its liquid recoloured ([r, g, b] 0..1; the acid's sickly yellow-green), or as it is. */
-function tinted(model, tint) {
-  if (tint) model.neon.color.setRGB(tint[0], tint[1], tint[2]);
-  return model;
+/**
+ * The model a flask shows in a hand or in flight (ChemicalThrowController): an objective flask (Floor 2's acid) is
+ * AcidFlaskBuilder's, every other ChemicalFlaskBuilder's of its variant.
+ */
+function modelOf(flask) {
+  return flask.objective ? new AcidFlaskModel() : new FlaskModel(flask.variant);
 }
 
 /** Fewest duct edges between nodes (null when more than maxHops or unknown). */

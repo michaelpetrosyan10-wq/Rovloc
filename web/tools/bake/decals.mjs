@@ -7,8 +7,10 @@
 // and floor checkers, which the generated textures already carry).
 //
 // Fonts: the Roblox families map onto fonts present at bake time (the result is pixels, so the player needs none):
-// GothamSSm -> Inter, Oswald -> Inter narrowed, SpecialElite -> Courier 10 Pitch, PatrickHand -> DejaVu Sans with a
-// hand-written jitter, Michroma -> Inter widened, RobotoMono -> JetBrains Mono.
+// GothamSSm -> Inter, Oswald -> Inter narrowed, SpecialElite -> Courier 10 Pitch, PatrickHand -> Patrick Hand itself
+// (Roblox's hand-lettered face, from @fontsource/patrick-hand, loaded into the page before anything is drawn),
+// Michroma -> Inter widened, RobotoMono -> JetBrains Mono. Nothing here is random: a decal's pixels depend only on its
+// GUI tree and size, never on its place in the bake.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,6 +24,43 @@ const PAD = 4; // texels of transparent padding around every decal (mipmaps)
 const MIN_SIDE = 16;
 const MAX_SIDE = 512;
 const MAX_PPS = 40;
+
+// The Roblox faces the bake draws in themselves (not a stand-in): each family's package and the subsets to load, by
+// the package's own unicode ranges.
+const FONT_FACES = [
+  {
+    family: 'Patrick Hand',
+    pkg: '@fontsource/patrick-hand',
+    subsets: { latin: 'files/patrick-hand-latin-400-normal.woff2', 'latin-ext': 'files/patrick-hand-latin-ext-400-normal.woff2' },
+  },
+];
+
+/**
+ * A Chromium page ready to draw GUI trees (window.renderPage / window.renderWearPage): every FONT_FACES face loaded
+ * first, since a canvas drawing with a face still loading falls back to another font without a word.
+ */
+async function rendererTab(browser) {
+  const tab = await browser.newPage();
+  await tab.setContent('<!doctype html><html><body></body></html>');
+  const faces = [];
+  for (const font of FONT_FACES) {
+    const ranges = JSON.parse(fs.readFileSync(require.resolve(`${font.pkg}/unicode.json`), 'utf8'));
+    for (const [subset, file] of Object.entries(font.subsets)) {
+      const data = fs.readFileSync(require.resolve(`${font.pkg}/${file}`)).toString('base64');
+      faces.push({ family: font.family, data, unicodeRange: ranges[subset] });
+    }
+  }
+  const missing = await tab.evaluate(async (list) => {
+    for (const f of list) {
+      const face = new FontFace(f.family, `url(data:font/woff2;base64,${f.data})`, { unicodeRange: f.unicodeRange });
+      document.fonts.add(await face.load());
+    }
+    return list.filter((f) => !document.fonts.check(`20px "${f.family}"`)).map((f) => f.family);
+  }, faces);
+  if (missing.length) throw new Error(`decal fonts did not load: ${missing.join(', ')}`);
+  await tab.addScriptTag({ content: RENDERER });
+  return tab;
+}
 
 /**
  * @param {any} raw world-raw.json
@@ -73,9 +112,7 @@ export async function bakeDecals(raw, outDir, opts = {}) {
   const { chromium } = require('playwright');
   const browser = await chromium.launch();
   try {
-    const tab = await browser.newPage();
-    await tab.setContent('<!doctype html><html><body></body></html>');
-    await tab.addScriptTag({ content: RENDERER });
+    const tab = await rendererTab(browser);
     fs.mkdirSync(outDir, { recursive: true });
     for (const p of pages) {
       const dataUrl = await tab.evaluate(([pg, q]) => window.renderPage(pg, q), [{ width: p.width, height: p.height, jobs: p.jobs }, quality]);
@@ -137,9 +174,7 @@ export async function bakeWear(raw, outDir, opts = {}) {
   const { chromium } = require('playwright');
   const browser = await chromium.launch();
   try {
-    const tab = await browser.newPage();
-    await tab.setContent('<!doctype html><html><body></body></html>');
-    await tab.addScriptTag({ content: RENDERER });
+    const tab = await rendererTab(browser);
     fs.mkdirSync(outDir, { recursive: true });
     for (const p of pages) {
       const res = await tab.evaluate(([pg, q]) => window.renderWearPage(pg, q), [{ width: p.width, height: p.height, jobs: p.jobs }, quality]);
@@ -223,7 +258,7 @@ const RENDERER = String.raw`
     GothamSSm: { family: 'Inter, "DejaVu Sans", sans-serif', stretch: 1 },
     Oswald: { family: 'Inter, "DejaVu Sans", sans-serif', stretch: 0.78, weight: 600 },
     SpecialElite: { family: '"Courier 10 Pitch", "FreeMono", "DejaVu Sans Mono", monospace', stretch: 1, weight: 700 },
-    PatrickHand: { family: '"DejaVu Sans", sans-serif', stretch: 0.92, hand: true },
+    PatrickHand: { family: '"Patrick Hand", "DejaVu Sans", sans-serif', stretch: 1 },
     Michroma: { family: 'Inter, "DejaVu Sans", sans-serif', stretch: 1.18, weight: 800 },
     RobotoMono: { family: '"JetBrains Mono", "DejaVu Sans Mono", monospace', stretch: 1, weight: 600 },
   };
@@ -235,8 +270,6 @@ const RENDERER = String.raw`
     return { ...f, weight: f.weight || WEIGHTS[wname] || 400, italic: /Italic/.test(n.fontStyle || '') };
   };
   const rgba = (c, a) => 'rgba(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ',' + Math.max(0, Math.min(1, a)).toFixed(4) + ')';
-  let seed = 1;
-  const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
 
   function sampleSeq(seq, t, isColor) {
     if (!seq || !seq.length) return isColor ? [1, 1, 1] : 0;
@@ -322,26 +355,12 @@ const RENDERER = String.raw`
       ctx.translate(x0, yc);
       ctx.scale(f.stretch, 1);
       ctx.fillStyle = fill;
-      if (f.hand) {
-        // hand-written: every glyph wobbles a little
-        let cx = 0;
-        for (const ch of line) {
-          const cw = ctx.measureText(ch).width;
-          ctx.save();
-          ctx.translate(cx + cw / 2, (rand() - 0.5) * size * 0.12);
-          ctx.rotate((rand() - 0.5) * 0.18);
-          ctx.fillText(ch, -cw / 2, 0);
-          ctx.restore();
-          cx += cw * (0.96 + rand() * 0.08);
-        }
-      } else {
-        if ((n.strokeTransparency ?? 1) < 1) {
-          ctx.lineWidth = Math.max(1, size * 0.08);
-          ctx.strokeStyle = rgba(n.strokeColor || [0, 0, 0], 1 - n.strokeTransparency);
-          ctx.strokeText(line, 0, 0);
-        }
-        ctx.fillText(line, 0, 0);
+      if ((n.strokeTransparency ?? 1) < 1) {
+        ctx.lineWidth = Math.max(1, size * 0.08);
+        ctx.strokeStyle = rgba(n.strokeColor || [0, 0, 0], 1 - n.strokeTransparency);
+        ctx.strokeText(line, 0, 0);
       }
+      ctx.fillText(line, 0, 0);
       ctx.restore();
       y0 += lineH;
     }
@@ -408,7 +427,6 @@ const RENDERER = String.raw`
     ctx.fillRect(0, 0, page.width, page.height);
     const crops = {};
     for (const job of page.jobs) {
-      seed = job.id * 7919 + 1;
       ctx.save();
       ctx.beginPath();
       ctx.rect(job.x, job.y, job.w, job.h);
@@ -454,7 +472,6 @@ const RENDERER = String.raw`
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, page.width, page.height);
     for (const job of page.jobs) {
-      seed = job.id * 7919 + 1;
       ctx.save();
       ctx.beginPath();
       ctx.rect(job.x, job.y, job.w, job.h);

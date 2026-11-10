@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 
 local MaterialLibrary = require(script.Parent.MaterialLibrary)
 
@@ -226,32 +227,36 @@ function Palette.variantFor(key: string): string?
 	return MaterialLibrary.variantFor(value.variant, value.material)
 end
 
--- Colour a part of `key` should take: `color` (default: the key's palette colour) as it is for an untextured key,
--- or compensated for the variant's colour map when the key is textured, so the dressed surface keeps the grade.
+-- Colour a part of `key` stores: `color` (default: the key's palette colour) as it is for an untextured key, or
+-- compensated for the variant's colour map when the key is textured, so the dressed surface keeps the grade. On the
+-- 8-bit grid a part keeps its colour on (MathUtil.color8), so this is exactly what the part reads back.
 function Palette.colorFor(key: string, color: Color3?): Color3
 	local value = Palette.get(key)
 	local base = color or value.color
 	if value.variant and Palette.variantFor(key) then
-		return MaterialLibrary.tint(value.variant, base)
+		return MathUtil.color8(MaterialLibrary.tint(value.variant, base))
 	end
-	return base
+	return MathUtil.color8(base)
 end
 
--- Dresses `part` (already given its material and colour) in the variant of `key` when one is live for the part's
--- material: sets MaterialVariant and compensates the colour. Returns whether it did; an untextured key, an
--- overridden material or no uploaded texture leaves the part untouched. Unknown / nil keys resolve like `get`.
-function Palette.dress(part: BasePart, key: string?): boolean
+-- Colours `part` (already given its material) `color` (default: `key`'s palette colour) and, when the variant of `key`
+-- is live for the part's material, dresses it in that MaterialVariant with the colour compensated for its colour map.
+-- The colour is written once, on the 8-bit grid (MathUtil.color8), and never read back from the part: Roblox keeps
+-- BasePart.Color in 8 bits and Lune keeps floats, so a colour read back and reworked would differ between the live
+-- server and the web's export. Returns whether the variant dressed it; an untextured key, an overridden material or no
+-- uploaded texture leaves MaterialVariant untouched. Unknown / nil keys resolve like `get`.
+function Palette.dress(part: BasePart, key: string?, color: Color3?): boolean
 	local value = entries[key or FALLBACK] or entries[FALLBACK]
-	if not value or not value.variant then
-		return false
+	local base = color or value.color
+	local texture = value.variant
+	local name = if texture then MaterialLibrary.variantFor(texture, part.Material) else nil
+	if texture and name then
+		part.MaterialVariant = name
+		part.Color = MathUtil.color8(MaterialLibrary.tint(texture, base))
+		return true
 	end
-	local name = MaterialLibrary.variantFor(value.variant, part.Material)
-	if not name then
-		return false
-	end
-	part.MaterialVariant = name
-	part.Color = MaterialLibrary.tint(value.variant, part.Color)
-	return true
+	part.Color = MathUtil.color8(base)
+	return false
 end
 
 -- Applies material + colour (and the key's texture when it is live) to a part, clearing a variant a previous key
@@ -259,7 +264,6 @@ end
 function Palette.apply(part: BasePart, key: string?)
 	local value = Palette.get(key)
 	part.Material = value.material
-	part.Color = value.color
 	if not Palette.dress(part, key) and part.MaterialVariant ~= "" then
 		part.MaterialVariant = ""
 	end

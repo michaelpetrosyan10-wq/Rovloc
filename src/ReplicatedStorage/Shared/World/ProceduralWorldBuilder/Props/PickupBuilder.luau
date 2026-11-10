@@ -17,6 +17,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Types = require(ReplicatedStorage.Shared.Types)
 
@@ -181,7 +182,7 @@ function PickupBuilder.build(ctx: Types.PropBuildContext): Model
 		body * CFrame.new(0, CAN.Y + RIM_PROUD - RIM_HEIGHT / 2, 0),
 		Vector3.new(CAN.X + RIM_PROUD * 2, RIM_HEIGHT, CAN.Z + RIM_PROUD * 2),
 		Enum.Material.Metal,
-		CAN_COLOR:Lerp(Color3.new(), 0.25)
+		MathUtil.lerpColor(CAN_COLOR, Color3.new(), 0.25)
 	)
 	local plateTop = PLATE_BOTTOM + PLATE.Y
 	piece(

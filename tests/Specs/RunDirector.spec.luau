@@ -217,6 +217,42 @@ return {
 		t.truthy(differing >= 10, string.format("only %d of 11 other seeds changed the plan", differing))
 	end,
 
+	["a run picks where props go, never how they look: an anchor's prop has the same variant in every plan"] = function(
+		t: Expect
+	)
+		local seen: { [string]: number } = {}
+		local repeated = 0
+		for seed = 1, 8 do
+			for _, difficulty: Enums.Difficulty in { STANDARD, NIGHTMARE } do
+				for _, prop in planFor(seed, difficulty).props do
+					local key = prop.kind .. "|" .. prop.anchorId
+					t.eq(
+						prop.variant,
+						RunDirector.variantOf(prop.kind, prop.levelId, prop.anchorId),
+						key .. " variantOf"
+					)
+					local before = seen[key]
+					if before then
+						repeated += 1
+						t.eq(prop.variant, before, key .. " keeps its variant from plan to plan")
+					else
+						seen[key] = prop.variant
+					end
+				end
+			end
+		end
+		t.truthy(repeated > 20, string.format("anchors picked again across plans (%d)", repeated))
+		local distinct: { [number]: boolean } = {}
+		local count = 0
+		for _, variant in seen do
+			if not distinct[variant] then
+				distinct[variant] = true
+				count += 1
+			end
+		end
+		t.truthy(count > 20, string.format("anchors vary from one another (%d variants)", count))
+	end,
+
 	["prop counts follow DifficultyConfig"] = function(t: Expect)
 		local basement = layoutById(RunDirector.TrapLevel)
 		local science = layoutById(RunDirector.ScienceLevel)

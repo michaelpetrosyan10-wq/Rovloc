@@ -3,17 +3,35 @@
 // 1. The codec on synthetic data: delta / triangle-delta coding at every element width, the sqrt light encoding.
 // 2. The baked world: decodeWorld(world.json, world.bin) against the bake's own pre-encoding samples
 //    (build/cache/golden.json): positions within half a quantisation step, UVs within half a UV step, colours, light
-//    bytes, flicker pairs and indices exact. Then structural checks over everything: indices in range, positions
-//    inside their chunk's bounds, unit normals, flicker groups that exist, entity ranges that tile their chunks,
-//    creature bone indices, collision and probe tables, every texture and material the chunks name.
+//    bytes, flicker pairs and indices exact. Then structural checks over everything: indices in range, positions inside
+//    their chunk's bounds, unit normals, flicker groups that exist, entity ranges that tile their chunks, every vent
+//    grate in both looks (each drawn, pivoting and colliding alike), creature bone indices, collision and probe tables,
+//    every texture and material the chunks name. The floor objectives' guard traps: every guarded item (the basement's
+//    fuses) has its guard on the careless walk in (each walk ends where the item's prompt first answers with a foot on
+//    the pan on the way; the one the baked world leaves open is on the floor with the body clear; and the shortest walk
+//    the baked world allows from the same start, found here, crosses the pan too), and its standing spot beside it,
+//    clear of every trap spot, the item's prompt reaching it, and a walk to it from a doorway that never sets a foot on
+//    a pan, all held to the baked collision and the entities' colliders. Every item entity is the prop any run builds
+//    on its anchor (a reagent's Slot its candidate's kind, no Slot without kinds), and what the web draws again away
+//    from the world matches the export: each chemical flask is its anchor's variant and looks as flaskFx.js draws that
+//    variant (ChemicalFlaskBuilder.lookOf on the world's Rng: liquid tiers, crack, colour), and the acid flask stands
+//    on its fume hood's AcidFlaskSpot.
 // 3. Flicker groups: world-wide 16-bit ids within the namespace and the engine's flicker texture, every light's group
 //    resolving (its FlickerGroup, its level), and each tunnel floor's power circuits (Mains: / Circuit:) pooling as
 //    one family: the bake's pooling rule, the family in world.json, one probe grid per family.
+// 4. The run plan, the same on both platforms: the web's Rng (src/game/util.js) against the golden values of
+//    tests/Specs/Rng.spec.luau (an independent C reference of xoshiro128** seeded by SplitMix32), then worldData's port
+//    of RunDirector against RunDirector itself: for every seed and difficulty of the export's build/cache/run-plans.json,
+//    the same objective picks and guard traps, the same bear trap, flask and battery anchors, every prop's variant
+//    (variantOf) and item slot, the same locked grates and the same exit stairwells.
 // Exits non-zero on the first category with failures (all failures are listed).
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import * as THREE from 'three';
+import { MeshBVH } from 'three-mesh-bvh';
 
 import {
   FLICKER_GROUP_LIMIT,
@@ -32,6 +50,9 @@ import {
   triEncode,
 } from '../src/engine/data.js';
 import { createSharedUniforms } from '../src/engine/materials.js';
+import { crackFrame, flaskLook, liquidColor, liquidTiers } from '../src/game/mechanics/flaskFx.js';
+import { Rng, cfMatrix, cfPos, hash as fnv, shuffle } from '../src/game/util.js';
+import { WorldData, variantOf } from '../src/game/worldData.js';
 import { POWER_CIRCUIT, dominantGroup } from './bake/light.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -216,6 +237,36 @@ for (const e of meta.entities) {
   for (const r of e.ranges) check(world.chunks[r.chunk] && world.chunks[r.chunk].kind === 'entity', `entity ${e.id} range chunk`);
 }
 
+// vent grates in both looks over the same boxes (VentGrateBuilder): the galvanized one in the grate's own nodes ('',
+// Panel, Screw1-4), the rusted-shut one in each node's Rusted sub-node, pivoting where that node rests. A run shows the
+// look its plan picks (vents.js), so the export ships both shown: each drawn, the two colliding alike
+{
+  const before = failures;
+  const LOOK_NODES = ['', 'Panel', 'Screw1', 'Screw2', 'Screw3', 'Screw4'];
+  const rustedNode = (node) => (node ? `${node}/Rusted` : 'Rusted');
+  const boxKey = (c) => `${c.shape}|${c.group}|${c.size.map((v) => v.toFixed(3))}|${c.cf.map((v) => v.toFixed(3))}`;
+  const grates = meta.entities.filter((e) => e.type === 'VentGrate');
+  check(grates.length >= 2, `${grates.length} vent grates`);
+  for (const e of grates) {
+    const nodes = new Map(e.nodes.map((n) => [n.path, n]));
+    const drawn = new Set(e.ranges.filter((r) => r.count > 0).map((r) => r.node || ''));
+    for (const node of LOOK_NODES) {
+      const twin = rustedNode(node);
+      const name = node || 'frame';
+      check(nodes.has(twin) && (!node || nodes.has(node)), `${e.id} ${name}: nodes ${node || "''"} and ${twin}`);
+      check(drawn.has(node) && drawn.has(twin), `${e.id} ${name}: drawn in both looks`);
+      const pivot = node ? nodes.get(node) && nodes.get(node).pivot : e.pivot;
+      const twinPivot = nodes.get(twin) && nodes.get(twin).pivot;
+      check(!!pivot && !!twinPivot && pivot.every((v, i) => Math.abs(v - twinPivot[i]) < 1e-4), `${e.id} ${twin} pivots where ${name} rests`);
+      const mine = e.colliders.filter((c) => (c.node || '') === node).map(boxKey).sort();
+      const theirs = e.colliders.filter((c) => c.node === twin).map(boxKey).sort();
+      check(mine.join(';') === theirs.join(';'), `${e.id} ${name}: the looks collide alike (${mine.length} / ${theirs.length} boxes)`);
+      if (node === '' || node === 'Panel') check(mine.length >= 4, `${e.id} ${name}: colliding boxes`);
+    }
+  }
+  if (failures === before) console.log(`  ok   ${grates.length} vent grates in both looks, drawn and colliding alike`);
+}
+
 // floor objectives: every candidate, station and lock is an entity with its prompts, leaves and attachments
 {
   const ids = new Set(meta.entities.map((e) => e.id));
@@ -317,7 +368,438 @@ for (const e of meta.entities) {
     }
     if (picked.length >= 3 && picked.every(Boolean)) check(new Set(picked.map((c) => c.quarter)).size >= rules.pickQuarters, `${floor.levelId} picks spread`);
     if (floor.item.slots) picked.forEach((c, i) => c && check(c.slot === i + 1, `${c.anchorId} is kind ${i + 1}`));
+    // every item entity is the prop any run that picks its anchor builds (RunDirector.objectiveProp): with kinds its
+    // Slot (on the model and its Pickup prompt) is its candidate's kind, without kinds it has none, whatever the picks
+    const slotOf = new Map(list.map((c) => [c.anchorId, c.slot]));
+    for (const e of meta.entities.filter((x) => x.type === floor.item.prop)) {
+      const want = floor.item.slots ? slotOf.get(e.attributes.AnchorId) : undefined;
+      const prompt = e.prompts.find((p) => p.name === 'Pickup');
+      check(e.attributes.Slot === want && (prompt ? prompt.attributes.Slot : undefined) === want,
+        `${e.id} Slot ${e.attributes.Slot} / prompt ${prompt ? prompt.attributes.Slot : '-'} (want ${want ?? 'none'})`);
+    }
   }
+}
+
+// the props the web draws again away from the world (flaskFx.js: the flask in a hand, in flight and a teammate's): a
+// chemical flask on any anchor is its anchor's variant (RunDirector.variantOf) and looks exactly as the exported world
+// prop (ChemicalFlaskBuilder.lookOf on the world's Rng: the fill line's three liquid tiers, the crack and its frame, the
+// liquid colour); the acid flask stands on its fume hood's AcidFlaskSpot (AcidFlaskBuilder.buildWorld's frame)
+{
+  const before = failures;
+  const rawFile = path.join(buildDir, 'cache', 'world-raw.json');
+  check(fs.existsSync(rawFile), `the export's world (${rawFile})`);
+  let flasks = 0;
+  let cracked = 0;
+  if (fs.existsSync(rawFile)) {
+    const raw = JSON.parse(fs.readFileSync(rawFile, 'utf8'));
+    const partsOf = new Map();
+    for (const p of raw.parts) {
+      if (p.entity === undefined) continue;
+      if (!partsOf.has(p.entity)) partsOf.set(p.entity, new Map());
+      partsOf.get(p.entity).set(p.name, p);
+    }
+    const planProps = meta.plan && Array.isArray(meta.plan.props) ? meta.plan.props : [];
+    const planned = new Map(planProps.filter((p) => p.kind === 'ChemicalFlask').map((p) => [p.anchorId, p.variant]));
+    const near = (a, b, tol) => Math.abs(a - b) <= tol;
+    const STUD = 2e-4; // the export's 1e-4 rounding plus Lune's 1/65536 storage
+    const at = new THREE.Vector3();
+    for (const e of raw.entities.filter((x) => /^ChemicalFlask_/.test(x.name))) {
+      flasks++;
+      const anchor = e.attributes.AnchorId;
+      const variant = variantOf('ChemicalFlask', e.level, anchor);
+      if (planned.has(anchor)) check(planned.get(anchor) === variant, `${anchor}: variantOf ${variant} is the plan's ${planned.get(anchor)}`);
+      const look = flaskLook(variant);
+      const parts = partsOf.get(e.index) || new Map();
+      const pivot = cfMatrix(e.pivot);
+      liquidTiers(look).forEach(([y0, y1, d], i) => {
+        const p = parts.get(`Liquid${i + 1}`);
+        check(!!p, `${anchor} Liquid${i + 1}`);
+        if (!p) return;
+        at.set(0, (y0 + y1) / 2, 0).applyMatrix4(pivot);
+        check(near(p.size[0], y1 - y0, STUD) && near(p.size[1], d, STUD) && near(p.size[2], d, STUD),
+          `${anchor} Liquid${i + 1} ${p.size.join(' x ')} (look: ${(y1 - y0).toFixed(4)} x ${d.toFixed(4)})`);
+        check(at.distanceTo(cfPos(p.cf)) <= 1e-3, `${anchor} Liquid${i + 1} sits at its tier`);
+        const c = liquidColor(variant);
+        check([c.r, c.g, c.b].every((v, k) => Math.round(v * 255) === Math.round(p.color[k] * 255)), `${anchor} Liquid${i + 1} colour`);
+      });
+      const crack = parts.get('Crack');
+      check(!!crack === look.cracked, `${anchor}: ${crack ? 'a' : 'no'} crack (look: ${look.cracked ? 'cracked' : 'whole'})`);
+      if (crack && look.cracked) {
+        cracked++;
+        const want = crackFrame(look);
+        check(want.size.every((v, k) => near(crack.size[k], v, STUD)), `${anchor} crack size ${crack.size.join(' x ')}`);
+        const frame = pivot.clone().multiply(want.frame);
+        check(cfPos(crack.cf).distanceTo(at.setFromMatrixPosition(frame)) <= 1e-3, `${anchor} crack position`);
+        // each axis within a milliradian (the stored rotations are rounded, so their columns are unit only to ~1e-5)
+        const got = cfMatrix(crack.cf);
+        const axis = (m, k) => new THREE.Vector3().setFromMatrixColumn(m, k).normalize();
+        check([0, 1, 2].every((k) => axis(got, k).angleTo(axis(frame, k)) <= 1e-3), `${anchor} crack orientation`);
+      }
+    }
+    check(flasks > 0 && flasks === meta.entities.filter((x) => x.type === 'ChemicalFlask').length, `${flasks} chemical flasks exported and baked`);
+    for (const acid of meta.entities.filter((x) => x.type === 'AcidFlask')) {
+      const hood = meta.entities.find((x) => x.type === 'FumeHood' && x.level === acid.level && x.attributes.AnchorId === acid.attributes.AnchorId);
+      const spot = hood && hood.attachments.AcidFlaskSpot;
+      check(!!spot, `${acid.id}: its hood's AcidFlaskSpot`);
+      if (spot) check(spot.every((v, k) => near(acid.pivot[k], v, k < 3 ? 1e-3 : 1e-4)), `${acid.id} pivot ${acid.pivot.join(',')} is the AcidFlaskSpot ${spot.join(',')}`);
+    }
+  }
+  if (failures === before) console.log(`  ok   ${flasks} chemical flasks (${cracked} cracked) look as flaskFx draws their variant; the acid flask on its spot`);
+}
+
+// guarded items (the basement's fuses): every candidate is taken from a spot beside it, clear of every trap spot a run
+// may arm (the guard of whichever fuses it picks, any other's, the seeded rest) and walked to from a doorway of its room
+// with no foot on a pan: the export's ObjectivePlaces.standingSpot, held here to the baked world (the static collision,
+// the entities' colliders and the item's own Pickup prompt)
+{
+  const o = meta.objectives || {};
+  const S = o.stand || {};
+  check(S.near > 0 && S.reach > S.near && S.trapClear > 0 && S.panReach > 0 && S.body > 0 && S.step > 0 && S.eye > 0 && S.bodyHeight > S.eye,
+    'the standing-spot rule is exported');
+  check(S.panCore > 0 && S.panCore < S.panReach && S.promptReach > S.reach && S.approachRun > 0, 'the guard rule is exported');
+  const rooms = new Map(meta.rooms.map((r) => [r.id, r]));
+  const bvhs = new Map();
+  const bvhOf = (level) => {
+    if (!bvhs.has(level)) {
+      // the engine's collision BVH (World._buildCollision)
+      const c = world.collision[level];
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(c.position, 3));
+      geometry.setIndex(new THREE.BufferAttribute(c.index, 1));
+      bvhs.set(level, new MeshBVH(geometry, { targetLeafSize: 8, strategy: 0 }));
+    }
+    return bvhs.get(level);
+  };
+  const ray = new THREE.Ray();
+  const hit = (level, from, dir, dist) => {
+    ray.origin.set(from[0], from[1], from[2]);
+    ray.direction.set(dir[0], dir[1], dir[2]).normalize();
+    const h = bvhOf(level).raycastFirst(ray, THREE.DoubleSide, 0, dist);
+    return h && h.distance <= dist ? h : null;
+  };
+  // an entity's colliders as oriented boxes (pivot * collider frame; CFrame rows: position, then the rotation matrix)
+  const compose = (a, b) => {
+    const r = (m, i, j) => m[3 + i * 3 + j];
+    const out = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (let i = 0; i < 3; i++) {
+      out[i] = a[i] + r(a, i, 0) * b[0] + r(a, i, 1) * b[1] + r(a, i, 2) * b[2];
+      for (let j = 0; j < 3; j++) out[3 + i * 3 + j] = r(a, i, 0) * r(b, 0, j) + r(a, i, 1) * r(b, 1, j) + r(a, i, 2) * r(b, 2, j);
+    }
+    return out;
+  };
+  const toLocal = (box, p) => {
+    const d = [p[0] - box.cf[0], p[1] - box.cf[1], p[2] - box.cf[2]];
+    return [0, 1, 2].map((j) => d[0] * box.cf[3 + j] + d[1] * box.cf[6 + j] + d[2] * box.cf[9 + j]);
+  };
+  const boxGap = (box, p) => {
+    const l = toLocal(box, p);
+    return Math.hypot(...l.map((v, k) => Math.max(Math.abs(v) - box.half[k], 0)));
+  };
+  const segmentHitsBox = (box, a, b) => {
+    const la = toLocal(box, a);
+    const lb = toLocal(box, b);
+    let t0 = 0;
+    let t1 = 1;
+    for (let k = 0; k < 3; k++) {
+      const d = lb[k] - la[k];
+      if (Math.abs(d) < 1e-9) {
+        if (Math.abs(la[k]) > box.half[k]) return false;
+        continue;
+      }
+      let ta = (-box.half[k] - la[k]) / d;
+      let tb = (box.half[k] - la[k]) / d;
+      if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta);
+      t1 = Math.min(t1, tb);
+      if (t0 > t1) return false;
+    }
+    return true;
+  };
+  const DIRS = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
+  const DIAGONALS = DIRS.concat([[1, 0, 1], [1, 0, -1], [-1, 0, 1], [-1, 0, -1]]);
+  let held = 0;
+  let guarded = 0;
+  let walked = 0;
+  let sprung = 0;
+  let searched = 0;
+  // The shortest walk the baked world allows from `start` ([x, z]) to the first point where `answers` (<= 0) holds, on
+  // a 0.25 grid at any angle (Theta*: a leg runs straight while every cell under it is free), searched inside `region`
+  // ({x0, z0, x1, z1}); `free(x, z)` says whether the body may stand on a cell's centre. [x, z] points, or null.
+  const anyAngleWalk = (start, region, free, answers) => {
+    const CELL = 0.25;
+    const nx = Math.ceil((region.x1 - region.x0) / CELL);
+    const nz = Math.ceil((region.z1 - region.z0) / CELL);
+    const known = new Int8Array(nx * nz).fill(-1);
+    const at = (k) => [region.x0 + ((k % nx) + 0.5) * CELL, region.z0 + (Math.floor(k / nx) + 0.5) * CELL];
+    const open = (i, j) => {
+      if (i < 0 || j < 0 || i >= nx || j >= nz) return false;
+      const k = j * nx + i;
+      if (known[k] < 0) known[k] = free(...at(k)) ? 1 : 0;
+      return known[k] === 1;
+    };
+    const cellOf = (x, z) => [Math.floor((x - region.x0) / CELL), Math.floor((z - region.z0) / CELL)];
+    const sight = (a, b) => {
+      const [ax, az] = at(a);
+      const [bx, bz] = at(b);
+      const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.05));
+      for (let t = 0; t <= n; t++) {
+        if (!open(...cellOf(ax + ((bx - ax) * t) / n, az + ((bz - az) * t) / n))) return false;
+      }
+      return true;
+    };
+    // the start's cell, else the free cell nearest the start (a start on the body's limit can put a centre over it)
+    let [si, sj] = cellOf(start[0], start[1]);
+    if (!open(si, sj)) {
+      let best = null;
+      for (let di = -2; di <= 2; di++) {
+        for (let dj = -2; dj <= 2; dj++) {
+          if (!open(si + di, sj + dj)) continue;
+          const [cx, cz] = at((sj + dj) * nx + si + di);
+          const d = Math.hypot(cx - start[0], cz - start[1]);
+          if (!best || d < best[0]) best = [d, si + di, sj + dj];
+        }
+      }
+      if (!best) return null;
+      [, si, sj] = best;
+    }
+    const dist = new Float64Array(nx * nz).fill(Infinity);
+    const prev = new Int32Array(nx * nz).fill(-1);
+    const heap = [];
+    const push = (d, k) => {
+      heap.push([d, k]);
+      for (let c = heap.length - 1; c > 0; ) {
+        const p = (c - 1) >> 1;
+        if (heap[p][0] <= heap[c][0]) break;
+        [heap[p], heap[c]] = [heap[c], heap[p]];
+        c = p;
+      }
+    };
+    const pop = () => {
+      const top = heap[0];
+      const end = heap.pop();
+      if (heap.length) {
+        heap[0] = end;
+        for (let c = 0; ; ) {
+          const l = 2 * c + 1;
+          let m = c;
+          if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+          if (l + 1 < heap.length && heap[l + 1][0] < heap[m][0]) m = l + 1;
+          if (m === c) break;
+          [heap[m], heap[c]] = [heap[c], heap[m]];
+          c = m;
+        }
+      }
+      return top;
+    };
+    const s0 = sj * nx + si;
+    dist[s0] = 0;
+    push(0, s0);
+    while (heap.length) {
+      const [d, k] = pop();
+      if (d > dist[k]) continue;
+      const [x, z] = at(k);
+      if (answers(x, z) <= 0) {
+        const walk = [];
+        for (let c = k; c >= 0; c = prev[c]) walk.unshift(at(c));
+        return walk;
+      }
+      const i = k % nx;
+      const j = Math.floor(k / nx);
+      for (const [di, dj] of DIAGONALS.map((v) => [v[0], v[2]])) {
+        if (!open(i + di, j + dj) || (di && dj && !(open(i + di, j) && open(i, j + dj)))) continue;
+        const n = (j + dj) * nx + i + di;
+        const [ux, uz] = at(n);
+        const p = prev[k];
+        if (p >= 0 && sight(p, n)) {
+          const [px, pz] = at(p);
+          const nd = dist[p] + Math.hypot(ux - px, uz - pz);
+          if (nd < dist[n] - 1e-9) {
+            dist[n] = nd;
+            prev[n] = p;
+            push(nd, n);
+          }
+        } else {
+          const nd = d + CELL * Math.hypot(di, dj);
+          if (nd < dist[n] - 1e-9) {
+            dist[n] = nd;
+            prev[n] = k;
+            push(nd, n);
+          }
+        }
+      }
+    }
+    return null;
+  };
+  for (const floor of o.floors || []) {
+    if (!floor.item.guarded) continue;
+    const level = (o.levels || {})[floor.levelId];
+    if (!level) continue;
+    guarded += level.candidates.length;
+    const id = floor.levelId;
+    const origin = meta.levels[id].origin;
+    const traps = meta.anchors.filter((a) => a.level === id && a.kind === 'TrapCandidate').map((a) => [a.cframe[0], a.cframe[2]]);
+    const trapGap = (x, z) => Math.min(...traps.map((t) => Math.hypot(t[0] - x, t[1] - z)));
+    const items = new Map(meta.entities.filter((e) => e.level === id && e.tags.includes('ObjectiveItem')).map((e) => [e.attributes.AnchorId, e]));
+    const boxes = [];
+    for (const e of meta.entities) {
+      if (e.level !== id || e.tags.includes('ObjectiveItem')) continue;
+      for (const c of e.colliders) boxes.push({ id: e.id, cf: compose(e.pivot, c.cf), half: c.size.map((v) => v / 2) });
+    }
+    // the body standing at (x, z) on a floor at y: clear of the static collision and of every entity's colliders
+    const bodyClear = (x, y, z, dirs, radius) => {
+      for (const h of [S.step + 0.2, 3, S.bodyHeight - 0.6]) {
+        const p = [x, y + h, z];
+        if (dirs.some((d) => hit(id, p, d, radius))) return `a wall within ${radius} at ${h} studs up`;
+        const near = boxes.find((b) => boxGap(b, p) < radius);
+        if (near) return `${near.id} within ${radius} at ${h} studs up`;
+      }
+      return null;
+    };
+    // the floor under (x, z): a walking surface at y
+    const footing = (x, y, z) => {
+      const h = hit(id, [x, y + 2, z], [0, -1, 0], 3);
+      return !!h && Math.abs(h.point.y - y) < 0.15;
+    };
+    for (const c of level.candidates) {
+      const s = c.stand;
+      check(!!s, `${c.anchorId}: a spot to stand beside it clear of every trap spot, walked to round its guard`);
+      if (!s) continue;
+      const room = rooms.get(c.room);
+      check(!!room, `${c.anchorId} room ${c.room}`);
+      if (!room) continue;
+      const y = room.floorY;
+      const x = origin[0] + s.pos[0];
+      const z = origin[2] + s.pos[2];
+      const item = [origin[0] + c.pos[0], origin[1] + c.pos[1], origin[2] + c.pos[2]];
+      const reach = Math.hypot(x - item[0], z - item[2]);
+      check(reach >= S.near - 0.01 && reach <= S.reach + 0.01, `${c.anchorId}: the spot ${reach.toFixed(2)} studs off it`);
+      check(trapGap(x, z) >= S.trapClear - 0.01, `${c.anchorId}: the spot ${trapGap(x, z).toFixed(2)} studs from the nearest trap spot`);
+      // the item's own Pickup prompt answers the standing root, in sight of the eye
+      const e = items.get(c.anchorId);
+      const prompt = e && e.prompts.find((p) => p.name === 'Pickup');
+      const point = e && e.attachments.PromptPoint;
+      check(!!prompt && !!point, `${c.anchorId}: its item and Pickup prompt`);
+      if (prompt && point) {
+        const root = [x, y + S.eye - 1.5, z];
+        const d = Math.hypot(point[0] - root[0], point[1] - root[1], point[2] - root[2]);
+        check(d <= prompt.maxDistance, `${c.anchorId}: its prompt reaches the spot (${d.toFixed(2)} of ${prompt.maxDistance})`);
+        const eye = [x, y + S.eye, z];
+        const to = [point[0] - eye[0], point[1] - eye[1], point[2] - eye[2]];
+        const len = Math.hypot(...to);
+        check(!hit(id, eye, to, len - 0.05), `${c.anchorId}: the item in sight of the spot (the static world)`);
+        const blocker = boxes.find((b) => segmentHitsBox(b, eye, point));
+        check(!blocker, `${c.anchorId}: the item in sight of the spot (${blocker && blocker.id} in the way)`);
+      }
+      // the careless walk in (a walk per way the arrival doorway's leaf may hang): each ends where the item's prompt first
+      // answers with its foot on the guard's pan on the way; the one the baked world leaves open (the leaf hangs where it
+      // does) is walked on the floor with the body clear all the way
+      const cw = c.careless;
+      const guardAt = (meta.anchors.find((a) => a.id === c.ref) || {}).cframe;
+      check(!!cw && Array.isArray(cw.walks) && cw.walks.length >= 1 && !!guardAt, `${c.anchorId}: its careless walk in and its guard`);
+      if (cw && guardAt && prompt && point) {
+        let open = 0;
+        cw.walks.forEach((w, v) => {
+          const pts = w.map((p) => [origin[0] + p[0], origin[2] + p[1]]);
+          const label = `${c.anchorId} careless walk ${v + 1}`;
+          const answers = (px, pz) => Math.hypot(point[0] - px, point[1] - (y + S.eye - 1.5), point[2] - pz) - prompt.maxDistance;
+          let near = Infinity;
+          let clear = true;
+          for (let i = 0; i + 1 < pts.length; i++) {
+            const [ax, az] = pts[i];
+            const [bx, bz] = pts[i + 1];
+            const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.25));
+            for (let k = 0; k <= steps; k++) {
+              const px = ax + ((bx - ax) * k) / steps;
+              const pz = az + ((bz - az) * k) / steps;
+              near = Math.min(near, Math.hypot(px - guardAt[0], pz - guardAt[2]));
+              if (i + 2 < pts.length || k < steps) check(answers(px, pz) > -0.05, `${label} at (${px.toFixed(2)}, ${pz.toFixed(2)}): the prompt waits for its end`);
+              if (clear && (!footing(px, y, pz) || bodyClear(px, y, pz, DIRS, S.body - 0.1))) clear = false;
+            }
+          }
+          const [ex, ez] = pts[pts.length - 1];
+          check(pts.length >= 2 && answers(ex, ez) <= 0.05, `${label} ends where the prompt answers`);
+          check(near <= S.panCore + 0.01, `${label} passes ${near.toFixed(2)} studs from ${c.ref}: its foot on the pan`);
+          if (clear) open++;
+        });
+        check(open >= 1, `${c.anchorId}: a careless walk the baked world leaves open`);
+        sprung++;
+        // and found here, not taken from the export: the shortest walk the baked world allows from the same start to
+        // where the prompt first answers (the body clear of the static collision and every entity's colliders, the floor
+        // under it) sets its foot on the guard's pan too
+        const start = [origin[0] + cw.walks[0][0][0], origin[2] + cw.walks[0][0][1]];
+        const span = cw.walks.flat().map((p) => [origin[0] + p[0], origin[2] + p[1]]);
+        const r = room.rect;
+        const region = {
+          x0: Math.min(origin[0] + r.x, ...span.map((p) => p[0])) - 4,
+          z0: Math.min(origin[2] + r.z, ...span.map((p) => p[1])) - 4,
+          x1: Math.max(origin[0] + r.x + r.w, ...span.map((p) => p[0])) + 4,
+          z1: Math.max(origin[2] + r.z + r.d, ...span.map((p) => p[1])) + 4,
+        };
+        const nearBoxes = boxes.filter((b) => b.cf[0] > region.x0 - 8 && b.cf[0] < region.x1 + 8 && b.cf[2] > region.z0 - 8 && b.cf[2] < region.z1 + 8);
+        const free = (px, pz) => {
+          if (!footing(px, y, pz)) return false;
+          for (const h of [S.step + 0.2, 3, S.bodyHeight - 0.6]) {
+            const q = [px, y + h, pz];
+            if (DIAGONALS.some((d) => hit(id, q, d, S.body - 0.1))) return false;
+            if (nearBoxes.some((b) => boxGap(b, q) < S.body - 0.1)) return false;
+          }
+          return true;
+        };
+        const answers = (px, pz) => Math.hypot(point[0] - px, point[1] - (y + S.eye - 1.5), point[2] - pz) - prompt.maxDistance;
+        const found = anyAngleWalk(start, region, free, answers);
+        check(!!found, `${c.anchorId}: the baked world lets a body walk in from the careless walk's start to the item's prompt`);
+        if (found) {
+          let near = Infinity;
+          for (let i = 0; i < found.length; i++) {
+            const [ax, az] = found[i];
+            const [bx, bz] = found[Math.min(i + 1, found.length - 1)];
+            const ab = [bx - ax, bz - az];
+            const l2 = ab[0] * ab[0] + ab[1] * ab[1];
+            const t = l2 > 1e-12 ? Math.max(0, Math.min(1, ((guardAt[0] - ax) * ab[0] + (guardAt[2] - az) * ab[1]) / l2)) : 0;
+            near = Math.min(near, Math.hypot(ax + ab[0] * t - guardAt[0], az + ab[1] * t - guardAt[2]));
+          }
+          check(near <= S.panCore, `${c.anchorId}: the shortest walk the baked world allows passes ${near.toFixed(2)} studs from ${c.ref}: its foot on the pan`);
+          searched++;
+        }
+      }
+      check(footing(x, y, z), `${c.anchorId}: the spot stands on the floor`);
+      check(!hit(id, [x, y + 0.3, z], [0, 1, 0], S.bodyHeight - 0.3), `${c.anchorId}: head room at the spot`);
+      const blocked = bodyClear(x, y, z, DIAGONALS, S.body - 0.05);
+      check(!blocked, `${c.anchorId}: the body clear at the spot (${blocked})`);
+      // the walk: from a doorway of the room (the way out through it is open) along straight legs, the foot off every
+      // pan, the body clear and the floor under it all the way
+      const path = (s.path || []).map((p) => [origin[0] + p[0], origin[2] + p[1]]);
+      const last = path[path.length - 1];
+      check(path.length >= 1 && Math.hypot(last[0] - x, last[1] - z) < 0.01, `${c.anchorId}: the walk ends on the spot`);
+      if (!path.length) continue;
+      const r = room.rect;
+      const [fx, fz] = path[0];
+      const edges = [[fx - r.x, [-1, 0, 0]], [r.x + r.w - fx, [1, 0, 0]], [fz - r.z, [0, 0, -1]], [r.z + r.d - fz, [0, 0, 1]]];
+      const [toEdge, out] = edges.reduce((a, b) => (b[0] < a[0] ? b : a));
+      check(toEdge <= S.body + 1.01, `${c.anchorId}: the walk starts by a wall of its room (${toEdge.toFixed(2)} in)`);
+      check(!hit(id, [fx, y + 3, fz], out, toEdge + 2), `${c.anchorId}: the walk starts in a doorway (the way out is open)`);
+      for (let i = 0; i + 1 < path.length; i++) {
+        const [ax, az] = path[i];
+        const [bx, bz] = path[i + 1];
+        const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.25));
+        for (let k = 0; k <= steps; k++) {
+          const px = ax + ((bx - ax) * k) / steps;
+          const pz = az + ((bz - az) * k) / steps;
+          walked++;
+          const where = `${c.anchorId}: the walk at (${px.toFixed(2)}, ${pz.toFixed(2)})`;
+          check(trapGap(px, pz) > S.panReach - 1e-6, `${where} keeps the foot off every pan`);
+          check(footing(px, y, pz), `${where} is on the floor`);
+          const b = bodyClear(px, y, pz, DIRS, S.body - 0.1);
+          check(!b, `${where}: the body clear (${b})`);
+        }
+      }
+      held++;
+    }
+  }
+  check(guarded > 0 && held === guarded, `${held} of ${guarded} guarded items held to the standing-spot rule`);
+  check(sprung === guarded, `${sprung} of ${guarded} guarded items' guards on their careless walks`);
+  check(searched === guarded, `${searched} of ${guarded} guarded items' guards on the shortest walk the baked world allows`);
+  console.log(`  ok   guarded items: ${sprung} guards on the careless walk in (${searched} on the shortest walk the baked world allows), ${held} standing spots and their walks (${walked} steps) clear of every trap spot`);
 }
 // routes: three candidate stairwells per floor pair, each complete (exit fire doors, entry doors, Checkpoint volume,
 // arrival spawns, an ExitLock on every exit candidate below the roof), its doors carrying the jam data, every
@@ -558,6 +1040,95 @@ console.log('== flicker groups');
     const fams = [...families].map(([k, v]) => `${k} ${v.length}`).join(', ');
     console.log(`  ok   ${fg.length - 1} groups (${counts}); ${resolved} lights resolve; power families: ${fams || 'none'}`);
   }
+}
+
+// ------------------------------------------------------------------------------------------------------------
+console.log('== run plan (the web replays RunDirector)');
+{
+  const before = failures;
+  // the generator: golden values (tests/Specs/Rng.spec.luau has the same ones)
+  const raw = (rng, n) => Array.from({ length: n }, () => rng.integer(0, 4294967295));
+  const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const golden = [
+    ['new(0)', raw(new Rng(0), 8), [3809008728, 1133695204, 53579671, 2891528803, 139681546, 2203266335, 104831812, 1587294886]],
+    ['new(1)', raw(new Rng(1), 8), [2442144158, 3238099751, 3819917871, 2104621829, 2021136066, 4223536128, 1515984730, 2298887649]],
+    ['new(2^32 - 1)', raw(new Rng(4294967295), 8), [835879718, 1921286648, 2356205009, 1885780724, 980451116, 1053911718, 3677392737, 2464361898]],
+    ['seeded(20251029, Objective|Level0_Basement)', raw(Rng.seeded(20251029, 'Objective|Level0_Basement'), 8),
+      [2975473077, 76520769, 278978910, 4012111892, 1972213258, 2943740582, 3088457692, 2273335167]],
+    ['new(-1) is new(2^32 - 1)', raw(new Rng(-1), 4), raw(new Rng(4294967295), 4)],
+  ];
+  for (const [label, got, want] of golden) check(same(got, want), `Rng ${label}: ${got.join(' ')}`);
+  check(fnv('Objective|Level0_Basement') === 21198310, 'MathUtil.hash (FNV-1a)');
+  check(fnv('é') === Math.imul(Math.imul(0x811c9dc5 ^ 0xc3, 0x01000193) ^ 0xa9, 0x01000193) >>> 0, 'hash takes UTF-8 bytes, as Luau');
+  let r = new Rng(12345);
+  check(same(Array.from({ length: 6 }, () => r.number()), [0.12076167785562575, 0.10254896758124232, 0.98554719984531403,
+    0.87494440888985991, 0.91712428559549153, 0.31075522652827203]), 'Rng number(): one draw / 2^32, exactly');
+  r = new Rng(12345);
+  check(same(Array.from({ length: 4 }, () => r.number(-3, 5)), [-2.033906577154994, -2.1796082593500614, 4.8843775987625122,
+    3.9995552711188793]), 'Rng number(-3, 5)');
+  r = new Rng(42);
+  check(same(Array.from({ length: 12 }, () => r.integer(1, 6)), [1, 2, 3, 1, 1, 1, 5, 5, 1, 3, 4, 5]), 'Rng integer(1, 6)');
+  r = new Rng(42);
+  check(same(Array.from({ length: 12 }, () => r.integer(0, 3221225471)), [2837322924, 544945897, 479756282, 339756180,
+    113173290, 65323186, 1112262688, 1395801302, 787581093, 2038421698, 2132581468, 3088945547]), 'Rng integer: redraws past the last whole range');
+  r = new Rng(99);
+  check(same(Array.from({ length: 10 }, () => r.integer(-5, 5)), [2, 0, 3, -5, 5, -2, 0, -2, -1, -4]), 'Rng integer(-5, 5)');
+  r = new Rng(2026);
+  check(same(Array.from({ length: 4 }, () => r.integer(1, 2000000000)), [1436751615, 742089594, 1736781945, 1312845264]), 'Rng integer(1, 2e9)');
+  check(same(shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], new Rng(7)), [4, 10, 7, 6, 5, 8, 3, 2, 9, 1]), 'shuffle (Rng.shuffle)');
+  let refused = 0;
+  for (const bad of [() => r.integer(1, 2.5), () => r.integer(3, 2), () => r.integer(0, 4294967296), () => new Rng(NaN)]) {
+    try {
+      bad();
+    } catch {
+      refused++;
+    }
+  }
+  check(refused === 4, 'Rng refuses bad bounds and seeds');
+
+  // the plans: worldData's port against RunDirector's own, seed for seed
+  const plansFile = path.join(buildDir, 'cache', 'run-plans.json');
+  check(fs.existsSync(plansFile), `RunDirector's plans exported (${plansFile})`);
+  let replayed = 0;
+  if (fs.existsSync(plansFile)) {
+    const plans = JSON.parse(fs.readFileSync(plansFile, 'utf8'));
+    const wd = new WorldData(meta);
+    const sorted = (a) => [...a].sort();
+    // (Lune's JSON writes an empty Luau table as {})
+    const arr = (x) => (Array.isArray(x) ? x : []);
+    for (const want of plans) {
+      const tag = `seed ${want.seed} ${want.difficulty}`;
+      const got = wd.plan(want.difficulty, want.seed);
+      for (const [level, picks] of Object.entries(want.objectives || {})) {
+        const mine = got.objectives[level];
+        const anchors = arr(picks.anchors);
+        const guards = arr(picks.guards);
+        check(!!mine && same(mine.anchors, anchors), `${tag} ${level} objective picks ${mine ? mine.anchors.join(',') : '-'} (RunDirector: ${anchors.join(',')})`);
+        check(!!mine && same(mine.guards, guards), `${tag} ${level} guard traps ${mine ? mine.guards.join(',') : '-'} (RunDirector: ${guards.join(',')})`);
+      }
+      const props = sorted(arr(want.props).filter((p) => ['BearTrap', 'ChemicalFlask', 'Battery'].includes(p.kind)).map((p) => p.anchorId));
+      check(same(sorted(got.props), props), `${tag} trap / flask / battery anchors (${got.props.size} vs ${props.length})`);
+      // every prop as RunDirector plans it: its anchor's own variant, and an objective item's slot its candidate's kind
+      // (none without kinds), so the entity the export built on that anchor is the run's prop
+      for (const p of arr(want.props)) {
+        check(variantOf(p.kind, p.levelId, p.anchorId) === p.variant, `${tag} ${p.anchorId}: variantOf ${variantOf(p.kind, p.levelId, p.anchorId)} (RunDirector: ${p.variant})`);
+        const picks = got.objectives[p.levelId];
+        if (picks && picks.anchors.includes(p.anchorId)) {
+          const slot = picks.slots[p.anchorId];
+          check((slot ?? null) === (p.slot ?? null), `${tag} ${p.anchorId} slot ${slot ?? 'none'} (RunDirector: ${p.slot ?? 'none'})`);
+        }
+      }
+      check(got.placements.size === 0, `${tag} every chosen anchor has its own entity`);
+      const locked = sorted(arr(want.lockedGrates));
+      check(same(sorted(got.lockedGrates), locked), `${tag} locked grates ${sorted(got.lockedGrates).join(',')} (RunDirector: ${locked.join(',')})`);
+      const routes = wd.routes(want.seed);
+      for (const [from, id] of Object.entries(want.route || {})) {
+        check(routes[from] && routes[from].stairwellId === id, `${tag} ${from} leaves by ${routes[from] ? routes[from].stairwellId : '-'} (RunDirector: ${id})`);
+      }
+      replayed++;
+    }
+  }
+  if (failures === before) console.log(`  ok   Rng golden values; ${replayed} RunDirector plans replayed pick for pick`);
 }
 
 console.log(failures ? `FAILED: ${failures} of ${checks} checks` : `PASSED: ${checks} checks`);

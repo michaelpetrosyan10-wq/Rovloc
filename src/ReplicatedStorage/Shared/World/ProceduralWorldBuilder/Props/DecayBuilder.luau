@@ -8,7 +8,8 @@
 --     the paint torn back in a pale ring, the hole into the lath (or the brick behind a corridor wall) shaded where the
 --     plaster still overhangs it, flakes of paint curling off the wall and crumbs of plaster on the floor below.
 --   * Standing water: dark, glossy puddles across the wet rooms (the basement, the pool level, the lobby, restrooms,
---     locker rooms and boiler rooms) and under the worst holes in a ceiling.
+--     locker rooms and boiler rooms) and under the worst holes in a ceiling; never in the solid ground between a
+--     tunnel floor's runs.
 --   * Loose paper: sheets of print scattered down the corridors and across the classrooms and offices.
 -- Everything here is "Detail" (no collision, no query, no shadow) and flat on the floor or close on a wall, so nothing
 -- can block a route; it still goes only where SetDressingBuilder.Kit lets dressing go (never in a doorway, on a grate
@@ -19,6 +20,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 
 local Finishes = require(script.Parent.Parent.Finishes)
 local FurnitureBuilder = require(script.Parent.FurnitureBuilder)
@@ -30,6 +32,7 @@ local SetDressingBuilder = require(script.Parent.SetDressingBuilder)
 local SurfaceArt = require(script.Parent.Parent.SurfaceArt)
 local WallPlanner = require(script.Parent.WallPlanner)
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Room = LayoutSchema.Room
 type Piece = SetDressingBuilder.Piece
@@ -63,6 +66,7 @@ local DAMP_LAYOUTS: { [string]: boolean } = { Level0_Basement = true, Level4_Flo
 local WET_KINDS: { [string]: boolean } = { Restroom = true, LockerRoom = true, Boiler = true, Pool = true }
 local DRY_KINDS: { [string]: boolean } = { Airlock = true, Stairwell = true, Chase = true, Roof = true }
 local DAMAGE_KINDS: { [string]: boolean } = { Corridor = true, Classroom = true, Office = true }
+-- Loose sheets of paper per room kind: { least, most } (a seeded count in between, each where it fits)
 local PAPER_COUNT: { [string]: { number } } = {
 	Corridor = { 2, 4 },
 	Classroom = { 0, 2 },
@@ -70,6 +74,7 @@ local PAPER_COUNT: { [string]: { number } } = {
 	Lab = { 0, 1 },
 	Storage = { 0, 1 },
 }
+DecayBuilder.PaperCount = table.freeze(PAPER_COUNT)
 
 local LATH = Color3.fromRGB(96, 72, 46)
 local LATH_GAP = Color3.fromRGB(18, 14, 11)
@@ -83,7 +88,7 @@ local STAIN = Color3.fromRGB(110, 86, 48)
 -- Helpers
 --------------------------------------------------------------------------------
 
-local function between(random: Random, a: number, b: number): number
+local function between(random: Rng, a: number, b: number): number
 	return random:NextNumber(a, b)
 end
 
@@ -122,12 +127,13 @@ local function add(state: State, pieces: { Piece }, painters: { [Piece]: (part: 
 	end
 end
 
--- A flat oval on the floor at world `centre` (its bottom on the floor), `a` x `b` across, turned `yaw` degrees.
-local function oval(
+-- A flat disc on the floor at world `centre` (its bottom on the floor), `across` studs wide, turned `yaw` degrees. A
+-- Cylinder's face is round on every engine (Roblox draws the smaller of its Y and Z), so the part is sized round:
+-- what is built is exactly what every platform draws and collides.
+local function disc(
 	name: string,
 	centre: Vector3,
-	a: number,
-	b: number,
+	across: number,
 	yaw: number,
 	key: string,
 	options: Geometry.PartOptions
@@ -137,7 +143,7 @@ local function oval(
 		name = name,
 		shape = "Cylinder",
 		cframe = CFrame.new(centre + Vector3.new(0, thickness / 2, 0)) * ry(yaw) * CFrame.Angles(0, 0, math.rad(90)),
-		size = Vector3.new(thickness, a, b),
+		size = Vector3.new(thickness, across, across),
 		key = key,
 		role = "Detail",
 		options = options,
@@ -156,7 +162,7 @@ local function planFalls(state: State)
 		if not room then
 			continue
 		end
-		local random = MathUtil.seededRandom(1, string.format("%s:fall:%s:%d", state.layout.id, fall.room, index))
+		local random = Rng.seeded(1, string.format("%s:fall:%s:%d", state.layout.id, fall.room, index))
 		local name = string.format("Fall_%s_%d", fall.room, index)
 		local tileColor = scaled(Palette.get("CeilingTile").color, between(random, 0.8, 0.95))
 		local landing =
@@ -241,7 +247,7 @@ end
 -- Plaster damage
 --------------------------------------------------------------------------------
 
-local function paintDamage(part: BasePart, random: Random, brick: boolean, wallColor: Color3)
+local function paintDamage(part: BasePart, random: Rng, brick: boolean, wallColor: Color3)
 	local gui = SurfaceArt.gui(part, Enum.NormalId.Front, { name = "Damage", pixelsPerStud = 18, maxDistance = 70 })
 	local peel = SurfaceArt.frame(gui, "Peel", 0, 0, 1, 1, scaled(wallColor, between(random, 1.12, 1.25)), 0.05, 1)
 	peel.Rotation = between(random, -6, 6)
@@ -275,11 +281,19 @@ local function paintDamage(part: BasePart, random: Random, brick: boolean, wallC
 	shadeCorner.Parent = shade
 end
 
-local function planDamage(state: State, room: Room, wallKey: string, random: Random)
-	local info = state.info
-	local ruin = Finishes.ruin(state.layout.id, room.id)
-	local count = math.floor(ruin * 2.4)
+-- How many patches of plaster have come away in `room` of `layout`: in the plastered rooms of DAMAGE_KINDS, as many
+-- as its ruin calls for (and one more down a long corridor); 0 elsewhere.
+function DecayBuilder.damageSites(layout: Layout, room: Room): number
+	if not DAMAGE_KINDS[room.kind] or string.sub(SchoolShellBuilder.wallKey(room), 1, 7) ~= "Plaster" then
+		return 0
+	end
+	return math.floor(Finishes.ruin(layout.id, room.id) * 2.4)
 		+ (if room.kind == "Corridor" and room.rect.w + room.rect.d >= 90 then 1 else 0)
+end
+
+local function planDamage(state: State, room: Room, wallKey: string, random: Rng)
+	local info = state.info
+	local count = DecayBuilder.damageSites(state.layout, room)
 	if count <= 0 then
 		return
 	end
@@ -377,7 +391,7 @@ local function planDamage(state: State, room: Room, wallKey: string, random: Ran
 			local seed = MathUtil.hash(state.layout.id .. ":" .. name)
 			add(state, pieces, {
 				[carrier] = function(part: BasePart)
-					paintDamage(part, Random.new(seed), brick, wallColor)
+					paintDamage(part, Rng.new(seed), brick, wallColor)
 				end,
 			})
 			local mount = WallPlanner.mount(wall, u - w / 2 - 0.4, u + w / 2 + 0.4, y0 - 0.3, y1 + 0.3)
@@ -394,7 +408,7 @@ end
 
 local PUDDLE_OPTIONS: Geometry.PartOptions = { reflectance = 0.32, transparency = 0.1 }
 
-local function planPuddles(state: State, room: Room, count: number, random: Random, near: Vector3?)
+local function planPuddles(state: State, room: Room, count: number, random: Rng, near: Vector3?)
 	local info = state.info
 	local inner = info.inner[room.id]
 	if not inner then
@@ -417,17 +431,16 @@ local function planPuddles(state: State, room: Room, count: number, random: Rand
 			local yaw = between(random, 0, 180)
 			local name = string.format("Puddle_%s_%d", room.id, index)
 			local pieces: { Piece } =
-				{ oval(name, centre, a, a * between(random, 0.45, 0.8), yaw, "Puddle", PUDDLE_OPTIONS) }
+				{ disc(name, centre, a * between(random, 0.45, 0.8), yaw, "Puddle", PUDDLE_OPTIONS) }
 			if random:NextNumber() < 0.5 then
 				local offset = CFrame.Angles(0, math.rad(yaw), 0)
 					:VectorToWorldSpace(Vector3.new(a * 0.45, 0.002, between(random, -0.3, 0.3)))
 				local b = a * between(random, 0.3, 0.5)
 				table.insert(
 					pieces,
-					oval(
+					disc(
 						name .. "_Spill",
 						centre + offset,
-						b,
 						b * between(random, 0.5, 0.9),
 						yaw + between(random, -40, 40),
 						"Puddle",
@@ -443,9 +456,9 @@ local function planPuddles(state: State, room: Room, count: number, random: Rand
 	end
 end
 
-local function paintPaper(part: BasePart, random: Random)
+-- `paper`: the sheet's colour as the part stores it (Palette.colorFor), never read back from the part.
+local function paintPaper(part: BasePart, paper: Color3, random: Rng)
 	local gui = SurfaceArt.gui(part, Enum.NormalId.Top, { name = "Print", pixelsPerStud = 40, maxDistance = 40 })
-	local paper = part.Color
 	SurfaceArt.stripes(gui, "Lines", 0.12, 0.16, 0.76, 0.7, 4, 0.2, PRINT, paper, 0.25, 1)
 	if random:NextNumber() < 0.4 then
 		SurfaceArt.stain(gui, between(random, 0.3, 0.7), between(random, 0.3, 0.7), 0.5, 0.4, STAIN, 0.7, nil, 2)
@@ -453,7 +466,7 @@ local function paintPaper(part: BasePart, random: Random)
 	SurfaceArt.grime(gui, Color3.fromRGB(70, 60, 40), between(random, 0.2, 0.45), random:NextNumber() < 0.5, 3)
 end
 
-local function planPaper(state: State, room: Room, random: Random)
+local function planPaper(state: State, room: Room, random: Rng)
 	local range = PAPER_COUNT[room.kind]
 	if not range then
 		return
@@ -484,7 +497,7 @@ local function planPaper(state: State, room: Room, random: Random)
 				local seed = MathUtil.hash(state.layout.id .. ":" .. sheet.name)
 				add(state, { sheet }, {
 					[sheet] = function(part: BasePart)
-						paintPaper(part, Random.new(seed))
+						paintPaper(part, Palette.colorFor("PaperSheet", paperColor), Rng.new(seed))
 					end,
 				})
 				break
@@ -517,7 +530,10 @@ function DecayBuilder.plan(layout: Layout): Plan
 		falls[fall.room] = falls[fall.room] or fall.centre
 	end
 	for _, room in layout.rooms do
-		local random = MathUtil.seededRandom(1, layout.id .. ":decay:" .. room.id)
+		if room.kind == "Solid" then
+			continue -- the ground between a tunnel floor's runs: no floor, no walls a player ever sees
+		end
+		local random = Rng.seeded(1, layout.id .. ":decay:" .. room.id)
 		local wallKey = SchoolShellBuilder.wallKey(room)
 		if DAMAGE_KINDS[room.kind] and string.sub(wallKey, 1, 7) == "Plaster" then
 			planDamage(state, room, wallKey, random)

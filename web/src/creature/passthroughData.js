@@ -6,13 +6,13 @@
 export const PASSTHROUGH = {
   levels: {
     "Lobby": {
-      vertexCount: 1385, indexCount: 8532, fingerprint: 1433194855,
+      vertexCount: 1385, indexCount: 8532, fingerprint: 2342800149,
       runs: [
         0, 56, 212, 32,
       ],
     },
     "Exterior": {
-      vertexCount: 546, indexCount: 2880, fingerprint: 3083874047,
+      vertexCount: 546, indexCount: 2880, fingerprint: 737929027,
       runs: [
       ],
     },
@@ -22,33 +22,33 @@ export const PASSTHROUGH = {
       ],
     },
     "Level4_FloodedPool": {
-      vertexCount: 22477, indexCount: 147996, fingerprint: 1079597462,
+      vertexCount: 22628, indexCount: 148752, fingerprint: 3267628048,
       runs: [
-        820, 6888, 12368, 2261,
+        804, 6972, 12423, 2289,
       ],
     },
     "Level3_Gymnasium": {
-      vertexCount: 19820, indexCount: 133116, fingerprint: 2477319751,
+      vertexCount: 20049, indexCount: 134952, fingerprint: 2600325925,
       runs: [
-        478, 6216, 11695, 1431,
+        470, 6300, 11890, 1389,
       ],
     },
     "Level2_ScienceHall": {
-      vertexCount: 20438, indexCount: 136116, fingerprint: 3105648240,
+      vertexCount: 20550, indexCount: 136440, fingerprint: 1940566711,
       runs: [
-        224, 6216, 11778, 2220,
+        240, 6216, 11724, 2370,
       ],
     },
     "Level1_Hallways": {
-      vertexCount: 25180, indexCount: 167124, fingerprint: 1867007300,
+      vertexCount: 24924, indexCount: 165036, fingerprint: 1304422362,
       runs: [
-        192, 7810, 14472, 2642,
+        192, 7756, 14231, 2681,
       ],
     },
     "Level0_Basement": {
-      vertexCount: 17701, indexCount: 109620, fingerprint: 2690134903,
+      vertexCount: 17841, indexCount: 110700, fingerprint: 852478847,
       runs: [
-        136, 5990, 10372, 1203,
+        136, 6045, 10590, 1070,
       ],
     },
     "Stairwells": {

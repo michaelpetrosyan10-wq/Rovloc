@@ -28,6 +28,7 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 
 local Geometry = require(script.Parent.Parent.Geometry)
 local PropKit = require(script.Parent.PropKit)
@@ -35,6 +36,7 @@ local SetDressingBuilder = require(script.Parent.SetDressingBuilder)
 
 local log = Log.new("PoolDressing")
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Rect = LayoutSchema.Rect
 type Basin = LayoutSchema.Basin
@@ -103,15 +105,15 @@ local function rz(degrees: number): CFrame
 	return CFrame.Angles(0, 0, math.rad(degrees))
 end
 
-local function between(random: Random, a: number, b: number): number
+local function between(random: Rng, a: number, b: number): number
 	return random:NextNumber(a, b)
 end
 
-local function chance(random: Random, p: number): boolean
+local function chance(random: Rng, p: number): boolean
 	return random:NextNumber() < p
 end
 
-local function pick<T>(random: Random, list: { T }): T
+local function pick<T>(random: Rng, list: { T }): T
 	return list[random:NextInteger(1, #list)]
 end
 
@@ -335,8 +337,15 @@ function PoolWaterBuilder.swimLegs(groups: { DryGroup }): { SwimLeg }
 			table.insert(candidates, { a = i, b = j, length = PoolWaterBuilder.groupGap(groups[i], groups[j]) })
 		end
 	end
+	-- (equal legs keep their group order: table.sort is not stable, and Luau builds need not agree on it)
 	table.sort(candidates, function(p: SwimLeg, q: SwimLeg): boolean
-		return p.length < q.length
+		if p.length ~= q.length then
+			return p.length < q.length
+		end
+		if p.a ~= q.a then
+			return p.a < q.a
+		end
+		return p.b < q.b
 	end)
 	local parent: { number } = {}
 	for i = 1, #groups do
@@ -407,7 +416,7 @@ local function hangingChunk(
 	info: LevelInfo,
 	edge: BreakEdge,
 	waterY: number,
-	random: Random,
+	random: Rng,
 	u0: number,
 	u1: number
 ): { Piece }
@@ -439,7 +448,7 @@ local function hangingChunk(
 	return out
 end
 
-local function rebar(info: LevelInfo, f: Fragment, direction: Vector3, u: number, random: Random, index: number): Piece
+local function rebar(info: LevelInfo, f: Fragment, direction: Vector3, u: number, random: Rng, index: number): Piece
 	local frame = edgeFrame(info, f, direction, u)
 	local y = -between(random, 0.18, math.max(0.25, f.thickness - 0.2))
 	local bend = math.rad(between(random, 5, 48))
@@ -458,7 +467,7 @@ local function rubble(
 	direction: Vector3,
 	u: number,
 	waterY: number,
-	random: Random,
+	random: Rng,
 	index: number
 ): Piece
 	local frame = edgeFrame(info, f, direction, u)
@@ -473,21 +482,14 @@ local function rubble(
 	return Kit.block("Rubble" .. index, cf, size, "Rubble", "Detail", SPALL)
 end
 
-local function crackLine(
-	info: LevelInfo,
-	f: Fragment,
-	direction: Vector3,
-	u: number,
-	random: Random,
-	index: number
-): Piece
+local function crackLine(info: LevelInfo, f: Fragment, direction: Vector3, u: number, random: Rng, index: number): Piece
 	local frame = edgeFrame(info, f, direction, u)
 	local length = between(random, 1.4, 2.8)
 	local cf = frame * CFrame.new(0, 0.01, length / 2 + 0.02) * ry(between(random, -25, 25))
 	return Kit.block("Crack" .. index, cf, Vector3.new(0.07, 0.02, length), "Rubber", "Detail", CRACK)
 end
 
-local function planWalkways(info: LevelInfo, classified: Classified, basin: Basin, random: Random): { Piece }
+local function planWalkways(info: LevelInfo, classified: Classified, basin: Basin, random: Rng): { Piece }
 	local pieces: { Piece } = {}
 	local waterY = basin.waterLevel
 	local edges = PoolWaterBuilder.breakEdges(classified)
@@ -532,7 +534,7 @@ local function planWalkways(info: LevelInfo, classified: Classified, basin: Basi
 			continue
 		end
 		local sides: { Vector3 } = { Vector3.xAxis, -Vector3.xAxis, Vector3.zAxis, -Vector3.zAxis }
-		MathUtil.shuffle(sides, random)
+		Rng.shuffle(sides, random)
 		for k = 1, 2 do
 			local direction = sides[k]
 			local e0, e1 = edgeRange(f, direction)
@@ -578,7 +580,10 @@ function PoolWaterBuilder.openSides(classified: Classified, f: Fragment, directi
 		end
 	end
 	table.sort(cuts, function(a: { number }, b: { number }): boolean
-		return a[1] < b[1]
+		if a[1] ~= b[1] then
+			return a[1] < b[1]
+		end
+		return a[2] < b[2]
 	end)
 	local out: { { number } } = {}
 	local cursor = e0 + LIP_INSET
@@ -691,7 +696,7 @@ local function laneLines(classified: Classified): (boolean, { number })
 	return alongX, lines
 end
 
-local function planRopes(info: LevelInfo, classified: Classified, basin: Basin, random: Random): { Piece }
+local function planRopes(info: LevelInfo, classified: Classified, basin: Basin, random: Rng): { Piece }
 	local pieces: { Piece } = {}
 	local interior = classified.interior
 	local alongX, lines = laneLines(classified)
@@ -719,7 +724,10 @@ local function planRopes(info: LevelInfo, classified: Classified, basin: Basin, 
 			end
 		end
 		table.sort(blocked, function(p: { number }, q: { number }): boolean
-			return p[1] < q[1]
+			if p[1] ~= q[1] then
+				return p[1] < q[1]
+			end
+			return p[2] < q[2]
 		end)
 		local stretches: { { number } } = {}
 		local cursor = a0
@@ -791,8 +799,8 @@ local function planRopes(info: LevelInfo, classified: Classified, basin: Basin, 
 				pieces,
 				Kit.cylinder(
 					string.format("Float%s_%d", span.tag, f),
-					span.p0:Lerp(span.p1, math.max(0, along / length - half)),
-					span.p0:Lerp(span.p1, math.min(1, along / length + half)),
+					MathUtil.lerpVector3(span.p0, span.p1, math.max(0, along / length - half)),
+					MathUtil.lerpVector3(span.p0, span.p1, math.min(1, along / length + half)),
 					0.42,
 					"Rubber",
 					"Detail",
@@ -835,7 +843,7 @@ local function facing(r: Rect, interior: Rect): Vector3
 	return dir
 end
 
-local function planBlocks(info: LevelInfo, classified: Classified, random: Random): { Piece }
+local function planBlocks(info: LevelInfo, classified: Classified, random: Rng): { Piece }
 	local pieces: { Piece } = {}
 	for i, block in classified.blocks do
 		local r = block.rect
@@ -963,7 +971,7 @@ local function ladderPieces(
 	return pieces
 end
 
-local function planLadders(info: LevelInfo, classified: Classified, basin: Basin, random: Random): { Piece }
+local function planLadders(info: LevelInfo, classified: Classified, basin: Basin, random: Rng): { Piece }
 	local pieces: { Piece } = {}
 	local interior = classified.interior
 	local room = info.rooms[basin.room]
@@ -971,15 +979,20 @@ local function planLadders(info: LevelInfo, classified: Classified, basin: Basin
 	if not (room and inner) then
 		return pieces
 	end
-	-- Deck sides of the basin, widest deck first
+	-- Deck sides of the basin, widest deck first (equal decks in the order listed here: table.sort is not stable, and
+	-- Luau builds need not agree on it, so the third entry, the side's place in this list, breaks the tie)
 	local sides: { { Vector3 | number } } = {
-		{ Vector3.xAxis, basin.rect.x - inner.x },
-		{ -Vector3.xAxis, inner.x + inner.w - (basin.rect.x + basin.rect.w) },
-		{ Vector3.zAxis, basin.rect.z - inner.z },
-		{ -Vector3.zAxis, inner.z + inner.d - (basin.rect.z + basin.rect.d) },
+		{ Vector3.xAxis, basin.rect.x - inner.x, 1 },
+		{ -Vector3.xAxis, inner.x + inner.w - (basin.rect.x + basin.rect.w), 2 },
+		{ Vector3.zAxis, basin.rect.z - inner.z, 3 },
+		{ -Vector3.zAxis, inner.z + inner.d - (basin.rect.z + basin.rect.d), 4 },
 	}
 	table.sort(sides, function(a: { Vector3 | number }, b: { Vector3 | number }): boolean
-		return (a[2] :: number) > (b[2] :: number)
+		local wa, wb = a[2] :: number, b[2] :: number
+		if wa ~= wb then
+			return wa > wb
+		end
+		return (a[3] :: number) < (b[3] :: number)
 	end)
 	local keepOff: { Rect } = {}
 	for _, r in classified.obstacles do
@@ -1005,7 +1018,7 @@ local function planLadders(info: LevelInfo, classified: Classified, basin: Basin
 			table.insert(candidates, u)
 			u += 2
 		end
-		MathUtil.shuffle(candidates, random)
+		Rng.shuffle(candidates, random)
 		for _, c in candidates do
 			if #placed >= wanted or made >= 3 then
 				break
@@ -1035,7 +1048,7 @@ local function planLadders(info: LevelInfo, classified: Classified, basin: Basin
 	return pieces
 end
 
-local function planDivingBoard(info: LevelInfo, classified: Classified, basin: Basin, random: Random): { Piece }
+local function planDivingBoard(info: LevelInfo, classified: Classified, basin: Basin, random: Rng): { Piece }
 	local pieces: { Piece } = {}
 	local tower = classified.towers[1]
 	if not tower then
@@ -1147,7 +1160,7 @@ local function planDivingBoard(info: LevelInfo, classified: Classified, basin: B
 end
 
 -- The tall lifeguard chair, upright in chair space (feet on y = 0, facing -Z), then knocked onto its side or back.
-local function lifeguardChair(random: Random): { Piece }
+local function lifeguardChair(random: Rng): { Piece }
 	local frameMetal = paint(rgb(96, 98, 94), Enum.Material.Metal)
 	local wood = paint(rgb(110, 92, 64), Enum.Material.WoodPlanks)
 	local pieces: { Piece } = {}
@@ -1205,7 +1218,7 @@ local function lifeguardChair(random: Random): { Piece }
 	return pieces
 end
 
-local function planChair(info: LevelInfo, classified: Classified, basin: Basin, random: Random): { Piece }
+local function planChair(info: LevelInfo, classified: Classified, basin: Basin, random: Rng): { Piece }
 	local inner = info.inner[basin.room]
 	if not inner then
 		return {}
@@ -1292,7 +1305,7 @@ local KICKBOARDS: { Color3 } = { rgb(54, 76, 104), rgb(124, 108, 50), rgb(110, 5
 local SCUM = paint(rgb(50, 58, 34), Enum.Material.SmoothPlastic, 0.25)
 
 -- A random open-water point clear of every platform (and of grate fronts), or nil.
-local function openWater(classified: Classified, random: Random, inset: number, keep: number): Vector3?
+local function openWater(classified: Classified, random: Rng, inset: number, keep: number): Vector3?
 	local interior = classified.interior
 	for _ = 1, 30 do
 		local x = between(random, interior.x + inset, interior.x + interior.w - inset)
@@ -1308,7 +1321,7 @@ local function openWater(classified: Classified, random: Random, inset: number, 
 	return nil
 end
 
-local function planFloating(info: LevelInfo, classified: Classified, basin: Basin, random: Random): { Piece }
+local function planFloating(info: LevelInfo, classified: Classified, basin: Basin, random: Rng): { Piece }
 	local pieces: { Piece } = {}
 	local waterY = info.origin.Y + basin.waterLevel
 	local ignore = { ClutterSpot = true, CorpseSpot = true }
@@ -1406,7 +1419,7 @@ local function planDrain(info: LevelInfo, classified: Classified, basin: Basin):
 	local tower = classified.towers[1]
 	if tower then
 		local t = Vector3.new(tower.rect.x + tower.rect.w / 2, 0, tower.rect.z + tower.rect.d / 2)
-		centre = t:Lerp(centre, 0.3)
+		centre = MathUtil.lerpVector3(t, centre, 0.3)
 	end
 	-- Nudge off any pier or tower foot
 	local spot = centre
@@ -1457,7 +1470,7 @@ local function planDrain(info: LevelInfo, classified: Classified, basin: Basin):
 	return pieces
 end
 
-local function planTiles(info: LevelInfo, classified: Classified, basin: Basin, random: Random): { Piece }
+local function planTiles(info: LevelInfo, classified: Classified, basin: Basin, random: Rng): { Piece }
 	local pieces: { Piece } = {}
 	local inner = info.inner[basin.room]
 	if not inner then
@@ -1595,7 +1608,7 @@ local function buildPool(ctx: PropKit.StaticContext): number
 	local built = 0
 	for _, basin in basins do
 		local classified = PoolWaterBuilder.classify(layout, basin)
-		local random = MathUtil.seededRandom(seed, basin.id)
+		local random = Rng.seeded(seed, basin.id)
 		local pieces: { Piece } = {}
 		local groups: { { Piece } } = {
 			planWalkways(info, classified, basin, random),

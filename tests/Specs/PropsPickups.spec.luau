@@ -5,7 +5,8 @@
 -- nothing collides or is queried; the bottom rests exactly on the plan point (floor, worktop or block top); the trap
 -- is built armed and its jaw / spring / pan poses round-trip, with armed jaws flat and snapped jaws standing up
 -- interlocked; its TriggerVolume is a NoCollide volume holding LegPoint and a walker's feet point and root; the flask's
--- visual copy is all-cosmetic with a Grip and is registered as a rig; same seed, same geometry.
+-- visual copy is all-cosmetic with a Grip and is registered as a rig; a prop's look is its anchor's (the same on
+-- every run), so the same anchor builds the same geometry and another anchor another.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -86,10 +87,10 @@ local function planned(
 	return { kind = kind, anchorId = anchorId, levelId = levelId, cframe = cframe, variant = variant }
 end
 
-local function build(plan: Types.PlannedProp, seed: number): Model
+local function build(plan: Types.PlannedProp): Model
 	local folder = Instance.new("Folder")
 	folder.Name = "SpecProps"
-	local built = Builder.BuildProp(plan, folder, Random.new(seed))
+	local built = Builder.BuildProp(plan, folder)
 	assert(built ~= nil, string.format("%s at %s built nothing", plan.kind, plan.anchorId))
 	assert(built:IsA("Model"), plan.kind .. " builds a Model")
 	assert(built.Parent == folder, plan.kind .. " is parented to the plan folder")
@@ -220,6 +221,11 @@ local function contains(volume: BasePart, point: Vector3): boolean
 	local half = volume.Size / 2
 	return math.abs(p.X) <= half.X and math.abs(p.Y) <= half.Y and math.abs(p.Z) <= half.Z
 end
+
+-- How near a pose read back from two stored CFrames can be to the one built: the Lune harness rounds every stored
+-- CFrame component to 1/65536 (Roblox keeps float32), so a transform between two stored frames carries up to two such
+-- roundings. A wrong pose is off by orders of magnitude more.
+local STORED_POSE = 2 / 65536
 
 local function cframeNear(a: CFrame, b: CFrame, epsilon: number): boolean
 	local ac = { a:GetComponents() }
@@ -355,7 +361,7 @@ return {
 		quiet(function()
 			for index = 1, #POINTS do
 				local plan = trapPlan(index, 1000 + index)
-				local model = build(plan, index)
+				local model = build(plan)
 				expectIdentity(t, model, plan, Tags.BearTrap)
 				t.eq(model:GetAttribute(W.Armed), true, "built armed")
 				t.eq(model:GetAttribute(W.TrappedUserId), nil, "nobody trapped yet")
@@ -381,7 +387,7 @@ return {
 		quiet(function()
 			for index = 1, #POINTS do
 				local plan = trapPlan(index, 77 * index)
-				local model = build(plan, 40 + index)
+				local model = build(plan)
 				local count = #parts(model)
 				t.truthy(count <= TRAP_BUDGET, string.format("trap budget (%d parts)", count))
 				expectInert(t, model, "trap")
@@ -400,13 +406,13 @@ return {
 
 	["BearTrap: built armed; jaw, spring and pan poses round-trip"] = function(t: Expect)
 		quiet(function()
-			local model = build(trapPlan(2, 31), 9)
+			local model = build(trapPlan(2, 31))
 			local open = BearTrapBuilder.JawOpenAngle
 			local travel = BearTrapBuilder.SpringTravel
 			local function expectPose(leaf: string, expected: CFrame, label: string)
 				local transform = PropKit.leafTransform(model, leaf)
 				assert(transform, leaf .. " has a rest pose")
-				t.truthy(cframeNear(transform, expected, 1e-5), string.format("%s %s", leaf, label))
+				t.truthy(cframeNear(transform, expected, STORED_POSE), string.format("%s %s", leaf, label))
 			end
 			expectPose("JawA", CFrame.Angles(open, 0, 0), "built armed")
 			expectPose("JawB", CFrame.Angles(-open, 0, 0), "built armed")
@@ -455,7 +461,7 @@ return {
 
 	["BearTrap: armed jaws lie flat, snapped jaws stand up interlocked"] = function(t: Expect)
 		quiet(function()
-			local model = build(trapPlan(1, 5), 3)
+			local model = build(trapPlan(1, 5))
 			local frame = model.WorldPivot
 			local jawA = leafParts(model, "JawA")
 			local jawB = leafParts(model, "JawB")
@@ -528,7 +534,7 @@ return {
 	["BearTrap: TriggerVolume is a NoCollide volume around LegPoint and the jaws"] = function(t: Expect)
 		quiet(function()
 			local plan = trapPlan(3, 12)
-			local model = build(plan, 12)
+			local model = build(plan)
 			local volume = model:FindFirstChild("TriggerVolume")
 			assert(volume and volume:IsA("BasePart"), "TriggerVolume")
 			t.eq(volume.Transparency, 1, "invisible")
@@ -570,7 +576,7 @@ return {
 			for index = 1, #POINTS do
 				local variant = 400 + index
 				local plan = flaskPlan(index, variant)
-				local model = build(plan, index)
+				local model = build(plan)
 				expectIdentity(t, model, plan, Tags.ChemicalItem)
 				expectPrompt(t, model, "Pickup", "Prompt.Pickup", "Prompt.Flask", ChemicalFlaskBuilder.PickupHold)
 				t.near(ChemicalFlaskBuilder.PickupHold, 0.35, 0.1, "a quick grab")
@@ -603,8 +609,9 @@ return {
 		quiet(function()
 			for variant = 1, 24 do
 				local index = variant % #POINTS + 1
-				local plan = flaskPlan(index, variant * 7919)
-				local model = build(plan, variant)
+				-- an anchor of its own per flask: its own rest pose
+				local plan = planned("ChemicalFlask", "SpecFlask_" .. variant, SCIENCE, POINTS[index], variant * 7919)
+				local model = build(plan)
 				local count = #parts(model)
 				t.truthy(count <= FLASK_BUDGET, string.format("flask budget (%d parts)", count))
 				expectInert(t, model, "flask")
@@ -646,7 +653,7 @@ return {
 			t.near(lowest(parts(visual), cframe), 0, REST_EPSILON, "visual rests on its cframe")
 
 			-- The same variant's world prop and visual are the same flask.
-			local prop = build(flaskPlan(1, 402), 99)
+			local prop = build(flaskPlan(1, 402))
 			local function shape(root: Instance): { [string]: Vector3 }
 				local out: { [string]: Vector3 } = {}
 				for _, part in parts(root) do
@@ -705,8 +712,9 @@ return {
 			local knocked, upright = 0, 0
 			for seed = 1, 40 do
 				local index = seed % #POINTS + 1
-				local plan = batteryPlan(index, seed * 31)
-				local model = build(plan, seed)
+				-- an anchor of its own per battery: its own rest pose (knocked over or upright)
+				local plan = planned("Battery", "SpecBattery_" .. seed, BASEMENT, POINTS[index], seed * 31)
+				local model = build(plan)
 				expectIdentity(t, model, plan, Tags.BatteryPickup)
 				t.eq(model:GetAttribute(W.Charge), GameConfig.BatteryPickupCharge, "Charge")
 				expectPrompt(t, model, "Pickup", "Prompt.Pickup", "Prompt.Battery", PickupBuilder.PickupHold)
@@ -739,15 +747,18 @@ return {
 		end)
 	end,
 
-	["determinism: same seed, same geometry; another seed moves it"] = function(t: Expect)
+	["determinism: the same anchor builds the same geometry on every run; another anchor another"] = function(
+		t: Expect
+	)
 		quiet(function()
 			for _, makePlan in { trapPlan, flaskPlan, batteryPlan } do
 				local plan = makePlan(2, 4242)
-				local a = build(plan, 17)
-				local b = build(plan, 17)
-				local c = build(plan, 18)
-				t.truthy(sameSnapshot(snapshot(a), snapshot(b), 0), plan.kind .. ": same seed, identical CFrames")
-				t.falsy(sameSnapshot(snapshot(a), snapshot(c), 1e-6), plan.kind .. ": another seed differs")
+				local a = build(plan)
+				local b = build(plan)
+				-- the same plan point and variant on another anchor: only the anchor's own stream differs
+				local c = build(planned(plan.kind, plan.anchorId .. "_Other", plan.levelId, plan.cframe, plan.variant))
+				t.truthy(sameSnapshot(snapshot(a), snapshot(b), 0), plan.kind .. ": same anchor, identical CFrames")
+				t.falsy(sameSnapshot(snapshot(a), snapshot(c), 1e-6), plan.kind .. ": another anchor differs")
 				for _, model in { a, b, c } do
 					discard(model)
 				end
@@ -769,7 +780,7 @@ return {
 			for _, case in cases do
 				for i, anchor in anchorsOf(case.layout, case.anchor) do
 					local plan = planned(case.kind, anchor.id, case.layout, anchor.cframe, i * 977)
-					local model = build(plan, i)
+					local model = build(plan)
 					t.near(
 						lowest(visibleParts(model), anchor.cframe),
 						0,
@@ -796,7 +807,7 @@ return {
 			end
 			local origin = WorldConfig.levelOrigin(SCIENCE)
 			for i, anchor in flasks do
-				local model = build(planned("ChemicalFlask", anchor.id, SCIENCE, anchor.cframe, i), i)
+				local model = build(planned("ChemicalFlask", anchor.id, SCIENCE, anchor.cframe, i))
 				local list = parts(model)
 				-- the worktop it stands over: a lab counter's 10 x 3.5 top, else the shelf of its tunnel cache
 				local frame: CFrame? = nil

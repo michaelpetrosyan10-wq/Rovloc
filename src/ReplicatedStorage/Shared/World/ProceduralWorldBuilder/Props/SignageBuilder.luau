@@ -24,6 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 
 local DecayBuilder = require(script.Parent.DecayBuilder)
@@ -36,6 +37,7 @@ local SchoolShellBuilder = require(script.Parent.Parent.SchoolShellBuilder)
 local SetDressingBuilder = require(script.Parent.SetDressingBuilder)
 local SurfaceArt = require(script.Parent.Parent.SurfaceArt)
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Room = LayoutSchema.Room
 type Door = LayoutSchema.Door
@@ -445,7 +447,7 @@ local function paintPlate(part: BasePart, style: Style, text: string, ink: Color
 end
 
 -- What time does to paper: water stains, a corner torn away to the wall behind, grime.
-local function weather(gui: SurfaceGui, random: Random, wallColor: Color3, size: Vector2)
+local function weather(gui: SurfaceGui, random: Rng, wallColor: Color3, size: Vector2)
 	for _ = 1, random:NextInteger(0, 2) do
 		local d = random:NextNumber(0.25, 0.6)
 		SurfaceArt.stain(
@@ -471,7 +473,7 @@ local function weather(gui: SurfaceGui, random: Random, wallColor: Color3, size:
 	SurfaceArt.grime(gui, rgb(70, 54, 30), random:NextNumber(0.25, 0.45), false, 6)
 end
 
-local function paintPoster(part: BasePart, style: Style, text: string, random: Random, wallColor: Color3)
+local function paintPoster(part: BasePart, style: Style, text: string, random: Rng, wallColor: Color3)
 	local gui = printGui(part, style)
 	local accents = { rgb(150, 36, 30), rgb(32, 70, 120), rgb(44, 96, 52) }
 	SurfaceArt.frame(gui, "Header", 0.06, 0.05, 0.88, 0.15, accents[random:NextInteger(1, #accents)], 0.05, 1)
@@ -482,7 +484,7 @@ local function paintPoster(part: BasePart, style: Style, text: string, random: R
 	weather(gui, random, wallColor, style.size)
 end
 
-local function paintNotice(part: BasePart, style: Style, text: string, random: Random, wallColor: Color3)
+local function paintNotice(part: BasePart, style: Style, text: string, random: Rng, wallColor: Color3)
 	local gui = printGui(part, style)
 	SurfaceArt.text(gui, "Text", text, 0.08, 0.06, 0.84, 0.22, INK, Enum.Font.SpecialElite, 2)
 	for i = 0, 7 do
@@ -493,7 +495,7 @@ local function paintNotice(part: BasePart, style: Style, text: string, random: R
 	weather(gui, random, wallColor, style.size)
 end
 
-local function paintMissing(part: BasePart, style: Style, text: string, random: Random, wallColor: Color3)
+local function paintMissing(part: BasePart, style: Style, text: string, random: Rng, wallColor: Color3)
 	local gui = printGui(part, style)
 	SurfaceArt.text(gui, "Text", text, 0.06, 0.03, 0.88, 0.17, INK, Enum.Font.GothamBlack, 2)
 	local photo = SurfaceArt.frame(gui, "Photo", 0.2, 0.23, 0.6, 0.42, rgb(72, 72, 74), 0, 1)
@@ -520,7 +522,7 @@ local function paintCaution(part: BasePart, style: Style)
 	SurfaceArt.grime(gui, rgb(40, 30, 18), 0.35, false, 4)
 end
 
-local function paintQuarantine(part: BasePart, style: Style, random: Random, wallColor: Color3)
+local function paintQuarantine(part: BasePart, style: Style, random: Rng, wallColor: Color3)
 	local gui = printGui(part, style)
 	local red = rgb(156, 26, 22)
 	SurfaceArt.frame(gui, "BandTop", 0, 0, 1, 0.17, red, 0, 1)
@@ -536,7 +538,7 @@ local function paintQuarantine(part: BasePart, style: Style, random: Random, wal
 end
 
 -- Words scrawled straight onto the wall, the paint run in drips below them.
-local function paintScrawl(part: BasePart, style: Style, text: string, random: Random)
+local function paintScrawl(part: BasePart, style: Style, text: string, random: Rng)
 	local gui = printGui(part, style)
 	local words = SurfaceArt.text(gui, "Text", text, 0.02, 0.02, 0.96, 0.6, SCRAWL_INK, Enum.Font.PermanentMarker, 2)
 	words.TextTransparency = 0.1
@@ -574,16 +576,16 @@ end
 -- Placement
 --------------------------------------------------------------------------------
 
-local function paperOptions(random: Random): Geometry.PartOptions
+local function paperOptions(random: Rng): Geometry.PartOptions
 	local fresh = Palette.get("SignPaper").color
-	return { color = fresh:Lerp(OLD_PAPER, random:NextNumber(0, 0.55)) }
+	return { color = MathUtil.lerpColor(fresh, OLD_PAPER, random:NextNumber(0, 0.55)) }
 end
 
 local function wallColor(room: Room): Color3
 	return Palette.get(SchoolShellBuilder.wallKey(room)).color
 end
 
-local function tilt(random: Random, style: Style): number
+local function tilt(random: Rng, style: Style): number
 	return random:NextNumber(-style.tilt, style.tilt)
 end
 
@@ -600,7 +602,7 @@ local function besideDoor(
 	door: Door,
 	style: Style,
 	y0: number,
-	random: Random,
+	random: Rng,
 	name: string,
 	options: Geometry.PartOptions?,
 	reach: number?
@@ -636,7 +638,7 @@ local function nearDoor(
 	room: Room,
 	door: Door,
 	style: Style,
-	random: Random,
+	random: Rng,
 	name: string,
 	options: Geometry.PartOptions?
 ): Piece?
@@ -678,7 +680,7 @@ local function anywhere(
 	state: State,
 	room: Room,
 	style: Style,
-	random: Random,
+	random: Rng,
 	name: string,
 	options: Geometry.PartOptions?,
 	yJitter: number?
@@ -736,9 +738,9 @@ local function roomsWhere(layout: Layout, where: Where): { Room }
 	return out
 end
 
-local function shuffled<T>(list: { T }, random: Random): { T }
+local function shuffled<T>(list: { T }, random: Rng): { T }
 	local out = table.clone(list)
-	MathUtil.shuffle(out, random)
+	Rng.shuffle(out, random)
 	return out
 end
 
@@ -767,7 +769,7 @@ end
 -- Plan
 --------------------------------------------------------------------------------
 
-local function planRoomPlates(state: State, random: Random)
+local function planRoomPlates(state: State, random: Rng)
 	local rooms = state.info.rooms
 	local done: { [string]: boolean } = {}
 	for _, door in state.layout.doors do
@@ -799,7 +801,7 @@ local function planRoomPlates(state: State, random: Random)
 	end
 end
 
-local function planWayfinding(state: State, random: Random)
+local function planWayfinding(state: State, random: Rng)
 	local rooms = state.info.rooms
 	local done: { [string]: boolean } = {}
 	for _, door in state.layout.doors do
@@ -886,7 +888,7 @@ local function planWayfinding(state: State, random: Random)
 end
 
 -- A QUARANTINE sheet taped beside the door of a storeroom or lab, on the outside.
-local function planQuarantine(state: State, random: Random, index: number): boolean
+local function planQuarantine(state: State, random: Rng, index: number): boolean
 	local rooms = state.info.rooms
 	local style = STYLES.Quarantine
 	for _, door in shuffled(state.layout.doors, random) do
@@ -926,7 +928,7 @@ local function planQuarantine(state: State, random: Random, index: number): bool
 	return false
 end
 
-local function planPapers(state: State, random: Random)
+local function planPapers(state: State, random: Rng)
 	local requests = LEVEL_PAPERS[state.layout.id]
 	if not requests then
 		return
@@ -987,7 +989,7 @@ end
 local BOARD = Vector2.new(1.15, 2.05)
 local BOARD_LEAN = math.rad(13)
 
-local function planWetFloors(state: State, random: Random)
+local function planWetFloors(state: State, random: Rng)
 	local count = WET_FLOOR[state.layout.id] or 0
 	local placed = 0
 	local candidates = shuffled(roomsWhere(state.layout, "Wet"), random)
@@ -1056,7 +1058,7 @@ local function buildSignage(ctx: PropKit.StaticContext): number
 		pieces = {},
 		painters = {},
 	}
-	local random = MathUtil.seededRandom(1, layout.id .. ":signage")
+	local random = Rng.seeded(1, layout.id .. ":signage")
 	planRoomPlates(state, random)
 	planWayfinding(state, random)
 	planPapers(state, random)

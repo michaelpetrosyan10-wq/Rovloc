@@ -3,11 +3,15 @@
 -- anchor and every FloorDebris / ScareStep trigger is dressed within its part budget; flasks rest on the epoxy
 -- worktops and the pool's starting-block tops stay clear for theirs; Drip parts carry the DripPipe tag at dripPoint(); debris lies inside its trigger and never collides;
 -- nothing intrudes on a doorway, a grate front, a stair landing or a spawn point; the pool dressing never makes a
--- route across the water that skips the swim; client dressing is non-colliding, unqueried and seed-deterministic.
+-- route across the water that skips the swim; client dressing is non-colliding, unqueried and the world's own (the
+-- same on every client and run).
 -- Signs and posters are lit, non-colliding prints on their walls above the chair rail, clear of every opening, with
 -- every word from Strings; the plant rooms' pipework runs above the door heads and clear of every light fixture and drip pipe.
--- Classrooms face a chalkboard with rows of desks that leave aisles, furniture stays within its budgets, decay (fallen
--- tiles under their holes, puddles, plaster damage, paper) never collides, and no sign lands on a board or a hole.
+-- Classrooms face a chalkboard with rows of desks that leave aisles (every classroom smaller than a hall seats pupils
+-- but the few FURNISHED_CLASSROOMS names), furniture stays within its budgets, decay (fallen tiles under their holes,
+-- puddles, plaster damage, paper) never collides, lies only in rooms a player walks into and shows in full in every
+-- room whose ruin calls for it (each ruined drop ceiling's holes, each plastered room's patches, each room kind's
+-- paper; at least DECAY_MIN of each in all), and no sign lands on a board or a hole.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -20,6 +24,7 @@ local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
+local DecayBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.DecayBuilder)
 local Finishes = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Finishes)
 local FurnitureBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.FurnitureBuilder)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
@@ -35,6 +40,19 @@ type Anchor = LayoutSchema.Anchor
 
 local W = Attributes.World
 local BUDGET = SetDressingBuilder.Budget
+-- The least decay the floors show in all (re-set for the tunnel floors' few school rooms, with a margin): holes in the
+-- ruined drop ceilings, patches of plaster off the walls, loose sheets of paper, puddle parts in the rooms players walk.
+local DECAY_MIN = table.freeze({ holes = 12, sites = 6, papers = 18, puddles = 500 })
+-- A drop ceiling at least this ruined (Finishes.ruin) has lost tiles: one more for every tenth of ruin past it, and
+-- the holes it shows (SchoolShellBuilder.ceilingFalls, a tile under each) are two once five tiles are gone, else one.
+local DECAY_HOLE_RUIN = 0.3
+-- A classroom this big (floor area, square studs) is a hall: long tables, not rows of desks.
+local HALL_AREA = 1400
+-- Classrooms smaller than a hall that their layout furnishes itself, with no room left for rows of pupils' desks: the
+-- platform that does it, and what it is. Every other classroom seats pupils.
+local FURNISHED_CLASSROOMS: { [string]: { platform: string, why: string } } = {
+	L3_TeamRoom = { platform = "L3_Table_Team", why = "the team table" },
+}
 
 local STATIC_PREFIXES: { string } = {
 	"LabCounter_",
@@ -138,6 +156,15 @@ end
 
 local function isDetail(part: BasePart): boolean
 	return not part.CanCollide and not part.CanQuery and not part.CanTouch and part.Anchored
+end
+
+-- The holes a ruined drop ceiling shows (see DECAY_HOLE_RUIN).
+local function decayHolesShown(ruin: number): number
+	if ruin < DECAY_HOLE_RUIN then
+		return 0
+	end
+	local missing = math.floor(1 + (ruin - DECAY_HOLE_RUIN) / 0.7 * 7)
+	return if missing >= 5 then 2 else 1
 end
 
 local function isPassthrough(part: BasePart): boolean
@@ -263,17 +290,17 @@ local function dressingParts(id: string): { BasePart }
 end
 
 --------------------------------------------------------------------------------
--- Cosmetic builds (two with one seed, one with another)
+-- Cosmetic builds (two, as two clients or two runs would make them)
 --------------------------------------------------------------------------------
 
 local cosmetic: { [number]: Folder } = {}
 
-local function dressing(seed: number, slot: number): Instance
+local function dressing(slot: number): Instance
 	local folder = cosmetic[slot]
 	if not folder then
 		local fresh = Instance.new("Folder")
 		fresh.Name = "Cosmetic" .. slot
-		Builder.BuildCosmetic(seed, fresh)
+		Builder.BuildCosmetic(fresh)
 		cosmetic[slot] = fresh
 		folder = fresh
 	end
@@ -715,7 +742,7 @@ return {
 	end,
 
 	["cosmetic dressing: every anchor dressed within budget, never colliding or queried"] = function(t: Expect)
-		local folder = dressing(7, 1)
+		local folder = dressing(1)
 		for _, layout in Builder.layouts() do
 			local dressed: { BasePart } = {}
 			for _, anchor in layout.anchors do
@@ -765,21 +792,49 @@ return {
 		end
 	end,
 
-	["cosmetic dressing: the same seed gives the same dressing, another seed another"] = function(t: Expect)
-		local a, b, c = dressing(7, 1), dressing(7, 2), dressing(11, 3)
-		local listA, listB, listC = parts(a), parts(b), parts(c)
-		t.eq(#listA, #listB, "same seed, same part count")
-		local differs = #listA ~= #listC
+	["cosmetic dressing: the world's, the same on every client and run, each anchor posed its own way"] = function(
+		t: Expect
+	)
+		local a, b = dressing(1), dressing(2)
+		local listA, listB = parts(a), parts(b)
+		t.eq(#listA, #listB, "every build makes the same parts")
 		for i, part in listA do
-			t.eq(part.Name, listB[i].Name)
-			t.truthy(part.CFrame.Position:FuzzyEq(listB[i].CFrame.Position, 1e-5), part.Name .. " same position")
-			t.truthy(part.CFrame.LookVector:FuzzyEq(listB[i].CFrame.LookVector, 1e-5), part.Name .. " same rotation")
-			local other = listC[i]
-			if other and not part.CFrame.Position:FuzzyEq(other.CFrame.Position, 1e-3) then
-				differs = true
-			end
+			local other = listB[i]
+			t.eq(part.Name, other.Name)
+			t.truthy(part.CFrame.Position:FuzzyEq(other.CFrame.Position, 1e-5), part.Name .. " same position")
+			t.truthy(part.CFrame.LookVector:FuzzyEq(other.CFrame.LookVector, 1e-5), part.Name .. " same rotation")
+			t.truthy(part.Size:FuzzyEq(other.Size, 1e-5), part.Name .. " same size")
+			t.eq(part.Color, other.Color, part.Name .. " same colour")
 		end
-		t.truthy(differs, "another seed poses and scatters differently")
+		-- every anchor draws from its own stream: a floor's corpses do not all lie alike on their anchors
+		for _, layout in Builder.layouts() do
+			local poses: { [string]: boolean } = {}
+			local corpses, distinct = 0, 0
+			for _, anchor in layout.anchors do
+				if anchor.kind ~= "Corpse" then
+					continue
+				end
+				local body = a:FindFirstChild("Corpse_" .. anchor.id)
+				assert(body, anchor.id .. " is dressed")
+				local frame = Builder.anchorCFrame(layout.id, anchor)
+				local rows: { string } = {}
+				for _, part in parts(body) do
+					local p = frame:PointToObjectSpace(part.CFrame.Position)
+					table.insert(rows, string.format("%s %.2f %.2f %.2f", part.Name, p.X, p.Y, p.Z))
+				end
+				table.sort(rows)
+				local pose = table.concat(rows, ";")
+				corpses += 1
+				if not poses[pose] then
+					poses[pose] = true
+					distinct += 1
+				end
+			end
+			t.truthy(
+				distinct >= math.min(corpses, 2),
+				string.format("%s: %d corpses in %d poses", layout.id, corpses, distinct)
+			)
+		end
 	end,
 
 	["signage: lit, non-colliding prints above the chair rail, clear of every opening, words from Strings"] = function(
@@ -980,18 +1035,39 @@ return {
 		t: Expect
 	)
 		local budget = FurnitureBuilder.Budget
-		local boards, desks = 0, 0
-		-- the rooms that face a board (classrooms and labs) and the classrooms that seat pupils (not the halls)
-		local boarded, seated = 0, 0
+		local boards = 0
+		-- the rooms that face a board (classrooms and labs) and the classrooms that seat pupils in rows: every one
+		-- smaller than a hall but those FURNISHED_CLASSROOMS names, each still holding the platform that furnishes it
+		local boarded = 0
+		local seated: { [string]: boolean } = {}
+		local furnished: { [string]: boolean } = {}
+		local desksIn: { [string]: number } = {}
 		for _, id: Enums.LayoutId in Enums.LayoutId do
-			for _, room in layoutOf(id).rooms do
+			local layout = layoutOf(id)
+			for _, room in layout.rooms do
 				if room.kind == "Classroom" or room.kind == "Lab" then
 					boarded += 1
 				end
-				if room.kind == "Classroom" and room.rect.w * room.rect.d < 1300 then
-					seated += 1
+				if room.kind ~= "Classroom" or room.rect.w * room.rect.d >= HALL_AREA then
+					continue
+				end
+				local own = FURNISHED_CLASSROOMS[room.id]
+				if own then
+					local standing = false
+					for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
+						if platform.id == own.platform and platform.room == room.id then
+							standing = true
+						end
+					end
+					t.truthy(standing, string.format("%s keeps %s (%s)", room.id, own.platform, own.why))
+					furnished[room.id] = true
+				else
+					seated[room.id] = true
 				end
 			end
+		end
+		for roomId, own in FURNISHED_CLASSROOMS do
+			t.truthy(furnished[roomId], string.format("%s, furnished with %s, is a classroom", roomId, own.why))
 		end
 		for _, id: Enums.LayoutId in Enums.LayoutId do
 			local layout = layoutOf(id)
@@ -1029,8 +1105,11 @@ return {
 							)
 						end
 					end
-				elseif string.find(part.Name, "^Desk_.*_Top$") then
-					desks += 1
+				else
+					local deskRoom = string.match(part.Name, "^Desk_(.+)_%d+_%d+_Top$")
+					if deskRoom then
+						desksIn[deskRoom] = (desksIn[deskRoom] or 0) + 1
+					end
 				end
 			end
 			for _, room in layout.rooms do
@@ -1048,10 +1127,15 @@ return {
 			boarded > 0 and boards >= math.ceil(0.75 * boarded),
 			string.format("classrooms and labs have chalkboards (%d of %d rooms)", boards, boarded)
 		)
-		t.truthy(
-			seated > 0 and desks >= 4 * seated,
-			string.format("pupils' desks stand in the classrooms (%d in %d)", desks, seated)
-		)
+		local classrooms = 0
+		for roomId in seated do
+			classrooms += 1
+			t.truthy(
+				(desksIn[roomId] or 0) >= 4,
+				string.format("pupils' desks stand in %s (%d)", roomId, desksIn[roomId] or 0)
+			)
+		end
+		t.truthy(classrooms > 0, "classrooms seat pupils")
 	end,
 
 	["furniture: desk columns keep aisles a player fits through, clear of the side walls"] = function(t: Expect)
@@ -1082,17 +1166,42 @@ return {
 				end
 			end
 		end
-		-- Upright pupils' desks of one row stand at least a player's width apart.
+		-- Upright pupils' desks of one row stand at least a player's width apart: in the floors' classrooms (which desks
+		-- stand upright is the world stream's draw) and in a full 40 x 30 classroom planned the same way, so the rule is
+		-- held on a whole room of rows whatever the floors' rooms drew.
+		local classroom: Layout = {
+			id = "Level1_Hallways",
+			height = 14,
+			acoustic = "Corridor",
+			ambience = "DroneHallways",
+			entry = "Spec_Hall",
+			exit = "Spec_Class",
+			rooms = {
+				{
+					id = "Spec_Class",
+					kind = "Classroom",
+					rect = LayoutSchema.rect(100, 40, 40, 30),
+					height = 12,
+					acoustic = "Room",
+				},
+				{ id = "Spec_Hall", kind = "Corridor", rect = LayoutSchema.rect(100, 70, 40, 12) },
+			},
+			doors = { { id = "Spec_ClassDoor", kind = "Door", rooms = { "Spec_Hall", "Spec_Class" }, at = 110 } },
+			anchors = {},
+			triggers = {},
+		}
 		local rows: { [string]: { number } } = {}
-		for _, piece in plan.pieces do
-			local room, row = string.match(piece.name, "^Desk_(.+)_(%d+)_%d+_Top$")
-			if room and row and math.abs(piece.cframe.UpVector.Y) > 0.95 then
-				local key = room .. ":" .. row
-				local list = rows[key] or {}
-				rows[key] = list
-				local p = piece.cframe.Position
-				table.insert(list, p.X)
-				table.insert(list, p.Z)
+		for _, pieces in { plan.pieces, FurnitureBuilder.plan(classroom).pieces } do
+			for _, piece in pieces do
+				local room, row = string.match(piece.name, "^Desk_(.+)_(%d+)_%d+_Top$")
+				if room and row and math.abs(piece.cframe.UpVector.Y) > 0.95 then
+					local key = room .. ":" .. row
+					local list = rows[key] or {}
+					rows[key] = list
+					local p = piece.cframe.Position
+					table.insert(list, p.X)
+					table.insert(list, p.Z)
+				end
 			end
 		end
 		local checked = 0
@@ -1105,7 +1214,7 @@ return {
 				end
 			end
 		end
-		t.truthy(checked > 0, "rows checked")
+		t.truthy(checked >= 6, string.format("rows checked (%d pairs of upright desks)", checked))
 	end,
 
 	["decay: fallen tiles under their holes, glossy puddles, damage on the walls, nothing collides or is queried"] = function(
@@ -1114,13 +1223,17 @@ return {
 		local falls, tiles, puddles, damage, papers = 0, 0, 0, 0, 0
 		for _, id: Enums.LayoutId in Enums.LayoutId do
 			local layout = layoutOf(id)
+			local rooms = LayoutSchema.indexRooms(layout)
 			local decay = props(id):FindFirstChild("Decay_" .. id)
 			local holes = SchoolShellBuilder.ceilingFalls(layout)
 			falls += #holes
-			if not decay then
-				continue
+			local holed: { [string]: number } = {}
+			for _, hole in holes do
+				holed[hole.room] = (holed[hole.room] or 0) + 1
 			end
-			for _, part in parts(decay) do
+			local sitesIn: { [string]: number } = {}
+			local papersIn: { [string]: number } = {}
+			for _, part in (if decay then parts(decay) else {}) :: { BasePart } do
 				t.truthy(isDetail(part), part.Name .. " never collides or is queried")
 				t.falsy(part.CastShadow, part.Name .. " casts no shadow")
 				local roomId, index = string.match(part.Name, "^Fall_(.+)_(%d+)_Tile")
@@ -1138,22 +1251,101 @@ return {
 					t.eq(part.Material, Enum.Material.Glass, part.Name .. " is water")
 					t.truthy(part.Reflectance >= 0.2, part.Name .. " is glossy")
 					t.truthy(part.Size.X <= 0.05, part.Name .. " lies flat")
+					-- on the floor of a room a player walks into (never in the solid ground between the tunnels)
+					local wet = string.match(part.Name, "^Puddle_(.+)_%d+_Spill$")
+						or string.match(part.Name, "^Puddle_(.+)_%d+$")
+					local room = if wet then rooms[wet] else nil
+					t.truthy(room ~= nil and room.kind ~= "Solid", part.Name .. " lies in a room a player walks into")
 				elseif string.sub(part.Name, 1, 7) == "Damage_" and part:FindFirstChild("Damage") then
 					damage += 1
 					t.eq(part.Transparency, 1, part.Name .. " carries only its paint")
 					local y = part.CFrame.Position.Y - WorldConfig.levelOrigin(id).Y
 					t.truthy(y > Finishes.RailTop, part.Name .. " above the rail")
+					local site = string.match(part.Name, "^Damage_(.+)_%d+$")
+					if site then
+						sitesIn[site] = (sitesIn[site] or 0) + 1
+					end
 				elseif string.sub(part.Name, 1, 6) == "Paper_" then
 					papers += 1
 					t.truthy(part:FindFirstChild("Print") ~= nil, part.Name .. " is printed")
+					local sheet = string.match(part.Name, "^Paper_(.+)_%d+$")
+					if sheet then
+						papersIn[sheet] = (papersIn[sheet] or 0) + 1
+					end
+				end
+			end
+			-- every room shows all the decay its ruin calls for: the holes of a ruined drop ceiling (DECAY_HOLE_RUIN),
+			-- every patch of plaster its ruin pulls off a plastered wall, its kind's sheets of paper
+			for _, room in layout.rooms do
+				local ruin = Finishes.ruin(id, room.id)
+				local dropped = not room.noCeiling and Finishes.dropCeiling(room, SchoolShellBuilder.ceilingKey(room))
+				local shown = if dropped then decayHolesShown(ruin) else 0
+				t.eq(holed[room.id] or 0, shown, string.format("%s: holes in its ceiling (ruin %.2f)", room.id, ruin))
+				local sites = DecayBuilder.damageSites(layout, room)
+				t.eq(sitesIn[room.id] or 0, sites, string.format("%s: plaster come away (ruin %.2f)", room.id, ruin))
+				local range = DecayBuilder.PaperCount[room.kind]
+				local sheets = papersIn[room.id] or 0
+				if range then
+					t.truthy(
+						sheets >= range[1] and sheets <= range[2],
+						string.format(
+							"%s: %d sheets of paper on its floor (%d to %d)",
+							room.id,
+							sheets,
+							range[1],
+							range[2]
+						)
+					)
+				else
+					t.eq(sheets, 0, room.id .. ": no paper in a " .. room.kind)
 				end
 			end
 		end
-		t.truthy(falls >= 20, string.format("ruined ceilings drop their tiles (%d holes)", falls))
+		t.truthy(falls >= DECAY_MIN.holes, string.format("ruined ceilings drop their tiles (%d holes)", falls))
 		t.truthy(tiles >= falls / 2, string.format("most holes have their tile below (%d of %d)", tiles, falls))
-		t.truthy(puddles >= 10, string.format("standing water in the wet rooms (%d)", puddles))
-		t.truthy(damage >= 10, string.format("plaster has come away (%d sites)", damage))
-		t.truthy(papers >= 30, string.format("paper on the floors (%d)", papers))
+		t.truthy(puddles >= DECAY_MIN.puddles, string.format("standing water in the wet rooms (%d)", puddles))
+		t.truthy(damage >= DECAY_MIN.sites, string.format("plaster has come away (%d sites)", damage))
+		t.truthy(papers >= DECAY_MIN.papers, string.format("paper on the floors (%d)", papers))
+	end,
+
+	["lights: every stair vestibule's strip and red lamp are fast to its ceiling, on every floor"] = function(
+		t: Expect
+	)
+		-- (buildLight only ever lowers a fixture to its ceiling: one set lower hangs in the air with nothing holding it;
+		-- a bulb hangs on its flex)
+		local checked = 0
+		for _, id in WorldConfig.LevelOrder do
+			local layout = layoutOf(id)
+			local rooms = LayoutSchema.indexRooms(layout)
+			local origin = WorldConfig.levelOrigin(id)
+			local here = 0
+			for _, d in world()[id]:GetDescendants() do
+				if not (d:IsA("BasePart") and d:HasTag(Tags.LevelLight)) then
+					continue
+				end
+				local room = rooms[d:GetAttribute(W.ZoneId) :: string]
+				local kind = d:GetAttribute(W.LightKind)
+				if not room or (room.kind ~= "Airlock" and room.kind ~= "Stairwell") or kind == "Bulb" then
+					continue
+				end
+				local ceiling = origin.Y + SchoolShellBuilder.ceilingBottom(layout, room)
+				local _, hi = aabb(d)
+				t.truthy(
+					math.abs(ceiling - hi.Y) <= 0.15,
+					string.format(
+						"%s %s (%s): %.2f studs under the ceiling",
+						room.id,
+						d.Name,
+						tostring(kind),
+						ceiling - hi.Y
+					)
+				)
+				here += 1
+			end
+			t.truthy(here >= 3, string.format("%s: its stair vestibules' fixtures (%d)", id, here))
+			checked += here
+		end
+		t.truthy(checked > 0, "fixtures checked")
 	end,
 
 	["signage keeps off the chalkboards, noticeboards, cabinets and plaster damage"] = function(t: Expect)

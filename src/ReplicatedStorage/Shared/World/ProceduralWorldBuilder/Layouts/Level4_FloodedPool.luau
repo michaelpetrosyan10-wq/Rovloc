@@ -81,9 +81,14 @@ type GratePlan = {
 type Stop = { coord: number, node: string }
 
 local PREFIX = "L4"
+-- TunnelPlanner draws from Rng (the same plan in Lune and on Roblox); this seed, the first tried, passes every rule
+-- and spec
 local SEED = 20261130
 local HEIGHT = WorldConfig.Levels.Level4_FloodedPool.height
 local LOW = 14 -- the stair vestibules
+-- The tunnels the stair vestibules' fire doors open onto stand tall enough for the door's KEEP CLOSED sign over its
+-- head casing (DoorBuilder: about 11.7 studs up).
+local FIRE_DOOR_CLEARANCE = 12.6
 local DUCT_ROOM = 6 -- the maintenance chase is a low service tunnel
 local WATER = WorldConfig.WaterSurfaceOffset
 local POOL_DEPTH = 10
@@ -409,7 +414,7 @@ do
 	-- (no stencil: the fire door's STAIRS sign is SignageBuilder's, beside it on the tunnel side)
 	keepRoom(
 		room(v[1], "Airlock", 0, v[2], 14, 24, AIRLOCK, LOW),
-		{ { side = "E", at = v[3], kind = "Airlock", id = v[4] } },
+		{ { side = "E", at = v[3], kind = "Airlock", id = v[4], runHeight = FIRE_DOOR_CLEARANCE } },
 		"Pumps"
 	)
 end
@@ -422,7 +427,7 @@ for _, v in
 do
 	keepRoom(
 		room(v[1], "Airlock", 386, v[2], 14, 24, AIRLOCK, LOW),
-		{ { side = "W", at = v[3], kind = "Airlock", id = v[4] } },
+		{ { side = "W", at = v[3], kind = "Airlock", id = v[4], runHeight = FIRE_DOOR_CLEARANCE } },
 		"Drains"
 	)
 end
@@ -814,8 +819,9 @@ for _, v in
 		{ "L4_AirlockSouthEast", 393, 260 },
 	} :: { { any } }
 do
+	-- both fixtures fast to the ceiling (buildLight lifts none: a fixture set low hangs in the air)
 	light(v[1], "Fluorescent", v[2], LOW - 0.6, v[3], { flicker = "Mains:" .. v[1], broken = true })
-	light(v[1], "EmergencyRed", v[2], LOW - 3, v[3] - 8, { brightness = 0.3 })
+	light(v[1], "EmergencyRed", v[2], LOW - 0.4, v[3] - 8, { brightness = 0.3 })
 end
 
 --------------------------------------------------------------------------------

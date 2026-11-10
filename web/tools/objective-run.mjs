@@ -31,6 +31,8 @@
 //                walking at it does not get you through) and stays so all run (checked on every floor); the route's
 //                doors show no debris; every arrival spawns in the route's entry vestibule; the roof's finale plays at
 //                the arrival housing (its own roof door smashed, the Creature behind it), corner housings included.
+//   Grates       at run start every grate shows the look the run's plan picks: rusted shut (Locked) where it locks
+//                one, galvanized everywhere else, never both looks at once.
 // Screenshots (the first seed only): the tracker on each floor, the breaker panel before and after power, the fume
 // hood, the chain burning, the generator, the valve seated, the crate's chain cut. Exit code 1 on any failure.
 
@@ -317,6 +319,33 @@ for (const [si, seed] of SEEDS.entries()) {
     check(`${where}: every off-route stairwell door stays shut and Locked with its debris (${j.jammed}); the route's ${j.open} show none`,
       j.bad.length === 0 && j.jammed === 20 && j.open === 10, j);
   };
+  /** Every grate shows the look its run's plan picks (VentGrateBuilder.setLocked): rusted shut where the plan locks it,
+   *  galvanized elsewhere, never both; and its state follows. */
+  const grateLookCheck = async (where) => {
+    const r = await G((g) => {
+      const locked = g.run.plan.lockedGrates;
+      const bad = [];
+      let rusted = 0;
+      let exported = 0;
+      for (const grate of g.vents.grates.values()) {
+        const e = g.env.entity(grate.id);
+        const lock = locked.has(grate.id);
+        if (lock) rusted++;
+        if (e.info.attributes.GrateState === 'Locked') exported++;
+        for (const node of ['', 'Panel', 'Screw1', 'Screw2', 'Screw3', 'Screw4']) {
+          const galvanized = e.nodes.get(node);
+          const rust = e.nodes.get(node ? `${node}/Rusted` : 'Rusted');
+          if (!galvanized || !rust || galvanized.hidden !== lock || rust.hidden === lock) {
+            bad.push(`${grate.id} ${node || 'frame'}: locked ${lock}, galvanized ${!!galvanized && !galvanized.hidden}, rusted ${!!rust && !rust.hidden}`);
+          }
+        }
+        if ((grate.state === 'Locked') !== lock) bad.push(`${grate.id}: ${grate.state}, locked ${lock}`);
+      }
+      return { grates: g.vents.grates.size, rusted, exported, bad };
+    });
+    check(`${where}: every grate shows its run's look (${r.rusted} of ${r.grates} rusted shut by the plan; the export seed locked ${r.exported})`,
+      r.bad.length === 0 && r.grates > 0, r);
+  };
   const spawnCheck = async (level, wantReason) => {
     const s = await G((g, dev, lv) => {
       const e = g.floors.spawns.log.filter((x) => x.level === lv).pop();
@@ -400,6 +429,7 @@ for (const [si, seed] of SEEDS.entries()) {
     check('the run route is the world rule\'s for the seed (one per floor pair, chained)', route.length === 5 &&
       route.every((r, i) => r.id === expected[i]), route.map((r) => r.id));
     await jamCheck('run start');
+    await grateLookCheck('run start');
     // a jammed door off the basement: its "collapsed" prompt, a thud, and walking at it does not get you through
     const jam = await G((g) => {
       const d = [...g.doors.byId.values()].find((x) => x.jammed && x.level === g.level && x.kind === 'Airlock');

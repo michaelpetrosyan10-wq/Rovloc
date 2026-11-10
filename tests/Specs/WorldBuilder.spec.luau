@@ -16,6 +16,7 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local CollisionGroups = require(ReplicatedStorage.Shared.CollisionGroups)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
@@ -1080,7 +1081,7 @@ return {
 		end
 		for _, tube in tubes do
 			t.eq(tube.Material, FixtureGlow.OnMaterial, "lit tubes are Neon")
-			t.near(tube.Color.G, lit.G, 1e-3, "in the light's own colour, whitened")
+			t.eq(tube.Color, MathUtil.color8(lit), "in the light's own colour, whitened (as the part stores it)")
 			t.falsy(tube.CanCollide, "tubes never collide")
 			t.falsy(tube.CanQuery, "tubes are never queried")
 			t.falsy(tube.CastShadow, "tubes never shadow their own light")
@@ -1665,6 +1666,11 @@ return {
 		t.eq(Lighting.Brightness, LightingRig.Baseline.Brightness)
 		t.truthy(Lighting.Ambient == LightingRig.Baseline.Ambient, "ambient fill")
 		t.truthy(Lighting:FindFirstChild(LightingRig.Names.Sky) ~= nil, "storm sky")
+		-- the storm cloud deck under Workspace.Terrain (every live place has one; the Lune harness gives its place one)
+		local terrain = game:GetService("Workspace"):FindFirstChildOfClass("Terrain")
+		assert(terrain, "Workspace.Terrain")
+		local clouds = terrain:FindFirstChild(LightingRig.Names.Clouds)
+		t.truthy(clouds and clouds:IsA("Clouds"), "storm cloud deck")
 	end,
 
 	["lighting rig writes only game-script-writable Lighting properties"] = function(t: Expect)
@@ -1694,7 +1700,7 @@ return {
 			variant = 1,
 		}
 		local folder = Instance.new("Folder")
-		t.eq(Builder.BuildProp(plan, folder, Random.new(1)), nil)
+		t.eq(Builder.BuildProp(plan, folder), nil)
 		t.eq(Builder.BuildRig("SpecNoSuchRig", folder, CFrame.new()), nil)
 		Builder.RegisterProp("SpecCrate", function(ctx): Instance
 			local part = Instance.new("Part")
@@ -1708,7 +1714,7 @@ return {
 			levelId = "Level0_Basement",
 			cframe = CFrame.new(1, 2, 3),
 			variant = 1,
-		}, folder, Random.new(1))
+		}, folder)
 		t.truthy(built ~= nil and built.Parent == folder, "registered prop is built and parented")
 		folder:Destroy()
 	end,
@@ -1758,6 +1764,61 @@ return {
 		t.eq(#child(result.school, "Stairwells"):GetChildren(), #WorldConfig.Stairwells)
 		child(result.school, "Exterior")
 		child(child(result.lobby, "Anchors"), "AnchorRoot")
+		-- Built exactly as Roblox keeps it: a value the engine would clamp or round (a Cylinder's face is round, a
+		-- Ball is a sphere, a light reaches 60 studs and opens 180 degrees at most, a part is 0.001..2048 a side, a
+		-- part's colour is stored in 8 bits a channel) would be exported as written but drawn otherwise on Roblox.
+		local problems: { string } = {}
+		local function onGrid(v: number): boolean
+			return math.abs(v * 255 - math.round(v * 255)) < 1e-3
+		end
+		for _, d in host:GetDescendants() do
+			if d:IsA("BasePart") then
+				local s = d.Size
+				if math.min(s.X, s.Y, s.Z) < 0.001 or math.max(s.X, s.Y, s.Z) > 2048 then
+					table.insert(problems, d:GetFullName() .. " size " .. tostring(s))
+				end
+				local c = d.Color
+				if not (onGrid(c.R) and onGrid(c.G) and onGrid(c.B)) then
+					table.insert(
+						problems,
+						string.format(
+							"%s: colour %s off the 8-bit grid (MathUtil.color8)",
+							d:GetFullName(),
+							tostring(c)
+						)
+					)
+				end
+				local shape = if d:IsA("Part") then d.Shape else nil
+				if shape == Enum.PartType.Cylinder and math.abs(s.Y - s.Z) > 1e-4 then
+					table.insert(
+						problems,
+						string.format("%s: an oval cylinder (%.3f x %.3f)", d:GetFullName(), s.Y, s.Z)
+					)
+				elseif shape == Enum.PartType.Ball and (math.abs(s.X - s.Y) > 1e-4 or math.abs(s.X - s.Z) > 1e-4) then
+					table.insert(problems, d:GetFullName() .. ": a non-uniform ball")
+				end
+			elseif d:IsA("Light") then
+				local range = if d:IsA("PointLight")
+						or d:IsA("SpotLight")
+						or d:IsA("SurfaceLight")
+					then (d :: any).Range :: number
+					else 0
+				if range > 60 then
+					table.insert(
+						problems,
+						string.format("%s: Range %.1f (Roblox caps it at 60)", d:GetFullName(), range)
+					)
+				end
+				local angle = if d:IsA("SpotLight") or d:IsA("SurfaceLight") then (d :: any).Angle :: number else 0
+				if angle > 180 then
+					table.insert(problems, string.format("%s: Angle %.1f (at most 180)", d:GetFullName(), angle))
+				end
+			end
+			if #problems >= 12 then
+				break
+			end
+		end
+		t.eq(#problems, 0, "engine rules: " .. table.concat(problems, "; "))
 		host:Destroy()
 	end,
 	["textures: every part takes exactly its key's live variant, and re-keying clears a stale one"] = function(

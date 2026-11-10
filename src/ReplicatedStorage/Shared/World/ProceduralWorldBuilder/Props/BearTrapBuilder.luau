@@ -32,6 +32,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Types = require(ReplicatedStorage.Shared.Types)
 
@@ -139,6 +140,7 @@ local RESCUE_PROMPT: PropKit.PromptSpec = {
 	hold = GameConfig.TrapRescueSeconds,
 }
 
+type Rng = Rng.Rng
 type Tint = {
 	frame: Color3,
 	jaw: Color3,
@@ -193,16 +195,16 @@ end
 
 local function tintOf(variant: number): Tint
 	local finite = variant == variant and math.abs(variant) ~= math.huge
-	local random = MathUtil.seededRandom(if finite then variant else 0, "BearTrap:tint")
+	local random = Rng.seeded(if finite then variant else 0, "BearTrap:tint")
 	local iron = Palette.get("Iron").color
 	local rust = Palette.get("MetalRust").color
 	local steel = Palette.get("TrimMetal").color
 	return {
-		frame = iron:Lerp(rust, random:NextNumber(0.2, 0.6)),
-		jaw = iron:Lerp(rust, random:NextNumber(0.4, 0.9)),
-		tooth = steel:Lerp(rust, random:NextNumber(0.25, 0.55)),
-		spring = iron:Lerp(rust, random:NextNumber(0.1, 0.5)),
-		chain = iron:Lerp(rust, random:NextNumber(0.05, 0.4)),
+		frame = MathUtil.lerpColor(iron, rust, random:NextNumber(0.2, 0.6)),
+		jaw = MathUtil.lerpColor(iron, rust, random:NextNumber(0.4, 0.9)),
+		tooth = MathUtil.lerpColor(steel, rust, random:NextNumber(0.25, 0.55)),
+		spring = MathUtil.lerpColor(iron, rust, random:NextNumber(0.1, 0.5)),
+		chain = MathUtil.lerpColor(iron, rust, random:NextNumber(0.05, 0.4)),
 	}
 end
 
@@ -376,7 +378,7 @@ local function buildPan(model: Model, frame: CFrame, tint: Tint)
 end
 
 -- Links alternate flat and on edge, wandering out from the -X spring end, then the stake they are fixed to.
-local function buildChain(model: Model, frame: CFrame, random: Random, tint: Tint)
+local function buildChain(model: Model, frame: CFrame, random: Rng, tint: Tint)
 	local heading = math.pi + random:NextNumber(-CHAIN_SPREAD / 2, CHAIN_SPREAD / 2)
 	local direction = Vector3.new(math.cos(heading), 0, math.sin(heading))
 	local centre = Vector3.new(-BASE_HALF, 0, 0) + direction * (LINK_LENGTH / 2 - 0.05)

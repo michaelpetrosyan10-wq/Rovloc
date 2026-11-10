@@ -19,7 +19,7 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
@@ -161,7 +161,7 @@ local function weatherShaft(part: BasePart?, face: Enum.NormalId, seed: string)
 	end
 	local gui, pps =
 		SurfaceArt.gui(part, face, { name = "Wear", pixelsPerStud = 4, maxDistance = Finishes.WearDistance })
-	local random = MathUtil.seededRandom(1, seed)
+	local random = Rng.seeded(1, seed)
 	SurfaceArt.edgeBand(gui, "Grime", false, 0, Finishes.GrimeHeight * pps, GRIME, 0.62, 1)
 	SurfaceArt.edgeBand(gui, "Soot", true, 0, 3 * pps, GRIME, 0.45, 1)
 	for _ = 1, random:NextInteger(2, 4) do
@@ -333,7 +333,7 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 	-- building-side wall: only that wall and the airlock's footprint wall stand between it and the airlock room. The
 	-- fixtures cast shadows (SchoolShellBuilder.buildLight), so the walls keep their glow inside the shaft except
 	-- through the openings.
-	local random = MathUtil.seededRandom(1, spec.id)
+	local random = Rng.seeded(1, spec.id)
 	local centre = Vector3.new(worldX((dims.uInner0 + dims.uInner1) / 2), bottom, dims.tower.openingZ)
 	local nearU = dims.uInner0 + LANDING / 2
 	local index = 0

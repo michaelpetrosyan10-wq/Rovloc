@@ -20,6 +20,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
@@ -140,7 +141,7 @@ function FumeHoodBuilder.buildHood(parent: Instance, spec: HoodSpec): Model
 		at(-HALF_W + WALL_T, WORKTOP + WORKTOP_T, 0.05),
 		at(HALF_W - WALL_T, HOOD_TOP, 0.25),
 		"TrimMetal",
-		{ material = Enum.Material.Metal, color = STEEL:Lerp(Color3.new(), 0.35) }
+		{ material = Enum.Material.Metal, color = MathUtil.lerpColor(STEEL, Color3.new(), 0.35) }
 	)
 	local canopy = block(
 		model,

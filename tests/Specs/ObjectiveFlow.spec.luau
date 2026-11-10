@@ -147,7 +147,7 @@ local function buildFloor(levelId: Enums.LevelId): Folder
 	assert(layout, levelId .. " layout")
 	local floor = spec(levelId)
 	quiet(function()
-		Builder.BuildFixtures(levelId, folder, nil, 99)
+		Builder.BuildFixtures(levelId, folder, nil)
 		local picks = RunDirector.pickObjective(SEED, layout, floor)
 		for index, anchor in picks do
 			local plan: Types.PlannedProp = {
@@ -158,7 +158,7 @@ local function buildFloor(levelId: Enums.LevelId): Folder
 				variant = 1,
 				slot = index,
 			}
-			Builder.BuildProp(plan, folder, Random.new(index))
+			Builder.BuildProp(plan, folder)
 		end
 		return true
 	end)

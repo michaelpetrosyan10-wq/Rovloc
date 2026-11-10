@@ -63,11 +63,13 @@ local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 
 local Geometry = require(script.Parent.Geometry)
 local PropKit = require(script.Parent.Props.PropKit)
 local SurfaceArt = require(script.Parent.SurfaceArt)
 
+type Rng = Rng.Rng
 export type JointSpec = { name: string, part0: string, part1: string }
 
 export type PartNameMap = {
@@ -144,7 +146,7 @@ type ToeSpec = { x: number, length: number, width: number }
 type Ctx = {
 	model: Model,
 	base: CFrame, -- rig-local -> world
-	random: Random,
+	random: Rng,
 	parts: { [string]: BasePart }, -- jointed rig parts by name
 	pivots: { [string]: Vector3 }, -- rig-local pivot of each joint, by joint name
 }
@@ -331,7 +333,7 @@ local TATTERS: { TatterClump } = {
 
 local SMOOTH = Enum.Material.SmoothPlastic
 local SHEEN = 0.04 -- the body's faint sheen
-local BONE_TONE = RIG.ShadowColor:Lerp(Color3.fromRGB(70, 72, 80), 0.12) -- bony knobs, a hair lighter
+local BONE_TONE = MathUtil.lerpColor(RIG.ShadowColor, Color3.fromRGB(70, 72, 80), 0.12) -- bony knobs, a hair lighter
 
 local PAINT_SHADOW: Paint = { material = SMOOTH, color = RIG.ShadowColor, shadow = true, reflectance = SHEEN }
 local PAINT_SHADOW_SMALL: Paint = { material = SMOOTH, color = RIG.ShadowColor, shadow = false, reflectance = SHEEN }
@@ -1021,20 +1023,24 @@ local function buildJaw(ctx: Ctx, head: CFrame)
 end
 
 -- Face-frame point on Roblox's mask shell over (x, y) and its outward normal: on the cylinder between the slit and the
--- brow, on the brow dome above it, below the slit on the jaw ball or the chin, whichever stands further out.
-local function maskSurface(x: number, y: number): (Vector3, Vector3)
+-- brow, on the brow dome above it, below the slit on the jaw ball or the chin, whichever stands further out. `jaw`
+-- names the half when the caller knows it (a strip rides the half its limb carries), so a point on the slit itself is
+-- never placed by the side of it a float rounding lands on; without it the point's own height decides.
+local function maskSurface(x: number, y: number, jaw: boolean?): (Vector3, Vector3)
 	local function onBall(centre: Vector3, radius: number): (Vector3, Vector3, boolean)
 		local dx, dy = x - centre.X, y - centre.Y
 		local inside = radius * radius - dx * dx - dy * dy
 		local point = Vector3.new(x, y, centre.Z - math.sqrt(math.max(inside, 0)))
 		return point, (point - centre).Unit, inside > 0
 	end
-	if y >= SLIT_Y and y <= MASK_TOP then
+	local lower = if jaw == nil then y < SLIT_Y else jaw
+	if not lower then
+		if y > MASK_TOP then
+			local point, normal = onBall(Vector3.new(0, MASK_TOP, MASK_Z), MASK_RADIUS)
+			return point, normal
+		end
 		local z = MASK_Z - math.sqrt(math.max(MASK_RADIUS ^ 2 - x * x, 0))
 		return Vector3.new(x, y, z), Vector3.new(x, 0, z - MASK_Z).Unit
-	elseif y > MASK_TOP then
-		local point, normal = onBall(Vector3.new(0, MASK_TOP, MASK_Z), MASK_RADIUS)
-		return point, normal
 	end
 	local point, normal, onJaw = onBall(CHIN_CENTRE, CHIN_RADIUS)
 	local tip, tipNormal, onTip = onBall(CHIN_TIP, CHIN_TIP_RADIUS)
@@ -1044,7 +1050,8 @@ local function maskSurface(x: number, y: number): (Vector3, Vector3)
 	return point, normal
 end
 
--- A thin strip `name` on the shell from face-frame a2 to b2, `width` across and `lift` proud of the surface.
+-- A thin strip `name` on the shell from face-frame a2 to b2, `width` across and `lift` proud of the surface of the
+-- half `limb` carries (the jaw's below the slit, the head's above it): both ends ride that half, a seam end too.
 local function surfaceStrip(
 	ctx: Ctx,
 	head: CFrame,
@@ -1056,8 +1063,9 @@ local function surfaceStrip(
 	lift: number,
 	paint: Paint
 ): BasePart
-	local a, na = maskSurface(a2.X, a2.Y)
-	local b, nb = maskSurface(b2.X, b2.Y)
+	local jaw = limb == ctx.parts.Jaw
+	local a, na = maskSurface(a2.X, a2.Y, jaw)
+	local b, nb = maskSurface(b2.X, b2.Y, jaw)
 	local out = rotate(head, (na + nb).Unit)
 	local from, to = head * a + out * lift, head * b + out * lift
 	return block(
@@ -1070,13 +1078,14 @@ local function surfaceStrip(
 	)
 end
 
--- A polyline's segments, split where they cross the seam so each piece rides the half of the mask it lies on.
+-- A polyline's segments, split where they cross the seam so each piece rides the half of the mask it lies on (the cut
+-- point in Luau's doubles: the same on every platform; which half each piece rides is its limb's, see surfaceStrip).
 local function seamSegments(points: { Vector2 }): { { Vector2 } }
 	local out: { { Vector2 } } = {}
 	for i = 1, #points - 1 do
 		local a, b = points[i], points[i + 1]
 		if (a.Y - SLIT_Y) * (b.Y - SLIT_Y) < 0 then
-			local cut = a:Lerp(b, (SLIT_Y - a.Y) / (b.Y - a.Y))
+			local cut = MathUtil.lerpVector2(a, b, (SLIT_Y - a.Y) / (b.Y - a.Y))
 			table.insert(out, { a, cut })
 			table.insert(out, { cut, b })
 		else
@@ -1152,7 +1161,7 @@ local function buildMaskGrime(ctx: Ctx, head: CFrame)
 		gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 		gui.Parent = card
 		-- the canvas is about 104 x 176 pixels, the eye hole at (0.5, 0.36): every frame is symmetric about x = 0.5
-		local soot = GRIME_COLOR:Lerp(Color3.new(), 0.7)
+		local soot = MathUtil.lerpColor(GRIME_COLOR, Color3.new(), 0.7)
 		SurfaceArt.stain(gui, 0.5, 0.36, 0.95, 0.42, soot, 0.62, nil, 1)
 		SurfaceArt.stain(gui, 0.5, 0.36, 0.7, 0.28, soot, 0.4, nil, 2)
 		SurfaceArt.streak(gui, 0.5, 70, 8, 96, soot, 0.6, 3)
@@ -1609,7 +1618,7 @@ function CreatureRigBuilder.build(parent: Instance, cframe: CFrame): Model
 	local ctx: Ctx = {
 		model = model,
 		base = cframe,
-		random = MathUtil.seededRandom(RIG_SEED, RIG_KIND),
+		random = Rng.seeded(RIG_SEED, RIG_KIND),
 		parts = {},
 		pivots = {},
 	}

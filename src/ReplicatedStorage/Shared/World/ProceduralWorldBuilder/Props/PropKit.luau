@@ -31,6 +31,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -40,6 +41,7 @@ local Geometry = require(script.Parent.Parent.Geometry)
 
 local W = Attributes.World
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 
 export type FixtureContext = {
@@ -47,7 +49,7 @@ export type FixtureContext = {
 	levelRoot: Model?, -- Workspace.School.<levelId> (anchors, grate attachments); nil when that level was not built
 	parent: Instance, -- Workspace.Runtime.<levelId>
 	plan: Types.SpawnPlan?, -- the run's plan (lockedGrates); nil when the director produced none
-	random: Random, -- seeded per run, level and fixture kind
+	random: Rng, -- seeded per run, level and fixture kind
 }
 
 -- Builds every fixture of one kind for one level. Returns how many it built.
@@ -57,7 +59,7 @@ export type StaticContext = {
 	layout: Layout,
 	root: Model, -- the level model
 	parent: Folder, -- <level>.Props
-	random: Random, -- seeded per layout and static kind (the same on every server)
+	random: Rng, -- seeded per layout and static kind (the same on every server)
 }
 
 -- Builds one kind of static geometry for one level. Returns how many pieces it built.
@@ -67,7 +69,7 @@ export type CosmeticAnchorBuilder = (
 	anchor: LayoutSchema.Anchor,
 	cframe: CFrame,
 	parent: Instance,
-	random: Random
+	random: Rng
 ) -> ()
 
 export type Registrar = {
@@ -92,6 +94,9 @@ export type PromptSpec = {
 local DEFAULT_PROMPT_DISTANCE = 7
 
 local PropKit = {}
+
+-- A prompt's MaxActivationDistance unless its spec says otherwise (studs from the player's root).
+PropKit.PromptDistance = DEFAULT_PROMPT_DISTANCE
 
 --------------------------------------------------------------------------------
 -- Placement
@@ -122,9 +127,27 @@ function PropKit.attachmentWorld(attachment: Attachment): CFrame
 	return attachment.CFrame
 end
 
+-- The descendants of `root` breadth-first, each level's children in their GetChildren order. Lookups walk this rather
+-- than GetDescendants, whose order is the engine's own (Roblox and Lune differ), so a name that repeats resolves to the
+-- same instance on every platform.
+local function breadthFirst(root: Instance): { Instance }
+	local out: { Instance } = {}
+	local queue: { Instance } = root:GetChildren()
+	local head = 1
+	while head <= #queue do
+		local node = queue[head]
+		head += 1
+		table.insert(out, node)
+		for _, child in node:GetChildren() do
+			table.insert(queue, child)
+		end
+	end
+	return out
+end
+
 -- The first Attachment named `name` under `root` (searched breadth-first through its folders and parts).
 function PropKit.findAttachment(root: Instance, name: string): Attachment?
-	for _, descendant in root:GetDescendants() do
+	for _, descendant in breadthFirst(root) do
 		if descendant.Name == name and descendant:IsA("Attachment") then
 			return descendant
 		end
@@ -132,12 +155,19 @@ function PropKit.findAttachment(root: Instance, name: string): Attachment?
 	return nil
 end
 
--- Every Attachment under `root` whose name starts with `prefix`, keyed by name.
+-- Every Attachment under `root` whose name starts with `prefix`, keyed by name (a repeated name: the first found
+-- breadth-first).
 function PropKit.attachmentsWithPrefix(root: Instance, prefix: string): { [string]: Attachment }
 	local out: { [string]: Attachment } = {}
+	local seen: { [string]: boolean } = {}
 	local length = #prefix
-	for _, descendant in root:GetDescendants() do
-		if descendant:IsA("Attachment") and string.sub(descendant.Name, 1, length) == prefix then
+	for _, descendant in breadthFirst(root) do
+		if
+			descendant:IsA("Attachment")
+			and string.sub(descendant.Name, 1, length) == prefix
+			and not seen[descendant.Name]
+		then
+			seen[descendant.Name] = true
 			out[descendant.Name] = descendant
 		end
 	end
@@ -244,13 +274,16 @@ function PropKit.prompt(host: Instance, spec: PromptSpec, tagged: Instance?): Pr
 	prompt:SetAttribute(W.BaseHold, spec.hold)
 	prompt.Parent = host
 	local target = tagged or host
-	target:AddTag(Tags.Interactable)
+	-- once per target, however many prompts it carries (Roblox's AddTag is idempotent, Lune's appends a duplicate)
+	if not target:HasTag(Tags.Interactable) then
+		target:AddTag(Tags.Interactable)
+	end
 	return prompt
 end
 
--- The prompt of `kind` under `root`, or nil.
+-- The prompt of `kind` under `root` (the first breadth-first), or nil.
 function PropKit.findPrompt(root: Instance, kind: Enums.PromptKind): ProximityPrompt?
-	for _, descendant in root:GetDescendants() do
+	for _, descendant in breadthFirst(root) do
 		if descendant:IsA("ProximityPrompt") and descendant:GetAttribute(W.PromptKind) == kind then
 			return descendant
 		end

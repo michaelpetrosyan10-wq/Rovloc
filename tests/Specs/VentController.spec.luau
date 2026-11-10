@@ -5,10 +5,11 @@
 -- is followed), cursor advance across edges and stubs (stopping at dead ends, short of shut grates, at the mouth of
 -- an open grate's stub), the keep-out a grate that shuts on a crawler pushes the cursor out of, panel stops, facing
 -- choice and smoothing, rail speed, membership, collider modes, server-move classification, crawl speeds against
--- MovementController, loop volumes, the vignette and hand plants. On every real level's ducts (built with
--- VentShaftBuilder, read with VentGraph): from any duct at any node the input carries the cursor into any branch it
--- points down, every duct is crawlable end to end, an entry point snaps onto the rail, and a long random crawl
--- with grates shut and open keeps every invariant (on the rail, outside keep-outs, within speed, no jumps).
+-- MovementController, loop volumes, the vignette and hand plants. On every real level's ducts (every floor whose script
+-- needs one keeps it: a gate's bypass, a hatch valve's flooded duct; built with VentShaftBuilder, read with VentGraph):
+-- from any duct at any node the input carries the cursor into any branch it points down, every duct is crawlable end
+-- to end, an entry point snaps onto the rail, and a long random crawl with grates shut and open keeps every invariant
+-- (on the rail, outside keep-outs, within speed, no jumps).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterPlayer = game:GetService("StarterPlayer")
@@ -140,7 +141,7 @@ end
 -- Real levels
 --------------------------------------------------------------------------------
 
-local function realLayouts(): { Layout }
+local function allLayouts(): { Layout }
 	local out: { Layout } = {}
 	local folder = ReplicatedStorage.Shared.World.ProceduralWorldBuilder:FindFirstChild("Layouts")
 	if not folder then
@@ -149,13 +150,38 @@ local function realLayouts(): { Layout }
 	for _, id: Enums.LayoutId in Enums.LayoutId do
 		local module = folder:FindFirstChild(id)
 		if module and module:IsA("ModuleScript") then
-			local layout = (require(module) :: any) :: Layout
-			if layout.vents and #layout.vents.edges > 0 then
-				table.insert(out, layout)
-			end
+			table.insert(out, (require(module) :: any) :: Layout)
 		end
 	end
 	return out
+end
+
+-- Every layout with ducts.
+local function realLayouts(): { Layout }
+	local out: { Layout } = {}
+	for _, layout in allLayouts() do
+		if layout.vents and #layout.vents.edges > 0 then
+			table.insert(out, layout)
+		end
+	end
+	return out
+end
+
+-- Whether a floor's script needs a duct (crawlways replaced the vents as the escape tool everywhere else): a gate's
+-- bypass (Level 1: the HallwayGate seals the hallway, its vent carries the crossing past it) or a hatch valve's flooded
+-- duct (Level 4).
+local function needsDuct(layout: Layout): boolean
+	for _, door in layout.doors do
+		if door.kind == "Gate" then
+			return true
+		end
+	end
+	for _, anchor in layout.anchors do
+		if anchor.kind == "HatchValve" then
+			return true
+		end
+	end
+	return false
 end
 
 local builtGraphs: { VentGraph.Graph }? = nil
@@ -180,7 +206,20 @@ local function realGraphs(t: Expect): { VentGraph.Graph }
 		end
 	end
 	Geometry.setYieldEvery(previous)
-	t.truthy(#out >= 3, "the levels with ducts")
+	-- every floor whose script needs a duct keeps one, and every floor's ducts are crawled here
+	local built: { [string]: boolean } = {}
+	for _, graph in out do
+		built[graph.levelId] = true
+	end
+	local needed = 0
+	for _, layout in allLayouts() do
+		if needsDuct(layout) then
+			needed += 1
+			t.truthy(built[layout.id], layout.id .. " keeps the duct its script needs")
+		end
+	end
+	t.truthy(needed > 0 and #out >= needed, string.format("the levels with ducts (%d; %d need one)", #out, needed))
+	t.eq(#out, #realLayouts(), "a graph for every level with ducts")
 	builtGraphs = out
 	return out
 end

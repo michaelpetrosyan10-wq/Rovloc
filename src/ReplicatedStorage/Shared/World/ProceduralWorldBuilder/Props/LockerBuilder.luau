@@ -34,13 +34,18 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local CameraConfig = require(ReplicatedStorage.Shared.Config.CameraConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Geometry = require(script.Parent.Parent.Geometry)
+local DoorBuilder = require(script.Parent.DoorBuilder)
 local PropKit = require(script.Parent.PropKit)
+local VentGrateBuilder = require(script.Parent.VentGrateBuilder)
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Room = LayoutSchema.Room
 type Anchor = LayoutSchema.Anchor
@@ -191,9 +196,9 @@ local function detail(part: BasePart): BasePart
 end
 
 -- `color` nudged in hue, saturation and brightness so no two lockers of a bank match exactly.
-local function shade(color: Color3, random: Random, amount: number): Color3
-	local h, s, v = color:ToHSV()
-	return Color3.fromHSV(
+local function shade(color: Color3, random: Rng, amount: number): Color3
+	local h, s, v = MathUtil.toHSV(color)
+	return MathUtil.fromHSV(
 		(h + random:NextNumber(-0.012, 0.012)) % 1,
 		math.clamp(s * random:NextNumber(1 - amount, 1 + amount), 0, 1),
 		math.clamp(v * random:NextNumber(1 - amount, 1), 0, 1)
@@ -202,7 +207,7 @@ end
 
 -- Paint aged by `rust` (0 = sound paint, 1 = mostly corrosion).
 local function weathered(paint: Color3, rust: number): Color3
-	return paint:Lerp(RUST, 0.12 + 0.3 * rust):Lerp(GRIME, 0.1 * rust)
+	return MathUtil.lerpColor(MathUtil.lerpColor(paint, RUST, 0.12 + 0.3 * rust), GRIME, 0.1 * rust)
 end
 
 local function printText(part: BasePart, name: string, text: string)
@@ -257,7 +262,8 @@ local function backFace(gap: number?): number
 end
 
 -- A floor test for torn-door landings in `room`: every footprint corner stays inside the room, clear of its walls and
--- door trims, and the footprint stays off the room's platforms (benches, bleachers).
+-- door trims, the footprint stays off the room's platforms (benches, bleachers) and off the floor its doors' leaves
+-- swing over (DoorBuilder.swingZones: wherever a static or fixture leaf may hang).
 local function clearFloor(layout: Layout, room: Room): (footprint: { Vector3 }) -> boolean
 	local origin = WorldConfig.levelOrigin(layout.id)
 	local obstacles: { LayoutSchema.Rect } = {}
@@ -266,6 +272,7 @@ local function clearFloor(layout: Layout, room: Room): (footprint: { Vector3 }) 
 			table.insert(obstacles, Geometry.insetRect(platform.rect, -LANDING_OBSTACLE_MARGIN))
 		end
 	end
+	local swings = DoorBuilder.swingZones(layout, room.id)
 	return function(points: { Vector3 }): boolean
 		local x0, z0, x1, z1 = math.huge, math.huge, -math.huge, -math.huge
 		for _, point in points do
@@ -281,22 +288,52 @@ local function clearFloor(layout: Layout, room: Room): (footprint: { Vector3 }) 
 				return false
 			end
 		end
+		local landing: VentGrateBuilder.Footprint = {
+			cx = (x0 + x1) / 2,
+			cz = (z0 + z1) / 2,
+			ux = 1,
+			uz = 0,
+			hu = (x1 - x0) / 2 + LANDING_OBSTACLE_MARGIN,
+			hv = (z1 - z0) / 2 + LANDING_OBSTACLE_MARGIN,
+			y0 = 0,
+			y1 = 1,
+			kind = "Landing",
+		}
+		for _, zone in swings do
+			if VentGrateBuilder.overlaps(landing, zone, 0) then
+				return false
+			end
+		end
 		return true
 	end
 end
 
--- Lockers along one wall form a bank: same room, same facing, same wall line.
-local function bankKey(anchor: Anchor, cframe: CFrame): string
-	local look = cframe.LookVector
-	return string.format(
-		"%s|%d|%d",
-		anchor.room,
-		math.round(anchor.yaw or 0),
-		math.round(cframe.Position:Dot(look) * 10)
-	)
+-- Lockers along one wall form a bank: same room, same facing, same wall line. The key comes from the layout data in
+-- doubles (the anchor's level-local floor point and its yaw), never from engine CFrame maths: a wall line sitting on a
+-- rounding boundary (2.05 studs off a wall) must round the same way in every engine, or a bank splits and every later
+-- locker's paint draw shifts. A quarter-turn yaw (every locker today) faces exactly along an axis; any other yaw
+-- falls back to its sine and cosine.
+local function bankKey(anchor: Anchor): string
+	local yaw = math.round(anchor.yaw or 0)
+	local quarter = (yaw % 360) / 90
+	local lookX, lookZ
+	if quarter == 0 then
+		lookX, lookZ = 0, -1
+	elseif quarter == 1 then
+		lookX, lookZ = -1, 0
+	elseif quarter == 2 then
+		lookX, lookZ = 0, 1
+	elseif quarter == 3 then
+		lookX, lookZ = 1, 0
+	else
+		local radians = math.rad(yaw)
+		lookX, lookZ = -math.sin(radians), -math.cos(radians)
+	end
+	local line = anchor.pos.X * lookX + anchor.pos.Z * lookZ
+	return string.format("%s|%d|%d", anchor.room, yaw, math.round(line * 10))
 end
 
-local function bankPaint(banks: { [string]: Color3 }, key: string, random: Random): Color3
+local function bankPaint(banks: { [string]: Color3 }, key: string, random: Rng): Color3
 	local existing = banks[key]
 	if existing then
 		return existing
@@ -394,10 +431,10 @@ function LockerBuilder.rippedTransform(swing: number, landed: CFrame, t: number)
 	local wrenched = CFrame.new(swing * 0.06, 0.18, -0.3) * CFrame.Angles(0, swing * RIP_WRENCH_ANGLE, 0)
 	if progress <= RIP_WRENCH then
 		local s = progress / RIP_WRENCH
-		return CFrame.new():Lerp(wrenched, 1 - (1 - s) * (1 - s))
+		return MathUtil.lerpCFrame(CFrame.new(), wrenched, 1 - (1 - s) * (1 - s))
 	end
 	local s = (progress - RIP_WRENCH) / (1 - RIP_WRENCH)
-	return aboveFloor(CFrame.new(0, 4 * RIP_ARC * s * (1 - s), 0) * wrenched:Lerp(landed, s), swing)
+	return aboveFloor(CFrame.new(0, 4 * RIP_ARC * s * (1 - s), 0) * MathUtil.lerpCFrame(wrenched, landed, s), swing)
 end
 
 -- Where `model`'s torn door lands, relative to its rest pivot (the builder's DoorLanding choice).
@@ -440,7 +477,7 @@ local function buildDoor(
 	front: number,
 	options: PartOptions,
 	spec: LockerSpec,
-	random: Random,
+	random: Rng,
 	rust: number
 )
 	local door = PropKit.leaf(model, DOOR, frame * CFrame.new(HINGE_X, 0, front))
@@ -528,7 +565,7 @@ local function buildDoor(
 			Vector3.new(-0.28, 6.3, front - 0.02),
 			Vector3.new(0.28, 6.58, front),
 			"Fixture",
-			{ material = Enum.Material.SmoothPlastic, color = PLATE:Lerp(RUST, 0.25 * rust) }
+			{ material = Enum.Material.SmoothPlastic, color = MathUtil.lerpColor(PLATE, RUST, 0.25 * rust) }
 		)
 	)
 	printText(plate, "Number", Strings.get("Prop.Locker.Number", spec.number))
@@ -545,7 +582,7 @@ local function buildDoor(
 			Vector3.new(streakX, math.max(DOOR_BOTTOM + 0.1, SLIT_BOTTOM - 0.02 - streakLength), front - 0.012),
 			Vector3.new(streakX + streakWidth, SLIT_BOTTOM - 0.02, front),
 			"MetalRust",
-			{ material = Enum.Material.CorrodedMetal, color = RUST:Lerp(RUST_DARK, random:NextNumber()) }
+			{ material = Enum.Material.CorrodedMetal, color = MathUtil.lerpColor(RUST, RUST_DARK, random:NextNumber()) }
 		)
 	)
 
@@ -568,14 +605,14 @@ local function buildDoor(
 				frame * CFrame.new(x, y, front - 0.006) * tilt,
 				Vector3.new(w, h, 0.04),
 				"TrimMetal",
-				{ material = options.material, color = (options.color or STEEL):Lerp(GRIME, 0.18) }
+				{ material = options.material, color = MathUtil.lerpColor(options.color or STEEL, GRIME, 0.18) }
 			)
 		)
 	end
 end
 
 -- Builds one locker into `parent`. Every random choice draws from `random`.
-function LockerBuilder.buildLocker(parent: Instance, spec: LockerSpec, random: Random): Model
+function LockerBuilder.buildLocker(parent: Instance, spec: LockerSpec, random: Rng): Model
 	local frame = spec.cframe
 	local back = backFace(spec.wallGap)
 	local front = back - DEPTH
@@ -589,7 +626,7 @@ function LockerBuilder.buildLocker(parent: Instance, spec: LockerSpec, random: R
 		else spec.paint
 	local doorColor = weathered(shade(doorPaint, random, 0.1), rust)
 	local body: PartOptions = { material = material, color = bodyColor }
-	local interior: PartOptions = { material = material, color = bodyColor:Lerp(GRIME, 0.3) }
+	local interior: PartOptions = { material = material, color = MathUtil.lerpColor(bodyColor, GRIME, 0.3) }
 
 	-- Shell
 	local base = block(
@@ -599,7 +636,7 @@ function LockerBuilder.buildLocker(parent: Instance, spec: LockerSpec, random: R
 		Vector3.new(-INNER_HALF, 0, front + PLINTH_RECESS),
 		Vector3.new(INNER_HALF, FLOOR_Y, back - BACK_T),
 		"MetalRust",
-		{ material = Enum.Material.CorrodedMetal, color = RUST_DARK:Lerp(bodyColor, 0.3) }
+		{ material = Enum.Material.CorrodedMetal, color = MathUtil.lerpColor(RUST_DARK, bodyColor, 0.3) }
 	)
 	model.PrimaryPart = base
 	block(
@@ -680,7 +717,7 @@ function LockerBuilder.buildLocker(parent: Instance, spec: LockerSpec, random: R
 		frame * Vector3.new(HINGE_X, DOOR_TOP - 0.15, front),
 		0.07,
 		"TrimMetal",
-		{ material = Enum.Material.Metal, color = STEEL:Lerp(RUST, 0.4 * rust) }
+		{ material = Enum.Material.Metal, color = MathUtil.lerpColor(STEEL, RUST, 0.4 * rust) }
 	)
 	if hinge then
 		detail(hinge)
@@ -768,7 +805,7 @@ local function buildFixtures(ctx: PropKit.FixtureContext): number
 			zoneId = anchor.room,
 			number = index,
 			wallGap = if room then wallGap(room, anchor) else nil,
-			paint = bankPaint(banks, bankKey(anchor, cframe), ctx.random),
+			paint = bankPaint(banks, bankKey(anchor), ctx.random),
 			landingClear = clear,
 		}, ctx.random)
 	end

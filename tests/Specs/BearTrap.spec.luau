@@ -118,7 +118,7 @@ local function buildTrap(index: number, folder: Folder): Model
 		cframe = POINTS[index],
 		variant = 300 + index,
 	}
-	local built = Builder.BuildProp(plan, folder, Random.new(index))
+	local built = Builder.BuildProp(plan, folder)
 	assert(built ~= nil and built:IsA("Model"), "the bear trap builder builds a Model")
 	return built
 end

@@ -69,7 +69,7 @@ export class Match {
     const run = {
       runId: spec && spec.runId ? spec.runId : newRunId(),
       difficulty: chosen,
-      plan: game.world.plan(chosen, seed, routes),
+      plan: game.world.plan(chosen, seed),
       routes,
       perks,
       startedAt: env.now(),

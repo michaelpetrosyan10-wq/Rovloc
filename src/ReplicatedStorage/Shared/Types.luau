@@ -5,6 +5,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
+
+type Rng = Rng.Rng
 
 export type MoveState = Enums.MoveState
 export type LevelId = Enums.LevelId
@@ -127,15 +130,15 @@ export type PlannedProp = {
 	anchorId: string,
 	levelId: Enums.LayoutId,
 	cframe: CFrame, -- world space
-	variant: number, -- seeded per prop, for visual variety
-	slot: number?, -- floor objective items: which of the floor's items this is (1..count; a reagent's colour)
+	variant: number, -- fixed per anchor (RunDirector.variantOf), for visual variety
+	slot: number?, -- floor objective items of a floor with kinds: the item's kind (a reagent's colour); else nil
 }
 
 -- One floor objective's seeded picks (RunDirector.plan; ObjectiveConfig names the floor's item and counts).
 export type ObjectivePicks = {
 	levelId: Enums.LayoutId,
 	prop: string, -- plan prop kind of the floor's item
-	anchors: { string }, -- the candidate anchors the run uses, in pick order (a prop's slot is its index here)
+	anchors: { string }, -- the candidate anchors the run uses, in pick order (with kinds, in kind order)
 	guards: { string }, -- bear-trap anchors armed on the approach of the guarded picks (Level 0), else empty
 }
 
@@ -158,7 +161,7 @@ export type SpawnPlan = {
 export type PropBuildContext = {
 	prop: PlannedProp,
 	parent: Instance,
-	random: Random,
+	random: Rng,
 }
 
 export type PropBuilder = (ctx: PropBuildContext) -> Instance

@@ -26,7 +26,7 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Geometry = require(script.Parent.Geometry)
@@ -435,7 +435,7 @@ local function buildBus(
 	local frame = CFrame.new(origin) * placement.cframe
 	local length = placement.length
 	local halfL, halfW = length / 2, BUS_WIDTH / 2
-	local random = MathUtil.seededRandom(1, "LobbyBus")
+	local random = Rng.seeded(1, "LobbyBus")
 
 	local function box(
 		name: string,

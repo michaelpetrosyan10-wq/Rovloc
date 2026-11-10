@@ -58,10 +58,16 @@ type LightOptions = {
 type LightDefaults = { brightness: number, range: number, color: Color3 }
 
 local PREFIX = "L0"
+-- TunnelPlanner draws from Rng (the same plan in Lune and on Roblox); this seed, the first tried, passes every rule
+-- and spec
 local SEED = 20261103
 local HEIGHT = WorldConfig.Levels.Level0_Basement.height
 
 local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
+-- The stair vestibules and the tunnels their fire doors open onto stand tall enough for the door's KEEP CLOSED sign
+-- over its head casing (DoorBuilder: about 11.7 studs up).
+local VESTIBULE_HEIGHT = 13
+local FIRE_DOOR_CLEARANCE = 12.6
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
@@ -294,10 +300,11 @@ for _, v in
 		{ "L0_AirlockSouthEast", 248, 260, "L0_Door_AirlockSouthEast" },
 	} :: { { any } }
 do
-	-- (no stencil: the fire door's STAIRS sign is SignageBuilder's, beside it on the tunnel side)
+	-- (no stencil: the fire door's STAIRS sign is SignageBuilder's, beside it on the tunnel side; the run the fire door
+	-- opens onto stands tall enough for its KEEP CLOSED sign over the head casing)
 	keepRoom(
-		room(v[1], "Airlock", 386, v[2], 14, 24, AIRLOCK, 12),
-		{ { side = "W", at = v[3], kind = "Airlock", id = v[4] } },
+		room(v[1], "Airlock", 386, v[2], 14, 24, AIRLOCK, VESTIBULE_HEIGHT),
+		{ { side = "W", at = v[3], kind = "Airlock", id = v[4], runHeight = FIRE_DOOR_CLEARANCE } },
 		"Drains"
 	)
 end
@@ -508,7 +515,7 @@ platform("L0_Workbench", "L0_Workshop", 133, 96, 4, 8, 3, 3, "WoodPanel")
 platform("L0_Shelf_Workshop", "L0_Workshop", 140, 88.6, 10, 2.6, 4, 4, "MetalRust")
 platform("L0_Boiler_A", "L0_BoilerRoom", 208, 228, 12, 8, 10, 10, "MetalRust")
 platform("L0_Boiler_B", "L0_BoilerRoom", 228, 228, 12, 8, 10, 10, "MetalRust")
-platform("L0_Pump_A", "L0_PumpRoom", 308, 248, 7, 6, 4, 4, "MetalRust")
+platform("L0_Pump_A", "L0_PumpRoom", 307, 248, 7, 6, 4, 4, "MetalRust")
 platform("L0_Pump_B", "L0_PumpRoom", 320, 248, 7, 6, 4, 4, "MetalRust")
 platform("L0_Switchgear", "L0_ElectricalRoom", 325, 89, 4, 18, 8, 8, "MetalGalvanized")
 
@@ -538,8 +545,9 @@ light("L0_PumpRoom", "Bulb", 318, 11.2, 242, { flicker = mains("L0_PumpRoom"), c
 light("L0_ElectricalRoom", "Fluorescent", 316, 11.4, 100, { flicker = mains("L0_ElectricalRoom") })
 light("L0_ElectricalRoom", "EmergencyRed", 316, 9, 110.6, { brightness = 0.5 })
 for _, v in { { "L0_AirlockNorthEast", 28 }, { "L0_AirlockEast", 144 }, { "L0_AirlockSouthEast", 260 } } :: { { any } } do
-	light(v[1], "Fluorescent", 393, 11.4, v[2], { flicker = mains(v[1]), broken = true })
-	light(v[1], "EmergencyRed", 393, HEIGHT - 5, v[2] - 8, { brightness = 0.3 })
+	-- both fixtures fast to the ceiling (buildLight lifts none: a fixture set low hangs in the air)
+	light(v[1], "Fluorescent", 393, VESTIBULE_HEIGHT - 0.4, v[2], { flicker = mains(v[1]), broken = true })
+	light(v[1], "EmergencyRed", 393, VESTIBULE_HEIGHT - 0.4, v[2] - 8, { brightness = 0.3 })
 end
 
 --------------------------------------------------------------------------------
@@ -553,23 +561,24 @@ end
 
 -- Floor objective (RestorePower): fuse candidates in the keep-rooms (the coal heap, the cage's shelving, the workbench,
 -- by the boilers and the pumps, the switchgear), each with a bear-trap spot on its approach (its ref: the director arms
--- the guard traps of the first two fuses it uses), plus the planner's six in tunnel alcoves (on wall shelves, guarded
--- the same way). The breaker panel stands on the electrical room's north wall (the floor point on the wall face,
--- facing into the room); the exit locks on the three stair airlocks' fire doors (the floor point on each door's
--- corridor face, facing out of the door).
+-- the guard traps of the first two fuses it uses), plus the planner's six in tunnel guard bays (on back-wall shelves,
+-- the trap in the bay's mouth). Every guard leaves a way round it: a careful player always reaches a spot beside the
+-- fuse clear of every trap spot (ObjectivePlaces.standingSpot). The breaker panel stands on the electrical room's
+-- north wall (the floor point on the wall face, facing into the room); the exit locks on the three stair airlocks'
+-- fire doors (the floor point on each door's corridor face, facing out of the door).
 local function fuse(x: number, y: number, z: number, guardX: number, guardZ: number)
 	local n = (anchorCounts.FuseCandidate or 0) + 1
 	local guard = anchor("TrapCandidate", guardX, 0, guardZ, nil, string.format("%s_TrapGuard_%02d", PREFIX, n))
 	anchor("FuseCandidate", x, y, z, nil, nil, guard)
 end
-fuse(28, 3, 163, 34, 166) -- on the coal heap
-fuse(102, 4, 65.8, 104, 74) -- on the cage's back shelving
-fuse(116.7, 4, 80, 110, 82) -- on the cage's side shelving
-fuse(135, 3, 100, 141, 100) -- on the workshop bench
-fuse(212, 0, 248.5, 218, 243) -- at the foot of the first boiler
-fuse(242.5, 0, 230, 242, 233) -- wedged behind the second boiler
-fuse(318, 0, 256.5, 317.5, 251) -- between the pumps
-fuse(322, 0, 92, 316, 96) -- dropped in front of the switchgear
+fuse(31.5, 3, 163, 39.1, 164.7) -- on the coal heap's front, taken from the floor before it
+fuse(116.7, 4, 72, 109.1, 73.1) -- on the cage's side shelving, its near end
+fuse(116.7, 4, 80, 109.1, 78.8) -- on the cage's side shelving, its far end
+fuse(135, 3, 100, 142.8, 100) -- on the workshop bench
+fuse(212, 0, 248.5, 207.3, 243) -- at the foot of the first boiler
+fuse(242.5, 0, 230, 240, 237.5) -- wedged behind the second boiler (its trap at the turn into the gap)
+fuse(318, 0, 256.5, 318.5, 249.3) -- past the pumps (its trap in the gap between them, a lane past it by the first)
+fuse(322.5, 0, 100, 315.3, 100) -- dropped in front of the switchgear
 anchor("BreakerPanel", 316, 0, 88.5, FACE_S, "L0_BreakerPanel")
 anchor("ExitLock", 385.5, 0, 144, FACE_W, "L0_ExitLock")
 anchor("ExitLock", 385.5, 0, 28, FACE_W, "L0_ExitLock_North")

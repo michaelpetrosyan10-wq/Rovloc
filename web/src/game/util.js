@@ -162,21 +162,107 @@ export function formatTime(seconds) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Seeded randomness (MathUtil.hash / seededRandom / shuffle)
+// Seeded randomness: two generators, as on Roblox
+//   Rng (xoshiro128** seeded by SplitMix32): the world's, a bit-for-bit port of Shared/Util/Rng.luau. worldData's port
+//     of RunDirector draws from Rng.seeded(seed, key) and shuffle, so a run seed picks the same objective spots, traps,
+//     flasks, batteries, grate locks and exits as the export and a live Roblox server. web/tools/data-test.mjs pins
+//     its golden values (the same as tests/Specs/Rng.spec.luau) and replays RunDirector's plans against the export's.
+//   seededRandom (mulberry32): the runtime's own streams (pacing, beats, spawns, fake-outs), as MathUtil.seededRandom
+//     (the engine's Random) is the Roblox runtime's: deterministic per seed, but not the same numbers as Roblox's.
 // ---------------------------------------------------------------------------------------------------------------
 
-/** 32-bit FNV-1a of a string. */
+const UTF8 = new TextEncoder();
+
+/** MathUtil.hash: 32-bit FNV-1a of a string's UTF-8 bytes (Luau strings are bytes). */
 export function hash(text) {
   let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i) & 0xff;
+  for (const byte of UTF8.encode(text)) {
+    h ^= byte;
     h = Math.imul(h, 0x01000193) >>> 0;
   }
   return h >>> 0;
 }
 
-/** A seeded stream with the Roblox Random API shape. */
+/** The murmur3 finaliser (Rng.luau fmix32). */
+function fmix32(x) {
+  let t = Math.imul(x ^ (x >>> 16), 0x85ebca6b);
+  t = Math.imul(t ^ (t >>> 13), 0xc2b2ae35);
+  return (t ^ (t >>> 16)) >>> 0;
+}
+
+/** rotl on 32 bits. */
+function rotl(x, k) {
+  return (x << k) | (x >>> (32 - k));
+}
+
+/**
+ * The world's seeded stream (Shared/Util/Rng.luau, bit for bit): `number()` is one 32-bit draw / 2^32, `integer(min,
+ * max)` takes integer bounds (at most 2^32 values) and redraws a draw at or past the last whole multiple of the range
+ * below 2^32, then min + draw % range (Rng:NextInteger), so `integer(0, n - 1)` draws what NextInteger(1, n) draws.
+ */
 export class Rng {
+  /** @param {number} seed a finite number (its floor, mod 2^32) */
+  constructor(seed) {
+    if (!Number.isFinite(seed)) throw new Error(`Rng needs a finite seed, got ${seed}`);
+    let weyl = Math.floor(seed) >>> 0;
+    this.s = new Uint32Array(4);
+    for (let i = 0; i < 4; i++) {
+      weyl = (weyl + 0x9e3779b9) >>> 0;
+      this.s[i] = fmix32(weyl);
+    }
+  }
+
+  /** Rng.seeded: the stream of (seed, key), floor(seed) mod 2^32 xor hash(key). */
+  static seeded(seed, key) {
+    if (!Number.isFinite(seed)) throw new Error(`Rng.seeded needs a finite seed, got ${seed}`);
+    return new Rng(((Math.floor(seed) >>> 0) ^ hash(key)) >>> 0);
+  }
+
+  /** One xoshiro128** step: the next 32-bit output in [0, 2^32). */
+  nextU32() {
+    const s = this.s;
+    const s1 = s[1];
+    const result = Math.imul(rotl(Math.imul(s1, 5), 7), 9) >>> 0;
+    const t = s1 << 9;
+    s[2] ^= s[0];
+    s[3] ^= s[1];
+    s[1] ^= s[2];
+    s[0] ^= s[3];
+    s[2] ^= t;
+    s[3] = rotl(s[3], 11);
+    return result;
+  }
+
+  /** NextNumber(): [0, 1). */
+  next() {
+    return this.nextU32() / 4294967296;
+  }
+
+  /** NextNumber(min, max): min + (max - min) * next(). */
+  number(min = 0, max = 1) {
+    return min + (max - min) * this.next();
+  }
+
+  /** NextInteger(min, max): uniform over the integers min..max. */
+  integer(min, max) {
+    const range = max - min + 1;
+    if (!(Number.isInteger(min) && Number.isInteger(max) && range >= 1 && range <= 4294967296)) {
+      throw new Error(`Rng.integer(${min}, ${max}) needs integer bounds, min <= max, at most 2^32 values`);
+    }
+    const limit = 4294967296 - (4294967296 % range);
+    let draw = this.nextU32();
+    while (draw >= limit) draw = this.nextU32();
+    return min + (draw % range);
+  }
+
+  /** A random element of a non-empty list. */
+  pick(list) {
+    return list[this.integer(0, list.length - 1)];
+  }
+}
+
+/** The runtime's stream (mulberry32), with the Rng shape. */
+class RuntimeRandom {
   /** @param {number} seed */
   constructor(seed) {
     this.state = Math.floor(seed) >>> 0 || 0x9e3779b9;
@@ -206,12 +292,12 @@ export class Rng {
   }
 }
 
-/** A stream unique to (seed, key). */
+/** A runtime stream unique to (seed, key) (MathUtil.seededRandom's role: pacing, beats, spawns). */
 export function seededRandom(seed, key) {
-  return new Rng(((Math.floor(seed) >>> 0) ^ hash(key)) >>> 0);
+  return new RuntimeRandom(((Math.floor(seed) >>> 0) ^ hash(key)) >>> 0);
 }
 
-/** Fisher-Yates in place with a seeded stream. */
+/** Fisher-Yates in place (Rng.shuffle: i from the last index down to 1 swaps with integer(0, i)). */
 export function shuffle(list, rng) {
   for (let i = list.length - 1; i > 0; i--) {
     const j = rng.integer(0, i);

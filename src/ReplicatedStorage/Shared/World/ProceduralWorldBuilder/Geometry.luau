@@ -119,13 +119,13 @@ local function configure(
 	part.CFrame = cframe
 	local entry = Palette.get(key)
 	part.Material = entry.material
-	part.Color = entry.color
+	local color = entry.color
 	if options then
 		if options.material then
 			part.Material = options.material
 		end
 		if options.color then
-			part.Color = options.color
+			color = options.color
 		end
 		if options.transparency then
 			part.Transparency = options.transparency
@@ -143,7 +143,9 @@ local function configure(
 			part.CastShadow = options.castShadow
 		end
 	end
-	Palette.dress(part, key) -- the key's generated texture, when uploaded and matching the part's material
+	-- the colour, written once as the part stores it, and the key's generated texture when uploaded and matching the
+	-- part's material
+	Palette.dress(part, key, color)
 end
 
 -- Re-dresses `part` in palette `key`: material, colour and the key's textured MaterialVariant (cleared when the key

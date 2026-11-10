@@ -18,13 +18,13 @@ import * as THREE from 'three';
 import { FloorObjective } from './base.js';
 import { ObjectiveTuning, holdOf } from './config.js';
 import { Ease, holdCallbacks, promptSpec } from './kit.js';
+import { ACID_COLOR } from '../mechanics/flaskFx.js';
 import { S } from '../strings.js';
 import { cfMatrix } from '../util.js';
 
 const HOOD = 'FumeHood';
 const ACID = 'AcidFlask';
 const BURN_SECONDS = 1.3;
-const ACID_TINT = [0.78, 1, 0.22];
 const FUME = [0.62, 0.7, 0.32];
 
 export class Floor2 extends FloorObjective {
@@ -143,7 +143,7 @@ export class Floor2 extends FloorObjective {
     if (this.acidState !== 'Ready' || !this.game.alive()) return;
     const flasks = this.game.flasks;
     const flask = {
-      id: ACID, variant: 0, objective: true, tint: ACID_TINT, color: new THREE.Color(...ACID_TINT),
+      id: ACID, variant: 0, objective: true, tint: ACID_COLOR, color: new THREE.Color(...ACID_COLOR),
       gripOffset: this._gripOffset(),
       onShatter: (point) => this._shattered(point),
       onLost: () => this._missed(),
@@ -235,7 +235,7 @@ export class Floor2 extends FloorObjective {
     this.burning = true;
     const at = this.lock.chainCentre(new THREE.Vector3());
     this.fx.smoke(at, { seconds: 3.4, rate: 9, color: FUME, size: 0.9, rise: 1.1, life: 2.4, spread: 0.8 });
-    this.fx.glow(at, ACID_TINT, 0.35, 7, 3.2, 1.2);
+    this.fx.glow(at, ACID_COLOR, 0.35, 7, 3.2, 1.2);
     this.game.playAt('ObjAcidSizzle', at);
     this.tweens.add({ seconds: 0, delay: BURN_SECONDS, update: () => {}, done: () => this.advance('BurnChain') });
     this.refresh();

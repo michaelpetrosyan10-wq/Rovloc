@@ -13,26 +13,31 @@
 --     with room to swing it) from hinge knuckles whose pin runs along the panel's front face, so it swings out into
 --     the room without ever cutting into the frame or the wall;
 --   * four corner screws, leaves "Screw1".."Screw4", through the panel border into the frame.
--- Locked grates (the run plan's lockedGrates) are rusted shut: corroded metal, weld beads along the latch and head
--- seams, a rust streak bled down from a screw.
+-- Every grate is built in two looks over the same boxes: galvanized (the parts straight in the model and in its leaves)
+-- and rusted shut (a sub-Model "Rusted" in the model, in the panel and in each screw, so it moves with its leaf:
+-- corroded metal, weld beads along the latch and head seams, a rust streak bled down from a screw). The run's plan
+-- never changes what is built: setLocked(model, locked) applies its lock (lockedGrates), as DoorBuilder.setJammed
+-- applies its route, showing one look and hiding the other (lookOf / showLook). The web's export shows both and the web
+-- shows the look of each run's plan, so every run's grates look the same on both platforms.
 --
--- State: tag VentGrate; attributes GrateId, GrateState ("Locked" | "Closed"), Lockable, CriticalPath, NodeId,
--- FacingZoneId, LevelId (copied from the attachment). Two disabled prompts on Base.PromptPoint, just in front of the
--- panel: Unscrew (hold GameConfig.UnscrewSeconds, E / ButtonX) and Kick (instant, R / ButtonY); the model is tagged
--- Interactable. On a locked grate both prompts read "Rusted shut".
+-- State: tag VentGrate; attributes GrateId, GrateState ("Locked" | "Closed": setLocked), Lockable, CriticalPath,
+-- NodeId, FacingZoneId, LevelId (copied from the attachment). Two disabled prompts on Base.PromptPoint, just in front
+-- of the panel: Unscrew (hold GameConfig.UnscrewSeconds, E / ButtonX) and Kick (instant, R / ButtonY); the model is
+-- tagged Interactable. On a locked grate both prompts read "Rusted shut".
 -- Anchors on Base: ExitAnchor (where a crawler leaving the duct is placed: 2.5 studs into the room at floor level, or at
 -- the water surface over a pool, LookVector away from the wall) and EntryAnchor (1.5 studs behind the opening at bore
 -- centre, LookVector into the duct).
 --
--- Poses (pure; PropKit leaves, so they behave the same in Roblox and in the Lune harness). Each moving piece records
--- its end poses as Attachments on Base next to PropKit's "<leaf>Rest": PanelOpen, PanelKicked (+ PanelCentre, the rest
--- centre the throw is computed about) and Screw<i>Out (where a removed screw comes to rest).
+-- Poses (pure; PropKit leaves, so they behave the same in Roblox and in the Lune harness; a leaf carries both its
+-- looks). Each moving piece records its end poses as Attachments on Base next to PropKit's "<leaf>Rest": PanelOpen,
+-- PanelKicked (+ PanelCentre, the rest centre the throw is computed about) and Screw<i>Out (where a removed screw comes
+-- to rest).
 --   setPanel(model, openness)  0 shut .. 1 swung 110 degrees out into the room about its hinge;
 --   setScrews(model, progress) the screws back out along the panel normal, spinning, and drop out at the end (1 = out,
 --                              lying on the floor, or sunk to the basin floor over a pool);
 --   setKicked(model, t)        the panel tears off its hinges (the screws ripping out with it) and lands, warped and
 --                              askew, on the floor in front of the opening (sunk to the basin floor over a pool).
--- Builders leave the initial state: panel shut, screws in. At most 22 parts per grate (68 grates rebuild every run).
+-- Builders leave the initial state: panel shut, screws in. At most 22 parts per look (MaxParts; a grate carries two).
 --
 -- VentGrateBuilder also exposes the pure layout planning other builders keep clear of: plan(layout), footprints(layout)
 -- (what each grate's frame, swing, throw and exit need in front of the wall) and obstacles(layout) (floor-standing
@@ -46,6 +51,8 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
+local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
@@ -56,7 +63,11 @@ local PropKit = require(script.Parent.PropKit)
 
 local log = Log.new("VentGrates")
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
+
+-- A grate's two looks (see the header): galvanized, and rusted shut (shown when a run locks it).
+export type Look = "Galvanized" | "Rusted"
 type Room = LayoutSchema.Room
 type Side = LayoutSchema.Side
 
@@ -87,7 +98,7 @@ export type Footprint = {
 	hv: number,
 	y0: number,
 	y1: number,
-	kind: string, -- what it is ("Grate", "Anchor", "Trigger", "Platform", "Pillar", "Basin")
+	kind: string, -- what it is ("Grate", "Anchor", "LockerFront", "Trigger", "Platform", "Pillar", "Basin")
 }
 
 local W = Attributes.World
@@ -123,10 +134,13 @@ local SCREW_TRAVEL = 0.36 -- backs out this far (clear of the panel face)
 local SCREW_TURNS = 9
 local SCREW_BACKOUT = 0.75 -- fraction of setScrews spent backing out; the rest is the drop
 
--- Locked dressing
+-- The rusted-shut look
+local RUSTED = "Rusted" -- its sub-Model in the grate and in each leaf
 local BEAD_DIAMETER = 0.07
+local STREAK = "RustStreak"
 local STREAK_WIDTH = 0.1
 local STREAK_LENGTH = 1.7
+local STREAK_TRANSPARENCY = 0.2 -- a stain: the metal shows through
 
 -- Throw
 local KICK_OUT = 0.35 -- gap between the wall face and the near edge of the landed panel
@@ -195,7 +209,10 @@ local INWARD: { [Side]: Vector3 } = {
 
 local VentGrateBuilder = {}
 
-VentGrateBuilder.MaxParts = MAX_PARTS
+VentGrateBuilder.MaxParts = MAX_PARTS -- per look
+VentGrateBuilder.Rusted = RUSTED
+-- The footprint kind of a locker's front (ANCHOR_APRON: its door's swing and where a torn door lands).
+VentGrateBuilder.LockerFront = "LockerFront"
 VentGrateBuilder.OpenAngle = OPEN_ANGLE
 VentGrateBuilder.ExitOut = EXIT_OUT
 VentGrateBuilder.EntryIn = ENTRY_IN
@@ -412,7 +429,7 @@ function VentGrateBuilder.obstacles(layout: Layout): { Footprint }
 					apron.Y / 2,
 					anchor.pos.Y - ANCHOR_BAND,
 					anchor.pos.Y + ANCHOR_BAND,
-					"Anchor"
+					VentGrateBuilder.LockerFront
 				)
 			)
 		end
@@ -974,7 +991,7 @@ end
 type Builder = {
 	model: Model,
 	frame: CFrame, -- world: opening centre on the wall's centre plane, LookVector into the room
-	random: Random,
+	random: Rng,
 }
 
 -- A box [u0, u1] x [y0, y1] x [a0, a1] in the grate frame (u along RightVector, y up, a out into the room).
@@ -1023,10 +1040,9 @@ local function rod(
 	)
 end
 
--- A worn variant of a palette colour (every grate is a little different).
-local function worn(key: string, random: Random): Color3
+-- The grate's wear (every grate is a little different): one draw, shared by its two looks.
+local function worn(key: string, shade: number): Color3
 	local base = Palette.get(key).color
-	local shade = random:NextNumber(-0.06, 0.04)
 	return Color3.new(
 		math.clamp(base.R + shade, 0, 1),
 		math.clamp(base.G + shade, 0, 1),
@@ -1034,11 +1050,32 @@ local function worn(key: string, random: Random): Color3
 	)
 end
 
+-- How one look dresses the same boxes: the metal of the frame and panel, the hardware of the knuckles and screws.
+type LookStyle = { key: string, hardware: string, metal: Geometry.PartOptions }
+
+local function lookStyle(look: Look, shade: number): LookStyle
+	local key = if look == "Rusted" then RUST else GALVANIZED
+	return {
+		key = key,
+		hardware = if look == "Rusted" then RUST_SCREW_KEY else SCREW_KEY,
+		metal = { castShadow = false, color = worn(key, shade) },
+	}
+end
+
+-- The rusted look's sub-Model of `owner` (the grate, or one of its leaves), pivoting where its owner rests.
+local function rustedModel(owner: Model, pivot: CFrame): Model
+	local look = Instance.new("Model")
+	look.Name = RUSTED
+	look.WorldPivot = pivot
+	look.Parent = owner
+	return look
+end
+
 local function attach(base: BasePart, name: string, world: CFrame): Attachment
 	return Geometry.attachment(base, name, base.CFrame:ToObjectSpace(world))
 end
 
-local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance, locked: boolean, random: Random): Model
+local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance, random: Rng): Model
 	local frame = PropKit.attachmentWorld(source)
 	local origin = frame.Position - plan.frame.Position -- level origin (the plan is level-local)
 	local id = plan.grate.id
@@ -1048,21 +1085,28 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 		previous:Destroy()
 	end
 	local face = plan.face
-	local model = PropKit.model(parent, name, frame * CFrame.new(0, 0, -face))
+	local modelPivot = frame * CFrame.new(0, 0, -face)
+	local model = PropKit.model(parent, name, modelPivot)
 	local b: Builder = { model = model, frame = frame, random = random }
 	local r, bd = plan.reach, plan.border
-	local key = if locked then RUST else GALVANIZED
-	local metal: Geometry.PartOptions = { castShadow = false, color = worn(key, random) }
+	local shade = random:NextNumber(-0.06, 0.04)
+	local galvanized, rusted = lookStyle("Galvanized", shade), lookStyle("Rusted", shade)
 
-	-- Frame. Over a pool the members reach back to the wall face, closing the slot above the coping.
+	-- Frame. Over a pool the members reach back to the wall face, closing the slot above the coping. The sill first:
+	-- the galvanized one is the PrimaryPart "Base"
 	local a0 = if plan.overBasin then WALL_HALF else face
 	local a1 = face + FRAME_DEPTH
 	local uL, uR = -(HALF_BORE + r.left), HALF_BORE + r.right
-	local base = box(b, model, "Base", uL, uR, -(HALF_BORE + r.down), -HALF_BORE, a0, a1, key, metal)
+	local function buildFrame(holder: Instance, style: LookStyle): Part
+		local key, metal = style.key, style.metal
+		local sill = box(b, holder, "Base", uL, uR, -(HALF_BORE + r.down), -HALF_BORE, a0, a1, key, metal)
+		box(b, holder, "FrameTop", uL, uR, HALF_BORE, HALF_BORE + r.up, a0, a1, key, metal)
+		box(b, holder, "FrameLeft", uL, -HALF_BORE, -HALF_BORE, HALF_BORE, a0, a1, key, metal)
+		box(b, holder, "FrameRight", HALF_BORE, uR, -HALF_BORE, HALF_BORE, a0, a1, key, metal)
+		return sill
+	end
+	local base = buildFrame(model, galvanized)
 	model.PrimaryPart = base
-	box(b, model, "FrameTop", uL, uR, HALF_BORE, HALF_BORE + r.up, a0, a1, key, metal)
-	box(b, model, "FrameLeft", uL, -HALF_BORE, -HALF_BORE, HALF_BORE, a0, a1, key, metal)
-	box(b, model, "FrameRight", HALF_BORE, uR, -HALF_BORE, HALF_BORE, a0, a1, key, metal)
 
 	-- Panel, hung from a pin along its front face on the hinge edge
 	local back = a1 + PANEL_GAP
@@ -1080,104 +1124,74 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 	local centre = frame * CFrame.new(centreLocal.X, centreLocal.Y, -centreLocal.Z)
 	attach(base, "PanelCentre", centre)
 
-	box(b, panel, "StileLeft", pL, -HALF_BORE, pD, pU, back, front, key, metal)
-	box(b, panel, "StileRight", HALF_BORE, pR, pD, pU, back, front, key, metal)
-	box(b, panel, "RailTop", -HALF_BORE, HALF_BORE, HALF_BORE, pU, back, front, key, metal)
-	box(b, panel, "RailBottom", -HALF_BORE, HALF_BORE, pD, -HALF_BORE, back, front, key, metal)
+	-- The panel's stiles, rails and louvres, and the hinge knuckles on the pin: the upper one on the panel, the lower
+	-- one on the frame side (into `holder`)
 	local pitch = 2 * HALF_BORE / LOUVRES
-	local louvreOptions: Geometry.PartOptions = { color = metal.color }
-	for i = 1, LOUVRES do
-		local y = -HALF_BORE + pitch * (i - 0.5)
-		Geometry.part(
-			panel,
-			"Louvre" .. i,
-			frame * CFrame.new(0, y, -(back + front) / 2) * CFrame.Angles(-LOUVRE_TILT, 0, 0),
-			Vector3.new(2 * HALF_BORE, LOUVRE_THICKNESS, LOUVRE_CHORD),
-			key,
-			louvreOptions
-		)
-	end
-
-	-- Hinge knuckles on the pin: the upper one on the panel, the lower one on the frame side
-	local hardware = if locked then RUST_SCREW_KEY else SCREW_KEY
 	local hingeOptions: Geometry.PartOptions = { castShadow = false }
-	local upper = rod(
-		b,
-		panel,
-		"Knuckle",
-		Vector3.new(hingeU, pU - 0.25 - KNUCKLE_LENGTH, front),
-		Vector3.new(hingeU, pU - 0.25, front),
-		KNUCKLE_DIAMETER,
-		hardware,
-		hingeOptions
-	)
-	local lower = rod(
-		b,
-		model,
-		"KnuckleFrame",
-		Vector3.new(hingeU, pD + 0.25, front),
-		Vector3.new(hingeU, pD + 0.25 + KNUCKLE_LENGTH, front),
-		KNUCKLE_DIAMETER,
-		hardware,
-		hingeOptions
-	)
-	for _, part in { upper, lower } do
+	local function buildPanel(holder: Instance, leaf: Instance, style: LookStyle)
+		local key, metal = style.key, style.metal
+		box(b, leaf, "StileLeft", pL, -HALF_BORE, pD, pU, back, front, key, metal)
+		box(b, leaf, "StileRight", HALF_BORE, pR, pD, pU, back, front, key, metal)
+		box(b, leaf, "RailTop", -HALF_BORE, HALF_BORE, HALF_BORE, pU, back, front, key, metal)
+		box(b, leaf, "RailBottom", -HALF_BORE, HALF_BORE, pD, -HALF_BORE, back, front, key, metal)
+		local louvreOptions: Geometry.PartOptions = { color = metal.color }
+		for i = 1, LOUVRES do
+			local y = -HALF_BORE + pitch * (i - 0.5)
+			Geometry.part(
+				leaf,
+				"Louvre" .. i,
+				frame * CFrame.new(0, y, -(back + front) / 2) * CFrame.Angles(-LOUVRE_TILT, 0, 0),
+				Vector3.new(2 * HALF_BORE, LOUVRE_THICKNESS, LOUVRE_CHORD),
+				key,
+				louvreOptions
+			)
+		end
+		local upper = rod(
+			b,
+			leaf,
+			"Knuckle",
+			Vector3.new(hingeU, pU - 0.25 - KNUCKLE_LENGTH, front),
+			Vector3.new(hingeU, pU - 0.25, front),
+			KNUCKLE_DIAMETER,
+			style.hardware,
+			hingeOptions
+		)
+		local lower = rod(
+			b,
+			holder,
+			"KnuckleFrame",
+			Vector3.new(hingeU, pD + 0.25, front),
+			Vector3.new(hingeU, pD + 0.25 + KNUCKLE_LENGTH, front),
+			KNUCKLE_DIAMETER,
+			style.hardware,
+			hingeOptions
+		)
+		for _, part in { upper, lower } do
+			if part then
+				PropKit.detail(part)
+			end
+		end
+	end
+	buildPanel(model, panel, galvanized)
+
+	-- Corner screws through the border into the frame
+	local screwOptions: Geometry.PartOptions = { castShadow = false }
+	local function buildScrew(leaf: Instance, su: number, sv: number, style: LookStyle)
+		local part = rod(
+			b,
+			leaf,
+			"Screw",
+			Vector3.new(su, sv, face + 0.01),
+			Vector3.new(su, sv, front + SCREW_PROUD),
+			SCREW_DIAMETER,
+			style.hardware,
+			screwOptions
+		)
 		if part then
 			PropKit.detail(part)
 		end
 	end
-
-	-- Rusted shut: weld beads along the latch and head seams, a rust streak bled down from the top hinge-side screw
-	if locked then
-		local latchU = if hinge < 0 then pR - 0.05 else pL + 0.05
-		local screwY0, screwY1 = -(HALF_BORE + bd.down / 2), HALF_BORE + bd.up / 2
-		local beads = {
-			rod(
-				b,
-				panel,
-				"WeldLatch",
-				Vector3.new(latchU, screwY0 + 0.14, front + 0.01),
-				Vector3.new(latchU, screwY1 - 0.14, front + 0.01),
-				BEAD_DIAMETER,
-				RUST_SCREW_KEY,
-				hingeOptions
-			),
-			rod(
-				b,
-				panel,
-				"WeldHead",
-				Vector3.new(-(HALF_BORE + bd.left / 2) + 0.14, pU - 0.05, front + 0.01),
-				Vector3.new(HALF_BORE + bd.right / 2 - 0.14, pU - 0.05, front + 0.01),
-				BEAD_DIAMETER,
-				RUST_SCREW_KEY,
-				hingeOptions
-			),
-		}
-		for _, bead in beads do
-			if bead then
-				PropKit.detail(bead)
-			end
-		end
-		local streakU = if hinge < 0 then -(HALF_BORE + bd.left / 2) else HALF_BORE + bd.right / 2
-		local streakTop = screwY1 - 0.09
-		local streak = box(
-			b,
-			panel,
-			"RustStreak",
-			streakU - STREAK_WIDTH / 2,
-			streakU + STREAK_WIDTH / 2,
-			math.max(screwY0 + 0.12, streakTop - STREAK_LENGTH),
-			streakTop,
-			front,
-			front + 0.006,
-			RUST,
-			{ color = STREAK_COLOR, material = Enum.Material.Slate, transparency = 0.2 }
-		)
-		PropKit.detail(streak)
-	end
-
-	-- Corner screws through the border into the frame
-	local screwOptions: Geometry.PartOptions = { castShadow = false }
+	local screws: { { leaf: Model, rest: CFrame, u: number, v: number } } = {}
 	local landU = plan.hinge * KICK_SHIFT * 0.5
 	local index = 0
 	for _, sy in { -1, 1 } do
@@ -1186,20 +1200,10 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 			local su = if sx < 0 then -(HALF_BORE + bd.left / 2) else HALF_BORE + bd.right / 2
 			local sv = if sy < 0 then -(HALF_BORE + bd.down / 2) else HALF_BORE + bd.up / 2
 			local screwName = "Screw" .. index
-			local screw = PropKit.leaf(model, screwName, frame * CFrame.new(su, sv, -front))
-			local part = rod(
-				b,
-				screw,
-				"Screw",
-				Vector3.new(su, sv, face + 0.01),
-				Vector3.new(su, sv, front + SCREW_PROUD),
-				SCREW_DIAMETER,
-				hardware,
-				screwOptions
-			)
-			if part then
-				PropKit.detail(part)
-			end
+			local rest = frame * CFrame.new(su, sv, -front)
+			local screw = PropKit.leaf(model, screwName, rest)
+			buildScrew(screw, su, sv, galvanized)
+			table.insert(screws, { leaf = screw, rest = rest, u = su, v = sv })
 			-- where it comes to rest once out: on the floor below its corner (sunk to the basin floor over a pool)
 			local restY = plan.rest + SCREW_DIAMETER / 2 + 0.005
 			local spot = frame
@@ -1215,6 +1219,62 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 		end
 	end
 
+	-- The rusted-shut look: the same boxes in corroded metal (sub-Models "Rusted" of the grate, the panel and each
+	-- screw, so it moves with its leaf), weld beads along the latch and head seams and a rust streak bled down from the
+	-- top hinge-side screw. Shown instead of the galvanized look when a run locks the grate (setLocked).
+	local rustedRoot = rustedModel(model, modelPivot)
+	local rustedPanel = rustedModel(panel, pivot)
+	buildFrame(rustedRoot, rusted)
+	buildPanel(rustedRoot, rustedPanel, rusted)
+	local latchU = if hinge < 0 then pR - 0.05 else pL + 0.05
+	local screwY0, screwY1 = -(HALF_BORE + bd.down / 2), HALF_BORE + bd.up / 2
+	local beads = {
+		rod(
+			b,
+			rustedPanel,
+			"WeldLatch",
+			Vector3.new(latchU, screwY0 + 0.14, front + 0.01),
+			Vector3.new(latchU, screwY1 - 0.14, front + 0.01),
+			BEAD_DIAMETER,
+			RUST_SCREW_KEY,
+			hingeOptions
+		),
+		rod(
+			b,
+			rustedPanel,
+			"WeldHead",
+			Vector3.new(-(HALF_BORE + bd.left / 2) + 0.14, pU - 0.05, front + 0.01),
+			Vector3.new(HALF_BORE + bd.right / 2 - 0.14, pU - 0.05, front + 0.01),
+			BEAD_DIAMETER,
+			RUST_SCREW_KEY,
+			hingeOptions
+		),
+	}
+	for _, bead in beads do
+		if bead then
+			PropKit.detail(bead)
+		end
+	end
+	local streakU = if hinge < 0 then -(HALF_BORE + bd.left / 2) else HALF_BORE + bd.right / 2
+	local streakTop = screwY1 - 0.09
+	local streak = box(
+		b,
+		rustedPanel,
+		STREAK,
+		streakU - STREAK_WIDTH / 2,
+		streakU + STREAK_WIDTH / 2,
+		math.max(screwY0 + 0.12, streakTop - STREAK_LENGTH),
+		streakTop,
+		front,
+		front + 0.006,
+		RUST,
+		{ color = STREAK_COLOR, material = Enum.Material.Slate, transparency = STREAK_TRANSPARENCY }
+	)
+	PropKit.detail(streak)
+	for _, screw in screws do
+		buildScrew(rustedModel(screw.leaf, screw.rest), screw.u, screw.v, rusted)
+	end
+
 	-- Where the kicked panel lands, as a pose of its pivot
 	local landedCentre = landing(plan, hinge)
 	local landedWorld = CFrame.new(origin) * landedCentre
@@ -1228,11 +1288,10 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 	local entryPosition = frame * Vector3.new(0, 0, -(face - ENTRY_IN))
 	attach(base, "EntryAnchor", CFrame.lookAt(entryPosition, entryPosition - frame.LookVector))
 
-	-- State, prompts
-	local state: Enums.GrateState = if locked then "Locked" else "Closed"
+	-- State and prompts as an unlocked grate's: a run's lock is applied by setLocked
 	PropKit.setAttributes(model, {
 		[W.GrateId] = source:GetAttribute(W.GrateId),
-		[W.GrateState] = state,
+		[W.GrateState] = "Closed",
 		[W.Lockable] = source:GetAttribute(W.Lockable),
 		[W.CriticalPath] = source:GetAttribute(W.CriticalPath),
 		[W.NodeId] = source:GetAttribute(W.NodeId),
@@ -1240,17 +1299,16 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 		[W.LevelId] = source:GetAttribute(W.LevelId),
 	})
 	model:AddTag(Tags.VentGrate)
-	local objectKey = if locked then "Prompt.GrateLocked" else "Prompt.Grate"
 	PropKit.prompt(promptPoint, {
 		kind = "Unscrew",
 		action = "Prompt.Unscrew",
-		object = objectKey,
+		object = "Prompt.Grate",
 		hold = GameConfig.UnscrewSeconds,
 	}, model)
 	PropKit.prompt(promptPoint, {
 		kind = "Kick",
 		action = "Prompt.Kick",
-		object = objectKey,
+		object = "Prompt.Grate",
 		hold = GameConfig.KickSeconds,
 		key = Enum.KeyCode.R,
 		gamepad = Enum.KeyCode.ButtonY,
@@ -1258,7 +1316,56 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 	return model
 end
 
--- Fixture "VentGrate": one grate per layout grate whose attachment the level has.
+--------------------------------------------------------------------------------
+-- Looks and the run's lock
+--------------------------------------------------------------------------------
+
+-- Which look `part` of grate `model` belongs to: the rusted one inside a "Rusted" sub-Model, else the galvanized one.
+function VentGrateBuilder.lookOf(model: Model, part: Instance): Look
+	local cursor = part.Parent
+	while cursor and cursor ~= model do
+		if cursor.Name == RUSTED and cursor:IsA("Model") then
+			return "Rusted"
+		end
+		cursor = cursor.Parent
+	end
+	return "Galvanized"
+end
+
+-- Shows or hides one look of grate `model`: its parts at their own transparency (the rust streak's stain shows the
+-- metal through) or at 1. Only the look changes: the two looks are the same colliding boxes (the rusted one adds
+-- non-colliding weld beads and a streak), so whichever shows, the grate collides alike. False when `model` has no such
+-- look (not a grate).
+function VentGrateBuilder.showLook(model: Model, look: Look, shown: boolean): boolean
+	local found = false
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") and VentGrateBuilder.lookOf(model, part) == look then
+			part.Transparency = if not shown then 1 elseif part.Name == STREAK then STREAK_TRANSPARENCY else 0
+			found = true
+		end
+	end
+	return found
+end
+
+-- Applies a run's lock to a built grate, as DoorBuilder.setJammed applies its route: a locked grate is Locked, shows
+-- its rusted-shut look and both its prompts read "Rusted shut"; an unlocked one is Closed and galvanized. Every grate
+-- is built in both looks, so this is all a run's plan changes (the web applies the same per run: vents.js).
+function VentGrateBuilder.setLocked(model: Model, locked: boolean)
+	model:SetAttribute(W.GrateState, if locked then "Locked" else "Closed")
+	local object = Strings.get(if locked then "Prompt.GrateLocked" else "Prompt.Grate")
+	local kinds: { Enums.PromptKind } = { "Unscrew", "Kick" }
+	for _, kind: Enums.PromptKind in kinds do
+		local prompt = PropKit.findPrompt(model, kind)
+		if prompt then
+			prompt.ObjectText = object
+		end
+	end
+	VentGrateBuilder.showLook(model, "Galvanized", not locked)
+	VentGrateBuilder.showLook(model, "Rusted", locked)
+end
+
+-- Fixture "VentGrate": one grate per layout grate whose attachment the level has, in both looks, the run's lock
+-- applied (geometry and draws never depend on the plan).
 local function buildAll(ctx: PropKit.FixtureContext): number
 	local layout = ctx.layout
 	if not layout.vents or #layout.vents.grates == 0 then
@@ -1280,7 +1387,8 @@ local function buildAll(ctx: PropKit.FixtureContext): number
 			log.warn("%s: grate %s has no %s%s attachment; skipped", layout.id, id, VentShaftBuilder.GratePrefix, id)
 			continue
 		end
-		buildGrate(plan, source, ctx.parent, locked[id] == true, ctx.random)
+		local model = buildGrate(plan, source, ctx.parent, ctx.random)
+		VentGrateBuilder.setLocked(model, locked[id] == true)
 		built += 1
 	end
 	return built

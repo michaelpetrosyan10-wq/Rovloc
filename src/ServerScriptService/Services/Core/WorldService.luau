@@ -33,7 +33,6 @@ local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Tags = require(ReplicatedStorage.Shared.Tags)
@@ -213,8 +212,7 @@ local function spawnProps(ctx: Types.RunContext)
 			skipped += 1
 			continue
 		end
-		local random = MathUtil.seededRandom(plan.seed, "prop:" .. prop.kind .. ":" .. prop.anchorId)
-		if Builder.BuildProp(prop, parent, random) then
+		if Builder.BuildProp(prop, parent) then
 			placed += 1
 		else
 			skipped += 1
@@ -226,12 +224,11 @@ end
 -- Fresh fixtures for every school level (grate locks from the plan; none locked without one).
 local function spawnFixtures(ctx: Types.RunContext)
 	local plan = NoiseAndDirectorService.GetPlan()
-	local seed = if plan then plan.seed else ctx.seed
 	local total = 0
 	for _, levelId: Enums.LevelId in Enums.LevelId do
 		local parent = Instances.runtimeLevel(levelId, true)
 		if parent then
-			total += Builder.BuildFixtures(levelId, parent, plan, seed)
+			total += Builder.BuildFixtures(levelId, parent, plan)
 		end
 	end
 	log.info("run %s: %d fixtures built", ctx.runId, total)

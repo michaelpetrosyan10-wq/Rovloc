@@ -17,17 +17,20 @@
 --                           anchor (a deck anchor), or lying on the surface (an anchor above the deck).
 --
 -- Every part is a PropKit.detail (no collision, no query), the same as the other pickups. Model attributes AnchorId,
--- LevelId, Candidate (the anchor kind), Slot (the plan's slot), Floor, Step (the floor's find step), ObjectiveId (the
--- item kind); tags ObjectiveItem and Interactable; Attachment "Grip" (where a hand holds it; the valve wheel also has
--- "Hub", its axis as UpVector, which the hatch valve's WheelSeat takes) and a disabled Pickup
--- prompt (hold item.hold, object item.object; a reagent's object names its reagent) on Attachment "PromptPoint".
+-- LevelId, Candidate (the anchor kind), Slot (the plan's slot: a reagent's kind; none on items without kinds), Floor,
+-- Step (the floor's find step), ObjectiveId (the item kind); tags ObjectiveItem and Interactable; Attachment "Grip"
+-- (where a hand holds it; the valve wheel also has "Hub", its axis as UpVector, which the hatch valve's WheelSeat
+-- takes) and a disabled Pickup prompt (hold item.hold, object item.object; a reagent's object names its reagent) on
+-- Attachment "PromptPoint".
 -- buildVisual(parent, kind, cframe, slot) is the cosmetic copy for the held item (every part makeCosmetic, no prompt,
 -- tags or attributes); each kind is also registered as a rig "<Kind>Visual". Part budgets per kind in MaxParts.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -39,6 +42,7 @@ local PropKit = require(script.Parent.PropKit)
 
 local W = Attributes.World
 
+type Rng = Rng.Rng
 type PartOptions = Geometry.PartOptions
 type Built = { base: BasePart, grip: CFrame, prompt: CFrame, hub: CFrame? }
 
@@ -189,7 +193,7 @@ local function buildKeys(model: Model, mount: CFrame, _slot: number?): Built
 		local options: PartOptions = if brass
 			then {
 				material = Enum.Material.Metal,
-				color = ObjectiveKit.Brass:Lerp(Color3.new(), 0.1 * (k % 3)),
+				color = MathUtil.lerpColor(ObjectiveKit.Brass, Color3.new(), 0.1 * (k % 3)),
 				reflectance = 0.12,
 			}
 			else steel
@@ -261,7 +265,7 @@ local function buildJar(model: Model, body: CFrame, slot: number?): Built
 		0.04,
 		JAR_HEIGHT * 0.72,
 		JAR_DIAMETER - 0.07,
-		{ material = Enum.Material.SmoothPlastic, color = color:Lerp(AMBER, 0.35), transparency = 0.08 }
+		{ material = Enum.Material.SmoothPlastic, color = MathUtil.lerpColor(color, AMBER, 0.35), transparency = 0.08 }
 	)
 	upright(
 		"Shoulder",
@@ -518,7 +522,7 @@ local SHAPES: { [string]: Shape } = {
 
 -- How a resting item sits on its anchor: the yaw it is given and whether it is settled onto the anchor plane
 -- (hung items keep the anchor's frame).
-local function restFrame(kind: string, cframe: CFrame, random: Random, leaning: boolean): (CFrame, boolean)
+local function restFrame(kind: string, cframe: CFrame, random: Rng, leaning: boolean): (CFrame, boolean)
 	if kind == "MasterKeys" or kind == "CoachKey" then
 		return cframe, false
 	elseif leaning then
@@ -588,7 +592,7 @@ function ObjectiveItemBuilder.build(ctx: Types.PropBuildContext): Model
 	local extra: { [string]: any } = {
 		[W.AnchorId] = plan.anchorId,
 		[W.Candidate] = spec.item.candidate,
-		[W.Slot] = plan.slot or 1,
+		[W.Slot] = plan.slot,
 	}
 	ObjectiveKit.mark(model, Tags.ObjectiveItem, spec, spec.steps[1].id, plan.kind, extra)
 	return model

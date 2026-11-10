@@ -19,6 +19,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
@@ -130,7 +131,7 @@ function GeneratorBuilder.buildGenerator(parent: Instance, spec: GeneratorSpec):
 		at(-HALF_L + 0.15, 0.45, -0.7),
 		at(-0.2, 1.75, 0.7),
 		"TrimMetal",
-		{ material = Enum.Material.Metal, color = ENGINE:Lerp(Color3.new(1, 1, 1), 0.08) }
+		{ material = Enum.Material.Metal, color = MathUtil.lerpColor(ENGINE, Color3.new(1, 1, 1), 0.08) }
 	)
 	block(
 		model,
@@ -205,7 +206,7 @@ function GeneratorBuilder.buildGenerator(parent: Instance, spec: GeneratorSpec):
 			frame * at(PULL_X, PULL_Y, -1.02),
 			0.9,
 			nil,
-			{ material = Enum.Material.Metal, color = YELLOW:Lerp(Color3.new(), 0.25) }
+			{ material = Enum.Material.Metal, color = MathUtil.lerpColor(YELLOW, Color3.new(), 0.25) }
 		)
 	)
 	local panel = block(

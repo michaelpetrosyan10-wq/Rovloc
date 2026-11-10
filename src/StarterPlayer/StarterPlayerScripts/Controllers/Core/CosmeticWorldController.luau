@@ -2,11 +2,12 @@
 -- CosmeticWorldController: client-only scenery that never replicates and never collides.
 --
 --   * Static pass. Once ReplicatedStorage.WorldReady is true (so it never competes with the world download on a
---     phone), ProceduralWorldBuilder.BuildCosmetic(STATIC_SEED, Workspace.Cosmetic) builds the ruined skyline and the
---     between-runs dressing (every registered cosmetic-anchor builder, seeded with STATIC_SEED).
---   * Run pass. OnRunStarted rebuilds the run-varying dressing into Workspace.Cosmetic.<RUN_FOLDER> with the run
---     seed (BuildCosmetic skips the skyline there because an ancestor already holds it) and parks the static
---     dressing; OnRunEnded destroys the run folder and puts the static dressing back.
+--     phone), ProceduralWorldBuilder.BuildCosmetic(Workspace.Cosmetic) builds the ruined skyline and the dressing
+--     (every registered cosmetic-anchor builder, from the builder's fixed world seed: the same on every client, run
+--     and platform as the web's export).
+--   * Run pass. OnRunStarted rebuilds the dressing into Workspace.Cosmetic.<RUN_FOLDER> (BuildCosmetic skips the
+--     skyline there because an ancestor already holds it) and parks the static dressing; OnRunEnded destroys the run
+--     folder and puts the static dressing back.
 --   * Builds yield (the builder's yieldPoint), so one worker thread reconciles "what should exist" with "what was
 --     built": runs that start and end while a build is in flight never leave dressing behind or build twice at once.
 
@@ -23,7 +24,6 @@ local log = Log.new("CosmeticWorld")
 
 local M = Attributes.Match
 
-local STATIC_SEED = 1
 local RUN_FOLDER = "Run"
 local DRESSING_FOLDER = "Dressing" -- the folder BuildCosmetic replaces under its parent
 
@@ -50,12 +50,12 @@ local runParts = 0
 local desiredRun: Types.RunInfo? = nil
 local working = false
 
-local function build(seed: number, parent: Instance): number
+local function build(parent: Instance): number
 	local parts = 0
 	xpcall(function()
-		parts = Builder.BuildCosmetic(seed, parent)
+		parts = Builder.BuildCosmetic(parent)
 	end, function(err: any)
-		log.error("cosmetic build (seed %d) failed: %s", seed, tostring(err))
+		log.error("cosmetic build into %s failed: %s", parent:GetFullName(), tostring(err))
 	end)
 	return parts
 end
@@ -100,7 +100,7 @@ local function buildRun(info: Types.RunInfo)
 	runFolder = folder
 	builtRunId = info.runId
 	parkStaticDressing()
-	runParts = build(info.seed, folder)
+	runParts = build(folder)
 	log.debug("run %s dressing: %d parts", info.runId, runParts)
 end
 
@@ -128,7 +128,7 @@ local function reconcile()
 end
 
 local function buildStatic()
-	staticParts = build(STATIC_SEED, Instances.cosmetic())
+	staticParts = build(Instances.cosmetic())
 	staticBuilt = true
 	log.info("cosmetic world built: %d parts", staticParts)
 	reconcile()

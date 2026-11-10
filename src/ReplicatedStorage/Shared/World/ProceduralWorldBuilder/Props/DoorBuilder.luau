@@ -5,12 +5,13 @@
 --
 -- Static kind "OpenDoors" (once at boot, every layout including the Lobby, into <level>.Props): every ordinary door
 -- (kind "Door") gets a wooden classroom door (stiles and rails around a small wired-glass window, kick plate, knob)
--- standing open about 95-110 degrees, a few hanging crooked off their lower hinge. Each one picks, from a seeded order,
--- the first swing room / hinge jamb / angle that keeps the leaf inside that room and clear of every doorway's walking
--- lane, the vent grates' swing and exit space, the props other builders stand on layout anchors, debris piles,
--- platforms, pillars, basins, the fixture doors' swing and the shell's own geometry; it prefers to swing into the
--- room rather than into a corridor. Colliding pieces are MonsterPassthrough (the Creature walks through, players bump
--- them); no prompts, no state.
+-- standing open about 95-110 degrees, a few hanging crooked off their lower hinge (CROOKED_SHARE of a floor's ordinary
+-- doors, at least one on every school floor, seeded among those a crooked hang fits; the lobby's are hung true). Each
+-- one picks, from a seeded order, the first swing room / hinge jamb / angle that keeps the leaf inside that room and
+-- clear of every doorway's walking lane, the vent grates' swing and exit space, the props other builders stand on
+-- layout anchors, debris piles, platforms, pillars, basins, the fixture doors' swing and the shell's own geometry; it
+-- prefers to swing into the room rather than into a corridor. Colliding pieces are MonsterPassthrough (the Creature
+-- walks through, players bump them); no prompts, no state.
 --
 -- Fixture kind "Doors" (rebuilt every run into Workspace.Runtime.<level>): Model "Door_<id>" per Ajar, Gate, Airlock
 -- and RoofDoor door, with attributes DoorId, DoorKind, DoorState ("Open"), LevelId, DoorWidth, DoorHeight,
@@ -62,6 +63,7 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -74,6 +76,7 @@ local VentGrateBuilder = require(script.Parent.VentGrateBuilder)
 
 local log = Log.new("Doors")
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Room = LayoutSchema.Room
 type Door = LayoutSchema.Door
@@ -150,7 +153,7 @@ local HANDLE_INSET = 0.5 -- from the free edge
 local STATIC_MIN_ANGLE = math.rad(95)
 local STATIC_MAX_ANGLE = math.rad(110)
 local STATIC_FALLBACK_ANGLES: { number } = { math.rad(92), math.rad(90) }
-local CROOKED_CHANCE = 0.12
+local CROOKED_SHARE = 0.12 -- of a floor's ordinary doors (rounded, at least one) hang crooked
 local CROOKED_TILT_MIN = math.rad(2.5)
 local CROOKED_TILT_MAX = math.rad(5)
 local CROOKED_LEAN_MIN = math.rad(1.5)
@@ -405,6 +408,15 @@ local function newLeaf(
 	}
 end
 
+-- How far the open leaf of an ordinary door `width` wide reaches over the floor on the face it stands on: out from the
+-- wall's centre line (its free edge at 90 degrees), and aside of the opening's edge (the hinge pin, then the free edge
+-- swung on to STATIC_MAX_ANGLE). ObjectivePlaces fences that floor off on either jamb.
+function DoorBuilder.staticLeafReach(width: number): (number, number)
+	local leaf = width + 2 * HINGE_OUT - LATCH_GAP
+	return LEAF_BACK + LEAF_THICKNESS + leaf,
+		HINGE_OUT + LEAF_THICKNESS + leaf * math.sin(STATIC_MAX_ANGLE - math.pi / 2)
+end
+
 --------------------------------------------------------------------------------
 -- Clearance (pure)
 --------------------------------------------------------------------------------
@@ -435,9 +447,15 @@ type Clearance = {
 	layout: Layout,
 	lanes: { Footprint },
 	hard: { Footprint }, -- grates, fixture doors, leaves already placed
-	soft: { Footprint }, -- props on anchors, debris, platforms, pillars, basins
+	soft: { Footprint }, -- props on anchors, debris, platforms, pillars, basins, the lockers' fronts
 	parts: PartGrid?,
 }
+
+-- The soft keep-outs a leaf's pose search respects, tier by tier: every one; then, for a door with no room otherwise,
+-- only the lockers' fronts (where a hider's door swings and a torn door lands: a leaf never hangs there while any other
+-- pose stands); then none.
+local SOFT_ALL, SOFT_FRONTS, SOFT_NONE = 0, 1, 2
+local SOFT_TIERS: { number } = { SOFT_ALL, SOFT_FRONTS, SOFT_NONE }
 
 -- Visible shell geometry bucketed on the floor plan (level-local footprints).
 type PartGrid = { cells: { [number]: { Footprint } }, size: number }
@@ -557,13 +575,13 @@ local function insideRoomOrOpening(layout: Layout, site: Site, room: Room, f: Fo
 end
 
 -- Whether `piece` of a leaf at `angle` stays out of the lanes (at `laneAngle` only, so an ajar leaf may stand in its
--- own doorway), the hard keep-outs, the soft ones unless `ignoreSoft`, and the shell's parts.
+-- own doorway), the hard keep-outs, the soft ones `softTier` keeps (SoftTiers), and the shell's parts.
 local function clearOf(
 	clearance: Clearance,
 	piece: Footprint,
 	angle: number,
 	laneAngle: number?,
-	ignoreSoft: boolean
+	softTier: number
 ): boolean
 	if laneAngle and math.abs(angle - laneAngle) < EPS then
 		for _, lane in clearance.lanes do
@@ -577,9 +595,12 @@ local function clearOf(
 			return false
 		end
 	end
-	if not ignoreSoft then
+	if softTier ~= SOFT_NONE then
 		for _, keep in clearance.soft do
-			if VentGrateBuilder.overlaps(piece, keep, 0.005) then
+			if
+				(softTier == SOFT_ALL or keep.kind == VentGrateBuilder.LockerFront)
+				and VentGrateBuilder.overlaps(piece, keep, 0.005)
+			then
 				return false
 			end
 		end
@@ -596,7 +617,7 @@ local function fits(
 	leaf: Leaf,
 	angles: { number },
 	laneAngle: number?,
-	ignoreSoft: boolean
+	softTier: number
 ): boolean
 	local room = swingRoom(site, leaf.swing)
 	for _, angle in angles do
@@ -608,8 +629,8 @@ local function fits(
 			return false
 		end
 		if
-			not clearOf(clearance, slab, angle, laneAngle, ignoreSoft)
-			or not clearOf(clearance, hardware, angle, laneAngle, ignoreSoft)
+			not clearOf(clearance, slab, angle, laneAngle, softTier)
+			or not clearOf(clearance, hardware, angle, laneAngle, softTier)
 		then
 			return false
 		end
@@ -623,6 +644,39 @@ end
 -- The angles a fixture leaf's swing is sampled at, from shut to `full`.
 local function sweep(full: number): { number }
 	return { 0, full * 0.25, full * 0.5, full * 0.75, full }
+end
+
+-- Doors whose hinged leaves swing over a room's floor (a gate rolls up, a boarded door or a doorway has none).
+local HINGED: { [string]: boolean } = { Door = true, Ajar = true, RoofDoor = true, Airlock = true }
+local ZONE_STEP = math.rad(10)
+
+-- The floor a hinged leaf of any door into `roomId` may stand over, whichever jamb it hangs on and however far it is
+-- open (shut to STATIC_MAX_ANGLE, every ZONE_STEP): the leaf's slab footprints, level-local. Pure (the layout only), so
+-- a fixture planned later keeps off whatever leaf a static or a fixture door hangs there (LockerBuilder lands a torn
+-- locker door clear of them).
+function DoorBuilder.swingZones(layout: Layout, roomId: string): { Footprint }
+	local rooms = LayoutSchema.indexRooms(layout)
+	local out: { Footprint } = {}
+	for _, door in layout.doors do
+		if not HINGED[door.kind] or (door.rooms[1] ~= roomId and door.rooms[2] ~= roomId) then
+			continue
+		end
+		local site = DoorBuilder.site(layout, rooms, door)
+		if not site then
+			continue
+		end
+		local swing = if site.rooms[2].id == roomId then 1 else -1
+		for _, hinge in { -1, 1 } do
+			local leaf = newLeaf(site, "Leaf", "Wood", swing, hinge, STATIC_MAX_ANGLE, STATIC_MAX_ANGLE, false)
+			local angle = 0
+			while angle <= STATIC_MAX_ANGLE + EPS do
+				local slab = leafFootprints(site.frame, leaf, angle)
+				table.insert(out, slab)
+				angle += ZONE_STEP
+			end
+		end
+	end
+	return out
 end
 
 --------------------------------------------------------------------------------
@@ -680,12 +734,12 @@ local function planSingle(
 	hinges: { number },
 	angleOf: (full: number) -> number
 ): { Leaf }?
-	for _, ignoreSoft in { false, true } do
+	for _, softTier in SOFT_TIERS do
 		for _, swing in swings do
 			for _, hinge in hinges do
 				for _, full in SWING_FULL_ANGLES do
 					local leaf = newLeaf(site, "Leaf", style, swing, hinge, angleOf(full), full, false)
-					if fits(clearance, site, leaf, sweep(full), full, ignoreSoft) then
+					if fits(clearance, site, leaf, sweep(full), full, softTier) then
 						return { leaf }
 					end
 				end
@@ -840,14 +894,14 @@ local function planFixture(layout: Layout, clearance: Clearance, site: Site): Fi
 		}
 	elseif kind == "Airlock" then
 		local vestibule = if site.rooms[2].kind == "Airlock" then 1 elseif site.rooms[1].kind == "Airlock" then -1 else 1
-		for _, ignoreSoft in { false, true } do
+		for _, softTier in SOFT_TIERS do
 			for _, swing in { vestibule, -vestibule } do
 				local left = newLeaf(site, "LeftLeaf", "Fire", swing, -1, AIRLOCK_ANGLE, AIRLOCK_ANGLE, true)
 				local right = newLeaf(site, "RightLeaf", "Fire", swing, 1, AIRLOCK_ANGLE, AIRLOCK_ANGLE, true)
 				local angles = sweep(AIRLOCK_ANGLE)
 				if
-					fits(clearance, site, left, angles, AIRLOCK_ANGLE, ignoreSoft)
-					and fits(clearance, site, right, angles, AIRLOCK_ANGLE, ignoreSoft)
+					fits(clearance, site, left, angles, AIRLOCK_ANGLE, softTier)
+					and fits(clearance, site, right, angles, AIRLOCK_ANGLE, softTier)
 				then
 					return {
 						site = site,
@@ -1177,7 +1231,7 @@ end
 
 type LeafLook = {
 	collide: boolean, -- Default-group leaf (fixture) vs passthrough (static)
-	random: Random,
+	random: Rng,
 }
 
 -- The parts of one leaf at `pose` (its frame at the built angle) into `parent`: wood or fire doors get stiles and
@@ -1350,7 +1404,7 @@ end
 -- Where a torn-off single leaf lands (level-local leaf frame): flat on its face in the room it swings into, its foot
 -- near the wall, yawed a little and propped on its knob; moved closer to the wall and turned until it fits inside the
 -- room (the most compact pose, lengthwise along the wall, when nothing fits).
-local function thrownPose(layout: Layout, site: Site, leaf: Leaf, random: Random): CFrame
+local function thrownPose(layout: Layout, site: Site, leaf: Leaf, random: Rng): CFrame
 	local room = swingRoom(site, leaf.swing)
 	local frame = swingFrame(site.frame, leaf.swing)
 	local length = leaf.top - leaf.bottom
@@ -1390,7 +1444,7 @@ end
 
 -- Builds `leaf` of a fixture door as a PropKit leaf of `model` (shut, at rest) and records its open, centre and
 -- smashed poses (`smashed` is a level-local leaf frame).
-local function fixtureLeaf(model: Model, ctx: Ctx, leaf: Leaf, smashed: CFrame, random: Random)
+local function fixtureLeaf(model: Model, ctx: Ctx, leaf: Leaf, smashed: CFrame, random: Rng)
 	local base = model.PrimaryPart
 	assert(base, "fixture door needs its Base first")
 	local rest = leafFrame(ctx.frame, leaf, 0)
@@ -1405,7 +1459,7 @@ end
 
 -- The buckled pose of a fire door leaf (level-local leaf frame): swung most of the way open, sagging off its top hinge,
 -- leaning out of its frame, pushed into the room and dropped onto its lowest corner.
-local function buckledPose(site: Site, leaf: Leaf, random: Random): CFrame
+local function buckledPose(site: Site, leaf: Leaf, random: Rng): CFrame
 	local buckled = table.clone(leaf)
 	buckled.tilt = math.rad(random:NextNumber(5, 8))
 	buckled.lean = math.rad(random:NextNumber(9, 14))
@@ -1436,7 +1490,7 @@ local function setDoorAttributes(model: Model, source: Attachment, site: Site, l
 	end
 end
 
-local function buildSwingDoor(model: Model, ctx: Ctx, plan: FixturePlan, layout: Layout, random: Random)
+local function buildSwingDoor(model: Model, ctx: Ctx, plan: FixturePlan, layout: Layout, random: Rng)
 	local site = plan.site
 	local kind = site.door.kind
 	local frame = ctx.frame
@@ -1520,7 +1574,7 @@ local function buildSwingDoor(model: Model, ctx: Ctx, plan: FixturePlan, layout:
 end
 
 -- The roll-down grille: housing ("Base"), rails, and telescoping sections.
-local function buildGate(model: Model, ctx: Ctx, plan: FixturePlan, random: Random)
+local function buildGate(model: Model, ctx: Ctx, plan: FixturePlan, random: Rng)
 	local site = plan.site
 	local gate = plan.gate
 	assert(gate, "gate plan")
@@ -1702,7 +1756,7 @@ end
 -- with a bent rebar and the stairwell's buckled lintel, all on the vestibule side so they show through the wired
 -- glass. Leaf "Jam" (no rest pose: it never moves), hidden unless the door is jammed (setJammed); non-colliding detail
 -- (the shut, Locked door is what blocks). A disabled-unless-jammed Locked prompt on attachment "JamPrompt".
-local function buildJam(model: Model, ctx: Ctx, site: Site, random: Random)
+local function buildJam(model: Model, ctx: Ctx, site: Site, random: Rng)
 	local base = model.PrimaryPart
 	if not base then
 		return
@@ -1889,10 +1943,23 @@ local function buildStatics(ctx: PropKit.StaticContext): number
 
 	local random = ctx.random
 	local built, skipped = 0, 0
+	-- the crooked ones: a seeded draw of CROOKED_SHARE of a school floor's ordinary doors (selection sampling, so
+	-- exactly that many hang crooked; a door drawn whose crooked hang fits nowhere passes its turn on to the doors
+	-- after it). The lobby is kept up.
+	local remaining = 0
+	for _, site in sites do
+		if site.door.kind == "Door" then
+			remaining += 1
+		end
+	end
+	local school = table.find(WorldConfig.LevelOrder, layout.id :: Enums.LevelId) ~= nil
+	local crookedLeft = if school and remaining > 0 then math.max(1, math.floor(remaining * CROOKED_SHARE + 0.5)) else 0
 	for _, site in sites do
 		if site.door.kind ~= "Door" then
 			continue
 		end
+		local crookedDraw = crookedLeft / remaining
+		remaining -= 1
 		local source = anchorRoot:FindFirstChild("Door_" .. site.door.id)
 		if not (source and source:IsA("Attachment")) then
 			log.warn("%s: door %s has no Door_%s attachment; skipped", layout.id, site.door.id, site.door.id)
@@ -1921,7 +1988,7 @@ local function buildStatics(ctx: PropKit.StaticContext): number
 		end
 		local hingeFirst = if random:NextNumber() < 0.5 then -1 else 1
 		local angle = random:NextNumber(STATIC_MIN_ANGLE, STATIC_MAX_ANGLE)
-		local crooked = random:NextNumber() < CROOKED_CHANCE
+		local crooked = random:NextNumber() < crookedDraw
 		local tilt = random:NextNumber(CROOKED_TILT_MIN, CROOKED_TILT_MAX)
 		local lean = random:NextNumber(CROOKED_LEAN_MIN, CROOKED_LEAN_MAX)
 
@@ -1930,7 +1997,7 @@ local function buildStatics(ctx: PropKit.StaticContext): number
 			table.insert(angles, fallback)
 		end
 		local chosen: Leaf? = nil
-		for _, ignoreSoft in { false, true } do
+		for _, softTier in SOFT_TIERS do
 			for _, swing in { preferred, -preferred } do
 				for _, hinge in { hingeFirst, -hingeFirst } do
 					for _, theta in angles do
@@ -1940,7 +2007,7 @@ local function buildStatics(ctx: PropKit.StaticContext): number
 								leaf.tilt = tilt
 								leaf.lean = lean
 							end
-							if fits(clearance, site, leaf, { theta }, theta, ignoreSoft) then
+							if fits(clearance, site, leaf, { theta }, theta, softTier) then
 								chosen = leaf
 								break
 							end
@@ -1966,6 +2033,9 @@ local function buildStatics(ctx: PropKit.StaticContext): number
 			log.warn("%s: door %s has no room to stand open; not built", layout.id, site.door.id)
 			skipped += 1
 			continue
+		end
+		if leaf.tilt ~= 0 then
+			crookedLeft -= 1
 		end
 
 		local frame = PropKit.attachmentWorld(source)

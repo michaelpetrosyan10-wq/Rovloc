@@ -12,7 +12,7 @@ node tools/data-test.mjs      # decoder round trip + structural checks
 
 | Step | Tool | Output |
 | --- | --- | --- |
-| export | `tools/export-world.luau` | `build/cache/world-raw.json`: every part, light, SurfaceGui, volume, attachment, entity, graph and layout of a real run's world at RunSeed 20251029 / Standard, built by the game's own builders in the Lune harness |
+| export | `tools/export-world.luau` | `build/cache/world-raw.json`: every part, light, SurfaceGui, volume, attachment, entity, graph and layout of a real run's world at RunSeed 20251029 / Standard (plus a prop on every candidate anchor a run may pick), built by the game's own builders in the Lune harness; `build/cache/run-plans.json`: RunDirector's plans for a spread of seeds (the data test replays them on worldData's port) |
 | textures | `tools/textures.py` | `build/textures/<Id>_{color,normal,orm}.webp` + `textures.json` (cached; reruns are instant) |
 | bake | `tools/bake.mjs` (+ `tools/bake/*.mjs`) | `build/world.json`, `build/world.bin`, `build/textures/{decals,wear}_N.webp`, `build/cache/golden.json` |
 
@@ -102,6 +102,8 @@ Faces buried in other solid static parts are culled. Large faces are subdivided 
 - **`decal`:** SurfaceGui signage rendered to `textures/decals_N.webp` (RGBA). This covers lobby signs, room
   plates, wayfinding, STAIRS, chalkboards, notices, posters, wet-floor and caution signs, hazard stripes, locker
   numbers, flask labels and EXIT letters.
+  - Text is drawn as laid out, nothing random: PatrickHand (chalkboards, graffiti, landmarks) in Patrick Hand itself
+    (`@fontsource/patrick-hand`), the other Roblox families in the stand-ins `tools/bake/decals.mjs` lists.
   - Quads sit 0.015 studs off the face.
   - Draw: alpha blended, depth test, no depth write, polygon offset (−2, −2), after opaque.
   - Colour: `tex.rgb * (li * bakedLight + (1 - li) * brightness)`, with `li` = `material.lightInfluence` and
@@ -232,6 +234,15 @@ let `M = P × inverse(entityNodeRest(e, n))`. Then either:
 
 Root parts use node `""` and move with the entity pivot.
 
+**Vent grate looks.** Every `VentGrate` is built in two looks over the same boxes (VentGrateBuilder): galvanized, in
+its own nodes (`""`: the frame and the lower knuckle; `Panel`; `Screw1`..`Screw4`), and rusted shut, in each of those
+nodes' `Rusted` sub-node (`Rusted`, `Panel/Rusted`, `Screw1/Rusted`, ...: the same boxes in corroded metal, plus weld
+beads along the latch and head seams and a rust streak on `Panel/Rusted`, none of them colliding). Each `Rusted` node
+pivots where its node rests and has the same colliders. The export shows both looks (its `GrateState` and prompts are
+the export seed's). Per run: a grate in the plan's `lockedGrates` is `Locked` (both prompts read "Rusted shut") and
+shows its `Rusted` nodes, hiding the galvanized ones; every other grate shows the galvanized look; never both, and a
+leaf's two nodes are always posed together. (In Roblox VentGrateBuilder.setLocked does this at build.)
+
 ## Floor objectives (`meta.objectives`, objective entities)
 
 Every floor's exit stays locked until its objective is done (ObjectiveConfig in
@@ -241,6 +252,14 @@ Every floor's exit stays locked until its objective is done (ObjectiveConfig in
   count, guarded?, slots?, hold, object}, `steps` [{id, count, label, seconds?}], `lockStep`, `lockVariant`,
   `lockReason`, `holds` by prompt kind);
 - `hideReach` (25): how close a hiding spot is to every step;
+- `stand`: the guard traps' rules. The fairness rule (ObjectivePlaces.standingSpot): a guarded item is taken from a
+  spot `near` (1.6) to `reach` (4) flat studs off it, at least `trapClear` (2.5) from every TrapCandidate a run may arm,
+  the body (`body` 1, from `step` 1.6 to `bodyHeight` 5.2 over the floor) clear and the item in sight of the eye (`eye`
+  4.5), walked to from a doorway of its room without the foot ever within `panReach` (half a pan's diagonal) of a
+  trap. The guard rule (ObjectivePlaces.carelessWalk): the careless walk in, the shortest walk from `approachRun` (8)
+  studs back beyond the item's arrival doorway to the first point where its Pickup prompt answers (`promptReach` 7
+  from the root, `eye` - 1.5 over the floor), passes within `panCore` (half a pan's side: on the pan at any yaw) of
+  its guard;
 - `rules`: the fairness and spread rules of the item picks: `entryClearance` (35: studs walked from the floor's
   entry to every candidate), `pickSpacing` (25: studs between two items of one run, horizontal), `pickQuarters` (2:
   three items lie in at least this many quarters of the floor), `pickAttempts` (24: re-shuffles tried), `footprint`
@@ -249,13 +268,19 @@ Every floor's exit stays locked until its objective is done (ObjectiveConfig in
   `candidates` [{anchorId, room, slot, ref, pos (level-local), planned, entryDistance (studs walked from the entry,
   ObjectivePlaces.walkDistance: door to door across rooms, through the vents a squad can always use, every Gate shut
   and every lockable grate locked), quarter (1 NW, 2 NE, 3 SW, 4 SE), hide {kind, id, distance}, eligible (a run may
-  use it: every exported candidate is)}], `picks` (the export seed's RunDirector picks: `anchors` in pick order,
+  use it: every exported candidate is), stand (guarded items: {pos (level-local, on the floor), reach, trapClear, path
+  (level-local [x, z] points: from just inside a doorway of the item's room, every turn, the spot)}), careless
+  (guarded items: {door (the arrival doorway: the one the squad reaches first, on foot and crawling alike), walks (one
+  per way that doorway's open leaf may hang, a plain doorway one: level-local [x, z] points from the start beyond the
+  doorway, every bend round the jambs and what stands in the room, to where the prompt first answers), guardGap (the
+  farthest any walk passes from the guard's centre)})}], `picks` (the
+  export seed's RunDirector picks: `anchors` in pick order,
   `guards`), `places` (every candidate, station and lock with its nearest hiding spot: `hide` {kind Locker / Vent /
   DarkCorner / DryFooting / Cover, id, distance}).
 
 | Floor | Item candidates (brief minimum) | Where |
 | --- | --- | --- |
-| 0 | 13 `Fuse` (12), each with a guard trap spot `L0_TrapGuard_NN` (its `ref`) | benches, shelves (new statics `L0_Shelf_Furniture`, `L0_Shelf_Archive`, `L0_Shelf_E1`), by the boilers, pumps, switchgear, water heaters, washers, coal heap |
+| 0 | 14 `Fuse` (12), each with a guard trap spot `L0_TrapGuard_NN` / `L0_TrapGuard_TNN` (its `ref`) on its careless walk in (`careless`) and a standing spot clear of every trap spot (`stand`) | eight in the keep-rooms (the coal heap's front, the cage's shelving, the workbench, by the boilers, past the pumps, before the switchgear), six on the back-wall shelves of tunnel guard bays (9 x 8 niches, the trap in the mouth toward the side the squad comes along the run from) |
 | 1 | 14 `MasterKeys` (9), all west of the gate | ten on hooks in tunnel niches west of the gate (TunnelPlanner items, `wall`), two in the janitor's closet, two in the main office |
 | 2 | 15 `ReagentJar` (12), five per kind | five on tunnel niche shelves, six on the islands of Chem Lab 203 and Bio Lab 209, two on the chem store's shelving, two on the specimen store's racks (hideable lockers in every lab and store) |
 | 3 | 32 `CoachKey` (12) | inside every locker of both locker rooms (`ref` = the locker) |
@@ -267,19 +292,20 @@ Objective entities carry attributes `Floor` (0-5), `Step`, `ObjectiveId` (= the 
 
 - **Items** are exported for every candidate, not just the export seed's picks: attribute `Planned` says which ones
   the export seed uses; hide the others and pick per run with RunDirector.pickObjective's rule. One stream per level,
-  `seededRandom(seed, "Objective|" + levelId)`, over the level's candidates in layout order (all eligible):
+  `Rng.seeded(seed, "Objective|" + levelId)`, over the level's candidates in layout order (all eligible):
   - one item (keys, coach key, valve wheel, bolt cutters): `shuffle(candidates)`, take the first;
   - several items, up to `pickAttempts` passes on the same stream: fuses `shuffle(candidates)` and take, in that
     order, each candidate in another room than the items taken so far and at least `pickSpacing` from each of them,
     until `item.count`; reagents (slot of candidate i = `(i - 1) % 3 + 1`) for k = 1..3 `shuffle(slot k's
     candidates)` and take the first that keeps the same rule. A pass stands when it is full and its three items lie
     in at least `pickQuarters` quarters; otherwise the next pass reshuffles (if none stands, the first fullest pass
-    is used). Slot = pick order (reagents: the kind);
+    is used). A reagent's slot is its candidate's kind (`slot`), never its place in the picks; other items have none;
   - the basement arms the guard trap (`ref`) of the first two fuses picked.
-  Item attributes add `Slot` (a reagent's colour / kind 1-3), `Candidate` (the anchor kind). Attachments `Grip`
-  (the hand), `PromptPoint` (a disabled `Pickup` prompt with the item's hold), and on the valve wheel `Hub` (its axis
-  is the UpVector). The `AcidFlask` stands at the fume hood's `AcidFlaskSpot` with `Planned` false: show it when the
-  mix is done.
+  Item attributes add `Slot` (reagents only: the candidate's colour / kind 1-3, also on the `Pickup` prompt; an item
+  is the prop any run builds on its anchor, RunDirector.objectiveProp), `Candidate` (the anchor kind). Attachments
+  `Grip` (the hand), `PromptPoint` (a disabled `Pickup` prompt with the item's hold), and on the valve wheel `Hub`
+  (its axis is the UpVector). The `AcidFlask` stands at the fume hood's `AcidFlaskSpot` (the attachment's whole
+  frame, its tag towards the Mix prompt) with `Planned` false: show it when the mix is done.
 - **Stations** (nodes = their leaves; each leaf's rest pose is attachment `<Leaf>Rest`):
   - `BreakerPanel`: nodes `Door` (built open, `DoorOpen`), `FuseSlot1..3` (attachments `FuseSlot<i>Seat`: pose a
     fitted fuse so its `Grip` lands there; `FuseSlot<i>Prompt` with a FitFuse prompt, `Slot` i), `Lever` (Breaker
@@ -324,7 +350,7 @@ lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones f
   whether it is the export seed's pick.
 - **`meta.routePairs`**: `[{ pair, from, to, candidates: [ids], picked }]` (`picked` = RunDirector's route for the
   export seed; `plan.route` holds the same as `{ [from]: id }`).
-- **`meta.routeRule`** = RunDirector.pickRoute: for each floor in climbing order, `seededRandom(seed, "Route|" +
+- **`meta.routeRule`** = RunDirector.pickRoute: for each floor in climbing order, `Rng.seeded(seed, "Route|" +
   from)`; draw `NextInteger(1, 3)` over the candidates in slot order; keep the draw if it is **fair** for the floor's
   entry, else draw again from the same stream, up to `attempts` (8) draws, then take the first fair candidate in slot
   order (else the middle one). The entry is the basement's layout entry, then each pick's `toRoom`. Fair: its exit
@@ -357,8 +383,14 @@ lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones f
   reached across the gym floor; L4's corner vestibules open off the corner rooms, the east ones reached only from the
   east deck: `L4_ChlorineHall` (x 214..228, z 25..30, a passage from the deck to the chlorine store; the maintenance
   chase now ends at x 214) and a door from the deck into the scoreboard room (its door to `L4_Storage_E2` went).
-- **Bear traps:** 16 trap entities (Nightmare's trapCount): this seed's Standard traps (`Planned` true) and the rest
-  of the Nightmare plan's (`Planned` false); `worldData.plan` moves as many as a run's difficulty needs.
+- **Bear traps, chemical flasks, batteries:** one entity on every candidate anchor a run may pick (every TrapCandidate
+  outside the trap-free rooms, every FlaskCandidate, every BatteryCandidate), each exactly the prop a live run builds
+  there (a prop's stream and its variant are its anchor's, never the run's: Builder.propRandom, RunDirector.variantOf);
+  `Planned` is true on this seed's Standard picks. `worldData.plan` replays RunDirector's draws (`Traps|`, `Flasks|`,
+  `Batteries|` streams of the run seed) and shows the entities on its picks. `worldData.variantOf` is
+  RunDirector.variantOf (`Rng.seeded(1, "Variant|<kind>|<level>|<anchor>")`, 1..1000000): a chemical flask carried,
+  thrown or drawn in a teammate's hand is drawn by `flaskFx.js` from its anchor's variant, with ChemicalFlaskBuilder's
+  look (`lookOf` on the same `Rng`: fill line, crack) and liquid colour, so it is the flask the world built there.
 
 ## Creature (`meta.creature`)
 
@@ -467,8 +499,15 @@ the vent is the only way west, and the walk graphs (TunnelRules, ObjectivePlaces
 
 ## Known differences from a live server
 
-- The Lune harness's `Random` is a deterministic xorshift, not Roblox's PCG32. Seeded choices are fixed and
-  reproducible but are not the ones a live server would make for the same seed: which traps, flasks and batteries,
-  which grates are locked, which dead tubes revive, and the strip-fixture variants.
+- None in the world itself: every seeded choice of the builders, the layouts and RunDirector draws from
+  `Shared/Util/Rng` (pure Luau, the same numbers in Lune and on Roblox), and everything built is seeded from the
+  builder's world seed, never a run's, so the export is part for part what a live server and its clients build (see
+  docs/ARCHITECTURE.md, "One world on both platforms"). Run plans: worldData's port draws from the same generator
+  (`Rng` in src/game/util.js; `seededRandom` there is the runtime's own mulberry32, for pacing), so a seed picks the
+  same objective spots, traps, flasks, batteries, locked grates and exits as a live server.
+- The runtime's own randomness (flicker, blackouts, beats, the Creature's spawn and growls, fake-out lockers) is each
+  platform's: the same stream keys, not the same numbers.
+- Model pivots: an entity's `pivot` is the stored `Model.WorldPivot`; Roblox pivots a model that has a `PrimaryPart` on
+  that part (`GetPivot()`), so the two differ for doors, stations, grates and hides (unverified in Studio).
 - The client-only light shafts, dust and lightning are not baked; the engine draws them. Moonlight is baked from every
   window, where the Roblox client lights only the nearest few.

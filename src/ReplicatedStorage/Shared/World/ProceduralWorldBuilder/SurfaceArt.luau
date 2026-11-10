@@ -14,6 +14,12 @@
 --   * positions are in canvas Scale, and every pattern here is symmetric under flipping either canvas axis, so the
 --     result does not depend on how the engine orients a Top or Bottom face's canvas.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
+
+type Rng = Rng.Rng
+
 local SurfaceArt = {}
 
 SurfaceArt.MaxCanvas = 1024
@@ -292,7 +298,7 @@ end
 -- the canvas). Returns the strokes drawn.
 function SurfaceArt.crack(
 	parent: Instance,
-	random: Random,
+	random: Rng,
 	x: number,
 	y: number,
 	heading: number,

@@ -39,7 +39,7 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
@@ -552,7 +552,7 @@ local function weatherDuct(floor: BasePart, axis: Axis, seed: string)
 	else
 		SurfaceArt.grid(gui, 1, joints, SEAM, 0.3, thickness, 1)
 	end
-	local random = MathUtil.seededRandom(1, seed .. ":wear")
+	local random = Rng.seeded(1, seed .. ":wear")
 	for _ = 1, random:NextInteger(0, 2) do
 		local at = random:NextNumber(0.15, 0.85)
 		local w, d = random:NextNumber(0.5, 0.9), random:NextNumber(0.1, 0.3)

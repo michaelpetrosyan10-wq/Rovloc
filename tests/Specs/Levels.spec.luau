@@ -942,7 +942,8 @@ return {
 			if kind == "CeilingDrag" then
 				local to = placement.to
 				assert(to, "the drag moves")
-				t.near(MathUtil.horizontalDistance(to, placement.from), Scenes.CeilingDragDistance, 1e-6, "16 studs")
+				-- (Vector3 is float32: a few hundred studs out, a 16-stud step carries ~1e-5 of rounding)
+				t.near(MathUtil.horizontalDistance(to, placement.from), Scenes.CeilingDragDistance, 1e-4, "16 studs")
 				t.truthy(MathUtil.horizontalDistance(to, listener) > distance, "away from the listener")
 			else
 				t.eq(placement.to, nil, kind .. " stays put")

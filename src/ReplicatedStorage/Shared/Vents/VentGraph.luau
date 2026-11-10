@@ -30,6 +30,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local VentShaftBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.VentShaftBuilder)
@@ -395,7 +396,7 @@ function VentGraph.pointAt(graph: Graph, a: string, b: string?, t: number): Vect
 		end
 		to = graph.nodes[b].position
 	end
-	return from.position:Lerp(to, math.clamp(t, 0, 1))
+	return MathUtil.lerpVector3(from.position, to, math.clamp(t, 0, 1))
 end
 
 -- The grate whose mouth stub starts at `nodeId`, if any.

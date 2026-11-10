@@ -137,6 +137,7 @@ const STRINGS = {
   "Prop.Floodlight.Warning": "EMERGENCY USE ONLY",
   "Prop.Parachute.Stencil": "EMERGENCY CHUTES",
   "Prop.Lab.Hazard": "DANGER: CORROSIVE",
+  "Prop.Acid.Label": "ACID",
   "Prop.Airlock.Sign": "FIRE DOOR - KEEP CLOSED",
   "Prop.Roof.Sign": "ROOF ACCESS",
   "Prop.Locker.Number": "%d",

@@ -87,7 +87,7 @@ Everything here is `--!strict` Luau. Requires go by instance path through the Ro
   - `Animation/ProceduralAnimator`;
   - `Sequence`: `Timeline`, the scenes and the door, locker and parachute motions;
   - `Util`: `Signal`, `Trove`, `Spring`, `SpatialQuery`, `Ballistics`, `WaterRules`, `ObjectiveState`, `BinaryHeap`,
-    plus `Log` and `MathUtil`, which the world builder also uses.
+    plus `Log`, `MathUtil` and `Rng` (the world's random streams, §6), which the world builder also uses.
 
 ## 3. The Roblox runtime
 
@@ -354,15 +354,14 @@ src/ (Luau world builder) ──rojo build──▶ place ──Lune export─�
 
 | Step | Command (in `web/`) | What happens |
 | --- | --- | --- |
-| Export | `npm run export` | `tools/export-world.luau` builds `default.project.json` with Rojo and loads it in Lune through `tools/lune/harness.luau`. It then does what a run's server does at the fixed seed 20251029 on Standard: builds the school, the run's plan with props and fixtures, every objective's candidate spots, the cosmetic dressing, the Creature rig and the moonlight windows. It writes `build/cache/world-raw.json`. |
+| Export | `npm run export` | `tools/export-world.luau` builds `default.project.json` with Rojo and loads it in Lune through `tools/lune/harness.luau`. It then does what a run's server does at the fixed seed 20251029 on Standard: builds the school, the run's plan with props and fixtures, a prop on every other candidate anchor a run may pick, the cosmetic dressing, the Creature rig and the moonlight windows. It writes `build/cache/world-raw.json`, and RunDirector's plans for a spread of seeds to `build/cache/run-plans.json` (the data test replays them on the web's port). |
 | Textures | `npm run textures` | `tools/textures.py` packs the generator's maps (`tools/textures/`) into WebP. |
 | Bake | `npm run bake` | `tools/bake.mjs` tessellates every part and bakes vertex light (BVH shadows, AO, sky, probes). It packs the result into `build/world.json` (metadata) and `build/world.bin` (quantised streams). See `web/DATA.md`. |
 | Build | `npm run build` | `tools/build.mjs` bundles `src/` with esbuild and inlines the gzipped world and textures into `dist/Rovloc.html`. |
 | Deploy | — | Copy `dist/Rovloc.html` to `site/index.html` and push; Vercel serves `site/` at rovloc.vercel.app. |
 
 `npm run data` runs the export, textures and bake in order. Every step is deterministic. Two runs differ only in the
-bake's timing (`stats.bakeSeconds`) and in eight `worldConfig` function entries that the export writes as their
-addresses.
+bake's timing (`stats.bakeSeconds`).
 
 ### The world builder (`src/ReplicatedStorage/Shared/`)
 
@@ -384,12 +383,54 @@ addresses.
 - **`Config/`:** `WorldConfig`, `CreatureConfig`, `DifficultyConfig`, `GameConfig`, `ObjectiveConfig`,
   `CameraConfig` and `TextureAssets`.
 - **The shared contract:** `Enums`, `Types`, `Attributes`, `Tags`, `CollisionGroups`, `Instances` and `Strings`.
-- **Utilities:** `Util/Log` and `Util/MathUtil`.
+- **Utilities:** `Util/Log`, `Util/MathUtil` and `Util/Rng`.
 
 Everything here is `--!strict` Luau. Requires go by instance path through the Rojo tree, for example
 `require(ReplicatedStorage.Shared.World.RunDirector)`. The builders create Roblox instances: live in the Roblox game, and inside the
-Lune harness for the web export. The harness provides the engine services the builders touch, and a
-deterministic `Random`.
+Lune harness for the web export. The harness provides the engine services the builders touch (and a stand-in for the
+engine's `Random`, which only the runtime's specs use: the world never draws from it).
+
+### One world on both platforms
+
+The web's export and a live Roblox build are the same world, part for part, for every floor and the lobby:
+
+- **One generator.** Every random number the world builder, the layouts (TunnelPlanner) and RunDirector draw comes from
+  `Shared/Util/Rng`: a pure-Luau xoshiro128** seeded by SplitMix32, exact 32-bit integer maths on `bit32`, so Lune and
+  every Roblox server and client draw the same numbers. `Rng.seeded(seed, key)` is a stream per decision (the seed xor
+  `MathUtil.hash(key)`); `NextInteger` is unbiased (it redraws past the last whole range) and `Rng.shuffle` is
+  Fisher-Yates. Never the engine's `Random`, `math.random` or `math.noise` there: `tests/Specs/WorldDeterminism.spec`
+  lints the sources of `Shared/World`, `Shared/Vents`, `Shared/Config` and `Util/Rng` for them (and for clocks, GUIDs
+  and spatial queries, which the harness answers with nothing). `tests/Specs/Rng.spec` and `web/tools/data-test.mjs`
+  pin the same golden values, from an independent C reference.
+- **One world seed.** Everything built is seeded from the builder's `WORLD_SEED` and its own key, never from a run's
+  seed: the school and its statics, each run's fixtures (`BuildFixtures`), each planned prop (`BuildProp`: its stream
+  and its variant are its anchor's) and every client's cosmetic dressing and skyline (`BuildCosmetic`). A run varies
+  only its plan (which anchors hold props, which grates lock, the route), and a plan never changes what is built, only
+  what shows: a stairwell door is built with its collapse and a grate in both its looks (galvanized and rusted shut,
+  the same boxes), and the run shows the ones its plan picks (`DoorBuilder.setJammed`, `VentGrateBuilder.setLocked`;
+  the web does the same per run). So the export, built once, is what every run builds.
+- **One maths.** Colours and points the builders derive are computed in Luau's doubles and stored once:
+  `MathUtil.lerpColor`, `lerpVector2`, `lerpVector3`, `lerpCFrame`, `toHSV` and `fromHSV`, never the engine's `Lerp`
+  or HSV methods. Each engine rounds those in float32 its own way (Lune's `Color3:Lerp` is `a * (1 - t) + b * t`, so a
+  channel lerped to its own value comes back off it and a .5 tie can round to the other byte), and one ulp flips a part
+  colour on the 8-bit grid or a point across a seam. The same lint refuses them in world code.
+- **One plan.** The web's `worldData.js` ports RunDirector rule for rule on the same generator (`Rng` in
+  `web/src/game/util.js`, `Math.imul` and `>>> 0` for `bit32`), so a run seed picks the same objective spots, guard
+  traps, bear traps, flasks, batteries, locked grates and exits on both platforms; the data test replays the export's
+  RunDirector plans for a spread of seeds pick for pick. The export builds a prop on every candidate anchor, exactly
+  as a run plans it there (`RunDirector.plannedProp` / `objectiveProp`: the anchor's variant, a reagent's kind), and a
+  run shows the ones on its picks.
+- **No hash order.** Every loop whose order reaches a draw, a name or a tie walks sorted keys (the walk graphs, the
+  exterior's tower holes, TunnelPlanner's crawl weights), sorts break every tie, and float comparisons in sorts use
+  quantised keys, so no Luau build's table layout or sort algorithm can change the map.
+
+What still differs is the runtime's own randomness (pacing, beats, spawns: the engine's `Random` on Roblox, mulberry32
+on the web), the text fitting of signs (each renderer's) and Lune's engine model where it is not Roblox's: property
+writes rounded to 1/65536 and `CFrame:Inverse` over the whole matrix, where Roblox stores float32 and transposes a
+rotation (positions agree to 2e-4 studs, and no build decision turns on that), and a stored `Model.WorldPivot` where
+Roblox pivots a model with a `PrimaryPart` on that part. Part colours do not differ: Roblox stores `BasePart.Color` in
+8 bits a channel, so the builders write every part colour on that grid, once (`MathUtil.color8`; never read back and
+reworked), from colour maths in Luau's doubles (One maths, above), and the export refuses a colour off it.
 
 On Roblox, the same builder runs live: `WorldService` builds the school and the lobby at boot, `BuildFixtures` builds
 each run's fixtures into `Workspace.Runtime`, and each client builds its cosmetic dressing. The textures reach Roblox

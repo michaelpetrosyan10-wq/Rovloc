@@ -19,6 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 
 local Finishes = require(script.Parent.Parent.Finishes)
@@ -28,6 +29,7 @@ local SetDressingBuilder = require(script.Parent.SetDressingBuilder)
 local SurfaceArt = require(script.Parent.Parent.SurfaceArt)
 local WallPlanner = require(script.Parent.WallPlanner)
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Room = LayoutSchema.Room
 type Piece = SetDressingBuilder.Piece
@@ -86,11 +88,11 @@ local function ry(degrees: number): CFrame
 	return CFrame.Angles(0, math.rad(degrees), 0)
 end
 
-local function between(random: Random, a: number, b: number): number
+local function between(random: Rng, a: number, b: number): number
 	return random:NextNumber(a, b)
 end
 
-local function tint(color: Color3, random: Random, amount: number): Color3
+local function tint(color: Color3, random: Rng, amount: number): Color3
 	local f = 1 + between(random, -amount, amount)
 	return Color3.new(math.clamp(color.R * f, 0, 1), math.clamp(color.G * f, 0, 1), math.clamp(color.B * f, 0, 1))
 end
@@ -167,7 +169,7 @@ end
 -- Pieces (local frames: LookVector is the way a sitter faces, Y up, the floor at y 0)
 --------------------------------------------------------------------------------
 
-local function deskPieces(frame: CFrame, name: string, random: Random): { Piece }
+local function deskPieces(frame: CFrame, name: string, random: Rng): { Piece }
 	local top = { color = tint(Color3.fromRGB(112, 92, 66), random, 0.12) }
 	return {
 		Kit.box(
@@ -198,7 +200,7 @@ local function deskPieces(frame: CFrame, name: string, random: Random): { Piece 
 	}
 end
 
-local function chairPieces(frame: CFrame, name: string, random: Random): { Piece }
+local function chairPieces(frame: CFrame, name: string, random: Rng): { Piece }
 	local shell = { color = tint(Color3.fromRGB(70, 62, 48), random, 0.15) }
 	return {
 		Kit.box(
@@ -239,7 +241,7 @@ local function chairPieces(frame: CFrame, name: string, random: Random): { Piece
 end
 
 -- A teacher's or office desk: a wide top on two panelled ends with a modesty panel toward the visitor (local -Z).
-local function bigDeskPieces(frame: CFrame, name: string, random: Random): { Piece }
+local function bigDeskPieces(frame: CFrame, name: string, random: Rng): { Piece }
 	local top = { color = tint(Color3.fromRGB(96, 74, 50), random, 0.1) }
 	return {
 		Kit.box(
@@ -264,7 +266,7 @@ local function bigDeskPieces(frame: CFrame, name: string, random: Random): { Pie
 	}
 end
 
-local function tablePieces(frame: CFrame, name: string, random: Random): { Piece }
+local function tablePieces(frame: CFrame, name: string, random: Rng): { Piece }
 	local top = { color = tint(Color3.fromRGB(104, 84, 58), random, 0.1) }
 	return {
 		Kit.box(frame, name .. "_Top", Vector3.new(-3, 2.4, -1.3), Vector3.new(3, 2.58, 1.3), "DeskTop", "Solid", top),
@@ -274,7 +276,7 @@ local function tablePieces(frame: CFrame, name: string, random: Random): { Piece
 end
 
 -- A chair at `frame` as the room left it: upright, knocked askew, on its side or on its back.
-local function looseChair(frame: CFrame, name: string, random: Random, floorY: number, toppleChance: number): { Piece }
+local function looseChair(frame: CFrame, name: string, random: Rng, floorY: number, toppleChance: number): { Piece }
 	local roll = random:NextNumber()
 	if roll < toppleChance then
 		local pieces = chairPieces(frame * ry(between(random, -60, 60)), name, random)
@@ -305,7 +307,7 @@ local function widestRun(state: State, walls: { Wall }, y0: number, y1: number, 
 	return best, bestU0, bestU1
 end
 
-local function paintChalk(part: BasePart, random: Random)
+local function paintChalk(part: BasePart, random: Rng)
 	local gui, pps = SurfaceArt.gui(part, Enum.NormalId.Front, { name = "Chalk", pixelsPerStud = 14, maxDistance = 70 })
 	for _ = 1, random:NextInteger(1, 3) do
 		local smudge = SurfaceArt.frame(
@@ -352,7 +354,7 @@ end
 
 -- A chalkboard on the widest free stretch of the room's walls. Returns that wall (the room's front, whether or not the
 -- board fitted there) and whether the board went up.
-local function planBoard(state: State, room: Room, random: Random): (Wall?, boolean)
+local function planBoard(state: State, room: Room, random: Rng): (Wall?, boolean)
 	local walls = WallPlanner.walls(state.info, room)
 	local ceiling = SchoolShellBuilder.ceilingBottom(state.layout, room)
 	local y0, y1 = BOARD_BOTTOM - 0.2, BOARD_BOTTOM + BOARD_HEIGHT + 0.2
@@ -406,7 +408,7 @@ local function planBoard(state: State, room: Room, random: Random): (Wall?, bool
 	local seed = MathUtil.hash(state.layout.id .. ":" .. room.id .. ":chalk")
 	local placed = addGroup(state, room, pieces, {
 		[slate] = function(part: BasePart)
-			paintChalk(part, Random.new(seed))
+			paintChalk(part, Rng.new(seed))
 		end,
 	})
 	if placed then
@@ -415,7 +417,7 @@ local function planBoard(state: State, room: Room, random: Random): (Wall?, bool
 	return wall, placed
 end
 
-local function paintNotices(part: BasePart, random: Random)
+local function paintNotices(part: BasePart, random: Rng)
 	local gui = SurfaceArt.gui(part, Enum.NormalId.Front, { name = "Notices", pixelsPerStud = 16, maxDistance = 60 })
 	local papers = { Color3.fromRGB(184, 176, 150), Color3.fromRGB(176, 160, 112), Color3.fromRGB(150, 168, 172) }
 	local count = random:NextInteger(3, 5)
@@ -433,14 +435,14 @@ local function paintNotices(part: BasePart, random: Random)
 end
 
 -- A cork noticeboard on a corridor wall.
-local function planNoticeboard(state: State, room: Room, random: Random)
+local function planNoticeboard(state: State, room: Room, random: Rng)
 	local walls = WallPlanner.walls(state.info, room)
 	local y0, y1 = NOTICE_BOTTOM - 0.2, NOTICE_BOTTOM + NOTICE_SIZE.Y + 0.2
 	if y1 > SchoolShellBuilder.ceilingBottom(state.layout, room) - 0.6 then
 		return
 	end
 	local order = table.clone(walls)
-	MathUtil.shuffle(order, random)
+	Rng.shuffle(order, random)
 	for _, wall in order do
 		local runs = WallPlanner.free(wall, WallPlanner.taken(state.layout, wall, state.plan.mounts), y0, y1, 6.2)
 		if #runs == 0 then
@@ -471,7 +473,7 @@ local function planNoticeboard(state: State, room: Room, random: Random)
 		if
 			not addGroup(state, room, pieces, {
 				[cork] = function(part: BasePart)
-					paintNotices(part, Random.new(seed))
+					paintNotices(part, Rng.new(seed))
 				end,
 			})
 		then
@@ -483,7 +485,7 @@ local function planNoticeboard(state: State, room: Room, random: Random)
 	end
 end
 
-local function paintCabinet(part: BasePart, random: Random)
+local function paintCabinet(part: BasePart, random: Rng)
 	local gui, pps =
 		SurfaceArt.gui(part, Enum.NormalId.Front, { name = "Drawers", pixelsPerStud = 12, maxDistance = 50 })
 	local seam = Color3.fromRGB(26, 28, 26)
@@ -495,10 +497,10 @@ local function paintCabinet(part: BasePart, random: Random)
 end
 
 -- A steel filing cabinet backed onto a free stretch of an office wall.
-local function planCabinet(state: State, room: Room, random: Random)
+local function planCabinet(state: State, room: Room, random: Rng)
 	local walls = WallPlanner.walls(state.info, room)
 	local order = table.clone(walls)
-	MathUtil.shuffle(order, random)
+	Rng.shuffle(order, random)
 	for _, wall in order do
 		local runs = WallPlanner.free(wall, WallPlanner.taken(state.layout, wall, state.plan.mounts), 0, CABINET.Y, 2.4)
 		if #runs == 0 then
@@ -521,7 +523,7 @@ local function planCabinet(state: State, room: Room, random: Random)
 		if
 			not addGroup(state, room, { cabinet }, {
 				[cabinet] = function(part: BasePart)
-					paintCabinet(part, Random.new(seed))
+					paintCabinet(part, Rng.new(seed))
 				end,
 			})
 		then
@@ -538,7 +540,7 @@ end
 --------------------------------------------------------------------------------
 
 -- Rows of desks and chairs facing `front`, and the teacher's desk before the board.
-local function planRows(state: State, room: Room, front: Wall, random: Random)
+local function planRows(state: State, room: Room, front: Wall, random: Rng)
 	local info = state.info
 	local floorY = info.origin.Y
 	local depth = WallPlanner.depth(info, front)
@@ -607,7 +609,7 @@ local function planRows(state: State, room: Room, front: Wall, random: Random)
 end
 
 -- Long tables with chairs down both sides, in a grid along `front`'s wall.
-local function planTables(state: State, room: Room, front: Wall, hasBoard: boolean, random: Random)
+local function planTables(state: State, room: Room, front: Wall, hasBoard: boolean, random: Rng)
 	local info = state.info
 	local floorY = info.origin.Y
 	local depth = WallPlanner.depth(info, front)
@@ -622,7 +624,7 @@ local function planTables(state: State, room: Room, front: Wall, hasBoard: boole
 			table.insert(cells, { row, col })
 		end
 	end
-	MathUtil.shuffle(cells, random)
+	Rng.shuffle(cells, random)
 	local spread = cols * 6 + (cols - 1) * AISLE
 	local mid = (front.u0 + front.u1) / 2
 	local placed = 0
@@ -660,7 +662,7 @@ local function planTables(state: State, room: Room, front: Wall, hasBoard: boole
 end
 
 -- An office: a desk with its chair somewhere in the room, a filing cabinet on a wall.
-local function planOffice(state: State, room: Room, random: Random)
+local function planOffice(state: State, room: Room, random: Rng)
 	local info = state.info
 	local inner = info.inner[room.id]
 	if not inner then
@@ -699,7 +701,7 @@ function FurnitureBuilder.plan(layout: Layout): Plan
 	}
 	if layout.id ~= "Lobby" and layout.id ~= "Level5_Roof" then
 		for _, room in layout.rooms do
-			local random = MathUtil.seededRandom(1, layout.id .. ":furniture:" .. room.id)
+			local random = Rng.seeded(1, layout.id .. ":furniture:" .. room.id)
 			if room.kind == "Classroom" then
 				local front, hasBoard = planBoard(state, room, random)
 				if front then

@@ -1,6 +1,9 @@
 // vents.js: the wall vents (VentNetworkService + GrateRules + CrawlRules + VentController + VentGraph.nearest).
 //
-// Grates. Every exported VentGrate starts Closed, or Locked when the run's plan rusted it shut. Unscrew (hold, 3.5 s,
+// Grates. Every exported VentGrate starts Closed, or Locked when the run's plan rusted it shut. Each is exported in both
+// looks over the same boxes (VentGrateBuilder): galvanized (its nodes '', Panel, Screw1-4) and rusted shut (each one's
+// Rusted sub-node: corroded metal, weld beads along the latch and head seams, a rust streak); a run shows the look its
+// plan picks (VentGrateBuilder.setLocked), hiding the other, and a leaf's two looks move together. Unscrew (hold, 3.5 s,
 // 1.2 s with the Rusty Screwdriver) makes it Unscrewing while held: the four screws back out with the hold, the
 // Unscrew cue plays at the panel, a quiet GrateUnscrew noise every 0.9 s; letting go runs the screws back in (Closed);
 // completing it makes it Open (the screws drop, the panel swings out over 0.6 s with a creak). Kick (instant) makes
@@ -47,6 +50,10 @@ const SCREW_BACKOUT = 0.75;
 const KICK_HOP = 0.6;
 const LEAD = 0.2;
 const UNSCREW_NOISE_INTERVAL = 0.9;
+// the two looks: the galvanized one's nodes, the rusted one's the same nodes' Rusted sub-node (VentGrateBuilder.Rusted)
+const LOOK_NODES = ['', 'Panel', 'Screw1', 'Screw2', 'Screw3', 'Screw4'];
+const RUSTED = 'Rusted';
+const rustedNode = (node) => (node ? `${node}/${RUSTED}` : RUSTED);
 // rail
 const BALL_RADIUS = 2.6 / 2;
 const PANEL_MARGIN = 0.08;
@@ -375,6 +382,7 @@ export class Vents {
       level: info.level,
       info,
       state: 'Closed',
+      rusted: false,
       graph: g,
       wall: g && g.wall[info.id] ? g.wall[info.id] : cfMatrix(info.pivot),
       wallInv: g && g.wallInv[info.id] ? g.wallInv[info.id] : cfMatrix(info.pivot).invert(),
@@ -400,6 +408,23 @@ export class Vents {
       prompts: [],
     };
     this.grates.set(info.id, grate);
+    // an unlocked grate's look until a run applies its plan: never both looks at once
+    this._showLook(grate, false);
+  }
+
+  /** VentGrateBuilder.setLocked's look: the rusted-shut one on a locked grate, else the galvanized one. */
+  _showLook(grate, locked) {
+    grate.rusted = locked;
+    for (const node of LOOK_NODES) {
+      this.env.setEntityVisible(grate.id, !locked, node);
+      this.env.setEntityVisible(grate.id, locked, rustedNode(node));
+    }
+  }
+
+  /** Places a leaf (Panel, ScrewN) at a world frame in both looks: its Rusted twin pivots where it rests. */
+  _placeLeaf(grate, leaf, frame) {
+    this.env.setNodePivot(grate.id, leaf, frame);
+    this.env.setNodePivot(grate.id, rustedNode(leaf), frame);
   }
 
   /** The grates on a level (for the hints and the tracker). */
@@ -444,7 +469,7 @@ export class Vents {
         const turn = new THREE.Quaternion().slerp(qb.clone().invert().multiply(qo), f);
         t = new THREE.Matrix4().compose(pos, qb.multiply(turn), new THREE.Vector3(1, 1, 1));
       }
-      this.env.setNodePivot(grate.id, `Screw${i + 1}`, rest.clone().multiply(t));
+      this._placeLeaf(grate, `Screw${i + 1}`, rest.clone().multiply(t));
     }
   }
 
@@ -452,7 +477,7 @@ export class Vents {
     const full = grate.panelRest.clone().invert().multiply(grate.panelOpen);
     const q = new THREE.Quaternion().setFromRotationMatrix(full);
     const partial = new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().slerp(q, clamp(openness, 0, 1)));
-    this.env.setNodePivot(grate.id, 'Panel', grate.panelRest.clone().multiply(partial));
+    this._placeLeaf(grate, 'Panel', grate.panelRest.clone().multiply(partial));
   }
 
   _setKicked(grate, t) {
@@ -472,9 +497,9 @@ export class Vents {
     const rel = qc.clone().invert().multiply(ql);
     const rot = qc.clone().multiply(new THREE.Quaternion().slerp(rel, tip));
     const pivot = new THREE.Matrix4().compose(pos, rot, new THREE.Vector3(1, 1, 1)).multiply(offset);
-    this.env.setNodePivot(grate.id, 'Panel', pivot);
+    this._placeLeaf(grate, 'Panel', pivot);
     const world = pivot.clone().multiply(rest.clone().invert());
-    for (let i = 0; i < 4; i++) this.env.setNodePivot(grate.id, `Screw${i + 1}`, world.clone().multiply(grate.screwRest[i]));
+    for (let i = 0; i < 4; i++) this._placeLeaf(grate, `Screw${i + 1}`, world.clone().multiply(grate.screwRest[i]));
   }
 
   _restPose(grate) {
@@ -576,6 +601,7 @@ export class Vents {
       grate.holdSince = null;
       this._restPose(grate);
       const locked = grate.state === 'Locked';
+      this._showLook(grate, locked);
       const object = S(locked ? 'Prompt.GrateLocked' : 'Prompt.Grate');
       const unscrewHold = perkHoldSeconds('Unscrew', grate.unscrewSpec ? grate.unscrewSpec.holdDuration : GameConfig.UnscrewSeconds, this.perks);
       const unscrew = this.env.addPrompt({

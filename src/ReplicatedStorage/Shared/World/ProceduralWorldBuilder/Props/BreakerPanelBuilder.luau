@@ -23,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
@@ -207,7 +208,7 @@ local function buildDoor(model: Model, mount: CFrame)
 		at(-HALF_W + 0.04, BOTTOM + 0.05, DEPTH),
 		at(HALF_W, TOP - 0.05, DEPTH + DOOR_T),
 		"TrimMetal",
-		{ material = Enum.Material.Metal, color = CABINET:Lerp(Color3.new(1, 1, 1), 0.04) }
+		{ material = Enum.Material.Metal, color = MathUtil.lerpColor(CABINET, Color3.new(1, 1, 1), 0.04) }
 	)
 	detail(
 		block(

@@ -25,7 +25,9 @@
 --   4. Crawlways (removed corridors short enough, re-cut as culverts the Creature cannot enter) picked greedily so a
 --      mouth lies within rules.crawlReach of every tunnel point; alcoves beside the runs; hiding spots (a barrel or a
 --      cabinet in an alcove, a dead end or a corner) picked greedily to cover every tunnel point within
---      rules.hideReach and every item within rules.objectiveHideReach; item shelves in alcoves.
+--      rules.hideReach and every item within rules.objectiveHideReach; item shelves in alcoves (a guarded item's in a
+--      wider, deeper bay with its bear-trap spot in the mouth toward the side the squad comes along the run from, so
+--      the walk straight in springs it and a careful player steps round its far side to the shelf).
 --   5. Solid fill over the rest of the footprint (rect cover), lights every style.lightSpacing (deadShare dead) wired
 --      in local circuits of up to four bulbs, each its own group: steady "Mains:<prefix>_<region>_<nn>", a share of
 --      bad ones flickering "Circuit:<prefix>_<region>_<nn>" (the power switch holds both down), junction
@@ -36,11 +38,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local TunnelRules = require(script.Parent.TunnelRules)
 
+type Rng = Rng.Rng
 type Rect = LayoutSchema.Rect
 type Room = LayoutSchema.Room
 type Door = LayoutSchema.Door
@@ -107,6 +110,10 @@ export type Style = {
 	alcoveWidth: number, -- item niches (a shelf on the back wall)
 	alcoveDepth: number,
 	alcoveHeight: number,
+	-- a guarded item's bay (its bear trap in the mouth, toward the side the squad comes from): wide enough to step round
+	-- the trap by its far side, deep enough that the item's prompt first answers in its mouth (default GUARD_ALCOVE)
+	guardAlcoveWidth: number?,
+	guardAlcoveDepth: number?,
 	hideAlcoveWidth: number?, -- hide niches: a barrel or cabinet stands free in one (default 10)
 	hideAlcoveDepth: number?, -- (default 7)
 	lightSpacing: { number },
@@ -125,7 +132,10 @@ export type ItemSpec = {
 	kind: Enums.AnchorKind,
 	count: number,
 	shelf: number, -- shelf top above the floor (the item rests on it); with `wall`, the hook's height
-	guard: boolean?, -- a TrapCandidate on its approach (the item's ref)
+	-- a TrapCandidate on its approach (the item's ref): in the mouth of a guard bay (style.guardAlcoveWidth x
+	-- guardAlcoveDepth) toward the side the squad comes along the run from, so the walk straight in round the near jamb
+	-- springs it while a careful player steps round its far side and takes the item from beside the shelf
+	guard: boolean?,
 	-- hung on a hook on the niche's back wall at `shelf` (the anchor is the hook's wall point, facing out of the niche)
 	-- instead of resting on a shelf
 	wall: boolean?,
@@ -203,7 +213,17 @@ local CIRCUIT_FIXTURES = 4 -- bulbs wired to one local light group (one circuit)
 local HIDE_FOOTPRINT: { [string]: Vector2 } = { Barrel = Vector2.new(3.3, 3.3), Cabinet = Vector2.new(3.3, 2.4) }
 local HIDE_BACK_GAP = 0.6
 local LOCKER_OFFSET = 2.05 -- a hideable locker's anchor stands this far off the line of the wall behind it
-local GUARD_IN = 1.8 -- a guarded item's trap spot: this far into its niche from the mouth
+-- A guarded item's bay, width x depth, and its trap spot: GUARD_IN into the bay from its mouth and GUARD_ASIDE off its
+-- centre line toward the near side (the side its run is walked along from the ways in: GUARD_SIDE_MARGIN studs sooner
+-- than the other, on foot and through the crawlways alike; a bay with no such side holds no guarded item). The item
+-- rests on its shelf so far back that its Pickup prompt first answers in the mouth: the walk in from the run, round the
+-- near jamb, sets its foot on the pan (2.2 square at any yaw: 1.1 to 1.56 from its centre) just as the prompt answers.
+-- Across the bay's 8 inside the walls, a body on the near side cannot pass the pan and the far side keeps a lane over 3
+-- studs wide for a careful player, who takes the item from beside the shelf well clear.
+local GUARD_ALCOVE = Vector2.new(9, 8)
+local GUARD_IN = 0.7
+local GUARD_ASIDE = 2.4
+local GUARD_SIDE_MARGIN = 6
 local PORT_BERTH = 11 -- niches keep this far (past their half width) from a keep-room's door along the run
 local FIRE_DOOR_BERTH = WorldConfig.AirlockDoorWidth + 4 -- a vestibule door's swing, then its STAIRS sign
 local PLATE_Y = 6.2
@@ -232,7 +252,14 @@ local function inside(inner: Rect, outer: Rect): boolean
 		and inner.z + inner.d <= outer.z + outer.d + EPS
 end
 
-local function pick<T>(random: Random, list: { T }): T
+-- A sort key for a measured length: `x` on a grid of EPS. Lengths within float noise of each other share a key (then
+-- the caller breaks the tie by id); unlike an "equal within EPS" comparator it is transitive, so table.sort orders the
+-- same way in every Luau build whatever its algorithm.
+local function sortKey(x: number): number
+	return math.floor(x / EPS + 0.5)
+end
+
+local function pick<T>(random: Rng, list: { T }): T
 	return list[random:NextInteger(1, #list)]
 end
 
@@ -341,7 +368,7 @@ local function gridLines(
 	forced: { number },
 	pitch: number,
 	jitter: number,
-	random: Random
+	random: Rng
 ): { number }
 	local fixed: { number } = {}
 	for _, f in forced do
@@ -440,7 +467,7 @@ end
 
 -- The full candidate graph: grid crossings and corridors clear of the keep-rooms, exclusions and barriers; port stubs;
 -- walks across keep-rooms between their ports; the entry point.
-local function buildGraph(spec: PlanSpec, random: Random): Graph
+local function buildGraph(spec: PlanSpec, random: Rng): Graph
 	local size = WorldConfig.FootprintSize
 	local style = spec.style
 	local maxWidth = math.max(style.galleryWidth, table.unpack(style.width))
@@ -906,7 +933,7 @@ local function chooseCrawls(
 	spec: PlanSpec,
 	rules: TunnelRules.RuleSpec,
 	reach: number,
-	random: Random
+	random: Rng
 ): { GEdge }
 	local maxEdge = rules.crawlLength + math.min(table.unpack(spec.style.width))
 	local weight: { [number]: number } = {}
@@ -924,8 +951,14 @@ local function chooseCrawls(
 			weight[e.b] = math.max(weight[e.b] or 0, 12)
 		end
 	end
-	for v, w in weight do
-		weight[v] = w * random:NextNumber(0.75, 1.25)
+	-- draws in node order (never the table's hash order), so every Luau build draws the same weight for each node
+	local weighted: { number } = {}
+	for v in weight do
+		table.insert(weighted, v)
+	end
+	table.sort(weighted)
+	for _, v in weighted do
+		weight[v] = weight[v] * random:NextNumber(0.75, 1.25)
 	end
 	local candidates: { GEdge } = {}
 	for _, e in g.edges do
@@ -933,8 +966,9 @@ local function chooseCrawls(
 			table.insert(candidates, e)
 		end
 	end
-	MathUtil.shuffle(candidates, random)
+	Rng.shuffle(candidates, random)
 	local cover: { [GEdge]: { [number]: number } } = {}
+	local coverOrder: { [GEdge]: { number } } = {}
 	for _, e in candidates do
 		local da = dijkstra(g, e.a, reach, e.id)
 		local db = dijkstra(g, e.b, reach, e.id)
@@ -943,6 +977,13 @@ local function chooseCrawls(
 			set[v] = math.min(set[v] or INF, d)
 		end
 		cover[e] = set
+		-- the covered nodes in node order: the gains below sum in the same order in every Luau build
+		local nodes: { number } = {}
+		for v in set do
+			table.insert(nodes, v)
+		end
+		table.sort(nodes)
+		coverOrder[e] = nodes
 	end
 	local chosen: { GEdge } = {}
 	local done: { [number]: boolean } = {}
@@ -964,7 +1005,7 @@ local function chooseCrawls(
 				continue
 			end
 			local gain = 0
-			for v in cover[e] do
+			for _, v in coverOrder[e] do
 				if not done[v] then
 					gain += weight[v] or 0
 				end
@@ -986,7 +1027,7 @@ end
 
 -- Thins the graph (see the header). Returns the crossing it ends at (math.huge when the crawlway sites cannot cover
 -- the ports).
-local function thin(g: Graph, spec: PlanSpec, rules: TunnelRules.RuleSpec, random: Random): number
+local function thin(g: Graph, spec: PlanSpec, rules: TunnelRules.RuleSpec, random: Rng): number
 	-- crawlway sites first: corridors re-cut low, their crossings kept; every corridor stays within reach of one
 	-- (door points cut the corners of the crossings, so the walk the rules measure is a little shorter than this one)
 	local reach = rules.crawlReach + 1
@@ -1125,7 +1166,7 @@ local function thin(g: Graph, spec: PlanSpec, rules: TunnelRules.RuleSpec, rando
 			table.insert(order, e.id)
 		end
 	end
-	MathUtil.shuffle(order, random)
+	Rng.shuffle(order, random)
 	local total = aliveLength(g)
 	local loopReach = rules.maxLoop / 2 + 1
 	for _, id in order do
@@ -1345,7 +1386,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 	local bestScore = INF
 	local bestCrossing = 0
 	for attempt = 1, attempts do
-		local random = MathUtil.seededRandom(spec.seed, string.format("%s:grid:%d", prefix, attempt))
+		local random = Rng.seeded(spec.seed, string.format("%s:grid:%d", prefix, attempt))
 		local g = buildGraph(spec, random)
 		local walk = thin(g, spec, rules, random)
 		local length = aliveLength(g)
@@ -1370,7 +1411,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 		)
 	end
 	local g = best :: Graph
-	local random = MathUtil.seededRandom(spec.seed, prefix .. ":dress")
+	local random = Rng.seeded(spec.seed, prefix .. ":dress")
 	local entryId = entryNode(g)
 
 	-- 3a. short dead ends off junctions and corners (a corridor to an unused crossing)
@@ -1391,7 +1432,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 				table.insert(candidates, e)
 			end
 		end
-		MathUtil.shuffle(candidates, random)
+		Rng.shuffle(candidates, random)
 		local placed: { GNode } = {}
 		for _, e in candidates do
 			if #deadEnds >= style.deadEnds then
@@ -1622,8 +1663,9 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 		end
 		local sorted = table.clone(runs)
 		table.sort(sorted, function(a: Run, b: Run): boolean
-			if math.abs(a.length - b.length) > EPS then
-				return a.length > b.length
+			local la, lb = sortKey(a.length), sortKey(b.length)
+			if la ~= lb then
+				return la > lb
 			end
 			return a.id < b.id
 		end)
@@ -1787,7 +1829,9 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 		end
 		linkPoints(previous, nodePoint[e.b], e.length / n)
 	end
-	local function pointDistances(seeds: { { number } }, limit: number): { [number]: number }
+	-- `extra`: more links to follow from a point than its own (the crawlways, for a squad that crawls)
+	type PointLinks = { [number]: { { to: number, cost: number } } }
+	local function pointDistances(seeds: { { number } }, limit: number, extra: PointLinks?): { [number]: number }
 		local dist: { [number]: number } = {}
 		local heap: Heap = { d = {}, n = {}, size = 0 }
 		for _, s in seeds do
@@ -1796,17 +1840,23 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 				heapPush(heap, s[2], s[1])
 			end
 		end
+		local function relax(d: number, l: { to: number, cost: number })
+			local nd = d + l.cost
+			if nd < (dist[l.to] or INF) - EPS then
+				dist[l.to] = nd
+				heapPush(heap, nd, l.to)
+			end
+		end
 		while heap.size > 0 do
 			local d, v = heapPop(heap)
 			if d > (dist[v] or INF) + EPS or d > limit then
 				continue
 			end
 			for _, l in pointLinks[v] do
-				local nd = d + l.cost
-				if nd < (dist[l.to] or INF) - EPS then
-					dist[l.to] = nd
-					heapPush(heap, nd, l.to)
-				end
+				relax(d, l)
+			end
+			for _, l in (if extra then extra[v] else nil) or {} :: { { to: number, cost: number } } do
+				relax(d, l)
 			end
 		end
 		return dist
@@ -1834,9 +1884,8 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 			isTunnelPoint[id] = true
 		end
 	end
-	local fromEntry = pointDistances({ { nodePoint[entryId], 0 } }, INF)
-	-- the walk from every way in: the entry, then each of otherEntries (from its ports)
-	local fromEntries: { { [number]: number } } = { fromEntry }
+	-- the walk from every way in, on foot (no crawlway): the entry, then each of otherEntries (from its ports)
+	local entrySeeds: { { { number } } } = { { { nodePoint[entryId], 0 } } }
 	for _, roomId in spec.otherEntries or {} :: { string } do
 		local seeds: { { number } } = {}
 		for _, node in g.nodes do
@@ -1845,9 +1894,14 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 			end
 		end
 		if #seeds > 0 then
-			table.insert(fromEntries, pointDistances(seeds, INF))
+			table.insert(entrySeeds, seeds)
 		end
 	end
+	local fromEntries: { { [number]: number } } = {}
+	for _, seeds in entrySeeds do
+		table.insert(fromEntries, pointDistances(seeds, INF))
+	end
+	local fromEntry = fromEntries[1]
 
 	-- 4a. crawlways: the sites the thinning kept, re-cut low and narrow between their two crossings' cores
 	type Crawl = { e: GEdge, rect: Rect, roomId: string, a: number, b: number }
@@ -1892,6 +1946,21 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 		end
 	end
 	local crawlCandidates = #crawls
+	-- the walk from every way in for a squad that takes the crawlways too (each joins its two crossings)
+	local crawlLinks: PointLinks = {}
+	for _, c in crawls do
+		local m = crawlMouths[c]
+		if m[1] and m[2] then
+			crawlLinks[m[1]] = crawlLinks[m[1]] or {}
+			crawlLinks[m[2]] = crawlLinks[m[2]] or {}
+			table.insert(crawlLinks[m[1]], { to = m[2], cost = c.e.length })
+			table.insert(crawlLinks[m[2]], { to = m[1], cost = c.e.length })
+		end
+	end
+	local fromEntriesCrawling: { { [number]: number } } = {}
+	for _, seeds in entrySeeds do
+		table.insert(fromEntriesCrawling, pointDistances(seeds, INF, crawlLinks))
+	end
 
 	-- 4b. alcoves: niches beside the runs, clear of the crossings, doors and other rooms
 	type Alcove = {
@@ -1901,7 +1970,9 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 		u: number,
 		roomId: string,
 		use: string?,
-		class: "Item" | "Hide", -- a shelf niche, or a hide niche (wider and deeper: the prop stands free)
+		-- a shelf niche, a guarded shelf niche (a bay: its trap at the mouth), or a hide niche (wider and deeper: the
+		-- prop stands free)
+		class: "Item" | "Guard" | "Hide",
 		width: number,
 		depth: number,
 		nx: number,
@@ -1911,7 +1982,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 	}
 	local alcoves: { Alcove } = {}
 	local alcoveCandidates: { Alcove } = {}
-	local function nicheCandidates(class: "Item" | "Hide", width: number, depth: number)
+	local function nicheCandidates(class: "Item" | "Guard" | "Hide", width: number, depth: number)
 		for _, run in runs do
 			local r = run.rect
 			local u0 = if run.axis == "X" then r.x else r.z
@@ -1997,7 +2068,22 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 			end
 		end
 	end
-	nicheCandidates("Item", style.alcoveWidth, style.alcoveDepth)
+	-- the item niches the floor's items need: plain shelves, guard bays (a floor without guarded items keeps only the
+	-- plain ones)
+	local guarded, plain = false, false
+	for _, item in spec.items or {} :: { ItemSpec } do
+		if item.guard then
+			guarded = true
+		else
+			plain = true
+		end
+	end
+	if plain or not guarded then
+		nicheCandidates("Item", style.alcoveWidth, style.alcoveDepth)
+	end
+	if guarded then
+		nicheCandidates("Guard", style.guardAlcoveWidth or GUARD_ALCOVE.X, style.guardAlcoveDepth or GUARD_ALCOVE.Y)
+	end
 	nicheCandidates("Hide", style.hideAlcoveWidth or 10, style.hideAlcoveDepth or 7)
 	local function claimAlcove(c: Alcove, use: string): Alcove?
 		for _, a in alcoves do
@@ -2023,22 +2109,56 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 	-- 4c. items in alcoves on shelves: spread, far enough from the entry, and only where hide niches near enough could
 	-- serve them (the hides come next and must keep one within rules.objectiveHideReach)
 	type ItemSpot = { kind: Enums.AnchorKind, alcove: Alcove, spec: ItemSpec }
+	-- which way along its run (-1 / 1 on the run's axis) a guard bay is walked to from the nearest way in, or nil when
+	-- both sides are about as near (no side the careless come from) or the squad comes from the other side once it
+	-- takes the crawlways (the side must hold either way)
+	local function entrySide(c: Alcove): number?
+		local run = c.run
+		local r = run.rect
+		local reachOut = c.width / 2 + 2
+		local side: number? = nil
+		for _, maps in { fromEntries, fromEntriesCrawling } do
+			local near: { number } = {}
+			for i, sign in { -1, 1 } do
+				local u = c.u + sign * reachOut
+				local x = if run.axis == "X" then u else r.x + r.w / 2
+				local z = if run.axis == "X" then r.z + r.d / 2 else u
+				local id = nearestPoint(x, z, run)
+				near[i] = INF
+				for _, dist in maps do
+					near[i] = math.min(near[i], dist[id] or INF)
+				end
+			end
+			if near[1] == INF or near[2] == INF or math.abs(near[1] - near[2]) < GUARD_SIDE_MARGIN then
+				return nil
+			end
+			local here = if near[1] < near[2] then -1 else 1
+			if side and side ~= here then
+				return nil
+			end
+			side = here
+		end
+		return side
+	end
 	local itemSpots: { ItemSpot } = {}
 	-- (the planner's walk to an item: to its niche's own sample point, short of the shelf at the back)
-	local itemReach = rules.objectiveHideReach - 3 - style.alcoveDepth / 2
+	local function itemReach(c: Alcove): number
+		return rules.objectiveHideReach - 3 - c.depth / 2
+	end
 	do
 		local taken: { Alcove } = {}
 		local served: { [Alcove]: boolean } = {}
 		for _, c in alcoveCandidates do
-			if c.class ~= "Item" then
+			if c.class == "Hide" then
 				continue
 			end
-			local near = pointDistances({ { c.point, 0 } }, itemReach)
+			local reach = itemReach(c)
+			local near = pointDistances({ { c.point, 0 } }, reach)
 			local count = 0
 			for _, h in alcoveCandidates do
 				if
 					h.class == "Hide"
-					and (near[h.point] or INF) <= itemReach
+					and (near[h.point] or INF) <= reach
 					and not overlaps(h.rect, c.rect, ALCOVE_GAP + 1)
 				then
 					count += 1
@@ -2059,11 +2179,15 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 			return false
 		end
 		for _, item in spec.items or {} :: { ItemSpec } do
+			local class = if item.guard then "Guard" else "Item"
 			for _ = 1, item.count do
 				local bestA: Alcove? = nil
 				local bestScoreA = -INF
 				for _, c in alcoveCandidates do
-					if c.use or c.class ~= "Item" or not served[c] or not inAreas(c, item.areas) then
+					if c.use or c.class ~= class or not served[c] or not inAreas(c, item.areas) then
+						continue
+					end
+					if item.guard and not entrySide(c) then
 						continue
 					end
 					local entryD = INF
@@ -2111,14 +2235,24 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 	do
 		local coverReach = rules.hideReach - 2.5
 		local hideCovered: { [number]: boolean } = {}
+		-- the points a hide must serve, each with its reach: the item niches (by their depth), the hide targets (as a
+		-- plain item niche's)
 		local mustCover: { number } = {}
+		local mustReach: { number } = {}
 		for _, s in itemSpots do
 			table.insert(mustCover, alcovePoint(s.alcove))
+			table.insert(mustReach, itemReach(s.alcove))
 		end
+		local targetReach = rules.objectiveHideReach - 3 - style.alcoveDepth / 2
 		local targets: { Vector3 } = spec.hideTargets or {}
 		for _, p in targets do
 			local id = nearestPoint(p.X, p.Z, nil)
 			table.insert(mustCover, id)
+			table.insert(mustReach, targetReach)
+		end
+		local farthest = targetReach
+		for _, reach in mustReach do
+			farthest = math.max(farthest, reach)
 		end
 		type HideCandidate = { make: () -> Hide?, point: number, cover: { [number]: number }, fallback: boolean? }
 		local candidates: { HideCandidate } = {}
@@ -2287,7 +2421,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 			end
 		end
 		for _, c in candidates do
-			c.cover = pointDistances({ { c.point, 0 } }, math.max(coverReach, itemReach))
+			c.cover = pointDistances({ { c.point, 0 } }, math.max(coverReach, farthest))
 		end
 		local function covers(c: HideCandidate, id: number, reach: number): boolean
 			local d = c.cover[id]
@@ -2311,7 +2445,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 					end
 				end
 				for i, id in mustCover do
-					if not mustDone[i] and covers(c, id, itemReach) then
+					if not mustDone[i] and covers(c, id, mustReach[i]) then
 						gain += 25
 					end
 				end
@@ -2336,7 +2470,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 					end
 				end
 				for i, id in mustCover do
-					if covers(c, id, itemReach) then
+					if covers(c, id, mustReach[i]) then
 						mustDone[i] = true
 					end
 				end
@@ -2561,7 +2695,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 	-- flicker, the Creature's teleport warning, touches only the bulbs near it): "Mains:<prefix>_<region>_<nn>" burns
 	-- steady, a bad circuit (flickerShare of them) "Circuit:<prefix>_<region>_<nn>" flickers; the power switch holds
 	-- both down until the breaker is thrown
-	local lightRandom = MathUtil.seededRandom(spec.seed, prefix .. ":lights")
+	local lightRandom = Rng.seeded(spec.seed, prefix .. ":lights")
 	local circuitCount = 0
 	for _, run in runs do
 		local room = roomOfRun[run]
@@ -2613,8 +2747,9 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 		end
 	end
 	table.sort(junctions, function(x: Junction, y: Junction): boolean
-		if math.abs(x.distance - y.distance) > EPS then
-			return x.distance < y.distance
+		local dx, dy = sortKey(x.distance), sortKey(y.distance)
+		if dx ~= dy then
+			return dx < dy
 		end
 		return x.node.id < y.node.id
 	end)
@@ -2864,7 +2999,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 	end
 
 	-- 5g. graffiti: lore lines, tallies, tags and arrows toward the exits
-	local graffitiRandom = MathUtil.seededRandom(spec.seed, prefix .. ":graffiti")
+	local graffitiRandom = Rng.seeded(spec.seed, prefix .. ":graffiti")
 	local function paintOn(
 		run: Run,
 		kind: TunnelRules.LandmarkKind,
@@ -3036,18 +3171,21 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 		end
 		local guardId: string? = nil
 		if s.spec.guard then
-			-- on the approach: just inside the niche's mouth, on its centre line (in the niche, with the item)
+			-- on the approach: just inside the bay's mouth (in the niche, with the item), toward the side the squad comes
+			-- along the run from: walked straight in round the near jamb, it springs; a careful player steps round its far
+			-- side to the shelf
 			local run = c.run
 			local rr = run.rect
 			local mouth = if run.axis == "X"
 				then (if c.nz > 0 then rr.z + rr.d else rr.z)
 				else (if c.nx > 0 then rr.x + rr.w else rr.x)
+			local aside = (entrySide(c) or 0) * GUARD_ASIDE
 			local gx, gz
 			if run.axis == "X" then
-				gx = c.u
+				gx = c.u + aside
 				gz = mouth + c.nz * GUARD_IN
 			else
-				gz = c.u
+				gz = c.u + aside
 				gx = mouth + c.nx * GUARD_IN
 			end
 			itemCount[s.kind] = (itemCount[s.kind] or 0) + 1
@@ -3212,7 +3350,7 @@ function TunnelPlanner.plan(spec: PlanSpec): Plan
 			local z = a.z + (b.z - a.z) * t + (if e.axis == "X" then offset else 0)
 			table.insert(slots, Vector2.new(x, z))
 		end
-		MathUtil.shuffle(slots, random)
+		Rng.shuffle(slots, random)
 		local placed = 0
 		for _, p in slots do
 			if placed >= spec.traps then

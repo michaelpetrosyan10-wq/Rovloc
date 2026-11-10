@@ -1,9 +1,9 @@
 --!strict
 -- MaterialLibrary + Palette texturing: with TextureAssets empty every surface stays exactly as it was (plain
 -- material, palette colour, no MaterialVariant); with textures uploaded the textured keys take their variant
--- (only when it is in MaterialService and matches the part's material) with the colour compensated for the map,
--- re-applying another key clears it, and overlays / images resolve. The shipped TextureAssets and the place's
--- MaterialService must agree.
+-- (only when it is in MaterialService and matches the part's material) with the colour compensated for the map and
+-- stored on the 8-bit grid a part keeps (MathUtil.color8), re-applying another key clears it, and overlays / images
+-- resolve. The shipped TextureAssets and the place's MaterialService must agree.
 
 local MaterialService = game:GetService("MaterialService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local MaterialLibrary = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.MaterialLibrary)
 local Palette = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Palette)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local TextureAssets = require(ReplicatedStorage.Shared.Config.TextureAssets)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
@@ -154,12 +155,15 @@ return {
 			Palette.apply(part, "PlasterSchool")
 			t.eq(part.MaterialVariant, "RovlocPaintedPlaster_Plaster", "apply dresses the part")
 			t.eq(part.Material, plaster.material, "in the key's own material")
-			local expected = Color3.new(
-				plaster.color.R / PLASTER_REF.R,
-				plaster.color.G / PLASTER_REF.G,
-				plaster.color.B / PLASTER_REF.B
+			-- the compensated colour, as a part stores it: the nearest 8-bit value of palette / reference
+			local expected = MathUtil.color8(
+				Color3.new(
+					plaster.color.R / PLASTER_REF.R,
+					plaster.color.G / PLASTER_REF.G,
+					plaster.color.B / PLASTER_REF.B
+				)
 			)
-			near3(t, part.Color, expected, "colour = palette / reference")
+			near3(t, part.Color, expected, "colour = palette / reference, on the 8-bit grid")
 			near3(t, Palette.colorFor("PlasterSchool"), expected, "colorFor agrees")
 
 			Palette.apply(part, "Concrete")
@@ -180,8 +184,8 @@ return {
 			near3(
 				t,
 				locker.Color,
-				MaterialLibrary.tint("RustedMetal", Color3.fromRGB(60, 80, 70)),
-				"its own colour is compensated"
+				MathUtil.color8(MaterialLibrary.tint("RustedMetal", Color3.fromRGB(60, 80, 70))),
+				"its own colour is compensated, on the 8-bit grid"
 			)
 		end)
 	end,

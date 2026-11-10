@@ -288,7 +288,9 @@ function session(opts = {}) {
     }
   });
   creature.jumpscareFinished.connect((_p, kind, outcome) => s.events.finished.push({ at: engine.loop.time, kind, outcome }));
+  // (warp: the teleport it belongs to: a spot watched when its warning ends is re-picked and warned again, one teleport)
   svc.teleportWarning.connect((spot, target, seconds) => s.events.warnings.push({ at: engine.loop.time, spot: spot.clone(), target, seconds,
+    warp: svc.warp ? svc.warp.startedAt : null,
     plan: svc.warp && svc.warp.plan ? { walk: svc.warp.plan.walk, side: svc.warp.plan.side } : null }));
   svc.revealed.connect((target, kind) => s.events.revealed.push({ at: engine.loop.time, target, kind }));
   svc.stared.connect((player) => s.events.stared.push({ at: engine.loop.time, player }));
@@ -690,10 +692,11 @@ for (const difficulty of ['Standard', 'Nightmare']) {
     });
   }
   const before = s.events.stared.length;
+  // the stare held without a break: a tick whose line to the head is blocked (its walk turning a corner) starts it over,
+  // as the Creature's own count does
   let held = 0;
   const started = advance(s, 3, () => {
-    behind(14, true);
-    held += TICK;
+    held = behind(14, true) ? held + TICK : 0;
     return svc.state === 'WallChase';
   });
   const fromStare = s.events.stared.length > before && s.events.stared[s.events.stared.length - 1].player === PLAYER;
@@ -764,11 +767,20 @@ for (const difficulty of ['Standard', 'Nightmare']) {
     stroll();
     return false;
   });
-  const total = s.events.warnings.length;
   report(duringBlock === 0, 'teleport: none while the game blocks them (survive countdown, finale)', `${duringBlock} during ${(s.engine.loop.time - blockedFrom).toFixed(0)} s blocked`);
-  const gaps = s.events.warnings.slice(1).map((w, i) => w.at - s.events.warnings[i].at);
-  report(total >= 2 && gaps.every((g) => g >= 25), 'teleport: they keep coming, a cooldown (and 25 s unseen) between them',
-    `${total} teleports, gaps ${gaps.map((g) => g.toFixed(0)).join(', ')} s`);
+  // one teleport per warp: its first warning, and how many times a watched spot made it warn again
+  const teleports = [];
+  for (const w of s.events.warnings) {
+    const last = teleports[teleports.length - 1];
+    if (last && w.warp !== null && last.warp === w.warp) last.warnings += 1;
+    else teleports.push({ at: w.at, warp: w.warp, warnings: 1 });
+  }
+  const total = teleports.length;
+  const gaps = teleports.slice(1).map((w, i) => w.at - teleports[i].at);
+  const rewarned = teleports.map((w) => w.warnings);
+  report(total >= 2 && gaps.every((g) => g >= 25) && rewarned.every((n) => n <= T.Retries + 1),
+    'teleport: they keep coming, a cooldown (and 25 s unseen) between them',
+    `${total} teleports, gaps ${gaps.map((g) => g.toFixed(0)).join(', ')} s, warnings each ${rewarned.join(', ')} (at most ${T.Retries + 1})`);
   summary.teleport = { first, total, gaps, reveals: s.events.revealed.length, sides: s.events.warnings.map((w) => w.plan && w.plan.side) };
 }
 

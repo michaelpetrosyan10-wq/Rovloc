@@ -39,13 +39,13 @@ keep-rooms' own furniture, lights and anchors. The spec:
 | `barriers` | Wall lines `{ x0, z0, x1, z1 }` no tunnel crosses. They fold the floor into one long walk; a corridor across one can only be a crawlway. |
 | `gridX`, `gridZ` | The crossings' lines (else generated every `style.pitch`, jittered). Port lines are added. Keep a crossing's square (`max width / 2 + 2`) clear of the keep-rooms. |
 | `crawlSites` | Pinned crawlways `{ x0, z0, x1, z1 }` between two neighbouring crossings (may cut a barrier); nil lets the planner pick them. |
-| `style` | Tunnel widths and heights, galleries (`galleryWidth`, `galleryHeight` 14–16, `galleryShare`, `galleryMin`), `length` (target tunnel length), `deadEnds`, `crawlWidth`, `crawlAcrossBarriers`, `crawlMouthsPass` (the thinning keeps two tunnel arms at every crawlway mouth, so no mouth ends up at the tip of a long dead end), niches (`alcoveWidth/Depth/Height` for item shelves, `hideAlcoveWidth/Depth` for hides, default 10 × 7), lights (`lightSpacing`, `deadShare` of bulbs, `flickerShare` of circuits, `plateLampEvery`), palette keys and acoustics. |
+| `style` | Tunnel widths and heights, galleries (`galleryWidth`, `galleryHeight` 14–16, `galleryShare`, `galleryMin`), `length` (target tunnel length), `deadEnds`, `crawlWidth`, `crawlAcrossBarriers`, `crawlMouthsPass` (the thinning keeps two tunnel arms at every crawlway mouth, so no mouth ends up at the tip of a long dead end), niches (`alcoveWidth/Depth/Height` for item shelves, `guardAlcoveWidth/Depth` for guarded items' bays, default 9 × 8, `hideAlcoveWidth/Depth` for hides, default 10 × 7), lights (`lightSpacing`, `deadShare` of bulbs, `flickerShare` of circuits, `plateLampEvery`), palette keys and acoustics. |
 | `rules` | The TunnelRules thresholds (section 3); omitted fields use `TunnelRules.Defaults`. |
 | `regions` | 4–6 regions `{ id, name, x, z, areas?, medium?, hides?, pipe, band, grime, paint, graffiti, wall?, floor?, wet? }`. A crossing belongs to the region whose `areas` rect holds it, else to the nearest seed `(x, z)` by walking distance (a region never jumps a barrier). `medium` is stencilled on the pipe markers. `hides` picks what the region's hide niches hold: any of `"Barrel"`, `"Cabinet"`, `"Locker"` (a hideable locker backed onto the niche's back wall, its hider stepping out at the front; ids `<prefix>_Locker_Tnn`); nil is barrels and cabinets. |
-| `items` | Planner-placed items `{ kind, count, shelf, guard, wall?, areas? }`: on a shelf in an item niche, spread out, at least 60 studs walked from the entry (and from each of `otherEntries`), only where hide niches can serve them; `guard` adds a TrapCandidate just inside the niche (the item's `ref`). `wall` hangs it on a hook on the niche's back wall at height `shelf` instead (no shelf: a key ring); `areas` (`{ x0, z0, x1, z1 }` rects) keeps its niches inside them (Level 1's keys: west of the gate). |
+| `items` | Planner-placed items `{ kind, count, shelf, guard, wall?, areas? }`: on a shelf in an item niche, spread out, at least 60 studs walked from the entry (and from each of `otherEntries`), only where hide niches can serve them; `guard` puts the item in a guard bay (`guardAlcoveWidth` × `guardAlcoveDepth`) with a TrapCandidate (the item's `ref`) just inside its mouth, 2.4 studs off the centre line toward the side the squad comes along the run from (only bays with such a side take a guarded item: one side at least 6 studs nearer the ways in than the other, on foot and through the crawlways alike). The shelf is deep enough that the item's prompt first answers in the mouth, so the shortest walk in, round the near jamb, sets a foot on the pan; a careful player steps round its far side, a lane over 3 studs wide, and takes the item from beside the shelf. `wall` hangs it on a hook on the niche's back wall at height `shelf` instead (no shelf: a key ring); `areas` (`{ x0, z0, x1, z1 }` rects) keeps its niches inside them (Level 1's keys: west of the gate). |
 | `hideTargets` | More points that need a hide within `objectiveHideReach` (the vestibules). |
 | `traps`, `batteries`, `clutter`, `corpses`, `drips`, `debris`, `scares`, `creatureSpawns`, `creatureBand` | Counts of the dressing anchors and triggers; creature spawns fall within `creatureBand` studs walked from the entry. |
-| `attempts`, `crossingTarget`, `seed` | Thinning attempts (the one closest to the target crossing and length wins), and the seed. |
+| `attempts`, `crossingTarget`, `seed` | Thinning attempts (the one closest to the target crossing and length wins), and the seed. The planner draws only from `Rng` (`Shared/Util/Rng`: the same numbers in Lune and on Roblox), so a seed plans the same floor for the web's export and a live server. A floor's seed is the first of its old seed, + 1, + 2, … whose plan passes every rule here and every spec (the layout records it). |
 
 What comes out:
 
@@ -77,21 +77,23 @@ regions, runs, galleries, niches, items, hides (greedy cover), Solid fill, doors
 
 `LayoutSchema.validate` runs them on every tunnel floor; `TunnelPlanner.spec` asserts them.
 
-| Rule | Default | Level 0 | Level 1 | Level 2 |
-| --- | --- | --- | --- | --- |
-| Connected on foot without any crawlway (every keep-room and vestibule) | — | yes | yes (the gate's vent counts) | yes |
-| Every junction on a loop of at most `maxLoop` studs | 200 | longest 122 | longest 152 | longest 190 |
-| Crossing: the walk from the entry to the farthest exit | 1100–1500 | 1650–1980 (1903) | 1650–1980 (1685) | 1650–1980 (1804) |
-| With the crawlways (crouched, 5.5 studs/s) the crossing still takes `crawlCrossingSeconds` | 40 s | 55.5 s | 68.9 s | 65.8 s |
-| Crawlways (count, length, mouth height) | 3–6, ≤ 20, 4.3 | 3–12: 11 | 3–18: 18 | 3–16: 14 |
-| A crawlway mouth within `crawlReach` of every tunnel point | 60 | 58.2 | 56.7 | 58.4 |
-| A hiding spot within `hideReach` of every tunnel point | 30 | 26.6 | 29.4 | 25.9 |
-| A hiding spot within `objectiveHideReach` of every objective place | 25 | yes | yes | yes |
-| Dead ends: count, length | ≤ 8, ≤ 25 | 3 (≤ 22) | 3 (≤ 24) | 6 (≤ 24) |
-| Regions: named, distinct | 4–6 | 5 | 5 | 5 |
-| Galleries 14–16 high; junction plates J-NN | — | yes | yes | yes |
+| Rule | Default | Level 0 | Level 1 | Level 2 | Level 3 | Level 4 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Connected on foot without any crawlway (every keep-room and vestibule) | — | yes | yes (the gate's vent counts) | yes | yes | yes |
+| Every junction on a loop of at most `maxLoop` studs | 200 | longest 122 | longest 152 | longest 196 | longest 148 | longest 140 |
+| Crossing: the walk from the entry to the farthest exit | 1100–1500 | 1650–1980 (1901) | 1650–1980 (1685) | 1650–1980 (1842) | 1650–1980 (1675) | 1400–1980 (1493) |
+| With the crawlways (crouched, 5.5 studs/s) the crossing still takes `crawlCrossingSeconds` | 40 s | 55.4 s | 69.0 s | 65.8 s | 70.8 s | 60.9 s |
+| Crawlways (count, length, mouth height) | 3–6, ≤ 20, 4.3 | 3–12: 11 | 3–18: 18 | 3–16: 14 | 3–18: 17 | 3–16: 15 |
+| A crawlway mouth within `crawlReach` of every tunnel point | 60 | 58.2 | 56.4 | 58.2 | 58.2 | 58.9 |
+| A hiding spot within `hideReach` of every tunnel point | 30 | 26.9 | 29.4 | 26.2 | 29.6 | 27.0 |
+| A hiding spot within `objectiveHideReach` of every objective place | 25 | yes | yes | yes | yes | yes |
+| Dead ends: count, length | ≤ 8, ≤ 25 | 3 (≤ 22) | 1 (≤ 20) | 6 (≤ 24) | 7 (≤ 24) | 4 (≤ 24) |
+| Regions: named, distinct | 4–6 | 5 | 5 | 5 | 5 | 5 |
+| Galleries 14–16 high; junction plates J-NN | — | yes | yes | yes | yes | yes |
+| Seed (`Layouts/<floor>.luau`) | — | 20261103 | 20261104 | 20261105 | 20261134 | 20261130 |
 
-Walking is 11 studs/s: Level 0 crosses in about 2.9 minutes, Level 1 in about 2.6, Level 2 in about 2.7.
+Walking is 11 studs/s: Level 0 crosses in about 2.9 minutes, Level 1 in about 2.6, Level 2 in about 2.8, Level 3 in
+about 2.5, Level 4 in about 2.3.
 
 **Vents.** The walk graph (`TunnelRules.walkGraph`) walks the vents a squad can always use, whatever its `crawl`
 flag: the grates that never lock and that no HatchValve keeps shut (timed, at `TunnelRules.VentSpeed`, 4.5 studs/s).
@@ -105,8 +107,8 @@ Lockers (keep-rooms), Barrels and Cabinets (the tunnels) share one convention (H
 Most barrels and cabinets **stand free** in a hide niche (10 × 7): centred, 0.6 off the back wall, front to the run,
 with clear floor on both sides; the anchor's `exit` (`Left` / `Right`) puts the ExitAnchor 1.3 studs off that side,
 so a hider (or a teammate pulling them out) can come out on a side the Creature is not standing on. The rest (dead-end
-drums, the few cabinets against a wide run's wall, the vestibule cabinets) step out at the front. Level 0: 99 hides,
-91 freestanding.
+drums, the few cabinets against a wide run's wall, the vestibule cabinets) step out at the front. Level 0: 102 barrels
+and cabinets, 93 freestanding.
 
 ## 5. Lights and power
 
@@ -169,8 +171,22 @@ When the planner fails or a rule does not hold:
 - **A STAIRS sign missing:** the vestibule's stub needs about 12 studs between its rail and the fire door (the
   door's swing and the doorway approach leave the rest; the planner keeps junction plates and their red lamps off
   that stretch); niches keep 11 studs (past their half width) from a keep-room's door. A fire door's own KEEP CLOSED
-  sign needs a run about 12 studs tall (`runHeight`).
-- **Guard traps:** a keep-room fuse's guard stands 2–9 studs from it, in the same room.
+  sign needs a run about 12 studs tall (`runHeight` 12.6 on every tunnel floor's vestibule ports) and a vestibule at
+  least 13 tall; `PropsVentsDoors.spec` checks every floor's fire doors for it.
+- **Guard traps:** a keep-room fuse's guard stands 2–9 studs from it, in the same room, on the careless walk in but
+  never sealing the item off:
+  - **On the careless walk** (ObjectivePlaces.carelessWalk): the shortest walk, a body (1 stud) clear of the walls and
+    of what stands in the room, from 8 studs back in the room beyond the room's arrival doorway (straight out, or
+    along the run it opens off: the doorway, and the side of it, the squad reaches first from the floor's ways in, on
+    foot and through the crawlways alike) to the first point where the item's Pickup prompt (7 studs) answers passes
+    within half a pan's side (1.1) of the guard, so the foot lands on the pan whatever the trap's yaw. With an ordinary door, the walk is held for each way its open leaf may
+    hang. Put the guard on that line, between the doorway and where the prompt first answers; a guard beside the line,
+    or past the point where the prompt answers, fails it.
+  - **Never sealing it:** every guarded item keeps a spot to stand beside it (ObjectivePlaces.standingSpot: 1.6–4
+    studs off it, 2.5 from every trap spot a run may arm, in sight, walked to from a doorway of its room without a
+    foot on any pan and round the open door leaves). A guard that blocks a gap or a slot fails it.
+  - `Objectives.spec` and `web/tools/data-test.mjs` hold every fuse candidate, tunnel bays included, to both (the data
+    test on the baked collision).
 - Render the plan to eyeball it: a dump of the layout's rooms, doors, anchors and lights drawn top-down (one of the
   maps' screenshots is exactly that).
 

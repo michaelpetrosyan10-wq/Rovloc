@@ -56,6 +56,8 @@ type LightOptions = {
 type LightDefaults = { brightness: number, range: number, color: Color3 }
 
 local PREFIX = "L2"
+-- TunnelPlanner draws from Rng (the same plan in Lune and on Roblox); this seed, the first tried, passes every rule
+-- and spec
 local SEED = 20261105
 local HEIGHT = WorldConfig.Levels.Level2_ScienceHall.height
 local WORKTOP = 3.2
@@ -625,8 +627,9 @@ for _, v in
 		{ "L2_AirlockSouthEast", 393, WorldConfig.Towers.SouthEast.openingZ },
 	} :: { { any } }
 do
-	light(v[1], "Fluorescent", v[2], 11.4, v[3], { flicker = mains(v[1]), broken = true })
-	light(v[1], "EmergencyRed", v[2], 12 - 5, v[3] - 8, { brightness = 0.3 })
+	-- both fixtures fast to the ceiling (buildLight lifts none: a fixture set low hangs in the air)
+	light(v[1], "Fluorescent", v[2], VESTIBULE_HEIGHT - 0.4, v[3], { flicker = mains(v[1]), broken = true })
+	light(v[1], "EmergencyRed", v[2], VESTIBULE_HEIGHT - 0.4, v[3] - 8, { brightness = 0.3 })
 end
 
 --------------------------------------------------------------------------------

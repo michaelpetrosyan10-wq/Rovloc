@@ -31,7 +31,7 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
@@ -46,6 +46,7 @@ local VentShaftBuilder = require(script.Parent.VentShaftBuilder)
 
 local log = Log.new("SchoolShell")
 
+type Rng = Rng.Rng
 type Room = LayoutSchema.Room
 type Rect = LayoutSchema.Rect
 type Layout = LayoutSchema.LevelLayout
@@ -470,7 +471,7 @@ local CORD_DIAMETER = 0.07
 -- of a socket, or the whole housing sagging off one mount.
 type StripVariant = "Whole" | "MissingTube" | "HangingTube" | "SaggingHousing"
 
-local function stripVariant(random: Random, broken: boolean, mayHang: boolean): StripVariant
+local function stripVariant(random: Rng, broken: boolean, mayHang: boolean): StripVariant
 	if not broken then
 		return "Whole"
 	end
@@ -607,7 +608,7 @@ function SchoolShellBuilder.buildLight(parent: Instance, spec: LightSpec): BaseP
 	local fixtureOptions: Geometry.PartOptions = { castShadow = false, canCollide = false }
 	local strip = STRIP[kind]
 	if strip then
-		local random = MathUtil.seededRandom(1, "fixture:" .. spec.id)
+		local random = Rng.seeded(1, "fixture:" .. spec.id)
 		local variant = stripVariant(random, spec.broken == true, spec.hang ~= false)
 		local axis = flatAxis(spec.along)
 		local frame = CFrame.fromMatrix(underCeiling(strip.height / 2), axis, Vector3.yAxis)
@@ -1195,7 +1196,7 @@ local function addPlanks(
 	y1: number,
 	face: number,
 	dir: number,
-	random: Random
+	random: Rng
 ): number
 	local count = 0
 	local width = (u1 - u0) + 0.8
@@ -1253,7 +1254,7 @@ local function addShards(
 	origin: Vector3,
 	run: Run,
 	opening: LineOpening,
-	random: Random
+	random: Rng
 ): number
 	local count = 0
 	local corners: { { number } } = {
@@ -1864,12 +1865,12 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 					math.min(opening.y1, run.height),
 					face,
 					dir,
-					MathUtil.seededRandom(1, layout.id .. ":door:" .. door.id)
+					Rng.seeded(1, layout.id .. ":door:" .. door.id)
 				)
 			end
 		elseif window then
 			local room = rooms[window.room]
-			local random = MathUtil.seededRandom(1, string.format("%s:window:%d", layout.id, index))
+			local random = Rng.seeded(1, string.format("%s:window:%d", layout.id, index))
 			local name = string.format("Window_%s_%d", window.room, index)
 			if window.boarded then
 				local face, dir = faceToward(run, room)
@@ -2282,7 +2283,15 @@ function SchoolShellBuilder.buildExterior(parent: Instance, street: Vector2?): n
 	local covered = street or size
 	local footprint = Geometry.rect(-margin, -margin, covered.X + margin * 2, covered.Y + margin * 2)
 	local holes: { Rect } = { footprint }
-	for _, tower in WorldConfig.Towers do
+	-- the towers in id order (never the dictionary's hash order): the pieces, and their names, come out the same way in
+	-- every Luau build
+	local towerIds: { string } = {}
+	for id in WorldConfig.Towers do
+		table.insert(towerIds, id)
+	end
+	table.sort(towerIds)
+	for _, id in towerIds do
+		local tower = WorldConfig.Towers[id]
 		table.insert(holes, Geometry.rect(tower.minX, tower.minZ, tower.maxX - tower.minX, tower.maxZ - tower.minZ))
 	end
 
@@ -2336,7 +2345,7 @@ function SchoolShellBuilder.buildExterior(parent: Instance, street: Vector2?): n
 	end
 
 	-- Deterministic street debris and dead lamp posts (no lights: the storm is the only light outside).
-	local random = MathUtil.seededRandom(1, "Exterior")
+	local random = Rng.seeded(1, "Exterior")
 	local function clearOfSchool(x: number, z: number, pad: number): boolean
 		if x > -walk - pad and x < size.X + walk + pad and z > -walk - pad and z < size.Y + walk + pad then
 			return false

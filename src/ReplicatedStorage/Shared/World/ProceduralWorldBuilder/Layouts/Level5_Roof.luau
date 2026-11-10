@@ -385,7 +385,8 @@ plant("MaintBox", 18, 70, 24, 73, 3.6, "MetalGalvanized")
 for _, spot in { { "L5_RoofAccessNorth", 28 }, { "L5_RoofAccess", 144 }, { "L5_RoofAccessSouth", 260 } } :: { { any } } do
 	local z: number = spot[2]
 	light(spot[1], "Bulb", 393, HEIGHT - 0.4, z, { broken = true })
-	light(spot[1], "EmergencyRed", 392, HEIGHT - 2, z - 8, { flicker = "L5_StairLamp", brightness = 0.3 })
+	-- the red lamp fast to the ceiling (buildLight lifts none: a fixture set low hangs in the air)
+	light(spot[1], "EmergencyRed", 392, HEIGHT - 0.4, z - 8, { flicker = "L5_StairLamp", brightness = 0.3 })
 	light("L5_Roof_East", "Bulb", 385.5, 10.8, z, { broken = true }) -- above the roof door's swing
 end
 light("L5_Roof_Plant", "EmergencyRed", 320, HEIGHT - 1, 152, { flicker = "L5_Beacon", brightness = 0.5, range = 20 })

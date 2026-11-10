@@ -1,15 +1,17 @@
 --!strict
 -- VentGrateBuilder and DoorBuilder on the real layouts. Level 1 and Level 2 are built once with BuildAuthoritative
 -- (shell, vents, the static open doors) and their fixtures with BuildFixtures under a hand-made plan that locks every
--- other lockable grate (every other grate when none locks: Level 1's bypass, so the rusted look is still built); every
+-- other lockable grate (every other grate when none locks: Level 1's bypass, so the locked look is still shown); every
 -- other school level with ordinary doors is built with them, so the door statistics have a sample to work on now that
 -- the tunnel floors keep few doors; the Level 5 roof door is built from its level's anchors alone through DoorBuilder's
 -- own registration. Checked: one grate per layout grate with the attachment's state, disabled Unscrew / Kick prompts,
--- rusted locked grates, the shut panel covering the 3.5 bore on the room-side face (colliding, with sight gaps), the
--- crawler's exit and entry anchors, grate poses; every ordinary door standing open outside its doorway's walking
--- lane and in front of its casing; fixture door attributes, tags, signs and budgets; leaves that never cut into the
--- wall or the casing over their swing; the gate's grille closing the whole opening when down and clearing it when
--- rolled up; smashed poses landing on the floor.
+-- both looks on every grate (the same boxes galvanized and rusted shut, the plan's lock showing one: setLocked), the
+-- shut panel covering the 3.5 bore on the room-side face in either look (colliding, with sight gaps), the crawler's
+-- exit and entry anchors, grate poses moving both looks; every ordinary door standing open outside its doorway's
+-- walking lane and in front of its casing, a few on every floor hanging crooked; every floor's stair vestibule fire
+-- doors with the head room for their KEEP CLOSED sign; fixture door attributes, tags, signs and budgets; leaves that
+-- never cut into the wall or the casing over their swing; the gate's grille closing the whole opening when down and
+-- clearing it when rolled up; smashed poses landing on the floor.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -20,6 +22,7 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -192,6 +195,51 @@ local function leafParts(model: Model, leaf: string): { BasePart }
 	return partsOf(child(model, leaf))
 end
 
+-- The parts of one look of a grate (VentGrateBuilder.lookOf), under `root` (the grate or one of its leaves).
+local function lookParts(model: Model, root: Instance, look: VentGrateBuilder.Look): { BasePart }
+	local out: { BasePart } = {}
+	for _, part in partsOf(root) do
+		if VentGrateBuilder.lookOf(model, part) == look then
+			table.insert(out, part)
+		end
+	end
+	return out
+end
+
+local LOOKS: { VentGrateBuilder.Look } = { "Galvanized", "Rusted" }
+local GRATE_PROMPTS: { Enums.PromptKind } = { "Unscrew", "Kick" }
+
+-- A part's place in its grate: the leaf it moves with ("" for the frame) and its name, the same for its twin in the
+-- other look.
+local function slotOf(model: Model, part: BasePart): string
+	local leaf = ""
+	local cursor = part.Parent
+	while cursor and cursor ~= model do
+		if cursor.Parent == model and cursor:IsA("Model") and cursor.Name ~= VentGrateBuilder.Rusted then
+			leaf = cursor.Name
+		end
+		cursor = cursor.Parent
+	end
+	return leaf .. "/" .. part.Name
+end
+
+-- The slots whose rusted part does not stand exactly where its galvanized twin stands now (the looks move together).
+local function twinsApart(model: Model): { string }
+	local galvanized: { [string]: BasePart } = {}
+	for _, part in lookParts(model, model, "Galvanized") do
+		galvanized[slotOf(model, part)] = part
+	end
+	local out: { string } = {}
+	for _, part in lookParts(model, model, "Rusted") do
+		local slot = slotOf(model, part)
+		local twin = galvanized[slot]
+		if twin and not isIdentity(twin.CFrame:ToObjectSpace(part.CFrame)) then
+			table.insert(out, slot)
+		end
+	end
+	return out
+end
+
 local function roomOf(layout: Layout, id: string): LayoutSchema.Room
 	local room = LayoutSchema.indexRooms(layout)[id]
 	assert(room, "room " .. id)
@@ -262,7 +310,7 @@ local function world(): World
 		rerolls = 0,
 	}
 	for _, id in LEVELS do
-		Builder.BuildFixtures(id, runtime[id], plan, SEED)
+		Builder.BuildFixtures(id, runtime[id], plan)
 	end
 	local built: World = { runtime = runtime, locked = locked }
 	cached = built
@@ -343,9 +391,11 @@ return {
 				t.eq(model:GetAttribute(W.GrateState), if built.locked[grate.id] then "Locked" else "Closed", grate.id)
 				local base = model.PrimaryPart
 				t.truthy(base ~= nil and base.Name == "Base", grate.id .. " Base is the PrimaryPart")
-				local parts = partsOf(model)
-				t.truthy(#parts <= GRATE_BUDGET, string.format("%s has %d parts", grate.id, #parts))
-				for _, part in parts do
+				for _, look: VentGrateBuilder.Look in LOOKS do
+					local count = #lookParts(model, model, look)
+					t.truthy(count <= GRATE_BUDGET, string.format("%s %s look has %d parts", grate.id, look, count))
+				end
+				for _, part in partsOf(model) do
 					t.truthy(part.Anchored, part:GetFullName() .. " anchored")
 				end
 				for _, leaf in { "Panel", "Screw1", "Screw2", "Screw3", "Screw4" } do
@@ -407,31 +457,98 @@ return {
 		end
 	end,
 
-	["vent grates: locked grates are rusted shut"] = function(t: Expect)
+	["vent grates: every grate in both looks, the plan's lock showing the rusted one"] = function(t: Expect)
 		local built = world()
 		local lockedCount, closedCount = 0, 0
 		for _, id in LEVELS do
 			for _, model in grateModels(built, id) do
 				local grateId = model:GetAttribute(W.GrateId) :: string
-				local panel = child(model, "Panel")
-				local base = model.PrimaryPart
-				assert(base, grateId)
-				local dressing = 0
-				for _, name in { "WeldLatch", "WeldHead", "RustStreak" } do
-					if panel:FindFirstChild(name) then
-						dressing += 1
-					end
-				end
-				if built.locked[grateId] then
+				local locked = built.locked[grateId] == true
+				if locked then
 					lockedCount += 1
-					t.eq(model:GetAttribute(W.GrateState), "Locked")
-					t.eq(base.Material, Enum.Material.CorrodedMetal, grateId .. " rusted frame")
-					t.eq(dressing, 3, grateId .. " weld beads and rust streak")
 				else
 					closedCount += 1
-					t.eq(base.Material, Enum.Material.Metal, grateId .. " galvanized frame")
-					t.eq(dressing, 0, grateId .. " no rust dressing")
 				end
+				-- the rusted look in a sub-Model of the grate, the panel and each screw, pivoting where its owner rests
+				for _, owner in { "", "Panel", "Screw1", "Screw2", "Screw3", "Screw4" } do
+					local holder: Instance = if owner == "" then model else child(model, owner)
+					local rusted = child(holder, VentGrateBuilder.Rusted)
+					assert(rusted:IsA("Model"), grateId .. " " .. owner .. " Rusted")
+					if owner ~= "" then
+						local rest = PropKit.leafRest(model, owner)
+						assert(rest, grateId .. " " .. owner .. " rest")
+						t.truthy(isIdentity(rest:ToObjectSpace(rusted.WorldPivot)), grateId .. " " .. owner .. " pivot")
+					end
+				end
+				local base = model.PrimaryPart
+				assert(base, grateId)
+				local rustedBase = child(child(model, VentGrateBuilder.Rusted), "Base")
+				assert(rustedBase:IsA("BasePart"), grateId .. " rusted sill")
+				t.eq(base.Material, Enum.Material.Metal, grateId .. " galvanized frame")
+				t.eq(rustedBase.Material, Enum.Material.CorrodedMetal, grateId .. " rusted frame")
+
+				-- the same boxes: every galvanized part has its twin in the rusted look, and the rusted look adds only
+				-- the weld beads and the streak, none of which collides
+				local twins: { [string]: BasePart } = {}
+				for _, part in lookParts(model, model, "Rusted") do
+					twins[slotOf(model, part)] = part
+				end
+				local galvanized = lookParts(model, model, "Galvanized")
+				for _, part in galvanized do
+					local slot = slotOf(model, part)
+					local twin = twins[slot]
+					if not twin then
+						t.fail(grateId .. " no rusted twin for " .. slot)
+						continue
+					end
+					twins[slot] = nil
+					t.truthy(
+						(twin.CFrame.Position - part.CFrame.Position).Magnitude < EPS
+							and (twin.Size - part.Size).Magnitude < EPS,
+						grateId .. " " .. slot .. " twin in place"
+					)
+					t.truthy(rotationAngle(part.CFrame:ToObjectSpace(twin.CFrame)) < EPS, grateId .. " " .. slot)
+					t.eq(twin.CanCollide, part.CanCollide, grateId .. " " .. slot .. " CanCollide")
+					t.eq(twin.CanQuery, part.CanQuery, grateId .. " " .. slot .. " CanQuery")
+					t.eq(twin.CollisionGroup, part.CollisionGroup, grateId .. " " .. slot .. " CollisionGroup")
+				end
+				local dressing: { string } = {}
+				for slot, part in twins do
+					table.insert(dressing, slot)
+					t.falsy(part.CanCollide or part.CanQuery, grateId .. " " .. slot .. " never collides")
+				end
+				table.sort(dressing)
+				t.eq(
+					table.concat(dressing, " "),
+					"Panel/RustStreak Panel/WeldHead Panel/WeldLatch",
+					grateId .. " weld beads and rust streak, on the panel"
+				)
+
+				-- the plan's lock: state, prompts and the look shown; setLocked flips all three and back
+				local function check(expectLocked: boolean, when: string)
+					t.eq(model:GetAttribute(W.GrateState), if expectLocked then "Locked" else "Closed", grateId .. when)
+					local object = Strings.get(if expectLocked then "Prompt.GrateLocked" else "Prompt.Grate")
+					for _, kind: Enums.PromptKind in GRATE_PROMPTS do
+						local prompt = PropKit.findPrompt(model, kind)
+						t.eq(prompt and prompt.ObjectText, object, grateId .. " " .. kind .. when)
+					end
+					for _, part in partsOf(model) do
+						local look = VentGrateBuilder.lookOf(model, part)
+						local shown = (look == "Rusted") == expectLocked
+						local own = if part.Name == "RustStreak" then 0.2 else 0
+						t.near(
+							part.Transparency,
+							if shown then own else 1,
+							1e-4,
+							slotOf(model, part) .. " " .. look .. when
+						)
+					end
+				end
+				check(locked, " as built")
+				VentGrateBuilder.setLocked(model, not locked)
+				check(not locked, " flipped")
+				VentGrateBuilder.setLocked(model, locked)
+				check(locked, " restored")
 			end
 		end
 		local planned = 0
@@ -456,59 +573,70 @@ return {
 				local lo = extent(frame, partsOf(model))
 				t.truthy(lo.Z >= WALL_HALF - EPS, grateId .. " mounted on the room-side face")
 
-				-- the frame rings the opening
-				for _, name in { "Base", "FrameTop", "FrameLeft", "FrameRight" } do
-					local part = child(model, name)
-					assert(part:IsA("BasePart"), name)
-					t.truthy(part.CanCollide, grateId .. " " .. name .. " collides")
-					t.eq(part.CollisionGroup, CollisionGroups.Default, grateId .. " " .. name)
+				-- in either look: the frame rings the opening
+				for _, look: VentGrateBuilder.Look in LOOKS do
+					local holder: Instance = if look == "Rusted" then child(model, VentGrateBuilder.Rusted) else model
+					for _, name in { "Base", "FrameTop", "FrameLeft", "FrameRight" } do
+						local part = child(holder, name)
+						assert(part:IsA("BasePart"), name)
+						t.truthy(part.CanCollide, grateId .. " " .. look .. " " .. name .. " collides")
+						t.eq(part.CollisionGroup, CollisionGroups.Default, grateId .. " " .. name)
+					end
+					local sill = child(holder, "Base")
+					assert(sill:IsA("BasePart"), "Base")
+					local baseLo, baseHi = extent(frame, { sill })
+					t.truthy(
+						baseHi.Y <= -HALF_BORE + EPS and baseLo.Y < -HALF_BORE,
+						grateId .. " " .. look .. " sill under the opening"
+					)
 				end
-				local baseLo, baseHi = extent(frame, { model.PrimaryPart :: BasePart })
-				t.truthy(baseHi.Y <= -HALF_BORE + EPS and baseLo.Y < -HALF_BORE, grateId .. " sill under the opening")
 
-				-- colliding panel parts: past the opening on every side, louvres the full width, small gaps only
-				local colliding: { BasePart } = {}
-				local spans: { { number } } = {}
-				local louvres = 0
-				for _, part in leafParts(model, "Panel") do
-					if not part.CanCollide then
-						continue
+				-- colliding panel parts, in either look: past the opening on every side, louvres the full width, small
+				-- gaps only
+				for _, look: VentGrateBuilder.Look in LOOKS do
+					local colliding: { BasePart } = {}
+					local spans: { { number } } = {}
+					local louvres = 0
+					for _, part in lookParts(model, child(model, "Panel"), look) do
+						if not part.CanCollide then
+							continue
+						end
+						t.eq(part.CollisionGroup, CollisionGroups.Default, grateId .. " " .. part.Name)
+						table.insert(colliding, part)
+						local pLo, pHi = extent(frame, { part })
+						if pLo.X <= -HALF_BORE + EPS and pHi.X >= HALF_BORE - EPS then
+							table.insert(spans, { pLo.Y, pHi.Y })
+						end
+						if string.sub(part.Name, 1, 6) == "Louvre" then
+							louvres += 1
+							t.truthy(
+								pLo.X <= -HALF_BORE + EPS and pHi.X >= HALF_BORE - EPS,
+								grateId .. " louvre spans the bore"
+							)
+						end
 					end
-					t.eq(part.CollisionGroup, CollisionGroups.Default, grateId .. " " .. part.Name)
-					table.insert(colliding, part)
-					local pLo, pHi = extent(frame, { part })
-					if pLo.X <= -HALF_BORE + EPS and pHi.X >= HALF_BORE - EPS then
-						table.insert(spans, { pLo.Y, pHi.Y })
+					t.eq(louvres, 5, grateId .. " louvres")
+					local panelLo, panelHi = extent(frame, colliding)
+					t.truthy(panelLo.X < -HALF_BORE and panelHi.X > HALF_BORE, grateId .. " panel wider than the bore")
+					t.truthy(panelLo.Y < -HALF_BORE and panelHi.Y > HALF_BORE, grateId .. " panel taller than the bore")
+					t.truthy(panelLo.Z > WALL_HALF, grateId .. " panel in front of the frame")
+					table.sort(spans, function(a: { number }, b: { number }): boolean
+						return a[1] < b[1]
+					end)
+					local reach, widest = -HALF_BORE, 0
+					for _, span in spans do
+						if span[1] > reach then
+							widest = math.max(widest, span[1] - reach)
+						end
+						reach = math.max(reach, span[2])
 					end
-					if string.sub(part.Name, 1, 6) == "Louvre" then
-						louvres += 1
-						t.truthy(
-							pLo.X <= -HALF_BORE + EPS and pHi.X >= HALF_BORE - EPS,
-							grateId .. " louvre spans the bore"
-						)
-					end
+					widest = math.max(widest, HALF_BORE - reach)
+					t.truthy(
+						widest < 0.6,
+						string.format("%s largest gap %.2f stops a crawler and a player", grateId, widest)
+					)
+					t.truthy(widest > 0.2, grateId .. " louvres leave sight lines")
 				end
-				t.eq(louvres, 5, grateId .. " louvres")
-				local panelLo, panelHi = extent(frame, colliding)
-				t.truthy(panelLo.X < -HALF_BORE and panelHi.X > HALF_BORE, grateId .. " panel wider than the bore")
-				t.truthy(panelLo.Y < -HALF_BORE and panelHi.Y > HALF_BORE, grateId .. " panel taller than the bore")
-				t.truthy(panelLo.Z > WALL_HALF, grateId .. " panel in front of the frame")
-				table.sort(spans, function(a: { number }, b: { number }): boolean
-					return a[1] < b[1]
-				end)
-				local reach, widest = -HALF_BORE, 0
-				for _, span in spans do
-					if span[1] > reach then
-						widest = math.max(widest, span[1] - reach)
-					end
-					reach = math.max(reach, span[2])
-				end
-				widest = math.max(widest, HALF_BORE - reach)
-				t.truthy(
-					widest < 0.6,
-					string.format("%s largest gap %.2f stops a crawler and a player", grateId, widest)
-				)
-				t.truthy(widest > 0.2, grateId .. " louvres leave sight lines")
 			end
 		end
 	end,
@@ -556,6 +684,7 @@ return {
 			t.near(rotationAngle(transformOf(model, "Panel")), VentGrateBuilder.OpenAngle / 2, 1e-3, grateId)
 			t.truthy(VentGrateBuilder.setPanel(model, 1), grateId .. " setPanel")
 			local open = transformOf(model, "Panel")
+			t.eq(table.concat(twinsApart(model), " "), "", grateId .. " both looks swing together")
 			t.near(rotationAngle(open), VentGrateBuilder.OpenAngle, 1e-3, grateId .. " open angle")
 			t.truthy(open.Position.Magnitude < EPS, grateId .. " turns about its hinge pin")
 			t.truthy(math.abs(open.UpVector.Y) > 0.9999, grateId .. " hinge axis vertical")
@@ -566,12 +695,14 @@ return {
 
 			-- screws back out along the panel normal, then lie on the floor
 			VentGrateBuilder.setScrews(model, 0.5)
+			t.eq(table.concat(twinsApart(model), " "), "", grateId .. " both looks' screws back out together")
 			for i = 1, 4 do
 				local screw = transformOf(model, "Screw" .. i)
 				t.truthy(screw.Position.Magnitude > 0.1, grateId .. " screw backing out")
 				t.truthy(math.abs(screw.Position.X) < EPS and math.abs(screw.Position.Y) < EPS, "along its axis")
 			end
 			t.truthy(VentGrateBuilder.setScrews(model, 1), grateId .. " setScrews")
+			t.eq(table.concat(twinsApart(model), " "), "", grateId .. " both looks' screws drop together")
 			for i = 1, 4 do
 				local parts = leafParts(model, "Screw" .. i)
 				local sLo, sHi = extent(frame, parts)
@@ -592,6 +723,7 @@ return {
 
 			-- kicked: torn off, lying in front of the opening on the floor, inside the room
 			t.truthy(VentGrateBuilder.setKicked(model, 1), grateId .. " setKicked")
+			t.eq(table.concat(twinsApart(model), " "), "", grateId .. " both looks land together")
 			local low, high = math.huge, -math.huge
 			for _, part in leafParts(model, "Panel") do
 				for _, corner in corners(part) do
@@ -618,6 +750,7 @@ return {
 		world()
 		local angles: { [number]: boolean } = {}
 		local distinct, crooked, total = 0, 0, 0
+		local crookedOn: { [string]: number } = {}
 		local sample = doorLevels()
 		for _, id in sample do
 			local layout = layoutOf(id)
@@ -670,6 +803,7 @@ return {
 				end
 				if stile.CFrame.UpVector.Y < 0.999 then
 					crooked += 1
+					crookedOn[id] = (crookedOn[id] or 0) + 1
 				end
 			end
 		end
@@ -685,7 +819,32 @@ return {
 		t.eq(total, expected, "every ordinary door on the floors that keep them")
 		t.truthy(total >= 10, string.format("%d ordinary doors to check", total))
 		t.truthy(distinct >= 10, string.format("seeded variety of angles (%d of %d)", distinct, total))
-		t.truthy(crooked >= 1 and crooked <= total / 4, string.format("a few hang crooked (%d)", crooked))
+		t.truthy(crooked >= 1 and crooked <= total / 4, string.format("a few hang crooked (%d of %d)", crooked, total))
+		for _, id in sample do
+			t.truthy((crookedOn[id] or 0) >= 1, id .. ": one of its ordinary doors hangs crooked")
+		end
+	end,
+
+	["doors: every stair vestibule's fire door has the head room for its KEEP CLOSED sign, on every floor"] = function(
+		t: Expect
+	)
+		local signed = 0
+		for _, id in WorldConfig.LevelOrder do
+			local airlocks = 0
+			for _, plan in DoorBuilder.planFixtures(layoutOf(id)) do
+				if plan.site.door.kind == "Airlock" then
+					airlocks += 1
+					t.truthy(plan.signSwing ~= nil, plan.site.door.id .. " hangs its KEEP CLOSED sign over the casing")
+					if plan.signSwing ~= nil then
+						signed += 1
+					end
+				end
+			end
+			if id ~= "Level5_Roof" then
+				t.truthy(airlocks >= 3, string.format("%s: its stair vestibules' fire doors (%d)", id, airlocks))
+			end
+		end
+		t.truthy(signed > 0, "fire doors signed")
 	end,
 
 	["doors: fixture doors carry their state, tags, signs and budgets"] = function(t: Expect)
@@ -969,7 +1128,7 @@ return {
 		local folder = Instance.new("Folder")
 		local build = doorBuilders().Doors
 		assert(build, "DoorBuilder registers the Doors fixture")
-		build({ layout = layout, levelRoot = root, parent = folder, plan = plan, random = Random.new(5) })
+		build({ layout = layout, levelRoot = root, parent = folder, plan = plan, random = Rng.new(5) })
 		local seen = 0
 		for _, model in folder:GetChildren() do
 			local id = model:GetAttribute(W.StairwellId)
@@ -1015,7 +1174,7 @@ return {
 		local fixtures = doorBuilders()
 		local build = fixtures.Doors
 		assert(build, "DoorBuilder registers the Doors fixture")
-		local count = build({ layout = layout, levelRoot = root, parent = folder, plan = nil, random = Random.new(5) })
+		local count = build({ layout = layout, levelRoot = root, parent = folder, plan = nil, random = Rng.new(5) })
 		t.eq(count, 3, "one fixture door per stair housing on the roof")
 		local door: LayoutSchema.Door? = nil
 		for _, item in layout.doors do

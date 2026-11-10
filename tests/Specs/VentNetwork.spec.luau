@@ -20,6 +20,7 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -178,7 +179,7 @@ local function world(): World
 		levelRoot = level,
 		parent = folder,
 		plan = plan,
-		random = MathUtil.seededRandom(SEED, "VentNetworkSpec"),
+		random = Rng.seeded(SEED, "VentNetworkSpec"),
 	})
 	local grates: { Model } = {}
 	for _, child in folder:GetChildren() do

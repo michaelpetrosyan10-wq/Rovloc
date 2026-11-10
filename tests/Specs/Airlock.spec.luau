@@ -131,7 +131,7 @@ local function freshFixtures()
 			for _, child in folder:GetChildren() do
 				child:Destroy()
 			end
-			Builder.BuildFixtures(id, folder, nil, SEED)
+			Builder.BuildFixtures(id, folder, nil)
 		end
 	end)
 end

@@ -34,7 +34,7 @@ local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
@@ -46,6 +46,7 @@ local SchoolShellBuilder = require(script.Parent.Parent.SchoolShellBuilder)
 
 local log = Log.new("SetDressing")
 
+type Rng = Rng.Rng
 type Layout = LayoutSchema.LevelLayout
 type Room = LayoutSchema.Room
 type Rect = LayoutSchema.Rect
@@ -221,21 +222,21 @@ end
 -- Turns a part's X axis vertical: cylinders become discs, thin wedges lie flat as triangles.
 local FLAT = rz(90)
 
-local function between(random: Random, a: number, b: number): number
+local function between(random: Rng, a: number, b: number): number
 	return random:NextNumber(a, b)
 end
 
-local function chance(random: Random, p: number): boolean
+local function chance(random: Rng, p: number): boolean
 	return random:NextNumber() < p
 end
 
-local function pick<T>(random: Random, list: { T }): T
+local function pick<T>(random: Rng, list: { T }): T
 	return list[random:NextInteger(1, #list)]
 end
 
-local function shuffled<T>(random: Random, list: { T }): { T }
+local function shuffled<T>(random: Rng, list: { T }): { T }
 	local out = table.clone(list)
-	MathUtil.shuffle(out, random)
+	Rng.shuffle(out, random)
 	return out
 end
 
@@ -243,7 +244,7 @@ local function rgb(r: number, g: number, b: number): Color3
 	return Color3.fromRGB(r, g, b)
 end
 
-local function tint(color: Color3, random: Random, amount: number): Color3
+local function tint(color: Color3, random: Rng, amount: number): Color3
 	local f = 1 + between(random, -amount, amount)
 	return Color3.new(math.clamp(color.R * f, 0, 1), math.clamp(color.G * f, 0, 1), math.clamp(color.B * f, 0, 1))
 end
@@ -1243,7 +1244,7 @@ local COUNTER_PROBE_IGNORE: { [string]: boolean } =
 	{ FlaskCandidate = true, CorpseSpot = true, ClutterSpot = true, DoorSwing = true }
 
 -- One lab island. Counter-local frame: X along the worktop (the anchor's RightVector), Y up, -Z the anchor's facing.
-local function planCounter(info: LevelInfo, anchor: Anchor, random: Random): { Piece }
+local function planCounter(info: LevelInfo, anchor: Anchor, random: Rng): { Piece }
 	local layout = info.layout
 	local flasks = counterFlasks(layout, anchor)
 	local top = counterTop(layout, anchor)
@@ -1589,7 +1590,7 @@ local function buildLabCounters(ctx: PropKit.StaticContext): number
 	local seed = ctx.random:NextInteger(1, 2_000_000_000)
 	local built = 0
 	for _, anchor in counters do
-		local random = MathUtil.seededRandom(seed, anchor.id)
+		local random = Rng.seeded(seed, anchor.id)
 		local pieces = planCounter(info, anchor, random)
 		if not Kit.fits(info, pieces, { owner = anchor.id, ignore = COUNTER_IGNORE }) then
 			log.warn("%s reaches into a clearance zone", anchor.id)
@@ -1616,7 +1617,7 @@ local INTERIOR = paint(rgb(34, 36, 34), Enum.Material.Metal)
 local PAPER: { Color3 } = { rgb(148, 140, 116), rgb(132, 128, 108), rgb(156, 150, 128), rgb(126, 132, 124) }
 local BOOK: { Color3 } = { rgb(72, 38, 34), rgb(40, 52, 70), rgb(52, 66, 44), rgb(90, 76, 46), rgb(56, 52, 60) }
 
-local function paperSheet(name: string, cframe: CFrame, random: Random): Piece
+local function paperSheet(name: string, cframe: CFrame, random: Rng): Piece
 	return Kit.block(
 		name,
 		cframe,
@@ -1636,7 +1637,7 @@ local function dentedDoor(
 	height: number,
 	color: Color3,
 	material: Enum.Material,
-	random: Random
+	random: Rng
 ): { Piece }
 	local crease = between(random, -0.15, 0.15) * height
 	local lowH = height / 2 + crease
@@ -1661,7 +1662,7 @@ end
 
 type LockerState = "Shut" | "Hanging" | "Torn" | "Missing" | "Empty"
 
-local function planLockers(info: LevelInfo, anchor: Anchor, random: Random, attempt: number): { Piece }?
+local function planLockers(info: LevelInfo, anchor: Anchor, random: Rng, attempt: number): { Piece }?
 	local span = lockerSpan(info.layout, info.rooms, info.inner, anchor)
 	if not span then
 		return nil
@@ -1928,7 +1929,7 @@ local function buildSmashedLockers(ctx: PropKit.StaticContext): number
 	for _, anchor in anchors do
 		local pieces: { Piece }? = nil
 		for attempt = 1, 3 do
-			pieces = planLockers(info, anchor, MathUtil.seededRandom(seed + attempt, anchor.id), attempt)
+			pieces = planLockers(info, anchor, Rng.seeded(seed + attempt, anchor.id), attempt)
 			if pieces then
 				break
 			end
@@ -2007,7 +2008,7 @@ local function lightBoxes(room: Room, ceiling: number): { Box }
 end
 
 -- The run of the drip pipe at `anchor`: its half-length is drawn from `random` (nil: `half`, else the shortest).
-local function planRun(info: LevelInfo, anchor: Anchor, random: Random?, half: number?): PipeRun?
+local function planRun(info: LevelInfo, anchor: Anchor, random: Rng?, half: number?): PipeRun?
 	local room = info.rooms[anchor.room]
 	local inner = info.inner[anchor.room]
 	if not (room and inner) then
@@ -2206,7 +2207,7 @@ function SetDressingBuilder.dripEnvelopes(layout: Layout, anchor: Anchor): { Box
 	return out
 end
 
-local function planPipe(info: LevelInfo, anchor: Anchor, random: Random): { Piece }?
+local function planPipe(info: LevelInfo, anchor: Anchor, random: Rng): { Piece }?
 	local run = planRun(info, anchor, random)
 	if not run then
 		return nil
@@ -2313,7 +2314,7 @@ local function planPipe(info: LevelInfo, anchor: Anchor, random: Random): { Piec
 	return pieces
 end
 
-local function planPuddle(info: LevelInfo, anchor: Anchor, random: Random, centre: Vector3): { Piece }
+local function planPuddle(info: LevelInfo, anchor: Anchor, random: Rng, centre: Vector3): { Piece }
 	local pieces: { Piece } = {}
 	for _, scale in { 1, 0.7, 0.45 } do
 		pieces = {
@@ -2361,7 +2362,7 @@ local function buildDripPipes(ctx: PropKit.StaticContext): number
 	local seed = ctx.random:NextInteger(1, 2_000_000_000)
 	local built = 0
 	for _, anchor in anchors do
-		local random = MathUtil.seededRandom(seed, anchor.id)
+		local random = Rng.seeded(seed, anchor.id)
 		local pipe = planPipe(info, anchor, random)
 		if not pipe then
 			log.warn("%s: no clear ceiling run for a pipe", anchor.id)
@@ -2433,7 +2434,7 @@ local function debrisPiece(
 	x: number,
 	y: number,
 	z: number,
-	random: Random
+	random: Rng
 ): Piece
 	local base = CFrame.new(origin + Vector3.new(x, y, z)) * ry(between(random, 0, 360))
 	local name = kind .. index
@@ -2521,7 +2522,7 @@ local function debrisPiece(
 	)
 end
 
-local function planDebris(info: LevelInfo, trigger: Trigger, random: Random): { Piece }
+local function planDebris(info: LevelInfo, trigger: Trigger, random: Rng): { Piece }
 	local r = trigger.rect
 	local floor = trigger.y or 0
 	local area = r.w * r.d
@@ -2580,7 +2581,7 @@ local function buildFloorDebris(ctx: PropKit.StaticContext): number
 		if trigger.kind ~= "FloorDebris" and trigger.kind ~= "ScareStep" then
 			continue
 		end
-		local pieces = planDebris(info, trigger, MathUtil.seededRandom(seed, trigger.id))
+		local pieces = planDebris(info, trigger, Rng.seeded(seed, trigger.id))
 		local r = trigger.rect
 		local model = PropKit.model(
 			ctx.parent,
@@ -2640,7 +2641,7 @@ local SKIN: { Color3 } = { rgb(102, 98, 76), rgb(92, 84, 66), rgb(86, 92, 70), r
 local BONE = rgb(150, 142, 118)
 local BLOOD: { Color3 } = { rgb(52, 22, 18), rgb(44, 20, 16), rgb(58, 28, 20) }
 
-local function posePieces(pose: Pose, random: Random): { Piece }
+local function posePieces(pose: Pose, random: Rng): { Piece }
 	local shirt = pick(random, SHIRTS)
 	local trousers = pick(random, TROUSERS)
 	local skin = pick(random, SKIN)
@@ -2736,7 +2737,7 @@ local function posePieces(pose: Pose, random: Random): { Piece }
 	return pieces
 end
 
-local function newPose(kind: PoseKind, random: Random): Pose
+local function newPose(kind: PoseKind, random: Rng): Pose
 	local function r(a: number, b: number): number
 		return between(random, a, b)
 	end
@@ -2833,7 +2834,7 @@ local REST_LIMIT: { [PoseKind]: { pelvis: number, torso: number } } = {
 
 -- Builds a pose in corpse space (origin on the ground, -Z the facing) settled on y = 0 (and, slumped, backed onto
 -- the wall at z = 0). Nil when this draw is not physically plausible (propped up off the floor on a limb).
-local function restPose(kind: PoseKind, random: Random): { Piece }?
+local function restPose(kind: PoseKind, random: Rng): { Piece }?
 	local pieces = posePieces(newPose(kind, random), random)
 	Kit.offset(pieces, Vector3.new(0, 0.01 - lowest(pieces), 0))
 	local pelvis = piece(pieces, "Pelvis")
@@ -2857,7 +2858,7 @@ local function restPose(kind: PoseKind, random: Random): { Piece }?
 end
 
 -- Dried blood under the body: pools under the torso and hips and one smear.
-local function bloodPieces(pieces: { Piece }, random: Random): { Piece }
+local function bloodPieces(pieces: { Piece }, random: Rng): { Piece }
 	local out: { Piece } = {}
 	local spots: { { string | number } } = { { "Torso", 1.9, 3 }, { "Pelvis", 1.2, 2 }, { "Head", 0.8, 1.2 } }
 	for i, spot in spots do
@@ -2931,7 +2932,7 @@ local function placedCopy(pieces: { Piece }, frame: CFrame): { Piece }
 	return out
 end
 
-local function buildCorpse(anchor: Anchor, cframe: CFrame, parent: Instance, random: Random)
+local function buildCorpse(anchor: Anchor, cframe: CFrame, parent: Instance, random: Rng)
 	local layout = layoutOfAnchor(anchor, cframe)
 	if not layout then
 		return
@@ -3062,7 +3063,7 @@ local BAGS: { Color3 } = { rgb(46, 54, 74), rgb(84, 40, 40), rgb(44, 58, 46), rg
 local BOTTLES: { Color3 } = { rgb(52, 78, 52), rgb(78, 52, 30), rgb(110, 118, 114) }
 
 -- An item in item space (on the ground at y = 0, around the origin).
-local function itemPieces(kind: ItemKind, room: Room, random: Random): { Piece }
+local function itemPieces(kind: ItemKind, room: Room, random: Rng): { Piece }
 	local function block(name: string, cf: CFrame, size: Vector3, key: string, options: Geometry.PartOptions?): Piece
 		return Kit.block(name, cf, size, key, "Detail", options)
 	end
@@ -3212,7 +3213,7 @@ local function itemPieces(kind: ItemKind, room: Room, random: Random): { Piece }
 end
 
 -- The kinds one clutter heap is made of (in placement order), within the part budget.
-local function clutterList(room: Room, random: Random): { ItemKind }
+local function clutterList(room: Room, random: Rng): { ItemKind }
 	local list: { ItemKind } = {}
 	local parts = 0
 	local function push(kind: ItemKind, count: number, cost: number)
@@ -3251,7 +3252,7 @@ local function clutterList(room: Room, random: Random): { ItemKind }
 	return list
 end
 
-local function buildClutter(anchor: Anchor, cframe: CFrame, parent: Instance, random: Random)
+local function buildClutter(anchor: Anchor, cframe: CFrame, parent: Instance, random: Rng)
 	local layout = layoutOfAnchor(anchor, cframe)
 	if not layout then
 		return
@@ -3300,7 +3301,7 @@ end
 -- Drips (cosmetic)
 --------------------------------------------------------------------------------
 
-local function buildDripCosmetic(anchor: Anchor, cframe: CFrame, parent: Instance, random: Random)
+local function buildDripCosmetic(anchor: Anchor, cframe: CFrame, parent: Instance, random: Rng)
 	local layout = layoutOfAnchor(anchor, cframe)
 	if not layout then
 		return

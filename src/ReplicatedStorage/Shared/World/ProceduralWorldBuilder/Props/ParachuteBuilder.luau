@@ -27,12 +27,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 
 local Geometry = require(script.Parent.Parent.Geometry)
 local PropKit = require(script.Parent.PropKit)
 
+type Rng = Rng.Rng
 type PartOptions = Geometry.PartOptions
 
 export type CrateSpec = {
@@ -194,9 +197,9 @@ local function strap(
 	)
 end
 
-local function jitter(color: Color3, random: Random, amount: number): Color3
-	local h, s, v = color:ToHSV()
-	return Color3.fromHSV(
+local function jitter(color: Color3, random: Rng, amount: number): Color3
+	local h, s, v = MathUtil.toHSV(color)
+	return MathUtil.fromHSV(
 		(h + random:NextNumber(-0.01, 0.01)) % 1,
 		math.clamp(s * random:NextNumber(1 - amount, 1 + amount), 0, 1),
 		math.clamp(v * random:NextNumber(1 - amount, 1 + amount * 0.5), 0, 1)
@@ -236,7 +239,7 @@ end
 --------------------------------------------------------------------------------
 
 -- One pack standing in the crate. `frame` is pack space (see PACK_* above).
-local function buildCratePack(crate: Model, index: number, frame: CFrame, spec: CrateSpec, random: Random): Model
+local function buildCratePack(crate: Model, index: number, frame: CFrame, spec: CrateSpec, random: Rng): Model
 	local pack = PropKit.model(crate, string.format("ParachutePack%d", index), frame)
 	local x0, x1 = -PACK_W / 2, PACK_W / 2
 	local container = jitter(OLIVE, random, 0.08)
@@ -257,7 +260,7 @@ local function buildCratePack(crate: Model, index: number, frame: CFrame, spec: 
 		Vector3.new(x0 + 0.04, PACK_BODY_H, -PACK_D + 0.04),
 		Vector3.new(x1 - 0.04, PACK_H, -0.04),
 		"Plank",
-		{ material = FABRIC, color = container:Lerp(Color3.new(), 0.18) }
+		{ material = FABRIC, color = MathUtil.lerpColor(container, Color3.new(), 0.18) }
 	)
 	local front = -PACK_D
 	for _, side: number in { -1, 1 } do
@@ -322,7 +325,7 @@ function ParachuteBuilder.crateExtents(packCount: number): (number, number, numb
 end
 
 -- Builds the crate and its packs into `parent`. Every random choice draws from `random`.
-function ParachuteBuilder.buildCrate(parent: Instance, spec: CrateSpec, random: Random): Model
+function ParachuteBuilder.buildCrate(parent: Instance, spec: CrateSpec, random: Rng): Model
 	local frame = spec.cframe
 	local count = math.max(0, spec.packCount)
 	local inner = count * PACK_SPACING + 2 * END_PAD
@@ -332,7 +335,7 @@ function ParachuteBuilder.buildCrate(parent: Instance, spec: CrateSpec, random: 
 
 	local paint = jitter(CRATE_PAINT, random, 0.08)
 	local function plank(wear: number): PartOptions
-		return { material = Enum.Material.WoodPlanks, color = paint:Lerp(CRATE_RAW, wear) }
+		return { material = Enum.Material.WoodPlanks, color = MathUtil.lerpColor(paint, CRATE_RAW, wear) }
 	end
 
 	-- Skids, floor and walls
@@ -344,7 +347,7 @@ function ParachuteBuilder.buildCrate(parent: Instance, spec: CrateSpec, random: 
 			Vector3.new(-halfL, 0, z - SKID_W / 2),
 			Vector3.new(halfL, SKID_H, z + SKID_W / 2),
 			"PlankDark",
-			{ material = Enum.Material.Wood, color = CRATE_RAW:Lerp(Color3.new(), 0.45) }
+			{ material = Enum.Material.Wood, color = MathUtil.lerpColor(CRATE_RAW, Color3.new(), 0.45) }
 		)
 	end
 	local base = block(
@@ -494,7 +497,7 @@ function ParachuteBuilder.buildBackpack(parent: Instance, cframe: CFrame): Model
 		Vector3.new(-CONTAINER_HALF_W + 0.04, SHOULDER_Y - 0.08, 0.08),
 		Vector3.new(CONTAINER_HALF_W - 0.04, SHOULDER_Y + 0.1, 0.7),
 		"Plank",
-		{ material = FABRIC, color = OLIVE:Lerp(Color3.new(), 0.18) }
+		{ material = FABRIC, color = MathUtil.lerpColor(OLIVE, Color3.new(), 0.18) }
 	)
 	for _, side: number in { -1, 1 } do
 		local name = if side < 0 then "Left" else "Right"

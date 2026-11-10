@@ -49,7 +49,6 @@ local GYM: Enums.LayoutId = "Level3_Gymnasium"
 local POOL: Enums.LayoutId = "Level4_FloodedPool"
 local ROOF: Enums.LayoutId = "Level5_Roof"
 local LEVELS: { Enums.LayoutId } = { GYM, POOL, ROOF }
-local SEED = 4242
 local TOUCH = 2e-3 -- faces closer than this count as touching, not overlapping
 local PLAYER_SIZE = Vector3.new(2, 5.2, 1)
 -- CFrames are single precision, and the Lune harness stores part rotations with a few millionths of error on every
@@ -86,14 +85,14 @@ local function ownFolders(level: Instance): { Instance }
 	return out
 end
 
-local function buildRuntime(seed: number): { [string]: Folder }
+local function buildRuntime(): { [string]: Folder }
 	local runtime: { [string]: Folder } = {}
 	local previous = Geometry.getYieldEvery()
 	Geometry.setYieldEvery(0)
 	for _, id in LEVELS do
 		local folder = Instance.new("Folder")
 		folder.Name = id
-		Builder.BuildFixtures(id, folder, nil, seed)
+		Builder.BuildFixtures(id, folder, nil)
 		runtime[id] = folder
 	end
 	Geometry.setYieldEvery(previous)
@@ -112,7 +111,7 @@ local function world(): World
 	local host = Instance.new("Model")
 	host.Name = "PropsHideAndEscapeSpec"
 	local result = Builder.BuildAuthoritative({ parent = host :: Instance, layouts = LEVELS, yieldEvery = 0 })
-	local runtime = buildRuntime(SEED)
+	local runtime = buildRuntime()
 	local built: World = { runtime = runtime, levels = result.levels }
 	cached = built
 	return built
@@ -1136,20 +1135,39 @@ return {
 		host:Destroy()
 	end,
 
-	["fixtures are deterministic per seed, vary between seeds and rebuild in place"] = function(t: Expect)
-		-- Two fresh builds (the shared world's props have been posed by other specs).
-		local first = buildRuntime(SEED)
-		local again = buildRuntime(SEED)
+	["fixtures are the world's: every run builds the same, varied from locker to locker, rebuilt in place"] = function(
+		t: Expect
+	)
+		-- Two fresh builds (the shared world's props have been posed by other specs): fixtures take no run seed, so
+		-- every run (and the web's export, built once) gets the very same lockers and crate.
+		local first = buildRuntime()
+		local again = buildRuntime()
 		for _, id in LEVELS do
-			t.eq(ownSignature(again[id]), ownSignature(first[id]), id .. " rebuilds identically from the same seed")
+			t.eq(ownSignature(again[id]), ownSignature(first[id]), id .. " every run builds the same fixtures")
 		end
-		local other = buildRuntime(SEED + 1)
-		t.truthy(ownSignature(other[GYM]) ~= ownSignature(first[GYM]), "another seed varies the lockers")
-		t.truthy(ownSignature(other[ROOF]) ~= ownSignature(first[ROOF]), "another seed varies the crate")
+		-- each locker draws its own look from its level's stream: the gym's lockers are not all alike
+		local looks: { [string]: boolean } = {}
+		local distinct = 0
+		for _, model in modelsIn(child(first[GYM], LockerBuilder.Folder)) do
+			local colours: { string } = {}
+			for _, part in partsOf(model) do
+				table.insert(
+					colours,
+					string.format("%s=%.3f,%.3f,%.3f", part.Name, part.Color.R, part.Color.G, part.Color.B)
+				)
+			end
+			table.sort(colours)
+			local look = table.concat(colours, ";")
+			if not looks[look] then
+				looks[look] = true
+				distinct += 1
+			end
+		end
+		t.truthy(distinct >= 2, string.format("the gym's lockers vary (%d looks)", distinct))
 		-- Building into the same runtime folder again replaces the previous run's fixtures.
 		local previous = Geometry.getYieldEvery()
 		Geometry.setYieldEvery(0)
-		local count = Builder.BuildFixtures(GYM, again[GYM], nil, SEED + 2)
+		local count = Builder.BuildFixtures(GYM, again[GYM], nil)
 		Geometry.setYieldEvery(previous)
 		t.truthy(count >= 40, "fixture count reported")
 		t.eq(
@@ -1173,7 +1191,7 @@ return {
 				t.eq(first[id]:FindFirstChild(folderName) ~= nil, expected, id .. " " .. folderName)
 			end
 		end
-		for _, set in { first, again, other } do
+		for _, set in { first, again } do
 			for _, folder in set do
 				folder:Destroy()
 			end
