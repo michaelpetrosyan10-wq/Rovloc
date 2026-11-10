@@ -3,12 +3,13 @@
 // test relay (coop-relay.mjs) standing in for Supabase Realtime; one client is forced onto the relay (?relayonly: its
 // direct link times out into the relay fallback).
 //
-//   node tools/coop-test.mjs [--served] [--live] [--html <page>] [--build] [--no-minify] [--seed 1029]
+//   node tools/coop-test.mjs [--served] [--live] [--html <page>] [--no-minify] [--seed 1029]
 //
 // --live plays the same game through the real Supabase project (no test relay; supabase.co must be reachable) and its
 // STUN servers.
-// The page is the deliverable (dist/Rovloc.html, built when missing or with --build), opened from file:// (as from a
-// Downloads folder: origin "null") or, with --served, from a local HTTP server. Each page has its own browser context
+// The page is the single-file game, built fresh for every run (tools/build.mjs --out build/cache/coop-test.html, so a
+// stale page is never tested) unless --html names one, opened from file:// (as from a Downloads folder: origin "null")
+// or, with --served, from a local HTTP server. Each page has its own browser context
 // (its own saved profile, like separate computers); the relay URL rides in the query (?relay=ws://127.0.0.1:<port>),
 // so the page's Content-Security-Policy is bypassed for the test relay only (production allows the Supabase host).
 // The pages run in real time with the 3D drawing switched off (headless WebGL is software).
@@ -54,8 +55,9 @@ const served = argv.includes('--served');
 /** --live: the real Supabase project instead of the test relay (needs supabase.co reachable). */
 const liveService = argv.includes('--live');
 const seed = Number(opt('--seed', '1029'));
-let pageFile = path.resolve(opt('--html', path.join(web, 'dist/Rovloc.html')));
-if (argv.includes('--build') || !fs.existsSync(pageFile)) {
+const givenPage = opt('--html', '');
+const pageFile = path.resolve(givenPage || path.join(web, 'build/cache/coop-test.html'));
+if (!givenPage) {
   execFileSync(process.execPath, [path.join(here, 'build.mjs'), ...(argv.includes('--no-minify') ? ['--no-minify'] : []),
     '--out', pageFile], { stdio: 'inherit' });
 }
