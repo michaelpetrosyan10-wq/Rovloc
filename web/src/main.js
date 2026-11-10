@@ -2,7 +2,9 @@
 // run; `start(engine)` from src/game/index.js). Until the game module exists the build links the engine's sandbox
 // in its place, a free walk through the real school (build.mjs resolves "@rovloc/game").
 //
-// The page works from file:// with no network: every byte (code, world, textures) is inside the HTML.
+// The world and the boot texture set come through the page's asset manifest (tools/assets.mjs): the site's hashed
+// assets/ (same origin), or, in a single-file build that works from file:// with no network, base64 inside the HTML.
+// The graphics tier's own texture set streams in after boot (engine/textures.js).
 
 import { Engine } from './engine/index.js';
 import { CSS } from './engine/ui/style.js';

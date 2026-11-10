@@ -4,8 +4,11 @@
     python3 tools/textures/generate.py                 every map + out/meta.json + out/preview.png
     python3 tools/textures/generate.py --only CheckerTile,RustedMetal --detail
     python3 tools/textures/generate.py --check         validate manifest <-> Palette.luau only (no images)
+    python3 tools/textures/generate.py --size 2048 --out tools/textures/out/2048 --no-preview
+                                                       the web's Max tier: the same textures at 2048, with the
+                                                       detail the 1024 maps cannot hold (texlib: Field sizes)
 
-Output (default tools/textures/out, git-ignored): <Id>_<Map>.png (1024 x 1024; colour RGB, or RGBA for overlays;
+Output (default tools/textures/out, git-ignored): <Id>_<Map>.png (1024 x 1024, or --size; colour RGB, or RGBA for overlays;
 normal RGB in the OpenGL tangent-space convention Roblox uses; roughness / metalness 8-bit grey), meta.json (the
 sha256 of every map and each texture's reference albedo, read by upload.py), preview.png (every surface lit at game
 scale, tinted with its palette colour) and with --detail preview_<Id>.png (the maps side by side, 1:1 crops).
@@ -176,14 +179,15 @@ def label(img: Image.Image, text: str, xy=(6, 4)):
 # -- main -----------------------------------------------------------------------------------------------------
 
 
-def surface_maps(m: dict, s: Surface) -> dict[str, np.ndarray]:
+def surface_maps(m: dict, s: Surface, unit: float = 1.0) -> dict[str, np.ndarray]:
+    """The maps of a surface; `unit` = size / design size (heights are in design pixels, so slopes scale with it)."""
     out: dict[str, np.ndarray] = {}
     if s.alpha is not None:
         out["ColorMap"] = np.dstack([to_u8(s.color), to_u8(s.alpha)])
     else:
         out["ColorMap"] = to_u8(s.color)
     if "NormalMap" in m["maps"]:
-        out["NormalMap"] = normal_map(s.height, s.normal_strength)
+        out["NormalMap"] = normal_map(s.height, s.normal_strength * unit)
     if "RoughnessMap" in m["maps"]:
         out["RoughnessMap"] = to_u8(s.roughness)
     if "MetalnessMap" in m["maps"]:
@@ -213,6 +217,7 @@ def main() -> int:
     ap.add_argument("--no-preview", action="store_true")
     ap.add_argument("--detail", action="store_true", help="also write preview_<Id>.png per material")
     ap.add_argument("--check", action="store_true", help="validate manifest and Palette only")
+    ap.add_argument("--size", type=int, default=0, help="map size in pixels (default: the manifest's design size)")
     args = ap.parse_args()
 
     manifest = load_manifest(args.manifest)
@@ -233,14 +238,15 @@ def main() -> int:
         with open(meta_path, encoding="utf-8") as fh:
             meta = json.load(fh)
     entries, textured = parse_palette()
-    size = manifest["size"]
+    design = manifest["size"]
+    size = args.size or design
     views = []
     for m in manifest["materials"]:
         if only and m["id"] not in only:
             continue
         started = time.time()
-        surface = RECIPES[m["id"]](Field(m["seed"], size))
-        maps = surface_maps(m, surface)
+        surface = RECIPES[m["id"]](Field(m["seed"], size, design))
+        maps = surface_maps(m, surface, size / design)
         files = {}
         for map_name, arr in maps.items():
             path = os.path.join(args.out, f"{m['id']}_{map_name}.png")

@@ -858,7 +858,8 @@ return {
 				t.truthy(cframeNear(moves[2].cframe, exitRoot, EPS), "stood up at the ExitAnchor")
 				t.eq(PlayerStateService.GetMode(player), "OnFoot")
 				t.eq(PlayerStateService.GetMoveState(player), "Crouching", "still holding crouch")
-				t.eq(CollisionService.GetMode(character), "Normal")
+				-- crouched on foot: only the parts under a crawlway's mouth collide (no duct ball any more)
+				t.eq(CollisionService.GetMode(character), "Crouch")
 
 				place(root, inFront(built, model, 1))
 				look(player, -wall.LookVector)

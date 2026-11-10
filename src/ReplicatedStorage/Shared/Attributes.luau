@@ -63,6 +63,11 @@ Attributes.Creature = table.freeze({
 	Hidden = "Hidden",
 	GrabbedUserId = "GrabbedUserId",
 	LevelId = "LevelId",
+	-- the view contract (docs/MONSTER.md 12): the one-shot action ("" for none: Stare, ReachIn, LookAway, FadeOut,
+	-- FadeIn, Jumpscare), the server time it began, and how visible it is (0..1; written while a warp fades it)
+	Action = "Action",
+	ActionAt = "ActionAt",
+	Fade = "Fade",
 })
 
 -- ReplicatedStorage (match-wide)

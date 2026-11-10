@@ -708,7 +708,7 @@ return {
 			t.eq(check(cloudView(), creatureView({ state = state }), nil, clearLine), "State", state)
 		end
 		for _, state: Enums.MonsterState in
-			{ "Patrol", "InvestigateNoise", "WallChase", "VentChase", "AquaticStalk" } :: { Enums.MonsterState }
+			{ "Patrol", "InvestigateNoise", "WallChase", "Search", "Teleport", "AquaticStalk" } :: { Enums.MonsterState }
 		do
 			t.truthy(ChemicalProjectileService.stunnableState(state), state)
 		end

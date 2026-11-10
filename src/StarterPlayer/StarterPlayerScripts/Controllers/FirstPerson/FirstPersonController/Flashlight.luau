@@ -21,8 +21,8 @@
 -- Battery. Extrapolated from the Battery meter attributes; full brightness down to LowBattery (15 %), then dimming
 -- and warming toward a dying orange, with a sputter in the last 5 %.
 --
--- EMF. The Creature disturbs electronics within CreatureConfig.Senses.EmfRadius (45 studs; full strength inside
--- EMF_FULL_SHARE of it), or from inside a wall vent next to my room: Creature.InVent and the AdjacentZones of the
+-- EMF. The Creature disturbs electronics within CreatureConfig.Senses.EmfRadius (15 studs; full strength inside
+-- EMF_FULL_SHARE of it: smoothstep(15 -> 2.25)), or from inside a wall vent next to my room: Creature.InVent and the AdjacentZones of the
 -- VentShaft segment it is in (Creature.VentSegmentId -> the VentShaft part with that SegmentId) contain the
 -- listener's ZoneId (then at least VentAdjacentIntensity). The light flickers (value noise dims it, seeded
 -- dropouts black it out briefly, both deeper and faster with intensity, scaled by FlashScale) and an EmfStatic loop
@@ -86,6 +86,11 @@ Flashlight.LowBattery = 0.15
 Flashlight.ReconcileGrace = 0.8
 
 local EMF_FULL_SHARE = 0.15 -- full interference inside this share of the radius
+local STUTTER_HZ = 18 -- the stutter's slots per second
+local STUTTER_SHARE = 0.55 -- share of the slots it drops out
+local STUTTER_LEVEL = 0.12 -- what is left of the beam in a dropout (docs/MONSTER-LOOK.md: the reveal's 12 %)
+-- The torch stutters (a teleport's warning, the reveal scare) until this server time.
+local stutterUntil = -math.huge
 local NOISE_PERIOD = 4096 -- server time is folded into this period before noise (keeps math.noise precise)
 local FLICKER_BASE_HZ = 5
 local FLICKER_EXTRA_HZ = 16
@@ -160,6 +165,24 @@ function Flashlight.emfIntensity(distance: number, radius: number, ventAdjacent:
 		level = math.max(level, Flashlight.VentAdjacentIntensity)
 	end
 	return MathUtil.clamp01(level)
+end
+
+-- The torch stutter's brightness factor at server time `t` for a stutter running until `untilT`: seeded dropouts to
+-- STUTTER_LEVEL on STUTTER_HZ slots (deterministic per time), 1 outside it.
+function Flashlight.stutterFactor(t: number, untilT: number): number
+	if not (t < untilT) then
+		return 1
+	end
+	local slot = math.floor((t % NOISE_PERIOD) * STUTTER_HZ)
+	local roll = (math.sin(slot * 12.9898 + 78.233) * 43758.5453) % 1
+	return if roll < STUTTER_SHARE then STUTTER_LEVEL else 1
+end
+
+-- Makes this client's torch stutter until server time `untilT` (a later end extends one running).
+function Flashlight.SetStutter(untilT: number)
+	if MathUtil.isFinite(untilT) then
+		stutterUntil = math.max(stutterUntil, untilT)
+	end
 end
 
 -- Brightness multiplier 0..1 of a light under EMF `intensity` at time `t` (deterministic per seed and time).
@@ -556,6 +579,7 @@ function Flashlight.new(player: Player): Light
 			output = Flashlight.batteryFactor(batteryFraction)
 				* Flashlight.sputter(batteryFraction, context.serverNow, seed)
 				* flicker
+				* Flashlight.stutterFactor(context.serverNow, stutterUntil)
 			local color = Flashlight.beamColor(batteryFraction)
 			inner.Enabled = output > 0.01
 			outer.Enabled = output > 0.01

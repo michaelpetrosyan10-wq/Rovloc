@@ -1,23 +1,26 @@
 --!strict
--- Patrol: the Creature walks its level's patrol loops at Patrol speed.
+-- Patrol (the Stalk, docs/MONSTER.md 6.3): the Creature walks its level's patrol loops (the junction graph; derived
+-- from the rooms where a level has no waypoints) at the Patrol pace, 7 studs/s: slower than a walking player.
 --
---   * Loops come from the layout's PatrolWaypoint anchors (Brain.levelInfo): it joins a loop at the waypoint nearest
---     it, walks it in order (the last waypoint leads back to the first) for one lap, then picks the next loop.
---   * At a corner (the route turns by CornerDegrees or more) it stops: first it looks into the room's far corner,
---     then along the way it is about to go, a beat each.
---   * Choosing the next loop (chooseLoop): it may only use what it heard. The rooms it heard noises in lately pull it:
---     with the pacing's sweep chance (BuildUp sweeps most, Peak a little less, Relax never) it takes the loop through
---     the most and loudest of them; in Relax it takes the loop farthest from the last one instead, a breather;
---     otherwise one of the three loops nearest it.
---   * Withdrawing: entered with ctx.reposition (after a catch, a stun, a chase that ran too long) it first walks, at
---     InvestigateNoise speed, to a waypoint out of every player's sight (PacingDirector.repositionPoint), then patrols.
--- Inside a duct the first walk crawls out through the best open grate (Locomotion plans the way out).
+--   * It joins a loop at the waypoint nearest it that it can walk to, walks it in order (the last waypoint leads back
+--     to the first) for one lap, then picks the next loop.
+--   * At a junction (the route turns by CornerDegrees or more, loops of 3+) it pauses: head tilted, listening: first it
+--     looks into the room's far corner, then along the way it is about to go, a beat each.
+--   * Choosing the next loop: the rooms it heard noises in during the last HeardTtl seconds pull it: with the pacing's
+--     sweep chance (BuildUp 0.75, Peak 0.6, Relax never) it takes the loop through the most and loudest of them; in
+--     Relax it takes the loop farthest from the latest one instead; otherwise one of the three loops nearest it. Only
+--     loops it can walk to count (ctx.reachable: a level may fall apart into parts joined only by locked airlocks or
+--     ducts, and a warp may leave it in any of them); a loop it cannot reach would fail every leg where it stands.
+--   * Withdrawing: entered with ctx.reposition (after a catch or a stun) it first walks, at InvestigateNoise speed, to a
+--     waypoint out of every player's sight 35..140 studs from them, then patrols. (A chase that gives up fades out
+--     instead: the service's warp, before Patrol starts.)
+--   * Three failed legs pick a new loop.
+-- In the water (Level 4) the first goal on land is reached by a warp: the Mover fades it out and in on land.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local Enums = require(ReplicatedStorage.Shared.Enums)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 
 local Brain = require(script.Parent.Parent.Brain)
 
@@ -46,8 +49,8 @@ type Run = {
 
 local NAME: Enums.MonsterState = "Patrol"
 local CORNER_DEGREES = 50
-local LOOK_SECONDS = { min = 0.6, max = 1.1 }
-local HEARD_TTL = 60 -- the noises it really heard in the last minute pull the next loop (harder Standard; was 90)
+local LOOK_MIN, LOOK_MAX = 0.6, 1.1
+local HEARD_TTL = 60
 local ARRIVE = 2
 local MAX_FAILURES = 3
 local WITHDRAW_MIN = 35 -- from the nearest player
@@ -58,16 +61,13 @@ local Patrol = {}
 Patrol.Name = NAME
 Patrol.CornerDegrees = CORNER_DEGREES
 Patrol.HeardTtl = HEARD_TTL
--- harder Standard (was 0.6 / 0.45): it sweeps toward the rooms it heard noises in more often
+Patrol.WithdrawMin = WITHDRAW_MIN
+Patrol.WithdrawMax = WITHDRAW_MAX
 Patrol.SweepChance = table.freeze({ BuildUp = 0.75, Peak = 0.6, Relax = 0 } :: { [string]: number })
 
 local runs: { [Context]: Run } = setmetatable({}, { __mode = "k" }) :: any
 
---------------------------------------------------------------------------------
--- Pure helpers
---------------------------------------------------------------------------------
-
--- The waypoint after `index` (the last leads back to the first).
+-- The waypoint after `index` (1-based; the last leads back to the first).
 function Patrol.nextIndex(loop: Loop, index: number): number
 	local count = #loop.waypoints
 	if count == 0 then
@@ -76,32 +76,48 @@ function Patrol.nextIndex(loop: Loop, index: number): number
 	return index % count + 1
 end
 
--- The waypoint of `loop` nearest `position` (1 for an empty loop).
-function Patrol.nearestIndex(loop: Loop, position: Vector3): number
+-- The waypoint of `loop` nearest `position` (of those `reachable` passes, when any does).
+function Patrol.nearestIndex(loop: Loop, position: Vector3, reachable: ((Vector3) -> boolean)?): number
+	local any = false
+	if reachable then
+		for _, waypoint in loop.waypoints do
+			if reachable(waypoint.position) then
+				any = true
+				break
+			end
+		end
+	end
 	local best, bestDistance = 1, math.huge
-	for index, waypoint in loop.waypoints do
-		local distance = (waypoint.position - position).Magnitude
-		if distance < bestDistance then
-			best, bestDistance = index, distance
+	for i, waypoint in loop.waypoints do
+		if any and reachable and not reachable(waypoint.position) then
+			continue
+		end
+		local d = (waypoint.position - position).Magnitude
+		if d < bestDistance then
+			best, bestDistance = i, d
 		end
 	end
 	return best
 end
 
--- Degrees the route turns at `here` (0 = straight on, 180 = doubling back).
+local function flat(v: Vector3): Vector3
+	return Vector3.new(v.X, 0, v.Z)
+end
+
+-- Degrees the route turns at `here` (0 = straight on).
 function Patrol.turnDegrees(previous: Vector3, here: Vector3, nextPoint: Vector3): number
-	local incoming = MathUtil.flat(here - previous)
-	local outgoing = MathUtil.flat(nextPoint - here)
+	local incoming = flat(here - previous)
+	local outgoing = flat(nextPoint - here)
 	if incoming.Magnitude < 1e-4 or outgoing.Magnitude < 1e-4 then
 		return 0
 	end
 	return math.deg(math.acos(math.clamp(incoming.Unit:Dot(outgoing.Unit), -1, 1)))
 end
 
--- Where to look at a corner: into the farthest corner of the room that is not behind it, then the way it goes on.
+-- Where to look at a corner: into the farthest corner of the room not behind it, then the way on.
 function Patrol.cornerLooks(room: Brain.Room?, here: Vector3, incoming: Vector3, outgoing: Vector3): { Vector3 }
 	local looks: { Vector3 } = {}
-	local forward = MathUtil.flat(incoming)
+	local forward = flat(incoming)
 	if room then
 		local best: Vector3? = nil
 		local bestDistance = -1
@@ -113,29 +129,30 @@ function Patrol.cornerLooks(room: Brain.Room?, here: Vector3, incoming: Vector3,
 				Vector3.new(room.maxX, here.Y, room.maxZ),
 			}
 		do
-			local offset = MathUtil.flat(corner - here)
-			if offset.Magnitude < 1e-3 then
+			local offset = flat(corner - here)
+			local len = offset.Magnitude
+			if len < 1e-3 then
 				continue
 			end
 			if forward.Magnitude > 1e-3 and offset.Unit:Dot(forward.Unit) < -0.2 then
 				continue
 			end
-			if offset.Magnitude > bestDistance then
-				best, bestDistance = offset.Unit, offset.Magnitude
+			if len > bestDistance then
+				best, bestDistance = offset.Unit, len
 			end
 		end
 		if best then
 			table.insert(looks, best)
 		end
 	end
-	local onward = MathUtil.flat(outgoing)
+	local onward = flat(outgoing)
 	if onward.Magnitude > 1e-3 then
 		table.insert(looks, onward.Unit)
 	end
 	return looks
 end
 
--- How strongly the noises it heard lately pull it toward `loop` (louder and fresher pull harder).
+-- How strongly the noises heard lately pull toward `loop`.
 function Patrol.heardPull(loop: Loop, heardZones: { [string]: Brain.HeardZone }, now: number): number
 	local pull = 0
 	for zoneId, heard in heardZones do
@@ -155,7 +172,7 @@ local function distanceTo(loop: Loop, position: Vector3): number
 	return best
 end
 
--- The next loop to walk (nil when the level has none). See the header for the rules.
+-- The next loop to walk (nil when the level has none).
 function Patrol.chooseLoop(loops: { Loop }, from: Vector3, options: ChooseOptions): Loop?
 	local candidates: { Loop } = {}
 	for _, loop in loops do
@@ -176,19 +193,18 @@ function Patrol.chooseLoop(loops: { Loop }, from: Vector3, options: ChooseOption
 	local latest: Brain.HeardZone? = nil
 	for _, heard in options.heardZones do
 		local age = options.now - heard.at
-		if age >= 0 and age < HEARD_TTL and (latest == nil or heard.at > latest.at) then
+		if age >= 0 and age < HEARD_TTL and (latest == nil or heard.at > (latest :: Brain.HeardZone).at) then
 			latest = heard
 		end
 	end
 	if options.avoid then
-		local quiet = latest
-		if quiet then
-			local best: Loop = candidates[1]
+		if latest then
+			local best = candidates[1]
 			local bestDistance = -1
 			for _, loop in candidates do
-				local distance = (loop.centre - quiet.position).Magnitude
-				if distance > bestDistance then
-					best, bestDistance = loop, distance
+				local d = (loop.centre - latest.position).Magnitude
+				if d > bestDistance then
+					best, bestDistance = loop, d
 				end
 			end
 			return best
@@ -212,10 +228,6 @@ function Patrol.chooseLoop(loops: { Loop }, from: Vector3, options: ChooseOption
 	return candidates[pick]
 end
 
---------------------------------------------------------------------------------
--- State
---------------------------------------------------------------------------------
-
 local function runOf(ctx: Context): Run
 	local run = runs[ctx]
 	if not run then
@@ -234,10 +246,6 @@ local function runOf(ctx: Context): Run
 	return run
 end
 
-local function lookSeconds(ctx: Context): number
-	return ctx.random:NextNumber(LOOK_SECONDS.min, LOOK_SECONDS.max)
-end
-
 local function pickLoop(ctx: Context, run: Run)
 	local level = ctx.level
 	if not level then
@@ -245,7 +253,25 @@ local function pickLoop(ctx: Context, run: Run)
 		return
 	end
 	local position = ctx.body:GetPosition()
-	local loop = Patrol.chooseLoop(level.loops, position, {
+	-- the loops it can walk to from here (all of them when it can reach none: the mover then stalls and the service
+	-- moves it unseen)
+	local reachable = ctx.reachable()
+	local walkable: { Loop } = {}
+	for _, loop in level.loops do
+		local ok = reachable == nil
+		if reachable then
+			for _, waypoint in loop.waypoints do
+				if reachable(waypoint.position) then
+					ok = true
+					break
+				end
+			end
+		end
+		if ok then
+			table.insert(walkable, loop)
+		end
+	end
+	local loop = Patrol.chooseLoop(if #walkable > 0 then walkable else level.loops, position, {
 		current = run.lastLoop,
 		heardZones = ctx.heardZones,
 		now = ctx.now(),
@@ -262,7 +288,7 @@ local function pickLoop(ctx: Context, run: Run)
 	run.arrived = false
 	if loop then
 		run.lastLoop = loop.id
-		run.index = Patrol.nearestIndex(loop, position)
+		run.index = Patrol.nearestIndex(loop, position, reachable)
 		ctx.mover:GoTo(loop.waypoints[run.index].position, { arrive = ARRIVE })
 	end
 end
@@ -272,7 +298,6 @@ local function setSpeed(ctx: Context, state: Enums.MonsterState)
 	ctx.body:SetWalkSpeed(ctx.speedOf(state))
 end
 
--- Reached waypoint `run.index`: queue the corner looks (if it turns here), then walk on.
 local function arrive(ctx: Context, run: Run, loop: Loop)
 	local count = #loop.waypoints
 	local here = loop.waypoints[run.index]
@@ -281,8 +306,7 @@ local function arrive(ctx: Context, run: Run, loop: Loop)
 	run.arrived = true
 	run.walked += 1
 	if count >= 3 and Patrol.turnDegrees(previous.position, here.position, following.position) >= CORNER_DEGREES then
-		local level = ctx.level
-		local room = if level then level.rooms[here.zoneId] else nil
+		local room = if ctx.level then ctx.level.rooms[here.zoneId] else nil
 		run.looks = Patrol.cornerLooks(
 			room,
 			here.position,
@@ -308,7 +332,9 @@ function Patrol.enter(ctx: Context, _from: Enums.MonsterState)
 	run.looks = {}
 	run.withdrawTo = nil
 	ctx.mover:SetRepathInterval(CreatureConfig.Repath.PatrolInterval)
-	ctx.body:SetPose("Biped")
+	if ctx.mover:Medium() == "Floor" then
+		ctx.body:SetPose("Biped")
+	end
 	if ctx.reposition then
 		ctx.reposition = false
 		local point = ctx.repositionPoint(WITHDRAW_MIN, WITHDRAW_MAX)
@@ -362,7 +388,7 @@ function Patrol.update(ctx: Context, _dt: number)
 	end
 	local look = table.remove(run.looks, 1)
 	if look then
-		mover:Hold(lookSeconds(ctx), look)
+		mover:Hold(ctx.random:NextNumber(LOOK_MIN, LOOK_MAX), look)
 		return
 	end
 	walkOn(ctx, run, loop)

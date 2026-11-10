@@ -382,6 +382,23 @@ return {
 		t.eq(PanicVFX.proximity(0 / 0, true), 0, "NaN distance")
 	end,
 
+	["panic: within 25 of its eye the heart races, seen or not (docs/MONSTER.md 11)"] = function(t: Expect)
+		t.eq(PanicVFX.nearFloor(25), 0, "nothing at the edge")
+		t.eq(PanicVFX.nearFloor(40), 0)
+		t.near(PanicVFX.nearFloor(24.999), 0.27, 1e-3, "0.27 just inside")
+		t.near(PanicVFX.nearFloor(6), 0.7, 1e-9, "0.27 + 0.43 at 6 studs")
+		t.near(PanicVFX.nearFloor(1), 0.7, 1e-9)
+		t.eq(PanicVFX.nearFloor(0 / 0), 0, "NaN distance")
+		local previous = 1
+		for distance = 0, 25, 0.5 do
+			local value = PanicVFX.nearFloor(distance)
+			t.truthy(value <= previous + 1e-9, "monotone at " .. distance)
+			previous = value
+		end
+		-- above the heartbeat's start (0.25) anywhere inside the radius
+		t.truthy(PanicVFX.nearFloor(20) > 0.25, "a heartbeat at 20 studs")
+	end,
+
 	["panic: target takes the highest source, downed adds, everything clamps"] = function(t: Expect)
 		t.eq(PanicVFX.target(STATIC_PANIC), 0)
 		local chased = table.clone(STATIC_PANIC)
@@ -732,7 +749,7 @@ return {
 
 	["flashlight: EMF intensity by distance and adjacent vents"] = function(t: Expect)
 		local radius = CreatureConfig.Senses.EmfRadius
-		t.eq(Flashlight.EmfRadius, 45)
+		t.eq(Flashlight.EmfRadius, 15, "torch static within 15 (docs/MONSTER.md section 11)")
 		t.eq(Flashlight.emfIntensity(radius, radius, false), 0, "nothing at the edge")
 		t.eq(Flashlight.emfIntensity(radius + 20, radius, false), 0)
 		t.eq(Flashlight.emfIntensity(2, radius, false), 1, "full right next to it")

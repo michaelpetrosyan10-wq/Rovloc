@@ -21,6 +21,10 @@
 //     dust show; the area grade tint eases at 1.2/s.
 //   * Lightning. lightning({intensity, stages}) flashes the sky (two-stage envelope), damped to 0.18 indoors; while the
 //     camera is outdoors an ambient storm throws seeded lightning with thunder unless setStormEnabled(false).
+//   * Graphics tiers (quality.js): the haze closes at the tier's view distance (exp^2 fog reaching 95 % there), and
+//     the extra haze darkens toward FOG_DARKEN of the film's colour, so far geometry sinks into the dark instead of a
+//     grey wall; shadowFixtures picks the fixtures that cast real-time shadows of moving things this frame.
+//     Both are visual: no rule reads them.
 
 import * as THREE from 'three';
 import { MAX_POINT } from './materials.js';
@@ -40,6 +44,10 @@ const STORM_QUIET_AFTER_SCRIPTED = 8;
 const FOG_SCALE = 0.02; // Atmosphere density -> exp2 fog coefficient
 const LOBBY = 'Lobby';
 const EXPOSURE_BASE = 0.3; // LightingRig.Baseline.ExposureCompensation
+const FOG_REACH = Math.sqrt(3); // exp^2 fog is 95 % opaque where (density x distance)^2 = 3
+const FOG_DARKEN = 0.35; // GraphicsConfig.FogDarken: the colour of a short view's extra haze, of the film's own
+const FIXTURE_CASTER_RANGE = 75; // casters further than this from the camera throw no fixture shadows
+const FIXTURE_KINDS_SKIPPED = new Set(['Moonlight', 'ExitSign']);
 /**
  * Web calibration of the exposure, in stops on top of the film's (the browser frame has no Future-lighting
  * auto-exposure, and players found the Roblox night "pitch black"): dark but readable, a lit corridor around 18-30
@@ -187,6 +195,90 @@ export class Lighting {
     this.lastScripted = -Infinity;
     this.outdoors = false;
     this._fogColor = new THREE.Color();
+    /** burning fixtures that can cast fixture shadows: {light, pos, range, color (linear), dir, cone, coneEdge} */
+    this.fixtures = [];
+    for (const l of meta.lights || []) {
+      if (!l.baked || l.broken || !l.pos || FIXTURE_KINDS_SKIPPED.has(l.kind) || !(l.brightness > 0)) continue;
+      const color = new THREE.Color().setRGB(l.color[0], l.color[1], l.color[2], THREE.SRGBColorSpace);
+      const cone = l.cls !== 'point' && l.dir;
+      const half = ((l.angle ?? 90) * Math.PI) / 360;
+      this.fixtures.push({
+        light: l,
+        pos: new THREE.Vector3(...l.pos),
+        range: Math.min(60, l.range || 16),
+        color,
+        dir: cone ? new THREE.Vector3(...l.dir).normalize() : null,
+        coneEdge: Math.cos(Math.min(half, Math.PI / 2 - 1e-3)),
+        cone: Math.cos(Math.min(half, Math.PI / 2) * 0.7),
+        group: l.group || 0,
+      });
+    }
+    this._fixturePicks = [];
+    this._fixtureOut = [];
+  }
+
+  /**
+   * The haze's colour as it reaches the screen (exposure, the ACES curve, sRGB): the clear colour, so whatever lies past
+   * the tier's draw distance sinks into the same haze instead of a black cut-out.
+   * @param {THREE.Color} out
+   */
+  displayFog(out) {
+    const f = this.shared.uFogColor.value;
+    const k = this.shared.uExposure.value;
+    const tone = (x) => {
+      const v = Math.max(0, x * k);
+      const a = Math.min(1, Math.max(0, (v * (2.51 * v + 0.03)) / (v * (2.43 * v + 0.59) + 0.14)));
+      return a <= 0.0031308 ? a * 12.92 : 1.055 * a ** (1 / 2.4) - 0.055;
+    };
+    return out.setRGB(tone(f.x), tone(f.y), tone(f.z), THREE.LinearSRGBColorSpace);
+  }
+
+  /**
+   * The fixtures whose shadows of moving casters (World.dynamicCasters: the Creature) are drawn this frame: for
+   * every caster near the camera, the burning fixtures that reach it, strongest at the caster first, at most `n`.
+   * Each entry: {pos, range, color (linear x brightness x flicker), dir, cone, coneEdge, caster}.
+   */
+  shadowFixtures(casters, cameraPos, n) {
+    const out = this._fixtureOut;
+    out.length = 0;
+    if (!n || !casters || !casters.size) return out;
+    const data = this.shared.uFlickerData;
+    const picks = this._fixturePicks;
+    picks.length = 0;
+    for (const caster of casters) {
+      const b = caster.bounds;
+      if (!b || !(b.radius > 0) || !caster.object.visible || !caster.object.parent) continue;
+      if (b.center.distanceTo(cameraPos) > FIXTURE_CASTER_RANGE + b.radius) continue;
+      let casting = false;
+      for (const mesh of caster.object.children) {
+        if (mesh.visible && mesh.material && mesh.material.userData && mesh.material.userData.castShadow) casting = true;
+      }
+      if (!casting) continue;
+      for (const f of this.fixtures) {
+        const reach = f.range + b.radius;
+        const dx = f.pos.x - b.center.x;
+        const dy = f.pos.y - b.center.y;
+        const dz = f.pos.z - b.center.z;
+        if (dx * dx + dy * dy + dz * dz > reach * reach) continue;
+        const level = f.group > 0 ? data[f.group] ?? 1 : 1;
+        if (level <= 0.02) continue;
+        const d = Math.max(0, Math.sqrt(dx * dx + dy * dy + dz * dz) - b.radius * 0.5);
+        const x = Math.min(1, d / f.range);
+        const w = 1 - x * x;
+        const score = f.light.brightness * level * (w * w) / (1 + this.shared.uFalloffK.value * d * d);
+        if (score > 0.01) picks.push({ f, level, caster, score });
+      }
+    }
+    picks.sort((a, b) => b.score - a.score);
+    for (let i = 0; i < Math.min(n, picks.length); i++) {
+      const p = picks[i];
+      const f = p.f;
+      const e = f.entry || (f.entry = { pos: f.pos, range: f.range, color: new THREE.Vector3(), dir: f.dir, cone: f.cone, coneEdge: f.coneEdge, caster: null });
+      e.color.set(f.color.r, f.color.g, f.color.b).multiplyScalar(f.light.brightness * p.level);
+      e.caster = p.caster;
+      out.push(e);
+    }
+    return out;
   }
 
   _addDynamic(props) {
@@ -424,12 +516,23 @@ export class Lighting {
     this.skyFlash = sky * flashScale;
     this.flash = this.skyFlash * (this.outdoors ? 1 : INDOOR_FLASH);
 
-    // shared uniforms: fog, exposure, sky flash
+    // shared uniforms: fog (closing at the tier's view distance, darkened), exposure, sky flash
     const film = this.film;
+    let density = film.density * FOG_SCALE;
+    let darken = 1;
+    const view = this.engine.quality && this.engine.quality.budget ? this.engine.quality.budget.viewDistance : Infinity;
+    if (Number.isFinite(view) && view > 0) {
+      const need = FOG_REACH / view;
+      if (need > density) {
+        darken = lerp(1, FOG_DARKEN, (need - density) / need);
+        density = need;
+      }
+    }
+    this.fogDensity = density;
     this._fogColor.setRGB(film.hazeColor[0], film.hazeColor[1], film.hazeColor[2], THREE.SRGBColorSpace);
     this.shared.uFogColor.value.set(this._fogColor.r, this._fogColor.g, this._fogColor.b)
-      .multiplyScalar(1 + this.flash * 6);
-    this.shared.uFogDensity.value = film.density * FOG_SCALE;
+      .multiplyScalar((1 + this.flash * 6) * darken);
+    this.shared.uFogDensity.value = density;
     this.shared.uExposure.value = 2 ** (EXPOSURE_BASE + film.exposure + this.flash * 1.1);
     // the trim lifts the baked world only: the torch keeps the brightness it was tuned with (no clipped hotspot)
     this.shared.torchGain = 2 ** -film.trim;

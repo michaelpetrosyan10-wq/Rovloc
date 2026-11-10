@@ -283,10 +283,9 @@ local function spawnCreature()
 		log.debug("no %s rig registered; the run has no Creature", CREATURE_RIG)
 		return
 	end
-	-- The basement has no monster (the squad meets it on Floor 1), so a run that starts there places it a floor up.
+	-- It hunts from the basement on (docs/MONSTER.md): placed on the level the run starts on.
 	local current: Enums.LevelId = LevelDirector.GetCurrentLevel() or Enums.LevelId[1]
-	local first: Enums.LevelId = if current == Enums.LevelId[1] then Enums.LevelId[2] else current
-	local cframe, levelId = creatureSpawn(first)
+	local cframe, levelId = creatureSpawn(current)
 	if not cframe or not levelId then
 		log.warn("no CreatureSpawn anchor on or after the current level; the Creature was not placed")
 		return

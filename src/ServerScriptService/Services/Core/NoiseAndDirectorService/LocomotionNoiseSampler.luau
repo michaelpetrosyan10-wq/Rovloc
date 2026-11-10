@@ -20,6 +20,9 @@
 -- tricks read as the sprint they are. Such a step is also reported as a SuspiciousStep (NoiseAndDirectorService
 -- fires SuspiciousMovement; P3 MovementAuthority turns it into strikes).
 --
+-- Landings. A character on foot that lands after NoiseConfig.JumpLandAirborne seconds or more in the air (the
+-- Humanoid in Freefall or Jumping) pulses JumpLand (26, Normal) where it lands, whatever its MoveState (landing).
+--
 -- The lobby is the safe zone: a character standing in a Lobby room right now (ZoneService: ZoneId set and
 -- LevelId "Lobby") is never heard. Outside every room (stair shafts, the street) characters are heard as usual.
 --
@@ -64,6 +67,7 @@ export type Track = {
 	movedAt: number?,
 	teleportUntil: number?,
 	character: Model?,
+	airborneSince: number?, -- when the character left the floor (nil on the floor)
 }
 
 -- A step longer than TeleportStep that no server teleport explains (horizontal studs over `seconds`).
@@ -241,7 +245,25 @@ function Sampler.newTrack(): Track
 		movedAt = nil,
 		teleportUntil = nil,
 		character = nil,
+		airborneSince = nil,
 	}
+end
+
+-- States that land on their feet (a landing from a vent, the water or a cutscene is no JumpLand).
+local ON_FOOT: { [string]: boolean } = { Standing = true, Sprinting = true, Crouching = true }
+
+-- Whether this sample lands a jump or a fall worth a JumpLand: `airborne` now, at `now`, in `moveState`. Tracks the
+-- time the character left the floor.
+function Sampler.landing(track: Track, airborne: boolean, now: number, moveState: string): boolean
+	if airborne then
+		if track.airborneSince == nil then
+			track.airborneSince = now
+		end
+		return false
+	end
+	local since = track.airborneSince
+	track.airborneSince = nil
+	return since ~= nil and now - since >= NoiseConfig.JumpLandAirborne and ON_FOOT[moveState] == true
 end
 
 -- Forgets the recent path (the next sample starts a new speed window). Pacing and an armed teleport token are kept,
@@ -479,6 +501,11 @@ local function samplePlayer(player: Player, emit: Emitter, report: SuspicionRepo
 
 	local moveState: Enums.MoveState = moveStateOf(player)
 	local position = root.Position
+	local airState = humanoid:GetState()
+	local airborne = airState == Enum.HumanoidStateType.Freefall or airState == Enum.HumanoidStateType.Jumping
+	if Sampler.landing(track, airborne, clock, moveState) then
+		emit(position, "JumpLand", { sourcePlayer = player, levelId = levelOf(player), medium = "Air" })
+	end
 	local kind: Enums.NoiseKind?, suspicious: SuspiciousStep? = Sampler.sample(track, position, moveState, clock)
 	if suspicious then
 		log.warnThrottled(

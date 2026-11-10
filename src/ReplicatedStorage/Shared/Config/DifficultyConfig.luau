@@ -12,7 +12,10 @@ export type DifficultySpec = {
 	flasksPool: number,
 	lockedGrateFraction: number, -- share of Lockable grates the RunDirector locks
 	catchCooldownSeconds: number, -- after a catch the Creature retreats this long
-	maxChaseSeconds: number, -- a chase that runs this long breaks off into a reposition
+	maxChaseSeconds: number, -- a chase gives up (FadeOut) after this, whatever happens
+	chaseLostSeconds: number, -- line of sight lost this long: it searches the last seen point
+	teleportCooldown: { number }, -- seconds between teleports: {low, high}
+	reachInSeconds: number, -- it reaches into a hiding spot it saw someone climb into this long after
 	postAirlockGraceSeconds: number,
 	creditMultiplier: number,
 }
@@ -20,7 +23,7 @@ export type DifficultySpec = {
 local DifficultyConfig = table.freeze({
 	Standard = table.freeze({
 		creatureSpeedMultiplier = 1,
-		hearingMultiplier = 1.15, -- harder Standard: +15 %
+		hearingMultiplier = 1, -- the Tall Man's radii (NoiseConfig) are the Standard reach
 		sightRangeMultiplier = 1,
 		trapCount = 10,
 		batteriesPerLevel = 2, -- harder Standard: one fewer per floor
@@ -28,13 +31,16 @@ local DifficultyConfig = table.freeze({
 		flasksPool = 2,
 		lockedGrateFraction = 0.25,
 		catchCooldownSeconds = 14.4, -- harder Standard: -20 %
-		maxChaseSeconds = 40,
+		maxChaseSeconds = 22,
+		chaseLostSeconds = 4,
+		teleportCooldown = table.freeze({ 60, 120 }),
+		reachInSeconds = 30,
 		postAirlockGraceSeconds = 12,
 		creditMultiplier = 1,
 	} :: DifficultySpec),
 	Nightmare = table.freeze({
 		creatureSpeedMultiplier = 1.2,
-		hearingMultiplier = 1.4375, -- x1.25 on top of Standard's
+		hearingMultiplier = 1.25,
 		sightRangeMultiplier = 1.15,
 		trapCount = 16,
 		batteriesPerLevel = 1,
@@ -42,7 +48,10 @@ local DifficultyConfig = table.freeze({
 		flasksPool = 1,
 		lockedGrateFraction = 0.45,
 		catchCooldownSeconds = 8.8, -- 11 s, -20 % with Standard
-		maxChaseSeconds = 65,
+		maxChaseSeconds = 28,
+		chaseLostSeconds = 5,
+		teleportCooldown = table.freeze({ 40, 80 }),
+		reachInSeconds = 24,
 		postAirlockGraceSeconds = 6,
 		creditMultiplier = 1.5,
 	} :: DifficultySpec),

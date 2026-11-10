@@ -1,5 +1,6 @@
 --!strict
--- LockerController: what a hideable locker looks and feels like on this client. LockerHidingService (server) decides
+-- LockerController: what a hiding spot (a locker, a barrel, a cabinet) looks and feels like on this client.
+-- HideSpotService (server) decides
 -- everything (who gets in, the door, the hold-breath verdict); this controller presents it.
 --
 -- Doors (everyone). OneShot "Door" / "LockerRip" whose subject is a HideableLocker carry a DoorMotion message; the
@@ -300,7 +301,7 @@ local function isLocker(instance: unknown): boolean
 		return false
 	end
 	local candidate = instance :: Instance
-	return candidate:IsA("Model") and candidate:HasTag(Tags.HideableLocker)
+	return candidate:IsA("Model") and (candidate:HasTag(Tags.Hideable) or candidate:HasTag(Tags.HideableLocker))
 end
 
 local function render(entry: Playing, now: number): boolean
@@ -675,7 +676,7 @@ local function myLocker(): Model?
 	if not player then
 		return nil
 	end
-	for _, instance in CollectionService:GetTagged(Tags.HideableLocker) do
+	for _, instance in CollectionService:GetTagged(Tags.Hideable) do
 		if
 			instance:IsA("Model")
 			and instance:GetAttribute(W.OccupantUserId) == player.UserId

@@ -153,6 +153,18 @@ export const CSS = `
 .rv-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: ${Palette.Ash}; transition: left 0.15s; }
 .rv-toggle.on { background: rgba(150,158,132,0.45); }
 .rv-toggle.on::after { left: 20px; background: ${Palette.Bone}; }
+.rv-graphics { margin: 6px 0 14px; padding-bottom: 12px; border-bottom: 1px solid ${Palette.StrokeDim}; }
+.rv-graphics-label { font-size: 14px; margin: 4px 0 8px; }
+.rv-segs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; border: 1px solid ${Palette.StrokeDim}; border-radius: 5px; overflow: hidden; }
+.rv-seg { position: relative; padding: 9px 4px; cursor: pointer; background: rgba(26,24,24,0.9); color: ${Palette.Ash};
+  border: none; border-left: 1px solid ${Palette.StrokeDim}; font-family: ${Fonts.Strong}; font-size: 14px;
+  letter-spacing: 0.08em; text-transform: uppercase; }
+.rv-seg:first-child { border-left: none; }
+.rv-seg:hover, .rv-seg:focus { color: ${Palette.Bone}; background: rgba(40,37,35,0.95); outline: none; }
+.rv-seg.on { color: ${Palette.Ink}; background: ${Palette.Bone}; }
+.rv-seg.suggested::after { content: ''; position: absolute; top: 5px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: ${Palette.Amber}; }
+.rv-graphics-info { margin: 8px 2px 2px; min-height: 18px; font-size: 13px; color: ${Palette.Ash}; }
+.rv-graphics-hint { margin: 6px 2px 0; font-size: 13px; color: ${Palette.Amber}; }
 
 /* loading */
 .rv-loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;

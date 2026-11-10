@@ -2,6 +2,7 @@
 // persisted in the save blob under "settings".
 
 import { SettingsList } from './config.js';
+import { migrateQuality } from './quality.js';
 import { Signal } from './signal.js';
 
 export class Settings {
@@ -17,6 +18,13 @@ export class Settings {
     for (const [k, v] of Object.entries(stored || {})) {
       const clean = Settings.sanitize(k, v);
       if (clean !== undefined) this.values[k] = clean;
+    }
+    // saves from before the five Graphics tiers: an explicit Low / Medium / High carries over, as does an Auto that had
+    // measured this device slow (Low / Medium); anything else starts at the default, Max
+    if (stored && stored.Graphics === undefined && stored.Quality !== undefined) {
+      const tier = migrateQuality(stored.Quality, save.get('autoTier', null));
+      if (tier) this.values.Graphics = tier;
+      this.save.set('settings', this.values);
     }
   }
 

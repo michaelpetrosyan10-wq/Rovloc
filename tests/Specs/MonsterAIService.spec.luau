@@ -1,11 +1,13 @@
 --!strict
 -- MonsterAIService live, on the real Creature rig with a fake clock and a fake movement engine (the Lune harness has
--- no physics: roots move only when the service places them). Attribute writes (every Creature attribute, StateSince
--- on every change), waking into Patrol after a level activates (and the airlock grace keeping noises from turning
--- into investigations), alerts, stuns, the scripted handle (exclusive, poses, hiding and the unseen reveal, a dead
--- handle after Release), the stuck reposition, a hallway catch through JumpscareHandler (the brain holds still while
--- it plays, then withdraws on the cooldown), the dev commands, and the vent rail: in through a kicked grate on all
--- fours on the centreline, along the ducts with VentSegmentId current, and back out.
+-- no physics: roots move only when the service places them). Attribute writes (every Creature attribute and the view
+-- contract, StateSince on every change), waking into Patrol after a level activates (and the airlock grace keeping
+-- noises from turning into investigations), alerts, stuns, the scripted handle (exclusive, poses, hiding and the
+-- unseen reveal, a dead handle after Release), the stuck reposition, a hallway catch through JumpscareHandler (the
+-- brain holds still while it plays, then withdraws on the cooldown), the dev commands, the spawn rule's grace, and the
+-- fairness rules (docs/MONSTER.md 13): no catch through a wall, the 22 s give-up (a FadeOut, back far away and out of
+-- sight), teleports never into view nor within 12 studs and never while the game blocks them, the HidingResponse's
+-- LookAway escape, its ReachIn at 30 s, and a teammate's pull-out that is no catch.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -13,11 +15,11 @@ local Workspace = game:GetService("Workspace")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
+local DifficultyConfig = require(ReplicatedStorage.Shared.Config.DifficultyConfig)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Types = require(ReplicatedStorage.Shared.Types)
-local VentGraph = require(ReplicatedStorage.Shared.Vents.VentGraph)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
@@ -28,7 +30,10 @@ local DevToolsService = require(ServerScriptService.Services.Core.DevToolsServic
 local LevelDirector = require(ServerScriptService.Services.Core.LevelDirector)
 local LifeStateService = require(ServerScriptService.Services.Player.LifeStateService)
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
+local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
+local HidingResponse = require(ServerScriptService.Services.Monster.MonsterAIService.States.HidingResponse)
 local Brain = require(ServerScriptService.Services.Monster.MonsterAIService.Brain)
+local FloorNav = require(ServerScriptService.Services.Monster.MonsterAIService.FloorNav)
 local CreatureBody = require(ServerScriptService.Services.Monster.MonsterAIService.CreatureBody)
 local JumpscareHandler = require(ServerScriptService.Services.Monster.MonsterAIService.JumpscareHandler)
 local Locomotion = require(ServerScriptService.Services.Monster.MonsterAIService.Locomotion)
@@ -168,7 +173,7 @@ end
 local function fakeEngine(moves: { Vector3 }): Locomotion.Engine
 	return {
 		computePath = function(from: Vector3, to: Vector3): Locomotion.ComputedPath?
-			return { waypoints = { from, to }, path = nil }
+			return { waypoints = { from, to } }
 		end,
 		moveTo = function(_humanoid: Humanoid, position: Vector3)
 			table.insert(moves, position)
@@ -235,6 +240,8 @@ local function inRun(participants: { Player }, inWorld: boolean, body: (world: W
 		MonsterAIService.OnPlayerRemoving(player)
 	end
 	MonsterAIService.SetEngine(nil)
+	MonsterAIService.SetLineClear(nil)
+	MonsterAIService.RegisterHideSpots(nil)
 	MonsterAIService.SetClock(nil)
 	JumpscareHandler.SetClock(nil)
 	LifeStateService.SetClock(nil)
@@ -282,10 +289,18 @@ spec["attributes: placed Dormant at its level's CreatureSpawn with every attribu
 		local model = world.model
 		t.eq(attr(model, C.MonsterState), "Dormant", "MonsterState")
 		t.eq(attr(model, C.StateSince), 7000, "StateSince is the server time")
-		t.eq(attr(model, C.PoseMode), "Biped", "PoseMode")
+		-- standing still, it hunches where the head room at its root is under HunchBelow (a tunnel's ceiling)
+		local nav = MonsterAIService.GetNav(LEVEL)
+		assert(nav, "Level 1's nav")
+		local headroom = nav:clearanceAt(spawnCFrame().Position)
+		t.eq(
+			attr(model, C.PoseMode),
+			if headroom < CreatureConfig.HunchBelow then "Hunched" else "Biped",
+			string.format("PoseMode under %.1f studs of head room", headroom)
+		)
 		t.eq(attr(model, C.TargetUserId), 0, "no target")
-		t.eq(attr(model, C.InVent), false, "InVent")
-		t.eq(attr(model, C.VentSegmentId), "", "no duct")
+		t.eq(attr(model, C.InVent), false, "never in a duct")
+		t.eq(attr(model, C.Action), "", "no action")
 		t.eq(attr(model, C.Hidden), false, "Hidden")
 		t.eq(attr(model, C.GrabbedUserId), 0, "no grab")
 		t.eq(attr(model, C.LevelId), LEVEL, "LevelId")
@@ -466,7 +481,9 @@ spec["dev commands: ai shows and forces states, pause holds it, ignoreme hides y
 		t.eq(attr(model, C.MonsterState), "Patrol", "ai Patrol wakes it")
 		ai("InvestigateNoise")
 		t.eq(attr(model, C.MonsterState), "InvestigateNoise", "ai InvestigateNoise searches where you stand")
-		t.truthy(string.find(ai("VentChase"), "not in a vent", 1, true) ~= nil, "VentChase needs you in a duct")
+		t.truthy(string.find(ai("HidingResponse"), "not in a hiding spot", 1, true) ~= nil, "it needs a hider")
+		ai("Search")
+		t.eq(attr(model, C.MonsterState), "Search", "ai Search searches where you stand")
 		t.truthy(string.find(ai("AquaticStalk"), "no pool", 1, true) ~= nil, "no pool on Level 1")
 		ai("pause")
 		t.truthy(MonsterAIService.IsPaused(), "paused")
@@ -492,92 +509,7 @@ spec["dev commands: ai shows and forces states, pause holds it, ignoreme hides y
 	end)
 end
 
-spec["vent rail: in through a kicked grate on the centreline, along the ducts, back out"] = function(t: Expect)
-	local folder = Instance.new("Folder")
-	local stand = Vector3.new(-4.5, 0, 0)
-	local model = quietBuild(folder, CFrame.lookAt(stand, stand + Vector3.new(1, 0, 0)))
-	local body = CreatureBody.attach(model)
-	assert(body, "a body")
-	local wall = CFrame.lookAt(Vector3.new(-1, 2, 0), Vector3.new(-2, 2, 0))
-	local graph: VentGraph.Graph = {
-		levelId = LEVEL,
-		nodes = {
-			A = { id = "A", position = Vector3.new(0, 2, 0), links = { "B" }, grateId = "G" },
-			B = { id = "B", position = Vector3.new(20, 2, 0), links = { "A" }, grateId = nil },
-		},
-		grates = {
-			G = {
-				id = "G",
-				nodeId = "A",
-				facingZoneId = "Room",
-				lockable = false,
-				criticalPath = false,
-				wall = wall,
-				mouth = wall.Position + wall.LookVector * VentGraph.MouthOut,
-			},
-		},
-		grateAtNode = { A = "G" },
-		segments = { ["A|B"] = "A-B", ["B|A"] = "A-B" },
-	}
-	local grateState: Enums.GrateState = "Closed"
-	local kicks = 0
-	local grates: Locomotion.Grates = {
-		state = function(_id: string): Enums.GrateState
-			return grateState
-		end,
-		standPoint = function(_grate: VentGraph.Grate): CFrame
-			return CFrame.lookAt(stand, stand + Vector3.new(-1, 0, 0))
-		end,
-		kick = function(_id: string)
-			kicks += 1
-			grateState = "Kicked"
-		end,
-	}
-	local now = 0
-	local mover = Locomotion.new(body, fakeEngine({}), grates, function(): number
-		return now
-	end)
-	mover:SetLevel(graph, {})
-	mover:SetSpeed(CreatureConfig.Speeds.VentChase)
-	local function step(seconds: number)
-		for _ = 1, math.floor(seconds / 0.05 + 0.5) do
-			now += 0.05
-			mover:Step(0.05)
-		end
-	end
-	mover:EnterVent(graph.grates.G, true)
-	step(0.2)
-	t.eq(kicks, 0, "faces the grate before the kick")
-	step(2.5)
-	t.eq(kicks, 1, "kicked the closed grate in once")
-	t.eq(mover:Medium(), "Vent", "in the ducts")
-	t.eq(body.pose, "Quadruped", "on all fours")
-	t.truthy(body.root.Anchored, "kinematic on the rail")
-	t.truthy(near(body.root.CFrame.Position, graph.nodes.A.position, 0.01), "on the centreline at the grate's node")
-	t.truthy(near(body.hitbox and body.hitbox.Size or Vector3.zero, CreatureConfig.Hitbox.Quadruped), "duct hitbox")
-	t.truthy(mover:RailTo({ a = "A", b = "B", t = 0.75, position = Vector3.new(15, 2, 0), distance = 0 }), "a route")
-	step(0.5)
-	t.eq(mover:Segment(), "A-B", "VentSegmentId follows the duct")
-	t.near(body.root.CFrame.Position.Y, 2, 1e-3, "root on the centreline while crawling")
-	t.truthy(body.root.CFrame.LookVector:Dot(Vector3.new(1, 0, 0)) > 0.99, "facing its travel")
-	step(1.5)
-	t.truthy(near(body.root.CFrame.Position, Vector3.new(15, 2, 0), 0.01), "reached the target's rail point")
-	t.truthy(mover:ExitVent(nil, nil), "a way out")
-	step(3)
-	t.eq(mover:Medium(), "Floor", "out of the ducts")
-	t.eq(body.pose, "Biped", "standing again")
-	t.falsy(body.root.Anchored, "the Humanoid walks it again")
-	t.truthy(near(body.root.CFrame.Position, stand + Vector3.new(0, CreatureBody.RootHeight, 0), 0.01), "in the room")
-	t.eq(kicks, 1, "no second kick through the open grate")
-	t.eq(mover:Segment(), nil, "no duct")
-	grateState = "Locked"
-	mover:Reset("Vent")
-	t.falsy(mover:ExitVent(nil, nil), "a locked grate is never a way out")
-	mover:Destroy()
-	model:Destroy()
-end
-
-spec["locomotion: walks fail after two routes are refused, Stop keeps a squeeze going"] = function(t: Expect)
+spec["locomotion: walks fail after two routes are refused; the water is entered only by a warp"] = function(t: Expect)
 	local folder = Instance.new("Folder")
 	local model = quietBuild(folder, CFrame.new(0, 0, 0))
 	local body = CreatureBody.attach(model)
@@ -590,16 +522,19 @@ spec["locomotion: walks fail after two routes are refused, Stop keeps a squeeze 
 	engine.clear = function(_from: Vector3, _to: Vector3, _ignore: { Instance }): boolean
 		return false
 	end
-	local grates: Locomotion.Grates = {
-		state = function(_id: string): Enums.GrateState
-			return "Open"
+	local warps: { string } = {}
+	local warpRunning = false
+	local hooks: Locomotion.Hooks = {
+		warp = function(_goal: Vector3, medium: Locomotion.Medium): boolean
+			table.insert(warps, medium)
+			warpRunning = true
+			return true
 		end,
-		standPoint = function(_grate: VentGraph.Grate): CFrame
-			return CFrame.new()
+		warping = function(): boolean
+			return warpRunning
 		end,
-		kick = function(_id: string) end,
 	}
-	local mover = Locomotion.new(body, engine, grates, function(): number
+	local mover = Locomotion.new(body, engine, hooks, function(): number
 		return now
 	end)
 	mover:GoTo(Vector3.new(100, 0, 0), nil)
@@ -611,6 +546,25 @@ spec["locomotion: walks fail after two routes are refused, Stop keeps a squeeze 
 	t.eq(mover:Status(), "Failed", "no route: failed")
 	mover:Reset("Floor")
 	t.eq(mover:Status(), "Idle", "reset")
+	local basin: Locomotion.Basin = {
+		id = "Spec",
+		minX = 20,
+		maxX = 40,
+		minZ = -10,
+		maxZ = 10,
+		surfaceY = -1,
+		floorY = -6,
+		deckY = 0,
+		fadeOnly = true,
+	}
+	mover:SetLevel({ basin })
+	mover:GoTo(Vector3.new(30, -3, 0), nil)
+	now += 0.1
+	mover:Step(0.1)
+	t.eq(#warps, 1, "a goal in the water starts a warp, never a walk down the deck")
+	t.eq(warps[1], "Water", "into the water")
+	t.truthy(mover:Busy(), "the warp leg cannot be interrupted")
+	warpRunning = false
 	mover:Destroy()
 	model:Destroy()
 end
@@ -658,6 +612,424 @@ spec["spawns: without a noise the grace runs its full length"] = function(t: Exp
 		run(world, 1)
 		t.eq(attr(world.model, C.MonsterState), "Patrol", "then it patrols")
 	end)
+end
+
+--------------------------------------------------------------------------------
+-- Fairness (docs/MONSTER.md 13)
+--------------------------------------------------------------------------------
+
+local function flat(v: Vector3): Vector3
+	local f = Vector3.new(v.X, 0, v.Z)
+	return if f.Magnitude > 1e-6 then f.Unit else Vector3.new(0, 0, -1)
+end
+
+-- Puts a fake player's root (3 studs over the floor) at `floor`.
+local function placeAt(player: Player, floor: Vector3)
+	local character = player.Character
+	local root = character and character.PrimaryPart
+	assert(root, player.Name .. " has a root")
+	root.CFrame = CFrame.new(floor + Vector3.new(0, 3, 0))
+	root.Position = floor + Vector3.new(0, 3, 0)
+end
+
+local function rootOf(player: Player): Vector3
+	local character = player.Character
+	local root = character and character.PrimaryPart
+	assert(root, player.Name .. " has a root")
+	return root.CFrame.Position
+end
+
+-- The way (+X, -X, +Z or -Z, in that order) along which the floor runs straight on from `from` for `reach` studs, every
+-- stud of it in a walkable room the player can be seen in (never a crawlway), or nil: a tunnel runs one or two ways
+-- from a point in it, and the rock between the tunnels has no floor.
+local function floorRun(nav: FloorNav.Nav, from: Vector3, reach: number): Vector3?
+	for _, way in { Vector3.new(1, 0, 0), Vector3.new(-1, 0, 0), Vector3.new(0, 0, 1), Vector3.new(0, 0, -1) } do
+		local clear = true
+		for s = 1, reach do
+			local room = nav:roomAt(from + way * s)
+			if not room or room.kind == "Crawlway" or room.kind == "Solid" then
+				clear = false
+				break
+			end
+		end
+		if clear then
+			return way
+		end
+	end
+	return nil
+end
+
+-- Walls: a sight line longer than `reach` studs is blocked.
+local function wallsBeyond(reach: number)
+	MonsterAIService.SetLineClear(function(from: Vector3, to: Vector3, _ignore: Instance?): boolean
+		return (to - from).Magnitude <= reach
+	end)
+end
+
+-- Runs until `done()` or `limit` seconds; returns the seconds it took (math.huge when it never happened).
+local function runUntil(world: World, limit: number, done: () -> boolean): number
+	local started = world.clock.now()
+	while world.clock.now() - started < limit do
+		run(world, TICK)
+		if done() then
+			return world.clock.now() - started
+		end
+	end
+	return math.huge
+end
+
+spec["fairness: never a catch through a wall, eye to eye and chest to chest"] = function(t: Expect)
+	local spawnPosition = spawnCFrame().Position
+	local floor = Vector3.new(spawnPosition.X, WorldConfig.levelElevation(LEVEL), spawnPosition.Z)
+	local victim = fakePlayer(CFrame.new(floor + Vector3.new(3, 3, 0)), true)
+	inRun({ victim }, true, function(world: World, runContext: Types.RunContext)
+		wake(world, runContext)
+		world.root.CFrame = CFrame.lookAt(world.root.CFrame.Position, world.root.CFrame.Position + Vector3.new(1, 0, 0))
+		local caughtKind: string? = nil
+		local connection = MonsterAIService.Caught:Connect(function(player: Player, kind: Enums.JumpscareKind)
+			if player == victim then
+				caughtKind = kind
+			end
+		end)
+		MonsterAIService.SetLineClear(function(_from: Vector3, _to: Vector3, _ignore: Instance?): boolean
+			return false
+		end)
+		DevToolsService.Execute(victim, "hunt", {})
+		run(world, 2)
+		t.eq(caughtKind, nil, "a wall between them: no catch within reach")
+		-- a counter 4 studs high just in front of them (80 % of the way): the eyes meet over it, the bodies do not
+		local counterTop = rootOf(victim).Y + 1
+		MonsterAIService.SetLineClear(function(from: Vector3, to: Vector3, _ignore: Instance?): boolean
+			return from.Y + (to.Y - from.Y) * 0.8 > counterTop
+		end)
+		DevToolsService.Execute(victim, "hunt", {})
+		run(world, 1)
+		t.eq(caughtKind, nil, "no catch over a counter")
+		t.eq(attr(world.model, C.MonsterState), "WallChase", "it still chases what it sees")
+		MonsterAIService.SetLineClear(nil)
+		run(world, 0.3)
+		connection:Disconnect()
+		t.eq(caughtKind, "Hallway", "the same reach in the open catches")
+	end)
+end
+
+spec["fairness: a chase gives up at 22 s, fades out, and comes back 45+ studs away out of sight"] = function(t: Expect)
+	local player = fakePlayer(CFrame.new(0, -600, 0), false)
+	inRun({ player }, true, function(world: World, runContext: Types.RunContext)
+		wake(world, runContext)
+		run(world, 13) -- the airlock grace
+		wallsBeyond(40)
+		-- the spawn stands in a tunnel: the player stands 15 studs down it, the Creature facing them
+		local nav = MonsterAIService.GetNav(LEVEL)
+		assert(nav, "Level 1's nav")
+		local start = world.root.CFrame.Position
+		local along = floorRun(nav, start, 15)
+		assert(along, "15 studs of tunnel floor from the spawn")
+		world.root.CFrame = CFrame.lookAt(start, start + along)
+		local floorY = start.Y - CreatureBody.RootHeight
+		local ahead = start + along * 15
+		placeAt(player, Vector3.new(ahead.X, floorY, ahead.Z))
+		local gaveUpTarget: Player? = nil
+		local connection = MonsterAIService.GaveUp:Connect(function(target: Player?, _at: Vector3)
+			gaveUpTarget = target
+		end)
+		local toChase = runUntil(world, 2, function(): boolean
+			return attr(world.model, C.MonsterState) == "WallChase"
+		end)
+		t.truthy(toChase < 2, "it sees them 15 studs ahead and chases")
+		local chased = runUntil(world, 30, function(): boolean
+			return attr(world.model, C.MonsterState) ~= "WallChase"
+		end)
+		t.near(chased, DifficultyConfig.Standard.maxChaseSeconds, 0.35, "it gives up at 22 s, still in sight")
+		t.eq(attr(world.model, C.MonsterState), "Patrol", "and patrols on")
+		t.eq(gaveUpTarget, player, "GaveUp names the one it chased")
+		t.eq(attr(world.model, C.Action), "FadeOut", "it fades out where it stands")
+		local hidden = runUntil(world, 2, function(): boolean
+			return attr(world.model, C.Hidden) == true
+		end)
+		t.truthy(hidden < 1, "hidden once the fade is over")
+		local back = runUntil(world, 15, function(): boolean
+			return attr(world.model, C.Hidden) == false
+		end)
+		t.truthy(back < 15, "it comes back")
+		connection:Disconnect()
+		local here = world.root.CFrame.Position
+		local eye = rootOf(player) + Vector3.new(0, 1.5, 0)
+		t.truthy((here - eye).Magnitude >= CreatureConfig.GiveUp.MinDistance - 0.01, "at least 45 studs from them")
+		t.truthy((here - eye).Magnitude > 40, "out of their sight (behind the walls)")
+	end)
+end
+
+-- A floor point in a hallway (never a keep-room: a teleport never forms in the room you stand in) with several
+-- teleport spots behind it (the player looks north, -Z), at least `away` studs from `from`.
+local function standingWithRoomBehind(nav: FloorNav.Nav, from: Vector3, away: number): Vector3?
+	local samples = nav:samplePoints(5)
+	for i = 1, #samples, 3 do
+		local p = samples[i].position
+		local room = nav:roomAt(p + Vector3.new(0, 1, 0))
+		if not room or room.kind ~= "Hallway" and room.kind ~= "Corridor" and room.kind ~= "Tunnel" then
+			continue
+		end
+		if (Vector3.new(p.X, 0, p.Z) - Vector3.new(from.X, 0, from.Z)).Magnitude < away then
+			continue
+		end
+		local behind = 0
+		for j = 1, #samples, 2 do
+			local q = samples[j].position
+			local offset = Vector3.new(q.X - p.X, 0, q.Z - p.Z)
+			if offset.Magnitude < 13 or offset.Magnitude > 22 or offset.Unit.Z < 0.2 then
+				continue
+			end
+			local walk = nav:pathLength(p, q)
+			if walk >= 13 and walk <= 23 then
+				behind += 1
+			end
+		end
+		if behind >= 4 then
+			return p
+		end
+	end
+	return nil
+end
+
+spec["fairness: a teleport lands 12..24 studs of walking away, never within 12 studs, never in view"] = function(
+	t: Expect
+)
+	local player = fakePlayer(CFrame.new(0, -600, 0), true)
+	inRun({ player }, true, function(world: World, runContext: Types.RunContext)
+		wake(world, runContext)
+		wallsBeyond(40)
+		local nav = MonsterAIService.GetNav(LEVEL)
+		assert(nav, "Level 1's nav")
+		local chosen = standingWithRoomBehind(nav, world.root.CFrame.Position, 0)
+		assert(chosen, "a spot to stand with room behind")
+		local feet = chosen :: Vector3
+		placeAt(player, feet)
+		local warnings: { Vector3 } = {}
+		local connection = MonsterAIService.TeleportWarning:Connect(
+			function(at: Vector3, target: Player?, seconds: number)
+				table.insert(warnings, at)
+				t.eq(target, player, "the warning names its target")
+				t.eq(seconds, CreatureConfig.Teleport.WarningSeconds, "1.6 s")
+			end
+		)
+		local key, reply = DevToolsService.Execute(player, "ai", { "Teleport" })
+		t.eq(key, "Dev.Ok", "ai Teleport answered")
+		t.truthy(string.find(reply[1], "teleporting", 1, true) ~= nil, "a teleport was planned: " .. reply[1])
+		local shownWhileHidden = false
+		local ended = runUntil(world, 8, function(): boolean
+			local fade = attr(world.model, C.Fade)
+			if #warnings > 0 and attr(world.model, C.Hidden) == true and type(fade) == "number" and fade > 0 then
+				shownWhileHidden = true
+			end
+			return #warnings > 0 and attr(world.model, C.Hidden) == false and attr(world.model, C.Fade) == 1
+		end)
+		connection:Disconnect()
+		t.truthy(ended < 8, "it formed after the warning")
+		t.eq(#warnings, 1, "one warning")
+		t.falsy(shownWhileHidden, "invisible until the warning is over")
+		t.eq(attr(world.model, C.MonsterState), "Teleport", "it stalks its target now")
+		local here = world.root.CFrame.Position
+		local theirs = rootOf(player)
+		t.truthy((here - theirs).Magnitude >= CreatureConfig.Teleport.MinStraight - 0.01, "never within 12 studs")
+		local floorHere = Vector3.new(here.X, feet.Y, here.Z)
+		local walk = nav:pathLength(feet, floorHere)
+		t.truthy(
+			walk >= CreatureConfig.Teleport.MinWalk - 0.5,
+			string.format("at least 12 studs of walking (%.1f)", walk)
+		)
+		t.truthy(walk <= CreatureConfig.Teleport.MaxWalk + 0.5, string.format("at most 24 (%.1f)", walk))
+		local eye = theirs + Vector3.new(0, 1.5, 0)
+		local look = Vector3.new(0, 0, -1)
+		for _, lift in { 0, CreatureConfig.EyeHeightAboveRoot.Biped } do
+			local q = here + Vector3.new(0, lift, 0)
+			local angle = math.deg(math.acos(math.clamp(look:Dot((q - eye).Unit), -1, 1)))
+			local blocked = (q - eye).Magnitude > 40
+			t.truthy(
+				angle > CreatureConfig.Teleport.ViewHalfAngle or blocked,
+				string.format("out of view (%.0f deg)", angle)
+			)
+		end
+	end)
+end
+
+spec["fairness: no teleport while the game blocks it (a survive countdown, the finale)"] = function(t: Expect)
+	local player = fakePlayer(CFrame.new(0, -600, 0), false)
+	inRun({ player }, true, function(world: World, runContext: Types.RunContext)
+		wallsBeyond(40)
+		local nav = MonsterAIService.GetNav(LEVEL)
+		assert(nav, "Level 1's nav")
+		local far = standingWithRoomBehind(nav, spawnCFrame().Position, 70)
+		assert(far, "a hallway far from the Creature")
+		placeAt(player, far)
+		local blocked = true
+		local unblock = MonsterAIService.RegisterTeleportBlock(function(): boolean
+			return blocked
+		end)
+		LevelDirector.LevelActivated:Fire(LEVEL, levelContext(runContext))
+		local grace = (CreatureConfig.FloorGrace.Standard or 20) + CreatureConfig.Teleport.FirstAfterGrace
+		local early = runUntil(world, grace + 30, function(): boolean
+			return attr(world.model, C.MonsterState) == "Teleport"
+		end)
+		t.eq(early, math.huge, "no teleport while blocked")
+		blocked = false
+		local after = runUntil(world, 20, function(): boolean
+			return attr(world.model, C.MonsterState) == "Teleport"
+		end)
+		unblock()
+		local snapshot = MonsterAIService.GetSnapshot()
+		t.truthy(
+			after < 20,
+			string.format(
+				"once the block lifts it teleports (%s: %s, warp %s, ready in %.0f s, unseen %.0f s)",
+				snapshot.state,
+				snapshot.reason,
+				tostring(snapshot.warp),
+				snapshot.teleportReadyAt - world.clock.now(),
+				world.clock.now() - snapshot.lastSeenAny
+			)
+		)
+	end)
+end
+
+-- A hiding spot on Level 1 near its spawn, its occupant, and the Creature standing off its front.
+type Hide = { spot: Model, front: CFrame, occupied: { player: Player? } }
+
+local function hideSpotFor(world: World, hider: Player): Hide
+	local spawn = spawnCFrame()
+	local floorY = WorldConfig.levelElevation(LEVEL)
+	local out = flat(spawn.LookVector)
+	local frontAt = Vector3.new(spawn.Position.X, floorY, spawn.Position.Z) + out * 4
+	-- the front faces back toward the spawn: the Creature stands off it, between the spot and the spawn
+	local front = CFrame.lookAt(frontAt, frontAt - out)
+	local spot = Instance.new("Model")
+	spot.Name = "SpecLocker"
+	local occupied: { player: Player? } = { player = nil }
+	MonsterAIService.RegisterHideSpots({
+		spotsOn = function(_levelId: string): { Brain.HideSpot }
+			return { { id = spot, kind = "Locker", front = front } }
+		end,
+		occupant = function(which: Instance): Player?
+			return if which == spot then occupied.player else nil
+		end,
+		spotOf = function(player: Player): Instance?
+			return if occupied.player == player then spot else nil
+		end,
+	})
+	-- in the spot, a little behind its front
+	placeAt(hider, frontAt + out * 1.2)
+	PlayerStateService.PushOverride(hider, "SpecHide", "Hiding")
+	occupied.player = hider
+	local stand = HidingResponse.standPoint(front) + Vector3.new(0, CreatureBody.RootHeight, 0)
+	world.root.CFrame = CFrame.lookAt(stand, stand + out)
+	return { spot = spot, front = front, occupied = occupied }
+end
+
+local function leave(hide: Hide, hider: Player, to: Vector3)
+	PlayerStateService.PopOverride(hider, "SpecHide")
+	hide.occupied.player = nil
+	placeAt(hider, to)
+end
+
+spec["fairness: it reaches into the hiding spot it saw you climb into 30 s after you got in"] = function(t: Expect)
+	local hider = fakePlayer(CFrame.new(0, -600, 0), true)
+	inRun({ hider }, true, function(world: World)
+		local hide = hideSpotFor(world, hider)
+		local caughtKind: string? = nil
+		local connection = MonsterAIService.Caught:Connect(function(player: Player, kind: Enums.JumpscareKind)
+			if player == hider then
+				caughtKind = kind
+			end
+		end)
+		local _, reply = DevToolsService.Execute(hider, "ai", { "HidingResponse" })
+		t.eq(attr(world.model, C.MonsterState), "HidingResponse", "it waits at the spot: " .. reply[1])
+		local reach = runUntil(world, 35, function(): boolean
+			return attr(world.model, C.Action) == "ReachIn"
+		end)
+		t.near(reach, DifficultyConfig.Standard.reachInSeconds, 0.25, "the ReachIn at 30 s")
+		t.eq(caughtKind, nil, "no catch before it")
+		run(world, CreatureConfig.Hiding.ReachInLead + 0.2)
+		connection:Disconnect()
+		t.eq(caughtKind, "Locker", "it takes them out of the spot")
+		PlayerStateService.PopOverride(hider, "SpecHide")
+		hide.occupied.player = nil
+	end)
+	PlayerStateService.OnPlayerRemoving(hider)
+end
+
+spec["fairness: a LookAway (after its grunt) lets the hider slip out unseen"] = function(t: Expect)
+	local hider = fakePlayer(CFrame.new(0, -600, 0), true)
+	inRun({ hider }, true, function(world: World)
+		local hide = hideSpotFor(world, hider)
+		local caught = false
+		local connection = MonsterAIService.Caught:Connect(function(player: Player, _kind: Enums.JumpscareKind)
+			if player == hider then
+				caught = true
+			end
+		end)
+		local gruntAt: number? = nil
+		local grunt = MonsterAIService.Grunted:Connect(function(_at: Vector3)
+			gruntAt = world.clock.now()
+		end)
+		DevToolsService.Execute(hider, "ai", { "HidingResponse" })
+		local looked = runUntil(world, 11, function(): boolean
+			return attr(world.model, C.Action) == "LookAway"
+		end)
+		grunt:Disconnect()
+		local H = CreatureConfig.Hiding
+		t.truthy(looked >= H.LookAwayMin - 0.2 and looked <= H.LookAwayMax + 0.2, "a LookAway 7..10 s in")
+		local lookAt = world.clock.now()
+		t.truthy(gruntAt ~= nil, "the grunt is the tell")
+		if gruntAt then
+			t.near(lookAt - gruntAt, H.GruntLead, 0.15, "0.7 s before it turns away")
+		end
+		-- out of the spot and away behind the corner while it looks down the tunnel
+		local away = HidingResponse.standPoint(hide.front) + flat(hide.front.LookVector) * -30
+		wallsBeyond(20)
+		leave(hide, hider, Vector3.new(away.X, WorldConfig.levelElevation(LEVEL), away.Z))
+		run(world, H.LookAwaySeconds + 1)
+		connection:Disconnect()
+		t.falsy(caught, "slipped out: no catch")
+		t.truthy(attr(world.model, C.MonsterState) ~= "HidingResponse", "it moves on")
+		t.truthy(attr(world.model, C.Action) ~= "ReachIn", "and never reaches into the empty spot")
+	end)
+	PlayerStateService.OnPlayerRemoving(hider)
+end
+
+spec["fairness: stepping out under its nose is a catch; a teammate's pull-out is not"] = function(t: Expect)
+	local hider = fakePlayer(CFrame.new(0, -600, 0), true)
+	inRun({ hider }, true, function(world: World)
+		local hide = hideSpotFor(world, hider)
+		local caughtKind: string? = nil
+		local connection = MonsterAIService.Caught:Connect(function(player: Player, kind: Enums.JumpscareKind)
+			if player == hider then
+				caughtKind = kind
+			end
+		end)
+		DevToolsService.Execute(hider, "ai", { "HidingResponse" })
+		run(world, 2)
+		-- pulled out by a teammate and thrown clear: a startle, no catch
+		local thrown = hide.front.Position + flat(hide.front.LookVector) * 1 + flat(hide.front.RightVector) * 6
+		MonsterAIService.NotePulled(hider)
+		leave(hide, hider, thrown)
+		run(world, CreatureConfig.Hiding.PullStartle + 0.5)
+		t.eq(caughtKind, nil, "a pull-out is no catch")
+		t.truthy(attr(world.model, C.MonsterState) ~= "HidingResponse", "it moves on")
+		t.truthy(attr(world.model, C.Action) ~= "ReachIn", "no reach into the empty spot")
+		-- back in, and out again on its own right in front of it
+		PlayerStateService.PushOverride(hider, "SpecHide", "Hiding")
+		hide.occupied.player = hider
+		placeAt(hider, hide.front.Position - flat(hide.front.LookVector) * 1.2)
+		local stand = HidingResponse.standPoint(hide.front) + Vector3.new(0, CreatureBody.RootHeight, 0)
+		world.root.CFrame = CFrame.lookAt(stand, stand - flat(hide.front.LookVector))
+		DevToolsService.Execute(hider, "ai", { "HidingResponse" })
+		run(world, 1)
+		leave(hide, hider, hide.front.Position)
+		run(world, 0.5)
+		connection:Disconnect()
+		t.eq(caughtKind, "Hallway", "stepping out while it watches is a catch")
+	end)
+	PlayerStateService.OnPlayerRemoving(hider)
 end
 
 return spec

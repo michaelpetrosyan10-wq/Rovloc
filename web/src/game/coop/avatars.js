@@ -525,7 +525,8 @@ export class Avatars {
     const spectating = this.coop.spectateTargetId();
     const ctx = {
       camera: this.camera,
-      beams: this.env.engine.quality.tier !== 'Low',
+      // teammates' torch beams: drawn on every tier but Low and Potato (quality.js remoteTorches > 1)
+      beams: (this.env.engine.quality.budget.remoteTorches ?? 3) > 1,
       spectating,
       visible: (member, pose) => {
         if (pose.life === 'Spectating' || (pose.flags & PoseFlags.Hidden) !== 0 || pose.moveState === 'Hiding') return false;

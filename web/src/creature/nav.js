@@ -47,6 +47,13 @@ const SCRIPTED = new Set(['Gate', 'Airlock', 'RoofDoor']);
 const EPS = 1e-3;
 const RADIUS = CreatureConfig.PathAgent.AgentRadius;
 const AGENT_HEIGHT = CreatureConfig.PathAgent.AgentHeight;
+// The hunch comes before the lintel (headroomAlong): the head room counts this far along its way ahead, its head's lead
+// on its root (the mask hangs about 1.6 studs ahead of it, more in a chase) plus what its pace covers while it bends
+// (the rig's hunch settles in about half a second), sampled every HEADROOM_STEP studs.
+export const HEAD_LEAD = 2;
+export const HUNCH_LEAD_SECONDS = 0.5;
+const HEADROOM_STEP = 1;
+const _ahead = new THREE.Vector3();
 const CLEARANCE = RADIUS + 0.25; // a footprint grows by this for the agent
 const WALL_CLEARANCE = RADIUS + WorldDefaults.WallThickness / 2; // a detour corner stays this far inside its room
 const INTERIOR = 0.01; // footprints shrink by this for the crossing test, so legs along their edges are clear
@@ -202,6 +209,34 @@ export class FloorNav {
       const room = this.roomAt(point) || this.nearestRoom(point);
       return !!room && seen.has(room.key);
     };
+  }
+
+  /**
+   * The head room it walks under (the hunch rule, docs/MONSTER.md 2): the lowest clearance at `root` and along `route`
+   * (the points it walks to next), HEAD_LEAD + `pace` x HUNCH_LEAD_SECONDS studs ahead, sampled every HEADROOM_STEP
+   * studs, so it is down before its head reaches a lintel or a tunnel's ceiling. The host's brain passes its planned
+   * route and walk speed; a co-op client's puppet the host's positions ahead of it and its measured speed.
+   * @param {THREE.Vector3} root
+   * @param {Iterable<THREE.Vector3>} route
+   * @param {number} pace studs a second
+   */
+  headroomAlong(root, route, pace) {
+    let clearance = this.clearanceAt(root);
+    let left = HEAD_LEAD + Math.max(0, pace) * HUNCH_LEAD_SECONDS;
+    let from = root;
+    for (const to of route) {
+      const leg = Math.hypot(to.x - from.x, to.z - from.z);
+      const span = Math.min(leg, left);
+      for (let s = HEADROOM_STEP; s < span + HEADROOM_STEP; s += HEADROOM_STEP) {
+        const k = Math.min(s, span) / leg;
+        _ahead.set(from.x + (to.x - from.x) * k, from.y, from.z + (to.z - from.z) * k);
+        clearance = Math.min(clearance, this.clearanceAt(_ahead));
+      }
+      left -= leg;
+      if (left <= 0) break;
+      from = to;
+    }
+    return clearance;
   }
 
   /** The head room at `p`: its room's height, or a low portal's clearance when it stands in that opening. */

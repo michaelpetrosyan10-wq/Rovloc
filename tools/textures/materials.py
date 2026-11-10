@@ -53,13 +53,13 @@ def tide(f: Field, mask: np.ndarray, width: float) -> np.ndarray:
 
 
 def ring_field(f: Field, cx: float, cy: float) -> np.ndarray:
-    """Toroidal distance (pixels) from (cx, cy)."""
+    """Toroidal distance (design pixels) from (cx, cy) (real pixels)."""
     n = f.n
     dx = f.x - cx
     dy = f.y - cy
     dx -= n * np.round(dx / n)
     dy -= n * np.round(dy / n)
-    return np.sqrt(dx * dx + dy * dy)
+    return np.sqrt(dx * dx + dy * dy) / f.unit
 
 
 def cracks(f: Field, cells: int, keep: float, width: float, warp: float = 7.0):
@@ -144,7 +144,7 @@ def painted_plaster(f: Field) -> Surface:
 def checker_tile(f: Field) -> Surface:
     n = f.n
     cols = rows = 4
-    g = tile_grid(n, cols, rows)
+    g = tile_grid(n, cols, rows, unit=f.unit)
     half = 3.4  # grout half width (pixels)
     d = g.edge - half
     tile = smoothstep(-0.6, 0.8, d)
@@ -187,8 +187,8 @@ def checker_tile(f: Field) -> Surface:
     crack = np.clip(f.strokes(4, (150, 320), (0.8, 1.2), wobble=0.1, intensity=(0.7, 1.0), taper=False), 0, 1)
     col = multiply(col, rgb(0.25, 0.23, 0.20), 0.9 * crack * tile)
     chip_n = 14
-    cx = (f.rng.integers(0, cols + 1, chip_n) * (n / cols) + f.rng.normal(0, 4, chip_n)) % n
-    cy = (f.rng.integers(0, rows + 1, chip_n) * (n / rows) + f.rng.normal(0, 4, chip_n)) % n
+    cx = (f.rng.integers(0, cols + 1, chip_n) * (n / cols) + f.rng.normal(0, 4, chip_n) * f.unit) % n
+    cy = (f.rng.integers(0, rows + 1, chip_n) * (n / rows) + f.rng.normal(0, 4, chip_n) * f.unit) % n
     chips = np.zeros((n, n), F32)
     for i in range(chip_n):
         r = f.rng.uniform(5, 13)
@@ -276,7 +276,7 @@ def stained_concrete(f: Field) -> Surface:
 def ceiling_tile(f: Field) -> Surface:
     n = f.n
     cols, rows = 2, 4  # 4 x 2 stud tiles on an 8-stud repeat
-    g = tile_grid(n, cols, rows)
+    g = tile_grid(n, cols, rows, unit=f.unit)
     half = 4.0
     d = g.edge - half
     tile = smoothstep(-0.5, 1.0, d)
@@ -354,9 +354,10 @@ def rusted_metal(f: Field) -> Surface:
     col = mix(col, steel, 0.8 * fresh * (1 - chip))
 
     # rust runs from the chips down the panel
-    ys, xs = np.nonzero(chip[::8, ::8] > 0.5)
+    every = max(1, int(round(8 * f.unit)))  # the same 128 x 128 sample grid at any size
+    ys, xs = np.nonzero(chip[::every, ::every] > 0.5)
     pick = f.rng.permutation(len(xs))[:60] if len(xs) else np.array([], int)
-    runs = f.drips(0, (60, 320), (1.6, 3.2), wobble=0.04, sources=(xs[pick] * 8.0, ys[pick] * 8.0)) if len(pick) else 0
+    runs = f.drips(0, (60, 320), (1.6, 3.2), wobble=0.04, sources=(xs[pick] * float(every), ys[pick] * float(every))) if len(pick) else 0
     runs = np.clip(runs, 0, 1)
     runs = np.clip(runs * 0.6 + f.directional_blur(runs, 3, 1) * 0.9, 0, 1)
     col = multiply(col, rgb(0.74, 0.56, 0.40), 0.65 * runs * (1 - chip))
@@ -415,7 +416,7 @@ def galvanized_metal(f: Field) -> Surface:
 
 def worn_wood(f: Field) -> Surface:
     n = f.n
-    g = plank_grid(n, 14, f.rng, (260, 760))
+    g = plank_grid(n, 14, f.rng, (260, 760), unit=f.unit)
     rnd = f.rng.random((g.count, 6)).astype(F32)
     ref = rgb(0.76, 0.58, 0.39)
     tone = 0.82 + 0.3 * g.per_tile(rnd[:, 0])
@@ -426,8 +427,8 @@ def worn_wood(f: Field) -> Surface:
     # grain: long fibres along x, sampled with a per-board offset so neighbours differ
     fibres = f.spectral(1.2, 2, 500, stretch=(18, 1))
     rings = f.spectral(2.0, 1, 60, stretch=(10, 1))
-    ox = g.per_tile(rnd[:, 2]) * n
-    oy = g.per_tile(rnd[:, 3]) * n
+    ox = g.per_tile(rnd[:, 2]) * f.design
+    oy = g.per_tile(rnd[:, 3]) * f.design
     fib = f.warp(fibres, ox, oy)
     rng_ = f.warp(rings, ox, oy)
     figure = np.sin(rng_ * 9.0 + fib * 0.6)
@@ -471,7 +472,7 @@ def worn_wood(f: Field) -> Surface:
 
 def pool_mosaic(f: Field) -> Surface:
     n = f.n
-    g = tile_grid(n, 16, 16)
+    g = tile_grid(n, 16, 16, unit=f.unit)
     half = 2.4
     d = g.edge - half
     tile = smoothstep(-0.5, 0.7, d)
@@ -517,7 +518,7 @@ def pool_mosaic(f: Field) -> Surface:
 
 def stained_brick(f: Field) -> Surface:
     n = f.n
-    g = tile_grid(n, 8, 32, row_shift=0.5)
+    g = tile_grid(n, 8, 32, row_shift=0.5, unit=f.unit)
     rnd = f.rng.random((g.count, 6)).astype(F32)
     edge_noise = 1.2 * f.spectral(1.2, 20, 300)
     half = 2.6
@@ -560,7 +561,7 @@ def stained_brick(f: Field) -> Surface:
 
 def vinyl_tile(f: Field) -> Surface:
     n = f.n
-    g = tile_grid(n, 8, 8)
+    g = tile_grid(n, 8, 8, unit=f.unit)
     rnd = f.rng.random((g.count, 4)).astype(F32)
     ref = rgb(0.80, 0.78, 0.70)
     parity = ((g.id // 8 + g.id % 8) % 2).astype(F32)
@@ -636,7 +637,7 @@ def rubber_mat(f: Field) -> Surface:
     n = f.n
     ref = rgb(0.50, 0.50, 0.50)
     f1, _, val = f.worley(110, 0.8)
-    cell = n / 110
+    cell = f.design / 110
     bump = np.clip(1 - (f1 / (cell * 0.42)) ** 2, 0, 1) ** 0.5
     worn = blotches(f, 0.35, 0.25, 1, 10)
     col = solid(n, ref) * (1 + 0.06 * f.spectral(2.0, 1, 30) + 0.05 * (val - 0.5))[..., None]
@@ -663,7 +664,7 @@ def roof_gravel(f: Field) -> Surface:
     layers = []
     for cells, rad in ((46, 0.62), (64, 0.55), (90, 0.5)):
         f1, _, val = f.worley(cells, 1.0)
-        r = (n / cells) * rad * (0.8 + 0.4 * val)
+        r = (f.design / cells) * rad * (0.8 + 0.4 * val)
         h = np.clip(1 - (f1 / r) ** 2, 0, 1) ** 0.6 * r * 0.5
         layers.append((h, val))
     height = np.zeros((n, n), F32)

@@ -12,7 +12,9 @@
 //   engine.input      keyboard + pointer lock + gamepad + touch; actions (InputConfig) and contexts
 //   engine.prompts    add({position | entity, text, holdSeconds, distance, onTriggered})
 //   engine.entities   setPivot(id, cframe), get(id), setNodePivot, setNodeTransform, setVisible, ...
-//   engine.quality    tiers Low / Medium / High (+ dynamic resolution)
+//   engine.quality    graphics tiers Max / High / Medium / Low / Potato (the Graphics setting; + dynamic resolution)
+//   engine.textures   the tier's texture set, streamed in the background (textures.js)
+//   engine.particles  GPU particles: steam vents, drips, ceiling grit, torch motes (particles.js)
 //   engine.loop       onTick(dt) fixed 30 Hz game logic, onFrame(dt) per render frame
 //   engine.save       localStorage JSON with versioning
 //   engine.lighting   flicker groups, overrides, bursts, lightning, dynamic lights, the level film
@@ -34,8 +36,10 @@ import { Quality } from './quality.js';
 import { Renderer } from './renderer.js';
 import { Save } from './save.js';
 import { Settings } from './settings.js';
+import { Particles } from './particles.js';
 import { Sky } from './sky.js';
 import { STRINGS, formatTime, getString } from './strings.js';
+import { TextureStreamer, decodeImage } from './textures.js';
 import { UI } from './ui/ui.js';
 import { Volumetrics } from './volumetrics.js';
 import { World } from './world.js';
@@ -48,9 +52,14 @@ const LEVEL_BEDS = {
 };
 
 /**
- * Inlined assets as build.mjs writes them: base64 gzip of world.json and world.bin, base64 WebP textures keyed by
- * their path relative to build/ ("textures/StainedBrick_color.webp").
- * @typedef {{json: string, bin: string, textures: Record<string, string>}} Assets
+ * The page's assets as build.mjs describes them: the asset manifest (an inline JSON script `rv-manifest`). Every
+ * reference is a URL of the site's hashed assets/ or `inline:<script id>` (base64 in a non-executed script tag of a
+ * single-file build):
+ *   world.json / world.bin            gzip
+ *   textures.boot                     the set the page boots with (256: the Potato colour maps)
+ *   textures.sets[size].maps[id][kind] every surface texture per size (2048, 1024, 512, 256); `inline` sets came with the page
+ *   textures.atlases[id].color        the decal and wear atlases (every tier)
+ * @typedef {{version: number, world: {json: string, bin: string}, textures: any}} Manifest
  */
 
 /** Base64 -> bytes. */
@@ -68,78 +77,109 @@ export async function gunzip(bytes) {
   return new Response(stream).arrayBuffer();
 }
 
-/** Reads the assets build.mjs inlined into the page (script tags of type application/x-rovloc). */
-export function readInlinedAssets(doc = document) {
-  const get = (id) => {
-    const el = doc.getElementById(id);
-    return el ? el.textContent.trim() : null;
-  };
-  const json = get('rv-world-json');
-  const bin = get('rv-world-bin');
-  const texIndex = get('rv-textures');
-  if (!json || !bin) return null;
-  const textures = {};
-  if (texIndex) {
-    for (const name of JSON.parse(texIndex)) textures[name] = get(`rv-tex:${name}`);
+/** The asset manifest build.mjs wrote into the page (null when there is none). */
+export function readManifest(doc = document) {
+  const el = doc.getElementById('rv-manifest');
+  if (!el) return null;
+  try {
+    return JSON.parse(el.textContent);
+  } catch {
+    return null;
   }
-  return { json, bin, textures };
 }
 
 /**
- * Decodes the inlined assets into the world data and texture images.
- * @param {Assets} assets
+ * The bytes of one asset reference: an inline script's base64, or a fetch of the site's asset (reporting bytes as
+ * they arrive).
+ */
+export async function assetBytes(ref, onBytes = null) {
+  if (ref.startsWith('inline:')) {
+    const el = document.getElementById(ref.slice(7));
+    if (!el) throw new Error(`missing inline asset ${ref}`);
+    return base64Bytes(el.textContent.trim());
+  }
+  const res = await fetch(ref);
+  if (!res.ok) throw new Error(`${ref}: HTTP ${res.status}`);
+  if (!onBytes || !res.body) return new Uint8Array(await res.arrayBuffer());
+  const reader = res.body.getReader();
+  const parts = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value);
+    total += value.length;
+    onBytes(value.length);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+}
+
+/**
+ * Loads the world (gzip JSON + binary streams) and the boot texture set through the manifest.
+ * @param {Manifest} manifest
  * @param {(fraction: number, text: string) => void} [progress]
  */
-export async function loadAssets(assets, progress = () => {}) {
-  progress(0.05, 'Unpacking the building');
-  const metaBytes = await gunzip(base64Bytes(assets.json));
-  const meta = JSON.parse(new TextDecoder().decode(metaBytes));
-  progress(0.15, 'Unpacking the building');
-  const bin = await gunzip(base64Bytes(assets.bin));
-  progress(0.35, 'Laying the floors');
+export async function loadAssets(manifest, progress = () => {}) {
+  if (!manifest || !manifest.world) throw new Error('No world data in this page');
+  const sizes = manifest.world.bytes || {};
+  const expected = (sizes.json || 0) + (sizes.bin || 0);
+  let received = 0;
+  const onBytes = expected > 0 ? (n) => {
+    received += n;
+    progress(0.02 + 0.33 * Math.min(1, received / expected), getString('Boot.Receiving', Math.round(Math.min(1, received / expected) * 100)));
+  } : null;
+  progress(0.02, 'Unpacking the building');
+  const [jsonGz, binGz] = await Promise.all([assetBytes(manifest.world.json, onBytes), assetBytes(manifest.world.bin, onBytes)]);
+  const meta = JSON.parse(new TextDecoder().decode(await gunzip(jsonGz)));
+  const bin = await gunzip(binGz);
+  progress(0.38, 'Laying the floors');
   const decoded = decodeWorld(meta, bin);
   progress(0.5, 'Painting the walls');
   const images = {};
   const jobs = [];
-  for (const [id, t] of Object.entries(meta.textures || {})) {
+  const tex = manifest.textures || {};
+  const boot = tex.sets && tex.sets[String(tex.boot)];
+  const want = { ...(boot ? boot.maps : {}), ...(tex.atlases || {}) };
+  for (const [id, maps] of Object.entries(want)) {
     images[id] = {};
-    for (const [kind, path] of Object.entries(t.maps || {})) {
-      const b64 = assets.textures[path];
-      if (!b64) continue;
-      const blob = new Blob([base64Bytes(b64)], { type: 'image/webp' });
+    for (const [kind, ref] of Object.entries(maps)) {
       // flipped at decode: the data's UVs assume three's default flipY upload, which ImageBitmaps ignore
-      jobs.push(createImageBitmap(blob, { imageOrientation: 'flipY', colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
+      jobs.push(assetBytes(ref).then((bytes) => decodeImage(new Blob([bytes], { type: 'image/webp' })))
         .then((bmp) => {
           images[id][kind] = bmp;
         })
-        .catch((err) => console.warn('[assets] texture', path, err)));
+        .catch((err) => console.warn('[assets] texture', ref, err)));
     }
   }
   await Promise.all(jobs);
   progress(0.6, 'Wiring the lights');
-  return { decoded, images };
+  return { decoded, images, bootSize: Number(tex.boot) || 0 };
 }
 
 export class Engine {
   /**
-   * Builds the engine from inlined assets (or already decoded data).
-   * @param {{root: HTMLElement, assets?: Assets, decoded?: any, images?: any, onProgress?: (f: number, t: string) => void}} opts
+   * Builds the engine from the page's assets (the manifest), or already decoded data.
+   * @param {{root: HTMLElement, manifest?: Manifest, decoded?: any, images?: any, onProgress?: (f: number, t: string) => void}} opts
    */
   static async create(opts) {
     const progress = opts.onProgress || (() => {});
     let decoded = opts.decoded;
     let images = opts.images || {};
-    if (!decoded) {
-      const assets = opts.assets || readInlinedAssets();
-      if (!assets) throw new Error('No world data in this page');
-      ({ decoded, images } = await loadAssets(assets, progress));
-    }
-    const engine = new Engine(opts.root, decoded, images, progress);
+    const manifest = opts.manifest || readManifest();
+    let bootSize = 0;
+    if (!decoded) ({ decoded, images, bootSize } = await loadAssets(manifest, progress));
+    const engine = new Engine(opts.root, decoded, images, progress, { manifest, bootSize });
     await engine._warmUp(progress);
     return engine;
   }
 
-  constructor(root, decoded, images, progress = () => {}) {
+  constructor(root, decoded, images, progress = () => {}, assets = {}) {
     this.root = root;
     /** The configuration ports (GameConfig, CameraConfig, NoiseConfig, InputBindings, WorldConfig, PhysicsConfig). */
     this.config = { GameConfig, CameraConfig, NoiseConfig, InputBindings, WorldConfig, PhysicsConfig };
@@ -148,6 +188,11 @@ export class Engine {
     this.strings = { get: getString, formatTime, all: STRINGS };
     this.save = new Save({ key: 'rovloc.save', version: 1 });
     this.settings = new Settings(this.save);
+    // a build may name the tier a player without a saved choice starts on (the offline lite build: Potato)
+    const stored = this.save.get('settings', {}) || {};
+    if (assets.manifest && assets.manifest.defaultTier && stored.Graphics === undefined && stored.Quality === undefined) {
+      this.settings.values.Graphics = Settings.sanitize('Graphics', assets.manifest.defaultTier) || this.settings.values.Graphics;
+    }
     this.quality = new Quality(this.settings, this.save);
     this.loop = new Loop();
     this.shared = createSharedUniforms((decoded.meta.flickerGroups || []).length);
@@ -169,11 +214,21 @@ export class Engine {
     this.prompts = new Prompts(this);
     this.volumetrics = new Volumetrics(this);
     this.sky = new Sky(this);
+    this.particles = new Particles(this);
     this.audio.captioned.connect((text, preset) => {
       const p = this.audio.ready ? preset : '';
       this.ui.caption(text, { danger: /Screech|Lunge|Creature|Growl|Vent(Scrape|Breathing)|NeckSnap/.test(p) });
     });
-    this.quality.changed.connect(() => this.world.applyQuality());
+    /** the tier's texture set, streamed in the background */
+    this.textures = new TextureStreamer(this.world, assets.manifest ? assets.manifest.textures : null, assets.bootSize || 0);
+    this.quality.changed.connect((budget) => {
+      this.world.applyQuality();
+      this.textures.want(budget.textureSize);
+    });
+    // the Auto hint: a low frame rate suggests Potato once; the tier stays what the player chose
+    this.quality.hinted.connect((tier) => {
+      this.ui.toast(`Running slowly? Try Graphics: ${tier} (${getString(`Settings.Graphics.${tier}.Info`).split(':')[0]}), in the menu.`, { seconds: 9 });
+    });
 
     /** The run's current level (W4's LevelDirector writes it); ambience falls back to it outside every room. */
     this.currentLevel = null;
@@ -194,8 +249,10 @@ export class Engine {
     });
     this.menuEnabled = true;
     this.ui.setMenuButtons([{ label: 'Resume', onClick: () => this.ui.closeMenu() }]);
+    // the stats overlay is a dev tool: F3 toggles it only with ?dev or ?stats in the URL (production shows none)
+    const statsKey = /[?&](dev|stats)\b/.test(location.search);
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'F3') {
+      if (e.code === 'F3' && statsKey) {
         this.showStats = !this.showStats;
         if (!this.showStats) this.ui.setStats('');
       }
@@ -205,6 +262,9 @@ export class Engine {
 
   /** Compiles every shader and uploads the level geometry before the first visible frame. */
   async _warmUp(progress) {
+    progress(0.8, 'Waking the school');
+    // zone culling: every static chunk sorted by the zone it faces (visual only)
+    this.world.enableZoneCulling();
     progress(0.85, 'Waking the school');
     const levels = Object.keys(this.world.meta.levels || {});
     this.world.setFocus(levels);
@@ -215,10 +275,10 @@ export class Engine {
     this.world.setFocus([]);
   }
 
-  /** Starts the loop (and the frame-time probe that picks the quality tier). */
+  /** Starts the loop and asks for the tier's texture set (it streams in the background). */
   start() {
     this.loop.start();
-    this.quality.probe((tier) => this.world.applyQuality(tier));
+    this.textures.want(this.quality.budget.textureSize);
   }
 
   /** Sets the run's current level (ambience fallback, W4's LevelDirector). */
@@ -244,11 +304,15 @@ export class Engine {
     for (const l of playerFocus) focus.add(l);
     this.world.setFocus(focus);
     this.cameraLevel = this.world.levelAt(camera.position);
+    // the zones the camera can see (visual only: what is drawn, never what collides)
+    const seen = this.world.updateVisibility(camera.position);
 
     const film = this.lighting.update(realDt, camera.position, this.cameraLevel);
     this._post(film);
-    this.volumetrics.update(dt, camera, film, this.world.focus);
+    this.volumetrics.update(dt, camera, film, this.world.focus, seen);
+    this.particles.update(realDt, camera, film, seen);
     this.sky.update(camera, this.world.focus, film);
+    this.textures.frame();
     this._viewport.width = this.renderer.width;
     this._viewport.height = this.renderer.height;
     this.prompts.update(dt, camera, this._viewport);
@@ -273,15 +337,23 @@ export class Engine {
     this.ui.update(realDt);
 
     if (!this.skipRender) {
-      this.renderer.render(this.world.scene, { shadow: this.player.flashlight.shadowSpec(), time: this.loop.realTime });
+      const budget = this.quality.budget;
+      const fixtures = budget.fixtureShadows > 0
+        ? this.lighting.shadowFixtures(this.world.dynamicCasters, camera.position, budget.fixtureShadows) : null;
+      this.renderer.render(this.world.scene, {
+        shadow: this.player.flashlight.shadowSpec(), time: this.loop.realTime, fixtures,
+        haze: film.density * 0.02, clear: this.lighting.displayFog(_clear),
+      });
     }
     this.frameMs = performance.now() - t0;
     this.quality.frame(realDt);
     if (this.showStats) {
       const s = this.renderer.stats;
+      const c = this.world.culling ? this.world.culling.stats : null;
       this.ui.setStats(`${this.quality.fps.toFixed(0)} fps  cpu ${this.frameMs.toFixed(1)} ms\n` +
-        `${this.quality.tier} x${this.quality.scale.toFixed(2)} ${s.internal[0]}x${s.internal[1]}\n` +
-        `calls ${s.calls}  tris ${(s.triangles / 1000).toFixed(0)}k\n${this.cameraLevel || '-'} ${this.player.moveState}`);
+        `${this.quality.tier} x${this.quality.scale.toFixed(2)} ${s.internal[0]}x${s.internal[1]}  tex ${this.textures.current}\n` +
+        `calls ${s.calls}  tris ${(s.triangles / 1000).toFixed(0)}k  ${s.passes}\n` +
+        `pvs ${c && c.level ? `${c.zone} ${c.visibleZones} zones` : 'off'}\n${this.cameraLevel || '-'} ${this.player.moveState}`);
     }
   }
 
@@ -292,12 +364,20 @@ export class Engine {
     u.uContrast.value = film.contrast + panic.grade.contrast + flash * 0.18;
     u.uSaturation.value = film.saturation + panic.grade.saturation - flash * 0.25;
     u.uLift.value = film.lift + flash * 0.22 * 0.4;
-    u.uTint.value.copy(this.lighting.grade).multiply(panic.grade.tint);
+    u.uTint.value.copy(this.lighting.grade);
+    u.uPanicTint.value.copy(panic.grade.tint);
+    const budget = this.quality.budget;
+    // Potato's flat grade (GraphicsConfig flatGrade): the film's colour look goes, its brightness stays: the post keeps
+    // the luminance the area tint gives each pixel without its cast, and the film's saturation is dropped (panic's own
+    // grade is kept)
+    const flat = budget.tier === 'Potato';
+    u.uFlat.value = flat ? 1 : 0;
+    if (flat) u.uSaturation.value = panic.grade.saturation - flash * 0.25;
     u.uVignette.value = panic.vignette.opacity;
     u.uVignetteDepth.value = panic.vignette.depth;
-    u.uGrain.value = this.quality.budget.grain ? 0.035 : 0;
-    u.uBloom.value = this.quality.budget.bloom ? film.bloomIntensity * 0.6 : 0;
-    u.uBlur.value = this.quality.budget.dof ? panic.panic * 0.6 : 0;
+    u.uGrain.value = budget.grain || 0;
+    u.uBloom.value = budget.bloom ? film.bloomIntensity * 0.6 : 0;
+    u.uBlur.value = budget.dof ? panic.panic * 0.6 : 0;
   }
 
   _acoustics() {
@@ -348,6 +428,7 @@ export class Engine {
 
 const _fwd = new THREE.Vector3();
 const _up = new THREE.Vector3();
+const _clear = new THREE.Color();
 
 export { THREE, GameConfig, CameraConfig, NoiseConfig, InputBindings, WorldConfig, PhysicsConfig, FramePriority };
 export { STRINGS, getString, formatTime };

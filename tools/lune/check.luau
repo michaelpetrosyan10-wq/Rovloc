@@ -490,10 +490,10 @@ local function runLifecycle(h)
 			if not sawPlan then
 				fail("plan on %s sent no DevOverlay", levelId)
 			end
-			-- MonsterAIService: from Level 1 on, the Creature waits Dormant on the squad's level (ai reports it); on
-			-- Level 1 the classroom scare holds it Scripted until the glass is stepped on, and on the roof the Level 5
-			-- controller holds it Scripted behind the stairwell door until the squad is out.
-			if index >= 2 then
+			-- MonsterAIService: on every level (the basement too) the Creature waits Dormant on the squad's level (ai
+			-- reports it); on Level 1 the classroom scare holds it Scripted until the glass is stepped on, and on the
+			-- roof the Level 5 controller holds it Scripted behind the stairwell door until the squad is out.
+			if index >= 1 then
 				local creature = CollectionService:GetTagged("Creature")[1]
 				local _, mind = dev("ai")
 				local scripted = levelId == "Level1_Hallways" or levelId == "Level5_Roof"

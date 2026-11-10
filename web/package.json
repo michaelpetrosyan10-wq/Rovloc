@@ -2,7 +2,7 @@
   "name": "rovloc-web",
   "private": true,
   "version": "1.0.0",
-  "description": "Rovloc for the browser: one self-contained HTML file for school Chromebooks",
+  "description": "Rovloc for the browser: a static site (Max to Potato graphics, textures streamed per tier) and an offline single-file lite build",
   "type": "module",
   "scripts": {
     "export": "lune run tools/export-world.luau",
@@ -10,7 +10,8 @@
     "bake": "node tools/bake.mjs",
     "data": "npm run export && npm run textures && npm run bake",
     "build": "node tools/build.mjs",
-    "check": "node tools/build.mjs && node tools/check.mjs"
+    "check": "node tools/build.mjs && node tools/check.mjs",
+    "parity": "node tools/tier-parity.mjs"
   },
   "dependencies": {
     "@supabase/realtime-js": "2.117.3",

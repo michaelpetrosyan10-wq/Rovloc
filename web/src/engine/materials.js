@@ -8,9 +8,14 @@
 //     system rewrites each frame (group 0 is steady). Static chunks and node-batched entity chunks read it alike.
 //   * Probe: entities and dynamic things (doors, props, hands, the creature) get one probe irradiance uniform,
 //     trilinearly sampled from the level's probe grid where they stand.
-//   * Dynamic: the flashlight (two spot cones like Flashlight.luau, optional shadow map), the presence glow around
-//     the player, and up to MAX_POINT nearest scripted / flickering point lights. Diffuse is Lambert; the generated
-//     roughness and normal maps give the specular sheen that makes glossy floors and bumpy walls read under the torch.
+//   * Dynamic: the flashlight (two spot cones like Flashlight.luau, optional shadow map filtered by the tier: 16 or 8
+//     rotated Poisson taps of soft PCF, a 3 x 3 grid or 4 corner taps), the presence glow around the player, and up to
+//     MAX_POINT nearest scripted / flickering point lights. Diffuse is Lambert; the generated roughness and normal maps
+//     give the specular sheen that makes glossy floors and bumpy walls read under the torch.
+//   * Fixture shadows (Max / High / Medium): the nearest fixtures to a moving caster (the Creature) render its depth
+//     into one tile each of a shadow atlas; a surface in such a shadow loses that fixture's share of its light (the
+//     bake's falloff x Lambert x cone, at the fixture's current flicker), so the Creature throws real shadows under the
+//     lamps it passes. Static shadows are already in the baked light.
 //   * Neon parts are emissive (x their flicker), glass / water blend.
 //   * Fog: exponential-squared haze in the level film's colour. Output is exposure-scaled, ACES-filmic tone mapped
 //     and gamma encoded, so the post pass works on display values (like Roblox's ColorCorrection).
@@ -18,6 +23,8 @@
 import * as THREE from 'three';
 
 export const MAX_POINT = 4;
+/** Fixture shadow tiles at most (the Max tier's budget). */
+export const MAX_FIX = 4;
 /** Flicker groups per row of the flicker texture (the shader's `g & 255`, `g >> 8`). */
 export const FLICKER_ROW = 256;
 
@@ -56,6 +63,15 @@ export function createSharedUniforms(groupCount = FLICKER_ROW) {
     uShadowMatrix: { value: new THREE.Matrix4() },
     uShadowOn: { value: 0 },
     uShadowTexel: { value: 1 / 512 },
+    uShadowSoft: { value: 1 }, // the torch filter's radius in shadow-map texels
+    // fixture shadows (renderer.js): per tile i of the atlas, the fixture's position + range, linear colour x brightness
+    // x flicker + cone cos (-2: no cone), axis + cone edge cos, and its world -> tile matrix
+    uFixPos: { value: Array.from({ length: MAX_FIX }, () => new THREE.Vector4(0, -1e5, 0, 1)) },
+    uFixColor: { value: Array.from({ length: MAX_FIX }, () => new THREE.Vector4(0, 0, 0, -2)) },
+    uFixDir: { value: Array.from({ length: MAX_FIX }, () => new THREE.Vector4(0, -1, 0, -2)) },
+    uFixMatrix: { value: Array.from({ length: MAX_FIX }, () => new THREE.Matrix4()) },
+    uFixAtlas: { value: null },
+    uFixTexel: { value: new THREE.Vector2(1 / 1024, 1 / 1024) },
     uFogColor: { value: new THREE.Vector3(0.02, 0.025, 0.03) },
     uFogDensity: { value: 0.006 },
     uExposure: { value: 1.3 },
@@ -197,6 +213,21 @@ uniform sampler2D uShadowMap;
 uniform mat4 uShadowMatrix;
 uniform float uShadowOn;
 uniform float uShadowTexel;
+uniform float uShadowSoft;
+#ifndef SHADOW_TAPS
+#define SHADOW_TAPS 9
+#endif
+#endif
+#ifndef NUM_FIX
+#define NUM_FIX 0
+#endif
+#if NUM_FIX > 0
+uniform vec4 uFixPos[${MAX_FIX}];
+uniform vec4 uFixColor[${MAX_FIX}];
+uniform vec4 uFixDir[${MAX_FIX}];
+uniform mat4 uFixMatrix[${MAX_FIX}];
+uniform sampler2D uFixAtlas;
+uniform vec2 uFixTexel;
 #endif
 uniform vec3 uFogColor;
 uniform float uFogDensity;
@@ -231,6 +262,21 @@ vec3 aces(vec3 x) {
   return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
 
+#if defined(USE_SHADOW) || NUM_FIX > 0
+// a rotated Poisson disc (soft PCF): the rotation per pixel (interleaved gradient noise) trades banding for fine grain
+const vec2 POISSON[16] = vec2[16](
+  vec2(-0.94201624, -0.39906216), vec2(0.94558609, -0.76890725), vec2(-0.09418410, -0.92938870), vec2(0.34495938, 0.29387760),
+  vec2(-0.91588581, 0.45771432), vec2(-0.81544232, -0.87912464), vec2(-0.38277543, 0.27676845), vec2(0.97484398, 0.75648379),
+  vec2(0.44323325, -0.97511554), vec2(0.53742981, -0.47373420), vec2(-0.26496911, -0.41893023), vec2(0.79197514, 0.19090188),
+  vec2(-0.24188840, 0.99706507), vec2(-0.81409955, 0.91437590), vec2(0.19984126, 0.78641367), vec2(0.14383161, -0.14100790));
+mat2 discRotation() {
+  float a = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  float s = sin(a);
+  float c = cos(a);
+  return mat2(c, s, -s, c);
+}
+#endif
+
 #ifdef USE_SHADOW
 float shadowAt(vec3 wp, float ndl) {
   vec4 sc = uShadowMatrix * vec4(wp, 1.0);
@@ -239,13 +285,76 @@ float shadowAt(vec3 wp, float ndl) {
   if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
   float bias = 0.0006 + 0.0025 * (1.0 - ndl);
   float lit = 0.0;
+#if SHADOW_TAPS == 16 || SHADOW_TAPS == 8
+  // soft PCF: a disc of uShadowSoft texels, its bias grown with the reach so slopes do not shadow themselves
+  bias += uShadowTexel * uShadowSoft * 0.35 * (1.0 - ndl);
+  mat2 rot = discRotation();
+  for (int i = 0; i < SHADOW_TAPS; i++) {
+    float d = texture(uShadowMap, p.xy + rot * POISSON[i] * (uShadowSoft * uShadowTexel)).r;
+    lit += (p.z - bias) <= d ? 1.0 : 0.0;
+  }
+  lit /= float(SHADOW_TAPS);
+#elif SHADOW_TAPS == 4
+  for (int i = 0; i < 4; i++) {
+    vec2 o = vec2(float(i & 1) - 0.5, float(i >> 1) - 0.5) * uShadowTexel;
+    lit += (p.z - bias) <= texture(uShadowMap, p.xy + o).r ? 1.0 : 0.0;
+  }
+  lit *= 0.25;
+#else
   for (int i = -1; i <= 1; i++) {
     for (int j = -1; j <= 1; j++) {
       float d = texture(uShadowMap, p.xy + vec2(float(i), float(j)) * uShadowTexel).r;
       lit += (p.z - bias) <= d ? 1.0 : 0.0;
     }
   }
-  return mix(1.0, lit / 9.0, uShadowOn);
+  lit /= 9.0;
+#endif
+  return mix(1.0, lit, uShadowOn);
+}
+#endif
+
+#if NUM_FIX > 0
+// The share of fixture i's light a moving caster takes from this point: 0 (not in its shadow) .. 1 (fully shadowed),
+// 8 rotated taps of its tile in the atlas.
+float fixtureOcclusion(int i, vec3 wp, float ndl) {
+  vec4 sc = uFixMatrix[i] * vec4(wp, 1.0);
+  if (sc.w <= 0.0) return 0.0;
+  vec3 p = sc.xyz / sc.w;
+  if (p.x <= 0.0 || p.x >= 1.0 || p.y <= 0.0 || p.y >= 1.0 || p.z >= 1.0) return 0.0;
+  float bias = 0.0015 + 0.004 * (1.0 - ndl);
+  float tiles = float(NUM_FIX);
+  vec2 base = vec2((float(i) + p.x) / tiles, p.y);
+  mat2 rot = discRotation();
+  float occ = 0.0;
+  for (int k = 0; k < 8; k++) {
+    vec2 o = rot * POISSON[k * 2] * 1.6 * uFixTexel;
+    vec2 uv = base + o;
+    uv.x = clamp(uv.x, (float(i) + 0.001) / tiles, (float(i) + 0.999) / tiles);
+    occ += (p.z - bias) > texture(uFixAtlas, uv).r ? 1.0 : 0.0;
+  }
+  return occ * 0.125;
+}
+
+// The light fixtures' shadows of moving casters take from the light at this point (baked or probe).
+vec3 fixtureShadows(vec3 light, vec3 wp, vec3 n) {
+  vec3 lost = vec3(0.0);
+  for (int i = 0; i < NUM_FIX; i++) {
+    vec4 c = uFixColor[i];
+    if (c.r + c.g + c.b <= 0.0) continue;
+    vec3 toL = uFixPos[i].xyz - wp;
+    float d = length(toL);
+    vec3 l = toL / max(d, 1e-4);
+    float ndl = max(dot(n, l), 0.0);
+    if (ndl <= 0.0 || d >= uFixPos[i].w) continue;
+    float cone = 1.0;
+    if (c.w > -1.5) cone = smoothstep(uFixDir[i].w, c.w, dot(-l, uFixDir[i].xyz));
+    if (cone <= 0.0) continue;
+    float occ = fixtureOcclusion(i, wp, ndl);
+    if (occ <= 0.0) continue;
+    lost += c.rgb * falloff(d, uFixPos[i].w) * ndl * cone * occ;
+  }
+  // never below a sliver of the light (bounce light lives in the bake too)
+  return max(light - lost, light * 0.12);
 }
 #endif
 
@@ -328,6 +437,9 @@ void main() {
 #else
   vec3 light = uProbe;
 #endif
+#if NUM_FIX > 0 && !defined(CREATURE)
+  light = fixtureShadows(light, vWorldPos, n);
+#endif
   light += uFlash * max(n.y, 0.25);
 #ifdef DECAL
   // SurfaceGui shading: LightInfluence of the scene's light, the rest self-lit at Brightness (flickering with its
@@ -373,6 +485,8 @@ void main() {
  * @property {boolean} [vertexAlpha]
  * @property {boolean} [shadow]    sample the flashlight shadow map
  * @property {number} [pointLights] dynamic point-light slots compiled in (the tier's budget)
+ * @property {number} [shadowTaps] the torch shadow filter (16 / 8 Poisson, 9 grid, 4 corners)
+ * @property {number} [fixtureShadows] fixture shadow tiles compiled in (0: none)
  * @property {boolean} [nodes]     node-batched geometry (a `node` attribute indexing the node texture)
  * @property {THREE.Texture} [nodeTexture]
  * @property {{lightInfluence: number, brightness: number}} [decal] SurfaceGui decal (map = the atlas)
@@ -399,6 +513,8 @@ export function createWorldMaterial(shared, spec) {
   if (spec.shadow) defines.USE_SHADOW = '';
   if (spec.nodes) defines.NODES = '';
   defines.NUM_POINT = String(spec.pointLights ?? MAX_POINT);
+  defines.SHADOW_TAPS = String(spec.shadowTaps || 9);
+  defines.NUM_FIX = String(spec.fixtureShadows || 0);
   const uniforms = {
     ...shared,
     uMap: { value: spec.map || null },

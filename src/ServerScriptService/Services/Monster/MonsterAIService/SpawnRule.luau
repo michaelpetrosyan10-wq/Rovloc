@@ -1,5 +1,6 @@
 --!strict
--- SpawnRule: where the Creature starts on Levels 2 and 3 (ObjectiveConfig.Spawn; the web build's spawns.js mirrors it).
+-- SpawnRule: where the Creature starts on Levels 0, 2 and 3 (ObjectiveConfig.Spawn; the web build's spawns.js mirrors
+-- it).
 -- Pure: layouts, the run's objective picks and a sight test in, a verdict out.
 --
 -- Candidates: the level's PatrolWaypoint and CreatureSpawn anchors that pass all three rules:

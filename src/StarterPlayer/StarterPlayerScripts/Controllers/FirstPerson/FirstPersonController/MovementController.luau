@@ -4,7 +4,8 @@
 -- Derivation (deriveState, mirrored exactly by the server's PlayerStateService):
 --   1. A held override wins: Scripted > Grabbed > Trapped > Hiding > Parachuting > DownedCrawling.
 --   2. Otherwise by locomotion mode, with canSprint = sprint and stamina > 0 and not exhausted:
---        OnFoot  Crouching if crouch; Sprinting if canSprint and moving; else Standing
+--        OnFoot  Crouching if crouch or lowCeiling (mustCrouch: in a Crawlway room, or less than
+--                StandHeadroom clear over the root); Sprinting if canSprint and moving; else Standing
 --        Vent    VentScurrying if canSprint; else VentCrawling
 --        Swim    Underwater if dive; Freestyle if canSprint; else Treading
 --   "Moving" is a horizontal speed of at least MovingSpeed or a Humanoid.MoveDirection longer than MoveDirectionMin.
@@ -30,7 +31,10 @@
 -- grabbed, or a ControlLock held) and JumpHeight (CharacterService's 2.5) otherwise. While a ControlLock is held the
 -- inputs are ignored (sprint reads released; the crouch toggle keeps its value).
 
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Enums = require(ReplicatedStorage.Shared.Enums)
@@ -39,11 +43,14 @@ local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
+local SpatialQuery = require(ReplicatedStorage.Shared.Util.SpatialQuery)
+local Tags = require(ReplicatedStorage.Shared.Tags)
 
 local log = Log.new("Movement")
 
 local P = Attributes.Player
 local M = Attributes.Match
+local W = Attributes.World
 
 export type Mode = "OnFoot" | "Vent" | "Swim"
 
@@ -56,6 +63,7 @@ export type DeriveInputs = {
 	stamina: number,
 	moving: boolean,
 	exhausted: boolean, -- the exhaustion latch (updateExhausted)
+	lowCeiling: boolean?, -- mustCrouch: the head room here forbids standing up (OnFoot only)
 }
 
 export type StepContext = {
@@ -89,6 +97,7 @@ MovementController.ReconcileWindow = 0.3
 MovementController.Keepalive = 0.5
 MovementController.MinSendInterval = 0.13 -- MoveIntent's token bucket refills at 8/s
 MovementController.JumpHeight = 2.5 -- CharacterService builds every Humanoid with this JumpHeight
+MovementController.CeilingProbeInterval = 0.1 -- the server samples motion (and the head room) at 10 Hz
 
 -- Highest priority first.
 MovementController.OverridePriority = table.freeze({
@@ -181,10 +190,16 @@ function MovementController.deriveState(inputs: DeriveInputs): Enums.MoveState
 		end
 		return if canSprint then "Freestyle" else "Treading"
 	end
-	if inputs.crouch then
+	if inputs.crouch or inputs.lowCeiling == true then
 		return "Crouching"
 	end
 	return if canSprint and inputs.moving then "Sprinting" else "Standing"
+end
+
+-- Whether a player on foot must stay crouched: in a Crawlway room (`roomKind`), or with less than StandHeadroom of
+-- clear space over their root (`headroom`, math.huge with nothing over them). The server's mustCrouch.
+function MovementController.mustCrouch(roomKind: string?, headroom: number): boolean
+	return roomKind == "Crawlway" or headroom < GameConfig.StandHeadroom
 end
 
 -- The exhaustion latch after this frame: set when stamina reaches 0 while sprint is held, cleared when sprint is
@@ -269,6 +284,10 @@ function MovementController.new(player: Player): Movement
 	local speed = 0
 	local locked = false
 	local exhausted = false
+	local lowCeiling = false
+	local probedAt = -math.huge
+	local zoneId: string? = nil
+	local zoneKind: string? = nil
 
 	local seq = 0
 	local sentCrouch: boolean? = nil
@@ -278,6 +297,43 @@ function MovementController.new(player: Player): Movement
 	local dirty = true
 
 	local changed: Signal.Signal<Enums.MoveState, Enums.MoveState> = Signal.new()
+
+	-- The RoomKind of the zone the server put this player in (P.ZoneId), resolved once per zone change.
+	local function currentRoomKind(): string?
+		local id = Attributes.getString(player, P.ZoneId, "")
+		if id == zoneId then
+			return zoneKind
+		end
+		zoneId, zoneKind = id, nil
+		if id == "" then
+			return nil
+		end
+		for _, zone in CollectionService:GetTagged(Tags.Zone) do
+			local named = zone:GetAttribute(W.ZoneId)
+			if (if type(named) == "string" then named else zone.Name) == id then
+				local kind = zone:GetAttribute(W.RoomKind)
+				zoneKind = if type(kind) == "string" then kind else nil
+				break
+			end
+		end
+		return zoneKind
+	end
+
+	-- The server's lowCeilingAt: a Crawlway room, or something solid within StandHeadroom over the root.
+	local function probeCeiling(currentRoot: BasePart): boolean
+		local exclude: { Instance } = {}
+		for _, other in Players:GetPlayers() do
+			if other.Character then
+				table.insert(exclude, other.Character)
+			end
+		end
+		local hit = Workspace:Raycast(
+			currentRoot.Position,
+			Vector3.new(0, GameConfig.StandHeadroom, 0),
+			SpatialQuery.worldParams(exclude)
+		)
+		return MovementController.mustCrouch(currentRoomKind(), if hit then hit.Distance else math.huge)
+	end
 
 	local function canSend(): boolean
 		local phase = ReplicatedStorage:GetAttribute(M.MatchPhase)
@@ -373,6 +429,12 @@ function MovementController.new(player: Player): Movement
 			end
 			local direction = if currentHumanoid then currentHumanoid.MoveDirection.Magnitude else 0
 			moving = MovementController.isMoving(speed, direction)
+			if mode ~= "OnFoot" or not currentRoot or currentRoot.Parent == nil then
+				lowCeiling = false
+			elseif now - probedAt >= MovementController.CeilingProbeInterval then
+				probedAt = now
+				lowCeiling = probeCeiling(currentRoot)
+			end
 
 			local predicted: Enums.MoveState = MovementController.deriveState({
 				mode = mode,
@@ -383,6 +445,7 @@ function MovementController.new(player: Player): Movement
 				stamina = stamina,
 				moving = moving,
 				exhausted = exhausted,
+				lowCeiling = lowCeiling,
 			})
 			local effective: Enums.MoveState
 			effective, disagreeSince =

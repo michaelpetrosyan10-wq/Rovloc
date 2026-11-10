@@ -10,8 +10,11 @@
 -- Parachuting > DownedCrawling (PushOverride / PopOverride, keyed by token; LifeStateService holds "LifeState" →
 -- DownedCrawling). Otherwise the base mode decides (SetMode; OnFoot by default, P4 vents, P7 swimming), where
 -- "can sprint" = sprint ∧ stamina > 0 ∧ not exhausted:
---   OnFoot  Crouching if crouch; Sprinting if can sprint ∧ moving (observed horizontal root speed ≥ 4 studs/s, or
---           Humanoid.MoveDirection longer than 0.1); else Standing.
+--   OnFoot  Crouching if crouch, or while the head room forbids standing (mustCrouch: in a Crawlway room, or anything
+--           solid within StandHeadroom over the root: a crawlway's 4.3-stud mouth); Sprinting if can sprint ∧ moving
+--           (observed horizontal root speed ≥ 4 studs/s, or Humanoid.MoveDirection longer than 0.1); else Standing.
+-- Crouching on foot pushes CollisionService's "Crouch" mode (only the parts under a crawlway's mouth collide), so a
+-- crouched player passes through a crawlway (docs/MAPS.md); the Creature never does.
 --   Vent    VentScurrying if can sprint, else VentCrawling.
 --   Swim    Underwater if dive; Freestyle if can sprint; else Treading.
 -- Exhaustion (updateExhausted, pure) starts when stamina is empty while sprint is held and ends when sprint is released
@@ -59,15 +62,19 @@ local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
+local SpatialQuery = require(ReplicatedStorage.Shared.Util.SpatialQuery)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
 
 local CharacterService = require(ServerScriptService.Services.Core.CharacterService)
+local CollisionService = require(ServerScriptService.Services.Core.CollisionService)
 local RunLifecycleService = require(ServerScriptService.Services.Core.RunLifecycleService)
+local ZoneService = require(ServerScriptService.Services.Core.ZoneService)
 
 local LoadoutService = require(script.Parent.LoadoutService)
 
 local log = Log.new("PlayerState")
+local CROUCH_TOKEN = "Crouch" -- the collision mode a crouched body holds (CollisionService)
 
 local P = Attributes.Player
 
@@ -82,6 +89,7 @@ export type DeriveInput = {
 	stamina: number,
 	exhausted: boolean, -- updateExhausted for this stamina and intent
 	moving: boolean,
+	lowCeiling: boolean?, -- mustCrouch: the head room here forbids standing up
 }
 
 export type MeterEvent = "Empty" | "Regen" | "Full"
@@ -128,6 +136,7 @@ type Record = {
 	look: QuantizedLook?,
 	samples: { MotionSample },
 	speed: number,
+	lowCeiling: boolean, -- mustCrouch held at the last motion sample
 }
 
 local MODES: { Mode } = { "OnFoot", "Vent", "Swim" }
@@ -182,6 +191,8 @@ local BASELINE_STATE: Enums.MoveState = "Standing"
 local PlayerStateService = {}
 
 PlayerStateService.Name = "PlayerStateService"
+-- Clear space over the root a player needs to stand up (GameConfig.StandHeadroom; the client mirrors it).
+PlayerStateService.StandHeadroom = GameConfig.StandHeadroom
 PlayerStateService.OverridePriority = table.freeze(table.clone(OVERRIDE_PRIORITY))
 PlayerStateService.Modes = table.freeze(table.clone(MODES))
 PlayerStateService.OverrideToken = table.freeze({ LifeState = "LifeState" })
@@ -264,7 +275,7 @@ function PlayerStateService.deriveState(input: DeriveInput): Enums.MoveState
 		else
 			state = "Treading"
 		end
-	elseif intent.crouch then
+	elseif intent.crouch or input.lowCeiling == true then
 		state = "Crouching"
 	elseif canSprint and input.moving then
 		state = "Sprinting"
@@ -272,6 +283,12 @@ function PlayerStateService.deriveState(input: DeriveInput): Enums.MoveState
 		state = "Standing"
 	end
 	return state
+end
+
+-- Whether a player on foot must stay crouched: in a Crawlway room (`roomKind`), or with less than StandHeadroom of
+-- clear space over their root (`headroom`, math.huge with nothing over them).
+function PlayerStateService.mustCrouch(roomKind: string?, headroom: number): boolean
+	return roomKind == "Crawlway" or headroom < PlayerStateService.StandHeadroom
 end
 
 -- The exhaustion latch after observing `stamina` (of `max`) with sprint held or not: set while sprint is held at an
@@ -446,6 +463,13 @@ local function setState(record: Record, state: Enums.MoveState, now: number)
 	end
 	record.state = state
 	Attributes.set(record.player, P.MoveState, state)
+	-- a crouched body collides only below a crawlway's mouth
+	local character = record.player.Character
+	if character and state == "Crouching" then
+		CollisionService.PushMode(character, CROUCH_TOKEN, "Crouch")
+	elseif character and previous == "Crouching" then
+		CollisionService.PopMode(character, CROUCH_TOKEN)
+	end
 	moveStateChanged:Fire(record.player, state, previous)
 end
 
@@ -547,6 +571,7 @@ refresh = function(record: Record)
 		stamina = stamina,
 		exhausted = record.exhausted,
 		moving = record.moving,
+		lowCeiling = record.mode == "OnFoot" and record.lowCeiling,
 	})
 	setState(record, state, now)
 	applyWalkSpeed(record)
@@ -580,6 +605,7 @@ local function newRecord(player: Player): Record
 		look = nil,
 		samples = {},
 		speed = 0,
+		lowCeiling = false,
 	}
 	records[player] = record
 	Attributes.set(player, P.MoveState, BASELINE_STATE)
@@ -833,6 +859,28 @@ end
 -- Sampling + broadcast
 --------------------------------------------------------------------------------
 
+-- The head room over a player's root: in a Crawlway room, or with something solid within StandHeadroom above.
+local function lowCeilingAt(player: Player, root: BasePart): boolean
+	local zone = ZoneService.GetPlayerZone(player)
+	local kind = if zone then zone:GetAttribute(Attributes.World.RoomKind) else nil
+	local headroom = math.huge
+	local exclude: { Instance } = {}
+	for _, other in Players:GetPlayers() do
+		if other.Character then
+			table.insert(exclude, other.Character)
+		end
+	end
+	local hit = Workspace:Raycast(
+		root.Position,
+		Vector3.new(0, PlayerStateService.StandHeadroom, 0),
+		SpatialQuery.worldParams(exclude)
+	)
+	if hit then
+		headroom = hit.Distance
+	end
+	return PlayerStateService.mustCrouch(if type(kind) == "string" then kind else nil, headroom)
+end
+
 local function sampleMotion(record: Record, now: number)
 	local root = Instances.characterRoot(record.player)
 	local humanoid = Instances.characterHumanoid(record.player)
@@ -858,8 +906,10 @@ local function sampleMotion(record: Record, now: number)
 	local span = latest.time - oldest.time
 	record.speed = if span > 0 then MathUtil.horizontalDistance(latest.position, oldest.position) / span else 0
 	local moving = PlayerStateService.isMoving(record.speed, humanoid.MoveDirection.Magnitude)
-	if moving ~= record.moving then
+	local low = record.mode == "OnFoot" and lowCeilingAt(record.player, root)
+	if moving ~= record.moving or low ~= record.lowCeiling then
 		record.moving = moving
+		record.lowCeiling = low
 		refresh(record)
 	end
 end

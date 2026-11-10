@@ -100,18 +100,51 @@ return {
 		end
 	end,
 
-	["Emit uses the spec's noise radii"] = function(t: Expect)
+	["landings: a jump or a fall of 0.32 s or more lands a JumpLand, on foot only"] = function(t: Expect)
+		local airborne = 0.32
+		t.eq(NoiseConfig.JumpLandAirborne, airborne)
+		local track = Sampler.newTrack()
+		t.falsy(Sampler.landing(track, false, 10, "Standing"), "on the floor: nothing")
+		t.falsy(Sampler.landing(track, true, 10, "Standing"), "taking off")
+		t.falsy(Sampler.landing(track, true, 10.2, "Standing"), "in the air")
+		t.truthy(Sampler.landing(track, false, 10 + airborne, "Standing"), "a full jump lands loud")
+		t.falsy(Sampler.landing(track, false, 10.5, "Standing"), "once")
+		local hop = Sampler.newTrack()
+		Sampler.landing(hop, true, 20, "Sprinting")
+		t.falsy(Sampler.landing(hop, false, 20.2, "Sprinting"), "a short hop (a step down) is quiet")
+		local swim = Sampler.newTrack()
+		Sampler.landing(swim, true, 30, "Treading")
+		t.falsy(Sampler.landing(swim, false, 31, "Treading"), "not in the water")
+		local crouch = Sampler.newTrack()
+		Sampler.landing(crouch, true, 40, "Crouching")
+		t.truthy(Sampler.landing(crouch, false, 40.5, "Crouching"), "a crouched drop still lands")
+	end,
+
+	["Emit uses the spec's noise radii (docs/MONSTER.md 3.1)"] = function(t: Expect)
 		local expected: { [string]: number } = {
-			CrouchWalk = 8,
+			CrouchWalk = 5,
+			HideEnter = 8,
 			SlowVentCrawl = 8,
 			GrateUnscrew = 10,
-			Walk = 30,
-			Sprint = 65,
+			Treading = 12,
+			HideEnterHurried = 14,
+			Walk = 22,
+			FallingObject = 24,
+			ChatMessage = 25,
+			JumpLand = 26,
+			ObjectiveWork = 34,
+			Gasp = 40,
+			FlaskShatter = 50,
+			Sprint = 60,
 			Freestyle = 75,
+			Splash = 75,
+			DoorSlam = 90,
 			VentScurry = 90,
+			ObjectiveClunk = 110,
 			GrateKick = 130,
 			FloorDebris = 130,
 			TrapSnap = 130,
+			GeneratorStart = 170,
 		}
 		for kind, radius in expected do
 			local event = NoiseAndDirectorService.Emit(Vector3.zero, (kind :: any) :: Enums.NoiseKind)

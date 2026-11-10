@@ -55,7 +55,7 @@ local GameConfig = table.freeze({
 
 	-- Meters (value units; drains and regen per second)
 	StaminaMax = 100,
-	StaminaSprintDrain = 16,
+	StaminaSprintDrain = 7, -- a full sprint lasts about 14 s (the Creature chases at 16.5, you sprint at 19)
 	StaminaScurryDrain = 22,
 	StaminaFreestyleDrain = 20,
 	StaminaTreadDrain = 2,
@@ -73,6 +73,9 @@ local GameConfig = table.freeze({
 	WalkSpeed = 11,
 	SprintSpeed = 19,
 	CrouchSpeed = 5.5,
+	-- Clear space over the root a player needs to stand up (an R15 body is 5.8 tall with its root centre 3 up); a
+	-- crawlway's mouth is 4.3 high, so under one (or anywhere in a Crawlway room) a player on foot stays crouched.
+	StandHeadroom = 2.9,
 	VentCrawlSpeed = 4.5,
 	VentScurrySpeed = 9,
 	TreadSpeed = 4,

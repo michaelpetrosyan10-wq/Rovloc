@@ -25,7 +25,8 @@
 //              timer on every page), the straggler comes in, it seals, every page moves to Level 1; the late joiner
 //              gets up there at half health (then leaves)
 //   Level 1    the classroom scare set off by a client (the scene on the host, the gate slam everywhere); the Creature
-//              hunts and chases a client (not the host): its state, its target and its position agree on that page
+//              hunts and chases a client (not the host): its state, its target and its position agree on that page,
+//              and its pose (the host's hunch rule) and its eye (the rig's height for that pose)
 //   leaving    a client carrying the master keys closes their page: the keys drop where they stood on the other pages
 //   the end    the last client dies and spectates the host; the host dies: a wipe, results on both pages, Play Again
 //              waits for both and brings them back to the lobby Ready; then the host closes their page: the client is
@@ -530,6 +531,25 @@ try {
     if (s.jumpscare.isBusy()) s.jumpscare.abort('Test');
   });
   await sleep(500);
+  // Alice's puppet stands as the host's Creature does: its eye at the rig's height for the pose it stands in (the
+  // metrics' 5.64 standing / 3.6 hunched, not a stand-in's), 0.6 forward along its facing, and that pose the host's
+  // (the same hunch rule, look-ahead and all; read until the two pages agree, as they sample it a moment apart)
+  const stance = (p) => G(p, (g) => {
+    const s = g.creature.c.service;
+    const snap = s.snapshot();
+    const d = snap.eye.clone().sub(snap.position);
+    return { pose: snap.poseMode, lift: +d.y.toFixed(3), rig: s.metrics.eyeHeights[snap.poseMode], forward: +Math.hypot(d.x, d.z).toFixed(3) };
+  });
+  let puppet = await stance(alice);
+  let brain = await stance(host);
+  for (let i = 0; i < 25 && puppet.pose !== brain.pose; i++) {
+    await sleep(200);
+    puppet = await stance(alice);
+    brain = await stance(host);
+  }
+  check(`Alice's page: the Creature's eye at the rig's height for its pose, the host's pose (${puppet.pose}, ${puppet.lift} up)`,
+    Math.abs(puppet.lift - puppet.rig) < 0.01 && Math.abs(puppet.forward - 0.6) < 0.01 && puppet.pose === brain.pose &&
+    Math.abs(brain.lift - puppet.lift) < 0.01, { puppet, brain });
   await G(alice, (g, dev, a) => {
     g.env.teleport({ position: { x: a[0] + 3, y: a[1], z: a[2] }, yaw: 0 });
     g.traps.noteTeleport();

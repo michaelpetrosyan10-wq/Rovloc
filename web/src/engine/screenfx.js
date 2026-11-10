@@ -13,7 +13,7 @@ uniform vec4 uTear; // x chromatic split, y band slip (uv), z static 0..1, w see
 uniform vec4 uTearTint; // rgb the flash's colour, a amount: the frame graded into it by brightness
 `;
 
-/** Replaces the post shader's scene fetch (`vec3 c = texture(tScene, vUv).rgb;`). */
+/** Replaces the post shader's scene fetch (`vec3 c = sceneSample(vUv);`: FXAA and the lens fringe when the tier has them). */
 export const SCREEN_FX_SAMPLE = /* glsl */ `
   vec3 c;
   if (uTear.x + uTear.y > 0.0) {
@@ -26,7 +26,7 @@ export const SCREEN_FX_SAMPLE = /* glsl */ `
     c.g = texture(tScene, tuv).g;
     c.b = texture(tScene, tuv - vec2(uTear.x, uTear.x * 0.35)).b;
   } else {
-    c = texture(tScene, vUv).rgb;
+    c = sceneSample(vUv);
   }
 `;
 

@@ -7,6 +7,12 @@
 //   * Level culling. Only the levels in focus are visible: the player's level, the stairwells, both ends of the
 //     stairwell the player stands in, and the exterior from the roof (setFocus /
 //     focusFor).
+//   * Zone culling (pvs.js, every tier): inside the camera's level only the triangles of the zones its zone can see are
+//     drawn (enableZoneCulling at boot, updateVisibility each frame).
+//   * Graphics tiers (applyQuality): decorative Detail chunks above the tier's detailLimit and, below Medium, the wear
+//     decals are hidden; materials follow the tier's normal maps, torch shadow filter and fixture shadows; textures
+//     come from the tier's texture set (setTextureSet, streamed by textures.js). All visual: collision, queries and
+//     everything gameplay reads are untouched.
 //   * Collision. Every level's collision buffer (every colliding static part, invisible walls included) has a
 //     three-mesh-bvh BVH; entity colliders (boxes in node space) are tested through their node frames.
 //   * Queries: raycast (first hit on colliding geometry, like a Roblox ray with RespectCanCollide), lineClear,
@@ -20,6 +26,7 @@ import { createWorldMaterial } from './materials.js';
 import { NodeTable } from './batch.js';
 import { toMatrix } from './math.js';
 import { WorldConfig } from './config.js';
+import { ZoneCulling } from './pvs.js';
 
 const NEON_STRENGTH = 2.4; // Roblox Neon renders well above its colour; the bloom catches it on High
 const STAIRWELLS = 'Stairwells';
@@ -72,6 +79,12 @@ export class World {
     this.creatureChunks = decoded.chunks.filter((c) => c.kind === 'creature');
     /** Entity chunks (node space) for Entities. */
     this.entityChunks = decoded.chunks.filter((c) => c.kind === 'entity');
+    /** Every static chunk's mesh (userData: chunk, level, bucket, detail). */
+    this.staticMeshes = [];
+    /** Zone culling (enableZoneCulling; null until the renderer asks for it). */
+    this.culling = null;
+    /** Moving shadow casters for the fixture shadows: creature models register here (createCreatureModel). */
+    this.dynamicCasters = new Set();
     const k = this.meta.lighting && this.meta.lighting.falloff && this.meta.lighting.falloff.inverseSquareK;
     if (Number.isFinite(k)) this.shared.uFalloffK.value = k;
     this._buildStatic(decoded.chunks.filter((c) => c.kind === 'static'));
@@ -94,7 +107,7 @@ export class World {
       const atlas = this.meta.textures[id] && this.meta.textures[id].atlas;
       tex.wrapS = tex.wrapT = atlas ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping;
       tex.colorSpace = THREE.NoColorSpace;
-      tex.anisotropy = this.quality.budget.anisotropy;
+      tex.anisotropy = this.quality.budget.anisotropy || 1;
       tex.generateMipmaps = true;
       tex.minFilter = THREE.LinearMipmapLinearFilter;
       tex.magFilter = THREE.LinearFilter;
@@ -126,7 +139,7 @@ export class World {
     mat = createWorldMaterial(this.shared, {
       map: tex ? this._texture(tex, 'color') : null,
       normalMap: tex && !decal && !wear && budget.normalMaps ? this._texture(tex, 'normal') : null,
-      roughMap: tex && !decal && !wear && budget.normalMaps ? this._texture(tex, 'orm') : null,
+      roughMap: tex && !decal && !wear && budget.normalMaps && this._texture(tex, 'normal') ? this._texture(tex, 'orm') : null,
       decal: decal ? { lightInfluence: info.lightInfluence ?? 1, brightness: info.brightness ?? 1 } : null,
       wear,
       studsPerTile: info.studsPerTile || 8,
@@ -141,28 +154,35 @@ export class World {
       nodeTexture: variant.nodeTexture,
       pointLights: budget.pointLights,
       shadow: budget.flashlightShadow && !emissive && !transparent && !decal && !wear,
+      shadowTaps: budget.shadowTaps,
+      fixtureShadows: !emissive && !transparent && !wear ? budget.fixtureShadows || 0 : 0,
     });
     mat.userData.key = cacheKey;
     mat.userData.tex = decal || wear ? null : tex;
     mat.userData.castShadow = !emissive && !transparent && !decal && !wear;
+    mat.userData.receivesFixtures = !emissive && !transparent && !wear;
     this.materials.set(cacheKey, mat);
     return mat;
   }
 
-  /** Rebuilds every material for a new quality tier (normal maps / shadow sampling change the shaders). */
+  /**
+   * Follows the graphics tier: every material's normal maps (once that set's maps have arrived), torch shadow filter,
+   * point-light slots and fixture shadows; texture filtering; which Detail chunks and wear decals are drawn.
+   */
   applyQuality() {
     const budget = this.quality.budget;
     for (const mat of this.materials.values()) {
       const tex = mat.userData.tex;
-      const want = !!tex && budget.normalMaps;
+      const normal = tex ? this._texture(tex, 'normal') : null;
+      const want = !!normal && !!budget.normalMaps;
       const defs = mat.defines;
       let changed = false;
       if (tex && want !== ('USE_NORMALMAP' in defs)) {
         if (want) {
-          mat.uniforms.uNormalMap.value = this._texture(tex, 'normal');
+          mat.uniforms.uNormalMap.value = normal;
           mat.uniforms.uRoughMap.value = this._texture(tex, 'orm');
           defs.USE_NORMALMAP = '';
-          defs.USE_ROUGHMAP = '';
+          if (mat.uniforms.uRoughMap.value) defs.USE_ROUGHMAP = '';
         } else {
           delete defs.USE_NORMALMAP;
           delete defs.USE_ROUGHMAP;
@@ -179,8 +199,93 @@ export class World {
         else delete defs.USE_SHADOW;
         changed = true;
       }
+      const taps = String(budget.shadowTaps || 9);
+      if (defs.SHADOW_TAPS !== taps) {
+        defs.SHADOW_TAPS = taps;
+        changed = true;
+      }
+      const fix = String(mat.userData.receivesFixtures ? budget.fixtureShadows || 0 : 0);
+      if (defs.NUM_FIX !== fix) {
+        defs.NUM_FIX = fix;
+        changed = true;
+      }
       if (changed) mat.needsUpdate = true;
     }
+    const aniso = budget.anisotropy || 1;
+    for (const tex of this.textureCache.values()) {
+      if (tex && tex.anisotropy !== aniso) {
+        tex.anisotropy = aniso;
+        if (tex.image) tex.needsUpdate = true;
+      }
+    }
+    for (const mesh of this.staticMeshes) this.refreshMeshVisibility(mesh);
+  }
+
+  /**
+   * Shows a static mesh unless the tier drops it (Detail above the tier's limit, wear below Medium) or zone culling
+   * left it nothing to draw.
+   */
+  refreshMeshVisibility(mesh) {
+    const budget = this.quality.budget;
+    const ud = mesh.userData;
+    const limit = budget.detailLimit ?? 3;
+    let on = !(ud.detail > limit);
+    if (ud.bucket === 'wear' && budget.wear === false) on = false;
+    if (ud.pvsEmpty) on = false;
+    mesh.visible = on;
+  }
+
+  /** Sorts the static chunks by zone and starts culling by the potentially visible sets (renderer only). */
+  enableZoneCulling() {
+    if (!this.culling) this.culling = new ZoneCulling(this);
+    this.culling.prepare(this.staticMeshes);
+    return this.culling;
+  }
+
+  /** Per frame: the zones the camera can see (null: everything). */
+  updateVisibility(cameraPos) {
+    return this.culling ? this.culling.update(cameraPos) : null;
+  }
+
+  /** Whether a zone may be seen from the camera now (true when nothing is culled). */
+  zoneVisible(id) {
+    return !this.culling || this.culling.sees(id);
+  }
+
+  /** Swaps one map's image in place when its texture exists (textures.js spreads a set's swaps over frames). */
+  setTextureImage(id, kind, image) {
+    const tex = this.textureCache.get(`${id}:${kind}`);
+    if (tex && image && tex.image !== image) swapImage(tex, image);
+  }
+
+  /**
+   * Swaps in a texture set (textures.js): `images[id][kind]` -> ImageBitmap. Textures already made re-upload with the
+   * new image; a map that was missing (a normal map arriving) becomes available to applyQuality.
+   * @param {Record<string, {color?: ImageBitmap, normal?: ImageBitmap, orm?: ImageBitmap}>} images
+   */
+  setTextureSet(images) {
+    const old = this.images;
+    this.images = images;
+    for (const [key, tex] of this.textureCache) {
+      const sep = key.lastIndexOf(':');
+      const id = key.slice(0, sep);
+      const kind = key.slice(sep + 1);
+      const image = images[id] && images[id][kind];
+      if (!tex) {
+        // a map that was missing: made on the next lookup
+        if (image) this.textureCache.delete(key);
+        continue;
+      }
+      if (!image) {
+        // the new set has no such map (a normal map below Medium): free it; applyQuality drops it from the shaders
+        tex.dispose();
+        this.textureCache.delete(key);
+        continue;
+      }
+      if (tex.image !== image) swapImage(tex, image);
+    }
+    this.applyQuality();
+    return old;
   }
 
   // ------------------------------------------------------------------ build
@@ -193,7 +298,12 @@ export class World {
       mesh.matrixAutoUpdate = false;
       mesh.renderOrder = RENDER_ORDER[c.bucket] ?? 0;
       mesh.userData.level = c.level;
+      mesh.userData.chunk = c;
+      mesh.userData.bucket = c.bucket;
+      mesh.userData.detail = c.detail || 0;
       group.add(mesh);
+      this.staticMeshes.push(mesh);
+      this.refreshMeshVisibility(mesh);
     }
   }
 
@@ -493,14 +603,23 @@ export class World {
       object.add(this.nodeMesh(lean, slots, table));
     }
     const delta = new THREE.Matrix4();
-    return {
+    // the bones' bounds as written this frame: the fixture shadows aim their shadow maps at it
+    const bounds = new THREE.Sphere(new THREE.Vector3(), 0);
+    const lo = new THREE.Vector3(Infinity, Infinity, Infinity);
+    const hi = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    const casters = this.dynamicCasters;
+    const model = {
       object,
       table,
       bones,
+      bounds,
       /** Bone i's world frame now (its part's CFrame). */
       setBoneWorld(i, world) {
         delta.multiplyMatrices(world, restInverse[i]);
         table.setMatrix(i, delta);
+        const e = world.elements;
+        lo.set(Math.min(lo.x, e[12]), Math.min(lo.y, e[13]), Math.min(lo.z, e[14]));
+        hi.set(Math.max(hi.x, e[12]), Math.max(hi.y, e[13]), Math.max(hi.z, e[14]));
       },
       /** Probe irradiance (THREE.Color) lighting the whole rig. */
       setLight(color, bone) {
@@ -513,9 +632,21 @@ export class World {
         else for (let i = 0; i < bones.length; i++) table.setMode(i, on ? 2 : 0);
       },
       flush() {
+        if (lo.x <= hi.x) {
+          bounds.center.addVectors(lo, hi).multiplyScalar(0.5);
+          bounds.radius = lo.distanceTo(hi) * 0.5 + 1.2; // bone origins + the parts round them
+          lo.set(Infinity, Infinity, Infinity);
+          hi.set(-Infinity, -Infinity, -Infinity);
+        }
         table.flush();
       },
+      /** Stops casting fixture shadows (the model is gone). */
+      dispose() {
+        casters.delete(model);
+      },
     };
+    casters.add(model);
+    return model;
   }
 }
 
@@ -539,6 +670,17 @@ function zoneContains(z, p) {
   if (!z.box.containsPoint(p)) return false;
   _local.copy(p).applyMatrix4(z.inverse);
   return Math.abs(_local.x) <= z.half.x && Math.abs(_local.y) <= z.half.y && Math.abs(_local.z) <= z.half.z;
+}
+
+/**
+ * Gives a texture a new image. Textures live in immutable GPU storage of their first size, so a set of another size
+ * first frees the old storage (three allocates anew on the next upload).
+ */
+function swapImage(tex, image) {
+  const old = tex.image;
+  if (old && (old.width !== image.width || old.height !== image.height)) tex.dispose();
+  tex.image = image;
+  tex.needsUpdate = true;
 }
 
 /** BufferGeometry for one decoded chunk. */

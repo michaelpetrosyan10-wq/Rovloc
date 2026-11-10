@@ -8,6 +8,8 @@
 //     fades at 1.6/s.
 //   * Dust. The nearest `budget.dust` shafts carry a slow cloud of motes (additive points) that glint inside the
 //     light, scaled by the film's `dust`.
+//   * Zone culling: a fixture in a zone the camera cannot see (pvs.js) throws no shaft. Tiers: Max 20 shafts / 12
+//     dust clouds, High 14 / 8, Medium 6 / 3, Low and Potato none.
 
 import * as THREE from 'three';
 import { clamp01 } from './math.js';
@@ -26,7 +28,9 @@ const BEHIND_PENALTY = 1.8;
 const FADE_RATE = 1.6;
 const REFRESH = 0.25;
 const SHAFT_ALPHA = 0.055; // additive strength of a full-brightness shaft
-const DUST_PER_SHAFT = 48;
+const DUST_PER_SHAFT = 64;
+const MAX_SHAFTS = 20;
+const MAX_DUST = 12;
 
 const SHAFT_VERT = /* glsl */ `
 uniform vec3 uTop; uniform vec3 uAxis; uniform float uLen; uniform float uW0; uniform float uW1;
@@ -71,7 +75,7 @@ export class Volumetrics {
     const geo = new THREE.PlaneGeometry(2, 1, 1, 6);
     geo.translate(0, 0.5, 0);
     this.slots = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < MAX_SHAFTS; i++) {
       const mat = new THREE.ShaderMaterial({
         uniforms: {
           uTop: { value: new THREE.Vector3() }, uAxis: { value: new THREE.Vector3(0, -1, 0) }, uLen: { value: 10 },
@@ -93,7 +97,7 @@ export class Volumetrics {
     }
     // dust motes
     this.dustSlots = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < MAX_DUST; i++) {
       const g = new THREE.BufferGeometry();
       const seeds = new Float32Array(DUST_PER_SHAFT * 3);
       for (let k = 0; k < seeds.length; k++) seeds[k] = Math.random();
@@ -145,7 +149,7 @@ export class Volumetrics {
     this.clock = REFRESH;
   }
 
-  update(dt, camera, film, focus) {
+  update(dt, camera, film, focus, seen = null) {
     const budget = this.engine.quality.budget;
     const lighting = this.engine.lighting;
     const flicker = this.engine.shared.uFlickerData;
@@ -156,6 +160,7 @@ export class Volumetrics {
       const ranked = [];
       for (const s of this.sources) {
         if (!focus.has(s.level)) continue;
+        if (seen && s.level === this.engine.world.culling.activeLevel && s.light.room && !seen.has(s.light.room)) continue;
         const d = s.pos.distanceTo(camera.position);
         if (d > SHAFT_RANGE) continue;
         _to.subVectors(s.pos, camera.position);

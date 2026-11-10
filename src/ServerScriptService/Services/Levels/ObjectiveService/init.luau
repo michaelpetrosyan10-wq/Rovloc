@@ -99,8 +99,9 @@ local LifeStateService = require(ServerScriptService.Services.Player.LifeStateSe
 local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
 local ChemicalProjectileService = require(ServerScriptService.Services.Mechanics.ChemicalProjectileService)
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
-local LockerHidingService = require(ServerScriptService.Services.Mechanics.LockerHidingService)
+local HideSpotService = require(ServerScriptService.Services.Mechanics.HideSpotService)
 local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
+local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 
 local log = Log.new("Objective")
 
@@ -975,8 +976,8 @@ local function serves(kind: Enums.PromptKind, host: Instance, prompt: ProximityP
 			and live
 			and not isDone(floor, "FindCoachKey")
 			and not floor.searched[locker]
-			and LockerHidingService.GetState(locker) == "Free"
-			and not LockerHidingService.IsSearchOpen(locker)
+			and HideSpotService.GetState(locker) == "Free"
+			and not HideSpotService.IsSearchOpen(locker)
 	end
 	local floor = floorOfHost(host)
 	if not floor then
@@ -1382,13 +1383,13 @@ local function search(floor: Floor, player: Player, locker: Model)
 	end
 	floor.searched[locker] = true
 	if locker == floor.keyLocker then
-		LockerHidingService.SetSearchOpen(locker, true)
+		HideSpotService.SetSearchOpen(locker, true)
 		showKey(floor)
 		notifyPlayer(player, "Obj.KeyFound")
 	else
-		if LockerHidingService.SetSearchOpen(locker, true) then
+		if HideSpotService.SetSearchOpen(locker, true) then
 			addTween(0, T.SearchEmptySeconds, function(_t: number) end, function()
-				LockerHidingService.SetSearchOpen(locker, false)
+				HideSpotService.SetSearchOpen(locker, false)
 			end)
 		end
 		notifyPlayer(player, "Obj.LockerEmpty")
@@ -1563,7 +1564,7 @@ local function take(floor: Floor, player: Player, host: Instance)
 	elseif kind == "CoachKey" then
 		playAt("ObjKeyJingle", at)
 		if floor.keyLocker then
-			LockerHidingService.SetSearchOpen(floor.keyLocker, false)
+			HideSpotService.SetSearchOpen(floor.keyLocker, false)
 		end
 		if first then
 			advance(floor, "FindCoachKey", player)
@@ -1841,10 +1842,14 @@ local function addSearchPrompts(floor: Floor)
 			continue
 		end
 		local hide = PropKit.findPrompt(locker, "Hide")
+		local kind = Attributes.getString(locker, W.HideKind, "Locker")
 		local prompt = PropKit.prompt(hostAttachment, {
 			kind = "Search",
 			action = "Obj.Prompt.Search",
-			object = "Prompt.Locker",
+			object = if kind == "Barrel"
+				then "Prompt.Barrel"
+				elseif kind == "Cabinet" then "Prompt.Cabinet"
+				else "Prompt.Locker",
 			hold = T.SearchHold,
 			distance = if hide then hide.MaxActivationDistance else nil,
 			key = Enum.KeyCode.R,
@@ -1990,7 +1995,8 @@ local function newFloor(spec: ObjectiveConfig.FloorSpec, ctx: Types.RunContext):
 				end
 			end
 		end
-		for _, locker in CollectionService:GetTagged(Tags.HideableLocker) do
+		-- every hiding spot in the key's rooms is searched: lockers, and the tunnels' barrels and cabinets
+		for _, locker in CollectionService:GetTagged(Tags.Hideable) do
 			if
 				locker:IsA("Model")
 				and onLevel(locker, levelId)
@@ -2138,7 +2144,7 @@ function ObjectiveService.Step(at: number?)
 				keyLocker
 				and not floor.keyShown
 				and not isDone(floor, "FindCoachKey")
-				and LockerHidingService.GetState(keyLocker) == "Smashed"
+				and HideSpotService.GetState(keyLocker) == "Smashed"
 			then
 				showKey(floor)
 			end
@@ -2151,6 +2157,21 @@ end
 --------------------------------------------------------------------------------
 
 -- Whether `levelId`'s exit may be used (no objective there, its lock step done, or no run tracked).
+-- Whether a floor's survive countdown is running (Floor 3's WindMotor: ObjectiveTimerEndsAt still ahead).
+function ObjectiveService.SurviveRunning(): boolean
+	if not running then
+		return false
+	end
+	local t = now()
+	for _, floor in floors do
+		local endsAt = floor.motorEndsAt
+		if endsAt and t < endsAt then
+			return true
+		end
+	end
+	return false
+end
+
 function ObjectiveService.ExitOpen(levelId: string): boolean
 	if not running then
 		return true
@@ -2320,6 +2341,8 @@ function ObjectiveService.Init()
 	serviceTrove:Add(LifeStateService.StateChanged:Connect(onLifeStateChanged))
 	serviceTrove:Add(ChemicalProjectileService.AcidShattered:Connect(onAcidShattered))
 	serviceTrove:Add(ChemicalProjectileService.AcidLost:Connect(onAcidLost))
+	-- no teleport while a survive countdown runs (Floor 3's motor): the squad holds out against the hunt it has
+	serviceTrove:Add(MonsterAIService.RegisterTeleportBlock(ObjectiveService.SurviveRunning))
 	serviceTrove:Add(ReplicatedStorage:GetAttributeChangedSignal(M.MatchPhase):Connect(function()
 		local phase = ReplicatedStorage:GetAttribute(M.MatchPhase)
 		if type(phase) == "string" and Enums.has(Enums.MatchPhase, phase) then

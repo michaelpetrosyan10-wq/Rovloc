@@ -6,7 +6,9 @@
 --     (1) and CreatureFarDistance (0) on a smoothstep; full weight with line of sight (eye to the Creature's eye,
 --     a Default-group ray that ignores every character and the Creature itself, so lockers and desks block it),
 --     OCCLUDED_SHARE of it through walls (it is right there, you can hear it). Sensed at SENSE_HZ.
---   * chase floor: the Creature's TargetUserId is me and its MonsterState is WallChase or VentChase.
+--   * near floor (docs/MONSTER.md 11): within NearRadius (25) of its eye, seen or not (not Hidden, Dormant or
+--     Scripted), at least NearBase + NearSpan x smoothstep(25 -> 6, distance): 0.27 at the edge, 0.7 at 6 studs.
+--   * chase floor: the Creature's TargetUserId is me and its MonsterState is WallChase.
 --   * external floors: SetFloor(token, value) from later systems (struggles, scripted beats); the highest wins.
 --   * Downed: +DOWNED_BONUS.
 -- Panic approaches the target at CameraConfig.Panic.RiseSpeed per second going up and FallSpeed going down.
@@ -75,9 +77,15 @@ local PanicVFX = {}
 
 PanicVFX.OccludedShare = 0.3
 PanicVFX.DownedBonus = 0.4
+PanicVFX.NearRadius = 25
+PanicVFX.NearFull = 6
+PanicVFX.NearBase = 0.27
+PanicVFX.NearSpan = 0.43
 
 local SENSE_HZ = 10
-local CHASE_STATES: { [string]: boolean } = { WallChase = true, VentChase = true }
+local CHASE_STATES: { [string]: boolean } = { WallChase = true }
+-- States in which it is no threat to feel near: before it wakes, and while a cutscene holds it.
+local CALM_STATES: { [string]: boolean } = { Dormant = true, Scripted = true }
 
 local HEART_SLOW = 0.25
 local HEART_FAST = 0.62
@@ -111,6 +119,15 @@ function PanicVFX.proximity(distance: number, visible: boolean): number
 	end
 	local raw = 1 - MathUtil.smoothstep(Panic.CreatureNearDistance, Panic.CreatureFarDistance, distance)
 	return if visible then raw else raw * PanicVFX.OccludedShare
+end
+
+-- The heartbeat floor of a Creature `distance` studs from my eye, seen or not (0 beyond NearRadius).
+function PanicVFX.nearFloor(distance: number): number
+	if not (distance < PanicVFX.NearRadius) then
+		return 0
+	end
+	return PanicVFX.NearBase
+		+ PanicVFX.NearSpan * MathUtil.smoothstep(PanicVFX.NearRadius, PanicVFX.NearFull, math.max(distance, 0))
 end
 
 function PanicVFX.target(inputs: TargetInputs): number
@@ -343,6 +360,7 @@ function PanicVFX.new(player: Player): PanicFx
 		if distance >= Panic.CreatureFarDistance then
 			return
 		end
+		local near = if CALM_STATES[state] then 0 else PanicVFX.nearFloor(distance)
 		local exclude: { Instance } = { creature }
 		for _, other in Players:GetPlayers() do
 			local character = other.Character
@@ -355,7 +373,7 @@ function PanicVFX.new(player: Player): PanicFx
 			table.insert(exclude, camera)
 		end
 		local visible = SpatialQuery.lineClear(eye, creatureEye, SpatialQuery.losParams(exclude), creature)
-		proximity = PanicVFX.proximity(distance, visible)
+		proximity = math.max(PanicVFX.proximity(distance, visible), near)
 	end
 
 	local fx: PanicFx = {

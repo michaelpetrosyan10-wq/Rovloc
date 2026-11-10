@@ -644,8 +644,8 @@ local function blockedFrom(player: Player, prompt: ProximityPrompt, host: Instan
 	if creature then
 		table.insert(exclude, creature)
 	end
-	-- lockers are furniture against the walls: a key hanging inside an open one is reached past its door
-	for _, locker in CollectionService:GetTagged(Tags.HideableLocker) do
+	-- hiding spots are furniture: a key hanging inside an open locker (or cabinet, or barrel) is reached past its leaf
+	for _, locker in CollectionService:GetTagged(Tags.Hideable) do
 		table.insert(exclude, locker)
 	end
 	local params = RaycastParams.new()

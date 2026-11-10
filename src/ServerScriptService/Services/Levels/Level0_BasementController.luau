@@ -1,6 +1,6 @@
 --!strict
--- Level0_BasementController: the basement's ambience beats (spec, Level 0: no Creature down here; the bear traps
--- are BearTrapService's). While the squad is on Level 0 a seeded director plays a scare every INTERVAL_MIN..
+-- Level0_BasementController: the basement's ambience beats (the Creature hunts down here too: MonsterAIService wakes
+-- it at the seeded spawn after the floor's grace; the bear traps are BearTrapService's). While the squad is on Level 0 a seeded director plays a scare every INTERVAL_MIN..
 -- INTERVAL_MAX seconds, never the same kind twice in a row, from a point BAND_MIN..BAND_MAX studs (horizontally) from
 -- a randomly drawn playing participant that no participant can see (behind walls, pillars, round corners):
 --   PipeBang       a bang in the overhead pipes (under the ceiling),

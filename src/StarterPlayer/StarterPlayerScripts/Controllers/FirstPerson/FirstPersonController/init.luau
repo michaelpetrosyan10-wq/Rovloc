@@ -917,6 +917,13 @@ function FirstPersonController.FlashlightLevel(batteryFraction: number, emf: num
 	return Flashlight.batteryFactor(batteryFraction) * Flashlight.sputter(batteryFraction, t, seed) * flicker
 end
 
+-- Makes this client's torch stutter for `seconds` from now (a teleport's warning, the reveal scare).
+function FirstPersonController.StutterTorch(seconds: number)
+	if MathUtil.isFinite(seconds) and seconds > 0 then
+		Flashlight.SetStutter(Workspace:GetServerTimeNow() + seconds)
+	end
+end
+
 -- Beam colour for a cell at `batteryFraction`.
 function FirstPersonController.BeamColor(batteryFraction: number): Color3
 	return Flashlight.beamColor(batteryFraction)

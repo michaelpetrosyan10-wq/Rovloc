@@ -118,7 +118,7 @@ local ALERT_MAX = 7
 local ALERT_COOLDOWN = 40
 local ALERT_CHECK = 1
 local ALERTABLE: { [string]: boolean } = { Patrol = true, InvestigateNoise = true }
-local HUNTING: { [string]: boolean } = { AquaticStalk = true, WallChase = true, VentChase = true }
+local HUNTING: { [string]: boolean } = { AquaticStalk = true, WallChase = true }
 local LEVER_SECONDS = 0.45
 local LEVER_LIT_AT = 0.85 -- lever travel (0..1) at which the green lamp comes on
 local BREAKER_DELAY = 0.35 -- seconds from the clank to the lamps striking

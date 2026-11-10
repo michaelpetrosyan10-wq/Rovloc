@@ -151,6 +151,12 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
+		name = "CreatureCuesController",
+		load = function(): any
+			return require(Gameplay.CreatureCuesController)
+		end,
+	},
+	{
 		name = "ChemicalThrowController",
 		load = function(): any
 			return require(Gameplay.ChemicalThrowController)

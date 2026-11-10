@@ -160,6 +160,22 @@ return {
 		t.eq(derive(tired), "Standing", "no sprint while exhausted")
 	end,
 
+	["derive: a low ceiling keeps a player on foot crouched (crawlways)"] = function(t: Expect)
+		local derive = PlayerStateService.deriveState
+		local function low(mode: PlayerStateService.Mode, posture: Intent, override: Enums.MoveState?): DeriveInput
+			local entry = input(mode, posture, 100, true, override)
+			entry.lowCeiling = true
+			return entry
+		end
+		t.eq(derive(low("OnFoot", intent(false, false, false))), "Crouching", "cannot stand under a crawlway's mouth")
+		t.eq(derive(low("OnFoot", intent(false, true, false))), "Crouching", "nor sprint through one")
+		t.eq(derive(low("Vent", intent(false, false, false))), "VentCrawling", "means nothing in a duct")
+		t.eq(derive(low("Swim", intent(false, false, false))), "Treading", "means nothing in the water")
+		t.eq(derive(low("OnFoot", intent(false, false, false), "Hiding")), "Hiding", "an override still wins")
+		-- the speed a forced crouch moves at is the crouch speed: never a sprint through a crawlway
+		t.eq(PlayerStateService.walkSpeedFor("Crouching"), GameConfig.CrouchSpeed)
+	end,
+
 	["derive: vent and swim modes"] = function(t: Expect)
 		local derive = PlayerStateService.deriveState
 		t.eq(derive(input("Vent", intent(false, false, false), 100, false)), "VentCrawling")

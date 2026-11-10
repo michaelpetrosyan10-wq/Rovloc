@@ -1,7 +1,7 @@
 // Screenshots of the Creature in the real engine (headless Playwright Chromium, SwiftShader WebGL).
 //
 //   node tools/creature-shot.mjs [--out <dir> (default: <os tmp>/rovloc-creature-shots)] [--stages idle,walk,...]
-//                                [--width 1280 --height 720] [--tier Low|Medium|High (default High)] [--perf]
+//                                [--width 1280 --height 720] [--tier Max|High|Medium|Low|Potato (default High)] [--perf]
 // --perf instead times the rig per frame (CreatureView.frame + JumpscareView.step) at 4x CPU throttle on each tier.
 //
 // Builds a single-file page with build.mjs --entry tools/creature-shot-entry.js (the engine, the world data and the
@@ -66,7 +66,6 @@ async function main() {
     const e = window.__rovloc.engine;
     e.loop.stop();
     e.quality.adapt = false;
-    e.quality.probing = null;
     e.quality.setTier(t);
     return window.__shot.place;
   }, tier);
@@ -76,7 +75,7 @@ async function main() {
     // view's step) with the CPU throttled 4x, per tier, the Creature stalking toward the camera within 20 studs
     const cdp = await tab.context().newCDPSession(tab);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-    for (const t of ['Low', 'Medium', 'High']) {
+    for (const t of ['Potato', 'Low', 'Medium', 'High', 'Max']) {
       const ms = await tab.evaluate((tierName) => window.__shot.perf(tierName, 150), t);
       console.log(`PERF  ${t.padEnd(6)} rig ${ms.rig.toFixed(3)} ms/frame (median ${ms.median.toFixed(3)}, p95 ${ms.p95.toFixed(3)}), frame ${ms.frame.toFixed(1)} ms, ${ms.calls} draw calls  ${JSON.stringify(ms.parts)}`);
     }

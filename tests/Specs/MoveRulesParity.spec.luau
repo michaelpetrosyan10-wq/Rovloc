@@ -32,44 +32,49 @@ return {
 							for _, dive in BOOLS do
 								for _, exhausted in BOOLS do
 									for _, moving in BOOLS do
-										local overrideState: Enums.MoveState? = if overrideIndex <= #OVERRIDES
-											then OVERRIDES[overrideIndex]
-											else nil
-										local server = PlayerStateService.deriveState({
-											mode = mode,
-											override = overrideState,
-											intent = { crouch = crouch, sprint = sprint, dive = dive },
-											stamina = stamina,
-											exhausted = exhausted,
-											moving = moving,
-										})
-										local client = MovementController.deriveState({
-											mode = mode,
-											override = overrideState,
-											crouch = crouch,
-											sprint = sprint,
-											dive = dive,
-											stamina = stamina,
-											exhausted = exhausted,
-											moving = moving,
-										} :: any)
-										checked += 1
-										if server ~= client then
-											t.eq(
-												client,
-												server,
-												string.format(
-													"%s override=%s stamina=%s crouch=%s sprint=%s dive=%s exhausted=%s moving=%s",
-													mode,
-													tostring(overrideState),
-													tostring(stamina),
-													tostring(crouch),
-													tostring(sprint),
-													tostring(dive),
-													tostring(exhausted),
-													tostring(moving)
+										for _, lowCeiling in BOOLS do
+											local overrideState: Enums.MoveState? = if overrideIndex <= #OVERRIDES
+												then OVERRIDES[overrideIndex]
+												else nil
+											local server = PlayerStateService.deriveState({
+												mode = mode,
+												override = overrideState,
+												intent = { crouch = crouch, sprint = sprint, dive = dive },
+												stamina = stamina,
+												exhausted = exhausted,
+												moving = moving,
+												lowCeiling = lowCeiling,
+											})
+											local client = MovementController.deriveState({
+												mode = mode,
+												override = overrideState,
+												crouch = crouch,
+												sprint = sprint,
+												dive = dive,
+												stamina = stamina,
+												exhausted = exhausted,
+												moving = moving,
+												lowCeiling = lowCeiling,
+											} :: any)
+											checked += 1
+											if server ~= client then
+												t.eq(
+													client,
+													server,
+													string.format(
+														"%s override=%s stamina=%s crouch=%s sprint=%s dive=%s exhausted=%s moving=%s low=%s",
+														mode,
+														tostring(overrideState),
+														tostring(stamina),
+														tostring(crouch),
+														tostring(sprint),
+														tostring(dive),
+														tostring(exhausted),
+														tostring(moving),
+														tostring(lowCeiling)
+													)
 												)
-											)
+											end
 										end
 									end
 								end
@@ -79,7 +84,28 @@ return {
 				end
 			end
 		end
-		t.truthy(checked == #MODES * (#OVERRIDES + 1) * #STAMINAS * 32, "every combination checked")
+		t.truthy(checked == #MODES * (#OVERRIDES + 1) * #STAMINAS * 64, "every combination checked")
+	end,
+
+	["both sides force a crouch under the same head room"] = function(t: Expect)
+		local headrooms: { number } =
+			{ 0, 1.3, GameConfig.StandHeadroom - 0.01, GameConfig.StandHeadroom, 7, math.huge }
+		local kinds: { { kind: string? } } =
+			{ { kind = "Crawlway" }, { kind = "Tunnel" }, { kind = "Room" }, { kind = nil } }
+		for _, row in kinds do
+			local roomKind: string? = row.kind
+			for _, headroom in headrooms do
+				t.eq(
+					MovementController.mustCrouch(roomKind, headroom),
+					PlayerStateService.mustCrouch(roomKind, headroom),
+					string.format("kind=%s headroom=%s", tostring(roomKind), tostring(headroom))
+				)
+			end
+		end
+		-- a crawlway's 4.3-stud mouth: the ceiling 1.3 over a standing root's centre (3 up) forbids standing
+		t.truthy(PlayerStateService.mustCrouch(nil, 4.3 - 3), "under a crawlway's mouth")
+		t.falsy(PlayerStateService.mustCrouch(nil, 7), "under a doorway lintel")
+		t.truthy(PlayerStateService.mustCrouch("Crawlway", math.huge), "anywhere in a Crawlway room")
 	end,
 
 	["the exhaustion latch is the same on both sides"] = function(t: Expect)

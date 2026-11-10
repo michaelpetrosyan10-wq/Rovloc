@@ -1,16 +1,14 @@
 --!strict
--- WallChase: the Creature has seen someone and runs them down on two legs, at WallChase speed x the difficulty's
--- multiplier, re-routing every Repath.ChaseInterval (and walking straight at them when the way is clear and close).
+-- WallChase (the Chase, docs/MONSTER.md 6.5): the Creature saw someone (or was stared at) and runs them down at 16.5
+-- studs/s (x the difficulty, never past SpeedCap: a sprinting player, 19, gains on it; a walking one loses ground),
+-- re-routing every Repath.ChaseInterval (and walking straight at them when the way is clear and close).
 --
---   * Goal: the target while they are in sight; once they are not, the last place it saw or heard them (the brain's
---     memory, MemorySeconds long). Reaching that spot with nobody in sight ends the chase: the brain searches the
---     area (InvestigateNoise).
---   * Catches: anyone in sight within CatchDistance (same floor, clear line, the brain's catch rules) is caught as a
---     "Hallway" jumpscare; the target first.
---   * An unreachable target (no route) is retried a moment later while still in sight; an unreachable memory ends
---     the chase.
--- The brain breaks the chase off when it has run too long or the pacing calls a breather, and switches to VentChase
--- when the target is seen crawling into a duct.
+--   * Goal: the target while in sight (arrive 1); once not, the last place it saw or heard them (arrive 2).
+--   * Catches: anyone in sight within the catch reach (4 studs, the same floor, a clear line eye to eye and chest to
+--     chest: never through a wall; Brain.catchKind) is caught as a Hallway jumpscare; the target first.
+--   * Ends (the brain): after ChaseLost seconds without a sight of its quarry, or on reaching the last seen point with
+--     nobody in sight, it searches there (Search); MaxChase seconds in, it gives up and fades out (Patrol).
+--   * An unreachable target (no route) is retried a moment later while still in sight; an unreachable memory ends it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -26,7 +24,7 @@ type Run = { retryAt: number }
 
 local NAME: Enums.MonsterState = "WallChase"
 local RETRY_SECONDS = 1
-local MEMORY_REACHED = 4 -- studs from the remembered spot that count as there
+local MEMORY_REACHED = 4
 
 local WallChase = {}
 
@@ -67,13 +65,14 @@ local function inSight(ctx: Context, player: Player): boolean
 end
 
 function WallChase.enter(ctx: Context, _from: Enums.MonsterState)
-	local run = runOf(ctx)
-	run.retryAt = 0
+	runOf(ctx).retryAt = 0
 	local speed = ctx.speedOf(NAME)
 	ctx.mover:SetSpeed(speed)
 	ctx.body:SetWalkSpeed(speed)
 	ctx.mover:SetRepathInterval(CreatureConfig.Repath.ChaseInterval)
-	ctx.body:SetPose("Biped")
+	if ctx.mover:Medium() == "Floor" then
+		ctx.body:SetPose("Biped")
+	end
 	ctx.body:Face(nil)
 end
 
@@ -89,7 +88,6 @@ function WallChase.update(ctx: Context, _dt: number)
 			return
 		end
 	end
-
 	local target = ctx.target
 	local memory = ctx.memory
 	local visible = target ~= nil and inSight(ctx, target)

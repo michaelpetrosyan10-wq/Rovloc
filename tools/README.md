@@ -10,7 +10,7 @@ The Luau side's checks and helpers: the Roblox game and the shared world builder
 | `capscan.py` | Flags writes to engine properties game scripts may not write (plugin-only, read-only, not scriptable), from the Roblox API dump. |
 | `lune/harness.luau` | Loads a Rojo-built place in Lune and runs the Luau modules outside Roblox (engine shims, a deterministic `Random`, fake remotes and players). |
 | `lune/check.luau` | `layouts`, `world`, `specs`, `lifecycle` or `all`: the blueprints, the world build, every spec, and the real `ServerMain` driven through the match loop. |
-| `textures/` | The PBR texture generator (`generate.py`, `materials.py`, `texlib.py`, `manifest.json`) and the Roblox uploader (`upload.py`, run by the Textures workflow). `web/tools/textures.py` packs the generator's output for the web. |
+| `textures/` | The PBR texture generator (`generate.py`, `materials.py`, `texlib.py`, `manifest.json`) and the Roblox uploader (`upload.py`, run by the Textures workflow). `web/tools/textures.py` packs the generator's output for the web, one set per graphics tier (2048, 1024, 512, 256; the 2048 maps come from `generate.py --size 2048 --out tools/textures/out/2048`: the same textures with the detail 1024 cannot hold). |
 
 ## `verify.sh`
 
