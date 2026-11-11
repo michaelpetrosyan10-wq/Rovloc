@@ -27,7 +27,7 @@
 //    (variantOf), the same locked grates and the same exit stairwells.
 // 5. The shared rules: every config the export lists (meta.exportedConfigs: each Shared/Config and Shared/Rules module
 //    with an exportMeta) is in meta under its name, the ones the website needs among them; build/cache/golden.json
-//    parses and gives every rule module rows ({ name, fn, args, expect }, names unique, at least 12 per function); the
+//    parses and gives every rule module rows ({ name, fn, args, expect }, names unique, at least 12 per module); the
 //    run plan's spec v2 picks (meta.plan.batteries, meta.plan.flasks and every replayed plan's) are anchors of the right
 //    kind on their level, as many as the rules allow; the CreatureBlocks (meta.creatureBlocks) are boxes on a level.
 // Exits non-zero on the first category with failures (all failures are listed).
@@ -1199,7 +1199,7 @@ console.log('== shared rules (configs, goldens, picks)');
   }
   check(meta.parkourConfig && meta.parkourConfig.Leap && meta.parkourConfig.Leap.Gap === 12, 'meta.parkourConfig: the leap gap is 12');
 
-  // the golden rows (written by the export; the website's ports of LivesRules, RadarRules and ParkourRules replay them)
+  // the golden rows (written by the export; the website's ports of the rule modules replay them)
   const goldenRules = path.join(buildDir, 'cache', 'golden.json');
   let modules = {};
   try {
@@ -1208,7 +1208,9 @@ console.log('== shared rules (configs, goldens, picks)');
     fail(`golden rows at ${goldenRules}: ${err.message}`);
   }
   const names = Object.keys(modules).sort();
-  for (const module of ['LivesRules', 'RadarRules', 'ParkourRules']) check(names.includes(module), `golden.json has ${module}`);
+  for (const module of ['ChaseRules', 'EndingRules', 'LivesRules', 'ParkourRules', 'RadarRules', 'TakeoffRules']) {
+    check(names.includes(module), `golden.json has ${module}`);
+  }
   let rows = 0;
   for (const module of names) {
     const list = modules[module];
@@ -1223,7 +1225,7 @@ console.log('== shared rules (configs, goldens, picks)');
       check(typeof row.fn === 'string' && Array.isArray(row.args) && row.expect !== undefined, `${module} / ${row.name}: fn, args, expect`);
       perFn.set(row.fn, (perFn.get(row.fn) || 0) + 1);
     }
-    for (const [fn, n] of perFn) check(n >= 12, `${module}.${fn}: ${n} golden rows (at least 12)`);
+    check(list.length >= 12 && perFn.size > 0, `${module}: ${list.length} golden rows over ${perFn.size} functions (at least 12)`);
   }
 
   // the run plan's spec v2 picks: radar batteries per sneaking stage, stun flasks per stage

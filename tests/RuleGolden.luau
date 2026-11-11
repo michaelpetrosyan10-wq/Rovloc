@@ -2,7 +2,9 @@
 -- RuleGolden: what the spec of every pure rule module (Shared/Rules) asserts about it, shared by those specs:
 --   * golden(): every row { name, fn, args, expect } is named once, names a function of the module, holds plain
 --     JSON data (strings, finite numbers, booleans, arrays and string-keyed tables: what golden.json carries to the
---     website's port), and the function returns exactly `expect` for `args`; every function has at least 12 rows;
+--     website's port), and the function returns exactly `expect` for `args`; every function of the module has at
+--     least one row (how many rows cover a function's branches is for the module's own spec to say: a rule of one
+--     argument with two values has two rows);
 --   * purity: the module's code (comments and strings aside) uses no engine type, service, clock, task or randomness:
 --     its one engine call is the require path (`game:GetService("ReplicatedStorage")`).
 
@@ -14,7 +16,6 @@ export type Row = { name: string, fn: string, args: { any }, expect: any }
 
 local RuleGolden = {}
 
-RuleGolden.MinRows = 12
 
 -- Whether `value` is plain JSON data; else the path to the first part that is not.
 function RuleGolden.plain(value: any, path: string?): (boolean, string)
@@ -92,7 +93,7 @@ function RuleGolden.check(t: Expect, module: any, name: string): { Row }
 	for key, value in module :: { [string]: any } do
 		if type(value) == "function" and key ~= "golden" then
 			t.truthy(
-				(perFn[key] or 0) >= RuleGolden.MinRows,
+				(perFn[key] or 0) >= 1,
 				string.format("%s.%s: %d golden rows", name, key, perFn[key] or 0)
 			)
 		end
