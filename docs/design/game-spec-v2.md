@@ -802,32 +802,40 @@ chaser driven by `ChaseRules`, with no senses, no teleports and no patrol. That 
 
 | Quantity | Rule |
 |---|---|
-| Progress p of a runner | the clean-time coordinate of their projection onto the centre line (nearest point on the current or next segment, 1.5-stud hysteresis). It never decreases. Inside a well it stays at the well's entry coordinate e. The pen is negative: 14 studs behind the gate is −0.74 |
+| Progress p of a runner | the clean-time coordinate of their projection onto the centre line (nearest point on the current or next segment, 1.5-stud hysteresis: the next segment wins unless it is more than 1.5 farther, and it never goes back). It never decreases, except that a runner more than 2 below the deck is in the well and held at its entry coordinate e; climbing out, it resumes from its projection. The pen is negative: 14 studs behind the gate is −0.74. Clean time: each corner's 0.15 s is spread over 2 studs either side of it, each bar's over the bar |
 | Quarry | the active runner with the smallest p (Alive, not caught, not yet under the shutter), re-picked every tick |
 | Chaser coordinate c | starts at −τ0 at t0, with **τ0 = 2.6 [2.4]** |
 | Gap | g = p(quarry) − c |
-| Advance per second | **ρ = 0.86 [0.93]** while g ≤ τ\*; **ρ = 1.12 [1.15]** while g > τ\*; **τ\* = 1.6 [1.2]** |
+| Advance per second | **ρ = 0.86 [0.93]** while g ≤ τ\*; **ρ = 1.12 [1.15]** while g > τ\*; **τ\* = 1.6 [1.2]**. Each tick's ρ is read from the gap at the start of the tick |
 | Where it is | the course point at coordinate c. It moves at ρ × the local clean pace: at most 21.3 [21.9] studs/s on the flat, slower through fixtures |
-| Loom | while the quarry is in a well, c is held at e − 0.3: it stands at the lip and stares down (the Stare action). After **8 [6] s** it reaches down (the ReachIn action) and that runner is caught |
+| Loom | while the quarry is in a well, c advances no further than e − 0.3: it stands at the lip and stares down (the Stare action). After **8 [6] s** of looming over that quarry it reaches down (the ReachIn action) and that runner is caught |
 | Catch | g ≤ **0.25** (about 4.7 studs) on 3 consecutive ticks, the quarry not in a well. Only the quarry can be caught, so c is always behind every active runner |
 | Lag | the quarry's progress is read from its timestamped report against c at that timestamp (a 30 Hz history, rewound at most 0.4 s). Pages draw the chaser from the rail state `{c, ρ, t}`, so the gap on screen is the authority's |
 | Fixtures | when c reaches a hurdle or bar, the prop switches to its `Smashed` node behind the runners (cosmetic; collision is static). It crosses wells along the centre line |
 
-**The table the specs assert** (simulated on the tick; a stall is time with no progress)
+**The table the specs assert** (simulated on the tick by `ChaseRules`, the same on all three arrivals; a stall is time
+with no progress: a bump is 15 ticks, a slow bar 24, a fall 78 in the well; "apart" and "later" are start to start; a
+runner stands at the gate at t0, and every mistake is made at a fixture after the gap has settled, the worst one
+given. Earlier mistakes cost less)
 
 | Run | Standard | Nightmare |
 |---|---|---|
-| Clean | never caught; the gap settles at τ\* after 8.3 s (about 30 studs behind) and never drops below 1.56 | never caught; never below 1.16 |
-| One bumped hurdle (0.5 s) | dips to 1.11, recovers | dips to 0.67 |
-| One bar crouch-walked (0.8 s) | dips to 0.85 | dips to 0.39 |
-| Longest single stall survived | **1.50 s** | **0.97 s** |
-| Two bumps 2 s apart | 0.88 | 0.31 |
-| A bump, then a slow bar 3 s later | 0.76 | caught |
-| Two slow bars 3 s apart | 0.46 | caught |
+| Clean | never caught; the gap settles at τ\* after 8.3 s (about 30 studs behind) and never drops below 1.58 | never caught; settles after 8.0 s; never below 1.17 |
+| One bumped hurdle (0.5 s) | dips to 1.16, recovers | dips to 0.73 |
+| One bar crouch-walked (0.8 s) | dips to 0.90 | dips to 0.45 |
+| Longest single stall survived | **1.57 s** (47 ticks) | **1.00 s** (30 ticks) |
+| Two bumps 2 s apart | 0.94 | 0.37 |
+| A bump, then a slow bar 3 s later | 0.82 | caught |
+| Two slow bars 3 s apart | 0.52 | caught |
 | A fall (2.6 s in the well), then clean | Loom; rejoin at 0.93; escapes | the same |
-| A fall, then a slow bar 2 s after rejoining | escapes | escapes |
+| A fall, then a slow bar 2 s after rejoining | escapes (dips to 0.52) | escapes (dips to 0.33) |
 | Staying in a well | caught at 8 s | caught at 6 s |
-| Standing at the gate | caught at 2.4 s | at 2.0 s |
+| Standing at the gate | caught at 2.5 s | at 2.1 s |
+
+- **Margins.** Standard's mistakes all escape with at least 9 ticks to spare. Nightmare's double mistakes sit close to
+  its 30-tick budget by design: two bumps 2 s apart escape with up to 3 more ticks of stall, a fall then a slow bar
+  with up to 2 more; a bump then a slow bar is caught down to a 22-tick bar (2 to spare), two slow bars down to a
+  12-tick one.
 
 **Catches, attempts and resets.**
 - A caught runner gets the Hallway catch moment (2.05 s) and lies Downed where they fell, bleed-out frozen; the
@@ -887,8 +895,8 @@ from the hide-reach and entry-clearance rules (it has no hiding and no hunting),
   the holder is already nearer than a stop distance it holds. If it is still over 4 away at 15.5 it lunges at 12; at
   17.0 a lightning cut puts it on the holder. The holder walking into it earlier makes it stop and hold until 15.5.
   It walks straight lines on the open deck, re-aimed every 0.35 s; non-holders pass through it.
-- **Window:** 2.0 → 15.5 = **13.5 s**. Nightmare: every event after 2.0 moves to 2.0 + (t − 2.0) × 0.741: contact at
-  12.0, a **10.0 s** window (I5); its second line ("You hid…") is cut so no two lines overlap.
+- **Window:** 2.0 → 15.5 = **13.5 s**. Nightmare: every event after 2.0 moves to 2.0 + (t − 2.0) × 0.7407 (exactly
+  10.0 / 13.5): contact at 12.0, a **10.0 s** window (I5); its second line ("You hid…") is cut so no two lines overlap.
 - **Lowering the gun** (hold 1.5 s) is the choice not to shoot: "I knew you wouldn't." It walks in at 6. In co-op a
   teammate may still take the gun from a lowered holder (hold 1.2 s) and fire.
 - **An idle holder** (no look, move or aim input for 4 s during the standoff) drops the gun at their feet.
@@ -903,8 +911,8 @@ from the hide-reach and entry-clearance rules (it has no hiding and no hunting),
 - The shot is the camera's centre ray at the fire tick, 60 long. There is no sway in the test.
 - It **hits** if it passes through the Biped hitbox (2.6 × 11 × 2.7) grown by the input's margin: mouse 0.6, gamepad
   1.2, touch 1.8 studs. Any hit is Ending A; on screen the bullet always strikes the mask. A choice, not an aim test.
-- A ray blocked by the world does not fire: the reticle shows "no clear shot" and the round is kept. Teammates never
-  block.
+- A ray blocked by the world (it meets the world before the hitbox or, missing the hitbox, within its 60) does not
+  fire: the reticle shows "no clear shot" and the round is kept. Teammates never block.
 - A clear miss uses the round: "Missed." It closes at 9; contact is Ending B.
 - **Authority** (web host and Roblox server, the same rules). Accept a shot whose client time is inside the window
   and that arrives within 0.35 s of its end. Its origin must be within 3 of the holder's head and its direction
@@ -1156,7 +1164,7 @@ runway, v speed, x the offset from the centre line)
 | Rule | Value |
 |---|---|
 | Speed | the throttle is locked open: +2.5 studs/s² up to 70 |
-| Rotate | from v ≥ 60 the HUD shouts "PULL UP!": holding it for 1.0 s lifts off. Held early, it starts counting at 60 |
+| Rotate | from v ≥ 60 the HUD shouts "PULL UP!": holding it for 1.0 s lifts off. Held early, it starts counting at 60 (each tick that starts at v ≥ 60 counts; v gains its 2.5 first, then s gains v) |
 | Steering | x moves at up to 16 studs/s (a 0.25 s ramp), within ±25. The plane's hit box is 10 wide |
 | Obstacle rows | at s = 70, 150, 250, 360, 470, 580, 800, 910, 1,020, 1,130, 1,240, 1,350: baggage carts, a stalled bowser, barriers, a parked wing. Each row leaves one gap 22 wide, centred at x = −18, 0 or +18; the next gap is at most 18 aside. Three authored patterns, picked by run seed; rows 1 and 2 always block the centre |
 | Seeing them | red beacons and the lights are unfogged emissive (I10), visible from 200 studs: at least 2.9 s ahead at top speed |
@@ -1169,9 +1177,9 @@ runway, v speed, x the offset from the centre line)
 
 | Run | Standard | Nightmare |
 |---|---|---|
-| Clean | wheels up at **25.0 s, 782 studs**; his closest is 29.6 studs at 8.7 s | the same lift-off; closest 21.6 |
+| Clean | wheels up at **25.0 s, 782 studs**; his closest is 29.6 studs at 8.8 s | the same lift-off; closest 21.6 |
 | Row 1 hit | closest 8.6 (he rakes the rudder); up at 28.0 s, 828 | caught at 10.1 s |
-| Rows 1 and 2 hit, or no steering at all | caught at 12.9 s | caught |
+| Rows 1 and 2 hit, or no steering at all | caught at 13.0 s | caught |
 | Any 3 knocks that do not include both rows 1 and 2 | always airborne, by 1,365 at the latest | — |
 | Any 2 knocks that do not include row 1 | airborne by 1,184 | always airborne, by 1,274 |
 | Hitting only him | up at 29.2 s, 1,010 | 30.0 s, 1,048 |
@@ -1711,3 +1719,17 @@ Numbers are positions in `finale-critiques.json`, counted from 1 (1–37 are cri
 ## Spec amendments (made while building; newest last)
 - 3.1 (WP04a, measured): the web's step-up is about 1.9, not 1.6 (a probe reach of exactly StepHeight let the body walk through a block a little higher than a step), so a standing jump mounts 4.4, not 4.1. Hurdles (2.4 to 2.8) and walls (5.5) keep their margins. The longest free jump is 8.2 on the level, 8.6 onto a landing 2 lower.
 - 3.3 (lead, Nov 10): respawns are 1 per stage on Standard and 1 per run on Nightmare, plus the syringe's one per run.
+- 4.5 (rules batch, simulated by `ChaseRules`): the chaser's rule text made exact where it was open (ρ read from the gap at the start of each tick; the projection's hysteresis favours the next segment and never goes back; a fall sets progress back to e, the only decrease; the Loom counts 8 [6] s over that quarry; each corner's 0.15 s spread over ±2 studs, each bar's over the bar; the table's scenarios defined in its caption). No rule number changed.
+- 4.5 (rules batch): Clean's floor 1.56 [1.16] → 1.58 [1.17] (the dip is the projection reaching each corner 1.5 studs early); Nightmare's clean gap settles after 8.0 s (added).
+- 4.5 (rules batch): one bumped hurdle 1.11 [0.67] → 1.16 [0.73]; one bar crouch-walked 0.85 [0.39] → 0.90 [0.45].
+- 4.5 (rules batch): longest single stall survived 1.50 s [0.97 s] → 1.57 s, 47 ticks [1.00 s, 30 ticks].
+- 4.5 (rules batch): two bumps 2 s apart 0.88 [0.31] → 0.94 [0.37]; a bump then a slow bar 3 s later 0.76 → 0.82 (Nightmare still caught); two slow bars 3 s apart 0.46 → 0.52 (Nightmare still caught).
+- 4.5 (rules batch): standing at the gate, caught at 2.4 s [2.0 s] → 2.5 s [2.1 s] (2.53 [2.13]: the gap must close to 0.25 at the hold rate, then 3 ticks).
+- 4.5 (rules batch): the fall-then-slow-bar row now states its dip, 0.52 [0.33], and a Margins note gives every row's slack; Nightmare's double mistakes sit 2 to 3 ticks from the catch line by design, so no rule number was changed for them.
+- 4.6 (rules batch): Nightmare's time scale is exactly 10.0 / 13.5 (0.7407); 0.741 gave a 10.0035 s window. A miss whose ray meets the world within 60 counts as blocked (round kept).
+- 4.9 (rules batch, simulated by `TakeoffRules`): the clean run's closest approach is at 8.8 s, not 8.7 s (29.6 [21.6] studs unchanged).
+- 4.9 (rules batch): rows 1 and 2 hit, or no steering, is caught at 13.0 s (12.97), not 12.9 s.
+- 4.9 (rules batch): the rotate rule made exact (a tick that starts at v ≥ 60 counts; v gains before s); with it every other entry of the table reproduces: 25.0 s / 782, 28.0 s / 828, 10.1 s, 1,365, 1,184 [1,274], 29.2 s / 1,010 [30.0 s / 1,048], 34.7 s, 1,191.
+- 2.3 (WP01b): the gamepad's Skip is Y on both platforms, not Start: Roblox keeps Start for its own menu (Space and B stay out, as the spec wants).
+- 3.2 (WP01b): the battery placement's walks are all on the walk graph (the 30-stud pair spacing too), and a dead end is a room with fewer than two ways in or out (doors, crawlway mouths, open grates).
+- 7 (WP01b): WP01 registers no empty prop builder stubs; `Props/init` finds every builder module in its folder (name order), so a package adds its builder's file and nothing else.
