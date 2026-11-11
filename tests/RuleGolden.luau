@@ -16,7 +16,6 @@ export type Row = { name: string, fn: string, args: { any }, expect: any }
 
 local RuleGolden = {}
 
-
 -- Whether `value` is plain JSON data; else the path to the first part that is not.
 function RuleGolden.plain(value: any, path: string?): (boolean, string)
 	local here = path or "value"
@@ -92,10 +91,7 @@ function RuleGolden.check(t: Expect, module: any, name: string): { Row }
 	end
 	for key, value in module :: { [string]: any } do
 		if type(value) == "function" and key ~= "golden" then
-			t.truthy(
-				(perFn[key] or 0) >= 1,
-				string.format("%s.%s: %d golden rows", name, key, perFn[key] or 0)
-			)
+			t.truthy((perFn[key] or 0) >= 1, string.format("%s.%s: %d golden rows", name, key, perFn[key] or 0))
 		end
 	end
 	return rows
