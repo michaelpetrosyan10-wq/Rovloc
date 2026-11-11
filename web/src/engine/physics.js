@@ -6,10 +6,16 @@
 // radius, in substeps short enough that a sprint never tunnels a 1-stud wall. Below the capsule, five downward rays
 // (centre + a ring) find the floor: within StepHeight above or SnapDown below the feet the body stands on it (steps,
 // stairs and debris are walked up and down), otherwise it falls under Workspace.Gravity. A falling body's floor rays
-// start from where its feet were before the step, so a long frame (the loop allows 0.1 s) or a fast fall never drops
-// it through a slab between two probes. Jumps launch at
-// sqrt(2 g JumpHeight). "Ball" mode is the vent crawl's 2.6-stud VentCollider: a sphere at the root, no floor
-// probe, no gravity (the vent rail drives it).
+// start from where its feet were before the step, so a fast fall never drops it through a slab between two probes.
+// The rays start half a stud above StepHeight, where the capsule is wider than the ring, so none starts inside what
+// it probes; a ring ray reaches a little past the capsule's round bottom, so the legs climb about 0.3 more than
+// StepHeight, and whatever is higher than that the capsule stops like a wall. (A reach of exactly StepHeight would
+// leave a gap between the two: the round bottom cannot hold the body out of a block only a little higher than a
+// step, and with no leg able to stand on it the body walks straight through.)
+// Jumps launch at sqrt(2 g JumpHeight) and a falling body moves on the exact parabola of its substep (position by the
+// mean of the velocities at the substep's two ends), so the apex is JumpHeight whatever the substep. The player steps
+// the body on the fixed 30 Hz tick in substeps of 1/60 s (player.js), never per rendered frame. "Ball" mode is the
+// vent crawl's 2.6-stud VentCollider: a sphere at the root, no floor probe, no gravity (the vent rail drives it).
 // Crouching lowers the crown to CrouchHeight (the player sets `height`), so a crouched body fits the tunnels'
 // crawlways (CrouchHeight + 0.6 of head room, TunnelRules.CrawlClearance); `headroom()` says whether it may stand.
 
@@ -17,6 +23,7 @@ import * as THREE from 'three';
 import { PhysicsConfig } from './config.js';
 
 const SUBSTEP = 0.35; // studs of travel per collision substep
+const TERMINAL_SPEED = 200; // studs/s a fall never exceeds
 const SNAP_DOWN = 0.75; // studs a grounded body follows the floor down (stairs, ramps)
 const RING = 0.72; // floor probe ring radius
 const MAX_PUSH_ITERATIONS = 3;
@@ -67,15 +74,16 @@ export class CharacterBody {
     return this.position.y - ROOT_ABOVE_FEET;
   }
 
+  /** Puts the body at `position`, at rest. A walker stands on the floor under it; a crawler or a swimmer stays there. */
   teleport(position) {
     this.position.copy(position);
     this.velocity.set(0, 0, 0);
     this.grounded = false;
-    this._probeFloor(true);
+    if (this.shape === 'Biped' && this.gravity) this._probeFloor(true);
   }
 
   /**
-   * Advances the body by dt with a desired horizontal velocity.
+   * Advances the body by one physics substep (the player's 1/60 s) with a desired horizontal velocity.
    * @param {number} dt
    * @param {THREE.Vector3} wish horizontal velocity (studs/s)
    * @param {{jump?: boolean, accel?: number}} [opts]
@@ -89,20 +97,30 @@ export class CharacterBody {
     const k = 1 - Math.exp(-accel * dt);
     this.velocity.x += (wish.x - this.velocity.x) * k;
     this.velocity.z += (wish.z - this.velocity.z) * k;
+    let dy;
     if (this.shape === 'Ball' || !this.gravity) {
       this.velocity.y += ((wish.y || 0) - this.velocity.y) * k;
-    } else if (this.grounded) {
-      this.velocity.y = 0;
-      if (opts.jump) {
-        this.velocity.y = Math.sqrt(2 * PhysicsConfig.Gravity * PhysicsConfig.JumpHeight);
-        this.grounded = false;
-      }
+      dy = this.velocity.y * dt;
     } else {
-      this.velocity.y -= PhysicsConfig.Gravity * dt;
-      this.velocity.y = Math.max(this.velocity.y, -200);
+      if (this.grounded) {
+        this.velocity.y = 0;
+        if (opts.jump) {
+          this.velocity.y = Math.sqrt(2 * PhysicsConfig.Gravity * PhysicsConfig.JumpHeight);
+          this.grounded = false;
+        }
+      }
+      if (this.grounded) {
+        dy = 0;
+      } else {
+        // the exact parabola over the substep (the mean of the two end velocities), capped at terminal speed
+        const v0 = this.velocity.y;
+        const v1 = Math.max(v0 - PhysicsConfig.Gravity * dt, -TERMINAL_SPEED);
+        this.velocity.y = v1;
+        dy = 0.5 * (v0 + v1) * dt;
+      }
     }
     const feetBefore = this.feetY;
-    this.move(_o.copy(this.velocity).multiplyScalar(dt));
+    this.move(_o.set(this.velocity.x * dt, dy, this.velocity.z * dt));
     if (this.shape === 'Biped' && this.gravity) this._probeFloor(false, feetBefore);
   }
 
@@ -239,7 +257,7 @@ export class CharacterBody {
 
   /**
    * Finds the floor under the feet and stands on it (or starts falling). `feetBefore` (the feet before this step)
-   * sweeps the rays down from there when the body dropped further than a step this frame.
+   * sweeps the rays down from there when the body dropped further than a step this substep.
    */
   _probeFloor(force, feetBefore = -Infinity) {
     const feet = this.feetY;

@@ -11,6 +11,16 @@
 // Exhaustion latch: set when stamina hits 0 with sprint held, cleared by releasing sprint or a full meter.
 // WalkSpeed per state (GameConfig). Sprinting out of a crouch stands up. Changing mode clears the crouch.
 //
+// The body moves on the fixed 30 Hz tick, never per rendered frame (tick): crouch toggles and the jump press are
+// latched by the input handlers and consumed at the next tick (a press shorter than a frame or a tick is never lost;
+// one still pending when its action stops being live, as when the pause menu opens, is dropped; a held jump also
+// jumps again on landing, like a Humanoid), MoveState is derived, then the body advances in SUBSTEPS
+// substeps of 1/60 s (the walking physics, or the strongest motion override: vent rail, swimming, parachute, the
+// drag), the wish direction read from the yaw and the move input at the tick. Everything gameplay reads (the root,
+// speed, moving, grounded, footstep noise, landings, stamina) is that tick state. The frame draws the root
+// interpolated between the last two tick states by loop.alpha (drawnRoot); a teleport or any move made outside a
+// tick snaps the drawn root to it.
+//
 // Meters (active only while `metersActive`: a run is live and the player Alive / Downed; otherwise held full):
 //   stamina  drains per state (Sprinting 16, VentScurrying 22, Freestyle 20, Treading 2 per s); StaminaRegenDelay
 //            after draining stops (or a spend) it regenerates at StaminaRegen.
@@ -50,6 +60,8 @@ const CAMERA_SKIN = 0.25;
 const COLLISION_RELEASE = 6;
 const EXERTION_BELOW = 0.45;
 const NOISE_HZ = 10;
+/** Physics substeps per 30 Hz tick: the body steps at 1/60 s. */
+export const SUBSTEPS = 2;
 
 /** A meter: value in [0, max], an externally driven rate per second (oxygen), and its listeners. */
 export class Meter {
@@ -148,6 +160,15 @@ export class Player {
     this.noiseClock = 0;
     this.wasGrounded = true;
     this.jumpHeld = false;
+    /** A Jump press since the last tick (consumed by the tick, so a press shorter than a tick still jumps). */
+    this.jumpLatched = false;
+    /** Crouch toggle presses since the last tick (an odd count toggles the crouch at the tick). */
+    this.crouchPresses = 0;
+    /** The root at the start and at the end of the last tick (the tick states the frame draws between). */
+    this.tickPrevious = new THREE.Vector3();
+    this.tickCurrent = new THREE.Vector3();
+    /** The drawn root this frame: the tick states interpolated by loop.alpha. */
+    this.drawnRoot = new THREE.Vector3();
 
     this.panic = new PanicFx({ world, audio });
     this.flashlight = new Flashlight({ shared, audio, scene: world.scene, meters: this.meters, settings, quality });
@@ -155,7 +176,7 @@ export class Player {
 
     input.on('Sprint', (phase) => this._setSprint(phase === 'Begin'));
     input.on('Crouch', (phase) => {
-      if (phase === 'Begin' && !this.isLocked()) this.intent.crouch = !this.intent.crouch;
+      if (phase === 'Begin' && !this.isLocked()) this.crouchPresses++;
     });
     input.on('Dive', (phase) => {
       this.intent.dive = phase === 'Begin' && !this.isLocked();
@@ -165,6 +186,14 @@ export class Player {
     });
     input.on('Jump', (phase) => {
       this.jumpHeld = phase === 'Begin';
+      if (phase === 'Begin') this.jumpLatched = true;
+    });
+    // a press still waiting for its tick is void once its action is no longer live (the pause menu opened, a cutscene
+    // or a locker took the controls): the input layer ends held actions on a context change the same way, and a jump
+    // pressed just before the pause must not fire when the game resumes
+    input.contextChanged.connect(() => {
+      if (!input.isLive('Jump')) this.jumpLatched = false;
+      if (!input.isLive('Crouch')) this.crouchPresses = 0;
     });
   }
 
@@ -201,6 +230,7 @@ export class Player {
     if (!['OnFoot', 'Vent', 'Swim'].includes(mode) || mode === this.mode) return;
     this.mode = mode;
     this.intent.crouch = false;
+    this.crouchPresses = 0;
     this.body.shape = mode === 'Vent' ? 'Ball' : 'Biped';
     this.body.gravity = mode === 'OnFoot';
   }
@@ -253,6 +283,7 @@ export class Player {
     const m = toMatrix(cframe, _m);
     _v.setFromMatrixPosition(m);
     this.body.teleport(_v);
+    this._snapDrawn();
     _d.set(-m.elements[8], -m.elements[9], -m.elements[10]);
     if (_d.lengthSq() > 1e-6) {
       this.yaw = yawPitchFromVector(_d).yaw;
@@ -265,7 +296,7 @@ export class Player {
     if (this.engine.volumetrics) this.engine.volumetrics.snapNow();
   }
 
-  /** Root (HumanoidRootPart centre) position. */
+  /** Root (HumanoidRootPart centre) position: the tick state (what gameplay reads). */
   rootPosition() {
     return this.body.position;
   }
@@ -275,7 +306,7 @@ export class Player {
     return out.set(this.body.position.x, this.body.feetY, this.body.position.z);
   }
 
-  /** The eye this frame (no bob, shake or overrides). */
+  /** The eye this frame, from the drawn root (no bob, shake or overrides). */
   eye(out = new THREE.Vector3()) {
     return out.copy(this.eyePosition);
   }
@@ -332,7 +363,8 @@ export class Player {
 
   /**
    * Replaces the walking physics while held (vent rails, swimming, parachute, drags). `fn(dt, player)` moves the
-   * body itself (player.body.move(delta) collides; body.position.copy() teleports). Highest priority wins.
+   * body itself (player.body.move(delta) collides; body.position.copy() teleports). Highest priority wins. It runs
+   * inside the 30 Hz tick, once per physics substep (dt = 1/60 s), never per rendered frame.
    */
   setMotionOverride(token, fn, priority = 0) {
     if (!fn) this.motionOverrides.delete(token);
@@ -401,10 +433,12 @@ export class Player {
     return canSprint && this.moving ? 'Sprinting' : 'Standing';
   }
 
-  /** Fixed 30 Hz: meters, MoveState, locomotion noise. */
+  /** Fixed 30 Hz: the latched presses, meters, MoveState, the body's motion, landings, locomotion noise. */
   tick(dt) {
     const now = this.engine.loop.time;
     const st = this.meters.stamina;
+    if (this.crouchPresses % 2 === 1) this.intent.crouch = !this.intent.crouch;
+    this.crouchPresses = 0;
     const sprintHeld = this.input.isHeld('Sprint') && !this.isLocked();
     if (!sprintHeld) this.intent.sprint = false;
     if (this.metersActive) {
@@ -434,6 +468,7 @@ export class Player {
     }
     // the crouched body is shorter (crawlways): physics.js CrouchHeight
     this.body.height = this.moveState === 'Crouching' ? CrouchHeight : PhysicsConfig.BodyHeight;
+    this._simulate(dt);
     this.noiseClock += dt;
     if (this.noiseClock >= 1 / NOISE_HZ) {
       this.noiseClock = 0;
@@ -447,40 +482,61 @@ export class Player {
     }
   }
 
-  /** Per frame: movement, camera, hands, torch, panic. */
-  frame(dt, camera) {
-    if (dt <= 0) dt = 1e-4;
-    const input = this.input;
-    const engine = this.engine;
+  /**
+   * The body's motion for one tick, in SUBSTEPS substeps: the strongest motion override, else the walking physics
+   * (the wish from the yaw and the move input at this tick; the latched or held jump), else Vent / Swim without a
+   * driver. Then the tick's speed, moving and landing, and the tick states the frame interpolates between.
+   */
+  _simulate(dt) {
+    const body = this.body;
     const locked = this.isLocked();
-    const ctxName = input.getContext();
     const state = this.moveState;
-
-    // movement
-    const mv = locked || !this.isAlive() ? { x: 0, y: 0 } : input.moveVector();
+    // the state before this tick: the last tick's end, or wherever the body was put since (teleports, scripts)
+    this.tickPrevious.copy(body.position);
+    const mv = locked || !this.isAlive() ? { x: 0, y: 0 } : this.input.moveVector();
     const sy = Math.sin(this.yaw);
     const cy = Math.cos(this.yaw);
     const speedCap = WalkSpeeds[state] ?? GameConfig.WalkSpeed;
     _wish.set((-sy * mv.y + cy * mv.x) * speedCap, 0, (-cy * mv.y - sy * mv.x) * speedCap);
-    const before = _f.copy(this.body.position);
-    let driver = null;
-    for (const d of this.motionOverrides.values()) if (!driver || d.priority > driver.priority) driver = d;
-    if (driver) {
-      driver.fn(dt, this);
-    } else if (this.mode === 'OnFoot') {
-      const canJump = !locked && !NO_JUMP.has(state) && this.lifeState !== 'Downed';
-      this.body.step(dt, _wish, { jump: this.jumpHeld && canJump && this.body.grounded });
-    } else {
+    if (this.mode === 'Swim') _wish.y = this.intent.dive ? -speedCap * 0.6 : 0;
+    const jump = (this.jumpLatched || this.jumpHeld) && !locked && !NO_JUMP.has(state) && this.lifeState !== 'Downed';
+    this.jumpLatched = false;
+    const sub = dt / SUBSTEPS;
+    for (let i = 0; i < SUBSTEPS; i++) {
+      // a driver may end itself mid-tick (a climb out of the water): the next substep walks
+      let driver = null;
+      for (const d of this.motionOverrides.values()) if (!driver || d.priority > driver.priority) driver = d;
+      if (driver) driver.fn(sub, this);
+      else if (this.mode === 'OnFoot') body.step(sub, _wish, { jump: jump && body.grounded });
       // Vent / Swim without a driver: move along the look (the game's vent rail and swim drivers replace this)
-      if (this.mode === 'Swim') _wish.y = this.intent.dive ? -speedCap * 0.6 : 0;
-      this.body.step(dt, _wish, { accel: 10 });
+      else body.step(sub, _wish, { accel: 10 });
     }
-    const moved = _d.subVectors(this.body.position, before);
-    this.speed = Math.hypot(moved.x, moved.z) / dt;
-    if (this.body.anchored) this.speed = 0;
+    const moved = _d.subVectors(body.position, this.tickPrevious);
+    this.speed = body.anchored ? 0 : Math.hypot(moved.x, moved.z) / dt;
     this.moving = this.speed >= MOVING_SPEED || Math.hypot(mv.x, mv.y) > MOVE_DIRECTION_MIN;
-    if (this.body.grounded && !this.wasGrounded) this.landed.fire();
-    this.wasGrounded = this.body.grounded;
+    if (body.grounded && !this.wasGrounded) this.landed.fire();
+    this.wasGrounded = body.grounded;
+    this.tickCurrent.copy(body.position);
+  }
+
+  /** The drawn root jumps to the body (a teleport): no interpolation from where it was. */
+  _snapDrawn() {
+    this.tickPrevious.copy(this.body.position);
+    this.tickCurrent.copy(this.body.position);
+    this.drawnRoot.copy(this.body.position);
+  }
+
+  /** Per frame: the drawn root, camera, hands, torch, panic. The body itself moves on the tick (tick / _simulate). */
+  frame(dt, camera) {
+    if (dt <= 0) dt = 1e-4;
+    const input = this.input;
+    const engine = this.engine;
+    const ctxName = input.getContext();
+    const state = this.moveState;
+
+    // the drawn root: between the last two tick states; a body moved outside a tick is drawn where it is
+    if (!this.body.position.equals(this.tickCurrent)) this._snapDrawn();
+    else this.drawnRoot.lerpVectors(this.tickPrevious, this.tickCurrent, engine.loop.alpha);
 
     // camera state and pitch range
     let forced = null;
@@ -577,7 +633,7 @@ export class Player {
   }
 
   _computeEye(dt, state, forced) {
-    const root = this.body.position;
+    const root = this.drawnRoot;
     let snap = this.snapNext;
     if (this.lastRoot && this.lastRoot.distanceTo(root) > SNAP_DISTANCE) snap = true;
     if (!this.lastRoot) this.lastRoot = new THREE.Vector3();
@@ -607,7 +663,7 @@ export class Player {
     eyeOffset(CameraRig.DefaultEye, this.yaw, this.pitch, _eo);
     const desired = _des.set(root.x + _eo.x + ox, this.heightSpring.position + _eo.y + o.y, root.z + _eo.z + oz);
     if (grounded && this.mode === 'OnFoot') {
-      const floorY = this.body.feetY;
+      const floorY = root.y - ROOT_ABOVE_FEET;
       if (desired.y < floorY + MIN_EYE_ABOVE_FLOOR) desired.y = floorY + MIN_EYE_ABOVE_FLOOR;
     }
     // pull the eye in front of whatever lies between the root centre and it
@@ -655,6 +711,8 @@ export class Player {
     this.body.anchored = false;
     this.setMode('OnFoot');
     this.intent = { crouch: false, sprint: false, dive: false };
+    this.crouchPresses = 0;
+    this.jumpLatched = false;
     this.exhausted = false;
   }
 }

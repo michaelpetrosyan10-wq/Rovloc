@@ -205,9 +205,16 @@ export class Game {
     return this.env.emitNoise(position, kind, { level: this.level || undefined, source: 'player', ...opts });
   }
 
-  /** The player's eye as the levels see it (LevelKit eyes). */
+  /**
+   * The player's eye as the levels see it (LevelKit.eyeOf): the root plus the MoveState's eye height. Tick state, the
+   * same at any frame rate and the same rule the host applies to a teammate's pose; never the camera (env.eye() is the
+   * drawn eye: it follows the body interpolated between ticks, and is for the view, the hands and the throw).
+   */
   eye(out = new THREE.Vector3()) {
-    return this.env.eye(out);
+    const env = this.env;
+    env.rootPosition(out);
+    out.y += env.eyeHeight(env.moveState());
+    return out;
   }
 
   /** The route `level` is left by this run (worldData Route: exit vestibule, doors, checkpoint, lock), or null. */
@@ -229,7 +236,7 @@ export class Game {
   /** LevelKit.seenBy for the one player: within `range` of the eye with a clear line. */
   seen(point, range = 250) {
     if (!this.playing()) return false;
-    const eye = this.env.eye(_eye);
+    const eye = this.eye(_eye);
     if (eye.distanceTo(point) > range) return false;
     return this.env.lineClear(eye, point, { ignoreEntities: false });
   }

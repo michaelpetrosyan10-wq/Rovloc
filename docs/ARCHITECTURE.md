@@ -299,9 +299,20 @@ game module (or with `?sandbox`), the build links the engine sandbox: a free wal
   - `volumetrics.js`, `sky.js`;
   - `quality.js`: the five graphics tiers, Max to Potato, and dynamic resolution (§5).
 - **Player:** `player.js` (MoveState machine, meters, first-person camera), `physics.js` (a floating capsule),
-  `camera.js`, `viewmodel.js`, `flashlight.js`, `panic.js`.
+  `camera.js`, `viewmodel.js`, `flashlight.js`, `panic.js`. The body moves on the 30 Hz tick, never per rendered frame
+  (spec v2 §3.1, I8): each tick consumes the latched Jump and Crouch presses, derives the MoveState and steps the body
+  in 2 substeps of 1/60 s (velocity smoothing, gravity on the exact parabola, collide-and-slide, the floor probe; or
+  the strongest motion override: the vent rail, swimming, the parachute, the drag), the wish direction read from the
+  yaw at the tick. Gameplay reads that tick state (the root, speed, grounded, footstep noise, landings, stamina, the
+  co-op pose, the Creature's senses). A frame only draws: the camera follows the root interpolated between the last two
+  tick states by `loop.alpha` (`player.drawnRoot`), and looking around stays per frame. The jump apex is `JumpHeight`
+  (2.5) at any frame rate. The floor probe is as it was: a step of `PhysicsConfig.StepHeight` (1.6) is always climbed,
+  the legs reach about 0.3 more, and anything higher stops the capsule (so nothing is ever walked through). The levels
+  (`game.eye()`, `seen()`, `subjects()`) see the player's eye as Roblox's `LevelKit.eyeOf` does, the tick root plus the
+  MoveState's eye height; the camera's eye (`env.eye()`) is drawn state, for the view, the hands and the throw.
 - **Systems:**
-  - `loop.js`: a fixed 30 Hz tick plus a per-frame callback;
+  - `loop.js`: a fixed 30 Hz tick (all gameplay, the player's body included) plus a per-frame callback (drawing,
+    interpolated by `alpha`);
   - `input.js`: keyboard, pointer lock, gamepad and touch;
   - `audio/`: WebAudio synthesis; there are no sound files;
   - `ui/`, `prompts.js`;
@@ -553,6 +564,7 @@ checks, in order:
 | --- | --- |
 | `node tools/data-test.mjs` | The world data codec round trip and structural checks of the baked world. |
 | `npm run check` | Builds the site and the lite file, then loads them headless. `site/` is served as Vercel serves it (`vercel.json`'s redirect and header rules applied): the beta at `/beta/` names only relative assets, fetches nothing but its own files and none fails (Potato only the light ones, through a solo run from the title into Level 0), shows its build stamp and no dev control without `?dev`; the stable page at `/` still boots, and each page boots on the game the other saved. The lite file boots from `file://` with no request. No console errors; frame times per graphics tier at 4x CPU throttle; screenshots per tier. |
+| `node tools/parkour-test.mjs` | The player's movement on the tick: one tick-indexed input trace gives identical body states at 20, 30, 60 and 144 fps, with irregular frame times and with stalls; the jump apex, the top speeds, the sprint jump, the hurdle and the wall; the widest gap a free jump crosses (under 10, never 12); the step-up limit, and that nothing too high to step onto is walked through; latched presses (single-frame presses, a held jump, the pause menu, locked controls); the render interpolation (teleports are cuts, the pause, a stall); the vent rail and the parachute at 20 and 144 fps; the eye the levels see. |
 | `node tools/tier-parity.mjs` | The same scripted run at Max and Potato (20 and 144 fps render loops): identical gameplay every tick. |
 | `node tools/game-smoke.mjs` | The game played headless from the title through each floor's signature moment. |
 | `node tools/creature-sim.mjs` | The Creature's scenarios on the real world, on a fake clock. |

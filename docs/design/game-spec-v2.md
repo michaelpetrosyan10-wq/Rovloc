@@ -283,7 +283,7 @@ P1: H8, three seconds in the wheel well's shadow: a ring of keys swinging on the
 
 | Move | Geometry | How | Cost of getting it wrong | Monster |
 |---|---|---|---|---|
-| **Hurdle** (free jump) | top 2.4–2.8 over the lane, ≤ 3 deep, lane-wide. Too high to step over (step-up is 1.6 on the web, about 2.0 on Roblox), well inside a jump (the web mounts 4.1, Roblox about 4.5) | Jump (apex 2.5) | you stop against it and jump again: about 0.5 s | smashes it aside behind the runners (cosmetic) |
+| **Hurdle** (free jump) | top 2.4–2.8 over the lane, ≤ 3 deep, lane-wide. Too high to step over (the web's legs climb about 1.9, Roblox about 2.0), well inside a jump (the web mounts 4.4, Roblox about 4.5; measured by `parkour-test`) | Jump (apex 2.5) | you stop against it and jump again: about 0.5 s | smashes it aside behind the runners (cosmetic) |
 | **Slide** (new MoveState `Sliding`) | bar with 4.2 clear under it and solid from 4.2 to at least 9.7, ≤ 6 deep | Crouch while sprinting at ≥ 15 on the ground (the press is consumed: it does not toggle crouch): 0.70 s, speed 17 falling to 13 (10.5 studs), body 3.7 high, eye −1.5, steering ≤ 30°/s, no jump. It ends standing if there is headroom, else crouched | no slide: crouch-walk under at 5.5, about 0.8 s lost | smashes the bar |
 | **Leap** (the one sampled move) | gap exactly 12 edge to edge, landing level or ≤ 2 lower; a 4-stud take-off strip with hazard paint and chevrons; a lit pad ≥ 8 deep | below | not sprinting, misaligned or no press: you run off the edge and fall | cannot follow (city); crosses on its rail (roof) |
 | **Plank** (free walking; city only) | 3.0 wide, 0.5 thick, 12 long | walk, crouch or sprint across | step off the side: you fall | cannot |
@@ -307,7 +307,7 @@ P1: H8, three seconds in the wheel well's shadow: a ring of keys swinging on the
   `MovementAuthority` for 0.9 s, and never corrects mid-arc. Leaps are allowed in `InRun` on any level.
 
 **Envelope constants** (asserted on both platforms, I9): required hurdles ≤ 2.8; walls ≥ 5.5; the longest free jump
-either body makes is under 10 studs (about 8.4 on the web; `parkour-test` records it, RP02 measures Roblox); leap
+either body makes is under 10 studs (8.2 on the level and 8.6 onto a landing 2 lower on the web; `parkour-test` records it, RP02 measures Roblox); leap
 gaps and every street or alley are ≥ 12.
 
 | Action | Keyboard | Gamepad | Touch |
@@ -1706,3 +1706,8 @@ Numbers are positions in `finale-critiques.json`, counted from 1 (1–37 are cri
 | 115 · 167 · 139, 140, 142, 143 · 114 (part) | §4.2 `ExtraAnchors` · `levelAt` · §2.6, §3.3, §4.10 · the join packet |
 | 155 · 163–166 · 168, 169 · 170 | §5.2 the torch gate · §6 · §7.2 · I11 and §8.3 |
 
+---
+
+## Spec amendments (made while building; newest last)
+- 3.1 (WP04a, measured): the web's step-up is about 1.9, not 1.6 (a probe reach of exactly StepHeight let the body walk through a block a little higher than a step), so a standing jump mounts 4.4, not 4.1. Hurdles (2.4 to 2.8) and walls (5.5) keep their margins. The longest free jump is 8.2 on the level, 8.6 onto a landing 2 lower.
+- 3.3 (lead, Nov 10): respawns are 1 per stage on Standard and 1 per run on Nightmare, plus the syringe's one per run.

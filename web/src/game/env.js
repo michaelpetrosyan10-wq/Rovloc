@@ -183,7 +183,7 @@ export class Env {
     return this.engine.player.moveState;
   }
 
-  /** Observed horizontal speed (studs/s). */
+  /** Observed horizontal speed over the last tick (studs/s). */
   speed() {
     return this.engine.player.speed;
   }
@@ -298,7 +298,10 @@ export class Env {
     this.engine.player.setHandPose(pose, target);
   }
 
-  /** Replaces the walking physics while held: fn(dt, player) moves player.body itself. */
+  /**
+   * Replaces the walking physics while held: fn(dt, player) moves player.body itself. It runs inside the 30 Hz tick,
+   * once per 1/60 s physics substep, so a driver reads env.now() as the tick's time.
+   */
   setMotionOverride(token, fn, priority = 0) {
     this.engine.player.setMotionOverride(token, fn, priority);
   }

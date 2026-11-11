@@ -399,7 +399,7 @@ export class Flasks {
   /** The look the throw leaves along (unit), from the camera's eye. */
   _aim(eye, dir) {
     const look = this.env.look();
-    this.game.eye(eye);
+    this.env.eye(eye);
     dir.copy(look.direction).normalize();
     return look;
   }
@@ -669,13 +669,13 @@ export class Flasks {
       const look = env.look();
       const windup = this.windStart !== null ? clamp01((real - this.windStart) / WINDUP_SECONDS) : 0;
       const follow = following ? 1 - (1 - clamp01((real - this.followStart) / FOLLOW_SECONDS)) ** 2 : 0;
-      handTarget(game.eye(_eye), look.yaw, look.pitch, windup, follow, _target).multiply(FIST_TO_NECK);
+      handTarget(env.eye(_eye), look.yaw, look.pitch, windup, follow, _target).multiply(FIST_TO_NECK);
       env.setHandPose('Flask', _target);
       this.poseOwned = true;
     } else this._releasePose();
     if (this.heldModel) {
       this.heldModel.group.visible = !!pose;
-      this.heldModel.setLight(env.probeAt(game.eye(_eye), _probe));
+      this.heldModel.setLight(env.probeAt(env.eye(_eye), _probe));
     }
     this._hint();
     this._arc(real, dt);

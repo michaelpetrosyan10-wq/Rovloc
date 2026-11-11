@@ -2,6 +2,9 @@
 // Ticks run from an accumulator so game logic is frame-rate independent; at most MAX_CATCH_UP ticks run per frame
 // (a long stall drops time instead of spiralling). Frame dt is clamped to MAX_FRAME_DT, like the Roblox render step.
 // `time` is the game clock (seconds, paused while the loop is paused); `realTime` keeps running.
+// Everything that is gameplay runs on the tick, the player's body included (player.js steps it there); a frame only
+// draws. `alpha` (how far the accumulator is into the next tick) is what a frame interpolates the last two tick states
+// by, so motion looks smooth at any display rate while every result stays a function of the tick index alone.
 
 import { Signal } from './signal.js';
 
@@ -21,6 +24,8 @@ export class Loop {
     this.realTime = 0;
     this.paused = false;
     this.frameCount = 0;
+    /** Ticks run since the start (the tick index tick-indexed scripts and tests key on). */
+    this.tickCount = 0;
     /** Interpolation share of the next tick (0..1) for smoothing render state between ticks. */
     this.alpha = 0;
     this.tickDt = TICK_DT;
@@ -93,6 +98,7 @@ export class Loop {
       while (this.accumulator >= TICK_DT && n < MAX_CATCH_UP) {
         this.accumulator -= TICK_DT;
         this.time += TICK_DT;
+        this.tickCount++;
         call(this.ticks, TICK_DT, this.onError);
         n++;
       }

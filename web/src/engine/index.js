@@ -6,6 +6,8 @@
 //   engine.player     MoveState machine + meters (stamina / oxygen / battery), pushOverride(token, state) /
 //                     popOverride(token), lock(reason) / unlock(reason), teleport(cframe), eye(), look(),
 //                     setCameraOverride(token, fn | null, priority), setMode, setMotionOverride, flashlight, panic, ...
+//                     The body moves on the 30 Hz tick (2 substeps of 1/60 s); rootPosition() is the tick state and
+//                     drawnRoot the root drawn this frame (interpolated between the last two ticks by loop.alpha).
 //   engine.noise      emit(position, kind, opts) with NoiseConfig radii, on(fn)
 //   engine.audio      play(name, {position?, volume?, loop?}) -> handle with stop(fade); setAmbience; 3D panning
 //   engine.ui         HUD kit: panels, meters, rings, prompts with hold rings, toasts, captions, key glyphs, fades
@@ -15,7 +17,7 @@
 //   engine.quality    graphics tiers Max / High / Medium / Low / Potato (the Graphics setting; + dynamic resolution)
 //   engine.textures   the tier's texture set, streamed in the background (textures.js)
 //   engine.particles  GPU particles: steam vents, drips, ceiling grit, torch motes (particles.js)
-//   engine.loop       onTick(dt) fixed 30 Hz game logic, onFrame(dt) per render frame
+//   engine.loop       onTick(dt) fixed 30 Hz game logic (and the player's body), onFrame(dt) per render frame
 //   engine.save       localStorage JSON with versioning
 //   engine.lighting   flicker groups, overrides, bursts, lightning, dynamic lights, the level film
 //   engine.settings   the player's settings (SettingsSchema)
@@ -305,7 +307,7 @@ export class Engine {
 
     // level focus follows the camera (spectating and cutscene cameras included)
     const focus = this.world.focusFor(camera.position);
-    const playerFocus = this.world.focusFor(this.player.rootPosition());
+    const playerFocus = this.world.focusFor(this.player.drawnRoot);
     for (const l of playerFocus) focus.add(l);
     this.world.setFocus(focus);
     this.cameraLevel = this.world.levelAt(camera.position);
