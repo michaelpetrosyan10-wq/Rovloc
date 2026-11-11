@@ -284,4 +284,29 @@ function WorldConfig.facesTower(z0: number, z1: number, margin: number): boolean
 	return false
 end
 
+-- `value` as plain data: vectors as arrays of their components, tables copied, functions left out.
+local function plain(value: any): any
+	local kind = typeof(value)
+	if kind == "Vector3" then
+		return { value.X, value.Y, value.Z }
+	elseif kind == "Vector2" then
+		return { value.X, value.Y }
+	elseif kind == "table" then
+		local out: { [any]: any } = {}
+		for key, item in value do
+			if type(item) ~= "function" then
+				out[key] = plain(item)
+			end
+		end
+		return out
+	end
+	return value
+end
+
+-- The world's dimensions, levels, towers and stairwells as plain data for the website (world.json
+-- meta.worldConfig; vectors as arrays).
+function WorldConfig.exportMeta(): { [string]: any }
+	return plain(WorldConfig)
+end
+
 return table.freeze(WorldConfig)

@@ -17,6 +17,11 @@
 -- Everything the web build needs is written as plain JSON (CFrames as 12 numbers x,y,z,R00..R22, colours as 0..1
 -- floats, enums by name). web/tools/bake.mjs turns it into the packed runtime data (see web/DATA.md).
 --
+-- The shared rules, generically: every module of ReplicatedStorage.Shared.Config and .Rules with an exportMeta() lands
+-- in world-raw.json `configs` (the bake puts each in world.json meta) under its name with a lower-case first letter
+-- (meta.stageConfig, meta.livesConfig, ...), and every golden() lands in build/cache/golden.json as
+-- { [moduleName]: rows }. A new module is picked up by its own exportMeta / golden; nothing here names it.
+--
 -- The same world as a live Roblox server's: every seeded choice of the builders, the layouts and RunDirector draws from
 -- Shared/Util/Rng (pure Luau, the same numbers in Lune and on Roblox), and everything built is seeded from the
 -- builder's world seed, never a run's (a run varies only its plan: the web replays RunDirector's picks with the same
@@ -37,7 +42,8 @@ local RUN_SEED = 20251029
 local DIFFICULTY = "Standard"
 
 local repo = if fs.isDir("../src") and fs.isFile("../default.project.json") then ".." else "."
-local outPath = process.args[1] or (if repo == ".." then "build/cache/world-raw.json" else "web/build/cache/world-raw.json")
+local outPath = process.args[1]
+	or (if repo == ".." then "build/cache/world-raw.json" else "web/build/cache/world-raw.json")
 local cacheDir = string.match(outPath, "^(.*)/[^/]+$") or "."
 fs.writeDir(cacheDir)
 local placePath = cacheDir .. "/rovloc-export.rbxl"
@@ -262,8 +268,15 @@ end
 -- item (a plain crossing) has no candidates.
 local ObjectiveConfig = h.require("ReplicatedStorage.Shared.Config.ObjectiveConfig")
 local ObjectivePlaces = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces")
+-- The floors of the levels the world builds (ObjectiveConfig's every row, the city's too, is meta.objectiveConfig).
+local builtFloors = {}
+for _, spec in ObjectiveConfig.Floors do
+	if Builder.getLayout(spec.levelId) then
+		table.insert(builtFloors, spec)
+	end
+end
 local objectiveData = {
-	floors = toJson(ObjectiveConfig.Floors),
+	floors = toJson(builtFloors),
 	hideReach = ObjectiveConfig.HideReach,
 	-- a guarded item's guard and standing spot (ObjectivePlaces.carelessWalk and standingSpot: the guard traps' rules,
 	-- see web/DATA.md)
@@ -290,7 +303,7 @@ local objectiveData = {
 	},
 	levels = {},
 }
-for _, spec in ObjectiveConfig.Floors do
+for _, spec in builtFloors do
 	local layout = Builder.getLayout(spec.levelId)
 	local parent = Instances.runtimeLevel(spec.levelId, true)
 	local picks = plan.objectives and plan.objectives[spec.levelId]
@@ -328,7 +341,9 @@ for _, spec in ObjectiveConfig.Floors do
 			planned = picked[anchor.id] ~= nil,
 			entryDistance = math.floor(ObjectivePlaces.entryDistance(layout, place) * 10 + 0.5) / 10,
 			quarter = ObjectivePlaces.quarter(anchor.pos),
-			hide = if hide then { kind = hide.kind, id = hide.id, distance = math.floor(hide.distance * 10 + 0.5) / 10 } else nil,
+			hide = if hide
+				then { kind = hide.kind, id = hide.id, distance = math.floor(hide.distance * 10 + 0.5) / 10 }
+				else nil,
 			eligible = table.find(RunDirector.objectiveCandidates(layout, spec), anchor) ~= nil,
 			careless = if approach
 				then { door = approach.door, walks = toJson(approach.walks), guardGap = toJson(approach.guardGap) }
@@ -352,7 +367,9 @@ for _, spec in ObjectiveConfig.Floors do
 			kind = place.kind,
 			room = place.room,
 			pos = toJson(place.pos),
-			hide = if hide then { kind = hide.kind, id = hide.id, distance = math.floor(hide.distance * 10 + 0.5) / 10 } else nil,
+			hide = if hide
+				then { kind = hide.kind, id = hide.id, distance = math.floor(hide.distance * 10 + 0.5) / 10 }
+				else nil,
 		})
 	end
 	objectiveData.levels[spec.levelId] = {
@@ -622,7 +639,13 @@ local function levelForPosition(p): string
 		if inTower and p.Y < WorldConfig.Levels[ROOF].elevation then
 			return "Stairwells"
 		end
-		if p.Y > WorldConfig.Levels[ROOF].elevation - 2 and p.X > -40 and p.X < size.X + 40 and p.Z > -40 and p.Z < size.Y + 40 then
+		if
+			p.Y > WorldConfig.Levels[ROOF].elevation - 2
+			and p.X > -40
+			and p.X < size.X + 40
+			and p.Z > -40
+			and p.Z < size.Y + 40
+		then
 			return ROOF
 		end
 		return "Exterior"
@@ -1012,7 +1035,12 @@ for _, d in Workspace:GetDescendants() do
 	end
 	local entity = entityIndexOf(d)
 	if entity then
-		exportPart(d, { level = entityRoots[entity].level, source = "Entity", entity = entity, entityRoot = entityRoots[entity].root })
+		exportPart(d, {
+			level = entityRoots[entity].level,
+			source = "Entity",
+			entity = entity,
+			entityRoot = entityRoots[entity].root,
+		})
 	else
 		local level, source = staticPlace(d)
 		exportPart(d, { level = level, source = source })
@@ -1105,7 +1133,12 @@ for index, info in entityRoots do
 			table.insert(prompts, {
 				name = d.Name,
 				host = if host then host.Name else nil,
-				hostCFrame = if host and host:IsA("BasePart") then cf(host.CFrame) elseif host and host:IsA("Attachment") and host.Parent and host.Parent:IsA("BasePart") then cf(host.Parent.CFrame * host.CFrame) else nil,
+				hostCFrame = if host and host:IsA("BasePart")
+					then cf(host.CFrame)
+					elseif host and host:IsA("Attachment") and host.Parent and host.Parent:IsA("BasePart") then cf(
+						host.Parent.CFrame * host.CFrame
+					)
+					else nil,
 				actionText = d.ActionText,
 				objectText = d.ObjectText,
 				holdDuration = r4(d.HoldDuration),
@@ -1238,7 +1271,24 @@ for id, entry in TextureAssets do
 end
 
 local lightingProps = {}
-for _, name in { "ClockTime", "Brightness", "Ambient", "OutdoorAmbient", "EnvironmentDiffuseScale", "EnvironmentSpecularScale", "ExposureCompensation", "ShadowSoftness", "GeographicLatitude", "FogColor", "FogEnd", "FogStart", "ColorShift_Top", "ColorShift_Bottom" } do
+for _, name in
+	{
+		"ClockTime",
+		"Brightness",
+		"Ambient",
+		"OutdoorAmbient",
+		"EnvironmentDiffuseScale",
+		"EnvironmentSpecularScale",
+		"ExposureCompensation",
+		"ShadowSoftness",
+		"GeographicLatitude",
+		"FogColor",
+		"FogEnd",
+		"FogStart",
+		"ColorShift_Top",
+		"ColorShift_Bottom",
+	}
+do
 	local ok, value = pcall(function()
 		return (Lighting :: any)[name]
 	end)
@@ -1385,6 +1435,14 @@ for _, seed in PLAN_SEEDS do
 			table.insert(locked, id)
 		end
 		table.sort(locked)
+		local batteries = {}
+		for levelId, picks in planned.batteries or {} do
+			batteries[levelId] = { anchors = table.clone(picks.anchors), broken = picks.broken }
+		end
+		local flasks = {}
+		for levelId, ids in planned.flasks or {} do
+			flasks[levelId] = table.clone(ids)
+		end
 		table.insert(runPlans, {
 			seed = seed,
 			difficulty = difficulty,
@@ -1392,11 +1450,86 @@ for _, seed in PLAN_SEEDS do
 			props = props,
 			lockedGrates = locked,
 			route = table.clone(planned.route or {}),
+			batteries = batteries,
+			flasks = flasks,
 		})
 	end
 end
 fs.writeFile(cacheDir .. "/run-plans.json", serde.encode("json", runPlans, true))
 print(string.format("RunDirector plans for %d seeds x 2 difficulties -> %s/run-plans.json", #PLAN_SEEDS, cacheDir))
+
+--------------------------------------------------------------------------------
+-- The shared rules: every config's exportMeta() and every rule module's golden(), found by walking the folders
+--------------------------------------------------------------------------------
+
+local function lowerFirst(name: string): string
+	return string.lower(string.sub(name, 1, 1)) .. string.sub(name, 2)
+end
+
+local configs = {}
+local goldens = {}
+local goldenRows = 0
+for _, folderName in { "Config", "Rules" } do
+	local folder = game:GetService("ReplicatedStorage").Shared:FindFirstChild(folderName)
+	local names = {}
+	for _, child in (if folder then folder:GetChildren() else {}) do
+		if child:IsA("ModuleScript") then
+			table.insert(names, child.Name)
+		end
+	end
+	table.sort(names)
+	for _, name in names do
+		local module = h.require("ReplicatedStorage.Shared." .. folderName .. "." .. name)
+		if type(module) ~= "table" then
+			continue
+		end
+		if type(module.exportMeta) == "function" then
+			configs[lowerFirst(name)] = toJson(module.exportMeta())
+		end
+		if type(module.golden) == "function" then
+			local rows = module.golden()
+			goldens[name] = rows
+			goldenRows += #rows
+		end
+	end
+end
+fs.writeFile(cacheDir .. "/golden.json", serde.encode("json", goldens))
+local configNames = {}
+for key in configs do
+	table.insert(configNames, key)
+end
+table.sort(configNames)
+print(string.format("configs for meta: %s", table.concat(configNames, ", ")))
+print(string.format(
+	"golden rows: %d of %d modules -> %s/golden.json",
+	goldenRows,
+	(function()
+		local n = 0
+		for _ in goldens do
+			n += 1
+		end
+		return n
+	end)(),
+	cacheDir
+))
+
+-- The CreatureBlocks (an invisible wall across every opening into a Gap, colliding for the Creature only): the web's
+-- Creature clamps to the same boxes (meta.creatureBlocks); its players never collide with them.
+local CollectionService = game:GetService("CollectionService")
+local creatureBlocks = {}
+for _, part in CollectionService:GetTagged("CreatureBlock") do
+	if part:IsA("BasePart") then
+		table.insert(creatureBlocks, {
+			level = part:GetAttribute("LevelId"),
+			door = part:GetAttribute("DoorId"),
+			cframe = cf(part.CFrame),
+			size = v3(part.Size),
+		})
+	end
+end
+table.sort(creatureBlocks, function(a, b)
+	return tostring(a.level) .. "|" .. tostring(a.door) < tostring(b.level) .. "|" .. tostring(b.door)
+end)
 
 --------------------------------------------------------------------------------
 -- Write
@@ -1415,7 +1548,9 @@ local out = {
 		end
 		return ids
 	end)(),
-	worldConfig = toJson(WorldConfig),
+	worldConfig = configs.worldConfig,
+	configs = configs,
+	creatureBlocks = creatureBlocks,
 	objectives = objectiveData,
 	routes = routeData,
 	routePairs = routePairs,
@@ -1460,7 +1595,12 @@ local out = {
 }
 
 if offGridCount > 0 then
-	print(string.format("%d part colour(s) off the 8-bit grid a part stores (write them with MathUtil.color8):", offGridCount))
+	print(
+		string.format(
+			"%d part colour(s) off the 8-bit grid a part stores (write them with MathUtil.color8):",
+			offGridCount
+		)
+	)
 	for _, line in offGrid do
 		print("  " .. line)
 	end

@@ -14,6 +14,11 @@ export type MoveState =
 	| "Trapped"
 	| "Parachuting"
 	| "Scripted"
+	-- parkour and the plane (docs/design/game-spec-v2.md 3.1, 4.8): the slide (eye as Crouching), the leap (the root
+	-- rides ParkourRules.leap; the eye rides it at the sprint height) and a plane seat (eye 1.2 over the root)
+	| "Sliding"
+	| "Leaping"
+	| "Seated"
 
 export type CameraState =
 	"Standing"
@@ -22,6 +27,10 @@ export type CameraState =
 	| "DownedCrawling"
 	| "LockerPeeking"
 	| "ParachuteLookback"
+	-- a cutscene shot that is not the player's own view; the pilot's seat; the held look back (150 degrees in 0.18 s)
+	| "Cinematic"
+	| "Cockpit"
+	| "LookBack"
 
 export type CameraOverride = "Cutscene" | "Jumpscare" | "Spectating" | "Trapped"
 
@@ -54,13 +63,37 @@ export type CreatureAction = "Stare" | "ReachIn" | "LookAway" | "FadeOut" | "Fad
 -- A hiding spot's kind (tag Hideable, attribute HideKind).
 export type HideKind = "Locker" | "Barrel" | "Cabinet"
 
+-- A hiding spot's look (attribute HideSkin; model and camera only, every rule of its HideKind stays): Enums.HideSkinKind
+-- names the kind each skin dresses (docs/design/game-spec-v2.md 3.6).
+export type HideSkin =
+	"Wardrobe"
+	| "MeterCloset"
+	| "ToolCrib"
+	| "FilmCabinet"
+	| "TicketBooth"
+	| "PropTrunk"
+	| "RoadCase"
+	| "ACHousing"
+	| "BaggageCart"
+	| "ToolChest"
+	| "CheckInDesk"
+	| "TarDrum"
+	| "RainButt"
+	| "OilDrum"
+
+-- A Gate door's look (layout Door.skin; attribute GateSkin): a brick-painted flat over a hidden door, the hangar's big
+-- door, a mesh gate, a roll-down shutter.
+export type GateSkin = "BrickFlat" | "HangarDoor" | "MeshGate" | "Shutter"
+
 export type PoseMode = "Biped" | "Hunched" | "Quadruped"
 
+-- Prologue: the opening on the Back Lot, the bins, the walk and the chute, before the Basement's activation (InRun).
 export type MatchPhase =
 	"Booting"
 	| "Lobby"
 	| "Countdown"
 	| "Deploying"
+	| "Prologue"
 	| "InRun"
 	| "RunEnded"
 	| "Results"
@@ -113,6 +146,16 @@ export type NoiseKind =
 	| "HideEnter"
 	| "HideEnterHurried"
 	| "ChatMessage"
+	-- parkour (docs/design/game-spec-v2.md 3.1): a slide, and a fall of 8 or more studs
+	| "Slide"
+	| "HardLanding"
+	-- the stages of spec v2: the Auditorium's strike lamp, film score and projector; the hangar door's motor; the plane
+	| "LampStrike"
+	| "FilmScore"
+	| "ProjectorRun"
+	| "MotorStart"
+	| "MotorRun"
+	| "EngineStart"
 
 export type NoiseMedium = "Air" | "Vent"
 
@@ -161,6 +204,23 @@ export type PromptKind =
 	| "Locked"
 	-- a teammate drags a hider out of their hiding spot (THRESHOLD's throw)
 	| "PullOut"
+	-- spec v2's stages (docs/design/game-spec-v2.md 2-4): the Back Lot's bins and chute, the janitor, the wall phone,
+	-- the Auditorium's reels and lamp, the get-up, the revolver, the rooftops' feeders, the airport and the plane
+	| "PushLid"
+	| "ClimbIn"
+	| "WakeHim"
+	| "AnswerPhone"
+	| "ThreadReel"
+	| "StrikeLamp"
+	| "GetUp"
+	| "OpenLockbox"
+	| "TakeRevolver"
+	| "PickUpRevolver"
+	| "CloseFeeder"
+	| "FuelPlane"
+	| "HangarSwitch"
+	| "Board"
+	| "StartEngines"
 
 export type Audience = "Self" | "Others" | "All"
 
@@ -205,6 +265,17 @@ export type RoomKind =
 	| "Gallery"
 	| "Crawlway"
 	| "Solid"
+	-- spec v2's stages: the Auditorium (Foyer, the house, the Stage, Dressing rooms), the bell Tower, the airport's
+	-- Hangars; Yard: open to the sky (roofs, aprons, gantries); Gap: a drop between two walkable rooms (an alley), its
+	-- floor `drop` studs below the level, no floor for the Creature, a CreatureBlock at every opening into it
+	| "Foyer"
+	| "Auditorium"
+	| "Stage"
+	| "Dressing"
+	| "Tower"
+	| "Hangar"
+	| "Yard"
+	| "Gap"
 
 export type AnchorKind =
 	"PlayerSpawn"
@@ -230,8 +301,43 @@ export type AnchorKind =
 	-- ... and the stations and locks
 	| "BreakerPanel"
 	| "ExitLock"
+	-- spec v2's stages: the Auditorium (reels, projectors, speakers, the ghost light), the roof course and the bell
+	-- tower (course nodes, leap strips, the lockbox, the jump kits), the rooftops' feeders, the airport (fuel cans, the
+	-- wing filler, the hangar switch, the cabin door, the seats), the landing roof's marks, cutscene marks, the Back
+	-- Lot's bins, the wall phone, the billboard and the split-flap board
+	| "FilmReelCandidate"
+	| "Projector"
+	| "SpeakerPoint"
+	| "GhostLight"
+	| "CourseNode"
+	| "LeapStrip"
+	| "RevolverLockbox"
+	| "JumpKit"
+	| "FeederCandidate"
+	| "FuelCanCandidate"
+	| "WingFiller"
+	| "HangarSwitch"
+	| "CabinDoor"
+	| "Seat"
+	| "LandingMark"
+	| "CutsceneMark"
+	| "BinStart"
+	| "WallPhone"
+	| "Billboard"
+	| "FlapBoard"
 
-export type TriggerKind = "ScareStep" | "FloorDebris" | "Checkpoint" | "LevelExit"
+-- GatherZone: where a squad gathers before a scene; Shutter: the bell tower's shutter line; FallZone: a fall that
+-- lands on a deck (never damage); ChuteHatch: the Back Lot's chute; JumpGate: the roof's jump.
+export type TriggerKind =
+	"ScareStep"
+	| "FloorDebris"
+	| "Checkpoint"
+	| "LevelExit"
+	| "GatherZone"
+	| "Shutter"
+	| "FallZone"
+	| "ChuteHatch"
+	| "JumpGate"
 
 export type LightKind = "Fluorescent" | "Bulb" | "EmergencyRed" | "ClassroomGlow" | "ExitSign" | "BoilerGlow"
 
@@ -265,7 +371,13 @@ export type InputAction =
 	| "SpectatePrev"
 	| "SpectateNext"
 	| "Menu"
-	| "Objective"
+	| "Radar" -- a scan (no charge: the objective sheet)
+	| "LookBack"
+	| "Skip" -- the cutscene skip vote
+	| "Fire" -- the revolver
+	| "LowerGun"
+	| "Steer" -- the plane
+	| "PullUp"
 
 export type InputContext =
 	"Menu"
@@ -275,6 +387,9 @@ export type InputContext =
 	| "Downed"
 	| "Vent"
 	| "Parachute"
+	| "Revolver" -- holding the revolver (replaces Throw and the jump)
+	| "Cockpit" -- the pilot's seat
+	| "Seat" -- a passenger's seat
 	| "OnFoot"
 	| "Spectator"
 
@@ -324,6 +439,9 @@ Enums.MoveState = table.freeze({
 	"Trapped",
 	"Parachuting",
 	"Scripted",
+	"Sliding",
+	"Leaping",
+	"Seated",
 } :: { MoveState })
 
 Enums.CameraState = table.freeze({
@@ -333,6 +451,9 @@ Enums.CameraState = table.freeze({
 	"DownedCrawling",
 	"LockerPeeking",
 	"ParachuteLookback",
+	"Cinematic",
+	"Cockpit",
+	"LookBack",
 } :: { CameraState })
 
 Enums.CameraOverride = table.freeze({ "Cutscene", "Jumpscare", "Spectating", "Trapped" } :: { CameraOverride })
@@ -370,6 +491,43 @@ Enums.CreatureAction =
 
 Enums.HideKind = table.freeze({ "Locker", "Barrel", "Cabinet" } :: { HideKind })
 
+Enums.HideSkin = table.freeze({
+	"Wardrobe",
+	"MeterCloset",
+	"ToolCrib",
+	"FilmCabinet",
+	"TicketBooth",
+	"PropTrunk",
+	"RoadCase",
+	"ACHousing",
+	"BaggageCart",
+	"ToolChest",
+	"CheckInDesk",
+	"TarDrum",
+	"RainButt",
+	"OilDrum",
+} :: { HideSkin })
+
+-- The HideKind each HideSkin dresses.
+Enums.HideSkinKind = table.freeze({
+	Wardrobe = "Locker",
+	MeterCloset = "Locker",
+	ToolCrib = "Locker",
+	FilmCabinet = "Cabinet",
+	TicketBooth = "Cabinet",
+	PropTrunk = "Cabinet",
+	RoadCase = "Cabinet",
+	ACHousing = "Cabinet",
+	BaggageCart = "Cabinet",
+	ToolChest = "Cabinet",
+	CheckInDesk = "Cabinet",
+	TarDrum = "Barrel",
+	RainButt = "Barrel",
+	OilDrum = "Barrel",
+} :: { [string]: HideKind })
+
+Enums.GateSkin = table.freeze({ "BrickFlat", "HangarDoor", "MeshGate", "Shutter" } :: { GateSkin })
+
 Enums.PoseMode = table.freeze({ "Biped", "Hunched", "Quadruped" } :: { PoseMode })
 
 Enums.MatchPhase = table.freeze({
@@ -377,6 +535,7 @@ Enums.MatchPhase = table.freeze({
 	"Lobby",
 	"Countdown",
 	"Deploying",
+	"Prologue",
 	"InRun",
 	"RunEnded",
 	"Results",
@@ -426,6 +585,14 @@ Enums.NoiseKind = table.freeze({
 	"HideEnter",
 	"HideEnterHurried",
 	"ChatMessage",
+	"Slide",
+	"HardLanding",
+	"LampStrike",
+	"FilmScore",
+	"ProjectorRun",
+	"MotorStart",
+	"MotorRun",
+	"EngineStart",
 } :: { NoiseKind })
 
 Enums.NoiseMedium = table.freeze({ "Air", "Vent" } :: { NoiseMedium })
@@ -473,6 +640,21 @@ Enums.PromptKind = table.freeze({
 	"Unlock",
 	"Locked",
 	"PullOut",
+	"PushLid",
+	"ClimbIn",
+	"WakeHim",
+	"AnswerPhone",
+	"ThreadReel",
+	"StrikeLamp",
+	"GetUp",
+	"OpenLockbox",
+	"TakeRevolver",
+	"PickUpRevolver",
+	"CloseFeeder",
+	"FuelPlane",
+	"HangarSwitch",
+	"Board",
+	"StartEngines",
 } :: { PromptKind })
 
 Enums.Audience = table.freeze({ "Self", "Others", "All" } :: { Audience })
@@ -523,6 +705,14 @@ Enums.RoomKind = table.freeze({
 	"Gallery",
 	"Crawlway",
 	"Solid",
+	"Foyer",
+	"Auditorium",
+	"Stage",
+	"Dressing",
+	"Tower",
+	"Hangar",
+	"Yard",
+	"Gap",
 } :: { RoomKind })
 
 Enums.AnchorKind = table.freeze({
@@ -547,9 +737,39 @@ Enums.AnchorKind = table.freeze({
 	"MasterKeyCandidate",
 	"BreakerPanel",
 	"ExitLock",
+	"FilmReelCandidate",
+	"Projector",
+	"SpeakerPoint",
+	"GhostLight",
+	"CourseNode",
+	"LeapStrip",
+	"RevolverLockbox",
+	"JumpKit",
+	"FeederCandidate",
+	"FuelCanCandidate",
+	"WingFiller",
+	"HangarSwitch",
+	"CabinDoor",
+	"Seat",
+	"LandingMark",
+	"CutsceneMark",
+	"BinStart",
+	"WallPhone",
+	"Billboard",
+	"FlapBoard",
 } :: { AnchorKind })
 
-Enums.TriggerKind = table.freeze({ "ScareStep", "FloorDebris", "Checkpoint", "LevelExit" } :: { TriggerKind })
+Enums.TriggerKind = table.freeze({
+	"ScareStep",
+	"FloorDebris",
+	"Checkpoint",
+	"LevelExit",
+	"GatherZone",
+	"Shutter",
+	"FallZone",
+	"ChuteHatch",
+	"JumpGate",
+} :: { TriggerKind })
 
 Enums.LightKind = table.freeze({
 	"Fluorescent",
@@ -600,7 +820,13 @@ Enums.InputAction = table.freeze({
 	"SpectatePrev",
 	"SpectateNext",
 	"Menu",
-	"Objective",
+	"Radar",
+	"LookBack",
+	"Skip",
+	"Fire",
+	"LowerGun",
+	"Steer",
+	"PullUp",
 } :: { InputAction })
 
 -- Highest priority first: the first context on the stack that binds an action wins it.
@@ -612,6 +838,9 @@ Enums.InputContext = table.freeze({
 	"Downed",
 	"Vent",
 	"Parachute",
+	"Revolver",
+	"Cockpit",
+	"Seat",
 	"OnFoot",
 	"Spectator",
 } :: { InputContext })

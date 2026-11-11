@@ -8,7 +8,7 @@
 --   * Bindings. Each live action is one ContextActionService binding (keyboard + gamepad inputs from InputConfig) at
 --     InputConfig.ActionPriority, above the PlayerModule's jump. Actions that claim the keys the default controls own
 --     (Space / LeftShift / gamepad A) sink them, so holding breath never also jumps; every other input passes through,
---     so ProximityPrompts still see E / X. Tab is the Objective action: the HUD disables the core player list that
+--     so ProximityPrompts still see E / X. Tab is the Radar action: the HUD disables the core player list that
 --     would otherwise take it. A context change unbinds what is no longer live (held actions get their End) and binds
 --     what became live.
 --   * Phases. Hold actions fire Begin when the first of their inputs goes down and End when the last comes up (keys,

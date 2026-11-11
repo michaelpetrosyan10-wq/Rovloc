@@ -11,6 +11,9 @@ CameraConfig.StateOffsets = table.freeze({
 	DownedCrawling = Vector3.new(0, -2.3, 0),
 	LockerPeeking = Vector3.new(0, -0.15, 0),
 	ParachuteLookback = Vector3.new(0, 0, 0),
+	Cinematic = Vector3.new(0, 0, 0), -- the shot places the camera
+	Cockpit = Vector3.new(0, -0.3, 0), -- the seat's eye (EyeHeightAboveRoot.Seated)
+	LookBack = Vector3.new(0, 0, 0), -- the view turns (ParkourConfig.LookBack); the eye stays
 } :: { [string]: Vector3 })
 
 -- Eye height above the HumanoidRootPart centre, per server MoveState. Used for Creature LOS and
@@ -26,6 +29,9 @@ CameraConfig.EyeHeightAboveRoot = table.freeze({
 	Trapped = 1.1,
 	Parachuting = 1.5,
 	Scripted = 1.5,
+	Sliding = 0, -- as Crouching (docs/design/game-spec-v2.md 3.1: eye -1.5)
+	Leaping = 1.4, -- the root rides ParkourRules.leap; the eye rides it at the sprint height
+	Seated = 1.2, -- a plane seat
 } :: { [string]: number })
 
 CameraConfig.FieldOfView = table.freeze({

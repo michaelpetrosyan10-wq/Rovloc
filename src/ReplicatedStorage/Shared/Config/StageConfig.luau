@@ -131,6 +131,56 @@ function StageConfig.floorOf(id: string): number?
 	return if stage then stage.floor else nil
 end
 
+-- Whether stage `id` is played (anything but a cutscene and a walk: the seven stages whose activation hands every
+-- player a fresh stage respawn on Standard, LivesRules); false for BackLot, Bahamas and an unknown id.
+function StageConfig.isPlayable(id: string): boolean
+	local stage = byId[id]
+	if not stage then
+		return false
+	end
+	for _, play in stage.play do
+		if play ~= "Cutscene" and play ~= "Walk" then
+			return true
+		end
+	end
+	return false
+end
+
+-- Whether stage `id` is a sneaking stage (play "Sneak": objectives with the Creature hunting; the radar's arrival
+-- floor, batteries and the fair-objective rules are per sneaking stage).
+function StageConfig.isSneaking(id: string): boolean
+	local stage = byId[id]
+	return stage ~= nil and table.find(stage.play, "Sneak") ~= nil
+end
+
+-- The ids of the stages for which `keep` holds, in run order.
+local function idsWhere(keep: (string) -> boolean): { string }
+	local out: { string } = {}
+	for _, stage in ORDER do
+		if keep(stage.id) then
+			table.insert(out, stage.id)
+		end
+	end
+	return out
+end
+
+-- The sneaking stages in run order.
+StageConfig.Sneaking = table.freeze(idsWhere(StageConfig.isSneaking))
+
+-- The playable stages in run order.
+StageConfig.Playable = table.freeze(idsWhere(StageConfig.isPlayable))
+
+-- The stages as plain data for the website (world.json meta.stageConfig).
+function StageConfig.exportMeta(): { [string]: any }
+	local order: { any } = {}
+	for _, stage in ORDER do
+		local row: { [string]: any } = table.clone(stage :: any)
+		row.play = table.clone(stage.play)
+		table.insert(order, row)
+	end
+	return { order = order, sneaking = table.clone(StageConfig.Sneaking), playable = table.clone(StageConfig.Playable) }
+end
+
 -- The par of stage `id` in seconds (`replay`: its replay par where it has one).
 function StageConfig.parSeconds(id: string, replay: boolean?): number?
 	local stage = byId[id]

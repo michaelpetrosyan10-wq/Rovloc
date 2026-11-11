@@ -60,15 +60,23 @@ ObjectivePlaces.CornerInset = 1.5
 local STATION_KINDS: { [string]: boolean } = {
 	BreakerPanel = true,
 	ExitLock = true,
+	-- spec v2's stations (the Auditorium's projectors, the airport's wing filler, hangar switch and cabin door)
+	Projector = true,
+	WingFiller = true,
+	HangarSwitch = true,
+	CabinDoor = true,
 }
 
--- Every objective spot of `layout` in layout order: the floor's item candidates, its stations and its locks.
+-- Every objective spot of `layout` in layout order: the floor's item candidates, its picked stations' candidates (the
+-- rooftops' feeders), its stations and its locks.
 function ObjectivePlaces.places(layout: Layout): { Place }
 	local spec = ObjectiveConfig.forLevel(layout.id)
 	local item = if spec then spec.item else nil
+	local stations = if spec then spec.stations else nil
 	local out: { Place } = {}
 	for _, anchor in layout.anchors do
-		if (item and anchor.kind == item.candidate) or STATION_KINDS[anchor.kind] then
+		local picked = stations ~= nil and anchor.kind == stations.candidate
+		if (item and anchor.kind == item.candidate) or picked or STATION_KINDS[anchor.kind] then
 			table.insert(out, { id = anchor.id, kind = anchor.kind, room = anchor.room, pos = anchor.pos })
 		end
 	end

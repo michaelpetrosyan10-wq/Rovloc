@@ -379,5 +379,11 @@ export function buildMeta(raw, r) {
     emitters: steamEmitters(raw),
     layouts: raw.layouts,
     creature,
+    // the invisible walls across every opening into a Gap: the Creature clamps to them, players pass (CollisionGroups)
+    creatureBlocks: raw.creatureBlocks || [],
+    // the shared configs, generically (export-world.luau: every Shared/Config and Shared/Rules module's exportMeta(),
+    // keyed by its name with a lower-case first letter: stageConfig, livesConfig, radarConfig, parkourConfig, ...)
+    ...(raw.configs || {}),
+    exportedConfigs: Object.keys(raw.configs || {}).sort(),
   };
 }

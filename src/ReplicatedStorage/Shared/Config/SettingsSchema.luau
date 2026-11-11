@@ -3,6 +3,10 @@
 -- Brightness (-2..+2 around the graded default) goes to LightingController.SetBrightness. Graphics (a Choice: an
 -- index into GraphicsConfig.Order, Max by default) is read by GraphicsController.
 --
+-- Spec v2's settings (docs/design/game-spec-v2.md 3.1, 3.4): Leap assist (Auto: on for touch and gamepad, off for
+-- the keyboard; ParkourRules.assistOn), the monster's voice (voice and subtitles, or subtitles only), whether it says
+-- names, the voice volume, and which cut of a cutscene a replay plays (Short unless someone asks for Full).
+--
 -- Hidden entries (hidden = true) are saved and sanitized like every other setting but never drawn by SettingsMenu: the
 -- onboarding's progress (TutorialConfig.TutorialSetting: the walkthrough was finished or skipped; one Hint<Id> flag per
 -- first-time hint once shown). They live in the Settings blob because they are this player's own presentation state,
@@ -152,6 +156,37 @@ SettingsSchema.List = table.freeze({
 	{ key = "UIVolume", kind = "Number", label = "Settings.UIVolume", min = 0, max = 1, step = 0.05, default = 0.8 },
 	{ key = "Captions", kind = "Bool", label = "Settings.Captions", default = false },
 	{ key = "ShowHints", kind = "Bool", label = "Settings.ShowHints", default = true },
+	{
+		key = "LeapAssist",
+		kind = "Choice",
+		label = "Settings.LeapAssist",
+		options = table.freeze({ "Auto", "On", "Off" }),
+		default = 1,
+	},
+	{
+		key = "MonsterVoice",
+		kind = "Choice",
+		label = "Settings.MonsterVoice",
+		options = table.freeze({ "VoiceAndSubtitles", "SubtitlesOnly" }),
+		default = 1,
+	},
+	{ key = "SayNames", kind = "Bool", label = "Settings.SayNames", default = true },
+	{
+		key = "VoiceVolume",
+		kind = "Number",
+		label = "Settings.VoiceVolume",
+		min = 0,
+		max = 1,
+		step = 0.05,
+		default = 1,
+	},
+	{
+		key = "ReplayCutscenes",
+		kind = "Choice",
+		label = "Settings.ReplayCutscenes",
+		options = table.freeze({ "Short", "Full" }),
+		default = 1,
+	},
 	-- Onboarding progress (hidden; TutorialConfig names them)
 	{ key = "TutorialDone", kind = "Bool", label = "Settings.TutorialDone", hidden = true, default = false },
 	{ key = "HintBearTrap", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
@@ -176,6 +211,13 @@ SettingsSchema.List = table.freeze({
 		default = false,
 	},
 	{ key = "HintObjBreaker", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintHurdle", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintSlide", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintLeap", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintRadar", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintGetUp", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintRevolver", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintTakeoff", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
 } :: { Setting })
 
 local byKey: { [string]: Setting } = {}
@@ -208,6 +250,19 @@ function SettingsSchema.option(key: string, value: unknown): string?
 	local choice = setting :: ChoiceSetting
 	local index = if type(value) == "number" then value else choice.default
 	return choice.options[index] or choice.options[choice.default]
+end
+
+-- The schema as plain data for the website (world.json meta.settingsSchema): every entry in menu order.
+function SettingsSchema.exportMeta(): { [string]: any }
+	local list: { any } = {}
+	for _, setting in SettingsSchema.List do
+		local entry: { [string]: any } = table.clone(setting :: any)
+		if setting.kind == "Choice" then
+			entry.options = table.clone((setting :: ChoiceSetting).options)
+		end
+		table.insert(list, entry)
+	end
+	return { list = list }
 end
 
 -- Defaults for every key, as a fresh mutable table.

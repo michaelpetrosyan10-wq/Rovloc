@@ -3,7 +3,7 @@
 --
 --   * The tracker: a compact sheet top-left (top-right on touch, clear of the MENU / GOAL buttons): OBJECTIVE, the
 --     current goal, a short tip for the floor, and the key that asks for directions. It shows fully when the goal
---     changes or the Objective action is pressed (Tab / d-pad right / the GOAL button) and fades out after
+--     changes or the Radar action is pressed (Tab / d-pad right / the RADAR button) and fades out after
 --     TutorialConfig.Timing.TrackerHold seconds idle, in the lobby it stays.
 --   * Goals are read from what the server replicates (levelObjective / lobbyObjective):
 --       lobby       get on the bus (the glowing arrows) -> stand on a pad to ready up; optional lines for the vote and
@@ -23,7 +23,7 @@
 --     stairwell again (steps ticked). The floor card adds "OBJECTIVE: <title>".
 --   * A floating marker (BillboardGui on a client-side Attachment, through walls) hangs over the lobby's current step
 --     (the bus's rear door, then the nearest free ready pad) until it is done.
---   * Directions: the Objective action shows a chevron around the crosshair pointing at the goal with its distance
+--   * Directions: the Radar action shows a chevron around the crosshair pointing at the goal with its distance
 --     and the same marker over it, for DirectionShow seconds, then cools down for DirectionCooldown (the key hint
 --     counts it down), so it nudges without killing the tension.
 --   * Floor title card: FLOOR 1 / MAIN HALLWAYS fades in centre-top when the squad reaches a new level (and at the
@@ -1042,7 +1042,7 @@ local function step(dt: number)
 	end
 
 	local readyNow, remaining = ObjectiveTracker.direction(clock, directionAt, Timing.DirectionCooldown)
-	current.keyCap:SetGlyph(InputGlyphs.forAction("Objective", device))
+	current.keyCap:SetGlyph(InputGlyphs.forAction("Radar", device))
 	current.keyLabel.Text = if readyNow
 		then Strings.get("Objective.Direction")
 		else Strings.get("Objective.DirectionWait", math.ceil(remaining))
@@ -1150,7 +1150,7 @@ function ObjectiveTracker.Start()
 	serviceTrove:Add(current.marker)
 	serviceTrove:Add(current.markerAnchor)
 	serviceTrove:Connect(current.help.Activated, helpPressed)
-	serviceTrove:Add(InputController.Action("Objective"):Connect(onObjective))
+	serviceTrove:Add(InputController.Action("Radar"):Connect(onObjective))
 	serviceTrove:Connect(RunService.PreRender, function(dt: number)
 		xpcall(step, function(err: any)
 			log.warnThrottled("step", 10, "objective step failed: %s\n%s", tostring(err), debug.traceback())

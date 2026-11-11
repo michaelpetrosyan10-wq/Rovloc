@@ -11,6 +11,12 @@
 --   stairwells  WorldConfig.Stairwells fromRoom <-> toRoom across layouts, kind "Stair", portalId = stairwell id.
 -- A BlockedSet names portal ids that are currently impassable (locked grates, shut gates, sealed airlocks).
 --
+-- Gaps (docs/design/game-spec-v2.md 3.6 §10): a Gap room (an alley) is a node like any room, its centre on its deck
+-- (`drop` below the level). Every door edge between a Gap and another room is a `lip`: players cross it (a leap over
+-- the gap, a plank, a drop to the deck, a fire escape), the Creature never does (a CreatureBlock stands in it), so a
+-- Gap is walkable for players and gives the Creature no floor. ZoneGraph.creatureBlocked lists every portal the
+-- Creature never takes (lips and crawlway mouths). A hidden Gate is never in the worst case: its floor's script opens it.
+--
 -- Everything is deterministic: layouts, rooms, doors, grates, duct edges and stairwells are visited in list order,
 -- adjacency lists keep edge insertion order, and the shortest-path queue breaks ties by insertion sequence.
 -- Node centres are world space: a room's centre is its rect centre on its floor plane (level-local Y 0); a vent
@@ -97,7 +103,7 @@ end
 
 local function roomCenter(origin: Vector3, room: Room): Vector3
 	local r = room.rect
-	return origin + Vector3.new(r.x + r.w / 2, 0, r.z + r.d / 2)
+	return origin + Vector3.new(r.x + r.w / 2, -LayoutSchema.roomDrop(room), r.z + r.d / 2)
 end
 
 local function ventCenter(origin: Vector3, node: VentNodeSpec): Vector3
@@ -287,6 +293,9 @@ function ZoneGraph.build(layouts: { Layout }): Graph
 			if edge then
 				edge.clearance = LayoutSchema.doorClearance(layout, door)
 				edge.crawlOnly = LayoutSchema.doorCrawlOnly(layout, door)
+				if (a.kind == "Gap") ~= (b.kind == "Gap") then
+					edge.lip = true
+				end
 			end
 		end
 
@@ -521,11 +530,23 @@ function ZoneGraph.isLevelSolvable(graph: Graph, layout: Layout, blocked: Types.
 	return flood(graph, entry, blocked, layout.id)[exit] == true
 end
 
--- The worst case a run can produce on `layout`: every Gate door shut and every Lockable grate locked.
+-- Every portal of `graph` the Creature never takes: the lips into a Gap and the crawlway mouths.
+function ZoneGraph.creatureBlocked(graph: Graph): Types.BlockedSet
+	local blocked: Types.BlockedSet = {}
+	for _, edge in graph.edges do
+		if edge.lip or edge.crawlOnly then
+			blocked[edge.portalId] = true
+		end
+	end
+	return blocked
+end
+
+-- The worst case a run can produce on `layout`: every Gate door shut (but a hidden one, which the floor's script
+-- opens) and every Lockable grate locked.
 function ZoneGraph.worstCaseBlocked(layout: Layout): Types.BlockedSet
 	local blocked: Types.BlockedSet = {}
 	for _, door in layout.doors do
-		if door.kind == "Gate" then
+		if door.kind == "Gate" and not LayoutSchema.hiddenGate(door) then
 			blocked[door.id] = true
 		end
 	end

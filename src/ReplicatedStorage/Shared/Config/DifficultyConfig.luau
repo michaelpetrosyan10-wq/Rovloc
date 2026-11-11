@@ -7,7 +7,9 @@ export type DifficultySpec = {
 	hearingMultiplier: number,
 	sightRangeMultiplier: number,
 	trapCount: number, -- bear traps placed in the basement
-	batteriesPerLevel: number,
+	batteriesPerLevel: number, -- the batteries today's runs place per school level (RunDirector's prop plan)
+	-- stun flasks a run places per stage, by stage id (RunDirector.pickFlasks; docs/design/game-spec-v2.md 4.2)
+	flasksPerStage: { [string]: number },
 	lockedGrateFraction: number, -- share of Lockable grates the RunDirector locks
 	catchCooldownSeconds: number, -- after a catch the Creature retreats this long
 	maxChaseSeconds: number, -- a chase gives up (FadeOut) after this, whatever happens
@@ -18,13 +20,20 @@ export type DifficultySpec = {
 	creditMultiplier: number,
 }
 
-local DifficultyConfig = table.freeze({
+local DifficultyConfig = {
 	Standard = table.freeze({
 		creatureSpeedMultiplier = 1,
 		hearingMultiplier = 1, -- the Tall Man's radii (NoiseConfig) are the Standard reach
 		sightRangeMultiplier = 1,
 		trapCount = 10,
 		batteriesPerLevel = 2, -- harder Standard: one fewer per floor
+		flasksPerStage = table.freeze({
+			Level0_Basement = 3,
+			Level1_Hallways = 3,
+			Level2_Auditorium = 2,
+			City1_Rooftops = 2,
+			City2_Airport = 2,
+		}),
 		lockedGrateFraction = 0.25,
 		catchCooldownSeconds = 14.4, -- harder Standard: -20 %
 		maxChaseSeconds = 22,
@@ -40,6 +49,13 @@ local DifficultyConfig = table.freeze({
 		sightRangeMultiplier = 1.15,
 		trapCount = 16,
 		batteriesPerLevel = 1,
+		flasksPerStage = table.freeze({
+			Level0_Basement = 2,
+			Level1_Hallways = 2,
+			Level2_Auditorium = 1,
+			City1_Rooftops = 1,
+			City2_Airport = 1,
+		}),
 		lockedGrateFraction = 0.45,
 		catchCooldownSeconds = 8.8, -- 11 s, -20 % with Standard
 		maxChaseSeconds = 28,
@@ -49,6 +65,21 @@ local DifficultyConfig = table.freeze({
 		postAirlockGraceSeconds = 6,
 		creditMultiplier = 1.5,
 	} :: DifficultySpec),
-})
+}
 
-return DifficultyConfig
+-- Both difficulties as plain data for the website (world.json meta.difficultyConfig).
+function DifficultyConfig.exportMeta(): { [string]: any }
+	local out: { [string]: any } = {}
+	for _, name in { "Standard", "Nightmare" } do
+		local spec: DifficultySpec = if name == "Nightmare"
+			then DifficultyConfig.Nightmare
+			else DifficultyConfig.Standard
+		local row: { [string]: any } = table.clone(spec :: any)
+		row.teleportCooldown = table.clone(spec.teleportCooldown)
+		row.flasksPerStage = table.clone(spec.flasksPerStage)
+		out[name] = row
+	end
+	return out
+end
+
+return table.freeze(DifficultyConfig)

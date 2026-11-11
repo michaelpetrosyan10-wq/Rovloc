@@ -43,6 +43,17 @@ NoiseConfig.Kinds = table.freeze({
 	-- a loud single action (the main breaker, an exit unlocking).
 	ObjectiveWork = { radius = 34, priority = "Normal", medium = "Air", interval = 0 },
 	ObjectiveClunk = { radius = 110, priority = "High", medium = "Air", interval = 0 },
+	-- Parkour (docs/design/game-spec-v2.md 3.1): a slide, once; a fall of ParkourConfig HardLanding.Fall or more
+	Slide = { radius = 60, priority = "High", medium = "Air", interval = 0 },
+	HardLanding = { radius = 60, priority = "High", medium = "Air", interval = 0 },
+	-- The Auditorium (4.4): the strike lamp, the film's score while it plays, a projector running
+	LampStrike = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
+	FilmScore = { radius = 90, priority = "Normal", medium = "Air", interval = 0 },
+	ProjectorRun = { radius = 30, priority = "Normal", medium = "Air", interval = 0 },
+	-- The airport (4.8): the hangar door's motor starting, then running (every 4 s), and the plane's engines
+	MotorStart = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
+	MotorRun = { radius = 90, priority = "Normal", medium = "Air", interval = 4 },
+	EngineStart = { radius = 170, priority = "Critical", medium = "Air", interval = 0 },
 } :: { [string]: NoiseSpec })
 
 -- Observed horizontal speed (studs/s) above which a moving character is at least this loud,
@@ -67,5 +78,29 @@ NoiseConfig.MaxOccludingWalls = 3
 
 -- Noise travelling through ducts uses VentGraph path length instead of straight-line distance.
 NoiseConfig.VentPropagationMultiplier = 1.4
+
+-- Every noise and the hearing tables as plain data for the website (world.json meta.noiseConfig).
+function NoiseConfig.exportMeta(): { [string]: any }
+	local kinds: { [string]: any } = {}
+	for kind, spec in NoiseConfig.Kinds do
+		kinds[kind] = table.clone(spec)
+	end
+	local function tiers(list: { { minSpeed: number, kind: Enums.NoiseKind } }): { any }
+		local out: { any } = {}
+		for _, tier in list do
+			table.insert(out, table.clone(tier))
+		end
+		return out
+	end
+	return {
+		Kinds = kinds,
+		SpeedTiers = tiers(NoiseConfig.SpeedTiers),
+		VentSpeedTiers = tiers(NoiseConfig.VentSpeedTiers),
+		JumpLandAirborne = NoiseConfig.JumpLandAirborne,
+		WallOcclusion = NoiseConfig.WallOcclusion,
+		MaxOccludingWalls = NoiseConfig.MaxOccludingWalls,
+		VentPropagationMultiplier = NoiseConfig.VentPropagationMultiplier,
+	}
+end
 
 return table.freeze(NoiseConfig)

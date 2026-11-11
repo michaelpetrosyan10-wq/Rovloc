@@ -45,6 +45,16 @@ Attributes.Player = table.freeze({
 	Parachute = "Parachute",
 	ParachuteAt = "ParachuteAt",
 	ParachuteAuto = "ParachuteAuto",
+	-- Lives (LivesRules; the life-state owner is the only writer): the respawns left by source, spent in this order
+	-- (the stage's, the run's, the syringe's), the get-up used on this stage, and the server time a respawn's grace
+	-- (or a plane seat) stops the player being ignored by the Creature (nil: not ignored)
+	StageRespawns = "StageRespawns",
+	RunRespawns = "RunRespawns",
+	SyringeRespawns = "SyringeRespawns",
+	GetUpUsed = "GetUpUsed",
+	IgnoredUntil = "IgnoredUntil",
+	-- Radar (RadarRules): the charges this player holds (personal, 0..RadarConfig MaxCharges)
+	RadarCharges = "RadarCharges",
 })
 
 -- Workspace.Creature
@@ -99,6 +109,13 @@ Attributes.Match = table.freeze({
 	-- stutter (PowerOnSeconds) starts.
 	PowerOffLevel = "PowerOffLevel",
 	PowerOnAt = "PowerOnAt",
+	-- The squad's radar scan (RadarRules; a scan is a squad event): who scanned, the server time it shows from (after
+	-- the raise) and how long it lasts; nil while no scan is live
+	RadarScanBy = "RadarScanBy",
+	RadarScanAt = "RadarScanAt",
+	RadarScanSeconds = "RadarScanSeconds",
+	-- The scripted chase under way (the Last Run, Wheels Up): the squad's failed attempts at it (LivesRules.chaseFailure)
+	ChaseFailures = "ChaseFailures",
 })
 
 -- World instances (written by builders, mutated by services)
@@ -142,6 +159,10 @@ Attributes.World = table.freeze({
 	TrappedUserId = "TrappedUserId",
 	OccupantUserId = "OccupantUserId",
 	HideKind = "HideKind", -- a hiding spot's kind: "Locker" | "Barrel" | "Cabinet"
+	HideSkin = "HideSkin", -- its look (Enums.HideSkin; model and camera only); nil: the kind's own
+	GateSkin = "GateSkin", -- a Gate door's look (Enums.GateSkin); nil: the plain gate
+	GateHidden = "GateHidden", -- a Gate that reads as wall until its script opens it (the Auditorium's hidden door)
+	Drop = "Drop", -- a Gap room's zone: how far its floor lies below the level (an alley's deck)
 	-- decorative parts only (never colliding, queried or touched; never collision or nav geometry): 1 (shapes a
 	-- room's look: the tunnels' mains, cable trays, corpses, lore graffiti) .. 3 (small: debris, rubble, bands,
 	-- hangers, tags). A lower graphics setting may hide Detail >= n; nothing else on the map changes

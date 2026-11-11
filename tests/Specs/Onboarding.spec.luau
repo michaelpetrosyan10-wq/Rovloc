@@ -157,8 +157,8 @@ spec["controls page: one glyph per row for each device, from the bindings"] = fu
 	t.eq(sprint.keyCode, Enum.KeyCode.LeftShift)
 	t.eq(InputGlyphs.forAction("Throw", "KeyboardMouse").text, Strings.get("Input.Mouse.MouseButton1"), "LMB")
 	t.eq(InputGlyphs.forAction("Interact", "Gamepad").keyCode, Enum.KeyCode.ButtonX)
-	t.eq(InputGlyphs.forAction("Objective", "Gamepad").keyCode, Enum.KeyCode.DPadRight)
-	t.eq(InputGlyphs.forAction("Objective", "KeyboardMouse").keyCode, Enum.KeyCode.Tab)
+	t.eq(InputGlyphs.forAction("Radar", "Gamepad").keyCode, Enum.KeyCode.DPadRight)
+	t.eq(InputGlyphs.forAction("Radar", "KeyboardMouse").keyCode, Enum.KeyCode.Tab)
 	t.eq(InputGlyphs.forAction("Flashlight", "Touch").text, Strings.get("Input.Flashlight"), "the touch button's label")
 	t.eq(InputGlyphs.forAction("Interact", "Touch").text, Strings.get("Tutorial.Control.TapPrompt"), "tap the prompt")
 	t.eq(InputGlyphs.forAction("Nonsense", "KeyboardMouse").text, Strings.get("Input.Unbound"))
@@ -662,7 +662,7 @@ spec["every tracker and hint string exists"] = function(t: Expect)
 		"Objective.Stairwell.West",
 		"Lobby.Help",
 		"Lobby.HelpMark",
-		"Input.Objective",
+		"Input.Radar",
 		"Settings.ShowHints",
 	}
 	for _, key in keys do

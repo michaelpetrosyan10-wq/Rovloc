@@ -6,7 +6,9 @@
 --
 -- The walk graph: every passable door's centre on its wall (Boarded doors and Gates excluded) and the entry's arrival
 -- point, joined in straight lines across each room (rooms are convex rects). Crawlways are rooms of kind Crawlway: "on
--- foot" leaves every door into one out; "crawling" keeps them and walks them at CrouchSpeed.
+-- foot" leaves every door into one out; "crawling" keeps them and walks them at CrouchSpeed. A hidden Gate (the
+-- floor's script opens it) counts open for connectivity and the crossing, and shut for every reach (crawlways, hides,
+-- objective hides). A Gap (an alley) is walked like any room: its deck is the players' floor.
 --
 -- Rules (every number from TunnelRules.Defaults unless the layout's tunnels.rules overrides it):
 --   connected   every keep-room and every stair vestibule is reachable on foot from the entry without a crawlway;
@@ -133,7 +135,15 @@ export type TunnelData = {
 -- What TunnelRules needs of a layout (a LayoutSchema.LevelLayout fits).
 type Rect = { x: number, z: number, w: number, d: number }
 type RoomLike = { id: string, kind: string, rect: Rect, height: number? }
-type DoorLike = { id: string, kind: string, rooms: { string }, at: number, width: number?, height: number? }
+type DoorLike = {
+	id: string,
+	kind: string,
+	rooms: { string },
+	at: number,
+	width: number?,
+	height: number?,
+	hidden: boolean?,
+}
 type AnchorLike = { id: string, kind: string, room: string, pos: Vector3 }
 type VentNodeLike = { id: string, x: number, z: number }
 type VentEdgeLike = { a: string, b: string }
@@ -306,16 +316,18 @@ export type WalkGraph = {
 local WALK_DOORS: { [string]: boolean } = { Doorway = true, Door = true, Ajar = true, Airlock = true, RoofDoor = true }
 
 -- The walk graph of `layout`. `crawl`: keep the crawlway doors (their links cost studs x WalkSpeed / CrouchSpeed when
--- `timed`); otherwise crawlways are shut. The vents a squad can always use (grates that never lock) are walked too, whatever `crawl` says: a floor's script may make one the only way on (Level 1's gate
--- bypass); timed, their ducts cost studs x WalkSpeed / VentSpeed.
-function TunnelRules.walkGraph(layout: LayoutLike, crawl: boolean, timed: boolean?): WalkGraph
+-- `timed`); otherwise crawlways are shut. The vents a squad can always use (grates that never lock) are walked too,
+-- whatever `crawl` says: a floor's script may make one the only way on (Level 1's gate bypass); timed, their ducts cost
+-- studs x WalkSpeed / VentSpeed. `hiddenOpen`: walk the hidden Gates too (connectivity and the crossing).
+function TunnelRules.walkGraph(layout: LayoutLike, crawl: boolean, timed: boolean?, hiddenOpen: boolean?): WalkGraph
 	local rooms: { [string]: RoomLike } = {}
 	for _, room in layout.rooms do
 		rooms[room.id] = room
 	end
 	local g: WalkGraph = { pos = {}, links = {}, members = {}, doorNode = {}, crawlMouths = {}, rooms = rooms }
 	for _, door in layout.doors do
-		if not WALK_DOORS[door.kind] or #door.rooms ~= 2 then
+		local hidden = door.kind == "Gate" and door.hidden == true
+		if not (WALK_DOORS[door.kind] or (hidden and hiddenOpen)) or #door.rooms ~= 2 then
 			continue
 		end
 		local a, b = rooms[door.rooms[1]], rooms[door.rooms[2]]
@@ -568,6 +580,11 @@ TunnelRules.shortestLoopIn = shortestLoop
 local STATIONS: { [string]: boolean } = {
 	BreakerPanel = true,
 	ExitLock = true,
+	-- spec v2's stations (the Auditorium's projectors, the airport's wing filler, hangar switch and cabin door)
+	Projector = true,
+	WingFiller = true,
+	HangarSwitch = true,
+	CabinDoor = true,
 }
 local NOT_ITEMS: { [string]: boolean } = { TrapCandidate = true, FlaskCandidate = true, BatteryCandidate = true }
 
@@ -671,17 +688,17 @@ function TunnelRules.measure(layout: LayoutLike): Measures
 		table.insert(m.deadEnds, { node = node.id, length = length })
 	end
 
-	-- on foot (no crawlways): reachability and the crossing
-	local foot = TunnelRules.walkGraph(layout, false)
+	-- on foot (no crawlways): reachability and the crossing, every hidden Gate open (the floor's script opens it)
+	local open = TunnelRules.walkGraph(layout, false, false, true)
 	local entryPos = TunnelRules.arrival(layout, tunnels.entry)
-	local fromEntry = TunnelRules.distances(foot, TunnelRules.seedsAt(foot, tunnels.entry, entryPos))
+	local fromEntry = TunnelRules.distances(open, TunnelRules.seedsAt(open, tunnels.entry, entryPos))
 	local roomsById: { [string]: RoomLike } = {}
 	for _, room in layout.rooms do
 		roomsById[room.id] = room
 	end
 	local function roomReach(dist: { number }, room: string): number
 		local best = INF
-		for _, node in foot.members[room] or {} :: { number } do
+		for _, node in open.members[room] or {} :: { number } do
 			best = math.min(best, dist[node])
 		end
 		return best
@@ -700,7 +717,7 @@ function TunnelRules.measure(layout: LayoutLike): Measures
 		m.crossing = math.max(m.crossing, d)
 	end
 	-- with the crawlways, timed
-	local timedGraph = TunnelRules.walkGraph(layout, true, true)
+	local timedGraph = TunnelRules.walkGraph(layout, true, true, true)
 	local timed = TunnelRules.distances(timedGraph, TunnelRules.seedsAt(timedGraph, tunnels.entry, entryPos))
 	local worst = 0
 	for _, id in tunnels.exits do
@@ -712,7 +729,8 @@ function TunnelRules.measure(layout: LayoutLike): Measures
 	end
 	m.crawlCrossingSeconds = worst / TunnelRules.WalkSpeed
 
-	-- coverage: crawlway mouths and hiding spots, walked on foot
+	-- coverage: crawlway mouths and hiding spots, walked on foot (a hidden Gate shut)
+	local foot = TunnelRules.walkGraph(layout, false)
 	local samples = TunnelRules.samples(layout)
 	m.samples = #samples
 	local crawlSeeds: { { number } } = {}

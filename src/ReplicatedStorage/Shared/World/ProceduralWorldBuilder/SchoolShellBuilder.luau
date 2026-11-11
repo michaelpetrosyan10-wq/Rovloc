@@ -20,6 +20,13 @@
 -- default); Solid rooms are the ground between them: no floor (none on the bottom level, where nothing sees it), no
 -- ceiling, no zone, no wear, and no wall between two of them, so the tunnels' walls stand alone in the rock.
 --
+-- Open air (LayoutSchema: Yard and Gap rooms): no ceiling and no roof cap, a zone that reaches ROOF_ZONE_MIN up. A Gap's
+-- floor is its deck, `drop` below the level, and its sides are lined down to the deck (the buildings' faces either
+-- side); its zone runs from the deck. Every opening into a Gap gets a CreatureBlock: an invisible wall across the
+-- opening, CREATURE_BLOCK_HEIGHT tall, that only the Creature collides with (tag CreatureBlock; the web clamps its
+-- Creature to the same boxes, meta.creatureBlocks). A Gate's door anchor carries its GateSkin and GateHidden; a hidden
+-- Gate gets no hazard plates (it reads as wall).
+--
 -- Every light fixture casts shadows unless its layout entry says `shadows = false`: a Future-lighting light
 -- without shadows shines straight through walls and slabs into the neighbouring rooms. LightingController's
 -- render budget can still turn them off on low-end devices.
@@ -137,6 +144,7 @@ local EPS = 1e-3
 local CEILING = 0.4 -- ceiling panel thickness (hangs below the room height)
 local PLANK = 0.22
 local ROOF_ZONE_MIN = 24 -- open-sky zones extend this high so jumps and platforms stay inside them
+local CREATURE_BLOCK_HEIGHT = 12 -- taller than the Creature (11 standing) across an opening into a Gap
 local SLAB_EDGE_KEY = "ConcreteDark" -- slab edges nobody sees from the street (below grade, the lobby)
 local FACADE_SLAB_EDGE_KEY = "SlabEdge" -- the concrete band between storeys on the brick facade
 
@@ -192,6 +200,11 @@ local TRIGGER_TAGS: { [string]: string } = {
 	FloorDebris = Tags.FloorDebris,
 	Checkpoint = Tags.CheckpointVolume,
 	LevelExit = Tags.LevelExit,
+	GatherZone = Tags.GatherZone,
+	Shutter = Tags.ShutterLine,
+	FallZone = Tags.FallZone,
+	ChuteHatch = Tags.ChuteHatch,
+	JumpGate = Tags.JumpGate,
 }
 
 local LIGHT_COLORS: { [string]: Color3 } = {
@@ -244,7 +257,7 @@ function SchoolShellBuilder.surface(room: Room): Enums.SurfaceKind
 end
 
 local function hasCeiling(room: Room): boolean
-	return not room.noCeiling and room.kind ~= "Chase" and room.kind ~= "Solid"
+	return not LayoutSchema.openSky(room) and room.kind ~= "Chase" and room.kind ~= "Solid"
 end
 
 -- World Y of a room's ceiling underside (or its open top).
@@ -1533,7 +1546,7 @@ local function buildHazardPlates(layout: Layout, rooms: { [string]: Room }, orig
 	local count = 0
 	for _, door in layout.doors do
 		local depth = HAZARD_DEPTH[door.kind]
-		if not depth then
+		if not depth or LayoutSchema.hiddenGate(door) then
 			continue
 		end
 		local a, b = rooms[door.rooms[1]], rooms[door.rooms[2]]
@@ -1562,6 +1575,82 @@ local function buildHazardPlates(layout: Layout, rooms: { [string]: Room }, orig
 		end
 	end
 	return count
+end
+
+-- A Gap's sides lined from its deck up to the underside of the slab around it: the faces of the buildings either side
+-- of the alley (no opening reaches below the floor line).
+local function buildGapWells(layout: Layout, origin: Vector3, shell: Folder): number
+	local count = 0
+	local slab = WorldConfig.SlabThickness
+	local half = WorldConfig.WallThickness / 2
+	for _, room in layout.rooms do
+		local drop = LayoutSchema.roomDrop(room)
+		if room.kind ~= "Gap" or drop <= slab + EPS then
+			continue
+		end
+		local r = room.rect
+		local key = SchoolShellBuilder.wallKey(room)
+		local x0, x1, z0, z1 = r.x, r.x + r.w, r.z, r.z + r.d
+		local sides: { { name: string, lo: Vector3, hi: Vector3 } } = {
+			{
+				name = "N",
+				lo = Vector3.new(x0 - half, -drop, z0 - half),
+				hi = Vector3.new(x1 + half, -slab, z0 + half),
+			},
+			{
+				name = "S",
+				lo = Vector3.new(x0 - half, -drop, z1 - half),
+				hi = Vector3.new(x1 + half, -slab, z1 + half),
+			},
+			{
+				name = "W",
+				lo = Vector3.new(x0 - half, -drop, z0 + half),
+				hi = Vector3.new(x0 + half, -slab, z1 - half),
+			},
+			{
+				name = "E",
+				lo = Vector3.new(x1 - half, -drop, z0 + half),
+				hi = Vector3.new(x1 + half, -slab, z1 - half),
+			},
+		}
+		for _, side in sides do
+			local name = string.format("GapWell_%s_%s", room.id, side.name)
+			if Geometry.box(shell, name, origin + side.lo, origin + side.hi, key) then
+				count += 1
+			end
+		end
+	end
+	return count
+end
+
+-- The CreatureBlocks of `layout`: across every opening into a Gap (LayoutSchema.gapOpenings), on its wall line, the
+-- opening's width, from the floor CREATURE_BLOCK_HEIGHT up; colliding for the Creature only. Returns the parts built.
+function SchoolShellBuilder.buildCreatureBlocks(layout: Layout, origin: Vector3, parent: Instance): { BasePart }
+	local out: { BasePart } = {}
+	local levelId: string = layout.id
+	local half = WorldConfig.WallThickness / 2
+	for _, opening in LayoutSchema.gapOpenings(layout) do
+		local door = opening.door
+		local edge = LayoutSchema.sharedEdge(opening.room.rect, opening.gap.rect)
+		if not edge then
+			continue
+		end
+		local w = LayoutSchema.doorWidth(door) / 2
+		local lo = if edge.axis == "X"
+			then Vector3.new(edge.coord - half, 0, door.at - w)
+			else Vector3.new(door.at - w, 0, edge.coord - half)
+		local hi = if edge.axis == "X"
+			then Vector3.new(edge.coord + half, CREATURE_BLOCK_HEIGHT, door.at + w)
+			else Vector3.new(door.at + w, CREATURE_BLOCK_HEIGHT, edge.coord + half)
+		local part = Geometry.box(parent, "CreatureBlock_" .. door.id, origin + lo, origin + hi, "Concrete")
+		if part then
+			Geometry.makeCreatureBlock(part)
+			part:AddTag(Tags.CreatureBlock)
+			setAttributes(part, { [W.DoorId] = door.id, [W.LevelId] = levelId })
+			table.insert(out, part)
+		end
+	end
+	return out
 end
 
 -- The world box of `room`'s ceiling panel and the fixtures hanging from it (which no missing tile may expose).
@@ -1655,13 +1744,14 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		end
 		local floorKey = SchoolShellBuilder.floorKey(room)
 		local solid = room.kind == "Solid"
+		local deck = -LayoutSchema.roomDrop(room)
 		local pieces: { Rect } = if solid and options.bottom then {} else Geometry.subtractRects(room.rect, holes)
 		for i, piece in pieces do
 			local floor = Geometry.box(
 				shell,
 				string.format("Floor_%s_%d", room.id, i),
-				origin + Vector3.new(piece.x, -slab, piece.z),
-				origin + Vector3.new(piece.x + piece.w, 0, piece.z + piece.d),
+				origin + Vector3.new(piece.x, deck - slab, piece.z),
+				origin + Vector3.new(piece.x + piece.w, deck, piece.z + piece.d),
 				floorKey
 			)
 			if floor and not solid then
@@ -1674,8 +1764,8 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 			Geometry.box(
 				shell,
 				string.format("SlabEdge_%s_%d", room.id, i),
-				origin + Vector3.new(piece.x, -slab, piece.z),
-				origin + Vector3.new(piece.x + piece.w, 0, piece.z + piece.d),
+				origin + Vector3.new(piece.x, deck - slab, piece.z),
+				origin + Vector3.new(piece.x + piece.w, deck, piece.z + piece.d),
 				slabEdgeKey
 			)
 		end
@@ -1718,6 +1808,8 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 	buildWalls(origin, shell, lines, order, wearContext(layout, exteriorSides))
 	buildWainscots(layout, origin, shell, lines, placed, exteriorSides)
 	buildHazardPlates(layout, rooms, origin, shell)
+	buildGapWells(layout, origin, shell)
+	SchoolShellBuilder.buildCreatureBlocks(layout, origin, shell)
 
 	-- Opening dressing
 	for index, item in placed do
@@ -1851,13 +1943,13 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		end
 		local r = room.rect
 		local top = LayoutSchema.roomHeight(layout, room)
-		if room.noCeiling then
+		if LayoutSchema.openSky(room) then
 			top = math.max(top, ROOF_ZONE_MIN)
 		end
 		local zone = Geometry.box(
 			folders.Zones,
 			room.id,
-			origin + Vector3.new(r.x, 0, r.z),
+			origin + Vector3.new(r.x, -LayoutSchema.roomDrop(room), r.z),
 			origin + Vector3.new(r.x + r.w, top, r.z + r.d),
 			"Concrete"
 		)
@@ -1871,6 +1963,9 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 				[W.AcousticPreset] = room.acoustic or layout.acoustic,
 				[W.Surface] = SchoolShellBuilder.surface(room),
 			})
+			if room.kind == "Gap" then
+				zone:SetAttribute(W.Drop, LayoutSchema.roomDrop(room))
+			end
 		end
 	end
 
@@ -2019,6 +2114,12 @@ function SchoolShellBuilder.buildAnchors(layout: Layout, folders: Folders, origi
 		})
 		if door.scriptedId then
 			attachment:SetAttribute(W.ScriptedId, door.scriptedId)
+		end
+		if door.skin then
+			attachment:SetAttribute(W.GateSkin, door.skin)
+		end
+		if LayoutSchema.hiddenGate(door) then
+			attachment:SetAttribute(W.GateHidden, true)
 		end
 	end
 end

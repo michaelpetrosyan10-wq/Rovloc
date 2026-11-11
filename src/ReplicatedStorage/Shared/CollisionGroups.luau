@@ -11,6 +11,8 @@ export type GroupName =
 	| "MonsterPassthrough"
 	| "VentCollider"
 	| "NoCollide"
+	| "CreatureBlock"
+	| "Traversing"
 
 type Pair = { GroupName }
 
@@ -22,12 +24,36 @@ local Projectiles: GroupName = "Projectiles" -- query group for server flask ray
 local MonsterPassthrough: GroupName = "MonsterPassthrough" -- trims, lockers, desks, debris piles
 local VentCollider: GroupName = "VentCollider" -- the 2.6-stud ball that carries a vent crawler
 local NoCollide: GroupName = "NoCollide" -- collides with nothing; never physically queried
+-- an invisible wall across every opening from a walkable room into a Gap (an alley): it stops the Creature only, so
+-- players leap, cross a plank or drop through it (the web clamps the Creature to the same rects: meta.creatureBlocks)
+local CreatureBlock: GroupName = "CreatureBlock"
+-- a character on the leap curve (ParkourRules.leap, sampled by the client): it collides with nothing until it lands
+local Traversing: GroupName = "Traversing"
 
 -- Registration order. "Default" always exists and is never registered.
-local custom: { GroupName } =
-	{ Players, Monster, CorpseProps, Projectiles, MonsterPassthrough, VentCollider, NoCollide }
-local all: { GroupName } =
-	{ Default, Players, Monster, CorpseProps, Projectiles, MonsterPassthrough, VentCollider, NoCollide }
+local custom: { GroupName } = {
+	Players,
+	Monster,
+	CorpseProps,
+	Projectiles,
+	MonsterPassthrough,
+	VentCollider,
+	NoCollide,
+	CreatureBlock,
+	Traversing,
+}
+local all: { GroupName } = {
+	Default,
+	Players,
+	Monster,
+	CorpseProps,
+	Projectiles,
+	MonsterPassthrough,
+	VentCollider,
+	NoCollide,
+	CreatureBlock,
+	Traversing,
+}
 
 local collidingPairs: { Pair } = {
 	{ Default, Default },
@@ -42,6 +68,7 @@ local collidingPairs: { Pair } = {
 	{ CorpseProps, MonsterPassthrough },
 	{ Projectiles, MonsterPassthrough },
 	{ MonsterPassthrough, MonsterPassthrough },
+	{ Monster, CreatureBlock },
 }
 
 local pairSet: { [string]: boolean } = {}
@@ -63,6 +90,8 @@ export type CollisionGroupsModule = {
 	MonsterPassthrough: GroupName,
 	VentCollider: GroupName,
 	NoCollide: GroupName,
+	CreatureBlock: GroupName,
+	Traversing: GroupName,
 	Custom: { GroupName },
 	All: { GroupName },
 	CollidingPairs: { Pair },
@@ -78,6 +107,8 @@ local CollisionGroups: CollisionGroupsModule = {
 	MonsterPassthrough = MonsterPassthrough,
 	VentCollider = VentCollider,
 	NoCollide = NoCollide,
+	CreatureBlock = CreatureBlock,
+	Traversing = Traversing,
 	Custom = custom,
 	All = all,
 	CollidingPairs = collidingPairs,

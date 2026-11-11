@@ -11,6 +11,14 @@
 -- carries the tunnel graph, regions and landmarks, and validate asserts the tunnel rules on them.
 -- A `legacy` layout is one still drawn for the old 240 x 160 footprint (WorldConfig.LegacyFootprint): it tiles that,
 -- and its stair vestibules are not checked against the towers (they moved with the new footprint).
+--
+-- Open air (docs/design/game-spec-v2.md 3.6, 4.7): a `Yard` room is open to the sky (roofs, aprons, gantries: no
+-- ceiling, whatever `noCeiling` says). A `Gap` room is a drop between walkable rooms (an alley): open to the sky, its
+-- floor `drop` studs below the level's (the deck players land on), no floor for the Creature (no Creature anchor in
+-- it), entered only through Doorways (its openings: LayoutSchema.gapOpenings), at each of which the shell stands a
+-- CreatureBlock. A `Gate` door may carry a `skin` (Enums.GateSkin) and be `hidden` (it reads as wall until its script
+-- opens it): the solvability proof, TunnelRules' connectivity and crossing and RunDirector's grate locks count a hidden
+-- Gate open (the floor's script always opens it); every walk an item or a hide is measured on counts it shut.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -49,6 +57,7 @@ export type Room = {
 	surface: Enums.SurfaceKind?, -- footstep surface; defaults from the floor palette entry
 	acoustic: Enums.AcousticPreset?,
 	lights: { Light }?,
+	drop: number?, -- Gap rooms only: how far below the level's floor its floor (the deck) lies
 }
 
 export type Door = {
@@ -61,6 +70,8 @@ export type Door = {
 	scriptedId: string?, -- ScriptedDoor DoorId (HallwayGate, RoofStairDoor, ClassroomDoor)
 	crawlOnly: boolean?, -- a crawlway's mouth: players crouch through, the Creature never passes
 	clearance: number?, -- head room through the opening (default LayoutSchema.doorClearance)
+	skin: Enums.GateSkin?, -- Gate doors only: its look
+	hidden: boolean?, -- Gate doors only: reads as wall until its script opens it
 }
 
 export type VentNodeSpec = {
@@ -282,6 +293,45 @@ function LayoutSchema.doorCrawlOnly(layout: LevelLayout, door: Door): boolean
 	return false
 end
 
+-- Whether `room` is open to the sky: a Yard or a Gap, or any room with `noCeiling`.
+function LayoutSchema.openSky(room: Room): boolean
+	return room.kind == "Yard" or room.kind == "Gap" or room.noCeiling == true
+end
+
+-- How far below the level's floor `room`'s floor lies (a Gap's deck; 0 for every other room).
+function LayoutSchema.roomDrop(room: Room): number
+	return if room.kind == "Gap" then room.drop or 0 else 0
+end
+
+-- Whether the Creature has a floor in `room` (never in a Gap, a crawlway, a chase or solid ground).
+function LayoutSchema.creatureFloor(room: Room): boolean
+	return room.kind ~= "Gap" and room.kind ~= "Crawlway" and room.kind ~= "Chase" and room.kind ~= "Solid"
+end
+
+-- Whether a door is a hidden Gate (open for connectivity, shut for every item and hide reach).
+function LayoutSchema.hiddenGate(door: Door): boolean
+	return door.kind == "Gate" and door.hidden == true
+end
+
+-- The openings into a Gap: every passable door between a Gap and a room that is not one, in layout order, with the
+-- room on the near side. A CreatureBlock stands in each.
+function LayoutSchema.gapOpenings(layout: LevelLayout): { { door: Door, gap: Room, room: Room } }
+	local rooms = LayoutSchema.indexRooms(layout)
+	local out: { { door: Door, gap: Room, room: Room } } = {}
+	for _, door in layout.doors do
+		if door.kind == "Boarded" or #door.rooms ~= 2 then
+			continue
+		end
+		local a, b = rooms[door.rooms[1]], rooms[door.rooms[2]]
+		if not a or not b or (a.kind == "Gap") == (b.kind == "Gap") then
+			continue
+		end
+		local gap, room = if a.kind == "Gap" then a else b, if a.kind == "Gap" then b else a
+		table.insert(out, { door = door, gap = gap, room = room })
+	end
+	return out
+end
+
 -- The footprint a layout's rooms tile: the school's, or the old one for a legacy layout.
 function LayoutSchema.footprintOf(layout: LevelLayout): Rect
 	local size = if layout.legacy then WorldConfig.LegacyFootprint else WorldConfig.FootprintSize
@@ -389,7 +439,7 @@ local function stairwellRooms(layoutId: string): { [string]: WorldConfig.Stairwe
 end
 
 -- Graph used for the solvability proof: rooms + vent nodes, joined by doors, grates and ducts.
--- `strict` treats every lockable grate as locked and every Gate / Boarded door as shut.
+-- `strict` treats every lockable grate as locked and every Gate (but a hidden one) / Boarded door as shut.
 local function reachable(layout: LevelLayout, from: string, strict: boolean): { [string]: boolean }
 	local adjacency: { [string]: { string } } = {}
 	local function link(a: string, b: string)
@@ -399,7 +449,8 @@ local function reachable(layout: LevelLayout, from: string, strict: boolean): { 
 		table.insert(adjacency[b], a)
 	end
 	for _, door in layout.doors do
-		local passable = door.kind ~= "Boarded" and not (strict and door.kind == "Gate")
+		local passable = door.kind ~= "Boarded"
+			and not (strict and door.kind == "Gate" and not LayoutSchema.hiddenGate(door))
 		if passable and #door.rooms == 2 then
 			link("room:" .. door.rooms[1], "room:" .. door.rooms[2])
 		end
@@ -537,9 +588,9 @@ local function ductBoxes(vents: VentNetwork, nodes: { [string]: VentNodeSpec }):
 end
 
 -- The lowest walkable level under the level-local area `area` of `room`: the bore floor of a duct sunk below a
--- chase's floor, otherwise the floor (0).
+-- chase's floor, a Gap's deck, otherwise the floor (0).
 local function floorUnder(room: Room, area: Rect, ducts: { DuctBox }): number
-	local floor = 0
+	local floor = -LayoutSchema.roomDrop(room)
 	if room.kind == "Chase" then
 		for _, duct in ducts do
 			local footprint = LayoutSchema.rect(duct.x0, duct.z0, duct.x1 - duct.x0, duct.z1 - duct.z0)
@@ -585,6 +636,20 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		if room.wallHeight and room.wallHeight > LayoutSchema.roomHeight(layout, room) + EPS then
 			pushf(errors, "room %s wallHeight exceeds its height", room.id)
 		end
+		if room.kind == "Gap" then
+			local drop = room.drop
+			if drop == nil or not (drop > 0 and drop < math.huge) then
+				pushf(errors, "gap %s needs a positive drop (its deck below the level's floor)", room.id)
+			end
+			if room.lights and #room.lights > 0 then
+				pushf(errors, "gap %s holds lights (it is open air)", room.id)
+			end
+		elseif room.drop ~= nil then
+			pushf(errors, "room %s has a drop; only a Gap's floor lies below the level", room.id)
+		end
+		if (room.kind == "Yard" or room.kind == "Gap") and room.ceiling ~= nil then
+			pushf(errors, "room %s is open to the sky and names a ceiling", room.id)
+		end
 		for j = i + 1, #layout.rooms do
 			local other = layout.rooms[j]
 			if LayoutSchema.rectOverlapArea(room.rect, other.rect) > 0 then
@@ -626,6 +691,12 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 	if not rooms[layout.exit] then
 		pushf(errors, "exit room %s is missing", layout.exit)
 	end
+	for _, id in { layout.entry, layout.exit } do
+		local room = rooms[id]
+		if room and room.kind == "Gap" then
+			pushf(errors, "room %s is a gap and cannot be the entry or the exit", id)
+		end
+	end
 
 	-- Doors
 	for _, door in layout.doors do
@@ -644,6 +715,15 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		end
 		if a.kind == "Solid" or b.kind == "Solid" then
 			pushf(errors, "door %s opens into solid ground", door.id)
+		end
+		if (a.kind == "Gap" or b.kind == "Gap") and door.kind ~= "Doorway" then
+			pushf(errors, "door %s into a gap must be a Doorway (an opening), not %s", door.id, door.kind)
+		end
+		if door.kind ~= "Gate" and (door.skin ~= nil or door.hidden ~= nil) then
+			pushf(errors, "door %s has a gate skin or is hidden but is a %s, not a Gate", door.id, door.kind)
+		end
+		if door.skin ~= nil and not Enums.has(Enums.GateSkin, door.skin) then
+			pushf(errors, "door %s has an unknown gate skin %s", door.id, tostring(door.skin))
 		end
 		local edge = LayoutSchema.sharedEdge(a.rect, b.rect)
 		if not edge then
@@ -888,6 +968,21 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 				anchor.room,
 				floor,
 				top
+			)
+		end
+	end
+	for _, anchor in layout.anchors do
+		local room = rooms[anchor.room]
+		local creature = anchor.kind == "PatrolWaypoint"
+			or anchor.kind == "CreatureSpawn"
+			or anchor.kind == "CreatureScarePose"
+		if room and room.kind == "Gap" and creature then
+			pushf(
+				errors,
+				"anchor %s (%s) stands in gap %s, where the Creature has no floor",
+				anchor.id,
+				anchor.kind,
+				room.id
 			)
 		end
 	end

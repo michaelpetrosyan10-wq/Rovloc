@@ -1,6 +1,6 @@
 --!strict
 -- SquadPanel: who is in the run with me and how each of them is doing. The core player list is off (HUD: Tab is the
--- Objective action), so this compact sheet carries the squad, as the browser build's co-op HUD does
+-- Radar action), so this compact sheet carries the squad, as the browser build's co-op HUD does
 -- (web/src/game/coop/ui.js).
 --
 --   * Rows. Every participant of the run (Player.RunOutcome is set on exactly them, from BeginRun to EndRun): me
@@ -18,7 +18,7 @@
 --     while the tracker has faded (ObjectiveTracker.GetTrackerAlpha) and yields it as soon as the tracker comes back.
 --   * When. During a run (Deploying / InRun) with two or more participants; never while solo. Hidden with the HUD
 --     (cutscenes, jumpscares, results), in the Cutscene / Menu input contexts and while the onboarding screens are up.
---     A status changing, someone joining or leaving the list, or the Objective action (Tab, d-pad right, GOAL) shows
+--     A status changing, someone joining or leaving the list, or the Radar action (Tab, d-pad right, RADAR) shows
 --     it fully for HOLD seconds; then it fades to a dim IDLE_ALPHA, readable at a glance without drawing the eye.
 --
 -- Pure (tests/Specs/SquadPanel.spec.luau): status, statusKey, statusColor, rows, signature, visible, restAlpha,
@@ -85,7 +85,7 @@ local MARGIN = 14
 local TOUCH_TOP = 72 -- the tracker's top on touch: the corner the two share
 local ROW_HEIGHT = 18
 local SCAN_SECONDS = 0.25
-local HOLD = 6 -- seconds fully shown after a change or the Objective action
+local HOLD = 6 -- seconds fully shown after a change or the Radar action
 local FADE = 2.2 -- seconds easing down to the idle alpha after that
 local IDLE_ALPHA = 0.38
 local FADE_IN = 4 -- alpha per second
@@ -371,7 +371,7 @@ function SquadPanel.Start()
 		return
 	end
 	serviceTrove:Add(current.gui)
-	serviceTrove:Add(InputController.Action("Objective"):Connect(function(phase: InputController.Phase)
+	serviceTrove:Add(InputController.Action("Radar"):Connect(function(phase: InputController.Phase)
 		if phase == "Begin" then
 			activeAt = clock
 		end

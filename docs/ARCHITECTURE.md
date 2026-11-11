@@ -62,32 +62,47 @@ Everything here is `--!strict` Luau. Requires go by instance path through the Ro
   - the builder (`init.luau`): `BuildAuthoritative` (the server's school, lobby and stair towers), `BuildCosmetic`
     (each client's skyline and dressing) and `BuildFixtures` (each run's doors, grates, lockers, traps);
   - the shell, stairwells, lobby and skyline builders;
-  - the props under `Props/`;
-  - the level blueprints (`Layouts/*.luau`, validated by `LayoutSchema`);
+  - the props under `Props/`: `Props/init` finds its builders itself (every child module with a `register` function,
+    in name order, on Roblox and under the Lune harness alike; the kits PropKit, ObjectiveKit and WallPlanner have
+    none), so a new prop builder is its own file and nothing else;
+  - the level blueprints (`Layouts/*.luau`, validated by `LayoutSchema`; open air is a `Yard` room, an alley a `Gap`
+    room whose deck lies `drop` below the level, with a CreatureBlock in every opening; a `Gate` may carry a skin and
+    be hidden);
   - the Creature rig (`CreatureRigBuilder`);
-  - `ZoneGraph` (rooms and door edges);
+  - `ZoneGraph` (rooms and door edges; an opening into a Gap is a `lip` players cross and the Creature never does);
   - lighting: `LightingMood` (which fixtures burn, each level's film and its Roblox render), `LightingRig` and
     `FixtureGlow`;
   - surfaces: `Palette`, `MaterialLibrary`, `Finishes` and `SurfaceArt`;
   - `ObjectivePlaces`.
 - **`World/RunDirector.luau`:** the pure, seeded run plan: objective picks, traps, flasks, batteries, grate locks and
   routes. Roblox's `NoiseAndDirectorService` runs it for every run. The web export runs it at the fixed seed and
-  writes its rules into the metadata, and `web/src/game/worldData.js` ports them.
+  writes its rules into the metadata, and `web/src/game/worldData.js` ports them. Spec v2's picks ride in the plan
+  beside today's props, each on its own stream so today's picks never move: `plan.batteries` (the radar's batteries
+  per sneaking stage, in pick order: a squad takes the first `RadarRules.batteriesPlaced`), `plan.flasks` (the stun
+  flasks per stage) and the rooftops' feeders in `plan.objectives`.
 - **`World/Volumetrics.luau`:** the moonlight window specs. Roblox's `LightingController/Volumetrics` lights them; the
   web bakes them (`meta.windows`).
 - **`Vents/`:** `VentGraph` (the duct network) and `VentPathfinder` (A* and retreat paths on it).
 - **`Config/`:**
   - the game's rules: `GameConfig`, `DifficultyConfig`, `CreatureConfig`, `ObjectiveConfig`, `NoiseConfig`,
-    `PerkConfig` and `TutorialConfig`;
+    `PerkConfig`, `TutorialConfig`, `StageConfig` and spec v2's `LivesConfig`, `RadarConfig` and `ParkourConfig`;
   - the world: `WorldConfig` and `TextureAssets`;
   - the client: `CameraConfig`, `InputConfig`, `SettingsSchema` and `GraphicsConfig` (§5).
+- **`Rules/`:** the pure rules both platforms run, `LivesRules`, `RadarRules` and `ParkourRules` (and the later
+  packages' modules beside them). Two conventions hold for them and their configs:
+  - a config is a frozen table of numbers with `exportMeta()`: plain JSON data of what the website needs;
+  - a rule module is pure (no engine type, service, clock, task or randomness outside `Util/Rng`; its one engine call
+    is the require path) and has `golden()`: rows `{ name, fn, args, expect }`, `expect` what the function returns for
+    `args`, at least 12 a function, covering every branch and both difficulties. Its spec asserts every row and the
+    spec's numbers on their own (written from the spec's text, never read back from the config); `tests/RuleGolden`
+    holds the shared checks. The website ports the module and replays the same rows (`build/cache/golden.json`).
 - **The contracts:** `Enums`, `Types`, `Attributes`, `Tags`, `CollisionGroups`, `Instances` and `Strings`.
 - **Roblox-only shared modules** (used by both the server and the clients):
   - `Net`: the remotes and their validation;
   - `Audio`: the synthesizer, voice pool and buses;
   - `Animation/ProceduralAnimator`;
   - `Sequence`: `Timeline`, the scenes and the door, locker and parachute motions;
-  - `Util`: `Signal`, `Trove`, `Spring`, `SpatialQuery`, `Ballistics`, `WaterRules`, `ObjectiveState`, `BinaryHeap`,
+  - `Util`: `Signal`, `Trove`, `Spring`, `SpatialQuery`, `Ballistics`, `ObjectiveState`, `BinaryHeap`,
     plus `Log`, `MathUtil` and `Rng` (the world's random streams, §6), which the world builder also uses.
 
 ## 3. The Roblox runtime
@@ -457,7 +472,7 @@ src/ (Luau world builder) ──rojo build──▶ place ──Lune export─�
 
 | Step | Command (in `web/`) | What happens |
 | --- | --- | --- |
-| Export | `npm run export` | `tools/export-world.luau` builds `default.project.json` with Rojo and loads it in Lune through `tools/lune/harness.luau`. It then does what a run's server does at the fixed seed 20251029 on Standard: builds the school, the run's plan with props and fixtures, a prop on every other candidate anchor a run may pick, the cosmetic dressing, the Creature rig and the moonlight windows. It writes `build/cache/world-raw.json`, and RunDirector's plans for a spread of seeds to `build/cache/run-plans.json` (the data test replays them on the web's port). |
+| Export | `npm run export` | `tools/export-world.luau` builds `default.project.json` with Rojo and loads it in Lune through `tools/lune/harness.luau`. It then does what a run's server does at the fixed seed 20251029 on Standard: builds the school, the run's plan with props and fixtures, a prop on every other candidate anchor a run may pick, the cosmetic dressing, the Creature rig and the moonlight windows. It writes `build/cache/world-raw.json`, and RunDirector's plans for a spread of seeds to `build/cache/run-plans.json` (the data test replays them on the web's port). Generically, with no code per module: every `Shared/Config` and `Shared/Rules` module with `exportMeta()` lands in the metadata under its name with a lower-case first letter (`meta.stageConfig`, `meta.livesConfig`, ...), and every `golden()` in `build/cache/golden.json` as `{ [moduleName]: rows }`. |
 | Textures | `npm run textures` | `tools/textures.py` packs the generator's maps (`tools/textures/`) into WebP, one set per graphics tier: 2048 (generated at 2048), 1024, 512 and 256. |
 | Bake | `npm run bake` | `tools/bake.mjs` tessellates every part and bakes vertex light (BVH shadows, AO, sky, probes). It packs the result into `build/world.json` (metadata) and `build/world.bin` (quantised streams). See `web/DATA.md`. |
 | Build | `npm run build` | `tools/build.mjs` bundles `src/` with esbuild and writes the site to `site/beta/` (`index.html` + content-hashed `assets/`: the bundle, the gzipped world, every texture set, the atlases; the page boots on the 256 set and streams its tier's; every reference is relative, so it works from `/beta/`) and the offline lite build `dist/Rovloc-lite.html` (one file, the Low and Potato sets inline). `--stamp "BETA 10 NOV"` names the build in the corner of its title screen; a build without it shows nothing. |
@@ -562,7 +577,7 @@ checks, in order:
 
 | Command | Checks |
 | --- | --- |
-| `node tools/data-test.mjs` | The world data codec round trip and structural checks of the baked world. |
+| `node tools/data-test.mjs` | The world data codec round trip and structural checks of the baked world; the exported configs in the metadata, the golden rows, and the plan's spec v2 picks. |
 | `npm run check` | Builds the site and the lite file, then loads them headless. `site/` is served as Vercel serves it (`vercel.json`'s redirect and header rules applied): the beta at `/beta/` names only relative assets, fetches nothing but its own files and none fails (Potato only the light ones, through a solo run from the title into Level 0), shows its build stamp and no dev control without `?dev`; the stable page at `/` still boots, and each page boots on the game the other saved. The lite file boots from `file://` with no request. No console errors; frame times per graphics tier at 4x CPU throttle; screenshots per tier. |
 | `node tools/parkour-test.mjs` | The player's movement on the tick: one tick-indexed input trace gives identical body states at 20, 30, 60 and 144 fps, with irregular frame times and with stalls; the jump apex, the top speeds, the sprint jump, the hurdle and the wall; the widest gap a free jump crosses (under 10, never 12); the step-up limit, and that nothing too high to step onto is walked through; latched presses (single-frame presses, a held jump, the pause menu, locked controls); the render interpolation (teleports are cuts, the pause, a stall); the vent rail and the parachute at 20 and 144 fps; the eye the levels see. |
 | `node tools/tier-parity.mjs` | The same scripted run at Max and Potato (20 and 144 fps render loops): identical gameplay every tick. |

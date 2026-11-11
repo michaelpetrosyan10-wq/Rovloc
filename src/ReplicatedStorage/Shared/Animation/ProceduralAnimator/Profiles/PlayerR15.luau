@@ -956,6 +956,11 @@ local states: { [string]: StateSpec } = {
 		settle = true,
 	}),
 }
+-- Spec v2's states (docs/design/game-spec-v2.md 3.1, 4.8) pose as their nearest body: a slide as the crouch it ends
+-- in, a leap as the sprint it starts from, a plane seat as the neutral standing pose.
+states.Sliding = states.Crouching
+states.Leaping = states.Sprinting
+states.Seated = states.Scripted
 
 local profile: Profile = {
 	name = "PlayerR15",

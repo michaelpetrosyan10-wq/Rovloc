@@ -1016,11 +1016,12 @@ for (const b of builderList) {
 }
 log(`chunks: ${chunks.length}, ${vertexCursor} vertices, ${totalTris} triangles`);
 
-// Collision per level key: coarse triangles of every colliding static part (invisible colliders included).
+// Collision per level key: coarse triangles of every colliding static part (invisible colliders included), but the
+// CreatureBlocks: they stop the Creature only (meta.creatureBlocks), never a player.
 const collision = {};
 const collisionParts = {};
 for (const p of parts) {
-  if (!p.canCollide || p.entity) continue;
+  if (!p.canCollide || p.entity || p.group === 'CreatureBlock') continue;
   (collisionParts[p.level] ||= []).push(p);
 }
 let cvCursor = 0;
@@ -1116,5 +1117,6 @@ const meta = buildMeta(raw, {
 });
 fs.writeFileSync(path.join(OUT, 'world.json'), JSON.stringify(meta));
 fs.mkdirSync(path.join(OUT, 'cache'), { recursive: true });
-fs.writeFileSync(path.join(OUT, 'cache', 'golden.json'), JSON.stringify({ format: FORMAT_VERSION, samples: golden }));
+// the codec's samples (the shared rules' golden rows own cache/golden.json: the export writes them)
+fs.writeFileSync(path.join(OUT, 'cache', 'codec-golden.json'), JSON.stringify({ format: FORMAT_VERSION, samples: golden }));
 log(`wrote world.bin (${(bytes / 1e6).toFixed(2)} MB) + world.json (${(fs.statSync(path.join(OUT, 'world.json')).size / 1e6).toFixed(2)} MB)`);

@@ -75,10 +75,21 @@ local LOCK_LEAVES: { [string]: { string } } = {
 -- Helpers
 --------------------------------------------------------------------------------
 
--- The floors with an item to find (the Auditorium's interim floor has none).
-local function itemFloors(): { ObjectiveConfig.FloorSpec }
+-- The floors of the levels the world builds (the school's; the city's rows wait for their layouts).
+local function builtFloors(): { ObjectiveConfig.FloorSpec }
 	local out: { ObjectiveConfig.FloorSpec } = {}
 	for _, spec in ObjectiveConfig.Floors do
+		if WorldConfig.isSchoolLevel(spec.levelId) then
+			table.insert(out, spec)
+		end
+	end
+	return out
+end
+
+-- The built floors with an item to find (the Auditorium's interim floor has none).
+local function itemFloors(): { ObjectiveConfig.FloorSpec }
+	local out: { ObjectiveConfig.FloorSpec } = {}
+	for _, spec in builtFloors() do
 		if spec.item then
 			table.insert(out, spec)
 		end
@@ -255,8 +266,9 @@ end
 
 return {
 	["config: every floor has its steps and its holds; an item floor its item and its lock"] = function(t: Expect)
-		t.eq(#ObjectiveConfig.Floors, 3, "the basement, the hallways and the Auditorium storey")
-		for i, spec in ObjectiveConfig.Floors do
+		t.eq(#ObjectiveConfig.Floors, 5, "the basement, the hallways, the Auditorium storey and the city's two")
+		t.eq(#builtFloors(), 3, "the school's three floors below the roof")
+		for i, spec in builtFloors() do
 			t.eq(spec.floor, i - 1, spec.id .. " floor number")
 			t.eq(spec.levelId, WorldConfig.LevelOrder[i], spec.id .. " level in run order")
 			t.truthy(Strings.has(spec.title), spec.id .. " title string")
@@ -289,6 +301,22 @@ return {
 		t.eq(ObjectiveConfig.forLevel("Level3_Roof"), nil, "no floor objective on the roof")
 		t.eq((ObjectiveConfig.Floors[1].item :: ObjectiveConfig.ItemSpec).guarded, 2, "two fuses guarded")
 		t.eq(#itemFloors(), 2, "two floors with an item")
+		-- the city's floors, as data until their layouts come: a lock step among their steps, an item or stations
+		for _, spec in ObjectiveConfig.Floors do
+			if WorldConfig.isSchoolLevel(spec.levelId) then
+				continue
+			end
+			local stepIds: { [string]: boolean } = {}
+			for _, step in spec.steps do
+				t.truthy(Strings.has(step.label), step.id .. " label")
+				stepIds[step.id] = true
+			end
+			t.truthy(stepIds[spec.lockStep or ""], spec.id .. " unlocks on one of its steps")
+			t.truthy(spec.item ~= nil or spec.stations ~= nil, spec.id .. " has something to find or work")
+			if spec.lockVariant then
+				t.truthy(Strings.has(spec.lockReason or ""), spec.id .. " lock reason string")
+			end
+		end
 	end,
 
 	["layouts: candidates, stations and locks on every floor"] = function(t: Expect)
@@ -378,7 +406,7 @@ return {
 	end,
 
 	["layouts: nothing blocks a doorway, a vent mouth, an airlock or a corridor"] = function(t: Expect)
-		for _, spec in ObjectiveConfig.Floors do
+		for _, spec in builtFloors() do
 			local layout = layoutOf(spec.levelId)
 			local rooms = LayoutSchema.indexRooms(layout)
 			local nodes: { [string]: LayoutSchema.VentNodeSpec } = {}
@@ -430,7 +458,7 @@ return {
 	["layouts: every objective room is reachable with the gates shut and the lockable grates locked"] = function(
 		t: Expect
 	)
-		for _, spec in ObjectiveConfig.Floors do
+		for _, spec in builtFloors() do
 			local layout = layoutOf(spec.levelId)
 			local reach = strictReach(layout)
 			t.truthy(reach[layout.exit], spec.levelId .. " exit reachable")
@@ -789,7 +817,7 @@ return {
 	end,
 
 	["layouts: a hiding spot within reach of every objective step"] = function(t: Expect)
-		for _, spec in ObjectiveConfig.Floors do
+		for _, spec in builtFloors() do
 			local layout = layoutOf(spec.levelId)
 			for _, place in ObjectivePlaces.places(layout) do
 				local hide = ObjectivePlaces.nearestHide(layout, place)
@@ -1054,7 +1082,7 @@ return {
 
 	["locks: every exit holds its floor's lock variant on its door"] = function(t: Expect)
 		local built = runtime()
-		for _, spec in ObjectiveConfig.Floors do
+		for _, spec in builtFloors() do
 			local folder = built[spec.levelId]:FindFirstChild(LockBuilder.Folders.ExitLock)
 			if not spec.lockVariant then
 				t.eq(folder, nil, spec.levelId .. " has no door lock")

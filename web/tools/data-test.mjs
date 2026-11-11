@@ -2,7 +2,7 @@
 //
 // 1. The codec on synthetic data: delta / triangle-delta coding at every element width, the sqrt light encoding.
 // 2. The baked world: decodeWorld(world.json, world.bin) against the bake's own pre-encoding samples
-//    (build/cache/golden.json): positions within half a quantisation step, UVs within half a UV step, colours, light
+//    (build/cache/codec-golden.json): positions within half a quantisation step, UVs within half a UV step, colours, light
 //    bytes, flicker pairs and indices exact. Then structural checks over everything: indices in range, positions inside
 //    their chunk's bounds, unit normals, flicker groups that exist, entity ranges that tile their chunks, every vent
 //    grate in both looks (each drawn, pivoting and colliding alike), creature bone indices, collision and probe tables,
@@ -25,6 +25,11 @@
 //    of RunDirector against RunDirector itself: for every seed and difficulty of the export's build/cache/run-plans.json,
 //    the same objective picks and guard traps, the same bear trap, flask and battery anchors, every prop's variant
 //    (variantOf), the same locked grates and the same exit stairwells.
+// 5. The shared rules: every config the export lists (meta.exportedConfigs: each Shared/Config and Shared/Rules module
+//    with an exportMeta) is in meta under its name, the ones the website needs among them; build/cache/golden.json
+//    parses and gives every rule module rows ({ name, fn, args, expect }, names unique, at least 12 per function); the
+//    run plan's spec v2 picks (meta.plan.batteries, meta.plan.flasks and every replayed plan's) are anchors of the right
+//    kind on their level, as many as the rules allow; the CreatureBlocks (meta.creatureBlocks) are boxes on a level.
 // Exits non-zero on the first category with failures (all failures are listed).
 
 import fs from 'node:fs';
@@ -123,7 +128,7 @@ const decodeMs = performance.now() - t0;
 console.log(`  decoded ${world.chunks.length} chunks in ${decodeMs.toFixed(0)} ms`);
 
 // golden samples
-const goldenFile = path.join(buildDir, 'cache', 'golden.json');
+const goldenFile = path.join(buildDir, 'cache', 'codec-golden.json');
 let goldenCount = 0;
 if (fs.existsSync(goldenFile)) {
   const golden = JSON.parse(fs.readFileSync(goldenFile, 'utf8'));
@@ -384,8 +389,8 @@ for (const e of meta.entities) {
 // the props the web draws again away from the world (flaskFx.js: the flask in a hand, in flight and a teammate's): a
 // chemical flask on any anchor is its anchor's variant (RunDirector.variantOf) and looks exactly as the exported world
 // prop (ChemicalFlaskBuilder.lookOf on the world's Rng: the fill line's three liquid tiers, the crack and its frame, the
-// liquid colour). The four-level school has no flask anchors until RunDirector picks flasks again (WP01b): the count of
-// exported flasks is then only held to the baked entities.
+// liquid colour). One flask is exported on every FlaskCandidate anchor; while the floors have none (the four-level school
+// until its flask candidates are added), there is no flask to check, else there must be some.
 {
   const before = failures;
   const rawFile = path.join(buildDir, 'cache', 'world-raw.json');
@@ -441,6 +446,7 @@ for (const e of meta.entities) {
     const anchored = meta.anchors.filter((a) => a.kind === 'FlaskCandidate').length;
     check(flasks === meta.entities.filter((x) => x.type === 'ChemicalFlask').length && flasks === anchored,
       `${flasks} chemical flasks exported and baked, one per FlaskCandidate anchor (${anchored})`);
+    if (anchored > 0) check(flasks > 0, `${flasks} chemical flasks with ${anchored} FlaskCandidate anchors`);
   }
   if (failures === before) console.log(`  ok   ${flasks} chemical flasks (${cracked} cracked) look as flaskFx draws their variant`);
 }
@@ -1173,6 +1179,105 @@ console.log('== run plan (the web replays RunDirector)');
   }
   if (failures === before) console.log(`  ok   Rng golden values; ${replayed} RunDirector plans replayed pick for pick`);
   if (unported.length) console.log(`  skip props and routes of ${unported.join(', ')}: not in the web's LevelOrder yet (src/game/config.js, WP02)`);
+}
+
+// the shared rules: the configs in meta, the golden rows, the run plan's spec v2 picks, the CreatureBlocks
+console.log('== shared rules (configs, goldens, picks)');
+{
+  const before = failures;
+  const listed = Array.isArray(meta.exportedConfigs) ? meta.exportedConfigs : [];
+  const NEEDED = ['stageConfig', 'worldConfig', 'objectiveConfig', 'difficultyConfig', 'gameConfig', 'noiseConfig',
+    'inputConfig', 'settingsSchema', 'tutorialConfig', 'livesConfig', 'radarConfig', 'parkourConfig'];
+  for (const key of NEEDED) check(listed.includes(key), `meta.exportedConfigs lists ${key}`);
+  for (const key of listed) {
+    check(meta[key] && typeof meta[key] === 'object', `meta.${key} is the exported config`);
+  }
+  const stages = (meta.stageConfig && meta.stageConfig.order) || [];
+  check(stages.length === 9 && stages[0].id === 'BackLot' && stages[8].id === 'Bahamas', `meta.stageConfig: ${stages.length} stages`);
+  for (const d of ['Standard', 'Nightmare']) {
+    check(meta.livesConfig && meta.livesConfig[d] && meta.radarConfig && meta.radarConfig[d], `lives and radar numbers for ${d}`);
+  }
+  check(meta.parkourConfig && meta.parkourConfig.Leap && meta.parkourConfig.Leap.Gap === 12, 'meta.parkourConfig: the leap gap is 12');
+
+  // the golden rows (written by the export; the website's ports of LivesRules, RadarRules and ParkourRules replay them)
+  const goldenRules = path.join(buildDir, 'cache', 'golden.json');
+  let modules = {};
+  try {
+    modules = JSON.parse(fs.readFileSync(goldenRules, 'utf8'));
+  } catch (err) {
+    fail(`golden rows at ${goldenRules}: ${err.message}`);
+  }
+  const names = Object.keys(modules).sort();
+  for (const module of ['LivesRules', 'RadarRules', 'ParkourRules']) check(names.includes(module), `golden.json has ${module}`);
+  let rows = 0;
+  for (const module of names) {
+    const list = modules[module];
+    check(Array.isArray(list) && list.length > 0, `${module} has golden rows`);
+    if (!Array.isArray(list)) continue;
+    const seen = new Set();
+    const perFn = new Map();
+    for (const row of list) {
+      rows++;
+      check(typeof row.name === 'string' && !seen.has(row.name), `${module}: row ${row.name} is named once`);
+      seen.add(row.name);
+      check(typeof row.fn === 'string' && Array.isArray(row.args) && row.expect !== undefined, `${module} / ${row.name}: fn, args, expect`);
+      perFn.set(row.fn, (perFn.get(row.fn) || 0) + 1);
+    }
+    for (const [fn, n] of perFn) check(n >= 12, `${module}.${fn}: ${n} golden rows (at least 12)`);
+  }
+
+  // the run plan's spec v2 picks: radar batteries per sneaking stage, stun flasks per stage
+  const anchorsByLevel = new Map();
+  for (const a of meta.anchors || []) {
+    if (!anchorsByLevel.has(a.level)) anchorsByLevel.set(a.level, new Map());
+    anchorsByLevel.get(a.level).set(a.id, a);
+  }
+  const radar = meta.radarConfig || {};
+  const flaskCounts = (meta.difficultyConfig || {});
+  const sneaking = new Set((meta.stageConfig && meta.stageConfig.sneaking) || []);
+  const levels = (meta.worldConfig && meta.worldConfig.LevelOrder) || [];
+  const plansFile = path.join(buildDir, 'cache', 'run-plans.json');
+  const plans = fs.existsSync(plansFile) ? JSON.parse(fs.readFileSync(plansFile, 'utf8')) : [];
+  // an empty Luau table travels as {} (JSON cannot tell it from an empty list)
+  const list = (v) => (Array.isArray(v) ? v : v && typeof v === 'object' && Object.keys(v).length === 0 ? [] : null);
+  const checkPicks = (tag, difficulty, batteries, flasks) => {
+    for (const level of levels) {
+      const of = (kind) => [...(anchorsByLevel.get(level) || new Map()).values()].filter((a) => a.kind === kind).length;
+      if (sneaking.has(level)) {
+        const picks = batteries && batteries[level];
+        const anchors = picks ? list(picks.anchors) : null;
+        const want = Math.min((radar[difficulty] || {}).BatteriesMax, of('BatteryCandidate'));
+        check(anchors && anchors.length === want, `${tag} ${level}: ${anchors ? anchors.length : 0} batteries picked (want ${want})`);
+        for (const id of anchors || []) {
+          const a = (anchorsByLevel.get(level) || new Map()).get(id);
+          check(a && a.kind === 'BatteryCandidate', `${tag} ${level}: battery ${id} is a BatteryCandidate`);
+        }
+      } else {
+        check(!(batteries && batteries[level]), `${tag} ${level}: no radar batteries (not a sneaking stage)`);
+      }
+      const count = ((flaskCounts[difficulty] || {}).flasksPerStage || {})[level] || 0;
+      const got = list((flasks && flasks[level]) || []);
+      check(got !== null, `${tag} ${level}: the flasks are a list`);
+      if (got === null) continue;
+      check(got.length === Math.min(count, of('FlaskCandidate')), `${tag} ${level}: ${got.length} flasks picked of ${count}`);
+      for (const id of got) {
+        const a = (anchorsByLevel.get(level) || new Map()).get(id);
+        check(a && a.kind === 'FlaskCandidate', `${tag} ${level}: flask ${id} is a FlaskCandidate`);
+      }
+    }
+  };
+  checkPicks('export plan', meta.plan && meta.plan.difficulty, meta.plan && meta.plan.batteries, meta.plan && meta.plan.flasks);
+  for (const plan of plans) checkPicks(`seed ${plan.seed} ${plan.difficulty}`, plan.difficulty, plan.batteries, plan.flasks);
+
+  // the CreatureBlocks: boxes on a level (none until a floor has a Gap)
+  const blocks = list(meta.creatureBlocks);
+  check(blocks !== null, 'meta.creatureBlocks is a list');
+  for (const b of blocks || []) {
+    check(typeof b.level === 'string' && Array.isArray(b.cframe) && b.cframe.length === 12 && Array.isArray(b.size), `CreatureBlock ${b.door}: a box on ${b.level}`);
+  }
+  if (failures === before) {
+    console.log(`  ok   ${listed.length} configs in meta (${listed.join(', ')}); ${rows} golden rows of ${names.length} modules; plan picks of ${plans.length + 1} plans; ${(blocks || []).length} CreatureBlocks`);
+  }
 }
 
 console.log(failures ? `FAILED: ${failures} of ${checks} checks` : `PASSED: ${checks} checks`);

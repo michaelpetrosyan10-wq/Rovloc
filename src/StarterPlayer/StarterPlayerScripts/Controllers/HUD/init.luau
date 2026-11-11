@@ -5,7 +5,7 @@
 --     vignette of the downed state. Text and panels sit on a scaled layer (UIKit.scaleFor the viewport); the touch
 --     buttons are laid out in screen pixels by MobileControls.
 --   * Core UI. The Roblox health bar, backpack and player list are disabled (retried until the core scripts accept
---     it). The player list owned Tab, which is the Objective action here (the nudge toward the goal); the squad's
+--     it). The player list owned Tab, which is the Radar action here (a scan, or the objective); the squad's
 --     names and states are on SquadPanel instead.
 --   * Toasts. Notify messages from the server (claimed from DevToolsController through SetNotifyHandler) and
 --     HUD.Toast calls appear top-centre on a dark strip that fades at its ends; at most three, repeats refresh.

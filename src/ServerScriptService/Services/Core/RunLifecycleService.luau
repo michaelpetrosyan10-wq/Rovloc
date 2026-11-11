@@ -2,7 +2,8 @@
 -- RunLifecycleService: the match state machine. The only writer of the ReplicatedStorage attributes MatchPhase,
 -- RunId, RunSeed, Difficulty, RunStartedAt and RunEndedAt.
 --
--- Phases: Booting -> Lobby -> (Countdown ->) Deploying -> InRun -> RunEnded -> (Results ->) Resetting -> Lobby.
+-- Phases: Booting -> Lobby -> (Countdown ->) Deploying -> (Prologue ->) InRun -> RunEnded -> (Results ->) Resetting ->
+-- Lobby. Prologue (spec v2: the opening on the Back Lot) is a phase the port enters; BeginRun goes to InRun.
 -- SetPhase refuses any other transition. The service boots in Booting and moves to Lobby once WorldService has
 -- finished building the world.
 --
@@ -44,7 +45,8 @@ local TRANSITIONS: { [Enums.MatchPhase]: { [Enums.MatchPhase]: boolean } } = {
 	Booting = { Lobby = true },
 	Lobby = { Countdown = true, Deploying = true },
 	Countdown = { Lobby = true, Deploying = true },
-	Deploying = { InRun = true, RunEnded = true, Resetting = true },
+	Deploying = { Prologue = true, InRun = true, RunEnded = true, Resetting = true },
+	Prologue = { InRun = true, RunEnded = true, Resetting = true },
 	InRun = { RunEnded = true },
 	RunEnded = { Results = true, Resetting = true },
 	Results = { Resetting = true },

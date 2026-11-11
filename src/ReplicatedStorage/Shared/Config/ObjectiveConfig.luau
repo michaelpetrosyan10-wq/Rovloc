@@ -17,8 +17,19 @@
 --                                    breaker (3 s). Exit lock: Keypad (no power).
 --   Level1_Hallways    MasterKeys    the janitor's master keys (all past the gate) -> unlock the stairwell door (4 s).
 --                                    Padlock.
---   Level2_Auditorium  ReachExit     reach the east stairs (the interim floor: no item, no lock).
---   The roof and the city levels have no objective here yet.
+--   Level2_Auditorium  ReachExit     reach the east stairs (the interim floor: no item, no lock; the package that
+--                                    builds the theatre switches it).
+--   City1_Rooftops     PowerSkybridge close 3 of the 6 feeder cabinets (3 s each; the run's picks lie on both arcs of
+--                                    the ring: RunDirector.pickStations). Exit lock: Keypad (no power).
+--   City2_Airport      Preflight     2 of 10 fuel cans -> the wing filler (2.5 s each) -> the hangar switch (2 s, then
+--                                    the door's 20 s) -> board (0.8 s each) -> start the engines (3 s).
+--   The roof has no floor objective.
+--
+-- Every step has a `kind` from a small generic vocabulary, and `at` names the anchor kind of the station it is worked at:
+--   Find      pick up `count` of the floor's items          Deliver   bring the carried items to the station `at`
+--   Work      hold the station `at`'s prompt                Stations  work each of the run's picked stations (`stations`)
+--   Survive   hold `at`, then last `seconds` (no teleports)  Reach     get to the exit
+-- `mainStation` is the anchor kind of the floor's main station (the radar's batteries keep one in reach of it).
 --
 -- Fair spots (the specs and web/tools/data-test.mjs hold every candidate to them): on a real surface the squad can
 -- reach (on foot or through the vents); a hiding spot within HideReach; at least EntryClearance studs of
@@ -41,10 +52,24 @@ export type ItemSpec = {
 	object: string, -- Strings key of the Pickup prompt's object text
 }
 
+-- The floor's stations when a run picks them (the rooftops' feeders): `count` of the layout's `candidate` anchors,
+-- seeded per run; `arcs`: at least one north and one south of the frame's centre line (z 144).
+export type StationSpec = {
+	prop: string, -- plan prop kind of the station
+	candidate: Enums.AnchorKind,
+	count: number,
+	arcs: boolean?,
+}
+
+export type StepKind = "Find" | "Deliver" | "Work" | "Stations" | "Survive" | "Reach"
+
 export type StepSpec = {
 	id: string, -- the Step attribute of the props and prompts that serve it
 	count: number, -- how many times it is done ("Fuses 1/3")
 	label: string, -- Strings key of the tracker line
+	kind: StepKind,
+	at: Enums.AnchorKind?, -- the anchor kind of the station it is worked at (Deliver, Work, Stations, Survive)
+	seconds: number?, -- Survive: the countdown after the hold
 }
 
 export type FloorSpec = {
@@ -53,6 +78,8 @@ export type FloorSpec = {
 	id: string,
 	title: string, -- Strings key
 	item: ItemSpec?, -- nil: the floor has no item to find
+	stations: StationSpec?, -- the stations a run picks (nil: the floor's stations are fixed anchors)
+	mainStation: Enums.AnchorKind?, -- the floor's main station (nil: the exit)
 	steps: { StepSpec },
 	lockStep: string?, -- the step whose completion unlocks the exit (nil: the exit is never locked)
 	lockVariant: LockVariant?, -- the ExitLock prop on the exit airlock doors (nil: no lock)
@@ -76,10 +103,23 @@ local FLOORS: { FloorSpec } = {
 			hold = 0.6,
 			object = "Prompt.Fuse",
 		},
+		mainStation = "BreakerPanel",
 		steps = {
-			{ id = "FindFuses", count = 3, label = "Objective.Step.FindFuses" },
-			{ id = "FitFuses", count = 3, label = "Objective.Step.FitFuses" },
-			{ id = "ThrowBreaker", count = 1, label = "Objective.Step.ThrowBreaker" },
+			{ id = "FindFuses", count = 3, label = "Objective.Step.FindFuses", kind = "Find" },
+			{
+				id = "FitFuses",
+				count = 3,
+				label = "Objective.Step.FitFuses",
+				kind = "Deliver",
+				at = "BreakerPanel",
+			},
+			{
+				id = "ThrowBreaker",
+				count = 1,
+				label = "Objective.Step.ThrowBreaker",
+				kind = "Work",
+				at = "BreakerPanel",
+			},
 		},
 		lockStep = "ThrowBreaker",
 		lockVariant = "Keypad",
@@ -98,9 +138,10 @@ local FLOORS: { FloorSpec } = {
 			hold = 0.6,
 			object = "Prompt.MasterKeys",
 		},
+		mainStation = "ExitLock",
 		steps = {
-			{ id = "FindKeys", count = 1, label = "Objective.Step.FindKeys" },
-			{ id = "UnlockExit", count = 1, label = "Objective.Step.UnlockExit" },
+			{ id = "FindKeys", count = 1, label = "Objective.Step.FindKeys", kind = "Find" },
+			{ id = "UnlockExit", count = 1, label = "Objective.Step.UnlockExit", kind = "Work", at = "ExitLock" },
 		},
 		lockStep = "UnlockExit",
 		lockVariant = "Padlock",
@@ -114,12 +155,65 @@ local FLOORS: { FloorSpec } = {
 		title = "Objective.Floor.ReachExit",
 		item = nil,
 		steps = {
-			{ id = "ReachExit", count = 1, label = "Objective.Step.Exit" },
+			{ id = "ReachExit", count = 1, label = "Objective.Step.Exit", kind = "Reach" },
 		},
 		lockStep = nil,
 		lockVariant = nil,
 		lockReason = nil,
 		holds = {},
+	},
+	{
+		floor = 4,
+		levelId = "City1_Rooftops",
+		id = "PowerSkybridge",
+		title = "Objective.Floor.PowerSkybridge",
+		item = nil,
+		stations = { prop = "FeederCabinet", candidate = "FeederCandidate", count = 3, arcs = true },
+		mainStation = "FeederCandidate",
+		steps = {
+			{
+				id = "CloseFeeders",
+				count = 3,
+				label = "Objective.Step.CloseFeeders",
+				kind = "Stations",
+				at = "FeederCandidate",
+			},
+		},
+		lockStep = "CloseFeeders",
+		lockVariant = "Keypad",
+		lockReason = "Prompt.Locked.City1_Rooftops",
+		holds = { CloseFeeder = 3 },
+	},
+	{
+		floor = 5,
+		levelId = "City2_Airport",
+		id = "Preflight",
+		title = "Objective.Floor.Preflight",
+		item = {
+			prop = "FuelCan",
+			candidate = "FuelCanCandidate",
+			count = 2,
+			hold = 0.6,
+			object = "Prompt.FuelCan",
+		},
+		mainStation = "WingFiller",
+		steps = {
+			{ id = "FindFuel", count = 2, label = "Objective.Step.FindFuel", kind = "Find" },
+			{ id = "FuelPlane", count = 2, label = "Objective.Step.FuelPlane", kind = "Deliver", at = "WingFiller" },
+			{
+				id = "OpenHangar",
+				count = 1,
+				label = "Objective.Step.OpenHangar",
+				kind = "Survive",
+				at = "HangarSwitch",
+				seconds = 20,
+			},
+			{ id = "Board", count = 1, label = "Objective.Step.Board", kind = "Work", at = "CabinDoor" },
+		},
+		lockStep = "Board",
+		lockVariant = nil,
+		lockReason = nil,
+		holds = { FuelPlane = 2.5, HangarSwitch = 2, Board = 0.8, StartEngines = 3 },
 	},
 }
 
@@ -172,6 +266,30 @@ ObjectiveConfig.Spawn = table.freeze({
 	ReleaseSight = 70, -- ... or can see its head from this far
 	Stream = "CreatureSpawn|", -- the seeded stream, by level
 })
+
+-- Every floor as plain data for the website (world.json meta.objectiveConfig: every row, the city's included;
+-- meta.objectives carries the rows of the levels the world builds, with their candidates and places).
+function ObjectiveConfig.exportMeta(): { [string]: any }
+	local function copy(value: any): any
+		if type(value) ~= "table" then
+			return value
+		end
+		local out: { [any]: any } = {}
+		for key, item in value do
+			out[key] = copy(item)
+		end
+		return out
+	end
+	return {
+		floors = copy(FLOORS),
+		hideReach = ObjectiveConfig.HideReach,
+		entryClearance = ObjectiveConfig.EntryClearance,
+		pickSpacing = ObjectiveConfig.PickSpacing,
+		pickQuarters = ObjectiveConfig.PickQuarters,
+		tuning = copy(ObjectiveConfig.Tuning),
+		spawn = copy(ObjectiveConfig.Spawn),
+	}
+end
 
 -- The grace of a difficulty (Standard's for an unknown one).
 function ObjectiveConfig.graceFor(difficulty: string): number

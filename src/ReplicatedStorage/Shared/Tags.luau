@@ -29,11 +29,18 @@ local Tags = table.freeze({
 	ScareTrigger = "ScareTrigger",
 	FloorDebris = "FloorDebris",
 	LevelExit = "LevelExit",
+	-- spec v2's trigger kinds (Enums.TriggerKind)
+	GatherZone = "GatherZone", -- a squad gathers here before a scene
+	ShutterLine = "ShutterLine", -- the bell tower's shutter: the Last Run is saved by the first runner under it
+	FallZone = "FallZone", -- a fall that lands on a deck (never damage)
+	ChuteHatch = "ChuteHatch", -- the Back Lot's chute into the basement
+	JumpGate = "JumpGate", -- the roof's jump
 
 	-- Navigation & spawning
 	PatrolWaypoint = "PatrolWaypoint",
 	SpawnAnchor = "SpawnAnchor",
 	MonsterPassthrough = "MonsterPassthrough",
+	CreatureBlock = "CreatureBlock", -- the invisible wall across an opening into a Gap (attrs: DoorId, LevelId)
 
 	-- Atmosphere
 	LevelLight = "LevelLight", -- attrs: LightKind, LevelId, ZoneId, FlickerGroup, BaseBrightness

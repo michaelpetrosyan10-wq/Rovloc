@@ -47,6 +47,14 @@ export type HintId =
 	| "ObjLock_Level0_Basement"
 	| "ObjLock_Level1_Hallways"
 	| "ObjBreaker"
+	-- spec v2 (docs/design/game-spec-v2.md 3.1, 4.10): the parkour moves, the radar, the get-up, the revolver, the takeoff
+	| "Hurdle"
+	| "Slide"
+	| "Leap"
+	| "Radar"
+	| "GetUp"
+	| "Revolver"
+	| "Takeoff"
 
 -- A floor objective's station or lock (FirstTimeHints finds it by ObjectiveId on `level` while its step is undone).
 export type HintSpot = {
@@ -123,7 +131,7 @@ local CONTROL_ROWS: { ControlRow } = {
 	{ label = "Tutorial.Control.Interact", action = "Interact" },
 	{ label = "Tutorial.Control.Kick", action = "Kick" },
 	{ label = "Tutorial.Control.Throw", action = "Throw" },
-	{ label = "Tutorial.Control.Objective", action = "Objective" },
+	{ label = "Tutorial.Control.Radar", action = "Radar" },
 	{ label = "Tutorial.Control.Menu", action = "Menu" },
 }
 TutorialConfig.ControlRows = table.freeze(CONTROL_ROWS)
@@ -162,6 +170,12 @@ local HINTS: { Hint } = {
 		text = "Hint.DownedTeammate",
 		inputs = { { action = "Interact", label = "Hint.Input.Revive" } },
 		setting = "HintDownedTeammate",
+	},
+	{
+		id = "GetUp",
+		text = "Hint.GetUp",
+		inputs = { { action = "Interact", label = "Hint.Input.GetUp" } },
+		setting = "HintGetUp",
 	},
 	{
 		id = "BearTrap",
@@ -208,6 +222,51 @@ local HINTS: { Hint } = {
 		text = "Hint.LowBattery",
 		inputs = { { action = "Flashlight", label = "Hint.Input.Light" } },
 		setting = "HintLowBattery",
+	},
+	{
+		id = "Radar",
+		text = "Hint.Radar",
+		inputs = { { action = "Radar", label = "Hint.Input.Radar" } },
+		setting = "HintRadar",
+	},
+	{
+		id = "Hurdle",
+		text = "Hint.Hurdle",
+		inputs = {},
+		setting = "HintHurdle",
+		radius = 12,
+	},
+	{
+		id = "Slide",
+		text = "Hint.Slide",
+		inputs = {
+			{ action = "Sprint", label = "Hint.Input.Sprint" },
+			{ action = "Crouch", label = "Hint.Input.Slide" },
+		},
+		setting = "HintSlide",
+		radius = 14,
+	},
+	{
+		id = "Leap",
+		text = "Hint.Leap",
+		inputs = { { action = "Sprint", label = "Hint.Input.Sprint" } },
+		setting = "HintLeap",
+		radius = 20,
+	},
+	{
+		id = "Revolver",
+		text = "Hint.Revolver",
+		inputs = {
+			{ action = "Fire", label = "Hint.Input.Fire" },
+			{ action = "LowerGun", label = "Hint.Input.Lower" },
+		},
+		setting = "HintRevolver",
+	},
+	{
+		id = "Takeoff",
+		text = "Hint.Takeoff",
+		inputs = { { action = "PullUp", label = "Hint.Input.PullUp" } },
+		setting = "HintTakeoff",
 	},
 }
 for _, hint in HINTS do
@@ -283,5 +342,31 @@ for _, key in DRIFT do
 	table.freeze(key)
 end
 TutorialConfig.TitleDrift = table.freeze(DRIFT)
+
+-- The first-time hints and their saved flags as plain data for the website (world.json meta.tutorialConfig).
+function TutorialConfig.exportMeta(): { [string]: any }
+	local hints: { any } = {}
+	for _, hint in HINTS do
+		local inputs: { any } = {}
+		for _, input in hint.inputs do
+			table.insert(inputs, table.clone(input))
+		end
+		table.insert(hints, {
+			id = hint.id,
+			text = hint.text,
+			inputs = inputs,
+			setting = hint.setting,
+			radius = hint.radius,
+			spot = if hint.spot then table.clone(hint.spot) else nil,
+		})
+	end
+	return {
+		hints = hints,
+		hintsSetting = TutorialConfig.HintsSetting,
+		tutorialSetting = TutorialConfig.TutorialSetting,
+		lowBatteryFraction = TutorialConfig.LowBatteryFraction,
+		timing = table.clone(TutorialConfig.Timing),
+	}
+end
 
 return table.freeze(TutorialConfig)

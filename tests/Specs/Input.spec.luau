@@ -1,6 +1,6 @@
 --!strict
 -- Input rules: the context stack (resolveContext + push / pop by token), InputConfig's binding tables per context,
--- which bindings sink the default controls' keys, Tab reaching the Objective action, device detection, action phases
+-- which bindings sink the default controls' keys, Tab reaching the Radar action, device detection, action phases
 -- (Hold / Tap, injected touch presses, release on a context change) and the cursor's ref-counted free requests.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -113,16 +113,16 @@ return {
 		end
 	end,
 
-	["Tab and d-pad right reach the Objective action, not the core player list"] = function(t: Expect)
-		local objective = InputConfig.Bindings.Objective
-		t.truthy(objective and table.find(objective.keyboard, Enum.KeyCode.Tab) ~= nil, "Tab is bound to Objective")
-		t.truthy(objective and table.find(objective.gamepad, Enum.KeyCode.DPadRight) ~= nil, "so is d-pad right")
-		t.truthy(objective and #objective.contexts >= 2, "on foot and in vents")
-		local live: { Enums.InputContext } = if objective then objective.contexts else {}
+	["Tab and d-pad right reach the Radar action, not the core player list"] = function(t: Expect)
+		local radar = InputConfig.Bindings.Radar
+		t.truthy(radar and table.find(radar.keyboard, Enum.KeyCode.Tab) ~= nil, "Tab is bound to Radar")
+		t.truthy(radar and table.find(radar.gamepad, Enum.KeyCode.DPadRight) ~= nil, "so is d-pad right")
+		t.truthy(radar and #radar.contexts >= 2, "on foot and in vents")
+		local live: { Enums.InputContext } = if radar then radar.contexts else {}
 		for _, context: Enums.InputContext in live do
-			t.truthy(InputController.isLive("Objective", context), "live " .. context)
+			t.truthy(InputController.isLive("Radar", context), "live " .. context)
 			for action, binding in InputConfig.Bindings do
-				if action ~= "Objective" and table.find(binding.contexts, context) ~= nil then
+				if action ~= "Radar" and table.find(binding.contexts, context) ~= nil then
 					t.falsy(table.find(binding.keyboard, Enum.KeyCode.Tab) ~= nil, action .. " also takes Tab")
 				end
 			end

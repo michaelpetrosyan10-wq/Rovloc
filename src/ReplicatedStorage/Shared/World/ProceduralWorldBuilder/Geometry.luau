@@ -287,6 +287,17 @@ function Geometry.makeFixture(part: BasePart)
 	part.CollisionGroup = CollisionGroups.NoCollide
 end
 
+-- A CreatureBlock: an invisible wall only the Creature collides with (an opening into a Gap), never queried.
+function Geometry.makeCreatureBlock(part: BasePart)
+	part.Transparency = 1
+	part.Anchored = true
+	part.CanCollide = true
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.CollisionGroup = CollisionGroups.CreatureBlock
+end
+
 -- Trims and small furniture the Creature walks through (players still collide with them).
 function Geometry.makePassthrough(part: BasePart)
 	part.CollisionGroup = CollisionGroups.MonsterPassthrough

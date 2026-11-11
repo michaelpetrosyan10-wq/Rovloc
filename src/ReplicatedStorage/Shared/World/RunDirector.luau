@@ -14,7 +14,17 @@
 --                  TrapCandidate on the approach) of each of the first item.guarded fuses picked, so at least that
 --                  many fuses are guarded; then the rest. No two traps closer than MinTrapSpacing studs, and never
 --                  inside an airlock, a stairwell, the level's entry / exit room or a room holding PlayerSpawn anchors.
---   Battery        batteriesPerLevel BatteryCandidate anchors on every school level.
+--   Battery        batteriesPerLevel BatteryCandidate anchors on every school level (today's battery props).
+--   batteries      spec v2's radar batteries (plan.batteries[level], pickBatteries; not props yet): on every sneaking
+--                  stage, up to the difficulty's RadarConfig BatteriesMax BatteryCandidate anchors in pick order (a
+--                  squad of n uses the first RadarRules.batteriesPlaced), stream "Batteries|<level>": the first
+--                  20-60 studs walked from the entry, the second within 40 walked of the main station, every pair 30
+--                  walked apart, none in a dead end; a floor that cannot keep a rule degrades (fewest broken rules,
+--                  then the lowest id).
+--   flasks         spec v2's stun flasks (plan.flasks[level], pickFlasks): DifficultyConfig flasksPerStage
+--                  FlaskCandidate anchors, stream "Flasks|<level>".
+--   Stations       a floor whose objective picks its stations (ObjectiveConfig `stations`: the rooftops' feeders): 3
+--                  of 6 on both arcs (pickStations), stream "Objective|<level>", in plan.objectives[levelId].
 --   lockedGrates   round(lockedGrateFraction x lockable) of each level's Lockable grates (never CriticalPath ones).
 --                  A roll stands only while ZoneGraph still proves the level solvable with those grates locked and
 --                  every Gate door shut. A failing roll is re-rolled deterministically, up to MaxRerolls times per
@@ -43,7 +53,11 @@ local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuild
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local ObjectivePlaces = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces)
+local RadarConfig = require(ReplicatedStorage.Shared.Config.RadarConfig)
+local RadarRules = require(ReplicatedStorage.Shared.Rules.RadarRules)
 local Rng = require(ReplicatedStorage.Shared.Util.Rng)
+local StageConfig = require(ReplicatedStorage.Shared.Config.StageConfig)
+local TunnelRules = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local ZoneGraph = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ZoneGraph)
@@ -130,11 +144,12 @@ function RunDirector.lockCount(fraction: number, lockableCount: number): number
 	return math.clamp(math.round(fraction * lockableCount), 0, lockableCount)
 end
 
--- Every Gate door of `layout` shut: the worst case the level's scripted gates can produce.
+-- Every Gate door of `layout` shut: the worst case the level's scripted gates can produce (a hidden Gate is the way on
+-- its floor's script opens, so it never counts shut).
 function RunDirector.gateBlocked(layout: Layout): Types.BlockedSet
 	local blocked: Types.BlockedSet = {}
 	for _, door in layout.doors do
-		if door.kind == "Gate" then
+		if door.kind == "Gate" and not LayoutSchema.hiddenGate(door) then
 			blocked[door.id] = true
 		end
 	end
@@ -594,6 +609,301 @@ function RunDirector.objectiveOf(plan: Types.SpawnPlan, levelId: string): Types.
 end
 
 --------------------------------------------------------------------------------
+-- Picked stations (the rooftops' feeders)
+--------------------------------------------------------------------------------
+
+-- Whether `picks` lie on both arcs of the frame: at least one north and one south of its centre line.
+function RunDirector.bothArcs(picks: { Anchor }): boolean
+	local north, south = false, false
+	for _, anchor in picks do
+		if ObjectivePlaces.quarter(anchor.pos) <= 2 then
+			north = true
+		else
+			south = true
+		end
+	end
+	return north and south
+end
+
+-- The seeded station picks of one level (ObjectiveConfig `stations`: the rooftops' feeders): `count` of its candidate
+-- anchors, from the level's objective stream ("Objective|<level>", the seed only). With `arcs`, a pass stands when it
+-- holds both arcs (bothArcs); up to PickAttempts passes are shuffled, and if none stands the first pass trades its last
+-- pick for the lowest-id candidate of the missing arc.
+function RunDirector.pickStations(seed: number, layout: Layout, spec: ObjectiveConfig.FloorSpec): { Anchor }
+	local stations = spec.stations
+	assert(stations, string.format("RunDirector: %s has no picked stations", spec.id))
+	local candidates = anchorsOfKind(layout, stations.candidate, nil)
+	local count = math.min(stations.count, #candidates)
+	if count == 0 then
+		return {}
+	end
+	local random = Rng.seeded(seed, "Objective|" .. layout.id)
+	local first: { Anchor }? = nil
+	for _ = 1, PICK_ATTEMPTS do
+		local order = Rng.shuffle(table.clone(candidates), random)
+		local pass = table.move(order, 1, count, 1, {})
+		if not stations.arcs or RunDirector.bothArcs(pass) then
+			return pass
+		end
+		first = first or pass
+	end
+	local picks = first :: { Anchor }
+	local northHeld = ObjectivePlaces.quarter(picks[1].pos) <= 2
+	local missing: Anchor? = nil
+	for _, anchor in candidates do
+		if (ObjectivePlaces.quarter(anchor.pos) <= 2) ~= northHeld and (missing == nil or anchor.id < missing.id) then
+			missing = anchor
+		end
+	end
+	if missing and count >= 2 then
+		picks[count] = missing
+	end
+	return picks
+end
+
+--------------------------------------------------------------------------------
+-- Radar batteries and stun flasks (docs/design/game-spec-v2.md 3.2, 4.2)
+--------------------------------------------------------------------------------
+
+export type Place = { room: string, pos: Vector3 }
+
+-- A floor's walks for the placement rules: the walk graph the objective fairness rules use (TunnelRules: every door
+-- but the shut Gates, crawlways too, the vents a squad can always use) and each battery candidate's walk to every point.
+type Walks = {
+	graph: TunnelRules.WalkGraph,
+	from: { [string]: { number } }, -- candidate id -> distances over the graph
+}
+
+local walksCache: { [Layout]: Walks } = setmetatable({}, { __mode = "k" }) :: any
+
+local function walksOf(layout: Layout): Walks
+	local cached = walksCache[layout]
+	if cached then
+		return cached
+	end
+	local walks: Walks = { graph = TunnelRules.walkGraph(layout :: any, true), from = {} }
+	walksCache[layout] = walks
+	return walks
+end
+
+local function flat(v: Vector3): Vector2
+	return Vector2.new(v.X, v.Z)
+end
+
+-- Studs walked between two points of `layout` (math.huge when there is no way), on the placement rules' walk graph.
+function RunDirector.walk(layout: Layout, a: Place, b: Place): number
+	local walks = walksOf(layout)
+	local g = walks.graph
+	local dist = TunnelRules.distances(g, TunnelRules.seedsAt(g, a.room, flat(a.pos)))
+	return TunnelRules.reach(g, dist, b.room, flat(b.pos), if a.room == b.room then { flat(a.pos) } else nil)
+end
+
+local function walkFromAnchor(layout: Layout, anchor: Anchor, to: Place): number
+	local walks = walksOf(layout)
+	local g = walks.graph
+	local dist = walks.from[anchor.id]
+	if not dist then
+		dist = TunnelRules.distances(g, TunnelRules.seedsAt(g, anchor.room, flat(anchor.pos)))
+		walks.from[anchor.id] = dist
+	end
+	return TunnelRules.reach(
+		g,
+		dist,
+		to.room,
+		flat(to.pos),
+		if anchor.room == to.room then { flat(anchor.pos) } else nil
+	)
+end
+
+-- The rooms of `layout` that are dead ends: fewer than two ways in or out (doors, crawlway mouths, open grates).
+function RunDirector.deadEndRooms(layout: Layout): { [string]: boolean }
+	local g = walksOf(layout).graph
+	local out: { [string]: boolean } = {}
+	for _, room in layout.rooms do
+		local ways = g.members[room.id]
+		if room.kind ~= "Solid" and room.kind ~= "Chase" and (ways == nil or #ways < 2) then
+			out[room.id] = true
+		end
+	end
+	return out
+end
+
+-- Where the squad enters `layout` on `route` (the previous floor's pick; the layout's entry otherwise).
+function RunDirector.entryPlace(layout: Layout, route: { [string]: string }?): Place
+	local entry = WorldConfig.routeEntry(route, layout.id)
+	local room = if entry and entry.to == layout.id then entry.toRoom else layout.entry
+	return { room = room, pos = ObjectivePlaces.arrivalPoint(layout, room) }
+end
+
+-- The main station(s) of `layout` for a run (ObjectiveConfig mainStation): its anchors of that kind; the exit lock the
+-- route's exit uses (the ExitLock nearest its vestibule); the run's picked stations (`picked`, the feeders); the exit
+-- vestibule the route leaves by when the floor names none (the interim Auditorium's exit). Empty when there is none.
+function RunDirector.mainStations(layout: Layout, route: { [string]: string }?, picked: { string }?): { Place }
+	local spec = ObjectiveConfig.forLevel(layout.id)
+	local kind: Enums.AnchorKind? = if spec then spec.mainStation else nil
+	local out: { Place } = {}
+	local exitSpec = WorldConfig.routeExit(route, layout.id)
+	local exitRoom = if exitSpec and exitSpec.from == layout.id then exitSpec.fromRoom else nil
+	local exitPlace: Place? = if exitRoom
+		then { room = exitRoom, pos = ObjectivePlaces.arrivalPoint(layout, exitRoom) }
+		else nil
+	if kind == nil then
+		if exitPlace then
+			table.insert(out, exitPlace)
+		end
+		return out
+	end
+	local stations = if spec then spec.stations else nil
+	local pickedSet: { [string]: boolean }? = nil
+	if stations and stations.candidate == kind and picked then
+		local set: { [string]: boolean } = {}
+		for _, id in picked do
+			set[id] = true
+		end
+		pickedSet = set
+	end
+	local best: Anchor? = nil
+	local bestWalk = math.huge
+	local stationKind: Enums.AnchorKind = kind
+	for _, anchor in anchorsOfKind(layout, stationKind, nil) do
+		if pickedSet and not pickedSet[anchor.id] then
+			continue
+		end
+		if kind == "ExitLock" and exitPlace then
+			local d = walkFromAnchor(layout, anchor, exitPlace)
+			if d < bestWalk then
+				best, bestWalk = anchor, d
+			end
+		else
+			table.insert(out, { room = anchor.room, pos = anchor.pos })
+		end
+	end
+	if best then
+		table.insert(out, { room = best.room, pos = best.pos })
+	end
+	return out
+end
+
+-- How many of the battery placement rules `anchor` breaks as the `slot`-th pick next to `taken`: the slot's own rule
+-- (1st: EntryMin..EntryMax walked from `entry`; 2nd: within StationReach of a `stations` place, when there is one), the
+-- spacing (PairSpacing walked from every battery taken) and the dead end (none in one).
+local function brokenRules(
+	layout: Layout,
+	anchor: Anchor,
+	slot: number,
+	taken: { Anchor },
+	entry: Place,
+	stations: { Place },
+	dead: { [string]: boolean }
+): number
+	local rules = RadarConfig.Placement
+	local broken = 0
+	if slot == 1 then
+		local d = walkFromAnchor(layout, anchor, entry)
+		if d < rules.EntryMin or d > rules.EntryMax then
+			broken += 1
+		end
+	elseif slot == 2 and #stations > 0 then
+		local near = false
+		for _, station in stations do
+			if walkFromAnchor(layout, anchor, station) <= rules.StationReach then
+				near = true
+				break
+			end
+		end
+		if not near then
+			broken += 1
+		end
+	end
+	for _, other in taken do
+		if walkFromAnchor(layout, anchor, { room = other.room, pos = other.pos }) < rules.PairSpacing then
+			broken += 1
+			break
+		end
+	end
+	if dead[anchor.room] then
+		broken += 1
+	end
+	return broken
+end
+
+-- The seeded battery picks of one sneaking stage (stream "Batteries|<level>"): up to the difficulty's BatteriesMax of
+-- the layout's BatteryCandidate anchors, in pick order, so a squad of n takes the first RadarRules.batteriesPlaced. The
+-- first lies EntryMin..EntryMax walked from `entry`, the second within StationReach of the main station, every pair
+-- PairSpacing apart (walked), none in a dead end. Each slot takes the first shuffled candidate that keeps its rules; a
+-- floor that cannot (too few candidates, or none in reach) degrades deterministically: the candidate breaking the
+-- fewest rules, then the lowest id. `broken` counts the rules broken in all.
+function RunDirector.pickBatteries(
+	seed: number,
+	difficulty: Enums.Difficulty,
+	layout: Layout,
+	entry: Place,
+	stations: { Place }
+): Types.BatteryPicks
+	local candidates = anchorsOfKind(layout, "BatteryCandidate", nil)
+	local count = math.min(RadarConfig.of(difficulty).BatteriesMax, #candidates)
+	local order = Rng.shuffle(table.clone(candidates), Rng.seeded(seed, "Batteries|" .. layout.id))
+	local dead = RunDirector.deadEndRooms(layout)
+	local taken: { Anchor } = {}
+	local used: { [string]: boolean } = {}
+	local broken = 0
+	for slot = 1, count do
+		local pick: Anchor? = nil
+		local fewest = math.huge
+		for _, anchor in order do
+			if used[anchor.id] then
+				continue
+			end
+			local n = brokenRules(layout, anchor, slot, taken, entry, stations, dead)
+			if n == 0 then
+				pick, fewest = anchor, 0
+				break
+			end
+			local best = pick
+			if n < fewest or (n == fewest and best ~= nil and anchor.id < best.id) then
+				pick, fewest = anchor, n
+			end
+		end
+		local chosen = pick :: Anchor
+		used[chosen.id] = true
+		table.insert(taken, chosen)
+		broken += fewest
+	end
+	local ids: { string } = {}
+	for _, anchor in taken do
+		table.insert(ids, anchor.id)
+	end
+	return table.freeze({ anchors = table.freeze(ids), broken = broken })
+end
+
+-- The seeded stun flasks of one stage (stream "Flasks|<level>"): the difficulty's flasksPerStage of the layout's
+-- FlaskCandidate anchors, in pick order (fewer when the floor has fewer candidates).
+function RunDirector.pickFlasks(seed: number, difficulty: Enums.Difficulty, layout: Layout): { string }
+	local spec = if difficulty == "Nightmare" then DifficultyConfig.Nightmare else DifficultyConfig.Standard
+	local candidates = anchorsOfKind(layout, "FlaskCandidate", nil)
+	local count = math.min(spec.flasksPerStage[layout.id] or 0, #candidates)
+	local ids: { string } = {}
+	if count > 0 then
+		local order = Rng.shuffle(table.clone(candidates), Rng.seeded(seed, "Flasks|" .. layout.id))
+		for i = 1, count do
+			table.insert(ids, order[i].id)
+		end
+	end
+	return table.freeze(ids)
+end
+
+-- The batteries of `plan` a squad of `players` uses on `levelId` (the first RadarRules.batteriesPlaced of its picks).
+function RunDirector.batteriesOf(plan: Types.SpawnPlan, levelId: string, players: number): { string }
+	local all = plan.batteries
+	local picks = if all then all[levelId] else nil
+	if not picks then
+		return {}
+	end
+	local n = math.min(#picks.anchors, RadarRules.batteriesPlaced(plan.difficulty, players))
+	return table.move(picks.anchors, 1, n, 1, {})
+end
+
+--------------------------------------------------------------------------------
 -- Locking grates
 --------------------------------------------------------------------------------
 
@@ -704,6 +1014,29 @@ function RunDirector.plan(
 		})
 	end
 
+	-- Picked stations (the rooftops' feeders; seed only)
+	for _, floor in ObjectiveConfig.Floors do
+		local layout = byId[floor.levelId]
+		local stations = floor.stations
+		if not layout or not stations then
+			continue
+		end
+		local picks = RunDirector.pickStations(runSeed, layout, floor)
+		warnShort(stations.prop, layout, #picks, stations.count)
+		local anchorIds: { string } = {}
+		for _, anchor in picks do
+			table.insert(anchorIds, anchor.id)
+		end
+		objectives[layout.id] = table.freeze({
+			levelId = layout.id,
+			prop = stations.prop,
+			anchors = table.freeze(anchorIds),
+			guards = table.freeze({}),
+		})
+	end
+
+	local route = RunDirector.pickRoute(runSeed, layouts)
+
 	-- Bear traps: the objective's guard traps first, then the rest of the difficulty's count
 	local basement = byId[TRAP_LEVEL]
 	if basement then
@@ -743,6 +1076,28 @@ function RunDirector.plan(
 		addProps(props, RunDirector.PropKinds.Battery, layout, chosen)
 	end
 
+	-- Spec v2's radar batteries (every sneaking stage) and stun flasks (every stage with a count)
+	local batteries: { [string]: Types.BatteryPicks } = {}
+	local flasks: { [string]: { string } } = {}
+	for _, layout in layouts do
+		if byId[layout.id] ~= layout then
+			continue
+		end
+		if StageConfig.isSneaking(layout.id) then
+			local picked = objectives[layout.id]
+			batteries[layout.id] = RunDirector.pickBatteries(
+				runSeed,
+				resolved,
+				layout,
+				RunDirector.entryPlace(layout, route),
+				RunDirector.mainStations(layout, route, if picked then picked.anchors else nil)
+			)
+		end
+		if (spec.flasksPerStage[layout.id] or 0) > 0 then
+			flasks[layout.id] = RunDirector.pickFlasks(runSeed, resolved, layout)
+		end
+	end
+
 	-- Grate locks
 	local lockedGrates: { [string]: boolean } = {}
 	local rerolls = 0
@@ -772,7 +1127,9 @@ function RunDirector.plan(
 		lockedGrates = lockedGrates,
 		rerolls = rerolls,
 		objectives = objectives,
-		route = RunDirector.pickRoute(runSeed, layouts),
+		route = route,
+		batteries = table.freeze(batteries),
+		flasks = table.freeze(flasks),
 	}
 	table.freeze(plan)
 	return plan

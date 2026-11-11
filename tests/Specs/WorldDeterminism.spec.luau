@@ -13,6 +13,7 @@
 --                                        layouts, every builder and prop), RunDirector, Volumetrics
 --   ReplicatedStorage.Shared.Vents       VentGraph, VentPathfinder
 --   ReplicatedStorage.Shared.Config      the configs the builders read
+--   ReplicatedStorage.Shared.Rules       the pure rules (Lives, Radar, Parkour, ...)
 --   ReplicatedStorage.Shared.Util.Rng    the generator itself
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -53,7 +54,7 @@ local BANNED: { { pattern: string, why: string } } = {
 	},
 }
 
-local SCANNED: { string } = { "World", "Vents", "Config", "Util.Rng" }
+local SCANNED: { string } = { "World", "Vents", "Config", "Rules", "Util.Rng" }
 
 -- `source` with comments and the contents of string literals blanked (newlines kept, so line numbers hold).
 local function codeOnly(source: string): string

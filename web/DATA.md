@@ -12,9 +12,9 @@ node tools/data-test.mjs      # decoder round trip + structural checks
 
 | Step | Tool | Output |
 | --- | --- | --- |
-| export | `tools/export-world.luau` | `build/cache/world-raw.json`: every part, light, SurfaceGui, volume, attachment, entity, graph and layout of a real run's world at RunSeed 20251029 / Standard (plus a prop on every candidate anchor a run may pick), built by the game's own builders in the Lune harness; `build/cache/run-plans.json`: RunDirector's plans for a spread of seeds (the data test replays them on worldData's port) |
+| export | `tools/export-world.luau` | `build/cache/world-raw.json`: every part, light, SurfaceGui, volume, attachment, entity, graph and layout of a real run's world at RunSeed 20251029 / Standard (plus a prop on every candidate anchor a run may pick), built by the game's own builders in the Lune harness, and the shared configs (`configs`, below); `build/cache/run-plans.json`: RunDirector's plans for a spread of seeds (the data test replays them on worldData's port); `build/cache/golden.json`: the shared rules' golden rows (below) |
 | textures | `tools/textures.py` | `build/textures/<size>/<Id>_{color,normal,orm}.webp` per graphics tier (2048, 1024, 512, 256) + `textures.json` (cached; reruns are instant) |
-| bake | `tools/bake.mjs` (+ `tools/bake/*.mjs`) | `build/world.json`, `build/world.bin`, `build/textures/{decals,wear}_N.webp`, `build/cache/golden.json` |
+| bake | `tools/bake.mjs` (+ `tools/bake/*.mjs`) | `build/world.json`, `build/world.bin`, `build/textures/{decals,wear}_N.webp`, `build/cache/codec-golden.json` (the codec's pre-encoding samples) |
 
 The bake takes these options:
 
@@ -41,6 +41,23 @@ intermediates and is not shipped.
     smoothstep from the half angle to 0.7 × the half angle. It is recorded in `meta.lighting.falloff`.
   - Dynamic copies of baked lights should use the same falloff.
 - **Textures:** upload with `flipY = true` (three.js default). Every UV assumes it.
+
+## The shared rules: configs and golden rows
+
+The export finds them itself; nothing in it names a module (a new one is picked up by its own functions):
+
+- **Configs.** Every module of `Shared/Config` and `Shared/Rules` with `exportMeta()` (a plain JSON table of what the
+  website needs) lands in `world.json` meta under its name with a lower-case first letter: today `meta.stageConfig`
+  (the nine stages, `sneaking`, `playable`), `meta.worldConfig`, `meta.objectiveConfig` (every floor row, the city's
+  included: `meta.objectives.floors` keeps the rows of the levels the world builds, with their candidates and places),
+  `meta.difficultyConfig` (with `flasksPerStage`), `meta.gameConfig`, `meta.noiseConfig`, `meta.inputConfig` (the
+  bindings by key and button names, touch buttons, contexts, Steer's axis), `meta.settingsSchema`,
+  `meta.tutorialConfig` (the first-time hints), `meta.livesConfig`, `meta.radarConfig` and `meta.parkourConfig`.
+  `meta.exportedConfigs` lists the keys.
+- **Golden rows.** Every module with `golden()` (`LivesRules`, `RadarRules`, `ParkourRules`, and the later packages'
+  rules) lands in `build/cache/golden.json` as `{ [moduleName]: [{ name, fn, args, expect }] }`: `expect` is what
+  `module[fn](...args)` returns, as plain JSON (a Luau nil field is absent; numbers are the exact doubles, so a port
+  that does the same operations in the same order matches exactly). The website's port of a module replays every row.
 
 ## world.bin streams (`meta.streams[name] = { offset, length, type }`)
 
@@ -259,9 +276,11 @@ leaf's two nodes are always posed together. (In Roblox VentGrateBuilder.setLocke
 Every floor's exit stays locked until its objective is done (ObjectiveConfig in
 `src/ReplicatedStorage/Shared/Config/ObjectiveConfig.luau`). `meta.objectives` holds:
 
-- `floors`: ObjectiveConfig.Floors as data (per floor: `floor`, `levelId`, `id`, `title`, `item` {prop, candidate,
-  count, guarded?, slots?, hold, object}, `steps` [{id, count, label, seconds?}], `lockStep`, `lockVariant`,
-  `lockReason`, `holds` by prompt kind);
+- `floors`: the rows of ObjectiveConfig.Floors whose level the world builds (every row, the city's two included, is
+  `meta.objectiveConfig.floors`; per floor: `floor`, `levelId`, `id`, `title`, `item` {prop, candidate, count,
+  guarded?, hold, object}, `stations` {prop, candidate, count, arcs?} (floors that pick their stations), `mainStation`,
+  `steps` [{id, count, label, kind (Find, Deliver, Work, Stations, Survive, Reach), at?, seconds?}], `lockStep`,
+  `lockVariant`, `lockReason`, `holds` by prompt kind);
 - `hideReach` (25): how close a hiding spot is to every step;
 - `stand`: the guard traps' rules. The fairness rule (ObjectivePlaces.standingSpot): a guarded item is taken from a
   spot `near` (1.6) to `reach` (4) flat studs off it, at least `trapClear` (2.5) from every TrapCandidate a run may arm,
@@ -440,7 +459,7 @@ The Tall Man (CreatureRigBuilder): an 11-stud shadow figure with a porcelain mas
 | field | contents |
 | --- | --- |
 | `levels[key]` | `{ origin, elevation, height, aabb, film }` |
-| `rooms` | world rects (`x, z, w, d`), floorY, height, kind, acoustic, ambience, floor / wall / ceiling keys |
+| `rooms` | world rects (`x, z, w, d`), floorY, height, kind, acoustic, ambience, floor / wall / ceiling keys. Kind `Yard`: open to the sky; kind `Gap`: an alley, its deck `drop` below the level (its zone carries attribute `Drop`), no floor for the Creature |
 | `zones` | the Zone volumes (cframe, size, roomKind, acoustic preset, surface) |
 | `anchors` | every layout anchor: PlayerSpawn, CreatureSpawn, CreatureScarePose, PatrolWaypoint (+ `loop`, `order`), Trap / Flask / BatteryCandidate, ParachuteCrate, Locker, Corpse, ... (`cframe`, `room`) |
 | `patrolLoops` | `[{ level, loop, waypoints: [{ id, room, pos }] }]` in walking order (the last leads back to the first) |
@@ -459,7 +478,8 @@ The Tall Man (CreatureRigBuilder): an 11-stud shadow figure with a porcelain mas
 | `worldConfig` | WorldConfig as data |
 | `windows` | the moonlight window specs (Volumetrics.windowSpecs) |
 | `emitters` | the particle emitters the web draws (`src/engine/particles.js`): `[{ id, kind: 'Steam', level, pos, dir, detail }]`, one per SteamVent nozzle (TunnelDressingBuilder) at its `Mouth` attachment, `dir` the plume's way (the mouth's look vector). Decorative only |
-| `plan` | the director's plan for the seed (props, lockedGrates) |
+| `plan` | the director's plan for the seed (props, lockedGrates, objectives, route; spec v2's `batteries` per sneaking stage `{ anchors (pick order), broken }` and `flasks` per stage, see "Spec v2's picks") |
+| `creatureBlocks` | `[{ level, door, cframe, size }]`: the invisible walls across every opening into a Gap (CollisionGroup `CreatureBlock`); the Creature clamps to them, a player never collides with them (the bake leaves them out of the collision buffer). None until a floor has a Gap |
 | `layouts` | the raw layout blueprints, level-local as authored |
 | `film.levels[key]` | LightingMood.film (exposure, contrast, saturation, lift, bloom, Atmosphere density / offset / haze / glare / colour / decay, sun rays, DOF, vignette, shafts, dust, moon). `film.base` is the base film; `film.levels.Outdoor` is the storm outside |
 | `lighting` | `baseline` (LightingRig), `moods` (per level: cast, grade tint, revive, ...), `moonlight`, `fixtureCones` (haze-cone shapes per light kind), `bakedAmbient`, `falloff` |
@@ -487,6 +507,29 @@ in `layouts.<level>.tunnels` (graph, segments, regions, landmarks, rules, stats)
 Level 1's hallway keeps its scripted classroom glow (`Scripted:L1_Light_ClassroomGlow[Spill]`) and its gate's
 bypass vent (`L1_Grate_CorridorEast` / `L1_Grate_CorridorWest`, never locked, `criticalPath`): with the gate down,
 the vent is the only way west, and the walk graphs (TunnelRules, ObjectivePlaces, the routes) walk it.
+
+## Spec v2's picks (`meta.plan.batteries`, `meta.plan.flasks`, run-plans.json)
+
+RunDirector's new picks ride in the plan beside today's props, each on its own `Rng` stream, so today's picks never
+move (the props, objectives, grates and routes replay as before):
+
+- **Radar batteries** (`batteries[level]`, every sneaking stage: RunDirector.pickBatteries): up to RadarConfig's
+  `BatteriesMax` (9 [7]) BatteryCandidate anchors in pick order, from `Rng.seeded(seed, "Batteries|" + level)`
+  shuffling the candidates in layout order; a squad of n uses the first `RadarRules.batteriesPlaced` (6 [4] + 1 per
+  extra player). The first lies 20-60 studs walked from the entry (the route's entry vestibule), the second within 40
+  walked of the floor's main station (ObjectiveConfig `mainStation`; the exit lock of the route's exit, the run's
+  feeders, or the exit when the floor names none), every pair 30 walked apart, none in a dead end (a room with fewer
+  than two ways in or out). Walks are on the objective rules' walk graph (TunnelRules: doors, crawlways, the vents a
+  squad can always use; Gates shut). Each slot takes the first shuffled candidate that keeps its rules; a floor that
+  cannot degrades to the candidate breaking the fewest rules, then the lowest id, and `broken` counts the rules broken.
+  Today's floors have 6 to 13 candidates (36 come with the school's content package), so they degrade; the battery
+  props a run shows are still today's (`props`, `Batteries|` picks of `batteriesPerLevel`).
+- **Stun flasks** (`flasks[level]`: RunDirector.pickFlasks): DifficultyConfig `flasksPerStage` (3, 3, 2, 2, 2
+  [2, 2, 1, 1, 1]) FlaskCandidate anchors from `Rng.seeded(seed, "Flasks|" + level)`, in pick order. None while the
+  floors have no FlaskCandidate (data-test then expects no flask entity; with candidates it expects some).
+- **Feeders** (`objectives.City1_Rooftops`, once the rooftops have a layout: RunDirector.pickStations): 3 of the 6
+  FeederCandidate anchors from the objective's stream `Objective|City1_Rooftops`, at least one north and one south of
+  the frame's centre line.
 
 ## Known differences from a live server
 

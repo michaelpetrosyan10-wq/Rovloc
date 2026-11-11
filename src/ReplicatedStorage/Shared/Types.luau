@@ -110,6 +110,7 @@ export type ZoneEdge = {
 	length: number, -- studs between node centers along the portal
 	clearance: number?, -- doors: head room through the opening (the lintel, or the lower ceiling either side)
 	crawlOnly: boolean?, -- doors into a crawlway: players crouch through; the Creature never paths this way
+	lip: boolean?, -- an opening into a Gap: players cross it (leap, plank, drop), the Creature never does
 }
 
 export type ZoneGraphData = {
@@ -151,6 +152,18 @@ export type SpawnPlan = {
 	-- the stairwell each floor is left by (from-level id -> WorldConfig.Stairwells id, RunDirector.pickRoute); nil in
 	-- hand-made plans, where every floor uses its middle stairwell
 	route: { [string]: string }?,
+	-- spec v2's radar batteries per sneaking stage (RunDirector.pickBatteries: a squad of n uses the first
+	-- RadarRules.batteriesPlaced(difficulty, n) of them) and stun flasks per stage (stage id -> FlaskCandidate anchor
+	-- ids; RunDirector.pickFlasks); nil in hand-made plans
+	batteries: { [string]: BatteryPicks }?,
+	flasks: { [string]: { string } }?,
+}
+
+-- One sneaking stage's radar batteries (RunDirector.pickBatteries): the BatteryCandidate anchors in pick order (the
+-- one by the entry, the one by the main station, then the rest), and how many placement rules the pick had to break.
+export type BatteryPicks = {
+	anchors: { string },
+	broken: number,
 }
 
 --------------------------------------------------------------------------------

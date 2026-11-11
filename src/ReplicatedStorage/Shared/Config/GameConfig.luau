@@ -1,7 +1,7 @@
 --!strict
 -- Global rules, timers and economy. Seconds and studs unless noted.
 
-local GameConfig = table.freeze({
+local GameConfig = {
 	-- Squad
 	MinSquad = 1,
 	MaxSquad = 4, -- also set Server Size = 4 in the Creator Dashboard (Players.MaxPlayers is read-only)
@@ -85,6 +85,17 @@ local GameConfig = table.freeze({
 	-- so a phone-only developer can test a published build without Studio. Set false before a public launch if the
 	-- owner should play without the dev panel.
 	DevToolsForCreator = true,
-})
+}
 
-return GameConfig
+-- The rules and timers as plain data for the website (world.json meta.gameConfig).
+function GameConfig.exportMeta(): { [string]: any }
+	local out: { [string]: any } = {}
+	for key, value in GameConfig :: { [string]: any } do
+		if type(value) ~= "function" then
+			out[key] = if type(value) == "table" then table.clone(value) else value
+		end
+	end
+	return out
+end
+
+return table.freeze(GameConfig)
