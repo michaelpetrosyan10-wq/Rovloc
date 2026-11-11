@@ -160,7 +160,7 @@ local GALVANIZED = "MetalGalvanized"
 local RUST = "MetalRust"
 local SCREW_KEY = "TrimMetal"
 local RUST_SCREW_KEY = "Iron"
-local STREAK_COLOR = Color3.fromRGB(88, 48, 28)
+local STREAK_COLOR = Color3.fromRGB(67, 55, 49)
 
 -- Floor-standing pieces other builders put on layout anchors, as width (along the anchor's RightVector) x depth.
 local ANCHOR_KEEPOUT: { [string]: Vector2 } = {

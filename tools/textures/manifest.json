@@ -8,26 +8,18 @@
     {
       "id": "PaintedPlaster",
       "kind": "variant",
+      "chroma": 0.1,
       "seed": 1101,
       "studsPerTile": 10,
       "pattern": "Regular",
       "bases": ["Plaster"],
       "maps": ["ColorMap", "NormalMap", "RoughnessMap"],
-      "description": "Stained painted plaster: chipped paint over an older green coat, hairline cracks, grime, water runs, mildew."
-    },
-    {
-      "id": "CheckerTile",
-      "kind": "variant",
-      "seed": 1202,
-      "studsPerTile": 12,
-      "pattern": "Regular",
-      "bases": ["Plastic"],
-      "maps": ["ColorMap", "NormalMap", "RoughnessMap"],
-      "description": "Black and white checker floor tile, 3-stud squares: dirty grout, heel scuffs, cracked and chipped tiles, glossy glaze."
+      "description": "Stained painted plaster: chipped paint over an older coat, hairline cracks, grime, water runs, mildew."
     },
     {
       "id": "StainedConcrete",
       "kind": "variant",
+      "chroma": 0.1,
       "seed": 1303,
       "studsPerTile": 14,
       "pattern": "Organic",
@@ -38,6 +30,7 @@
     {
       "id": "CeilingTile",
       "kind": "variant",
+      "chroma": 0.1,
       "seed": 1404,
       "studsPerTile": 8,
       "pattern": "Regular",
@@ -48,6 +41,7 @@
     {
       "id": "RustedMetal",
       "kind": "variant",
+      "chroma": 0.15,
       "seed": 1505,
       "studsPerTile": 6,
       "pattern": "Regular",
@@ -58,6 +52,7 @@
     {
       "id": "GalvanizedMetal",
       "kind": "variant",
+      "chroma": 0.3,
       "seed": 1606,
       "studsPerTile": 8,
       "pattern": "Organic",
@@ -68,6 +63,7 @@
     {
       "id": "WornWood",
       "kind": "variant",
+      "chroma": 0.15,
       "seed": 1707,
       "studsPerTile": 8,
       "pattern": "Regular",
@@ -78,6 +74,7 @@
     {
       "id": "PoolMosaic",
       "kind": "variant",
+      "chroma": 0.15,
       "seed": 1808,
       "studsPerTile": 8,
       "pattern": "Regular",
@@ -88,6 +85,7 @@
     {
       "id": "StainedBrick",
       "kind": "variant",
+      "chroma": 0.06,
       "seed": 1909,
       "studsPerTile": 6,
       "pattern": "Regular",
@@ -98,16 +96,18 @@
     {
       "id": "VinylTile",
       "kind": "variant",
+      "chroma": 0.1,
       "seed": 2010,
       "studsPerTile": 8,
       "pattern": "Regular",
       "bases": ["Plastic"],
       "maps": ["ColorMap", "NormalMap", "RoughnessMap"],
-      "description": "Classroom vinyl composition tile: chip pattern, two-tone layout, yellowed wax, heel scuffs, a lifted corner."
+      "description": "Classroom vinyl composition tile: speckled chips in one tone, marbling, old wax, heel scuffs, a lifted corner."
     },
     {
       "id": "RubberMat",
       "kind": "variant",
+      "chroma": 0.3,
       "seed": 2111,
       "studsPerTile": 6,
       "pattern": "Organic",
@@ -118,6 +118,7 @@
     {
       "id": "RoofGravel",
       "kind": "variant",
+      "chroma": 0.15,
       "seed": 2212,
       "studsPerTile": 10,
       "pattern": "Organic",
@@ -128,6 +129,7 @@
     {
       "id": "LabWorktop",
       "kind": "variant",
+      "chroma": 0.3,
       "seed": 2313,
       "studsPerTile": 6,
       "pattern": "Organic",
@@ -171,15 +173,12 @@
   "uploadOrder": [
     "PaintedPlaster/ColorMap",
     "PaintedPlaster/NormalMap",
-    "CheckerTile/ColorMap",
-    "CheckerTile/NormalMap",
     "StainedConcrete/ColorMap",
     "StainedConcrete/NormalMap",
     "CeilingTile/ColorMap",
     "CeilingTile/NormalMap",
     "RustedMetal/ColorMap",
     "RustedMetal/NormalMap",
-    "CheckerTile/RoughnessMap",
     "StainedConcrete/RoughnessMap",
     "PaintedPlaster/RoughnessMap",
     "RustedMetal/RoughnessMap",

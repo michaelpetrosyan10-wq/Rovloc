@@ -3,7 +3,7 @@
 -- once at boot, the same on every server, into <level>.Props as one Model "Pipes_<layoutId>").
 --
 -- Every boiler room and the basement's stores and undercrofts carry
--- pipework along their long walls: a corroded iron main, a copper branch and a galvanized electrical conduit, each a
+-- pipework along their long walls: a corroded iron main, a lead branch and a galvanized electrical conduit, each a
 -- straight run from wall to wall (they pass through the walls at both ends) hung a little under the ceiling on straps,
 -- the boiler rooms' mains with a gate valve and its handwheel. A run keeps clear of every ceiling fixture
 -- (SchoolShellBuilder.fixtureBox), every drip pipe's run (SetDressingBuilder.dripEnvelopes), the pillars and the
@@ -42,7 +42,7 @@ local MAX_PER_ROOM = 22 -- part budget per room
 type PipeKind = { name: string, diameter: number, key: string, shadow: boolean }
 
 local MAIN: PipeKind = { name = "Main", diameter = 0.8, key = "PipeIron", shadow = true }
-local BRANCH: PipeKind = { name = "Branch", diameter = 0.46, key = "PipeCopper", shadow = true }
+local BRANCH: PipeKind = { name = "Branch", diameter = 0.46, key = "PipeLead", shadow = true }
 local CONDUIT: PipeKind = { name = "Conduit", diameter = 0.2, key = "Conduit", shadow = false }
 
 -- Rooms that get pipework.

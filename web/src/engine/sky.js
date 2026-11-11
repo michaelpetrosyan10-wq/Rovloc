@@ -1,5 +1,5 @@
 // Sky: the storm deck over the roof and the street (LightingRig's night sky: ClockTime 0.5, Terrain clouds at cover
-// 0.93 / density 0.78 in CloudColor (38, 40, 46)). A camera-centred dome drawn behind everything when the exterior is
+// 0.93 / density 0.78 in CloudColor (40, 41, 43)). A camera-centred dome drawn behind everything when the exterior is
 // in focus: a dark cloud ceiling with slow value-noise structure, fading into the level film's haze toward the
 // horizon. Lightning lights the deck (FLASH_CLOUDS) with the flash envelope, as the Roblox flash recolours the clouds.
 
@@ -8,7 +8,7 @@ import { WorldConfig } from './config.js';
 
 /** The open roof: the top school level. */
 const ROOF = WorldConfig.LevelOrder[WorldConfig.LevelOrder.length - 1];
-const CLOUD = [38 / 255, 40 / 255, 46 / 255]; // LightingRig.Baseline.CloudColor (display)
+const CLOUD = [40 / 255, 41 / 255, 43 / 255]; // LightingRig.Baseline.CloudColor (display)
 const FLASH_CLOUDS = [214 / 255, 220 / 255, 242 / 255];
 
 const VERT = /* glsl */ `

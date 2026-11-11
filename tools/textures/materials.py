@@ -138,80 +138,7 @@ def painted_plaster(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.55, np.clip(rough, 0, 1), reference=ref)
 
 
-# -- 2. Black and white checker ceramic floor -------------------------------------------------------------------
-
-
-def checker_tile(f: Field) -> Surface:
-    n = f.n
-    cols = rows = 4
-    g = tile_grid(n, cols, rows, unit=f.unit)
-    half = 3.4  # grout half width (pixels)
-    d = g.edge - half
-    tile = smoothstep(-0.6, 0.8, d)
-    parity = ((g.id // cols + g.id % cols) % 2).astype(F32)
-    rnd = f.rng.random((g.count, 4)).astype(F32)
-    white = rgb(0.86, 0.85, 0.81)
-    black = rgb(0.075, 0.075, 0.08)
-
-    shade = 1 + 0.05 * (g.per_tile(rnd[:, 0]) - 0.5)
-    yellow = g.per_tile(rnd[:, 1])
-    w = solid(n, white) * shade[..., None]
-    w = multiply(w, rgb(0.97, 0.93, 0.84), 0.5 * yellow)
-    b = solid(n, black) * (1 + 0.25 * (g.per_tile(rnd[:, 2]) - 0.5))[..., None]
-    glaze = f.spectral(2.2, 2, 60)
-    w *= (1 + 0.025 * glaze)[..., None]
-    b *= (1 + 0.08 * glaze)[..., None]
-    col = mix(w, b, parity)
-
-    # grout and the dirt that packs into it and against tile edges
-    grout = rgb(0.30, 0.27, 0.23) * (0.85 + 0.3 * f.fbm01(1.0, 40, 400))[..., None]
-    col = mix(grout, col, tile)
-    near = np.exp(-np.clip(d, 0, None) / 7.0) * tile
-    dirt_var = f.fbm01(1.6, 6, 200)
-    col = multiply(col, rgb(0.62, 0.55, 0.45), 0.55 * near * dirt_var * (1 - parity))
-    col = mix(col, rgb(0.20, 0.18, 0.15), 0.3 * near * dirt_var * parity)
-
-    # traffic dirt: a broad grey-brown haze, worse in patches
-    haze = blotches(f, 0.45, 0.25, 1, 12)
-    col = multiply(col, rgb(0.82, 0.78, 0.70), 0.45 * haze)
-    col = mix(col, rgb(0.35, 0.32, 0.28), 0.12 * haze * parity)  # dust greys the black tiles
-
-    # heel scuffs: short dark curved marks, mostly on the pale tiles; and grey scuffs on the black
-    scuff = f.strokes(55, (6, 28), (3.0, 6.0), wobble=0.1, intensity=(0.1, 0.45))  # rubber heel smudges
-    scuff = np.clip(f.blur(scuff, 2.0) * 1.4, 0, 1)
-    col = mix(col, rgb(0.16, 0.15, 0.14), 0.5 * scuff * (1 - parity) * tile)
-    scuff_g = f.strokes(70, (20, 90), (1.0, 2.6), wobble=0.04, intensity=(0.2, 0.7))
-    col = mix(col, rgb(0.42, 0.42, 0.40), np.clip(scuff_g, 0, 1) * parity * tile * 0.6)
-
-    # a few cracked tiles and chipped corners showing the biscuit
-    crack = np.clip(f.strokes(4, (150, 320), (0.8, 1.2), wobble=0.1, intensity=(0.7, 1.0), taper=False), 0, 1)
-    col = multiply(col, rgb(0.25, 0.23, 0.20), 0.9 * crack * tile)
-    chip_n = 14
-    cx = (f.rng.integers(0, cols + 1, chip_n) * (n / cols) + f.rng.normal(0, 4, chip_n) * f.unit) % n
-    cy = (f.rng.integers(0, rows + 1, chip_n) * (n / rows) + f.rng.normal(0, 4, chip_n) * f.unit) % n
-    chips = np.zeros((n, n), F32)
-    for i in range(chip_n):
-        r = f.rng.uniform(5, 13)
-        chips = np.maximum(chips, 1 - smoothstep(r * 0.7, r, ring_field(f, cx[i], cy[i])))
-    chips *= tile * smoothstep(0.3, 0.6, f.fbm01(0.8, 40, 300))
-    col = mix(col, rgb(0.62, 0.58, 0.50), chips)
-
-    # height: bevelled tiles, recessed grout, slight lippage between tiles, crazing barely there
-    bevel = smoothstep(-0.5, 6.0, d)
-    tilt = (g.per_tile(rnd[:, 3]) - 0.5) * 1.2
-    height = 3.0 * bevel + tilt * (g.u - 0.5) * tile + 0.15 * glaze * tile
-    height -= 2.0 * crack + 2.5 * chips
-    height += 0.4 * f.spectral(0.8, 100, 400) * (1 - tile)  # sandy grout
-
-    rough = np.where(parity > 0.5, 0.14, 0.18).astype(F32) + 0.06 * f.fbm01(1.5, 4, 100)
-    rough = lerp(rough, 0.5, 0.6 * haze)
-    rough = lerp(rough, 0.55, scuff)
-    rough = lerp(rough, 0.92, 1 - tile)
-    rough = lerp(rough, 0.85, chips)
-    return Surface(np.clip(col, 0, 1), height, 0.6, np.clip(rough, 0, 1), reference=white)
-
-
-# -- 3. Cracked, stained concrete -------------------------------------------------------------------------------
+# -- 2. Cracked, stained concrete -------------------------------------------------------------------------------
 
 
 def stained_concrete(f: Field) -> Surface:
@@ -270,7 +197,7 @@ def stained_concrete(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.5, np.clip(rough, 0, 1), reference=ref)
 
 
-# -- 4. Acoustic drop-ceiling tiles -----------------------------------------------------------------------------
+# -- 3. Acoustic drop-ceiling tiles -----------------------------------------------------------------------------
 
 
 def ceiling_tile(f: Field) -> Surface:
@@ -328,7 +255,7 @@ def ceiling_tile(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.45, np.clip(rough, 0, 1), reference=ref)
 
 
-# -- 5. Rusted painted metal ------------------------------------------------------------------------------------
+# -- 4. Rusted painted metal ------------------------------------------------------------------------------------
 
 
 def rusted_metal(f: Field) -> Surface:
@@ -384,7 +311,7 @@ def rusted_metal(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.6, np.clip(rough, 0, 1), np.clip(metal, 0, 1), reference=ref)
 
 
-# -- 6. Galvanised duct steel -----------------------------------------------------------------------------------
+# -- 5. Galvanised duct steel -----------------------------------------------------------------------------------
 
 
 def galvanized_metal(f: Field) -> Surface:
@@ -411,7 +338,7 @@ def galvanized_metal(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.45, np.clip(rough, 0, 1), metal, reference=ref)
 
 
-# -- 7. Worn wood boards ----------------------------------------------------------------------------------------
+# -- 6. Worn wood boards ----------------------------------------------------------------------------------------
 
 
 def worn_wood(f: Field) -> Surface:
@@ -467,7 +394,7 @@ def worn_wood(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.5, np.clip(rough, 0, 1), reference=ref)
 
 
-# -- 8. Pool mosaic ---------------------------------------------------------------------------------------------
+# -- 7. Pool mosaic ---------------------------------------------------------------------------------------------
 
 
 def pool_mosaic(f: Field) -> Surface:
@@ -513,7 +440,7 @@ def pool_mosaic(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.55, np.clip(rough, 0, 1), reference=ref)
 
 
-# -- 9. Stained brick -------------------------------------------------------------------------------------------
+# -- 8. Stained brick -------------------------------------------------------------------------------------------
 
 
 def stained_brick(f: Field) -> Surface:
@@ -556,7 +483,7 @@ def stained_brick(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.55, np.clip(rough, 0, 1), reference=ref)
 
 
-# -- 10. Classroom vinyl composition tile -----------------------------------------------------------------------
+# -- 9. Classroom vinyl composition tile ------------------------------------------------------------------------
 
 
 def vinyl_tile(f: Field) -> Surface:
@@ -564,13 +491,13 @@ def vinyl_tile(f: Field) -> Surface:
     g = tile_grid(n, 8, 8, unit=f.unit)
     rnd = f.rng.random((g.count, 4)).astype(F32)
     ref = rgb(0.80, 0.78, 0.70)
-    parity = ((g.id // 8 + g.id % 8) % 2).astype(F32)
-    tone = 1 - 0.07 * parity + 0.04 * (g.per_tile(rnd[:, 0]) - 0.5)
+    # one tone for the whole floor (no two-tone layout): each tile only a shade off its neighbours
+    tone = 1 + 0.04 * (g.per_tile(rnd[:, 0]) - 0.5)
     col = solid(n, ref) * tone[..., None]
-    # directional marbling of VCT, the run turned 90 degrees on alternate tiles
+    # directional marbling of VCT, the run turned 90 degrees on tiles laid at random
     mx = f.spectral(1.4, 3, 300, stretch=(1, 9))
     my = f.spectral(1.4, 3, 300, stretch=(9, 1))
-    marble = np.where(parity > 0.5, mx, my)
+    marble = np.where(g.per_tile(rnd[:, 3]) > 0.5, mx, my)
     col *= (1 + 0.035 * marble)[..., None]
     f1, _, val = f.worley(150, 1.0)
     chip = smoothstep(3.2, 2.2, f1)
@@ -597,7 +524,7 @@ def vinyl_tile(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.5, np.clip(rough, 0, 1), reference=ref)
 
 
-# -- 11. Epoxy lab worktop --------------------------------------------------------------------------------------
+# -- 10. Epoxy lab worktop --------------------------------------------------------------------------------------
 
 
 def lab_worktop(f: Field) -> Surface:
@@ -630,7 +557,7 @@ def lab_worktop(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.4, np.clip(rough, 0, 1), reference=ref)
 
 
-# -- 12. Rubber matting -----------------------------------------------------------------------------------------
+# -- 11. Rubber matting -----------------------------------------------------------------------------------------
 
 
 def rubber_mat(f: Field) -> Surface:
@@ -655,7 +582,7 @@ def rubber_mat(f: Field) -> Surface:
     return Surface(np.clip(col, 0, 1), height, 0.5, np.clip(rough, 0, 1), reference=ref)
 
 
-# -- 13. Roof gravel over tar -----------------------------------------------------------------------------------
+# -- 12. Roof gravel over tar -----------------------------------------------------------------------------------
 
 
 def roof_gravel(f: Field) -> Surface:
@@ -764,7 +691,6 @@ def crack_overlay(f: Field) -> Surface:
 
 RECIPES = {
     "PaintedPlaster": painted_plaster,
-    "CheckerTile": checker_tile,
     "StainedConcrete": stained_concrete,
     "CeilingTile": ceiling_tile,
     "RustedMetal": rusted_metal,

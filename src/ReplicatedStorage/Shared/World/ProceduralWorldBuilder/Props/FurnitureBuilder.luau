@@ -168,7 +168,7 @@ end
 --------------------------------------------------------------------------------
 
 local function deskPieces(frame: CFrame, name: string, random: Rng): { Piece }
-	local top = { color = tint(Color3.fromRGB(112, 92, 66), random, 0.12) }
+	local top = { color = tint(Color3.fromRGB(100, 94, 86), random, 0.12) }
 	return {
 		Kit.box(
 			frame,
@@ -199,7 +199,7 @@ local function deskPieces(frame: CFrame, name: string, random: Rng): { Piece }
 end
 
 local function chairPieces(frame: CFrame, name: string, random: Rng): { Piece }
-	local shell = { color = tint(Color3.fromRGB(70, 62, 48), random, 0.15) }
+	local shell = { color = tint(Color3.fromRGB(65, 63, 58), random, 0.15) }
 	return {
 		Kit.box(
 			frame,
@@ -240,7 +240,7 @@ end
 
 -- A teacher's or office desk: a wide top on two panelled ends with a modesty panel toward the visitor (local -Z).
 local function bigDeskPieces(frame: CFrame, name: string, random: Rng): { Piece }
-	local top = { color = tint(Color3.fromRGB(96, 74, 50), random, 0.1) }
+	local top = { color = tint(Color3.fromRGB(83, 77, 69), random, 0.1) }
 	return {
 		Kit.box(
 			frame,
@@ -265,7 +265,7 @@ local function bigDeskPieces(frame: CFrame, name: string, random: Rng): { Piece 
 end
 
 local function tablePieces(frame: CFrame, name: string, random: Rng): { Piece }
-	local top = { color = tint(Color3.fromRGB(104, 84, 58), random, 0.1) }
+	local top = { color = tint(Color3.fromRGB(92, 86, 78), random, 0.1) }
 	return {
 		Kit.box(frame, name .. "_Top", Vector3.new(-3, 2.4, -1.3), Vector3.new(3, 2.58, 1.3), "DeskTop", "Solid", top),
 		Kit.box(frame, name .. "_EndL", Vector3.new(-2.75, 0, -1.1), Vector3.new(-2.6, 2.4, 1.1), "Trim", "Detail"),
@@ -491,7 +491,7 @@ local function paintCabinet(part: BasePart, random: Rng)
 	for i = 0, 3 do
 		SurfaceArt.frame(gui, "Handle", 0.36, i / 4 + 0.07, 0.28, 0.03, Color3.fromRGB(150, 150, 140), 0.1, 2)
 	end
-	SurfaceArt.grime(gui, Color3.fromRGB(66, 40, 22), between(random, 0.3, 0.55), false, 3)
+	SurfaceArt.grime(gui, Color3.fromRGB(52, 44, 39), between(random, 0.3, 0.55), false, 3)
 end
 
 -- A steel filing cabinet backed onto a free stretch of an office wall.

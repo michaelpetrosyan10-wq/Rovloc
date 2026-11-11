@@ -9,7 +9,7 @@
 --   Lobby_BusBay      x 60..124, z 0..48  the bus shell, long axis along X; LobbyBuilder centres it on the four
 --                                          ReadyPads down its aisle (about x 74..116, z 19..29)
 --   Lobby_SupplyRoom  x  0..36, z 48..72  perk locker and the perk terminal
--- Warm, dim light only: caged bulbs here; LobbyBuilder adds the boiler's fire glow and the bulb inside the bus.
+-- Cold, dim light only: caged bulbs here; LobbyBuilder adds the boiler's pilot glow and the bulb inside the bus.
 --
 -- Anchor heights: pads, terminals and props on the floor (y = 0); PlayerSpawn at root height plus clearance (3.5).
 -- Yaw: 0 faces north (-Z), 90 west, 180 south, -90 east.
@@ -48,16 +48,21 @@ local HEIGHT = 20
 local FACE_S, FACE_E = 180, -90
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
-	Fluorescent = { brightness = 0.5, range = 18, color = Color3.fromRGB(236, 226, 200) },
-	Bulb = { brightness = 0.55, range = 20, color = Color3.fromRGB(255, 184, 116) },
+	Fluorescent = { brightness = 0.5, range = 18, color = Color3.fromRGB(214, 228, 236) },
+	Bulb = { brightness = 0.55, range = 20, color = Color3.fromRGB(197, 199, 200) },
 	EmergencyRed = { brightness = 0.45, range = 16, color = Color3.fromRGB(255, 34, 18) },
 	ClassroomGlow = { brightness = 1.1, range = 34, color = Color3.fromRGB(198, 220, 255) },
-	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(70, 255, 120) },
-	BoilerGlow = { brightness = 1.3, range = 32, color = Color3.fromRGB(255, 120, 44) },
+	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(222, 224, 226) },
+	BoilerGlow = { brightness = 1.3, range = 32, color = Color3.fromRGB(159, 160, 161) },
 }
 
-local BOILER_ROOM: Style =
-	{ floor = "ConcreteStained", wall = "Brick", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Lobby" }
+local BOILER_ROOM: Style = {
+	floor = "ConcreteStained",
+	wall = "BlockGray",
+	ceiling = "ConcreteDark",
+	surface = "Concrete",
+	acoustic = "Lobby",
+}
 local BUS_BAY: Style =
 	{ floor = "Asphalt", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Lobby" }
 local SUPPLY: Style =
@@ -233,7 +238,7 @@ door("Doorway", "Lobby_BoilerRoom", "Lobby_BusBay", 30, { id = "Lobby_Door_BusBa
 door("Door", "Lobby_BoilerRoom", "Lobby_SupplyRoom", 18, { id = "Lobby_Door_Supply" })
 
 --------------------------------------------------------------------------------
--- Lights: warm and dim
+-- Lights: cold and dim
 --------------------------------------------------------------------------------
 
 lightGrid("Lobby_BoilerRoom", "Bulb", 2, 2, "oofo", { flicker = "Lobby_Bulb" })

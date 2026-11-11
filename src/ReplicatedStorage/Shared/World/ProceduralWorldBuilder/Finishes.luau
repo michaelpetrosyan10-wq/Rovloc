@@ -2,10 +2,9 @@
 -- Finishes: what the shell's rooms are finished in, over the bare slabs, walls and ceilings SchoolShellBuilder cuts.
 --
 --   * Floors. Glossy where the floor would be polished or wet (Reflectance on the floor part: waxed linoleum, glazed
---     tile, damp basement concrete), and painted with SurfaceArt where the floor has a pattern: black-and-white checker
---     down every corridor and across the big halls (the floor part turns into the pale squares, a SurfaceGui adds the
---     dark ones, a little transparent so the gloss still shows through), and a subtle two-tone vinyl tile in the
---     classrooms.
+--     tile, damp basement concrete). The vinyl walkways and big halls are worn gray sheet vinyl with a darker traffic
+--     lane worn down their middle (one soft SurfaceArt band along the floor's long axis); classrooms and offices are a
+--     plain speckled gray tile. No floor is patterned in two tones (the gray look: docs/design/game-spec-v2.md 5.1).
 --   * Ceilings. Every plaster ceiling is a drop ceiling: a grid of tile seams, and in the ruined rooms (seeded per
 --     room) a few tiles gone (black holes into the plenum, never where a fixture hangs) and brown water stains. The
 --     first one or two holes of a room are real plates (planCeiling says where), so DecayBuilder can drop their tiles
@@ -23,8 +22,8 @@
 --     corners, brown water runs down from the ceiling and the odd crack. The chair rail and tile cap are bevelled
 --     (a wedge whose slope faces the room), so the wainscot reads as moulding rather than a stack of boxes.
 --   * Textures. Where Palette.variantFor gives a surface's key a generated MaterialVariant, the part wears it (Geometry
---     applies it); a textured checker or vinyl floor and a textured drop ceiling drop the painted squares and seams
---     their texture already shows. With no textures the look is the painted one.
+--     applies it); a textured drop ceiling drops the painted seams its texture already shows. With no textures the
+--     look is the painted one.
 -- Everything is deterministic (seeded by layout and room ids) and built once at boot with the shell.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -40,12 +39,10 @@ local SurfaceArt = require(script.Parent.SurfaceArt)
 type Room = LayoutSchema.Room
 type Axis = Geometry.Axis
 
-export type Checker = { cell: number, color: Color3, transparency: number }
-
 export type FloorStyle = {
-	key: string?, -- palette key the floor part is recoloured to (the pale squares of a checker)
+	key: string?, -- palette key the floor part is recoloured to
 	reflectance: number,
-	checker: Checker?,
+	lane: boolean?, -- a darker traffic lane is worn down the middle of the floor's long axis
 }
 
 export type WainscotStyle = {
@@ -91,22 +88,26 @@ Finishes.BaseDepth = 0.12
 Finishes.BandDepth = 0.06
 Finishes.RailDepth = 0.14
 Finishes.MinSpan = 0.8 -- shorter leftovers between openings are left bare
--- Most dark squares one checker SurfaceGui may hold (the cell grows until it fits).
-Finishes.MaxSquares = 256
 
 -- Drop-ceiling tiles (studs): long side along the room's long axis.
 Finishes.CeilingTile = Vector2.new(4, 2)
 
-local DARK_SQUARE = Color3.fromRGB(22, 22, 24)
-local VCT_SQUARE = Color3.fromRGB(92, 86, 68)
 local HOLE = Color3.fromRGB(7, 7, 8)
-local STAIN = Color3.fromRGB(96, 76, 42)
-local STAIN_RING = Color3.fromRGB(62, 48, 28)
+local STAIN = Color3.fromRGB(78, 76, 70)
+local STAIN_RING = Color3.fromRGB(50, 48, 44)
 
-local GRIME = Color3.fromRGB(30, 26, 19)
-local SOOT = Color3.fromRGB(16, 15, 13)
-local RUN = Color3.fromRGB(62, 48, 28)
-local CRACK = Color3.fromRGB(22, 20, 17)
+local GRIME = Color3.fromRGB(26, 26, 25)
+local SOOT = Color3.fromRGB(15, 15, 15)
+local RUN = Color3.fromRGB(52, 50, 46)
+local CRACK = Color3.fromRGB(20, 20, 19)
+
+-- The traffic lane worn down a vinyl walkway: its colour, its share of the floor's width (at most LaneMaxWidth
+-- studs), how dark it gets at its middle, and how much longer than wide a floor piece must be to have a direction.
+local LANE = Color3.fromRGB(34, 35, 36)
+Finishes.LaneShare = 0.45
+Finishes.LaneMaxWidth = 4
+Finishes.LaneStrength = 0.38
+Finishes.LaneMinAspect = 1.6
 
 Finishes.WearPixelsPerStud = 6
 Finishes.WearDistance = 60
@@ -137,10 +138,14 @@ local GLOSS: { [string]: number } = {
 -- Layouts whose bare concrete floors are damp.
 local DAMP: { [string]: boolean } = { Level0_Basement = true, Lobby = true }
 
--- The glazed tile band of each wing's corridors.
-local CORRIDOR_BAND: { [string]: string } = {
-	Level1_Hallways = "WainscotOxblood",
-	Level2_Auditorium = "WainscotTeal",
+-- The glazed tile band of the corridors (every wing the same slate gray).
+local CORRIDOR_BAND = "WainscotSlate"
+
+-- Room kinds whose vinyl floor is a walkway: worn sheet vinyl with a traffic lane.
+local WALKWAY_KINDS: { [string]: boolean } = {
+	Corridor = true,
+	Tunnel = true,
+	Gallery = true,
 }
 
 local DROP_CEILING_KINDS: { [string]: boolean } = {
@@ -157,21 +162,13 @@ local DROP_CEILING_KINDS: { [string]: boolean } = {
 
 -- How the floor of `room` (palette `floorKey`) on `layoutId` is finished; nil for a bare floor.
 function Finishes.floorStyle(layoutId: string, room: Room, floorKey: string): FloorStyle?
-	local area = room.rect.w * room.rect.d
-	local checkerable = floorKey == "Linoleum" or floorKey == "TileWhite"
-	if checkerable and (room.kind == "Corridor" or (floorKey == "Linoleum" and area >= 1800)) then
-		return {
-			key = "CheckerLight",
-			reflectance = 0.12,
-			checker = { cell = 3, color = DARK_SQUARE, transparency = 0.1 },
-		}
-	end
-	if floorKey == "Linoleum" and (room.kind == "Classroom" or room.kind == "Office") then
-		return {
-			key = "ClassroomVCT",
-			reflectance = 0.1,
-			checker = { cell = 2.5, color = VCT_SQUARE, transparency = 0.45 },
-		}
+	if floorKey == "Linoleum" then
+		if room.kind == "Classroom" or room.kind == "Office" then
+			return { key = "ClassroomVCT", reflectance = 0.1 }
+		end
+		if WALKWAY_KINDS[room.kind] or room.rect.w * room.rect.d >= 1800 then
+			return { key = "VinylGray", reflectance = 0.1, lane = true }
+		end
 	end
 	local gloss = GLOSS[floorKey]
 	if gloss then
@@ -181,27 +178,6 @@ function Finishes.floorStyle(layoutId: string, room: Room, floorKey: string): Fl
 		return { reflectance = 0.04 }
 	end
 	return nil
-end
-
--- Odd column and row counts for a checker of roughly `cell` squares over w x d, grown until its dark squares fit
--- MaxSquares. Odd counts put a dark square in every corner, so the pattern survives either canvas axis flipping.
-function Finishes.checkerCounts(w: number, d: number, cell: number): (number, number)
-	local size = cell
-	local function odd(span: number): number
-		local n = math.max(1, math.floor(span / size + 0.5))
-		if n % 2 == 0 then
-			n += if span / size > n then 1 else -1
-		end
-		return math.max(1, n)
-	end
-	for _ = 1, 40 do
-		local cols, rows = odd(w), odd(d)
-		if math.ceil(cols * rows / 2) <= Finishes.MaxSquares then
-			return cols, rows
-		end
-		size *= 1.08
-	end
-	return 1, 1
 end
 
 -- Whether the ceiling of `room` (palette `ceilingKey`) is a drop ceiling.
@@ -226,20 +202,19 @@ function Finishes.ceilingGrid(w: number, d: number): (number, number)
 	return math.max(1, math.floor(w / cw + 0.5)), math.max(1, math.floor(d / cd + 0.5))
 end
 
--- The wainscot of `room` (wall palette `wallKey`) on `layoutId`, or nil for bare walls.
-function Finishes.wainscotStyle(layoutId: string, room: Room, wallKey: string): WainscotStyle?
+-- The wainscot of `room` (wall palette `wallKey`), or nil for bare walls.
+function Finishes.wainscotStyle(room: Room, wallKey: string): WainscotStyle?
 	local kind = room.kind
-	local corridorBand = CORRIDOR_BAND[layoutId] or "WainscotOxblood"
 	if kind == "Corridor" then
-		if wallKey == "Brick" or string.sub(wallKey, 1, 7) == "Plaster" then
-			return { band = corridorBand, rail = "TileCap" }
+		if wallKey == "BlockGray" or string.sub(wallKey, 1, 7) == "Plaster" then
+			return { band = CORRIDOR_BAND, rail = "TileCap" }
 		end
 		return nil
 	elseif kind == "Classroom" or kind == "Storage" then
 		if string.sub(wallKey, 1, 7) == "Plaster" then
 			return { band = "WainscotPaint", rail = "Trim", base = "Baseboard" }
-		elseif wallKey == "Brick" and kind == "Classroom" then
-			return { band = corridorBand, rail = "TileCap" } -- the cafeteria
+		elseif wallKey == "BlockGray" and kind == "Classroom" then
+			return { band = CORRIDOR_BAND, rail = "TileCap" } -- the cafeteria
 		end
 		return nil
 	elseif kind == "Office" then
@@ -293,6 +268,16 @@ end
 -- Floors
 --------------------------------------------------------------------------------
 
+-- The traffic lane of a floor piece `size` big: whether it runs along the part's X (else its Z) and its width in
+-- studs; nil when the piece is too square to have a direction (a junction, a landing).
+function Finishes.lane(size: Vector3): (boolean?, number)
+	local long, short = math.max(size.X, size.Z), math.min(size.X, size.Z)
+	if short <= 0 or long / short < Finishes.LaneMinAspect then
+		return nil, 0
+	end
+	return size.X >= size.Z, math.min(short * Finishes.LaneShare, Finishes.LaneMaxWidth)
+end
+
 -- Finishes one floor piece of `room`. Returns the GuiObjects painted.
 function Finishes.decorateFloor(part: BasePart, layoutId: string, room: Room, floorKey: string): number
 	local style = Finishes.floorStyle(layoutId, room, floorKey)
@@ -303,16 +288,17 @@ function Finishes.decorateFloor(part: BasePart, layoutId: string, room: Room, fl
 		Geometry.applyKey(part, style.key)
 	end
 	part.Reflectance = style.reflectance
-	local checker = style.checker
-	if checker and Palette.variantFor(style.key or floorKey) then
-		checker = nil -- the tile texture is the pattern
-	end
-	if not checker then
+	if not style.lane then
 		return 0
 	end
-	local gui = SurfaceArt.gui(part, Enum.NormalId.Top, { name = "Finish", pixelsPerStud = 8, maxDistance = 170 })
-	local cols, rows = Finishes.checkerCounts(part.Size.X, part.Size.Z, checker.cell)
-	return SurfaceArt.checker(gui, cols, rows, checker.color, checker.transparency)
+	local alongX, width = Finishes.lane(part.Size)
+	if alongX == nil then
+		return 0
+	end
+	local gui = SurfaceArt.gui(part, Enum.NormalId.Top, { name = "Lane", pixelsPerStud = 4, maxDistance = 170 })
+	local across = if alongX then part.Size.Z else part.Size.X
+	SurfaceArt.lane(gui, alongX, width / across, LANE, Finishes.LaneStrength)
+	return 1
 end
 
 --------------------------------------------------------------------------------

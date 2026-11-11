@@ -7,7 +7,7 @@
 -- and the lighting rig never writes plugin-only props.
 -- Finishes too: fixtures glow with their light (Neon tubes, dead grey glass, self-lit exit letters) and broken ones
 -- only come apart within their own footprint; wainscots clear every opening and its frame and meet cleanly at corners;
--- corridors get glossy checker floors, classrooms vinyl tile, plaster ceilings a drop-ceiling grid whose missing tiles
+-- corridors get worn sheet vinyl with a traffic lane, classrooms plain vinyl tile, plaster ceilings a drop-ceiling grid whose missing tiles
 -- never hang over a fixture; striped hazard plates flank the fire doors and the gate.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -347,8 +347,8 @@ return {
 			"Linoleum",
 			"WoodPanel",
 			"PlasterSchool",
-			"PlasterGreen",
-			"Brick",
+			"PlasterAsh",
+			"BlockGray",
 			"MetalRust",
 			"MetalGalvanized",
 			"RoofGravel",
@@ -778,7 +778,7 @@ return {
 		local root = buildSlice(layout)
 		local shell = child(root, "Shell")
 		local origin = WorldConfig.levelOrigin(layout.id)
-		local facadeKey = SchoolShellBuilder.levelOptions(layout.id).facadeKey or "Brick"
+		local facadeKey = SchoolShellBuilder.levelOptions(layout.id).facadeKey or "BlockGray"
 		local facade = Palette.get(facadeKey)
 		local half = WorldConfig.ExteriorWallThickness / 2
 		local skin = 0.05 -- just inside the outer face
@@ -1142,7 +1142,7 @@ return {
 		root:Destroy()
 	end,
 
-	["finishes: glossy checker corridor, vinyl classroom, drop ceilings, hazard plates at the fire door and gate"] = function(
+	["finishes: worn vinyl corridor with a traffic lane, plain vinyl classroom, drop ceilings, hazard plates"] = function(
 		t: Expect
 	)
 		local layout = hallwaySlice()
@@ -1170,41 +1170,41 @@ return {
 		end
 
 		local hall = childPart(shell, "Floor_T_Hall_1")
-		local checker = Palette.get("CheckerLight")
-		t.eq(hall.Material, checker.material, "the corridor floor is the pale squares")
-		t.eq(hall.Color, Palette.colorFor("CheckerLight"))
+		local vinyl = Palette.get("VinylGray")
+		t.eq(hall.Material, vinyl.material, "the corridor floor is worn sheet vinyl")
+		t.eq(hall.Color, Palette.colorFor("VinylGray"))
 		t.truthy(hall.Reflectance >= 0.05 and hall.Reflectance <= 0.15, "waxed and glossy")
-		local cols, rows = Finishes.checkerCounts(hall.Size.X, hall.Size.Z, 3)
-		t.eq(cols % 2, 1, "odd columns")
-		t.eq(rows % 2, 1, "odd rows")
-		local hallTexture = Palette.variantFor("CheckerLight")
+		local hallTexture = Palette.variantFor("VinylGray")
 		if hallTexture then
-			t.eq(hall.MaterialVariant, hallTexture, "the generated tile texture is the pattern")
-			t.falsy(hall:FindFirstChild("Finish"), "no painted squares over the texture")
-		else
-			local squares = frames(finish(hall, Enum.NormalId.Top), "Square")
-			t.eq(squares, math.ceil(cols * rows / 2), "every other square is dark")
-			t.truthy(squares <= Finishes.MaxSquares, "within the frame budget")
-			for _, item in (hall:FindFirstChild("Finish") :: Instance):GetChildren() do
-				if item:IsA("Frame") then
-					t.truthy(item.BackgroundTransparency > 0, "the gloss shows through the dark squares")
-					break
-				end
-			end
+			t.eq(hall.MaterialVariant, hallTexture, "the generated vinyl texture")
 		end
-		local wide, deep = Finishes.checkerCounts(240, 14, 3)
-		t.truthy(math.ceil(wide * deep / 2) <= Finishes.MaxSquares, "even the longest hall fits the budget")
+		t.falsy(hall:FindFirstChild("Finish"), "no pattern painted over the corridor floor")
+		local alongX = Finishes.lane(hall.Size)
+		local lane = hall:FindFirstChild("Lane")
+		if alongX == nil then
+			t.falsy(lane, "a square floor piece has no direction to wear a lane along")
+		else
+			assert(lane and lane:IsA("SurfaceGui"), "a traffic lane is worn down the corridor")
+			t.eq(frames(lane, "Lane"), 1, "one soft band, no pattern")
+		end
+		local runX, runWidth = Finishes.lane(Vector3.new(96, 1, 8))
+		t.eq(runX, true, "a long corridor's lane runs along its length")
+		t.near(runWidth, 8 * Finishes.LaneShare, 1e-9, "the lane covers its share of the width")
+		t.eq(Finishes.lane(Vector3.new(14, 1, 240)), false, "and turns with the corridor")
+		t.eq(select(2, Finishes.lane(Vector3.new(240, 1, 30))), Finishes.LaneMaxWidth, "never wider than its cap")
+		t.eq(Finishes.lane(Vector3.new(20, 1, 18)), nil, "a junction has no lane")
 
 		local class = childPart(shell, "Floor_T_Class_1")
 		t.eq(class.Color, Palette.colorFor("ClassroomVCT"), "classroom vinyl tile")
 		t.truthy(class.Reflectance > 0, "polished")
 		local classTexture = Palette.variantFor("ClassroomVCT")
 		if classTexture then
-			t.eq(class.MaterialVariant, classTexture, "the generated vinyl texture is the pattern")
-			t.falsy(class:FindFirstChild("Finish"), "no painted tiles over the texture")
-		else
-			t.truthy(frames(finish(class, Enum.NormalId.Top), "Square") > 0, "two-tone tiles")
+			t.eq(class.MaterialVariant, classTexture, "the generated speckled vinyl texture")
 		end
+		t.falsy(
+			class:FindFirstChild("Finish") or class:FindFirstChild("Lane"),
+			"one plain tone, nothing painted over it"
+		)
 		local store = childPart(shell, "Floor_T_Store_1")
 		t.eq(store.Reflectance, 0, "a dry storeroom floor is matte")
 		t.falsy(store:FindFirstChild("Finish"), "and bare")

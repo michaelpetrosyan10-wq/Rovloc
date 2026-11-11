@@ -56,15 +56,15 @@ local FACE_W, FACE_S = 90, 180
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
-	Bulb = { brightness = 0.45, range = 14, color = Color3.fromRGB(255, 196, 140) },
+	Bulb = { brightness = 0.45, range = 14, color = Color3.fromRGB(206, 207, 209) },
 	EmergencyRed = { brightness = 0.45, range = 16, color = Color3.fromRGB(255, 34, 18) },
 	ClassroomGlow = { brightness = 1.1, range = 34, color = Color3.fromRGB(198, 220, 255) },
-	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(70, 255, 120) },
-	BoilerGlow = { brightness = 0.9, range = 16, color = Color3.fromRGB(255, 118, 40) },
+	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(222, 224, 226) },
+	BoilerGlow = { brightness = 0.9, range = 16, color = Color3.fromRGB(158, 158, 160) },
 }
 
 local ROOF: Style =
-	{ floor = "RoofGravel", wall = "Brick", ceiling = "Concrete", surface = "Concrete", acoustic = "Outdoor" }
+	{ floor = "RoofGravel", wall = "BlockGray", ceiling = "Concrete", surface = "Concrete", acoustic = "Outdoor" }
 local HOUSING: Style =
 	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "Concrete", surface = "Concrete", acoustic = "Stairwell" }
 
@@ -321,9 +321,9 @@ plant("SkylightCurb_A", 300, 166, 324, 176, 1.5, "MetalGalvanized")
 plant("HVAC_3", 268, 220, 292, 236, 6, "MetalGalvanized") -- south plant cell
 plant("ToolLocker", 322, 252, 325, 258, 5, "MetalRust")
 plant("WaterTank", 168, 28, 184, 44, 9, "MetalRust") -- north cell
-plant("BoilerFlue", 212, 10, 218, 16, 10, "Brick")
+plant("BoilerFlue", 212, 10, 218, 16, 10, "BlockGray")
 plant("HVAC_4", 140, 60, 158, 72, 6, "MetalGalvanized")
-plant("PlantRoom", 162, 124, 200, 164, 9, "Brick") -- centre cell: the plant room, walked round
+plant("PlantRoom", 162, 124, 200, 164, 9, "BlockGray") -- centre cell: the plant room, walked round
 plant("HVAC_5", 150, 220, 170, 234, 6, "MetalGalvanized") -- south cell
 plant("SkylightCurb_B", 186, 248, 210, 258, 1.5, "MetalGalvanized")
 plant("HVAC_6", 60, 230, 80, 244, 6, "MetalGalvanized") -- south-west cell

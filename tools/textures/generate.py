@@ -2,7 +2,7 @@
 """Generates Rovloc's seamless PBR textures from tools/textures/manifest.json.
 
     python3 tools/textures/generate.py                 every map + out/meta.json + out/preview.png
-    python3 tools/textures/generate.py --only CheckerTile,RustedMetal --detail
+    python3 tools/textures/generate.py --only VinylTile,RustedMetal --detail
     python3 tools/textures/generate.py --check         validate manifest <-> Palette.luau only (no images)
     python3 tools/textures/generate.py --size 2048 --out tools/textures/out/2048 --no-preview
                                                        the web's Max tier: the same textures at 2048, with the
@@ -12,7 +12,9 @@ Output (default tools/textures/out, git-ignored): <Id>_<Map>.png (1024 x 1024, o
 normal RGB in the OpenGL tangent-space convention Roblox uses; roughness / metalness 8-bit grey), meta.json (the
 sha256 of every map and each texture's reference albedo, read by upload.py), preview.png (every surface lit at game
 scale, tinted with its palette colour) and with --detail preview_<Id>.png (the maps side by side, 1:1 crops).
-Every recipe is seeded from the manifest, so the same inputs give the same pixels.
+Every recipe is seeded from the manifest, so the same inputs give the same pixels. A variant's colour map keeps only
+`chroma` (its manifest share, 0..1) of its own hue around its base layer (texlib.chroma): the gray look of spec v2 5.1,
+where the palette's cold gray shows through every stain, chip and grout line.
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from materials import RECIPES, Surface  # noqa: E402
-from texlib import Field, normal_map, to_u8  # noqa: E402
+from texlib import Field, chroma, normal_map, to_u8  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(HERE))
 PALETTE = os.path.join(ROOT, "src", "ReplicatedStorage", "Shared", "World", "ProceduralWorldBuilder", "Palette.luau")
@@ -76,6 +78,8 @@ def check(manifest: dict) -> list[str]:
                 errors.append(f"{m['id']}: pattern must be Regular or Organic")
             if not (m.get("studsPerTile", 0) > 0):
                 errors.append(f"{m['id']}: studsPerTile must be positive")
+            if not (0 < m.get("chroma", 0) <= 1):
+                errors.append(f"{m['id']}: chroma (the share of its own hue a colour map keeps) must be in (0, 1]")
         elif m.get("layout") not in ("strip", "tile") or m["maps"] != ["ColorMap"]:
             errors.append(f"{m['id']}: an overlay has layout strip|tile and only a ColorMap")
         if "ColorMap" not in m["maps"]:
@@ -246,6 +250,8 @@ def main() -> int:
             continue
         started = time.time()
         surface = RECIPES[m["id"]](Field(m["seed"], size, design))
+        if m["kind"] == "variant":
+            surface.color = np.clip(chroma(surface.color, surface.reference, m["chroma"]), 0, 1)
         maps = surface_maps(m, surface, size / design)
         files = {}
         for map_name, arr in maps.items():

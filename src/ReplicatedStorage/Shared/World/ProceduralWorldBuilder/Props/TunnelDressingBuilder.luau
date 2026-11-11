@@ -62,18 +62,18 @@ local VENT_SPACING = 34 -- the steam region: one relief valve per this much tunn
 local VENT_CHANCE = 0.22 -- elsewhere: a run's chance of one
 local DEBRIS_SPACING = 26
 local GALVANIZED = Color3.fromRGB(118, 124, 126)
-local IRON = Color3.fromRGB(46, 40, 36)
+local IRON = Color3.fromRGB(46, 47, 48)
 local VALVE_RED = Color3.fromRGB(150, 32, 26)
 local PLATE = Color3.fromRGB(22, 34, 52) -- enamel junction plate
 local PLATE_INK = Color3.fromRGB(228, 226, 214)
 local CABLE = Color3.fromRGB(24, 24, 22)
-local BRICK = Color3.fromRGB(112, 58, 44)
+local BLOCK = Color3.fromRGB(74, 76, 78)
 local PAPER = Color3.fromRGB(196, 188, 164)
 local CANS: { Color3 } = {
-	Color3.fromRGB(110, 40, 36),
-	Color3.fromRGB(46, 82, 52),
+	Color3.fromRGB(86, 72, 70),
+	Color3.fromRGB(66, 76, 70),
 	Color3.fromRGB(120, 122, 118),
-	Color3.fromRGB(140, 110, 42),
+	Color3.fromRGB(104, 98, 82),
 }
 local STEAM = Color3.fromRGB(214, 214, 208)
 
@@ -296,7 +296,7 @@ local function pipesOf(run: Run, ceiling: number): { Pipe }
 			off = 0.4,
 			color = MathUtil.lerpColor(paint, IRON, 0.35),
 			banded = false,
-			key = "PipeCopper",
+			key = "PipeLead",
 			level = MEDIUM,
 		},
 		{
@@ -352,8 +352,8 @@ local function pipeRun(parent: Instance, origin: Vector3, run: Run, side: number
 					Geometry.cylinder(
 						parent,
 						name .. "_Band",
-						onWall(origin, run, side, u - 0.18, pipe.y, pipe.off),
-						onWall(origin, run, side, u + 0.18, pipe.y, pipe.off),
+						onWall(origin, run, side, u - 0.25, pipe.y, pipe.off),
+						onWall(origin, run, side, u + 0.25, pipe.y, pipe.off),
 						pipe.d + 0.06,
 						"PipeIron",
 						{ material = Enum.Material.SmoothPlastic, color = run.region.band }
@@ -593,7 +593,7 @@ local function grime(parent: Instance, origin: Vector3, run: Run, side: number, 
 							material = Enum.Material.SmoothPlastic,
 							color = MathUtil.lerpColor(
 								run.region.grime,
-								Color3.fromRGB(70, 40, 24),
+								Color3.fromRGB(52, 50, 46),
 								run.random:NextNumber(0, 0.5)
 							),
 							transparency = run.random:NextNumber(0.25, 0.5),
@@ -802,9 +802,9 @@ local function debrisHeap(parent: Instance, origin: Vector3, run: Run, side: num
 					name .. "_Brick" .. i,
 					CFrame.new(at + Vector3.new(0, 0.16, 0)) * yaw,
 					size,
-					"Brick",
+					"BlockGray",
 					{
-						color = MathUtil.lerpColor(BRICK, Color3.new(0, 0, 0), random:NextNumber(0, 0.3)),
+						color = MathUtil.lerpColor(BLOCK, Color3.new(0, 0, 0), random:NextNumber(0, 0.3)),
 					}
 				),
 				SMALL
@@ -846,7 +846,7 @@ local function debrisHeap(parent: Instance, origin: Vector3, run: Run, side: num
 						* CFrame.Angles(random:NextNumber(-0.06, 0.06), 0, 0),
 					Vector3.new(random:NextNumber(0.6, 0.85), 0.01, random:NextNumber(0.8, 1.1)),
 					"PaperSheet",
-					{ color = MathUtil.lerpColor(PAPER, Color3.fromRGB(110, 96, 70), random:NextNumber(0, 0.6)) }
+					{ color = MathUtil.lerpColor(PAPER, Color3.fromRGB(101, 97, 89), random:NextNumber(0, 0.6)) }
 				),
 				SMALL
 			)

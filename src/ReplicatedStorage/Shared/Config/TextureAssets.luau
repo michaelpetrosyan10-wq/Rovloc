@@ -20,12 +20,6 @@ local TextureAssets: { [string]: Entry } = {
 		RoughnessMap = 74948079617763,
 		reference = Color3.new(0.8, 0.77, 0.69),
 	},
-	CheckerTile = {
-		ColorMap = 85905120131606,
-		NormalMap = 87329493184169,
-		RoughnessMap = 88188615129340,
-		reference = Color3.new(0.86, 0.85, 0.81),
-	},
 	StainedConcrete = {
 		ColorMap = 76879222787798,
 		NormalMap = 118540998902068,

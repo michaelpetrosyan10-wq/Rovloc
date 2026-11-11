@@ -71,19 +71,24 @@ local FIRE_DOOR_CLEARANCE = 12.6
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
-	Bulb = { brightness = 0.45, range = 14, color = Color3.fromRGB(255, 190, 128) },
+	Bulb = { brightness = 0.45, range = 14, color = Color3.fromRGB(201, 203, 205) },
 	EmergencyRed = { brightness = 0.45, range = 16, color = Color3.fromRGB(255, 34, 18) },
 	ClassroomGlow = { brightness = 1.1, range = 34, color = Color3.fromRGB(198, 220, 255) },
-	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(70, 255, 120) },
-	BoilerGlow = { brightness = 0.8, range = 14, color = Color3.fromRGB(255, 112, 36) },
+	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(222, 224, 226) },
+	BoilerGlow = { brightness = 0.8, range = 14, color = Color3.fromRGB(155, 156, 157) },
 }
 
-local BOILER: Style =
-	{ floor = "ConcreteStained", wall = "Brick", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Basement" }
+local BOILER: Style = {
+	floor = "ConcreteStained",
+	wall = "BlockGray",
+	ceiling = "ConcreteDark",
+	surface = "Concrete",
+	acoustic = "Basement",
+}
 local PLANT: Style =
 	{ floor = "Concrete", wall = "ConcreteDark", ceiling = "ConcreteDark", surface = "Concrete", acoustic = "Basement" }
 local STORE: Style =
-	{ floor = "ConcreteStained", wall = "Brick", ceiling = "Concrete", surface = "Concrete", acoustic = "Room" }
+	{ floor = "ConcreteStained", wall = "BlockGray", ceiling = "Concrete", surface = "Concrete", acoustic = "Room" }
 local WORKSHOP: Style =
 	{ floor = "ConcreteStained", wall = "WoodPanel", ceiling = "Concrete", surface = "Concrete", acoustic = "Room" }
 local ELECTRICAL: Style =
@@ -400,9 +405,9 @@ local plan = TunnelPlanner.plan({
 			x = 60,
 			z = 160,
 			areas = { { 0, 0, 126, 288 } },
-			pipe = rgb(48, 48, 50),
-			band = rgb(150, 146, 136),
-			grime = rgb(14, 13, 12),
+			pipe = rgb(58, 60, 62),
+			band = rgb(155, 155, 158),
+			grime = rgb(13, 13, 15),
 			paint = rgb(226, 222, 206),
 			graffiti = { "HE HEARS YOU RUN", "KEEP LOW", "DON'T RUN", "COUNT THE PLATES" },
 			wall = "ConcreteDark",
@@ -414,12 +419,12 @@ local plan = TunnelPlanner.plan({
 			x = 180,
 			z = 130,
 			areas = { { 126, 0, 231, 288 } },
-			pipe = rgb(132, 30, 24),
-			band = rgb(214, 206, 186),
-			grime = rgb(40, 18, 12),
+			pipe = rgb(58, 60, 62),
+			band = rgb(158, 113, 111),
+			grime = rgb(24, 24, 26),
 			paint = rgb(236, 226, 196),
 			graffiti = { "DON'T LOOK AT HIS FACE", "WALK. DON'T RUN", "HE WAS HERE", "STEAM ON" },
-			wall = "Brick",
+			wall = "BlockGray",
 		},
 		{
 			id = "Gas",
@@ -428,9 +433,9 @@ local plan = TunnelPlanner.plan({
 			x = 264,
 			z = 60,
 			areas = { { 231, 0, 264, 288 }, { 264, 0, 336, 130 } },
-			pipe = rgb(176, 136, 24),
-			band = rgb(30, 28, 24),
-			grime = rgb(36, 30, 14),
+			pipe = rgb(58, 60, 62),
+			band = rgb(158, 146, 111),
+			grime = rgb(30, 30, 32),
 			paint = rgb(232, 70, 48),
 			graffiti = { "3 FUSES", "NO FLAME", "BREAKER IS EAST", "SHUT IT OFF" },
 			wall = "ConcreteStained",
@@ -442,9 +447,9 @@ local plan = TunnelPlanner.plan({
 			x = 290,
 			z = 200,
 			areas = { { 264, 130, 336, 288 } },
-			pipe = rgb(36, 78, 128),
-			band = rgb(220, 220, 214),
-			grime = rgb(16, 24, 26),
+			pipe = rgb(58, 60, 62),
+			band = rgb(111, 132, 158),
+			grime = rgb(22, 22, 24),
 			paint = rgb(240, 236, 220),
 			graffiti = { "HIDE IN THE DRUMS", "HE WAITS", "IT CAN'T FIT", "LISTEN" },
 			wall = "Concrete",
@@ -457,9 +462,9 @@ local plan = TunnelPlanner.plan({
 			x = 367,
 			z = 150,
 			areas = { { 336, 0, 400, 288 } },
-			pipe = rgb(54, 92, 58),
-			band = rgb(214, 196, 64),
-			grime = rgb(18, 22, 14),
+			pipe = rgb(58, 60, 62),
+			band = rgb(111, 158, 116),
+			grime = rgb(20, 20, 22),
 			paint = rgb(236, 232, 214),
 			graffiti = { "DON'T LOOK BACK", "ALMOST OUT", "STAIRS EAST", "UP IS OUT" },
 			wall = "ConcreteStained",

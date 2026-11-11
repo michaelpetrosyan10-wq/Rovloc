@@ -311,6 +311,17 @@ def multiply(base: np.ndarray, color, t: np.ndarray) -> np.ndarray:
     return base * (1 - t3 + np.asarray(color, F32) * t3)
 
 
+def chroma(img: np.ndarray, reference, keep: float) -> np.ndarray:
+    """The gray look (spec v2 5.1): each pixel's departure in hue from the base layer `reference` cut to `keep` of
+    itself, its lightness relative to the base layer kept. The base layer stays the reference, so a part tinted to
+    palette / reference still lands on its palette colour; rust, stains and grout keep their depth and lose most of
+    their own colour, so the palette's cold gray is what shows."""
+    ref = np.maximum(np.asarray(reference, F32), 1e-3)
+    ratio = img / ref
+    luma = (ratio * np.asarray([0.299, 0.587, 0.114], F32)).sum(-1, keepdims=True)
+    return (luma + keep * (ratio - luma)) * ref
+
+
 def solid(n: int, color) -> np.ndarray:
     return np.broadcast_to(np.asarray(color, F32), (n, n, 3)).copy()
 

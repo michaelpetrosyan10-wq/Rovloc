@@ -339,6 +339,95 @@ async function soloRun(page) {
 
 const mb = (n) => (n / 1048576).toFixed(2);
 
+// ---------------------------------------------------------------------------------------------- the gray look gate
+/**
+ * The gray look (docs/design/game-spec-v2.md 5.1): three reference views per school stage, each rendered at Max and at
+ * Potato, torch on, must show a frame whose mean HSV saturation is at most GRAY_LIMIT. A pixel's saturation counts
+ * only where it has a colour to speak of: below GRAY_FLOOR of value (about 10/255) the 8-bit channels are too coarse
+ * to carry a hue (one count of blue in a 3/255 pixel reads as "33 % saturated"), so those near-black pixels count as
+ * gray. The views are walkways lit by the stage's own fixtures (a frame filled by an emergency lamp's pool measures the
+ * red accent 5.1 keeps, not the grade). Each is drawn at one fixed moment of the flicker clock with lightning off, so
+ * the gate never reads a stutter or a flash. `setTier(tier)` switches the held sandbox page's tier and waits for its
+ * texture set.
+ */
+const GRAY_LIMIT = 0.15;
+const GRAY_FLOOR = 0.04;
+const GRAY_VIEWS = {
+  Level0_Basement: {
+    'l0-boiler': { p: [207, 3.5, 238], yaw: -90, pitch: -4 },
+    'l0-west': { p: [60, 3.5, 200], yaw: 0, pitch: 0 },
+    'l0-steam': { p: [120, 3.5, 238], yaw: -90, pitch: -2 },
+  },
+  Level1_Hallways: {
+    'l1-corridor': { p: [380, 21, 144], yaw: 90, pitch: -3 },
+    'l1-gallery': { p: [250, 21, 236], yaw: 90, pitch: -2 },
+    'l1-kitchen': { p: [120, 21, 210], yaw: 90, pitch: -2 },
+  },
+  Level2_Auditorium: {
+    'l2-gallery': { p: [366, 37, 140], yaw: 0, pitch: -3 },
+    'l2-tunnel': { p: [200, 37, 86], yaw: 90, pitch: -2 },
+    'l2-west': { p: [34, 37, 240], yaw: 0, pitch: -2 },
+  },
+  Level3_Roof: {
+    'l3-roof': { p: [380, 67.5, 144], yaw: 90, pitch: 0 },
+    'l3-plant': { p: [300, 67.5, 110], yaw: 180, pitch: 0 },
+    'l3-southwest': { p: [60, 67.5, 240], yaw: 0, pitch: 0 },
+  },
+};
+
+async function grayLook(page, setTier, quick) {
+  const tiers = quick ? ['Potato'] : ['Max', 'Potato'];
+  const flashScale = await page.evaluate(() => {
+    const e = window.__rovloc.engine;
+    const was = e.settings.get('FlashScale');
+    e.settings.set('FlashScale', 0);
+    return was;
+  });
+  const measured = [];
+  for (const tier of tiers) {
+    await setTier(tier);
+    for (const [stage, views] of Object.entries(GRAY_VIEWS)) {
+      for (const [name, view] of Object.entries(views)) {
+        const m = await page.evaluate(([v, floor]) => {
+          const e = window.__rovloc.engine;
+          e.player.teleport({ position: { x: v.p[0], y: v.p[1], z: v.p[2] }, yaw: (v.yaw * Math.PI) / 180 });
+          e.player.setLook((v.yaw * Math.PI) / 180, (v.pitch * Math.PI) / 180);
+          e.player.flashlight.setOn(true);
+          e.loop.realTime = 40;
+          const skip = e.skipRender;
+          e.skipRender = true;
+          for (let i = 0; i < 30; i++) e.loop.stepManual(1 / 30);
+          e.skipRender = false;
+          e.loop.stepManual(1 / 30);
+          e.skipRender = skip;
+          const gl = e.renderer.gl.getContext();
+          const w = gl.drawingBufferWidth;
+          const h = gl.drawingBufferHeight;
+          const px = new Uint8Array(w * h * 4);
+          gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          let sat = 0;
+          let lum = 0;
+          for (let i = 0; i < px.length; i += 4) {
+            const hi = Math.max(px[i], px[i + 1], px[i + 2]);
+            lum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+            if (hi >= floor * 255) sat += (hi - Math.min(px[i], px[i + 1], px[i + 2])) / hi;
+          }
+          return { saturation: sat / (w * h), luminance: lum / (w * h) };
+        }, [view, GRAY_FLOOR]);
+        measured.push({ stage, name, tier, ...m });
+      }
+    }
+  }
+  await page.evaluate((v) => window.__rovloc.engine.settings.set('FlashScale', v), flashScale);
+  console.log(`INFO  gray look, mean saturation / luminance per view: ${measured
+    .map((m) => `${m.name} ${m.tier} ${m.saturation.toFixed(3)} / ${m.luminance.toFixed(1)}`).join(', ')}`);
+  const over = measured.filter((m) => !(m.saturation <= GRAY_LIMIT));
+  report(over.length === 0 && measured.length === tiers.length * 12,
+    `the gray look: every school stage's three reference views at ${tiers.join(' and ')} keep a mean saturation <= ${GRAY_LIMIT}`,
+    over.length ? over.map((m) => `${m.name} ${m.tier} ${m.saturation.toFixed(3)}`).join(', ')
+      : `worst ${Math.max(...measured.map((m) => m.saturation)).toFixed(3)} over ${measured.length} frames`);
+}
+
 async function main() {
   // the sandbox site for the engine walk and the tier measurements (served next to the website)
   execFileSync(process.execPath, [path.join(here, 'build.mjs'), '--sandbox', '--site', sandboxDir], { stdio: 'inherit' });
@@ -583,7 +672,7 @@ async function main() {
       e.quality.adapt = false;
     });
   } else {
-    // the Level 1 checkerboard hallway (its world rect, from the layout): the walk starts near its east end
+    // the Level 1 vinyl hallway (its world rect, from the layout): the walk starts near its east end
     const hall = await page.evaluate(() => {
       const r = window.__rovloc.engine.world.meta.rooms.find((x) => x.id === 'L1_Corridor_East');
       return { x: r.rect.x, z: r.rect.z, w: r.rect.w, d: r.rect.d, floorY: r.floorY, y: r.floorY + 3 };
@@ -812,7 +901,7 @@ async function main() {
     }, tier);
     await texturesSettled(page);
   };
-  // the Level 1 checkerboard hallway (west, toward the gate), the Level 0 tunnels (down a lit pipe gallery, the power
+  // the Level 1 vinyl hallway (west, toward the gate), the Level 0 tunnels (down a lit pipe gallery, the power
   // on), Level 2's west gallery (north along its 240 studs) and the lobby
   const places = {
     L1: { p: [380, 21, 144], yaw: Math.PI / 2 },
@@ -935,6 +1024,10 @@ async function main() {
     }
   }
   console.log(`INFO  mean luminance per tier: ${Object.entries(brightness).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(', ')}`);
+
+  // ------------------------------------------------------------------ 4b. the gray look's saturation gate
+  await grayLook(page, setTier, quick);
+
   // the Graphics menu (at Max, Max+ shown)
   await setTier('Max');
   await page.evaluate(() => {

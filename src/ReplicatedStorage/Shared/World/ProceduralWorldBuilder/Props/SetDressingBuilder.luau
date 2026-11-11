@@ -1134,7 +1134,7 @@ end
 -- Smashed lockers
 --------------------------------------------------------------------------------
 
-local LOCKER_PAINT: { Color3 } = { rgb(64, 82, 72), rgb(58, 70, 86), rgb(92, 60, 50), rgb(88, 88, 82), rgb(96, 84, 52) }
+local LOCKER_PAINT: { Color3 } = { rgb(72, 77, 74), rgb(65, 69, 74), rgb(75, 66, 63), rgb(88, 88, 86), rgb(88, 84, 74) }
 local INTERIOR = paint(rgb(34, 36, 34), Enum.Material.Metal)
 local PAPER: { Color3 } = { rgb(148, 140, 116), rgb(132, 128, 108), rgb(156, 150, 128), rgb(126, 132, 124) }
 local BOOK: { Color3 } = { rgb(72, 38, 34), rgb(40, 52, 70), rgb(52, 66, 44), rgb(90, 76, 46), rgb(56, 52, 60) }
@@ -1789,7 +1789,7 @@ local function planPipe(info: LevelInfo, anchor: Anchor, random: Rng): { Piece }
 			Vector3.new(0.22, 0.03, between(random, 1.6, 2.6)),
 			"Iron",
 			"Detail",
-			paint(rgb(70, 44, 28), Enum.Material.CorrodedMetal)
+			paint(rgb(56, 48, 43), Enum.Material.CorrodedMetal)
 		)
 	)
 	-- Ends: into the wall, or an elbow up through the ceiling
@@ -1930,7 +1930,7 @@ local function debrisMix(trigger: Trigger): { [DebrisKind]: number }
 end
 
 local CAN_COLORS: { Color3 } =
-	{ rgb(110, 40, 36), rgb(46, 82, 52), rgb(120, 122, 118), rgb(52, 62, 96), rgb(140, 110, 42) }
+	{ rgb(75, 54, 53), rgb(61, 72, 63), rgb(121, 121, 120), rgb(60, 63, 73), rgb(120, 111, 90) }
 local DEBRIS_ORDER: { DebrisKind } = { "Glass", "Can", "Flat", "Splinter", "Coal", "Plaster", "Lid", "Frame" }
 
 -- One debris item lying at level-local floor point (x, y, z), world space.
@@ -2554,7 +2554,7 @@ end
 
 type ItemKind = "Paper" | "Book" | "OpenBook" | "Chair" | "Backpack" | "Bottle" | "Tile" | "Box" | "Chunk"
 
-local CHAIR_SHELL: { Color3 } = { rgb(70, 76, 84), rgb(92, 62, 46), rgb(64, 74, 58), rgb(82, 80, 72) }
+local CHAIR_SHELL: { Color3 } = { rgb(74, 75, 78), rgb(76, 67, 62), rgb(68, 71, 66), rgb(80, 80, 77) }
 local BAGS: { Color3 } = { rgb(46, 54, 74), rgb(84, 40, 40), rgb(44, 58, 46), rgb(70, 66, 58), rgb(30, 30, 32) }
 local BOTTLES: { Color3 } = { rgb(52, 78, 52), rgb(78, 52, 30), rgb(110, 118, 114) }
 
@@ -2673,13 +2673,13 @@ local function itemPieces(kind: ItemKind, room: Room, random: Rng): { Piece }
 				"Chunk",
 				CFrame.new(0, s * 0.2, 0) * rz(between(random, -10, 10)),
 				Vector3.new(s, s * 0.45, s * 1.3),
-				if room.kind == "Roof" then "Brick" else "Rubble"
+				if room.kind == "Roof" then "BlockGray" else "Rubble"
 			),
 		}
 	end
 	-- A crushed cardboard box with a torn-open flap
 	local s = Vector3.new(between(random, 1.2, 1.6), between(random, 0.8, 1.1), between(random, 1, 1.4))
-	local card = paint(rgb(96, 78, 52), Enum.Material.Cardboard)
+	local card = paint(rgb(85, 80, 72), Enum.Material.Cardboard)
 	local list: { Piece } = {
 		block("Carton", CFrame.new(0, s.Y / 2, 0) * rz(between(random, -6, 6)), s, "Fixture", card),
 		block(

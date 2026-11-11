@@ -481,7 +481,7 @@ local function axisBox(
 end
 
 local SEAM = Color3.fromRGB(34, 36, 36)
-local RUST = Color3.fromRGB(92, 54, 28)
+local RUST = Color3.fromRGB(71, 60, 52)
 local DUCT_SEAM_PITCH = 4 -- studs between the sheet-metal joints of a duct run
 
 -- The inside of a duct's floor sheet: the joints between its sheets, rust where water stood and grime ground in

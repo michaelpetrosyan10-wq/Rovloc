@@ -14,18 +14,6 @@
       }
     },
     {
-      "name": "RovlocCheckerTile_Plastic",
-      "className": "MaterialVariant",
-      "properties": {
-        "BaseMaterial": "Plastic",
-        "ColorMapContent": "rbxassetid://85905120131606",
-        "NormalMapContent": "rbxassetid://87329493184169",
-        "RoughnessMapContent": "rbxassetid://88188615129340",
-        "StudsPerTile": 12,
-        "MaterialPattern": "Regular"
-      }
-    },
-    {
       "name": "RovlocStainedConcrete_Concrete",
       "className": "MaterialVariant",
       "properties": {

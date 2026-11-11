@@ -4,7 +4,7 @@
 -- to one of the three west ones, whose fire doors the janitor's master keys unlock.
 --
 -- The near side (east of the gate, x 290..400): the middle vestibule opens straight onto a short stretch of the old
--- checkerboard hallway (L1_Corridor_East, lockers smashed along its walls); the north and south vestibules come in
+-- long vinyl hallway (L1_Corridor_East, lockers smashed along its walls); the north and south vestibules come in
 -- through the service corridors behind the locker banks and join it at its east end. Every way west runs down that
 -- hallway, past Classroom 108: its door stands ajar, a pale glow spills from it onto broken glass (ScareStep
 -- L1_Trigger_GlassStep), and the Creature crouches in the room's north-west corner facing the wall, so a squad walking
@@ -89,20 +89,20 @@ local FIRE_DOOR_CLEARANCE = 12.6
 
 -- The gate line: everything east of it is the near side (the scare), everything west the far side (the keys).
 local GATE_X = 290
--- The checkerboard hallway's centre line (the middle stair tower's opening)
+-- The long vinyl hallway's centre line (the middle stair tower's opening)
 local HALL_Z = WorldConfig.Towers.East.openingZ
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
-	Bulb = { brightness = 0.45, range = 14, color = Color3.fromRGB(255, 196, 140) },
+	Bulb = { brightness = 0.45, range = 14, color = Color3.fromRGB(206, 207, 209) },
 	EmergencyRed = { brightness = 0.45, range = 16, color = Color3.fromRGB(255, 34, 18) },
 	ClassroomGlow = { brightness = 1.1, range = 34, color = Color3.fromRGB(198, 220, 255) },
-	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(70, 255, 120) },
-	BoilerGlow = { brightness = 0.9, range = 16, color = Color3.fromRGB(255, 118, 40) },
+	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(222, 224, 226) },
+	BoilerGlow = { brightness = 0.9, range = 16, color = Color3.fromRGB(158, 158, 160) },
 }
 
 local CORRIDOR: Style =
-	{ floor = "Linoleum", wall = "PlasterGreen", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Corridor" }
+	{ floor = "Linoleum", wall = "PlasterAsh", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Corridor" }
 local CLASSROOM: Style =
 	{ floor = "Linoleum", wall = "PlasterSchool", ceiling = "PlasterSchool", surface = "Tile", acoustic = "Room" }
 local OFFICE: Style =
@@ -398,7 +398,7 @@ local function keepRoom(r: Room, ports: { TunnelPlanner.Port }, region: string?,
 end
 
 -- The near side: the three stair vestibules the squad climbs into (route candidates of Stairwell_0_1*), the
--- checkerboard hallway the middle one opens onto, and the scare classroom off the hallway's north side
+-- long vinyl hallway the middle one opens onto, and the scare classroom off the hallway's north side
 local hallEast = room("L1_Corridor_East", "Corridor", GATE_X, HALL_Z - 7, 386 - GATE_X, 14, CORRIDOR)
 keepRoom(hallEast, {
 	{ side = "N", at = 370, kind = "Doorway", width = 8, id = "L1_Door_HallNorth" },
@@ -540,7 +540,7 @@ local plan = TunnelPlanner.plan({
 		deadShare = 0.3,
 		flickerShare = 0.12,
 		plateLampEvery = 2,
-		wall = "PlasterGreen",
+		wall = "PlasterAsh",
 		floor = "Linoleum",
 		ceiling = "PlasterSchool",
 		acoustic = "Corridor",
@@ -570,12 +570,12 @@ local plan = TunnelPlanner.plan({
 			x = 340,
 			z = 144,
 			areas = { { GATE_X, 0, 400, 288 } },
-			pipe = rgb(70, 96, 74),
-			band = rgb(214, 206, 170),
-			grime = rgb(20, 26, 20),
+			pipe = rgb(58, 60, 62),
+			band = rgb(111, 158, 118),
+			grime = rgb(24, 24, 26),
 			paint = rgb(232, 228, 210),
 			graffiti = { "DON'T GO IN 108", "IT WATCHES THE GLASS", "WALK SOFT", "LOCKERS ARE EMPTY" },
-			wall = "PlasterGreen",
+			wall = "PlasterAsh",
 			floor = "Linoleum",
 			-- the locker banks: their niches hold hideable lockers
 			hides = { "Locker" },
@@ -587,9 +587,9 @@ local plan = TunnelPlanner.plan({
 			x = 250,
 			z = 60,
 			areas = { { 230, 0, GATE_X, 180 }, { 160, 0, 230, 64 } },
-			pipe = rgb(126, 102, 70),
-			band = rgb(40, 34, 28),
-			grime = rgb(30, 26, 20),
+			pipe = rgb(58, 60, 62),
+			band = rgb(158, 138, 111),
+			grime = rgb(27, 27, 29),
 			paint = rgb(224, 60, 48),
 			graffiti = { "KEYS ON A NAIL", "OFFICE IS NORTH", "SIGN OUT", "NO HALL PASS" },
 			wall = "PlasterSchool",
@@ -602,9 +602,9 @@ local plan = TunnelPlanner.plan({
 			x = 120,
 			z = 80,
 			areas = { { 44, 0, 160, 64 }, { 44, 64, 230, 112 } },
-			pipe = rgb(96, 60, 92),
-			band = rgb(220, 200, 160),
-			grime = rgb(24, 18, 14),
+			pipe = rgb(58, 60, 62),
+			band = rgb(158, 111, 153),
+			grime = rgb(19, 19, 21),
 			paint = rgb(236, 230, 200),
 			graffiti = { "QUIET", "HE HEARS THE PAGES", "OVERDUE", "SHH" },
 			wall = "WoodPanel",
@@ -617,12 +617,12 @@ local plan = TunnelPlanner.plan({
 			x = 130,
 			z = 146,
 			areas = { { 44, 112, 230, 180 } },
-			pipe = rgb(40, 70, 118),
-			band = rgb(226, 226, 220),
+			pipe = rgb(58, 60, 62),
+			band = rgb(111, 129, 158),
 			grime = rgb(22, 22, 24),
 			paint = rgb(240, 236, 220),
 			graffiti = { "THE ROOF CAME DOWN", "DON'T LOOK UP", "IT CAME THROUGH HERE", "CLIMB" },
-			wall = "Brick",
+			wall = "BlockGray",
 			floor = "ConcreteStained",
 			wet = true,
 		},
@@ -633,9 +633,9 @@ local plan = TunnelPlanner.plan({
 			x = 160,
 			z = 240,
 			areas = { { 44, 180, GATE_X, 288 }, { 0, 0, 44, 288 } },
-			pipe = rgb(176, 136, 24),
-			band = rgb(30, 28, 24),
-			grime = rgb(34, 30, 16),
+			pipe = rgb(58, 60, 62),
+			band = rgb(158, 146, 111),
+			grime = rgb(30, 30, 32),
 			paint = rgb(232, 70, 48),
 			graffiti = { "LUNCH IS CANCELLED", "NO FLAME", "STAIRS WEST", "ALMOST OUT" },
 			wall = "TileGreen",

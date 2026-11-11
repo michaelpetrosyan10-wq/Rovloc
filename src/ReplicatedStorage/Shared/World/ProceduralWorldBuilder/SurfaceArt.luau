@@ -1,15 +1,16 @@
 --!strict
 -- SurfaceArt: procedural paint for part faces. Every pattern is a SurfaceGui of plain Frames (and the odd TextLabel,
--- UICorner, UIStroke or UIGradient): no images, no decals, no textures. Used for checker floors, drop-ceiling grids,
--- hazard stripes, signs and posters, and the wear on every wall: grime at the foot, soot under the ceiling, dirt in
--- the corners, water runs and cracks.
+-- UICorner, UIStroke or UIGradient): no images, no decals, no textures. Used for the traffic lanes of vinyl floors,
+-- drop-ceiling grids, hazard stripes, signs and posters, and the wear on every wall: grime at the foot, soot under the
+-- ceiling, dirt in the corners, water runs and cracks. No pattern here tiles a floor in two tones (the gray look,
+-- docs/design/game-spec-v2.md 5.1).
 --
 -- Rules every surface follows:
 --   * PixelsPerStud sizing, low resolution (4..20 px per stud) and capped so no canvas side exceeds MaxCanvas pixels
 --     (the engine downscales larger canvases anyway, and phones pay for every texel);
 --   * LightInfluence 1 unless a surface is itself a light source (an exit sign's letters), so paint sits in the
 --     scene's light and darkness like the part under it;
---   * patterns are drawn as the minority colour only (the dark squares of a checker, the seams of a grid) over a part
+--   * patterns are drawn as the minority colour only (a worn lane, the seams of a grid) over a part
 --     coloured as the majority, so a floor keeps its own material, gloss and reflections where most of it shows;
 --   * positions are in canvas Scale, and every pattern here is symmetric under flipping either canvas axis, so the
 --     result does not depend on how the engine orients a Top or Bottom face's canvas.
@@ -96,26 +97,26 @@ function SurfaceArt.frame(
 	return frame
 end
 
--- The dark squares of a cols x rows checker over the whole canvas (the part is the pale squares). With odd counts
--- the four corner squares are dark, so the pattern is the same under either axis flip.
-function SurfaceArt.checker(
-	parent: Instance,
-	cols: number,
-	rows: number,
-	color: Color3,
-	transparency: number,
-	zIndex: number?
-): number
-	local count = 0
-	for i = 0, cols - 1 do
-		for j = 0, rows - 1 do
-			if (i + j) % 2 == 0 then
-				SurfaceArt.frame(parent, "Square", i / cols, j / rows, 1 / cols, 1 / rows, color, transparency, zIndex)
-				count += 1
-			end
-		end
-	end
-	return count
+-- A traffic lane worn down the middle of the canvas: one band `share` of the canvas across, along canvas X (`alongX`)
+-- or canvas Y, `strength` dark at its centre line and fading out to both edges. Centred, so the same under either
+-- axis flip.
+function SurfaceArt.lane(parent: Instance, alongX: boolean, share: number, color: Color3, strength: number): Frame
+	local w = math.clamp(share, 0, 1)
+	local frame = if alongX
+		then SurfaceArt.frame(parent, "Lane", 0, (1 - w) / 2, 1, w, color, 0)
+		else SurfaceArt.frame(parent, "Lane", (1 - w) / 2, 0, w, 1, color, 0)
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = if alongX then 90 else 0
+	local dense = math.clamp(1 - strength, 0, 1)
+	gradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.3, math.clamp(dense + (1 - dense) * 0.35, 0, 1)),
+		NumberSequenceKeypoint.new(0.5, dense),
+		NumberSequenceKeypoint.new(0.7, math.clamp(dense + (1 - dense) * 0.35, 0, 1)),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	gradient.Parent = frame
+	return frame
 end
 
 -- Interior seams of a cols x rows grid of `thickness` pixels (the canvas edges are left to the walls).
