@@ -250,7 +250,7 @@ class Avatar {
     const dead = life === 'Dead';
     const downed = life === 'Downed' || state === 'DownedCrawling';
     const vent = (pose.flags & PoseFlags.Vent) !== 0 || state === 'VentCrawling' || state === 'VentScurrying';
-    const crouch = state === 'Crouching' || state === 'Trapped';
+    const crouch = state === 'Crouching' || state === 'Trapped' || state === 'Sliding';
     const prone = dead || downed || vent;
     const k = Math.min(1, dt * 8);
     this.blend.crouch += ((crouch ? 1 : 0) - this.blend.crouch) * k;

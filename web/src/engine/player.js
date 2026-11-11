@@ -3,7 +3,8 @@
 // HandRig, PanicVFX) in one, since single-player needs no prediction or reconciliation.
 //
 // MoveState (deriveState). A held override wins, highest first: Scripted > Trapped > Hiding > Parachuting >
-// DownedCrawling (pushOverride / popOverride by token). Otherwise the mode decides (setMode: OnFoot / Vent), with
+// DownedCrawling (pushOverride / popOverride by token). Then a leap under way is Leaping and a slide Sliding (parkour.js:
+// the slide, the leap, hard landings and the look-back). Otherwise the mode decides (setMode: OnFoot / Vent), with
 // canSprint = sprint held && stamina > 0 && not exhausted:
 //   OnFoot  Crouching if crouch; Sprinting if canSprint && moving (>= 4 studs/s or move input > 0.1); else Standing
 //   Vent    VentScurrying if canSprint, else VentCrawling
@@ -24,7 +25,8 @@
 //            spend) it regenerates at StaminaRegen.
 //   battery  drains while the torch is lit (FlashlightService); pickups add (addBattery); max can be raised (perk).
 //
-// Camera (per frame): look input -> pitch range of the camera state -> eye = spring-smoothed root height + the
+// Camera (per frame; the view's yaw is the look's turned by the look-back, a hard landing dips the eye):
+// look input -> pitch range of the camera state -> eye = spring-smoothed root height + the
 // neck-pivot eye + the state offset (spring) -> panic + bob + shake -> FOV (base + sprint + panic + heartbeat warp)
 // -> camera overrides (setCameraOverride, priority-blended) -> the camera. A ray from the root pulls the eye in front
 // of walls. ControlLocks (lock(reason)) anchor the body and ignore movement input; "Jumpscare" / "Cutscene" locks
@@ -36,15 +38,19 @@ import { CameraConfig, GameConfig, MaterialSurface, OverridePriority, StaminaDra
 import { Flashlight } from './flashlight.js';
 import { clamp01, dampNumber, NumberSpring, VectorSpring, toMatrix, wrapAngle, yawPitchFromVector } from './math.js';
 import { PanicFx } from './panic.js';
+import { Parkour } from './parkour.js';
 import { CharacterBody, CrouchHeight, ROOT_ABOVE_FEET } from './physics.js';
 import { Signal } from './signal.js';
 import { Viewmodel } from './viewmodel.js';
 
 const OVERRIDE_RANK = Object.fromEntries(OverridePriority.map((s, i) => [s, OverridePriority.length - i]));
 const MODE_OF = { VentCrawling: 'Vent', VentScurrying: 'Vent' };
-const NO_JUMP = new Set(['VentCrawling', 'VentScurrying', 'DownedCrawling', 'Hiding', 'Trapped']);
+const NO_JUMP = new Set(['VentCrawling', 'VentScurrying', 'DownedCrawling', 'Hiding', 'Trapped', 'Sliding', 'Leaping']);
+/** The MoveStates with the crouched body (3.7 tall: crawlways, slide bars). */
+const LOW_BODY = new Set(['Crouching', 'Sliding']);
 const FOOTSTEPS = { Standing: 1, Sprinting: 1, Crouching: 0.45, Scripted: 0.8 };
 const SELF_FOOTSTEP_VOLUME = 0.55;
+const SELF_MOVE_VOLUME = 0.9;
 const MOVING_SPEED = 4;
 const MOVE_DIRECTION_MIN = 0.1;
 const HEIGHT_SPEED = 26;
@@ -112,6 +118,12 @@ export class Player {
     this.footstep = new Signal();
     /** @type {Signal<[]>} */
     this.landed = new Signal();
+    /** @type {Signal<[]>} a slide started (parkour.js) */
+    this.slid = new Signal();
+    /** @type {Signal<[import('./parkour.js').Strip, number]>} a leap started (the strip, the take-off before its lip) */
+    this.leapt = new Signal();
+    /** @type {Signal<[number]>} a hard landing (the fall in studs) */
+    this.hardLanded = new Signal();
 
     this.mode = 'OnFoot';
     /** @type {Map<string, string>} */
@@ -131,6 +143,8 @@ export class Player {
     // look and camera
     this.yaw = 0;
     this.pitch = 0;
+    /** the view's yaw this frame: the look turned by the look-back */
+    this.viewYaw = 0;
     this.lookInput = new LookInput();
     this.bob = new ViewBob();
     this.stack = new CameraStack();
@@ -166,6 +180,8 @@ export class Player {
     this.panic = new PanicFx({ world, audio });
     this.flashlight = new Flashlight({ shared, audio, scene: world.scene, meters: this.meters, settings, quality });
     this.viewmodel = new Viewmodel({ shared, scene: renderer.viewScene });
+    /** the slide, the leap, hard landings and the look-back (parkour.js) */
+    this.parkour = new Parkour(this);
 
     input.on('Sprint', (phase) => this._setSprint(phase === 'Begin'));
     input.on('Crouch', (phase) => {
@@ -269,6 +285,7 @@ export class Player {
   teleport(cframe) {
     const m = toMatrix(cframe, _m);
     _v.setFromMatrixPosition(m);
+    this.parkour.reset();
     this.body.teleport(_v);
     this._snapDrawn();
     _d.set(-m.elements[8], -m.elements[9], -m.elements[10]);
@@ -372,6 +389,19 @@ export class Player {
     this.meters.battery.add(delta);
   }
 
+  /** A noise pulse of the player's own body at the feet (a slide, a landing), heard as the locomotion is. */
+  emitNoise(kind) {
+    if (!this.isAlive() || this.lifeState === 'Lobby' || this.inLobby) return null;
+    const zone = this.world.zoneAt(this.body.position);
+    const level = zone ? zone.level : this.world.levelAt(this.body.position);
+    return this.engine.noise.emit(this.feetPosition(_f), kind, { source: 'player', level });
+  }
+
+  /** One of the body's own sounds (the slide's scrape, the leap's whoosh, a hard landing). */
+  playSound(preset) {
+    if (this.audio) this.audio.play(preset, { volume: SELF_MOVE_VOLUME });
+  }
+
   /** The footstep surface under the feet (the zone's surface, the floor material, else Concrete). */
   surfaceAt(position) {
     const zone = this.world.zoneAt(position);
@@ -396,6 +426,8 @@ export class Player {
   _derive() {
     const override = this.getOverride();
     if (override) return override;
+    if (this.parkour.leap) return 'Leaping';
+    if (this.parkour.slide) return 'Sliding';
     const st = this.meters.stamina;
     const canSprint = this.intent.sprint && st.value > 0 && !this.exhausted;
     if (this.mode === 'Vent') return canSprint ? 'VentScurrying' : 'VentCrawling';
@@ -408,11 +440,18 @@ export class Player {
     return canSprint && this.moving ? 'Sprinting' : 'Standing';
   }
 
-  /** Fixed 30 Hz: the latched presses, meters, MoveState, the body's motion, landings, locomotion noise. */
+  /**
+   * Fixed 30 Hz: the latched presses (a Crouch press starts a slide or toggles the crouch; the Jump press is read
+   * against the leap strips and may start a leap), meters, MoveState, the body's motion, landings, locomotion noise.
+   */
   tick(dt) {
     const now = this.engine.loop.time;
     const st = this.meters.stamina;
-    if (this.crouchPresses % 2 === 1) this.intent.crouch = !this.intent.crouch;
+    // sprinting: at a sprint since the last tick, Sprint still held
+    const sprinting = this.moveState === 'Sprinting' && this.input.isHeld('Sprint') && !this.isLocked();
+    if (this.crouchPresses % 2 === 1 && !this.parkour.crouchPress(sprinting)) {
+      this.intent.crouch = !this.intent.crouch;
+    }
     this.crouchPresses = 0;
     const sprintHeld = this.input.isHeld('Sprint') && !this.isLocked();
     if (!sprintHeld) this.intent.sprint = false;
@@ -428,6 +467,9 @@ export class Player {
         if (now >= regenAt) st.value = Math.min(st.max, st.value + GameConfig.StaminaRegen * dt);
       }
     }
+    const press = this.jumpLatched;
+    this.jumpLatched = false;
+    const wantsJump = this.parkour.beforeMove(now, press, this.jumpHeld);
     const next = this._derive();
     if (next !== this.moveState) {
       const prev = this.moveState;
@@ -435,9 +477,11 @@ export class Player {
       this.moveState = next;
       this.moveStateChanged.fire(next, prev);
     }
-    // the crouched body is shorter (crawlways): physics.js CrouchHeight
-    this.body.height = this.moveState === 'Crouching' ? CrouchHeight : PhysicsConfig.BodyHeight;
-    this._simulate(dt);
+    // the crouched and the sliding body are shorter (crawlways, slide bars): physics.js CrouchHeight
+    this.body.height = LOW_BODY.has(this.moveState) ? CrouchHeight : PhysicsConfig.BodyHeight;
+    const jump = wantsJump && !this.isLocked() && !NO_JUMP.has(this.moveState) && this.lifeState !== 'Downed';
+    const driven = this._simulate(dt, jump, now);
+    this.parkour.afterMove(now, dt, driven);
     this.noiseClock += dt;
     if (this.noiseClock >= 1 / NOISE_HZ) {
       this.noiseClock = 0;
@@ -452,11 +496,13 @@ export class Player {
   }
 
   /**
-   * The body's motion for one tick, in SUBSTEPS substeps: the strongest motion override, else the walking physics
-   * (the wish from the yaw and the move input at this tick; the latched or held jump), else the Vent mode without a
-   * driver. Then the tick's speed, moving and landing, and the tick states the frame interpolates between.
+   * The body's motion for one tick, in SUBSTEPS substeps: the strongest motion override (the leap's among them), else
+   * the slide (its speed profile and steering), else the walking physics (the wish from the yaw and the move input at
+   * this tick, slowed by a hard landing; the jump), else the Vent mode without a driver. Then the tick's speed, moving
+   * and landing, and the tick states the frame interpolates between. Returns whether a motion override other than the
+   * leap moved the body.
    */
-  _simulate(dt) {
+  _simulate(dt, jump, now) {
     const body = this.body;
     const locked = this.isLocked();
     const state = this.moveState;
@@ -465,17 +511,29 @@ export class Player {
     const mv = locked || !this.isAlive() ? { x: 0, y: 0 } : this.input.moveVector();
     const sy = Math.sin(this.yaw);
     const cy = Math.cos(this.yaw);
-    const speedCap = WalkSpeeds[state] ?? GameConfig.WalkSpeed;
+    const speedCap = (WalkSpeeds[state] ?? GameConfig.WalkSpeed) * this.parkour.speedFactor(now);
     _wish.set((-sy * mv.y + cy * mv.x) * speedCap, 0, (-cy * mv.y - sy * mv.x) * speedCap);
-    const jump = (this.jumpLatched || this.jumpHeld) && !locked && !NO_JUMP.has(state) && this.lifeState !== 'Downed';
-    this.jumpLatched = false;
+    // the slide steers toward the move input's heading (a yaw), none without input
+    const steer = Math.hypot(mv.x, mv.y) > MOVE_DIRECTION_MIN ? Math.atan2(-_wish.x, -_wish.z) : null;
     const sub = dt / SUBSTEPS;
+    let driven = false;
     for (let i = 0; i < SUBSTEPS; i++) {
       // a driver may end itself mid-tick: the next substep walks
       let driver = null;
-      for (const d of this.motionOverrides.values()) if (!driver || d.priority > driver.priority) driver = d;
-      if (driver) driver.fn(sub, this);
-      else if (this.mode === 'OnFoot') body.step(sub, _wish, { jump: jump && body.grounded });
+      let token = null;
+      for (const [t, d] of this.motionOverrides) {
+        if (!driver || d.priority > driver.priority) {
+          driver = d;
+          token = t;
+        }
+      }
+      if (driver) {
+        driver.fn(sub, this);
+        if (token !== 'Leap') driven = true;
+      } else if (this.parkour.slide && this.mode === 'OnFoot') {
+        const slide = this.parkour.slideWish(this.parkour.slide.ticks * SUBSTEPS + i, sub, steer, _slideWish);
+        body.step(sub, slide, { accel: Infinity });
+      } else if (this.mode === 'OnFoot') body.step(sub, _wish, { jump: jump && body.grounded });
       // Vent without a driver: move along the look (the game's vent rail driver replaces this)
       else body.step(sub, _wish, { accel: 10 });
     }
@@ -485,6 +543,7 @@ export class Player {
     if (body.grounded && !this.wasGrounded) this.landed.fire();
     this.wasGrounded = body.grounded;
     this.tickCurrent.copy(body.position);
+    return driven;
   }
 
   /** The drawn root jumps to the body (a teleport): no interpolation from where it was. */
@@ -536,15 +595,18 @@ export class Player {
       this.lookInput.reset();
     }
     this.pitch = settlePitch(this.pitch, minP, maxP, dt);
+    // the view's yaw: the look, turned by the look-back (movement keeps the look's heading)
+    this.viewYaw = wrapAngle(this.yaw + this.parkour.lookYaw(engine.loop.alpha));
 
-    // eye
+    // eye (a hard landing dips it)
+    const motionScale = clamp01(this.settings.get('MotionScale'));
     this._computeEye(dt, state, forced);
+    this.eyePosition.y += this.parkour.dip(engine.loop.time) * motionScale;
     const dead = this.lifeState === 'Dead' || this.lifeState === 'Spectating';
 
     // panic + bob
     this.panic.sense(dt, dead ? null : this.eyePosition);
     const level = this.panic.step(dt, this.lifeState === 'Downed');
-    const motionScale = clamp01(this.settings.get('MotionScale'));
     const bob = this.bob.step(dt, {
       speed: dead ? 0 : this.speed,
       profile: CameraStates.bob(state),
@@ -563,7 +625,7 @@ export class Player {
     this.fov = dampNumber(this.fov, fovTarget, F.LerpSpeed, dt);
 
     // compose: eye x look x bob, then the override stack
-    _e.set(this.pitch, this.yaw, 0, 'YXZ');
+    _e.set(this.pitch, this.viewYaw, 0, 'YXZ');
     this.eyeQuat.setFromEuler(_e);
     _base.compose(this.eyePosition, this.eyeQuat, _one).multiply(bob.matrix);
     _base.decompose(_bp, _bq, _bs);
@@ -583,7 +645,7 @@ export class Player {
     const alive = !dead;
     const probe = this.world.probeAt(this.eyePosition, _probe);
     this.viewmodel.update({
-      dt, eye: this.eyePosition, yaw: this.yaw, pitch: this.pitch, moveState: state,
+      dt, eye: this.eyePosition, yaw: this.viewYaw, pitch: this.pitch, moveState: state,
       lit: this.flashlight.output > 0.05, active: this.cameraEnabled && alive && this.stack.coverage() < 0.5, probe,
     });
     this.flashlight.update({
@@ -622,13 +684,13 @@ export class Player {
       this.offsetSpring.target.copy(target);
       this.offsetSpring.step(dt);
     }
-    const sy = Math.sin(this.yaw);
-    const cy = Math.cos(this.yaw);
+    const sy = Math.sin(this.viewYaw);
+    const cy = Math.cos(this.viewYaw);
     const o = this.offsetSpring.position;
-    // rotate the state offset by yaw (x right, z back)
+    // rotate the state offset by the view's yaw (x right, z back)
     const ox = o.x * cy + o.z * sy;
     const oz = -o.x * sy + o.z * cy;
-    eyeOffset(CameraRig.DefaultEye, this.yaw, this.pitch, _eo);
+    eyeOffset(CameraRig.DefaultEye, this.viewYaw, this.pitch, _eo);
     const desired = _des.set(root.x + _eo.x + ox, this.heightSpring.position + _eo.y + o.y, root.z + _eo.z + oz);
     if (grounded && this.mode === 'OnFoot') {
       const floorY = root.y - ROOT_ABOVE_FEET;
@@ -682,6 +744,7 @@ export class Player {
     this.crouchPresses = 0;
     this.jumpLatched = false;
     this.exhausted = false;
+    this.parkour.reset();
   }
 }
 
@@ -693,6 +756,7 @@ const _f = new THREE.Vector3();
 const _ft = new THREE.Vector3();
 const _down = new THREE.Vector3(0, -1, 0);
 const _wish = new THREE.Vector3();
+const _slideWish = new THREE.Vector3();
 const _e = new THREE.Euler();
 const _base = new THREE.Matrix4();
 const _bp = new THREE.Vector3();

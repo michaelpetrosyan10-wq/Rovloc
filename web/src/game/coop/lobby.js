@@ -186,9 +186,10 @@ export class LobbyNet {
     const seed = game.match.runSeed();
     const runId = newRunId();
     const difficulty = this.chosen;
+    const players = this.coop.squad.list().length;
     this.coop.runNet.deployed(difficulty);
-    this.coop.broadcast({ t: 'deploy', seed, d: difficulty, id: runId });
-    game.lobby.deployWith(difficulty, { seed, runId, slot: this.coop.me ? this.coop.me.slot : 0 }).finally(() => {
+    this.coop.broadcast({ t: 'deploy', seed, d: difficulty, id: runId, n: players });
+    game.lobby.deployWith(difficulty, { seed, runId, slot: this.coop.me ? this.coop.me.slot : 0, players }).finally(() => {
       this.deploying = false;
     });
     for (const m of this.coop.squad.list()) {
@@ -223,7 +224,7 @@ export class LobbyNet {
     if (game.run) return;
     if (game.onboarding && game.onboarding.busy()) game.onboarding.closeForCoop();
     game.lobby.deployWith(msg.d === 'Nightmare' ? 'Nightmare' : 'Standard',
-      { seed: msg.seed, runId: msg.id, slot: this.coop.me ? this.coop.me.slot : 0 });
+      { seed: msg.seed, runId: msg.id, slot: this.coop.me ? this.coop.me.slot : 0, players: Number(msg.n) || 1 });
   }
 
   tick() {

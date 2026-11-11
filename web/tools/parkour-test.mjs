@@ -35,8 +35,8 @@
 //                 climbed, nothing from 2.0 up is (a hurdle starts at 2.4), the same at 20 and 144 fps, for blocks on
 //                 the floor and for slabs off it. And nothing is ever walked through: a block the body does not
 //                 stand on stops it at its near face.
-//   presses       a held jump hops again on every landing; two Crouch presses on one tick change nothing and three
-//                 toggle; a press and release on one tick still acts. A press still pending when the pause menu
+//   presses       a held jump hops again on every landing; at a walk two Crouch presses on one tick change nothing and
+//                 three toggle; a press and release on one tick still acts. A press still pending when the pause menu
 //                 opens is dropped, a press made while the menu is open or the controls are locked does nothing.
 //   interpolation at 144 fps with a constant velocity the drawn camera advances in near-equal steps (< 2 % spread)
 //                 and the drawn root always lies between the last two tick states; a Jump press and a Crouch press
@@ -44,17 +44,38 @@
 //                 a tick before or after the player's, between two frames, or a bare write of the body's position)
 //                 is a cut: no frame draws the root or the camera between the two places. The pause holds the drawn
 //                 root still; a one-second stall moves it by the three ticks the loop runs and no further.
+//   rules         src/game/rules/parkour.js replays every ParkourRules row of build/cache/golden.json (numbers within
+//                 1e-9) and the engine's leap curve is the golden one; the spec's numbers, written here from its text.
+//   slide         (lane x 40, a slide bar at x 70, a low ceiling at x 100) a Crouch press at a sprint slides on its tick
+//                 for 0.70 s (21 ticks): 10.5 studs, the speed 17 falling to 13 tick by tick, the body 3.7 tall, the
+//                 crouched eye, the Slide noise once, the press consumed (it ends standing), no jump, steering at most
+//                 30 degrees a second; a walk's press crouches; standing, the bar (4.2 clear) stops the body, a slide
+//                 and a crouch-walk pass under it; a slide ending under a low ceiling ends crouched. 20 / 30 / 60 / 144.
+//   leap          (a runway 12 high, its lip, the 12 gap, pads level and 2 lower; strips A and B over them, a blind
+//                 strip) on time (Jump in the strip) the leap starts on the tick, 18 ticks on the curve (to 2 past the
+//                 far edge, apex 2) and lands on the pad at 17, heard as JumpLand; early in the band the request waits
+//                 for the strip; outside the band it is a free jump into the gap; in the air within 0.10 s of the lip
+//                 it still leaps, at 0.13 s it does not; no leap under 15 studs/s nor 40 degrees off (30 leaps); leap
+//                 assist On leaps with no press, Auto on a keyboard and Off do not; the five never-blind rays reach each
+//                 pad and the walled one is blind. Identical at 20 / 30 / 60 / 144.
+//   landing       a 12-stud fall lands hard (HardLanding once on the landing tick), 0.6 s at 40 % of the sprint then
+//                 the sprint again; a drop of 4 is not hard; a jump's landing is JumpLand. 20 / 30 / 144.
+//   lookback      LookBack held: the view turns 150 degrees in 0.18 s and back on release, the walk keeps its heading;
+//                 nothing in a vent. 20 / 60 / 144.
 //   overrides     the vent rail and the parachute (freefall, ripcord, canopy) give identical tick states at 20 and
 //                 144 fps (the game page booted once per rate, the same preamble at 30 fps); entering a vent puts the
 //                 body on the rail at once (the drive's first tick moves it by its speed alone).
 //   senses        the eye the levels see (game.eye(), subjects()) is tick state, the root plus the MoveState's eye
 //                 height: identical at 20 and 144 fps on a walk through Level 1.
+//   falls         in the game, a fall of 15 onto the roof lands hard once and never damages (health and life kept).
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { parkourRules } from '../src/game/rules/parkour.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -64,8 +85,9 @@ const opt = (name, fallback) => {
   return i >= 0 && argv[i + 1] ? argv[i + 1] : fallback;
 };
 const noBuild = argv.includes('--no-build');
-const ALL_CASES = ['determinism', 'numbers', 'jumps', 'gaps', 'step-up', 'presses', 'interpolation', 'overrides', 'senses'];
-const GAME_CASES = ['overrides', 'senses'];
+const ALL_CASES = ['determinism', 'numbers', 'jumps', 'gaps', 'step-up', 'presses', 'interpolation', 'rules', 'slide', 'leap',
+  'landing', 'lookback', 'overrides', 'senses', 'falls'];
+const GAME_CASES = ['overrides', 'senses', 'falls'];
 const only = new Set(opt('--only', ALL_CASES.join(',')).split(','));
 const RATES = [20, 30, 60, 144];
 const TOLERANCE = 1e-6;
@@ -151,16 +173,17 @@ const CORRIDOR = [
   [220, 'turn', -0.06], [270, 'turn', 0], [300, 'key', 'KeyW', false],
 ];
 const CORRIDOR_TICKS = 320;
-// held and repeated presses: a jump held through a sprint (it hops again on every landing), two Crouch presses on one
-// tick (no change), three on one tick (a toggle), one more (back up), a Jump pressed and released on the same tick
+// held and repeated presses: a jump held through a sprint (it hops again on every landing); then at a walk (a Crouch
+// press at a sprint is a slide): two Crouch presses on one tick (no change), three on one tick (a toggle), one more
+// (back up), a Jump pressed and released on the same tick
 const PRESSES = [
   [0, 'at', 0, 40, 0], [3, 'key', 'KeyW', true], [3, 'sprint', true],
-  [30, 'jump', true], [95, 'jump', false],
+  [30, 'jump', true], [95, 'jump', false], [100, 'sprint', false],
   [110, 'crouch'], [110, 'crouch'],
   [120, 'crouch'], [120, 'crouch'], [120, 'crouch'],
   [150, 'crouch'],
   [165, 'jump', true], [165, 'jump', false],
-  [190, 'key', 'KeyW', false], [190, 'sprint', false],
+  [190, 'key', 'KeyW', false],
 ];
 const PRESSES_TICKS = 220;
 
@@ -271,6 +294,18 @@ function installLab() {
   box(354, 0, -20, 366, 4, 10);
   // the wall (x -330): 20 high, 40 wide, across z -20..-22
   box(-350, 0, -22, -310, 20, -20);
+  // the slide lanes (x 40 open floor, x 70 and x 100): a slide bar at x 70 (4.2 clear under it, solid to 9.7, 2 deep:
+  // z -500..-502), a low ceiling at x 100 (4.2 clear, from z -490 to -560)
+  box(64, 4.2, -502, 76, 9.7, -500);
+  box(94, 4.2, -560, 106, 9.7, -490);
+  // the leap course: a runway 12 high (x 220..380, z -380 to its lip at -440), the 12-stud gap (its floor the slab, 12
+  // below), the pads 40 deep: level with the runway (x 220..300) and 2 lower (x 300..380). Its strips: A over the level
+  // pad, B over the lower one, each 80 wide
+  box(220, 0, -440, 380, 12, -380);
+  box(220, 0, -492, 300, 12, -452);
+  box(300, 0, -492, 380, 10, -452);
+  // a blind strip (on the slab, lip at z -600 by x -250): a wall 20 high across its gap hides the pad
+  box(-270, 0, -607, -230, 20, -606);
   const geometry = new Geometry();
   geometry.setAttribute('position', new Attribute(new Float32Array(pos), 3));
   const index = new Uint32Array(pos.length / 3);
@@ -280,13 +315,18 @@ function installLab() {
   const bounds = new Box3();
   bvh.getBoundingBox(bounds);
   world.colliders.set('ParkourFixture', { bvh, box: bounds, level: 'ParkourFixture' });
+  const strips = {
+    A: p.parkour.addStrip('FixtureA', { x: O.x + 260, y: O.y + 12, z: O.z - 440 }, { x: 0, z: -1 }, 80),
+    B: p.parkour.addStrip('FixtureB', { x: O.x + 340, y: O.y + 12, z: O.z - 440 }, { x: 0, z: -1 }, 80),
+    Blind: p.parkour.addStrip('FixtureBlind', { x: O.x - 250, y: O.y, z: O.z - 600 }, { x: 0, z: -1 }, 40),
+  };
   const hall = world.meta.rooms.find((x) => x.id === 'L1_Corridor_East');
   const corridor = { x: hall.rect.x + hall.rect.w - 16, y: hall.floorY + 3, z: hall.rect.z + hall.rect.d / 2 };
 
   const TICK = loop.tickDt;
   const releaseAll = () => {
     input.keys.clear();
-    for (const action of ['Sprint', 'Jump', 'Crouch']) input.inject(action, 'lab', false);
+    for (const action of ['Sprint', 'Jump', 'Crouch', 'LookBack']) input.inject(action, 'lab', false);
   };
   const teleport = (x, y, z, yaw) => {
     p.teleport({ position: { x, y, z }, yaw });
@@ -311,6 +351,7 @@ function installLab() {
     p.moveState = 'Standing';
     p.body.height = 5.2;
     p.meters.stamina.set(p.meters.stamina.max);
+    e.settings.set('LeapAssist', 'Auto');
     teleport(O.x, O.y + 3, O.z + 40, 0);
   };
   const apply = (op, turn) => {
@@ -322,6 +363,9 @@ function installLab() {
       case 'sprint': input.inject('Sprint', 'lab', !!a); break;
       case 'jump': input.inject('Jump', 'lab', !!a); break;
       case 'crouch': input.inject('Crouch', 'lab', true); input.inject('Crouch', 'lab', false); break;
+      case 'lookback': input.inject('LookBack', 'lab', !!a); break;
+      case 'assist': e.settings.set('LeapAssist', a); break;
+      case 'mode': p.setMode(a); break;
       case 'yaw': p.setLook(a, 0); break;
       case 'turn': turn.rate = a; break;
       default: throw new Error(`unknown trace action ${action}`);
@@ -350,8 +394,12 @@ function installLab() {
     const offRecord = loop.onTick(() => {
       const b = p.body;
       states.push([b.position.x, b.position.y, b.position.z, b.velocity.x, b.velocity.y, b.velocity.z,
-        b.grounded ? 1 : 0, p.moveState, b.feetY]);
+        b.grounded ? 1 : 0, p.moveState, b.feetY, b.height, p.parkour.lookNow]);
     }, 1e9);
+    const noises = [];
+    const offNoise = e.noise.on((ev) => noises.push([states.length, ev.kind]));
+    const leaps = [];
+    const offLeap = p.leapt.connect((strip, takeoff) => leaps.push({ tick: states.length, strip: strip.id, takeoff }));
     let f = 0;
     try {
       while (states.length < ticks) {
@@ -373,12 +421,14 @@ function installLab() {
     } finally {
       offInput();
       offRecord();
+      offNoise();
+      offLeap();
       releaseAll();
     }
-    return { states: states.slice(0, ticks), frames: f, samples };
+    return { states: states.slice(0, ticks), frames: f, samples, noises, leaps };
   }
 
-  window.__lab = { O: { ...O }, play, steps, mounts, gaps, corridor };
+  window.__lab = { O: { ...O }, play, steps, mounts, gaps, corridor, strips };
   return { O, steps, mounts, gaps, corridor, colliders: [...world.colliders.keys()] };
 }
 
@@ -401,6 +451,15 @@ function compare(a, b) {
     }
   }
   return { max, first };
+}
+
+/** A rule's answer against a golden row's: numbers within 1e-9, tables key by key (an empty Luau table is {} or []). */
+function sameValue(a, b) {
+  if (typeof a === 'number' || typeof b === 'number') return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) <= 1e-9;
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])].every((k) => sameValue(a[k], b[k]));
+  }
+  return a === b;
 }
 
 const horizontal = (s, a, b) => Math.hypot(s[b][0] - s[a][0], s[b][2] - s[a][2]);
@@ -893,6 +952,287 @@ try {
     check(`a one-second stall runs ${cuts.stall.stallTicks} ticks (the 0.1 s clamp) and the camera moves by them alone (${fmt(cuts.stall.stallStep)} studs), then by a frame at a time (${fmt(cuts.stall.afterStep, 4)})`,
       cuts.stall.stallTicks >= 2 && cuts.stall.stallTicks <= 4 && cuts.stall.stallStep < 11 * 4 / 30 + 0.01 && cuts.stall.stallStep > 11 * 2 / 30 && cuts.stall.afterStep < perFrame * 1.1, cuts.stall);
   });
+
+  await runCase('rules', async () => {
+    // rules/parkour.js against every ParkourRules golden row, in Node, then the page's own rules (the engine's) on them
+    const golden = JSON.parse(fs.readFileSync(path.join(web, 'build/cache/golden.json'), 'utf8')).ParkourRules || [];
+    const meta = JSON.parse(fs.readFileSync(path.join(web, 'build/world.json'), 'utf8'));
+    const R = parkourRules(meta);
+    const bad = [];
+    const fns = new Set();
+    for (const row of golden) {
+      fns.add(row.fn);
+      const got = typeof R[row.fn] === 'function' ? R[row.fn](...row.args) : undefined;
+      if (!sameValue(got, row.expect)) bad.push({ row: row.name, got, want: row.expect });
+    }
+    check(`every ParkourRules golden row replays exactly (${golden.length} rows over ${fns.size} functions)`,
+      golden.length >= 200 && fns.size === 18 && bad.length === 0, bad.slice(0, 3));
+    const inPage = await sandbox.tab.evaluate((rows) => {
+      const rules = window.__rovloc.engine.player.parkour.rules;
+      return rows.filter((row) => row.fn === 'leap').map((row) => rules.leap(...row.args));
+    }, golden);
+    const leapRows = golden.filter((row) => row.fn === 'leap');
+    check(`the engine's leap curve is the golden one (${leapRows.length} rows)`, leapRows.every((row, i) => sameValue(inPage[i], row.expect)));
+    // the spec's numbers, from its text
+    check('the leap: 0.60 s, 2.0 past the far edge of a 12 gap, apex 2.0', R.leap(0.3, 0).height === 2 && R.leap(0.6, 0).along === 14 &&
+      R.leap(0.6, 0).done && !R.leap(0.59, 0).done);
+    check('the slide: 0.70 s, 17 falling to 13, 10.5 studs', Math.abs(R.slide(0.7).distance - 10.5) < 1e-9 && R.slide(0).speed === 17 &&
+      Math.abs(R.slide(0.7).speed - 13) < 1e-9 && R.slide(0.7).done);
+    check('a hard landing from a fall of 8: 0.6 s at 40 %, never damage', R.hardLanding(8).hard && R.hardLanding(8).seconds === 0.6 &&
+      R.hardLanding(8).speedFactor === 0.4 && !R.hardLanding(7.99).hard && [0, 8, 30, 100].every((f) => R.hardLanding(f).damage === 0));
+  });
+
+  /** Ticks a trace's root first has z (course-relative) at or below `z`, in a log. */
+  const zTick = (s, z) => s.findIndex((q) => q[2] - lab.O.z <= z);
+  /** How far before the leap course's lip (z -440) a tick state's root stands (negative: past it). */
+  const toLip = (q) => q[2] - lab.O.z + 440;
+
+  await runCase('slide', async () => {
+    // the open floor (lane x 40): sprint from rest, Crouch at tick 40
+    const open = (extra = []) => [[0, 'at', 40, -400, 0], [2, 'key', 'KeyW', true], [2, 'sprint', true], [40, 'crouch'], ...extra];
+    const rates = {};
+    for (const fps of RATES) rates[fps] = await play({ trace: open(), ticks: 90, frames: fps });
+    const r = rates[30];
+    const s = r.states;
+    const sliding = s.map((q, t) => (q[7] === 'Sliding' ? t : -1)).filter((t) => t >= 0);
+    const first = sliding[0];
+    const last = sliding[sliding.length - 1];
+    check(`a Crouch press at a sprint (${fmt(speedOver(s, 30, 39))} studs/s) starts the slide on its tick and it lasts 0.70 s (${sliding.length} ticks)`,
+      first === 40 && sliding.length === 21 && last === 60, { first, ticks: sliding.length });
+    const length = horizontal(s, first - 1, last);
+    info(`the slide on open floor: ${fmt(length)} studs in ${fmt(sliding.length / 30, 2)} s`);
+    check(`the slide covers 10.5 studs on open floor (${fmt(length)})`, Math.abs(length - 10.5) < 0.02);
+    // the profile: 17 falling linearly to 13 over 0.7 s, tick by tick
+    const dist = (t) => 17 * t - ((4 / 0.7) * t * t) / 2;
+    let worst = 0;
+    for (let k = 1; k <= 21; k++) worst = Math.max(worst, Math.abs(horizontal(s, first + k - 2, first + k - 1) - (dist(k / 30) - dist((k - 1) / 30))));
+    check(`the slide's speed falls from 17 to 13 tick by tick (largest error ${worst.toExponential(1)} studs a tick)`, worst < 1e-6);
+    check('the sliding body is 3.7 tall, then 5.2 again', sliding.every((t) => Math.abs(s[t][9] - 3.7) < 1e-9) && Math.abs(s[last + 1][9] - 5.2) < 1e-9);
+    check('the press is consumed: the slide ends standing up (sprinting on, never crouched)',
+      s.slice(last + 1).every((q) => q[7] === 'Sprinting'), s.slice(last + 1, last + 4).map((q) => q[7]));
+    const slides = r.noises.filter((n) => n[1] === 'Slide');
+    check('the slide is heard once (the Slide noise at its start)', slides.length === 1 && slides[0][0] === first, r.noises.filter((n) => n[1] !== 'Sprint'));
+    for (const fps of [20, 60, 144]) {
+      const d = compare(r.states, rates[fps].states);
+      check(`the slide at ${fps} fps gives the 30 fps tick states`, d.max <= TOLERANCE, d.first || `max ${d.max.toExponential(2)}`);
+    }
+    // the eye: the crouched camera state (eye 1.5 under the standing one) while sliding
+    const eye = await sandbox.tab.evaluate(() => {
+      const e = window.__rovloc.engine;
+      const p = e.player;
+      window.__lab.play({ trace: [[0, 'at', 40, -400, 0], [2, 'key', 'KeyW', true], [2, 'sprint', true], [40, 'crouch']], ticks: 46, frames: 60 });
+      return { state: p.moveState, camera: p.cameraState };
+    });
+    check('a slide is seen from the crouched eye (camera state Crouching)', eye.state === 'Sliding' && eye.camera === 'Crouching', eye);
+    // no slide without the speed: a walk's Crouch press crouches
+    const walk = await play({ trace: [[0, 'at', 40, -400, 0], [2, 'key', 'KeyW', true], [40, 'crouch']], ticks: 50, frames: 30 });
+    check('at a walk (11) the Crouch press crouches, no slide', walk.states.slice(40).every((q) => q[7] === 'Crouching'), walk.states[41][7]);
+    const released = await play({ trace: [[0, 'at', 40, -400, 0], [2, 'key', 'KeyW', true], [2, 'sprint', true], [40, 'sprint', false],
+      [40, 'crouch']], ticks: 50, frames: 30 });
+    check('Sprint let go on the tick of the press: it crouches, no slide (still at 19 then)', released.states.slice(40).every((q) => q[7] === 'Crouching'),
+      released.states[40][7]);
+    // no jump while sliding
+    const hop = await play({ trace: open([[45, 'jump', true], [46, 'jump', false]]), ticks: 62, frames: 30 });
+    check('Jump does nothing during a slide', hop.states.slice(40, 61).every((q) => q[4] <= 1e-9 && q[7] === 'Sliding'));
+    // steering: the look turned 90 degrees at the slide's start, W held: the heading turns at 30 degrees a second at most
+    const steer = await play({ trace: open([[41, 'yaw', Math.PI / 2]]), ticks: 62, frames: 30 });
+    const ss = steer.states;
+    const angles = [];
+    for (let t = 41; t <= 60; t++) angles.push(Math.atan2(-(ss[t][0] - ss[t - 1][0]), -(ss[t][2] - ss[t - 1][2])));
+    const turns = angles.slice(1).map((a, i) => (Math.abs(a - angles[i]) * 180) / Math.PI);
+    const total = ((angles[angles.length - 1] - angles[0]) * 180) / Math.PI;
+    check(`steering: at most 30 degrees a second (largest turn ${fmt(Math.max(...turns))} degrees a tick; ${fmt(total, 1)} over the slide)`,
+      Math.max(...turns) <= 1 + 1e-6 && total > 15 && total < 21);
+    // the bar (lane x 70: 4.2 clear across z -500..-502): sprinting into it stops; a slide passes under; so does a crouch-walk
+    const barLane = (extra) => [[0, 'at', 70, -400, 0], [2, 'key', 'KeyW', true], [2, 'sprint', true], ...extra];
+    const blocked = await play({ trace: barLane([]), ticks: 200, frames: 30 });
+    const furthest = Math.min(...blocked.states.map((q) => q[2] - lab.O.z));
+    check(`sprinting into the slide bar standing stops at its face (root reaches z ${fmt(furthest)}; the bar starts at -500)`, furthest > -500);
+    const at = zTick(blocked.states, -494);
+    const under = await play({ trace: barLane([[at, 'crouch']]), ticks: at + 40, frames: 30 });
+    const past = Math.min(...under.states.map((q) => q[2] - lab.O.z));
+    check(`a slide started 6 studs before the bar passes under it (root to z ${fmt(past)}, the bar ends at -502)`, past < -503.5 &&
+      under.states.slice(at).some((q) => q[7] === 'Sliding'));
+    for (const fps of [20, 144]) {
+      const again = await play({ trace: barLane([[at, 'crouch']]), ticks: at + 40, frames: fps });
+      const d = compare(under.states, again.states);
+      check(`the slide under the bar at ${fps} fps gives the 30 fps tick states`, d.max <= TOLERANCE, d.first || `max ${d.max.toExponential(2)}`);
+    }
+    const crouchWalk = await play({ trace: [[0, 'at', 70, -480, 0], [1, 'crouch'], [2, 'key', 'KeyW', true]], ticks: 150, frames: 30 });
+    check('crouch-walking (5.5) passes under the bar too', Math.min(...crouchWalk.states.map((q) => q[2] - lab.O.z)) < -503.5);
+    // under the low ceiling (lane x 100: 4.2 clear from z -490): the slide ends crouched
+    const ceilLane = [[0, 'at', 100, -400, 0], [2, 'key', 'KeyW', true], [2, 'sprint', true]];
+    const toCeil = await play({ trace: ceilLane, ticks: 200, frames: 30 });
+    const go = zTick(toCeil.states, -484);
+    const ceil = await play({ trace: [...ceilLane, [go, 'crouch']], ticks: go + 40, frames: 30 });
+    const end = ceil.states.findIndex((q, t) => t > go && q[7] !== 'Sliding');
+    check(`a slide that ends under a low ceiling ends crouched (${ceil.states[end] ? ceil.states[end][7] : '-'} at z ${ceil.states[end] ? fmt(ceil.states[end][2] - lab.O.z) : '-'})`,
+      end > go && ceil.states[end][7] === 'Crouching' && ceil.states[end][2] - lab.O.z < -490 && Math.abs(ceil.states[end][9] - 3.7) < 1e-9);
+  });
+
+  await runCase('leap', async () => {
+    // the runway's lane A (x 260, a level pad) and B (x 340, a pad 2 lower): sprint from 58 studs before the lip
+    const lane = (x, extra = [], yaw = 0) => [[0, 'at', x, -382, yaw, 12], [2, 'key', 'KeyW', true], [2, 'sprint', true], ...extra];
+    const plain = await play({ trace: lane(260), ticks: 140, frames: 30 });
+    const ps = plain.states;
+    const inStrip = ps.findIndex((q) => toLip(q) <= 3);
+    const inBand = ps.findIndex((q) => toLip(q) <= 7.5);
+    const beforeBand = ps.findIndex((q) => toLip(q) <= 11);
+    const pastLip = ps.findIndex((q) => toLip(q) < 0);
+    const airborne = ps.findIndex((q, t) => t > pastLip - 1 && q[6] === 0);
+    check('no press: the runner runs off the lip and falls into the gap (the slab 12 below)', !ps.some((q) => q[7] === 'Leaping') &&
+      ps.some((q) => q[6] === 1 && Math.abs(q[8] - lab.O.y) < 0.05));
+    const landing = (s, from) => s.findIndex((q, t) => t > from && q[7] !== 'Leaping' && q[6] === 1);
+    // on time: Jump in the strip (3 studs before the lip; a press at the tick start reads the root at the end of the last)
+    const rates = {};
+    for (const fps of RATES) rates[fps] = await play({ trace: lane(260, [[inStrip + 1, 'jump', true], [inStrip + 2, 'jump', false]]), ticks: 140, frames: fps });
+    const r = rates[30];
+    const s = r.states;
+    const leaping = s.map((q, t) => (q[7] === 'Leaping' ? t : -1)).filter((t) => t >= 0);
+    const start = leaping[0];
+    check(`on time (Jump 3 studs before the lip): the leap starts on that tick and lasts 0.60 s (${leaping.length} ticks)`,
+      start === inStrip + 1 && leaping.length === 18 && r.leaps.length === 1, { start, ticks: leaping.length, leaps: r.leaps });
+    // the curve: the root on ParkourRules.leap from the take-off (the spec's numbers: 0.6 s, to 2 past the far edge, apex 2)
+    const origin = s[start - 1];
+    const takeoff = toLip(origin);
+    let worst = 0;
+    for (let k = 1; k <= 18; k++) {
+      const u = Math.min(1, k / 18);
+      const along = (takeoff + 12 + 2) * u;
+      const q = s[start + k - 1];
+      worst = Math.max(worst, Math.abs(q[2] - (origin[2] - along)), Math.abs(q[0] - origin[0]), Math.abs(q[1] - (origin[1] + 4 * 2 * u * (1 - u))));
+    }
+    check(`the leap follows the curve tick by tick: a straight line to 2 past the far edge, apex 2.0 (largest error ${worst.toExponential(1)})`, worst < 1e-6);
+    const land = landing(s, start);
+    const landZ = s[land][2] - lab.O.z;
+    info(`the leap: ${fmt(leaping.length / 30, 2)} s from a take-off ${fmt(takeoff, 2)} before the lip; the curve ends at z ${fmt(origin[2] - lab.O.z - (takeoff + 14))} (2 past the far edge at -452); the first tick standing at z ${fmt(landZ)}`);
+    check(`it lands on the pad (feet at 12, z ${fmt(landZ)} past the far edge -452) and leaves at 17 along the leap`,
+      Math.abs(s[land][8] - lab.O.y - 12) < 0.05 && landZ < -452 && Math.abs(s[start + 17][5] + 17) < 1e-6, { land: s[land], exit: s[start + 17] });
+    const jl = r.noises.filter((n) => n[1] === 'JumpLand');
+    check('the leap\'s landing is heard (JumpLand once, nothing louder)', jl.length === 1 && !r.noises.some((n) => n[1] === 'HardLanding'), r.noises.filter((n) => n[1] !== 'Sprint'));
+    for (const fps of [20, 60, 144]) {
+      const d = compare(s, rates[fps].states);
+      check(`the leap at ${fps} fps gives the 30 fps tick states`, d.max <= TOLERANCE, d.first || `max ${d.max.toExponential(2)}`);
+    }
+    // the pad 2 lower (lane B)
+    const low = await play({ trace: lane(340, [[inStrip + 1, 'jump', true], [inStrip + 2, 'jump', false]]), ticks: 140, frames: 30 });
+    const lowLand = landing(low.states, inStrip + 1);
+    check('onto a pad 2 lower: the same leap, standing on it after', low.leaps.length === 1 && Math.abs(low.states[lowLand][8] - lab.O.y - 10) < 0.05 &&
+      low.states[lowLand][2] - lab.O.z < -452);
+    // early: Jump in the band before the strip (7.5 before the lip) is held, and the leap starts in the strip
+    const early = await play({ trace: lane(260, [[inBand + 1, 'jump', true], [inBand + 2, 'jump', false]]), ticks: 140, frames: 30 });
+    const eLeap = early.leaps[0];
+    check(`early (Jump 7.5 before the lip, in the band): no free jump, the request waits and the leap starts in the strip (take-off ${eLeap ? fmt(eLeap.takeoff, 2) : '-'} before the lip, ${eLeap ? eLeap.tick - inBand - 1 : '-'} ticks later)`,
+      !!eLeap && eLeap.takeoff <= 4 && eLeap.takeoff > 4 - 19 / 30 - 0.01 && (eLeap.tick - inBand - 1) / 30 <= 0.3 &&
+      early.states.slice(inBand, eLeap.tick).every((q) => q[4] <= 1e-9));
+    // too early: Jump 11 before the lip (outside the band) is a free jump; no leap, the gap is not crossed
+    const tooEarly = await play({ trace: lane(260, [[beforeBand + 1, 'jump', true], [beforeBand + 2, 'jump', false]]), ticks: 160, frames: 30 });
+    check('too early (11 before the lip, outside the band): a free jump, no leap; the runner ends in the gap',
+      tooEarly.leaps.length === 0 && tooEarly.states.some((q) => q[4] > 10) && tooEarly.states.some((q) => q[6] === 1 && Math.abs(q[8] - lab.O.y) < 0.05));
+    // late: Jump just after running off the lip (in the air, within 0.10 s) still leaps; later does not
+    const late = await play({ trace: lane(260, [[airborne + 1, 'jump', true], [airborne + 2, 'jump', false]]), ticks: 140, frames: 30 });
+    const lLeap = late.leaps[0];
+    check(`late (Jump in the air ${airborne + 1 - pastLip} tick(s) after crossing the lip): the leap still starts (take-off ${lLeap ? fmt(lLeap.takeoff, 2) : '-'}) and lands on the pad`,
+      !!lLeap && lLeap.takeoff < 0 && landing(late.states, lLeap.tick) > 0 && Math.abs(late.states[landing(late.states, lLeap.tick)][8] - lab.O.y - 12) < 0.05);
+    const tooLate = await play({ trace: lane(260, [[pastLip + 5, 'jump', true], [pastLip + 6, 'jump', false]]), ticks: 140, frames: 30 });
+    check('too late (0.13 s after crossing the lip): no leap, the runner falls into the gap', tooLate.leaps.length === 0 &&
+      tooLate.states.some((q) => q[6] === 1 && Math.abs(q[8] - lab.O.y) < 0.05));
+    // under 15 studs/s: a walk (11) with Jump in the strip
+    const walk = await play({ trace: [[0, 'at', 260, -420, 0, 12], [2, 'key', 'KeyW', true]], ticks: 80, frames: 30 });
+    const wStrip = walk.states.findIndex((q) => toLip(q) <= 2);
+    const slow = await play({ trace: [[0, 'at', 260, -420, 0, 12], [2, 'key', 'KeyW', true], [wStrip + 1, 'jump', true], [wStrip + 2, 'jump', false]], ticks: 90, frames: 30 });
+    check(`walking (${fmt(speedOver(walk.states, wStrip - 6, wStrip))} studs/s, under 15): Jump in the strip leaps nowhere and frees no jump; the runner walks off into the gap`,
+      slow.leaps.length === 0 && slow.states.slice(wStrip, wStrip + 5).every((q) => q[4] <= 1e-9) &&
+      slow.states.some((q) => q[6] === 1 && Math.abs(q[8] - lab.O.y) < 0.05));
+    // the heading: 40 degrees off the leap never leaps, 30 does (the runner starts to the side and crosses the strips)
+    const angled = (deg) => {
+      const yaw = (deg * Math.PI) / 180;
+      return [[0, 'at', 260 + 58 * Math.tan(yaw), -382, yaw, 12], [2, 'key', 'KeyW', true], [2, 'sprint', true]];
+    };
+    for (const [deg, want] of [[40, false], [30, true]]) {
+      const pre = await play({ trace: angled(deg), ticks: 140, frames: 30 });
+      const t = pre.states.findIndex((q) => toLip(q) <= 2);
+      const tr = await play({ trace: [...angled(deg), [t + 1, 'jump', true], [t + 2, 'jump', false]], ticks: 140, frames: 30 });
+      check(`${deg} degrees off the leap's line at a sprint: ${want ? 'it leaps' : 'no leap'}`, (tr.leaps.length === 1) === want, tr.leaps);
+    }
+    // leap assist: On leaps with no press at all; Auto on a keyboard and Off do not
+    for (const [setting, want] of [['On', true], ['Auto', false], ['Off', false]]) {
+      const tr = await play({ trace: lane(260, [[1, 'assist', setting]]), ticks: 140, frames: 30 });
+      const a = tr.leaps[0];
+      check(`Leap assist ${setting} (keyboard), no press: ${want ? `it leaps at the strip (take-off ${a ? fmt(a.takeoff, 2) : '-'})` : 'no leap'}`,
+        (tr.leaps.length === 1) === want && (!want || (a.takeoff <= 4 && a.takeoff > 3)));
+    }
+    // never blind: the five rays from a sprinting eye 20 studs before the strip reach the pad; a wall over the gap hides it
+    const sight = await sandbox.tab.evaluate(() => {
+      const { strips } = window.__lab;
+      const kit = window.__rovloc.engine.player.parkour;
+      return { A: kit.sight(strips.A), B: kit.sight(strips.B), blind: kit.sight(strips.Blind) };
+    });
+    check(`never blind: 5 of 5 rays reach each fixture pad (A ${sight.A}, B ${sight.B}); the walled one is seen blind (${sight.blind} of 5)`,
+      sight.A === 5 && sight.B === 5 && sight.blind < 5, sight);
+  });
+
+  await runCase('landing', async () => {
+    // off the runway's west side at a sprint: a 12-stud fall onto open floor is a hard landing; 0.6 s at 40 %, heard
+    const trace = [[0, 'at', 226, -410, Math.PI / 2, 12], [2, 'key', 'KeyW', true], [2, 'sprint', true]];
+    const r = await play({ trace, ticks: 80, frames: 30 });
+    const s = r.states;
+    const land = s.findIndex((q, t) => t > 2 && q[6] === 1 && Math.abs(q[8] - lab.O.y) < 0.05);
+    const hard = r.noises.filter((n) => n[1] === 'HardLanding');
+    check(`a 12-stud fall lands hard: the HardLanding noise once, on the landing tick (${hard.length ? hard[0][0] : '-'} / ${land})`,
+      hard.length === 1 && hard[0][0] === land && !r.noises.some((n) => n[1] === 'JumpLand'), r.noises.filter((n) => n[1] !== 'Sprint'));
+    const slow = speedOver(s, land + 12, land + 17);
+    const after = speedOver(s, land + 30, land + 40);
+    check(`for 0.6 s after it the body moves at 40 % (${fmt(slow)} studs/s, 40 % of 19 is 7.6), then at its sprint again (${fmt(after)})`,
+      slow <= 7.6 * 1.01 && slow > 6 && after > 18.5);
+    // a small drop (the 4-high ledge, walked off) is neither
+    const ledge = await play({ trace: [[0, 'at', 360, 0, 0, 4], [3, 'key', 'KeyW', true]], ticks: 60, frames: 30 });
+    check('a drop of 4 is no hard landing', !ledge.noises.some((n) => n[1] === 'HardLanding'));
+    // a standing jump's landing (0.33 s in the air) is heard as JumpLand
+    const hop = await play({ trace: [[0, 'at', 0, 40, 0], [5, 'jump', true], [6, 'jump', false]], ticks: 30, frames: 30 });
+    check('a jump\'s landing is heard (JumpLand once)', hop.noises.filter((n) => n[1] === 'JumpLand').length === 1, hop.noises);
+    for (const fps of [20, 144]) {
+      const again = await play({ trace, ticks: 80, frames: fps });
+      const d = compare(s, again.states);
+      check(`the hard landing at ${fps} fps gives the 30 fps tick states`, d.max <= TOLERANCE && again.noises.filter((n) => n[1] === 'HardLanding').length === 1,
+        d.first || `max ${d.max.toExponential(2)}`);
+    }
+  });
+
+  await runCase('lookback', async () => {
+    // V held while walking: the view turns 150 degrees in 0.18 s (6 ticks), the walk keeps its heading; released, back
+    const trace = [[0, 'at', 0, 40, 0], [2, 'key', 'KeyW', true], [20, 'lookback', true], [40, 'lookback', false]];
+    const r = await play({ trace, ticks: 60, frames: 60 });
+    const s = r.states;
+    const shares = s.slice(19, 28).map((q) => q[10]);
+    check(`held, the turn grows over 0.18 s to the full 150 degrees (shares ${shares.map((v) => fmt(v, 2)).join(' ')})`,
+      s[19][10] === 0 && s[20][10] > 0 && s[24][10] < 1 && s[25][10] === 1 && s[39][10] === 1);
+    check('released, it turns back as fast', s[40][10] < 1 && s[45][10] === 0);
+    check('movement keeps its heading (straight ahead, -z, the whole time)', s.slice(10, 60).every((q) => Math.abs(q[0] - s[10][0]) < 1e-9) &&
+      horizontal(s, 20, 40) > 6);
+    const view = await sandbox.tab.evaluate(() => {
+      const e = window.__rovloc.engine;
+      const p = e.player;
+      window.__lab.play({ trace: [[0, 'at', 0, 40, 0], [2, 'lookback', true]], ticks: 12, frames: 60 });
+      e.input.inject('LookBack', 'lab', true);
+      e.loop.stepManual(1 / 60);
+      const fwd = new (p.body.position.constructor)(0, 0, -1).applyQuaternion(e.renderer.camera.quaternion);
+      const turned = Math.atan2(-fwd.x, -fwd.z) - p.yaw;
+      e.input.inject('LookBack', 'lab', false);
+      // in a vent (not on foot) it never turns
+      window.__lab.play({ trace: [[0, 'at', 0, 40, 0], [1, 'mode', 'Vent'], [2, 'lookback', true]], ticks: 12, frames: 60 });
+      const vent = p.parkour.lookNow;
+      p.setMode('OnFoot');
+      return { turned: ((turned * 180) / Math.PI + 720) % 360, vent };
+    });
+    check(`the camera looks 150 degrees from the heading (${fmt(view.turned, 2)})`, Math.abs(view.turned - 150) < 0.5);
+    check('in a vent the look-back does nothing (on foot only)', view.vent === 0, view);
+    for (const fps of [20, 144]) {
+      const again = await play({ trace, ticks: 60, frames: fps });
+      const d = compare(s, again.states);
+      check(`the look-back at ${fps} fps gives the 60 fps tick states`, d.max <= TOLERANCE, d.first || `max ${d.max.toExponential(2)}`);
+    }
+  });
 } finally {
   if (sandbox) await sandbox.context.close();
 }
@@ -1006,6 +1346,29 @@ async function gameRun(fps) {
       input.keys.clear();
       dev.gotoLevel('Level3_Roof');
       await step30(30);
+      // a fall of 15 onto the roof (open air): a hard landing, and never damage
+      const before = { health: g.life.health, life: g.life.state };
+      // a spot of open roof near the arrival: the floor under it at the arrival's height, nothing over it for 20 studs
+      const here = e.player.body.position.clone();
+      const Vec = here.constructor;
+      let top = here;
+      for (let i = 0; i < 64 && top === here; i++) {
+        const a = (i % 16) * (Math.PI / 8);
+        const r = 12 + 6 * Math.floor(i / 16);
+        const at = new Vec(here.x + Math.sin(a) * r, here.y + 16, here.z + Math.cos(a) * r);
+        const down = e.world.raycast(at, new Vec(0, -1, 0), 40);
+        if (down && Math.abs(down.point.y - (here.y - 3)) < 0.5 && !e.world.raycast(new Vec(at.x, down.point.y + 0.5, at.z), new Vec(0, 1, 0), 20)) {
+          top = new Vec(at.x, down.point.y + 3, at.z);
+        }
+      }
+      let hard = 0;
+      const offHard = e.player.hardLanded.connect(() => hard++);
+      const fallen = await segment(rate, 45, (r) => {
+        if (r === 0) e.player.teleport({ position: { x: top.x, y: top.y + 15, z: top.z }, yaw: e.player.yaw });
+      });
+      offHard();
+      const drop = { hard, before, after: { health: g.life.health, life: g.life.state }, grounded: fallen[fallen.length - 1][6],
+        fell: top.y + 15 - fallen[fallen.length - 1][1] };
       // the parachute: a pack and off the gap, the ripcord after 10 ticks, the canopy down to the landing
       const chute = [];
       const parachute = await segment(rate, 360, (r) => {
@@ -1015,7 +1378,7 @@ async function gameRun(fps) {
       });
       // where entering left the body against where the drive's first tick (no input yet) holds it
       const entryJump = Math.hypot(vent[0][0] - entered.x, vent[0][1] - entered.y, vent[0][2] - entered.z);
-      return { walk, vent, entryJump, parachute, crawled, chute, landed: g.parachute.state };
+      return { walk, vent, entryJump, parachute, crawled, chute, landed: g.parachute.state, drop };
     }, fps);
   } finally {
     await context.close();
@@ -1065,6 +1428,15 @@ await runCase('senses', async () => {
     off.length === 0, off.length ? { ticks: off.length, first: off[0] } : undefined);
   const d = compare(a, b);
   check(`the walk and the levels' eye: identical tick states at 20 and 144 fps (${a.length} ticks)`, d.max <= TOLERANCE, d.first || `max difference ${d.max.toExponential(2)}`);
+});
+
+await runCase('falls', async () => {
+  await gameRuns();
+  for (const fps of [20, 144]) {
+    const d = gameLogs[fps].drop;
+    check(`${fps} fps, in the game: a fall of ${fmt(d.fell, 1)} onto the roof lands hard once and never damages (health ${d.before.health} -> ${d.after.health}, ${d.after.life})`,
+      d.hard === 1 && d.fell >= 8 && d.grounded === 1 && d.after.health === d.before.health && d.after.life === 'Alive', d);
+  }
 });
 
 await browser.close();

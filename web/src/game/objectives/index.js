@@ -5,9 +5,9 @@
 // at a run start the doors are reset before the exits are locked and on a level's activation the Creature has been
 // moved there before the start rule takes it.
 //
-// What the rest of the game asks of it: exitOpen(level) (the airlock waits for it), tracker(level) and nudge(level,
-// root) (ui/objectives.js), hintSpots(level) (ui/hints.js), the carry (the HUD chips), devComplete(level) (dev / the
-// smoke run's shortcut through a floor).
+// What the rest of the game asks of it: exitOpen(level) (the airlock waits for it), tracker(level) (ui/objectives.js),
+// radarTargets(level) (the radar, mechanics/radar.js), hintSpots(level) (ui/hints.js), the carry (the HUD chips),
+// devComplete(level) (dev / the smoke run's shortcut through a floor).
 
 import { Carry } from './carry.js';
 import { ObjectiveFx } from './fx.js';
@@ -107,17 +107,10 @@ export class FloorObjectives {
     };
   }
 
-  /** The Tab nudge's target on a locked floor ({point, label, room}), or null (the tracker then points at the exit). */
-  nudge(level, root) {
+  /** What a radar scan can show of a level's objective (FloorObjective.radarTargets), or null without one. */
+  radarTargets(level) {
     const f = this.floor(level);
-    if (!f || f.unlocked || !f.active) return null;
-    return f.nudge(root);
-  }
-
-  /** When the nudge first becomes available on the current floor (game time), or -Infinity. */
-  nudgeReadyAt(level, delay) {
-    const f = this.floor(level);
-    return f && f.activatedAt !== null ? f.activatedAt + delay : -Infinity;
+    return f && this.game.run ? f.radarTargets() : null;
   }
 
   hintSpots(level) {

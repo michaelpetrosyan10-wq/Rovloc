@@ -1,21 +1,19 @@
 // objectives.js: what to do next, always one glance away (ObjectiveTracker).
 //
-//   Tracker   a compact sheet top-left (top-right on touch): OBJECTIVE, the goal, the floor's tip, the key that asks
-//             for directions. Fully shown when the goal changes or the Radar action is pressed (Tab / d-pad
-//             right / GOAL), fading after TrackerHold seconds idle; in the lobby it stays, with the optional lines
-//             (vote, perks) ticking off and a HOW TO PLAY button (H / d-pad left / tap) that replays the walkthrough.
+//   Tracker   a compact sheet top-left (top-right on touch): OBJECTIVE, the goal, the floor's tip, and in a run the
+//             radar's key with its charges (RADAR 1/3). Fully shown when the goal changes or when the radar is pressed
+//             empty (openSheet: with the line "Radar empty. Batteries blink."), fading after TrackerHold seconds idle;
+//             in the lobby it stays, with the optional lines (vote, perks) ticking off and a HOW TO PLAY button (H /
+//             d-pad left / tap) that replays the walkthrough.
 //   Goals     lobby: the bus -> a pad -> waiting -> the countdown; every floor: its objective (the title and each step
 //             with its count, done steps ticked, the current one marked) until its exit unlocks, then "Get to the
 //             <compass> stairwell" (the run's route; a floor that is only crossed shows the way to its stairwell from
 //             the start); once its doors count down get in (or hold it from inside); Floor 1 after the gate slams: a
 //             vent around it, crawl through (as the tip); the roof: out of the stair housing, find the parachutes, run
 //             for them once the door is smashed, the gap with a pack on, the cord, landed.
-//   Marker    a floating diamond over the lobby's current step (the bus's rear door, then the nearest free pad).
-//   Directions the Radar action (the radar is a later package) shows a chevron around the crosshair at the goal with
-//             its distance and the marker over it for DirectionShow seconds, then cools down for DirectionCooldown. On
-//             an objective floor it points at the ROOM of the nearest undone step's target (its centre, or its doorway
-//             nearest you; labelled with the room's name), never at the item; it is first available NudgeDelay after
-//             arriving and cools down for NudgeCooldown.
+//   Marker    a floating diamond over the lobby's current step (the bus's rear door, then the nearest free pad). The
+//             Marker and the Pointer (a chevron round the crosshair toward a point) are the radar's too (ui/radar.js):
+//             there is no other way to be shown where things are.
 //   Stage card the stage's card (StageConfig's Card text: FLOOR 1 · HALLWAYS), the level's name and OBJECTIVE: <the
 //             floor's objective> in the centre-top on each new level, held while the HUD is hidden (up to
 //             FloorCardWait seconds).
@@ -25,9 +23,8 @@
 import * as THREE from 'three';
 import { TutorialConfig } from '../config.js';
 import { S } from '../strings/index.js';
-import { cfPos } from '../util.js';
+import '../strings/kit.js';
 import { glyphFor } from './nav.js';
-import { ObjectiveTuning } from '../objectives/config.js';
 import { Palette, el } from './style.js';
 
 const T = TutorialConfig.Timing;
@@ -41,31 +38,31 @@ const FADE_OUT = 2.5;
 const VENT_STATES = new Set(['VentCrawling', 'VentScurrying']);
 const ROOF_LEVEL = 'Level3_Roof';
 
-/** ObjectiveTracker.levelObjective */
+/** ObjectiveTracker.levelObjective: the goal's line and tip on a level. */
 export function levelObjective(input) {
   const floor = TutorialConfig.Floors[input.level];
   if (!floor) return null;
   const tip = floor.tip;
   if (input.airlock !== 'None') {
-    if (input.insideAirlock) return { text: 'Objective.Airlock.Wait', tip: null, target: null };
-    return { text: 'Objective.Airlock.Get', tip: null, target: 'Exit' };
+    if (input.insideAirlock) return { text: 'Objective.Airlock.Wait', tip: null };
+    return { text: 'Objective.Airlock.Get', tip: null };
   }
   if (input.level === ROOF_LEVEL) {
     const p = input.parachute;
-    if (p === 'Landed') return { text: 'Objective.Roof.Landed', tip: null, target: null };
-    if (p === 'Freefall') return { text: 'Objective.Roof.Cord', tip: null, target: null };
+    if (p === 'Landed') return { text: 'Objective.Roof.Landed', tip: null };
+    if (p === 'Freefall') return { text: 'Objective.Roof.Cord', tip: null };
     if (p === 'Canopy') return null;
-    if (p === 'Packed') return { text: 'Objective.Roof.Jump', tip: null, target: 'Gap' };
-    if (input.roofDoor === 'Smashed') return { text: 'Objective.Roof.Run', tip, target: 'Crate' };
-    if (input.onRoof) return { text: 'Objective.Roof.Search', tip, target: 'Crate' };
-    return { text: 'Objective.Roof.Out', tip, target: 'RoofDoor' };
+    if (p === 'Packed') return { text: 'Objective.Roof.Jump', tip: null };
+    if (input.roofDoor === 'Smashed') return { text: 'Objective.Roof.Run', tip };
+    if (input.onRoof) return { text: 'Objective.Roof.Search', tip };
+    return { text: 'Objective.Roof.Out', tip };
   }
   if (input.level === 'Level1_Hallways' && input.gateSlammed && !input.beyondGate) {
-    if (input.inVent) return { text: 'Objective.GateVent', tip: null, target: null };
-    return { text: 'Objective.Gate', tip, target: 'BypassVent' };
+    if (input.inVent) return { text: 'Objective.GateVent', tip: null };
+    return { text: 'Objective.Gate', tip };
   }
   // the run route's stair tower (East / West / NorthEast / ...), else the floor's side
-  return { text: `Objective.Stairwell.${input.tower || floor.stairwell || 'East'}`, tip, target: 'Exit' };
+  return { text: `Objective.Stairwell.${input.tower || floor.stairwell || 'East'}`, tip };
 }
 
 /** ObjectiveTracker.lobbyObjective */
@@ -100,6 +97,102 @@ function nearest(points, from) {
   return best;
 }
 
+/**
+ * A floating marker over a world point: an icon in a diamond, a name and the straight distance in metres. `color` is
+ * its accent (the lobby's amber, the radar's cold green); `dot` draws the small dot of a radar battery instead.
+ */
+export class Marker {
+  constructor(layer, color, dot = false) {
+    this.dot = dot;
+    this.root = el('div', '', layer);
+    Object.assign(this.root.style, { position: 'absolute', transform: 'translate(-50%, -100%)', textAlign: 'center',
+      opacity: '0', pointerEvents: 'none', display: 'none' });
+    this.label = el('div', 'rg-caps rg-outline', this.root);
+    Object.assign(this.label.style, { color, fontSize: '13px', whiteSpace: 'nowrap', display: dot ? 'none' : '' });
+    this.distance = el('div', 'rg-caps rg-outline', this.root);
+    this.distance.style.display = dot ? 'none' : '';
+    this.diamond = el('div', '', this.root);
+    const size = dot ? 7 : 14;
+    Object.assign(this.diamond.style, { width: `${size}px`, height: `${size}px`, margin: '4px auto 0', position: 'relative',
+      transform: dot ? 'none' : 'rotate(45deg)', borderRadius: dot ? '50%' : '0', border: dot ? 'none' : `2px solid ${color}`,
+      background: dot ? color : 'rgba(0,0,0,0.25)' });
+    this.icon = el('div', '', this.diamond);
+    Object.assign(this.icon.style, { position: 'absolute', left: '50%', top: '50%', width: '6px', height: '6px',
+      transform: 'translate(-50%, -50%) rotate(-45deg)', background: color, display: 'none' });
+  }
+
+  /**
+   * Shows the marker at `point` (lifted `lift` studs) with its text, or hides it off screen.
+   * @param {import('../env.js').Env} env
+   * @param {{label?: string, metres?: number, icon?: 'Item'|'Station'|'Exit'|null, alpha: number, pulse: number, lift?: number}} o
+   */
+  place(env, point, o) {
+    _p.copy(point);
+    _p.y += o.lift ?? MARKER_LIFT;
+    const s = o.alpha > 0.001 ? env.project(_p) : null;
+    if (!s) {
+      this.hide();
+      return;
+    }
+    this.root.style.display = '';
+    this.root.style.left = `${s.x}px`;
+    this.root.style.top = `${s.y}px`;
+    this.root.style.opacity = String(o.alpha);
+    if (!this.dot) {
+      this.label.textContent = o.label || '';
+      this.distance.textContent = S('Objective.Distance', Math.max(1, o.metres ?? 0));
+      this.icon.style.display = o.icon ? '' : 'none';
+      if (o.icon) {
+        // the icon: a dot for an item, a square for a station, a triangle for the exit
+        this.icon.style.borderRadius = o.icon === 'Item' ? '50%' : '0';
+        this.icon.style.clipPath = o.icon === 'Exit' ? 'polygon(50% 0, 100% 100%, 0 100%)' : 'none';
+      }
+    }
+    this.diamond.style.opacity = String(0.65 + 0.35 * o.pulse);
+  }
+
+  hide() {
+    this.root.style.display = 'none';
+  }
+
+  remove() {
+    this.root.remove();
+  }
+}
+
+/** The chevron round the crosshair toward a world point, with a label (ObjectiveTracker's pointer). */
+export class Pointer {
+  constructor(layer, color) {
+    this.root = el('div', 'rg-layer', layer);
+    this.arrow = el('div', '', this.root);
+    Object.assign(this.arrow.style, { position: 'absolute', width: '0', height: '0', borderLeft: '9px solid transparent',
+      borderRight: '9px solid transparent', borderBottom: `16px solid ${color}`, transformOrigin: '50% 60%' });
+    this.label = el('div', 'rg-caps rg-outline', this.root, '');
+    Object.assign(this.label.style, { position: 'absolute', transform: 'translate(-50%, -50%)', color, whiteSpace: 'nowrap' });
+    this.root.style.opacity = '0';
+  }
+
+  /** Points at `target` (a world point) from the camera with `text` beside it, at `alpha`. */
+  place(env, target, text, alpha) {
+    this.root.style.opacity = String(alpha);
+    if (alpha <= 0.001 || !target) return;
+    const cam = env.camera();
+    _local.copy(target).applyMatrix4(_inv.copy(cam.matrixWorld).invert());
+    const angle = Math.abs(_local.x) < 1e-6 && Math.abs(_local.z) < 1e-6 ? 0 : Math.atan2(_local.x, -_local.z);
+    const rect = env.uiRoot().getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const x = Math.sin(angle) * POINTER_RADIUS;
+    const y = -Math.cos(angle) * POINTER_RADIUS;
+    this.arrow.style.left = `${cx + x - 9}px`;
+    this.arrow.style.top = `${cy + y - 8}px`;
+    this.arrow.style.transform = `rotate(${(angle * 180) / Math.PI}deg)`;
+    this.label.style.left = `${cx + x * 0.62}px`;
+    this.label.style.top = `${cy + y * 0.62}px`;
+    this.label.textContent = text;
+  }
+}
+
 export class Objectives {
   /** @param {import('../game.js').Game} game */
   constructor(game) {
@@ -109,19 +202,18 @@ export class Objectives {
     this.clock = 0;
     this.scannedAt = -Infinity;
     this.activeAt = -Infinity;
-    this.directionAt = -Infinity;
     this.lastText = null;
     this.trackerAlpha = 0;
     this.cardAlpha = 0;
-    this.pointerAlpha = 0;
     this.markerAlpha = 0;
     this.cardLevel = null;
     this.cardDueAt = -Infinity;
     this.cardStartedAt = null;
     this.shownLevel = null;
+    /** a line the sheet shows under the goal until it fades (openSheet), or null */
+    this.sheetLine = null;
     this.scan = { objective: null, lobby: null, target: null, inLobby: false };
     this._build();
-    this.env.onAction('Radar', (phase) => this._objective(phase));
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyH' && !e.repeat) this._help();
     });
@@ -157,6 +249,8 @@ export class Objectives {
     });
     this.tip = el('div', 'rg-body', this.tracker, '');
     Object.assign(this.tip.style, { fontSize: '13px', color: Palette.Ash, marginTop: '4px' });
+    this.extra = el('div', 'rg-body', this.tracker, '');
+    Object.assign(this.extra.style, { fontSize: '13px', color: Palette.Bone, marginTop: '6px', display: 'none' });
     this.optional = [0, 1].map(() => {
       const row = el('div', '', this.tracker);
       Object.assign(row.style, { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' });
@@ -185,24 +279,8 @@ export class Objectives {
     Object.assign(this.cardName.style, { fontSize: '15px', letterSpacing: '0.28em', marginTop: '8px' });
     this.cardGoal = el('div', 'rg-caps rg-outline', this.card, '');
     Object.assign(this.cardGoal.style, { fontSize: '13px', letterSpacing: '0.22em', marginTop: '10px', color: Palette.Amber });
-    // pointer (direction nudge)
-    this.pointer = el('div', 'rg-layer', this.layer);
-    this.arrow = el('div', '', this.pointer);
-    Object.assign(this.arrow.style, { position: 'absolute', width: '0', height: '0', borderLeft: '9px solid transparent',
-      borderRight: '9px solid transparent', borderBottom: `16px solid ${Palette.Bone}`, transformOrigin: '50% 60%' });
-    this.pointerLabel = el('div', 'rg-caps rg-outline', this.pointer, '');
-    Object.assign(this.pointerLabel.style, { position: 'absolute', transform: 'translate(-50%, -50%)', color: Palette.Bone });
-    this.pointer.style.opacity = '0';
-    // marker
-    this.marker = el('div', '', this.layer);
-    Object.assign(this.marker.style, { position: 'absolute', transform: 'translate(-50%, -100%)', textAlign: 'center',
-      opacity: '0', pointerEvents: 'none' });
-    this.markerLabel = el('div', 'rg-caps rg-outline', this.marker, '');
-    Object.assign(this.markerLabel.style, { color: Palette.Amber, fontSize: '13px' });
-    this.markerDistance = el('div', 'rg-caps rg-outline', this.marker, '');
-    this.diamond = el('div', '', this.marker);
-    Object.assign(this.diamond.style, { width: '14px', height: '14px', margin: '4px auto 0', transform: 'rotate(45deg)',
-      border: `2px solid ${Palette.Amber}`, background: 'rgba(204,158,88,0.35)' });
+    // the lobby's marker
+    this.marker = new Marker(this.layer, Palette.Amber);
   }
 
   _allowed() {
@@ -218,14 +296,10 @@ export class Objectives {
     if (this.scan.inLobby && this._allowed() && this.game.onboarding) this.game.onboarding.openWalkthrough('Hidden');
   }
 
-  _objective(phase) {
-    if (phase !== 'Begin' || !this._allowed()) return;
+  /** Brings the sheet back (the radar pressed empty), with `line` under the goal until it fades. */
+  openSheet(line) {
     this.activeAt = this.clock;
-    const timing = this._nudgeTiming();
-    if (timing.wait <= 0 && this.clock - this.directionAt >= timing.cooldown && this.scan.target) {
-      this.directionAt = this.clock;
-      this.env.play('UiClick');
-    }
+    this.sheetLine = line || null;
   }
 
   // ---------------------------------------------------------------------------------------------------- scans
@@ -260,7 +334,6 @@ export class Objectives {
     const zone = g.world.roomAt(root, level);
     const airlock = g.airlock;
     const airlockState = airlock.level === level && airlock.deadline !== null ? (airlock.phase === 'Sealing' ? 'Sealing' : 'Waiting') : 'None';
-    const parachute = g.parachute ? g.parachute.state : 'None';
     const objective = levelObjective({
       level,
       tower: route ? route.tower : null,
@@ -272,14 +345,13 @@ export class Objectives {
       roofDoor: roofDoor ? roofDoor.state : null,
       onRoof: !!zone && zone.kind !== 'Stairwell' && (!roof || zone.id !== roof.housingRoom()) &&
         !(g.parachute && g.parachute.inTower(root)),
-      parachute,
+      parachute: g.parachute ? g.parachute.state : 'None',
     });
     this.scan.lobby = null;
     this.scan.inLobby = false;
-    this.scan.label = null;
+    this.scan.target = null;
     this.scan.steps = null;
     this.scan.title = null;
-    this.scan.floorNudge = null;
     // the floor objective: its title and steps until the exit unlocks, then the way to the stairwell
     const floor = g.floors ? g.floors.tracker(level) : null;
     if (floor && objective && airlockState === 'None') {
@@ -288,33 +360,11 @@ export class Objectives {
         this.scan.title = floor.title;
         const context = objective.text === 'Objective.Gate' || objective.text === 'Objective.GateVent' ? objective.text : null;
         objective.tip = context || objective.tip;
-        if (!context) {
-          objective.target = 'Floor';
-          const nudge = g.floors.nudge(level, root);
-          this.scan.floorNudge = nudge;
-        }
       } else if (floor.exit) {
         this.scan.title = floor.exit;
-        objective.target = 'Exit';
-        this.scan.label = floor.exitLabel;
       }
     }
     this.scan.objective = objective;
-    let target = null;
-    const kind = objective ? objective.target : null;
-    if (kind === 'Floor' && this.scan.floorNudge) {
-      target = this.scan.floorNudge.point;
-      this.scan.label = this.scan.floorNudge.label;
-    }
-    if (kind === 'Exit') target = exitPoint;
-    else if (kind === 'BypassVent') {
-      const grates = g.world.entities('VentGrate', level).filter((e) => e.attributes.CriticalPath).map((e) => cfPos(e.pivot));
-      const near = grates.filter((p) => !(gatePoint && exitPoint && beyond(gatePoint, exitPoint, p, BEYOND_MARGIN)));
-      target = nearest(near.length ? near : grates, root);
-    } else if (kind === 'RoofDoor' && roofDoor) target = roofDoor.centre;
-    else if (kind === 'Crate' && g.parachute) target = g.parachute.freePackPoint(root);
-    else if (kind === 'Gap' && g.parachute) target = g.parachute.gapCentre();
-    this.scan.target = target;
   }
 
   _rescan() {
@@ -329,16 +379,7 @@ export class Objectives {
       this._scanLevel(g.level);
       return;
     }
-    this.scan = { objective: null, lobby: null, target: null, inLobby: false, title: null, steps: null, label: null };
-  }
-
-  /** The nudge's cooldown and when it is first available on this floor (an objective floor waits NudgeDelay). */
-  _nudgeTiming() {
-    const g = this.game;
-    const floor = g.floors && g.level && g.phase === 'InRun' ? g.floors.floor(g.level) : null;
-    if (!floor || this.scan.inLobby) return { cooldown: T.DirectionCooldown, wait: 0 };
-    const readyAt = g.floors.nudgeReadyAt(g.level, ObjectiveTuning.NudgeDelay);
-    return { cooldown: ObjectiveTuning.NudgeCooldown, wait: Math.max(0, readyAt - g.env.now()) };
+    this.scan = { objective: null, lobby: null, target: null, inLobby: false, title: null, steps: null };
   }
 
   // ---------------------------------------------------------------------------------------------------- frame
@@ -431,13 +472,13 @@ export class Objectives {
     this.help.style.display = this.scan.inLobby ? '' : 'none';
     this.helpKey.style.display = touch ? 'none' : '';
     this.helpKey.textContent = device === 'Gamepad' ? '◀' : 'H';
-    const timing = this._nudgeTiming();
-    const remaining = Math.max(timing.wait, timing.cooldown - (this.clock - this.directionAt));
-    const ready = remaining <= 0;
+    // the radar's key and charges, in a run
+    const radar = this.game.radar;
+    const charges = !this.scan.inLobby && text && radar && this.game.run ? radar.chargesLine() : null;
     this.keyCap.textContent = glyphFor(env, 'Radar', device);
-    this.keyLabel.textContent = ready ? S('Objective.Direction') : S('Objective.DirectionWait', Math.ceil(remaining));
-    this.keyCap.style.display = this.scan.target ? '' : 'none';
-    this.keyLabel.style.display = this.scan.target ? '' : 'none';
+    this.keyLabel.textContent = charges || '';
+    this.keyCap.style.display = charges ? '' : 'none';
+    this.keyLabel.style.display = charges ? '' : 'none';
     let trackerTarget = 0;
     if (text && canShow) {
       if (this.scan.inLobby) trackerTarget = 1;
@@ -446,57 +487,27 @@ export class Objectives {
         trackerTarget = since <= T.TrackerHold ? 1 : Math.max(0, 1 - (since - T.TrackerHold) / T.TrackerFade);
       }
     }
+    if (trackerTarget <= 0 && this.trackerAlpha <= 0.001) this.sheetLine = null;
+    this.extra.textContent = this.sheetLine || '';
+    this.extra.style.display = this.sheetLine ? '' : 'none';
     this.trackerAlpha += Math.sign(trackerTarget - this.trackerAlpha) *
       Math.min(Math.abs(trackerTarget - this.trackerAlpha), dt * (trackerTarget > this.trackerAlpha ? FADE_IN : FADE_OUT));
     this.tracker.style.opacity = String(this.trackerAlpha);
     this.tracker.style.display = this.trackerAlpha > 0.001 ? '' : 'none';
     this.tracker.style.pointerEvents = this.trackerAlpha > 0.5 && this.scan.inLobby ? 'auto' : 'none';
 
-    // direction nudge + marker
+    // the lobby's marker over its current step
     const target = this.scan.target;
-    const nudging = canShow && target && this.clock - this.directionAt <= T.DirectionShow;
-    const pTarget = nudging && !this.scan.inLobby ? 1 : 0;
-    this.pointerAlpha += Math.sign(pTarget - this.pointerAlpha) * Math.min(Math.abs(pTarget - this.pointerAlpha), dt * FADE_IN);
-    const root = env.rootPosition(_root);
-    const distance = target ? target.distanceTo(root) : 0;
-    const meters = Math.max(1, Math.floor(distance * STUDS_TO_METERS + 0.5));
-    this.pointer.style.opacity = String(this.pointerAlpha);
-    if (this.pointerAlpha > 0.001 && target) {
-      const cam = env.camera();
-      _local.copy(target).applyMatrix4(_inv.copy(cam.matrixWorld).invert());
-      const angle = Math.abs(_local.x) < 1e-6 && Math.abs(_local.z) < 1e-6 ? 0 : Math.atan2(_local.x, -_local.z);
-      const rect = env.uiRoot().getBoundingClientRect();
-      const cx = rect.width / 2;
-      const cy = rect.height / 2;
-      const x = Math.sin(angle) * POINTER_RADIUS;
-      const y = -Math.cos(angle) * POINTER_RADIUS;
-      this.arrow.style.left = `${cx + x - 9}px`;
-      this.arrow.style.top = `${cy + y - 8}px`;
-      this.arrow.style.transform = `rotate(${(angle * 180) / Math.PI}deg)`;
-      this.pointerLabel.style.left = `${cx + x * 0.62}px`;
-      this.pointerLabel.style.top = `${cy + y * 0.62}px`;
-      const far = S('Objective.Distance', meters);
-      this.pointerLabel.textContent = this.scan.label ? `${this.scan.label} · ${far}` : far;
-    }
-    let mTarget = 0;
-    if (canShow && target) mTarget = this.scan.inLobby ? 1 : nudging ? 0.85 : 0;
+    const mTarget = canShow && target && this.scan.inLobby ? 1 : 0;
     this.markerAlpha += Math.sign(mTarget - this.markerAlpha) * Math.min(Math.abs(mTarget - this.markerAlpha), dt * FADE_IN);
     if (this.markerAlpha > 0.001 && target) {
-      _p.copy(target);
-      _p.y += MARKER_LIFT + Math.sin(this.clock * 2.2) * 0.35;
-      const s = env.project(_p);
-      if (s) {
-        this.marker.style.display = '';
-        this.marker.style.left = `${s.x}px`;
-        this.marker.style.top = `${s.y}px`;
-        this.marker.style.opacity = String(this.markerAlpha);
-        const kind = lobby ? lobby.target : objective ? objective.target : null;
-        this.markerLabel.textContent = this.scan.label ? this.scan.label :
-          S(kind === 'Bus' ? 'Objective.Marker.Bus' : kind === 'Pad' ? 'Objective.Marker.Pad' : 'Objective.Marker.Goal');
-        this.markerDistance.textContent = S('Objective.Distance', meters);
-        this.diamond.style.opacity = String(0.65 + 0.35 * Math.sin(this.clock * 3));
-      } else this.marker.style.display = 'none';
-    } else this.marker.style.display = 'none';
+      const kind = lobby ? lobby.target : null;
+      this.marker.place(env, target, {
+        label: S(kind === 'Bus' ? 'Objective.Marker.Bus' : 'Objective.Marker.Pad'),
+        metres: Math.floor(target.distanceTo(env.rootPosition(_root)) * STUDS_TO_METERS + 0.5),
+        alpha: this.markerAlpha, pulse: Math.sin(this.clock * 3), lift: MARKER_LIFT + Math.sin(this.clock * 2.2) * 0.35,
+      });
+    } else this.marker.hide();
   }
 }
 

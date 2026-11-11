@@ -7,7 +7,8 @@
 // the intent ({t: 'lethal'}, {t: 'getUp'}); the host answers with the rules' word ({t: 'lifeCmd'}: down, killed and what
 // follows, up, the lives record) and every page reports its life state ({t: 'life'}). A killed player with a respawn left
 // gets RespawnBlackout of black and stands up at their slot's spawn at the stage's entry; on the host the Creature is
-// moved away from that entry and blind to them for the grace. Out of respawns they spectate. A teammate going down or
+// moved away from that entry and blind to them for the grace (at the host's blackout's end, or sooner when their page
+// says they stood up first). Out of respawns they spectate. A teammate going down or
 // dying is announced; a dying player's carried objective items are set down where they fell ({t: 'drop'}), as are a
 // leaver's. Each page tells the host whether its loadout holds the syringe ({t: 'livesKit'}).
 // Revive. A Downed teammate carries a Revive prompt (hold ReviveHold) on every other page, live for an Alive player with
@@ -133,6 +134,9 @@ export class RunNet {
     const rec = member.local ? null : this.book.get(member.id);
     if (rec && state === 'Alive') {
       rec.downedAt = null;
+      // a respawn standing up on its own page before the host's blackout ran out (the host's clock behind theirs):
+      // its effects at once, so the Creature is never left at their entry while they stand there unprotected
+      if (rec.respawning) this._respawnStood(member.id);
       rec.respawning = false;
     }
     if (state !== 'Alive') this._clearReviving(member.id);
@@ -433,16 +437,26 @@ export class RunNet {
   /** Host: teammates' respawns come due: the Creature moved away from their entry, blind to them for the grace. */
   _stepRespawns(now) {
     if (!this.coop.isHost() || !this.respawnsDue.length) return;
-    const game = this.game;
     const due = this.respawnsDue.filter((r) => now >= r.at);
     if (!due.length) return;
     this.respawnsDue = this.respawnsDue.filter((r) => now < r.at);
-    for (const r of due) {
-      const m = this.coop.squad.get(r.id);
-      const spawn = m && game.level ? game.match.spawnOf(game.level, m.slot) : null;
-      const handle = m ? this.coop.creatureNet.handleOf(m.id) : null;
-      if (spawn && handle) game.life.respawnEffects(spawn.cframe, handle);
-    }
+    for (const r of due) this._respawnEffects(r.id);
+  }
+
+  /** Host: teammate `id` stood up from a respawn still due on the host's clock: its effects now, not again later. */
+  _respawnStood(id) {
+    if (!this.respawnsDue.some((r) => r.id === id)) return;
+    this.respawnsDue = this.respawnsDue.filter((r) => r.id !== id);
+    this._respawnEffects(id);
+  }
+
+  /** Host: teammate `id`'s respawn at their slot's spawn: the Creature moved away from that entry, blind to them. */
+  _respawnEffects(id) {
+    const game = this.game;
+    const m = this.coop.squad.get(id);
+    const spawn = m && game.level ? game.match.spawnOf(game.level, m.slot) : null;
+    const handle = m ? this.coop.creatureNet.handleOf(m.id) : null;
+    if (spawn && handle) game.life.respawnEffects(spawn.cframe, handle);
   }
 
   // ---------------------------------------------------------------------------------------------------- spectating
@@ -807,7 +821,7 @@ export class RunNet {
     member.life = 'Spectating';
     this._open(member, game.run.difficulty);
     msg.run = { seed: game.run.seed, d: game.run.difficulty, id: game.run.runId, stage: game.stage,
-      cleared: [...game.cleared] };
+      cleared: [...game.cleared], n: game.run.players };
   }
 
   /** Client: welcomed into a room whose run is underway. */
@@ -821,7 +835,7 @@ export class RunNet {
     if (game.onboarding && game.onboarding.busy()) game.onboarding.closeForCoop();
     this.lateJoin = true;
     const ok = await game.match.deploy(run.d, { seed: run.seed, runId: run.id, slot: this.coop.me ? this.coop.me.slot : 0,
-      stage: run.stage, cleared: run.cleared, spectate: true });
+      stage: run.stage, cleared: run.cleared, spectate: true, players: Number(run.n) || 1 });
     if (ok) game.life.setSpectating();
   }
 

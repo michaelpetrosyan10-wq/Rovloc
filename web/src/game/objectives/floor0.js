@@ -176,17 +176,10 @@ export class Floor0 extends FloorObjective {
     if (this.breakerPrompt) this.breakerPrompt.setEnabled(this.active && next === null && !this.powered);
   }
 
-  targets() {
-    if (!this.done('FindFuses') && !(this.carry.count('Fuse') + this.fitted.length >= this.slots.length)) {
-      const out = [];
-      for (const e of this.items) {
-        if (!this.picked(e.id) || this.env.entity(e.id).hidden) continue;
-        if (this.fitted.some((f) => f.id === e.id)) continue;
-        out.push({ point: this.pointOf(e.id, 'PromptPoint') });
-      }
-      if (out.length) return out;
-    }
-    return this.panel ? [{ point: this.pointOf(this.panel, 'LeverPrompt') }] : [];
+  /** The breaker panel: the station of fitting the fuses and of throwing the breaker. */
+  radarStations() {
+    if (!this.panel) return [];
+    return ['FitFuses', 'ThrowBreaker'].map((step) => this.radarStation(this.panel, step, this.pointOf(this.panel, 'LeverPrompt')));
   }
 
   hintSpots() {

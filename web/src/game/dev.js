@@ -7,6 +7,7 @@
 //   gotoStage(stage)       go to a stage: enter it (a level: at its first spawn slot; a stand-in: its card)
 //   gotoLevel(level)       the level skip (gotoStage for a level of the school)
 //   respawns(n)            set your respawns left: n stage respawns, none from the run or the syringe
+//   radar(n)               set your radar charges (up to the difficulty's most)
 //   snapTrap()             spring the nearest armed trap on yourself          seal()  seal the current airlock now
 //   seed(n)                pin the next runs' seed (null: random)          completeObjective(level?) the floor done at once
 //   beat(kind?)            a basement beat now
@@ -69,6 +70,14 @@ export class Dev {
     if (!this.game.run || !life.authority() || !Number.isInteger(n) || n < 0) return false;
     this._mark();
     life.setLives({ ...life.lives, stage: n, run: 0, syringe: 0 });
+    return true;
+  }
+
+  /** Sets this player's radar charges (0 to the difficulty's most). */
+  radar(n) {
+    if (!this.game.run || !Number.isInteger(n) || n < 0) return false;
+    this._mark();
+    this.game.radar.setCharges(n);
     return true;
   }
 

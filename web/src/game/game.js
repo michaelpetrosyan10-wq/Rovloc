@@ -21,7 +21,7 @@ import { Signal } from './util.js';
 /**
  * @typedef {'Title'|'Lobby'|'Countdown'|'Deploying'|'InRun'|'RunEnded'|'Results'|'Resetting'} Phase
  * @typedef {{runId: string, difficulty: string, plan: import('./worldData.js').Plan, routes: Record<string, import('./worldData.js').Route>,
- *   perks: string[], startedAt: number, seed: number, devRun: boolean, slot: number,
+ *   perks: string[], startedAt: number, seed: number, devRun: boolean, slot: number, players: number,
  *   clockFrom: number|null, clockTo: number|null}} Run
  */
 

@@ -430,7 +430,7 @@ export class Coop {
     const meters = env.meters();
     let flags = 0;
     if (env.flashlightOn()) flags |= PoseFlags.Torch;
-    if (ms === 'Crouching') flags |= PoseFlags.Crouch;
+    if (ms === 'Crouching' || ms === 'Sliding') flags |= PoseFlags.Crouch;
     if (env.mode() === 'Vent') flags |= PoseFlags.Vent;
     if (ms === 'Hiding' || (g.lockers && g.lockers.occupiedId())) flags |= PoseFlags.Hidden;
     if (g.traps && g.traps.caught) flags |= PoseFlags.Trapped;

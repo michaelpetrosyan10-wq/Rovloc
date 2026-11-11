@@ -84,6 +84,8 @@ export const CameraConfig = Object.freeze({
     Trapped: 1.1,
     Parachuting: 1.5,
     Scripted: 1.5,
+    Sliding: 0, // as Crouching (the slide's eye is the crouched one)
+    Leaping: 1.4, // the root rides ParkourRules.leap; the eye rides it at the sprint height
   }),
   FieldOfView: Object.freeze({ Base: 70, SprintBonus: 6, PanicMaxBonus: 12, JumpscareFov: 55, LerpSpeed: 6 }),
   Pitch: Object.freeze({ Min: -80, Max: 80, VentMin: -35, VentMax: 35, TrappedLookDown: -55, ParachuteLookUp: 55 }),
@@ -146,6 +148,9 @@ export const NoiseKinds = Object.freeze({
   // unlocking)
   ObjectiveWork: { radius: 34, priority: 'Normal', medium: 'Air', interval: 0 },
   ObjectiveClunk: { radius: 110, priority: 'High', medium: 'Air', interval: 0 },
+  // the parkour (spec v2 3.1): a slide once at its start, a fall of 8 or more on landing
+  Slide: { radius: 60, priority: 'High', medium: 'Air', interval: 0 },
+  HardLanding: { radius: 60, priority: 'High', medium: 'Air', interval: 0 },
 });
 
 export const NoiseConfig = Object.freeze({
@@ -173,13 +178,12 @@ export const NoiseConfig = Object.freeze({
  *   - LeftControl is not bound: Ctrl+W (crouch while walking) would close the browser tab.
  *   - Menu also answers Escape and the gamepad's Start; Jump is the default character control (Roblox PlayerModule).
  *   - Interact is live while Downed too: the get-up's hold (the GetUp prompt reads its key itself on Roblox).
- *   - CROUCH's touch button sits clear above JUMP (their circles overlapped at -150 / -90); the Radar action's button
- *     reads GOAL while it drives the objective nudge (WebTouch).
+ *   - CROUCH's touch button sits clear above JUMP (their circles overlapped at -150 / -90) (WebTouch).
  *   - PendingActions: InputConfig's actions whose feature the website does not have yet are not bound at all (no key,
  *     no touch button, never live); the package that builds one takes it off the list.
  * data-test holds the bound table to the export's (every action, its keys, buttons, kind and contexts).
  */
-export const PendingActions = Object.freeze(['LookBack', 'Fire', 'LowerGun', 'Steer', 'PullUp']);
+export const PendingActions = Object.freeze(['Fire', 'LowerGun', 'Steer', 'PullUp']);
 
 /** Roblox Enum.KeyCode / UserInputType names -> KeyboardEvent.code ('Mouse0': the left button). */
 const KEY_CODES = Object.freeze({
@@ -201,7 +205,6 @@ const WEB_EXTRA = Object.freeze({
 /** The web's own touch placement and labels (Strings keys) of an exported action's button. */
 export const WebTouch = Object.freeze({
   Crouch: { position: [1, -90, 1, -172] },
-  Radar: { label: 'Input.Objective' },
 });
 /** The actions the web adds (the default character controls). */
 const WEB_ACTIONS = Object.freeze({
@@ -259,8 +262,7 @@ export const InputContexts = Object.freeze(['Menu', 'Cutscene', 'Locker', 'Trapp
  * settings whose feature the website does not have yet keep their stored value but are never shown; the package that
  * builds one takes it off the list.
  */
-export const PendingSettings = Object.freeze(['Brightness', 'LeapAssist', 'MonsterVoice', 'SayNames', 'VoiceVolume',
-  'ReplayCutscenes']);
+export const PendingSettings = Object.freeze(['Brightness', 'MonsterVoice', 'SayNames', 'VoiceVolume', 'ReplayCutscenes']);
 
 const WEB_SETTINGS = Object.freeze([
   { key: 'Supersample', kind: 'Bool', label: 'Settings.Supersample', default: false },
@@ -318,7 +320,7 @@ export const WorldConfig = Object.freeze({
 
 /** The MoveStates (Enums.MoveState). */
 export const MoveStates = Object.freeze(['Standing', 'Sprinting', 'Crouching', 'VentCrawling', 'VentScurrying',
-  'DownedCrawling', 'Hiding', 'Trapped', 'Parachuting', 'Scripted']);
+  'DownedCrawling', 'Hiding', 'Trapped', 'Parachuting', 'Scripted', 'Sliding', 'Leaping']);
 
 /** Override MoveStates, highest priority first (PlayerStateService.OverridePriority). */
 export const OverridePriority = Object.freeze(['Scripted', 'Trapped', 'Hiding', 'Parachuting', 'DownedCrawling']);

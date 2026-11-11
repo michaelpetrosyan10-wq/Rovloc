@@ -21,9 +21,6 @@ export const ObjectiveTuning = Object.freeze({
   PowerOnSeconds: 2.6,
   /** The basement: the breaker lever's throw (ObjectiveConfig LeverThrow, degrees about the lever's X axis). */
   LeverThrowDegrees: 110,
-  /** The Tab nudge on a floor with an objective: available this long after arriving, then every Cooldown. */
-  NudgeDelay: 20,
-  NudgeCooldown: 30,
   /** First-time objective hints: a station or lock within this of the eye with a clear line. */
   HintRadius: 12,
 });
@@ -63,22 +60,6 @@ export function holdOf(spec, kind) {
 /** The step spec `id` of a floor. */
 export function stepOf(spec, id) {
   return spec.steps.find((s) => s.id === id) || null;
-}
-
-/**
- * A room's spoken name from its layout id: the level prefix dropped, words split at underscores and capitals
- * ("L1_Classroom_108" -> "Classroom 108", "L0_Storage_NW" -> "Storage NW", "L1_JanitorCloset" -> "Janitor Closet").
- */
-export function roomName(id) {
-  if (!id) return '';
-  const parts = String(id).split('_');
-  if (/^L\d+$/.test(parts[0]) || parts[0] === 'Lobby') parts.shift();
-  const words = [];
-  for (const part of parts) {
-    if (/^[A-Z0-9]+$/.test(part)) words.push(part);
-    else words.push(...part.replace(/([a-z])([A-Z0-9])/g, '$1 $2').replace(/([0-9])([A-Za-z])/g, '$1 $2').split(' '));
-  }
-  return words.filter(Boolean).join(' ');
 }
 
 /**

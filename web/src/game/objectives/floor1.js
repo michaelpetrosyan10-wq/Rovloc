@@ -42,11 +42,9 @@ export class Floor1 extends FloorObjective {
     if (this.unlockPrompt) this.unlockPrompt.setEnabled(this.active && !this.unlocked && this.carry.has('MasterKeys'));
   }
 
-  targets() {
-    if (!this.done('FindKeys')) {
-      return this.items.filter((e) => this.picked(e.id) && !this.env.entity(e.id).hidden)
-        .map((e) => ({ point: this.pointOf(e.id, 'PromptPoint') }));
-    }
-    return this.lock ? [{ point: this.lock.promptPoint() }] : [];
+  /** The stairwell door's padlock: the station of the unlock. */
+  radarStations() {
+    if (!this.lock) return [];
+    return [this.radarStation(this.lock.id, 'UnlockExit', this.lock.promptPoint())];
   }
 }

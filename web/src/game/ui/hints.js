@@ -3,7 +3,9 @@
 // The world's first-time hints (meta.tutorialConfig.hints, keyed as there; WEB_HINTS: the ones this card shows, those
 // whose moment the website has; the get-up's is the downed screen's, ui/lives.js), highest priority first: the
 // stairwell airlock (near its vestibule, or its countdown), a downed teammate (never solo), the first bear trap, flask, vent grate or locker within the hint's radius on the current
-// level, a low battery with the light on. Each shows once ever: its hidden setting (Hint<Id>) is set the moment it
+// level, a low battery with the light on, the radar the first time a scan can be made, the first leap strip within the
+// Leap hint's radius, and the stages' own hint spots (addSpot: the roof pen's slide bar is the Slide hint's). Each
+// shows once ever: its hidden setting (Hint<Id>) is set the moment it
 // shows and saved with the settings. After the airlock come the floor objective's stations and locks
 // (FloorObjectives.hintSpots: a Hint.Obj.<what> line the first time one is within HintRadius of the eye with a clear
 // line; once ever, saved under ObjectiveHintsSeen). The card: a taped strip below the crosshair with the line and the
@@ -15,6 +17,7 @@
 import * as THREE from 'three';
 import { TutorialConfig } from '../config.js';
 import { S } from '../strings/index.js';
+import '../strings/kit.js';
 import { cfPos } from '../util.js';
 import { glyphFor } from './nav.js';
 import { ObjectiveTuning } from '../objectives/config.js';
@@ -32,7 +35,8 @@ const GRATE_SHUT = new Set(['Closed', 'Unscrewing', 'Locked']);
 const AIRLOCK_HINT_RADIUS = 22;
 const OBJECTIVE_HINTS = 'ObjectiveHintsSeen';
 /** The hints this card shows (the rest have no moment on the website yet, or are shown elsewhere). */
-const WEB_HINTS = new Set(['Airlock', 'DownedTeammate', 'BearTrap', 'Flask', 'VentGrate', 'Locker', 'LowBattery']);
+const WEB_HINTS = new Set(['Airlock', 'DownedTeammate', 'BearTrap', 'Flask', 'VentGrate', 'Locker', 'LowBattery', 'Radar',
+  'Slide', 'Leap']);
 /** A Luau list as JSON carries it (an empty one arrives as {}). */
 const list = (v) => (Array.isArray(v) ? v : []);
 
@@ -51,6 +55,8 @@ export class Hints {
     /** @type {Set<string>} */
     this.due = new Set();
     this.positions = new Map();
+    /** @type {Array<{id: string, level: string, point: THREE.Vector3}>} the stages' hint spots (addSpot) */
+    this.spots = [];
     const tc = game.world.meta.tutorialConfig;
     /** the hints, highest priority first ({id, text, inputs, setting, radius?}) */
     this.list = list(tc.hints).filter((h) => WEB_HINTS.has(h.id)).map((h) => ({ ...h, inputs: list(h.inputs) }));
@@ -68,6 +74,19 @@ export class Hints {
     this.text.style.fontSize = '15px';
     this.inputs = el('div', '', this.card);
     Object.assign(this.inputs.style, { display: 'flex', gap: '16px', marginTop: '8px', flexWrap: 'wrap' });
+  }
+
+  /**
+   * A stage's hint spot: hint `id` (one with a radius: the roof pen's slide bar is Slide's) is due within its radius
+   * of `point` on `level`. Returns its removal.
+   */
+  addSpot(id, level, point) {
+    const spot = { id, level, point: point.clone() };
+    this.spots.push(spot);
+    return () => {
+      const i = this.spots.indexOf(spot);
+      if (i >= 0) this.spots.splice(i, 1);
+    };
   }
 
   /** The airlock just sealed: nothing to do (the hint is driven by the countdown). */
@@ -145,6 +164,15 @@ export class Hints {
       const b = this.env.meters().battery;
       const f = b.max > 0 ? b.value / b.max : 0;
       if (this.env.flashlightOn() && f > 0 && f <= this.lowBattery) this.due.add('LowBattery');
+    }
+    // the radar: the first time a scan can be made (a charge held where the radar works)
+    if (!seen.Radar && g.radar && g.radar.rules.refusal(g.radar.asker()) === 'Ok') this.due.add('Radar');
+    // the first leap strip in reach (the world's LeapStrip anchors), and the stages' own spots (a slide bar)
+    if (!seen.Leap && this.env.leapStrips().some((st) => (!st.level || st.level === level) && st.lip.distanceTo(from) <= radius('Leap'))) {
+      this.due.add('Leap');
+    }
+    for (const spot of this.spots) {
+      if (!seen[spot.id] && spot.level === level && spot.point.distanceTo(from) <= radius(spot.id)) this.due.add(spot.id);
     }
   }
 

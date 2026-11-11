@@ -119,7 +119,7 @@ export function eyeOffset(metrics, yaw, pitch, out = new THREE.Vector3()) {
 const MOVE_TO_CAMERA = {
   Standing: 'Standing', Sprinting: 'Standing', Crouching: 'Crouching', VentCrawling: 'VentCrawling',
   VentScurrying: 'VentCrawling', DownedCrawling: 'DownedCrawling', Hiding: 'LockerPeeking', Trapped: 'Standing',
-  Parachuting: 'Standing', Scripted: 'Standing',
+  Parachuting: 'Standing', Scripted: 'Standing', Sliding: 'Crouching', Leaping: 'Standing',
 };
 const PRIMARY_MOVE = {
   Standing: 'Standing', Crouching: 'Crouching', VentCrawling: 'VentCrawling', DownedCrawling: 'DownedCrawling',
@@ -139,7 +139,7 @@ const BOB = {
   VentCrawling: { amplitude: B.VentMultiplier, frequency: 0.7, nominalSpeed: GameConfig.VentCrawlSpeed },
   VentScurrying: { amplitude: B.VentMultiplier * 1.4, frequency: 0.95, nominalSpeed: GameConfig.VentScurrySpeed },
   DownedCrawling: { amplitude: 0.9, frequency: 0.5, nominalSpeed: GameConfig.DownedMoveSpeed },
-  Hiding: STILL, Trapped: STILL, Parachuting: STILL, Scripted: STILL,
+  Hiding: STILL, Trapped: STILL, Parachuting: STILL, Scripted: STILL, Sliding: STILL, Leaping: STILL,
 };
 
 export const CameraStates = Object.freeze({

@@ -345,7 +345,8 @@ export class Lobby {
       const name = el('div', 'rg-title', card, S(`Lobby.Difficulty.${d}`));
       name.style.fontSize = '22px';
       name.style.color = d === 'Nightmare' ? Palette.Ember : Palette.Bone;
-      const lines = d === 'Nightmare' ? [S('Lobby.Difficulty.NightmareHint'), ...nightmareLines()] : [S('Lobby.Difficulty.StandardHint')];
+      const lines = d === 'Nightmare' ? [S('Lobby.Difficulty.NightmareHint'), ...nightmareLines(this.game.world.meta.radarConfig)]
+        : [S('Lobby.Difficulty.StandardHint')];
       for (const l of lines) {
         const line = el('div', 'rg-body', card, l);
         Object.assign(line.style, { fontSize: '13px', color: Palette.Ash });
@@ -515,15 +516,15 @@ export class Lobby {
   }
 }
 
-/** LobbyController.nightmareLines */
-function nightmareLines() {
+/** LobbyController.nightmareLines (the batteries: the radar's per sneaking stage for one player, meta.radarConfig) */
+function nightmareLines(radar) {
   const s = DifficultyConfig.Standard;
   const n = DifficultyConfig.Nightmare;
   const pct = (m) => Math.round((m - 1) * 100);
   return [
     S('Lobby.Nightmare.Speed', pct(n.creatureSpeedMultiplier / s.creatureSpeedMultiplier), pct(n.hearingMultiplier / s.hearingMultiplier)),
     S('Lobby.Nightmare.Traps', n.trapCount, s.trapCount),
-    S('Lobby.Nightmare.Batteries', n.batteriesPerLevel, s.batteriesPerLevel),
+    S('Lobby.Nightmare.Batteries', radar.Nightmare.BatteriesBase, radar.Standard.BatteriesBase),
     S('Lobby.Nightmare.Grates', Math.round(n.lockedGrateFraction * 100), Math.round(s.lockedGrateFraction * 100)),
     S('Lobby.Nightmare.Credits', n.creditMultiplier),
   ];

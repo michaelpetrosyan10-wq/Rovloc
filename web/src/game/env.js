@@ -745,6 +745,11 @@ export class Env {
 
   // ---------------------------------------------------------------------------------------------------- effects
 
+  /** The leap strips the player's body knows (engine/parkour.js Strip: lip, dir, side, width, level). */
+  leapStrips() {
+    return this.engine.player.parkour.strips;
+  }
+
   /** Adds a three.js object (an effect: shards, a cloud, the aim arc) to the world scene. */
   addToScene(object) {
     this.engine.world.scene.add(object);

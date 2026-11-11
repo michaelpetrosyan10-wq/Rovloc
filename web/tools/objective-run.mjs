@@ -30,6 +30,9 @@
 //                at the arrival housing (its own roof door smashed, the Creature behind it), corner housings included.
 //   Grates       at run start every grate shows the look the run's plan picks: rusted shut (Locked) where it locks
 //                one, galvanized everywhere else, never both looks at once.
+//   Radar        every floor of every seed is finished without a single radar scan (I14), but the last of several
+//                seeds plays the basement by radar: Tab shows the three fuses (the run's picks: it never reads them),
+//                a battery (its LED blinks) gives the spent charge back, the next scan shows the breaker panel.
 // Screenshots (the first seed only): the tracker on each floor, the breaker panel before and after power, the results.
 // Exit code 1 on any failure.
 
@@ -97,6 +100,9 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 for (const [si, seed] of SEEDS.entries()) {
   seedTag = String(seed);
   const first = si === 0;
+  // the last of several seeds finds the basement's fuses and its panel by radar scans alone; every other floor and
+  // every other seed is played without a single scan (I14)
+  const scanned = SEEDS.length > 1 && si === SEEDS.length - 1;
   const logs = [];
   const tab = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   await tab.addInitScript(() => {
@@ -225,6 +231,8 @@ for (const [si, seed] of SEEDS.entries()) {
   const tracker = () => G((g) => ({ title: g.objectives.scan.title, steps: (g.objectives.scan.steps || []).map((s) => s.text) }));
   /** Walks into the floor's exit vestibule from the floor side and waits for the next level. */
   const leave = async (next) => {
+    const scans = await G((g) => ({ level: g.level, scans: g.radar.scans }));
+    if (!scanned) check(`${scans.level}: finished without a single radar scan (I14)`, scans.scans === 0, scans);
     await jamCheck(`leaving ${await G((g) => g.level)}`);
     const entryRoom = await G((g) => g.route(g.level).entryRoomOfNextLevel);
     await G((g) => {
@@ -521,8 +529,24 @@ for (const [si, seed] of SEEDS.entries()) {
     await standAt(await at(lock0, 'LockPrompt'), { reach: [2.4, 3, 2], expect: /Locked/ });
     p = await active();
     check('L0: the lock prompt reads "Locked — no power"', !!p && /Locked — no power/.test(p.text), p);
-    // the fuses
-    for (const id of picks.Level0_Basement) {
+    // the fuses: from the run's picks, or (the scanning seed) where a radar scan shows them
+    let fuseIds = picks.Level0_Basement;
+    let panel = await G((g) => g.world.entities('BreakerPanel', g.level)[0].id);
+    /** Tab, then what the scan shows once it is up: [{kind, id, at}] (never the Creature: kinds and ids checked). */
+    const scan = async () => {
+      await tab.keyboard.press('Tab');
+      await ff(0.5);
+      return G((g) => g.radar.targets().map((x) => ({ kind: x.kind, id: x.id, at: x.point.toArray() })));
+    };
+    if (scanned) {
+      const seen = await scan();
+      const items = seen.filter((x) => x.kind === 'Item');
+      check(`L0 (by radar): the scan shows the three fuses (${items.map((x) => x.id).join(', ')}), they are the run's`, items.length === 3 &&
+        items.every((x) => picks.Level0_Basement.includes(x.id)) && seen.every((x) => ['Item', 'Battery'].includes(x.kind)), seen);
+      fuseIds = items.map((x) => x.id);
+      await ff(8);
+    }
+    for (const id of fuseIds) {
       const r = await standAt(await at(id, 'PromptPoint'), { expect: /Fuse/ });
       const p = await active();
       await hold(1.0);
@@ -531,7 +555,23 @@ for (const [si, seed] of SEEDS.entries()) {
     }
     f = await floorOf();
     check('L0: three fuses carried', f.carry.Fuse === 3 && f.steps.FindFuses === 3, f);
-    const panel = await G((g) => g.world.entities('BreakerPanel', g.level)[0].id);
+    if (scanned) {
+      // the charge spent: a battery (its LED blinks) gives one more; the next scan shows the breaker panel
+      const battery = await G((g) => {
+        const root = g.env.rootPosition();
+        const live = g.batteries.live(g.level).sort((a, b) => a.point.distanceTo(root) - b.point.distanceTo(root));
+        return live[0] ? { id: live[0].id, at: live[0].point.toArray() } : null;
+      });
+      const r = await standAt(battery.at, { expect: /Battery/ });
+      await hold(0.5);
+      const charges = await G((g) => g.radar.charges);
+      check('L0 (by radar): a battery taken gives the charge back', r.ok && charges === 1, { r, charges });
+      const seen = await scan();
+      const stations = seen.filter((x) => x.kind === 'Station');
+      check(`L0 (by radar): the next scan shows the breaker panel (${stations.map((x) => x.id).join(', ')})`, stations.length === 1, seen);
+      panel = stations.length ? stations[0].id.split('#')[0] : panel;
+      await ff(8);
+    }
     await standAt(await at(panel, 'LeverPrompt'), { reach: [2.6, 3.2] });
     await shot('L0-breaker-before.png');
     for (let i = 1; i <= 3; i++) {

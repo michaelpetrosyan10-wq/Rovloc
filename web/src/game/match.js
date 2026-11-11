@@ -53,10 +53,12 @@ export class Match {
 
   /**
    * MatchAndDataService.Deploy. Returns false when a run exists or away from the lobby phases. Co-op (`spec`, from the
-   * host): the run's seed and id, this page's spawn slot; a late joiner's spec also names the stage the squad is on and
-   * the stages already cleared (they watch until the next stage).
+   * host): the run's seed and id, this page's spawn slot, the squad's size at the deploy (the radar's batteries per
+   * stage); a late joiner's spec also names the stage the squad is on and the stages already cleared (they watch until
+   * the next stage).
    * @param {string} difficulty
-   * @param {{seed: number, runId: string, slot: number, stage?: string, cleared?: string[], spectate?: boolean}} [spec]
+   * @param {{seed: number, runId: string, slot: number, stage?: string, cleared?: string[], spectate?: boolean,
+   *   players?: number}} [spec]
    */
   async deploy(difficulty, spec) {
     const game = this.game;
@@ -77,6 +79,7 @@ export class Match {
       seed,
       devRun: this.devRun,
       slot: spec ? spec.slot : 0,
+      players: spec && spec.players ? spec.players : 1,
       clockFrom: null,
       clockTo: null,
     };

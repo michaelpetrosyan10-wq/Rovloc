@@ -43,7 +43,7 @@ const LEG_LENGTH = 2;
 const ROOT_TO_FEET = 3;
 const LEAD = 0.2;
 const POLL = 0.1;
-const ON_FOOT = new Set(['Standing', 'Sprinting', 'Crouching']);
+const ON_FOOT = new Set(['Standing', 'Sprinting', 'Crouching', 'Sliding']);
 // client presentation
 const PITCH_MIN = -80;
 const TRAPPED_LOOK_DOWN = -55;

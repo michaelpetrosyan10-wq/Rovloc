@@ -1,7 +1,7 @@
 // life.js: health and life state (LifeStateService) on the lives rules (docs/design/game-spec-v2.md 3.3: rules/lives.js,
 // the port of LivesRules, over the world's meta.livesConfig), the perks' effects (LoadoutService: the syringe's one
-// more respawn, battery capacity) and the battery pickups (FlashlightService), for this page's player. The HUD of it
-// all (the pips, the downed screen, the respawn's black) is ui/lives.js.
+// more respawn, battery capacity), for this page's player (the battery pickups are mechanics/batteries.js). The HUD of
+// it all (the pips, the downed screen, the respawn's black) is ui/lives.js.
 //
 // LifeState: Lobby (not in a run) · Alive · Downed · Dead · Spectating.
 //   beginRun     Alive at MaxHealth; the run's lives (LivesRules.newRun: the run respawn on Nightmare, the syringe's),
@@ -412,60 +412,6 @@ export class Life {
     const empty = this.env.meters().battery.value <= 1e-3;
     if (empty && !this.wasEmpty) this.game.notify('Hud.BatteryEmpty');
     this.wasEmpty = empty;
-  }
-}
-
-/** FlashlightService's pickups: the plan's batteries on every level (on the anchors it chose), Pickup prompt, Charge added. */
-export class BatteryPickups {
-  /** @param {import('./game.js').Game} game */
-  constructor(game) {
-    this.name = 'BatteryPickups';
-    this.game = game;
-    this.prompts = [];
-  }
-
-  beginRun(run) {
-    const { env, world } = this.game;
-    for (const info of world.entities('Battery')) {
-      const live = run.plan.props.has(info.id);
-      env.setEntityVisible(info.id, live);
-      // the run's plan may serve another anchor with this battery (worldData.plan placements)
-      const placed = run.plan.placements ? run.plan.placements.get(info.id) : null;
-      env.setEntityPivot(info.id, placed || info.pivot);
-      if (!live) continue;
-      const spec = info.prompts.find((p) => p.name === 'Pickup') || info.prompts[0];
-      const charge = info.attributes.Charge ?? GameConfig.BatteryPickupCharge;
-      const prompt = env.addPrompt({
-        entity: info.id,
-        attachment: spec ? spec.host : 'PromptPoint',
-        text: S('Prompt.Pickup'),
-        objectText: S('Prompt.Battery'),
-        holdSeconds: spec ? spec.holdDuration : 0.25,
-        distance: spec ? spec.maxDistance : 7,
-        requiresLineOfSight: false,
-        // co-op: the first teammate to take it has it; on the other pages it is just gone
-        net: 'claim',
-        netRemote: (member, handle) => {
-          env.setEntityVisible(info.id, false);
-          handle.remove();
-        },
-        onTriggered: (handle) => {
-          if (!this.game.alive()) return;
-          const battery = env.meters().battery;
-          battery.set(Math.min(battery.max, battery.value + charge));
-          const at = env.attachmentWorld(info.id, 'PromptPoint');
-          this.game.playAt('Pickup', at ? new THREE.Vector3().setFromMatrixPosition(at) : env.rootPosition());
-          env.setEntityVisible(info.id, false);
-          handle.remove();
-        },
-      });
-      this.prompts.push(prompt);
-    }
-  }
-
-  endRun() {
-    for (const p of this.prompts) p.remove();
-    this.prompts = [];
   }
 }
 

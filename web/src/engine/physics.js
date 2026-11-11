@@ -17,7 +17,9 @@
 // the body on the fixed 30 Hz tick in substeps of 1/60 s (player.js), never per rendered frame. "Ball" mode is the
 // vent crawl's 2.6-stud VentCollider: a sphere at the root, no floor probe, no gravity (the vent rail drives it).
 // Crouching lowers the crown to CrouchHeight (the player sets `height`), so a crouched body fits the tunnels'
-// crawlways (CrouchHeight + 0.6 of head room, TunnelRules.CrawlClearance); `headroom()` says whether it may stand.
+// crawlways (CrouchHeight + 0.6 of head room, TunnelRules.CrawlClearance) and a slid body passes under a slide bar
+// (ParkourConfig.Slide: 3.7 tall under 4.2); `headroom()` says whether it may stand, `headroomHeight()` how high the
+// lowest thing overhead is.
 
 import * as THREE from 'three';
 import { PhysicsConfig } from './config.js';
@@ -184,6 +186,26 @@ export class CharacterBody {
       if (this.world.raycast(_o, _up, reach)) return false;
     }
     return true;
+  }
+
+  /**
+   * Studs from the feet to the lowest thing overhead (the centre and the headroom ring, cast up from half a stud over
+   * the feet), or `reach` when nothing is within it.
+   */
+  headroomHeight(reach) {
+    const feet = this.feetY;
+    let best = reach;
+    for (let i = 0; i < 5; i++) {
+      const a = (i - 1) * (Math.PI / 2);
+      _o.set(
+        this.position.x + (i === 0 ? 0 : Math.cos(a) * HEADROOM_RING),
+        feet + 0.5,
+        this.position.z + (i === 0 ? 0 : Math.sin(a) * HEADROOM_RING),
+      );
+      const hit = this.world.raycast(_o, _up, reach - 0.5);
+      if (hit) best = Math.min(best, 0.5 + hit.distance);
+    }
+    return best;
   }
 
   _resolve() {

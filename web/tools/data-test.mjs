@@ -26,10 +26,12 @@
 // 4. The run plan, the same on both platforms: the web's Rng (src/game/util.js) against the golden values of
 //    tests/Specs/Rng.spec.luau (an independent C reference of xoshiro128** seeded by SplitMix32), then worldData's port
 //    of RunDirector against RunDirector itself: for every seed and difficulty of the export's build/cache/run-plans.json,
-//    the same objective picks and guard traps, the same bear trap, flask and battery anchors, every prop's variant
-//    (variantOf), the same locked grates and the same exit stairwells.
+//    the same objective picks and guard traps, the same bear trap and flask prop anchors, every prop's variant
+//    (variantOf), the radar's battery picks of every sneaking stage (pickBatteries: anchors in pick order and the rules
+//    broken) and the stun flask picks of every stage (pickFlasks), the same locked grates and the same exit stairwells.
 // 5. The shared rules: every config the export lists (meta.exportedConfigs: each Shared/Config and Shared/Rules module
-//    with an exportMeta) is in meta under its name, the ones the website needs among them; build/cache/golden.json
+//    with an exportMeta) is in meta under its name, the ones the website needs among them; the web's mirror of
+//    NoiseConfig's kinds (engine/config.js NoiseKinds) is the export's, kind for kind; build/cache/golden.json
 //    parses and gives every rule module rows ({ name, fn, args, expect }, names unique, at least 12 per module); the
 //    run plan's spec v2 picks (meta.plan.batteries, meta.plan.flasks and every replayed plan's) are anchors of the right
 //    kind on their level, as many as the rules allow; the CreatureBlocks (meta.creatureBlocks) are boxes on a level.
@@ -66,8 +68,8 @@ import {
 import { createSharedUniforms } from '../src/engine/materials.js';
 import { crackFrame, flaskLook, liquidColor, liquidTiers } from '../src/game/mechanics/flaskFx.js';
 import { Rng, cfMatrix, cfPos, hash as fnv, shuffle } from '../src/game/util.js';
-import { PendingActions, PendingSettings, WorldConfig as WebWorldConfig, inputBindingsFrom, settingsFrom, webKey }
-  from '../src/engine/config.js';
+import { NoiseKinds as WebNoiseKinds, PendingActions, PendingSettings, WorldConfig as WebWorldConfig, inputBindingsFrom,
+  settingsFrom, webKey } from '../src/engine/config.js';
 import { StageScripts, Stages } from '../src/game/stages.js';
 import { LevelOrder as WebLevelOrder, TutorialConfig } from '../src/game/config.js';
 import { SpawnTuning } from '../src/game/objectives/config.js';
@@ -843,7 +845,8 @@ for (const e of meta.entities) {
 }
 // removals in the website's own sources: no cut floor's id, no old floor 4 / 5 id, and no swimming, oxygen, struggle,
 // reagent, acid flask, fume hood, gym generator, coach's key, valve wheel, bolt cutters, crate chain, floodlight or
-// landing field, nor the syringe's button, action or self-revive, anywhere under web/src and web/tools (this file names
+// landing field, nor the syringe's button, action or self-revive, nor the Tab hint (its delay and cooldown, the room
+// nudge, the direction line, the GOAL button), anywhere under web/src and web/tools (this file names
 // them here on purpose and is not scanned). The
 // one "Swim" left is a sample's name (SoundLibrary's Swimming loop, kept for the rain and the drones).
 {
@@ -869,6 +872,8 @@ for (const e of meta.entities) {
     ['the bolt cutters', /bolt ?cutter/i], ['the crate chain', /crate ?chain|CutCrate|crateOpen|crateCut/i],
     ['the floodlights', /floodlight/i], ['the landing field', /landing ?field/i],
     ['the syringe\'s button, action or self-revive', /useSyringe|onAction\('Syringe'|setSyringePips|Downed\.UseSyringe|'SelfRevive'/],
+    ['the Tab hint (its delay, cooldown, room nudge, direction line and GOAL button)',
+      /NudgeDelay|NudgeCooldown|nudgeReadyAt|DirectionCooldown|DirectionShow|Objective\.Direction|Input\.Objective|roomPortals/],
   ];
   let scanned = 0;
   for (const file of sources) {
@@ -1250,8 +1255,22 @@ console.log('== run plan (the web replays RunDirector)');
         check(!!mine && same(mine.anchors, anchors), `${tag} ${level} objective picks ${mine ? mine.anchors.join(',') : '-'} (RunDirector: ${anchors.join(',')})`);
         check(!!mine && same(mine.guards, guards), `${tag} ${level} guard traps ${mine ? mine.guards.join(',') : '-'} (RunDirector: ${guards.join(',')})`);
       }
-      const props = sorted(arr(want.props).filter((p) => ['BearTrap', 'ChemicalFlask', 'Battery'].includes(p.kind)).map((p) => p.anchorId));
-      check(same(sorted(got.props), props), `${tag} trap / flask / battery anchors (${got.props.size} vs ${props.length})`);
+      // RunDirector's legacy Battery props (batteriesPerLevel, the Roblox runtime's until the port) are not the
+      // website's: its batteries are the radar's picks, replayed pick for pick below
+      const props = sorted(arr(want.props).filter((p) => ['BearTrap', 'ChemicalFlask'].includes(p.kind)).map((p) => p.anchorId));
+      check(same(sorted(got.props), props), `${tag} trap / flask anchors (${got.props.size} vs ${props.length})`);
+      for (const [level, picks] of Object.entries(want.batteries || {})) {
+        const mine = got.batteries[level];
+        const anchors = arr(picks.anchors);
+        check(!!mine && same(mine.anchors, anchors) && mine.broken === picks.broken,
+          `${tag} ${level} radar batteries ${mine ? mine.anchors.join(',') : '-'} broken ${mine ? mine.broken : '-'} (RunDirector: ${anchors.join(',')} broken ${picks.broken})`);
+      }
+      check(same(Object.keys(got.batteries).sort(), Object.keys(want.batteries || {}).sort()),
+        `${tag} radar batteries on ${Object.keys(got.batteries).join(', ')} (RunDirector: ${Object.keys(want.batteries || {}).join(', ')})`);
+      for (const [level, ids] of Object.entries(want.flasks || {})) {
+        check(same(got.flasks[level] || [], arr(ids)), `${tag} ${level} stun flasks ${(got.flasks[level] || []).join(',')} (RunDirector: ${arr(ids).join(',')})`);
+      }
+      check(same(Object.keys(got.flasks).sort(), Object.keys(want.flasks || {}).sort()), `${tag} stun flasks on the same stages`);
       // every prop as RunDirector plans it: its anchor's own variant, and no objective item with a slot (no floor has
       // kinds), so the entity the export built on that anchor is the run's prop
       for (const p of arr(want.props)) {
@@ -1289,6 +1308,13 @@ console.log('== shared rules (configs, goldens, picks)');
     check(meta.livesConfig && meta.livesConfig[d] && meta.radarConfig && meta.radarConfig[d], `lives and radar numbers for ${d}`);
   }
   check(meta.parkourConfig && meta.parkourConfig.Leap && meta.parkourConfig.Leap.Gap === 12, 'meta.parkourConfig: the leap gap is 12');
+  // the web's mirror of NoiseConfig's kinds (engine/config.js NoiseKinds): every kind it keeps is the export's
+  const kinds = (meta.noiseConfig && meta.noiseConfig.Kinds) || {};
+  for (const [kind, spec] of Object.entries(WebNoiseKinds)) {
+    const want = kinds[kind];
+    check(!!want && ['radius', 'priority', 'medium', 'interval'].every((f) => want[f] === spec[f]),
+      `NoiseKinds.${kind} is NoiseConfig's (${JSON.stringify(spec)} vs ${JSON.stringify(want)})`);
+  }
 
   // the golden rows (written by the export; the website's ports of the rule modules replay them)
   const goldenRules = path.join(buildDir, 'cache', 'golden.json');

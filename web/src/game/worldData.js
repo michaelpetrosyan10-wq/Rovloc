@@ -13,8 +13,9 @@
 //
 // The plan (RunDirector.plan, ported rule for rule over the export's candidate anchors): the objective picks
 // (pickObjective: one seeded shuffle per level, "Objective|<level>"), bear traps (the guard traps of the first fuses
-// picked, then the difficulty's count spaced from them), batteries and rusted grates, every one from
-// its own stream of the run seed. The streams are Rng (util.js), the world's generator bit for bit, so a seed picks
+// picked, then the difficulty's count spaced from them), the radar's batteries (pickBatteries: per sneaking stage, the
+// placement rules walked on TunnelRules' walk graph from the route's entry and the floor's main station), the stun
+// flasks (pickFlasks) and rusted grates, every one from its own stream of the run seed. The streams are Rng (util.js), the world's generator bit for bit, so a seed picks
 // what the export's RunDirector and a live Roblox server pick (data-test.mjs replays the export's plans). The export
 // built a prop on every candidate anchor (a prop's look is its anchor's, never the run's), so a run shows the entities
 // on its chosen anchors; placements (entity id -> world pivot) move a spare onto an anchor only if one was missing.
@@ -37,11 +38,12 @@ import { Rng, cfMatrix, cfPos, horizontalDistance, inVolume, list, shuffle } fro
  *   compass: string|null, exitPoint: THREE.Vector3}} Route
  * @typedef {{levelId: string, anchors: string[], guards: string[]}} ObjectivePicks
  * @typedef {{difficulty: string, seed: number, props: Set<string>, placements: Map<string, THREE.Matrix4>,
- *   lockedGrates: Set<string>, objectives: Record<string, ObjectivePicks>, short: Record<string, number>}} Plan
+ *   lockedGrates: Set<string>, objectives: Record<string, ObjectivePicks>,
+ *   batteries: Record<string, {anchors: string[], broken: number}>, flasks: Record<string, string[]>,
+ *   short: Record<string, number>}} Plan
  */
 
 const MIN_TRAP_SPACING = 6;
-const BATTERY_SPACING = 10;
 const TRAP_ATTEMPTS = 16;
 const MAX_REROLLS = 64;
 const TRAP_LEVEL = 'Level0_Basement';
@@ -82,6 +84,8 @@ export class WorldData {
     this._restInv = new Map();
     /** @type {Map<string, any>} the walking graph per level */
     this._walk = new Map();
+    /** @type {Map<string, any>} the battery placement rules' walks per level (_placeWalks) */
+    this._places = new Map();
     /** @type {Record<string, Route>} the routes outside a run (every floor's middle stairwell: WorldConfig.routeExit) */
     this.defaultRoutes = {};
     for (const level of LevelOrder) {
@@ -325,7 +329,7 @@ export class WorldData {
       const p = portalPoint(ra, rb, d.at);
       if (!p) continue;
       const room = this.room(a) || this.room(b);
-      add({ id: d.id, rooms: [a, b], links: [], door: true,
+      add({ id: d.id, rooms: [a, b], links: [],
         pos: new THREE.Vector3(origin[0] + p.x, room ? room.floorY : origin[1], origin[2] + p.z) });
     }
     const zg = this.meta.zoneGraph;
@@ -405,11 +409,6 @@ export class WorldData {
     return dist;
   }
 
-  /** The doorways of a room (doors, airlock doors, open doorways) as world floor points. */
-  roomPortals(level, roomId) {
-    return (this._walkGraph(level).byRoom.get(roomId) || []).filter((p) => p.door)
-      .map((p) => ({ id: p.id, pos: p.pos.clone(), rooms: p.rooms.slice() }));
-  }
   // ---------------------------------------------------------------------------------------------------- entities
 
   /** @returns {EntityInfo|null} */
@@ -558,9 +557,10 @@ export class WorldData {
 
   /**
    * The run's spawn plan (RunDirector.plan) for a difficulty and seed: the objective picks (on every floor with an
-   * item), which traps and batteries are live and where (props: live entity ids; placements: the world pivot of an entity moved onto an anchor
-   * without one of its own, none with today's export), which grates are rusted shut. `short` counts anchors chosen
-   * beyond the entities the export built (per kind).
+   * item), which traps are live and where (props: live entity ids; placements: the world pivot of an entity moved onto
+   * an anchor without one of its own, none with today's export), the radar's batteries and the stun flasks of every
+   * stage that has them (batteries, flasks: anchor ids in pick order), which grates are rusted shut. `short` counts
+   * anchors chosen beyond the entities the export built (per kind).
    * @param {string} difficulty
    * @param {number} seed
    * @returns {Plan}
@@ -586,12 +586,23 @@ export class WorldData {
     const traps = chooseSpaced(trapCandidates, fill, Rng.seeded(s, `Traps|${TRAP_LEVEL}`), MIN_TRAP_SPACING, guards);
     this._assign('BearTrap', TRAP_LEVEL, [...traps, ...guards], props, placements, short);
 
-    // batteries
+    // the radar's batteries (every sneaking stage) and the stun flasks (every stage with a count), on the run's route
+    const routes = this.routes(s);
+    const route = Object.fromEntries(Object.entries(routes).map(([level, r]) => [level, r.stairwellId]));
+    const sneaking = new Set(list(this.meta.stageConfig && this.meta.stageConfig.sneaking));
+    const flaskCounts = ((this.meta.difficultyConfig || {})[difficulty === 'Nightmare' ? 'Nightmare' : 'Standard'] || {}).flasksPerStage || {};
+    /** @type {Record<string, {anchors: string[], broken: number}>} */
+    const batteries = {};
+    /** @type {Record<string, string[]>} */
+    const flasks = {};
     for (const level of LevelOrder) {
-      const candidates = this.layoutAnchors('BatteryCandidate', level).map(withPos);
-      if (!candidates.length) continue;
-      const chosen = choosePreferSpaced(candidates, spec.batteriesPerLevel, Rng.seeded(s, `Batteries|${level}`), BATTERY_SPACING);
-      this._assign('Battery', level, chosen, props, placements, short);
+      const layout = this.meta.layouts && this.meta.layouts[level];
+      if (!layout) continue;
+      if (sneaking.has(level)) {
+        const picked = objectives[level] ? objectives[level].anchors : null;
+        batteries[level] = this.pickBatteries(s, difficulty, level, this.entryPlace(level, routes), this.mainStations(level, route, picked));
+      }
+      if ((flaskCounts[level] || 0) > 0) flasks[level] = this.pickFlasks(s, flaskCounts[level], level);
     }
 
     // grate locks
@@ -599,7 +610,182 @@ export class WorldData {
     for (const level of LevelOrder) {
       for (const id of this._lockGrates(s, spec.lockedGrateFraction, level)) lockedGrates.add(id);
     }
-    return { difficulty, seed: s, props, placements, lockedGrates, objectives, short };
+    return { difficulty, seed: s, props, placements, lockedGrates, objectives, batteries, flasks, short };
+  }
+
+  // ---------------------------------------------------------------------------------------------------- batteries
+
+  /**
+   * The placement rules' walks on a level (RunDirector walksOf): the walk graph (TunnelRules.walkGraph with crawlways,
+   * untimed, the hidden Gates shut) and each battery candidate's distances over it, cached.
+   */
+  _placeWalks(level) {
+    let w = this._places.get(level);
+    if (!w) {
+      w = { graph: walkGraph(this.meta.layouts[level], true), from: new Map() };
+      this._places.set(level, w);
+    }
+    return w;
+  }
+
+  /** Studs walked from layout anchor `anchor` to place `to` ({room, pos: [x, y, z]}, layout coordinates). */
+  _walkFromAnchor(level, anchor, to) {
+    const w = this._placeWalks(level);
+    let dist = w.from.get(anchor.id);
+    if (!dist) {
+      dist = distances(w.graph, seedsAt(w.graph, anchor.room, anchor.pos[0], anchor.pos[2]));
+      w.from.set(anchor.id, dist);
+    }
+    return reach(w.graph, dist, to.room, to.pos[0], to.pos[2], anchor.room === to.room ? [anchor.pos] : null);
+  }
+
+  /** RunDirector.deadEndRooms: the rooms with fewer than two ways in or out (doors, crawlway mouths, open grates). */
+  deadEndRooms(level) {
+    const g = this._placeWalks(level).graph;
+    const out = new Set();
+    for (const room of this.meta.layouts[level].rooms) {
+      const ways = g.members.get(room.id);
+      if (room.kind !== 'Solid' && room.kind !== 'Chase' && (!ways || ways.length < 2)) out.add(room.id);
+    }
+    return out;
+  }
+
+  /** ObjectivePlaces.arrivalPoint: the centroid of a room's PlayerSpawn anchors (else its centre), layout coordinates. */
+  arrivalPoint(level, roomId) {
+    const layout = this.meta.layouts[level];
+    let x = 0;
+    let z = 0;
+    let n = 0;
+    for (const a of layout.anchors) {
+      if (a.kind === 'PlayerSpawn' && a.room === roomId) {
+        x += a.pos[0];
+        z += a.pos[2];
+        n++;
+      }
+    }
+    if (n > 0) return [x / n, 0, z / n];
+    const room = layout.rooms.find((r) => r.id === roomId);
+    return room ? [room.rect.x + room.rect.w / 2, 0, room.rect.z + room.rect.d / 2] : [0, 0, 0];
+  }
+
+  /** RunDirector.entryPlace: where the squad enters `level` on `routes` (the previous floor's pick; else its entry). */
+  entryPlace(level, routes) {
+    const room = this.entryRoom(level, routes);
+    return { room, pos: this.arrivalPoint(level, room) };
+  }
+
+  /**
+   * RunDirector.mainStations: the floor's main station(s) (meta.objectives.floors mainStation): its anchors of that kind,
+   * the exit lock nearest the route's exit vestibule for an ExitLock, the exit vestibule for a floor that names none.
+   * `route` maps a level to the stairwell it is left by.
+   */
+  mainStations(level, route, picked) {
+    const layout = this.meta.layouts[level];
+    const floor = ((this.meta.objectives && this.meta.objectives.floors) || []).find((f) => f.levelId === level);
+    const kind = floor ? floor.mainStation : undefined;
+    const out = [];
+    const exit = this.routeCandidates(level).find((c) => c.stairwellId === route[level]) ||
+      this.routeCandidates(level).find((c) => c.slot === 'Middle');
+    const exitPlace = exit ? { room: exit.exitRoom, pos: this.arrivalPoint(level, exit.exitRoom) } : null;
+    if (!kind) return exitPlace ? [exitPlace] : out;
+    const stations = floor.stations;
+    const pickedSet = stations && stations.candidate === kind && picked ? new Set(picked) : null;
+    let best = null;
+    let bestWalk = Infinity;
+    for (const anchor of layout.anchors) {
+      if (anchor.kind !== kind || (pickedSet && !pickedSet.has(anchor.id))) continue;
+      if (kind === 'ExitLock' && exitPlace) {
+        const d = this._walkFromAnchor(level, anchor, exitPlace);
+        if (d < bestWalk) {
+          best = anchor;
+          bestWalk = d;
+        }
+      } else out.push({ room: anchor.room, pos: anchor.pos });
+    }
+    if (best) out.push({ room: best.room, pos: best.pos });
+    return out;
+  }
+
+  /**
+   * How many battery placement rules layout anchor `anchor` breaks as the `slot`-th pick next to `taken`
+   * (RunDirector.brokenRules): the slot's own rule (1st: EntryMin..EntryMax walked from `entry`; 2nd: within
+   * StationReach of a station), the spacing (PairSpacing walked from every battery taken), the dead end.
+   */
+  _brokenRules(level, anchor, slot, taken, entry, stations, dead) {
+    const rules = this.meta.radarConfig.Placement;
+    let broken = 0;
+    if (slot === 1) {
+      const d = this._walkFromAnchor(level, anchor, entry);
+      if (d < rules.EntryMin || d > rules.EntryMax) broken++;
+    } else if (slot === 2 && stations.length > 0) {
+      if (!stations.some((st) => this._walkFromAnchor(level, anchor, st) <= rules.StationReach)) broken++;
+    }
+    if (taken.some((other) => this._walkFromAnchor(level, anchor, { room: other.room, pos: other.pos }) < rules.PairSpacing)) broken++;
+    if (dead.has(anchor.room)) broken++;
+    return broken;
+  }
+
+  /**
+   * RunDirector.pickBatteries: the radar's batteries of one sneaking stage (stream "Batteries|<level>"): up to the
+   * difficulty's BatteriesMax of its BatteryCandidate anchors in pick order (a squad of n takes the first
+   * RadarRules.batteriesPlaced); each slot takes the first shuffled candidate that keeps its rules, else the one breaking
+   * the fewest (then the lowest id). `broken` counts the rules broken in all.
+   * @returns {{anchors: string[], broken: number}}
+   */
+  pickBatteries(seed, difficulty, level, entry, stations) {
+    const layout = this.meta.layouts[level];
+    const radar = this.meta.radarConfig[difficulty === 'Nightmare' ? 'Nightmare' : 'Standard'];
+    const candidates = layout.anchors.filter((a) => a.kind === 'BatteryCandidate');
+    const count = Math.min(radar.BatteriesMax, candidates.length);
+    const order = shuffle(candidates.slice(), Rng.seeded(seed, `Batteries|${level}`));
+    const dead = this.deadEndRooms(level);
+    const taken = [];
+    const used = new Set();
+    let broken = 0;
+    for (let slot = 1; slot <= count; slot++) {
+      let pick = null;
+      let fewest = Infinity;
+      for (const anchor of order) {
+        if (used.has(anchor.id)) continue;
+        const n = this._brokenRules(level, anchor, slot, taken, entry, stations, dead);
+        if (n === 0) {
+          pick = anchor;
+          fewest = 0;
+          break;
+        }
+        if (n < fewest || (n === fewest && pick !== null && anchor.id < pick.id)) {
+          pick = anchor;
+          fewest = n;
+        }
+      }
+      used.add(pick.id);
+      taken.push(pick);
+      broken += fewest;
+    }
+    return { anchors: taken.map((a) => a.id), broken };
+  }
+
+  /**
+   * RunDirector.pickFlasks: `count` (the difficulty's flasksPerStage) of a stage's FlaskCandidate anchors in pick order
+   * (stream "Flasks|<level>"; fewer when the floor has fewer candidates).
+   */
+  pickFlasks(seed, count, level) {
+    const candidates = this.meta.layouts[level].anchors.filter((a) => a.kind === 'FlaskCandidate');
+    const n = Math.min(count, candidates.length);
+    if (n <= 0) return [];
+    return shuffle(candidates.slice(), Rng.seeded(seed, `Flasks|${level}`)).slice(0, n).map((a) => a.id);
+  }
+
+  /**
+   * RunDirector.batteriesOf: the radar batteries of `plan` a squad of `players` uses on `level` (the first
+   * RadarRules.batteriesPlaced of its picks).
+   * @param {Plan} plan
+   * @param {(difficulty: string, players: number) => number} placed RadarRules.batteriesPlaced
+   */
+  batteriesOf(plan, level, players, placed) {
+    const picks = plan.batteries && plan.batteries[level];
+    if (!picks) return [];
+    return picks.anchors.slice(0, Math.min(picks.anchors.length, placed(plan.difficulty, players)));
   }
 
   /**
@@ -715,32 +901,180 @@ function spacedFrom(c, chosen, spacing) {
 function spacedPass(candidates, count, rng, spacing, fixed) {
   const order = shuffle(candidates.slice(), rng);
   const chosen = [];
-  const passed = [];
   for (const c of order) {
     if (chosen.length >= count) break;
     if (spacedFrom(c, chosen, spacing) && (!fixed || spacedFrom(c, fixed, spacing))) chosen.push(c);
-    else passed.push(c);
   }
-  return { chosen, passed };
+  return chosen;
 }
 
 function chooseSpaced(candidates, count, rng, spacing, fixed) {
   let best = [];
   if (count <= 0 || !candidates.length) return best;
   for (let i = 0; i < TRAP_ATTEMPTS; i++) {
-    const { chosen } = spacedPass(candidates, count, rng, spacing, fixed);
+    const chosen = spacedPass(candidates, count, rng, spacing, fixed);
     if (chosen.length > best.length) best = chosen;
     if (best.length >= count) break;
   }
   return best;
 }
 
-function choosePreferSpaced(candidates, count, rng, spacing) {
-  if (count <= 0 || !candidates.length) return [];
-  const { chosen, passed } = spacedPass(candidates, count, rng, spacing);
-  for (const c of passed) {
-    if (chosen.length >= count) break;
-    chosen.push(c);
+// ---------------------------------------------------------------------------------------------------- the walk graph
+
+/** TunnelRules.walkGraph's walkable door kinds (a hidden Gate is shut for the placement rules). */
+const PLACE_DOORS = new Set(['Doorway', 'Door', 'Ajar', 'Airlock', 'RoofDoor']);
+const WALK_EPS = 1e-3;
+
+/** TunnelRules.doorPoint: the level-local [x, z] a door opens at (its centre on the shared wall), or null. */
+function doorPoint(a, b, at) {
+  if (Math.abs(a.x + a.w - b.x) < WALK_EPS || Math.abs(b.x + b.w - a.x) < WALK_EPS) {
+    const coord = Math.abs(a.x + a.w - b.x) < WALK_EPS ? b.x : a.x;
+    if (Math.min(a.z + a.d, b.z + b.d) - Math.max(a.z, b.z) > WALK_EPS) return [coord, at];
   }
-  return chosen;
+  if (Math.abs(a.z + a.d - b.z) < WALK_EPS || Math.abs(b.z + b.d - a.z) < WALK_EPS) {
+    const coord = Math.abs(a.z + a.d - b.z) < WALK_EPS ? b.z : a.z;
+    if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > WALK_EPS) return [at, coord];
+  }
+  return null;
+}
+
+/**
+ * TunnelRules.walkGraph(layout, crawl, untimed): door nodes (crawlway doors kept when `crawl`), the always-open vents
+ * (duct nodes linked along the ducts, each never-locking grate's node joining its room), and every pair of nodes of one
+ * room linked in a straight line (rooms in id order, so the links, and every tie, are RunDirector's).
+ * @returns {{pos: number[][], links: {to: number, cost: number}[][], members: Map<string, number[]>}}
+ */
+function walkGraph(layout, crawl) {
+  const rooms = new Map(layout.rooms.map((r) => [r.id, r]));
+  const g = { pos: [], links: [], members: new Map() };
+  const member = (room, index) => {
+    if (!g.members.has(room)) g.members.set(room, []);
+    g.members.get(room).push(index);
+  };
+  const span = (a, b) => Math.hypot(g.pos[a][0] - g.pos[b][0], g.pos[a][1] - g.pos[b][1]);
+  const link = (a, b, cost) => {
+    g.links[a].push({ to: b, cost });
+    g.links[b].push({ to: a, cost });
+  };
+  for (const door of layout.doors) {
+    const ids = list(door.rooms);
+    if (!PLACE_DOORS.has(door.kind) || ids.length !== 2) continue;
+    const a = rooms.get(ids[0]);
+    const b = rooms.get(ids[1]);
+    if (!a || !b || ((a.kind === 'Crawlway' || b.kind === 'Crawlway') && !crawl)) continue;
+    const p = doorPoint(a.rect, b.rect, door.at);
+    if (!p) continue;
+    g.pos.push(p);
+    g.links.push([]);
+    for (const id of ids) member(id, g.pos.length - 1);
+  }
+  const vents = layout.vents;
+  if (vents) {
+    const ventIndex = new Map();
+    for (const node of list(vents.nodes)) {
+      g.pos.push([node.x, node.z]);
+      g.links.push([]);
+      ventIndex.set(node.id, g.pos.length - 1);
+    }
+    for (const edge of list(vents.edges)) {
+      const a = ventIndex.get(edge.a);
+      const b = ventIndex.get(edge.b);
+      if (a !== undefined && b !== undefined) link(a, b, span(a, b));
+    }
+    for (const grate of list(vents.grates)) {
+      const index = ventIndex.get(grate.node);
+      if (index !== undefined && !grate.lockable && rooms.has(grate.room)) member(grate.room, index);
+    }
+  }
+  for (const id of [...g.members.keys()].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0))) {
+    const nodes = g.members.get(id);
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) link(nodes[i], nodes[j], span(nodes[i], nodes[j]));
+    }
+  }
+  return g;
+}
+
+/** TunnelRules.distances: the shortest walks from `seeds` ([node, distance]) over the graph (Dijkstra on a heap). */
+function distances(g, seeds) {
+  const dist = new Array(g.pos.length).fill(Infinity);
+  const heap = new Heap();
+  for (const [node, d] of seeds) {
+    if (d < dist[node]) {
+      dist[node] = d;
+      heap.push(d, node);
+    }
+  }
+  while (heap.size > 0) {
+    const [d, node] = heap.pop();
+    if (d > dist[node] + WALK_EPS) continue;
+    for (const l of g.links[node]) {
+      const nd = d + l.cost;
+      if (nd < dist[l.to] - WALK_EPS) {
+        dist[l.to] = nd;
+        heap.push(nd, l.to);
+      }
+    }
+  }
+  return dist;
+}
+
+/** TunnelRules.seedsAt: a point's straight line to each door of its room. */
+function seedsAt(g, room, x, z) {
+  return (g.members.get(room) || []).map((node) => [node, Math.hypot(g.pos[node][0] - x, g.pos[node][1] - z)]);
+}
+
+/** TunnelRules.reach: the walk from the sources (`dist`) to point (x, z) in `room`; `direct`: sources in that room. */
+function reach(g, dist, room, x, z, direct) {
+  let best = Infinity;
+  for (const node of g.members.get(room) || []) best = Math.min(best, dist[node] + Math.hypot(g.pos[node][0] - x, g.pos[node][1] - z));
+  for (const q of direct || []) best = Math.min(best, Math.hypot(q[0] - x, q[2] - z));
+  return best;
+}
+
+/** TunnelRules' binary heap of (distance, node): popped in the same order as there. */
+class Heap {
+  constructor() {
+    this.d = [];
+    this.n = [];
+    this.size = 0;
+  }
+
+  push(dist, node) {
+    let i = this.size++;
+    this.d[i] = dist;
+    this.n[i] = node;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (this.d[p] <= this.d[i]) break;
+      this._swap(p, i);
+      i = p;
+    }
+  }
+
+  pop() {
+    const out = [this.d[0], this.n[0]];
+    const last = --this.size;
+    this.d[0] = this.d[last];
+    this.n[0] = this.n[last];
+    this.d.length = this.size;
+    this.n.length = this.size;
+    let i = 0;
+    for (;;) {
+      const l = i * 2 + 1;
+      const r = l + 1;
+      let m = i;
+      if (l < this.size && this.d[l] < this.d[m]) m = l;
+      if (r < this.size && this.d[r] < this.d[m]) m = r;
+      if (m === i) break;
+      this._swap(m, i);
+      i = m;
+    }
+    return out;
+  }
+
+  _swap(a, b) {
+    [this.d[a], this.d[b]] = [this.d[b], this.d[a]];
+    [this.n[a], this.n[b]] = [this.n[b], this.n[a]];
+  }
 }

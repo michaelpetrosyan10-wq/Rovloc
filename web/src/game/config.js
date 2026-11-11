@@ -69,7 +69,7 @@ export const Difficulties = Object.freeze(['Standard', 'Nightmare']);
 /**
  * DifficultyConfig.luau
  * @typedef {{creatureSpeedMultiplier: number, hearingMultiplier: number, sightRangeMultiplier: number,
- *   trapCount: number, batteriesPerLevel: number, lockedGrateFraction: number, catchCooldownSeconds: number, maxChaseSeconds: number,
+ *   trapCount: number, lockedGrateFraction: number, catchCooldownSeconds: number, maxChaseSeconds: number,
  *   postAirlockGraceSeconds: number, creditMultiplier: number}} DifficultySpec
  * @type {Readonly<Record<string, DifficultySpec>>}
  */
@@ -79,7 +79,6 @@ export const DifficultyConfig = Object.freeze({
     hearingMultiplier: 1.15, // harder Standard: +15 % (objective update)
     sightRangeMultiplier: 1,
     trapCount: 10,
-    batteriesPerLevel: 2, // harder Standard: one fewer per floor
     lockedGrateFraction: 0.25,
     catchCooldownSeconds: 14.4, // harder Standard: -20 %
     maxChaseSeconds: 40,
@@ -91,7 +90,6 @@ export const DifficultyConfig = Object.freeze({
     hearingMultiplier: 1.4375, // Nightmare x1.25 on top of Standard
     sightRangeMultiplier: 1.15,
     trapCount: 16,
-    batteriesPerLevel: 1,
     lockedGrateFraction: 0.45,
     catchCooldownSeconds: 8.8, // Nightmare 11 s, -20 % with Standard
     maxChaseSeconds: 65,
@@ -154,7 +152,7 @@ export const TutorialConfig = Object.freeze({
     { label: 'Tutorial.Control.Interact', action: 'Interact' },
     { label: 'Tutorial.Control.Kick', action: 'Kick' },
     { label: 'Tutorial.Control.Throw', action: 'Throw' },
-    { label: 'Tutorial.Control.Objective', action: 'Radar' },
+    { label: 'Tutorial.Control.Radar', action: 'Radar' },
     { label: 'Tutorial.Control.Menu', action: 'Menu' },
   ]),
   // Every school level by id: its Strings keys are Floor.<id>.Title, Floor.<id>.Name and Objective.Tip.<id>; the
@@ -174,8 +172,6 @@ export const TutorialConfig = Object.freeze({
   Timing: Object.freeze({
     TrackerHold: 9,
     TrackerFade: 1.6,
-    DirectionShow: 3.5,
-    DirectionCooldown: 20,
     FloorCardIn: 1.2,
     FloorCardHold: 3.6,
     FloorCardOut: 1.6,

@@ -10,14 +10,21 @@
 // lock step is a plain crossing (the Auditorium's ReachExit): its exit is open from the start and its steps are done
 // when the squad leaves it. Carried items, kept progress and a dropped item's spot all live in the floor's run state,
 // so being downed or revived never loses a step; the run ending (death, the results, Play Again) resets everything for
-// the next run.
+// the next run. radarTargets() is what the radar (mechanics/radar.js) asks of a floor: the open step, its items, its
+// stations and its exit; each floor names its own stations and the step its item is found for.
 
 import * as THREE from 'three';
 import { S } from '../strings/index.js';
-import { ObjectiveTuning, roomName, stepOf } from './config.js';
+import { ObjectiveTuning, stepOf } from './config.js';
+import '../strings/kit.js';
 import { LockFixture } from './locks.js';
 import { Tweens, WorkHold, entityPrompt } from './kit.js';
 import { cfMatrix, cfPos } from '../util.js';
+
+/**
+ * @typedef {{id: string, step: string, carried: boolean, dropped: boolean, point: THREE.Vector3, name: string}} RadarItem
+ * @typedef {{id: string, step: string, done: boolean, point: THREE.Vector3, name: string}} RadarStation
+ */
 
 /** How far over the floor point a dropped item is set down (co-op). */
 const DROP_LIFT = 0.35;
@@ -48,6 +55,8 @@ export class FloorObjective {
     this.itemPrompts = new Map();
     /** @type {Set<string>} items taken this run */
     this.taken = new Set();
+    /** @type {Set<string>} items set down where their carrier fell (dropItem) and not taken again */
+    this.dropped = new Set();
     /** @type {WorkHold[]} */
     this.holds = [];
     this.picks = { anchors: [], guards: [] };
@@ -56,7 +65,6 @@ export class FloorObjective {
     this.route = null;
     this.unlocked = false;
     this.active = false;
-    this.activatedAt = null;
   }
 
   // ---------------------------------------------------------------------------------------------------- helpers
@@ -129,7 +137,6 @@ export class FloorObjective {
     this.progress.clear();
     this.unlocked = !this.spec.lockStep;
     this.active = false;
-    this.activatedAt = null;
     for (const e of this.items) {
       this.env.setEntityPivot(e.id, e.pivot);
       this.env.setEntityVisible(e.id, this.picked(e.id));
@@ -160,6 +167,7 @@ export class FloorObjective {
     this.prompts = [];
     this.itemPrompts.clear();
     this.taken.clear();
+    this.dropped.clear();
     for (const h of this.holds) h.reset();
     this.holds = [];
     this.tweens.clear();
@@ -170,7 +178,6 @@ export class FloorObjective {
 
   activate() {
     this.active = true;
-    this.activatedAt = this.env.now();
     this.onActivate();
     this.refresh();
   }
@@ -214,6 +221,7 @@ export class FloorObjective {
         if (take(entity, p) === false) return;
         this.carry.noteEntity(entity.id);
         this.taken.add(entity.id);
+        this.dropped.delete(entity.id);
         this.refresh();
       },
     });
@@ -229,6 +237,7 @@ export class FloorObjective {
     const info = this.items.find((e) => e.id === entityId);
     if (!info || !this.taken.has(entityId)) return false;
     this.taken.delete(entityId);
+    this.dropped.add(entityId);
     const pivot = cfMatrix(info.pivot, _m);
     pivot.setPosition(at.x, at.y + DROP_LIFT, at.z);
     this.env.setEntityPivot(entityId, pivot);
@@ -260,37 +269,49 @@ export class FloorObjective {
     });
   }
 
+  // ---------------------------------------------------------------------------------------------------- the radar
+
   /**
-   * Where the nearest undone step is worked: [{point, room}] (the station, or the item spots still to find). The Tab
-   * nudge points at that room, never the item.
+   * What a radar scan can show of this floor (docs/design/game-spec-v2.md 3.2; RadarRules.targets picks from it):
+   * the open step, every picked item (the step it is found for, carried or dropped, where it is now, its marker's
+   * name), the stations of the floor's steps (done or not) and the exit (unlocked once the floor is). A floor names
+   * its item's step and its stations (radarItemStep, radarStations); a plain crossing has neither, its exit open.
+   * @returns {{openStep: string, items: RadarItem[], stations: RadarStation[], exit: RadarStation & {unlocked: boolean}|null}}
    */
-  targets() {
+  radarTargets() {
+    const open = this.current();
+    const picked = this.items.filter((e) => this.picked(e.id));
+    const name = this.spec.item ? S(`Carry.${this.spec.item.prop}`).toUpperCase() : '';
+    const items = picked.map((e, i) => ({
+      id: e.id,
+      step: this.radarItemStep(),
+      carried: this.taken.has(e.id),
+      dropped: this.dropped.has(e.id),
+      point: this.pointOf(e.id, 'PromptPoint'),
+      name: this.dropped.has(e.id) ? S('Radar.Marker.Dropped', name) : S('Radar.Marker.Item', name, i + 1, picked.length),
+    }));
+    const route = this.route;
+    const door = route ? this.game.doors.get(route.exitDoorIds[0]) : null;
+    const exit = door ? { id: door.id, step: '', done: false, unlocked: this.exitOpen(), point: door.centre.clone(),
+      name: S('Radar.Marker.Exit') } : null;
+    return { openStep: open ? open.id : '', items, stations: this.radarStations(), exit };
+  }
+
+  /** The step the floor's item is found for (its first step). */
+  radarItemStep() {
+    return this.spec.steps[0].id;
+  }
+
+  /** The floor's stations for the radar: [{id, step, done, point, name}] (none on a plain crossing). */
+  radarStations() {
     return [];
   }
 
-  /** The nudge for a player at `root`: the room of the nearest target, at its centre or nearest doorway; or null. */
-  nudge(root) {
-    let best = null;
-    for (const t of this.targets()) {
-      const room = t.room || this.roomOf(t.point);
-      if (!room) continue;
-      const d = t.point.distanceTo(root);
-      if (!best || d < best.d) best = { d, room };
-    }
-    if (!best) return null;
-    const here = this.roomOf(root);
-    let point = this.world.roomCentre(best.room);
-    if (here !== best.room) {
-      let bd = Infinity;
-      for (const p of this.world.roomPortals(this.level, best.room)) {
-        const d = p.pos.distanceTo(root);
-        if (d < bd) {
-          bd = d;
-          point = p.pos;
-        }
-      }
-    }
-    return { point: point.clone().add(_lift), room: best.room, label: roomName(best.room) };
+  /** A station entry of entity `entityId` for step `step` at `point`, named by the entity's first prompt. */
+  radarStation(entityId, step, point) {
+    const info = this.world.entity(entityId);
+    const prompt = info && info.prompts.length ? info.prompts[0].objectText : '';
+    return { id: `${entityId}#${step}`, step, done: this.done(step), point, name: String(prompt).toUpperCase() };
   }
 
   /** First-time hint spots: [{key, point}] (stations and locks of the floor). */
@@ -332,4 +353,3 @@ export class FloorObjective {
 }
 
 const _m = new THREE.Matrix4();
-const _lift = new THREE.Vector3(0, 3, 0);

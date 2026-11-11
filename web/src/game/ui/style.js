@@ -19,6 +19,8 @@ export const Palette = Object.freeze({
   Moss: 'rgb(150,158,132)',
   Cyan: 'rgb(110,148,160)',
   Paper: 'rgb(196,186,164)',
+  // the radar's cold green (spec 3.2: green lives only on the radar and the airport beacon)
+  Radar: 'rgb(116,226,170)',
 });
 
 export const Fonts = Object.freeze({

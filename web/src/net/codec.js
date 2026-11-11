@@ -17,7 +17,7 @@ import { WorldConfig } from '../engine/config.js';
 import { Reader, Writer } from './bytes.js';
 
 export const MoveStates = Object.freeze(['Standing', 'Crouching', 'Sprinting', 'VentCrawling', 'VentScurrying',
-  'Trapped', 'Hiding', 'Parachuting', 'DownedCrawling', 'Scripted', 'Freefall']);
+  'Trapped', 'Hiding', 'Parachuting', 'DownedCrawling', 'Scripted', 'Freefall', 'Sliding', 'Leaping']);
 export const LifeStates = Object.freeze(['Lobby', 'Alive', 'Downed', 'Dead', 'Spectating']);
 export const MonsterStateList = Object.freeze(['Dormant', 'Patrol', 'InvestigateNoise', 'WallChase', 'VentChase',
   'Stunned', 'Scripted']);

@@ -6,7 +6,7 @@ import { createCreatureApi } from './creatureApi.js';
 import { Dev } from './dev.js';
 import { Env } from './env.js';
 import { Game } from './game.js';
-import { BatteryPickups, Life } from './life.js';
+import { Life } from './life.js';
 import { Lobby } from './lobby.js';
 import { Match } from './match.js';
 import { StandIn } from './stages.js';
@@ -16,12 +16,14 @@ import { Profile } from './profile.js';
 import { registerSceneTracks } from './sceneTracks.js';
 import { WorldData } from './worldData.js';
 import { Airlock } from './mechanics/airlock.js';
+import { Batteries } from './mechanics/batteries.js';
 import { Doors } from './mechanics/doors.js';
 import { Traps } from './mechanics/traps.js';
 import { Vents } from './mechanics/vents.js';
 import { Flasks } from './mechanics/flasks.js';
 import { Lockers } from './mechanics/lockers.js';
 import { Parachute } from './mechanics/parachute.js';
+import { Radar } from './mechanics/radar.js';
 import { Debris } from './mechanics/debris.js';
 import { MonsterFx } from './mechanics/monsterFx.js';
 import { Level0 } from './levels/level0.js';
@@ -32,6 +34,7 @@ import { Hints } from './ui/hints.js';
 import { Nav } from './ui/nav.js';
 import { Objectives } from './ui/objectives.js';
 import { LivesHud } from './ui/lives.js';
+import { RadarHud } from './ui/radar.js';
 import { Results } from './ui/results.js';
 import { installStyle } from './ui/style.js';
 import { Onboarding } from './ui/title.js';
@@ -53,7 +56,9 @@ export async function start(engine, opts = {}) {
   // systems, in dependency order (beginRun runs forward, endRun in reverse)
   game.match = game.add(new Match(game));
   game.life = game.add(new Life(game));
-  game.add(new BatteryPickups(game));
+  // the radar (its charges and the squad's scans) and the batteries that feed it and the torch
+  game.radar = game.add(new Radar(game));
+  game.batteries = game.add(new Batteries(game));
   game.doors = game.add(new Doors(game));
   game.traps = game.add(new Traps(game));
   game.vents = game.add(new Vents(game));
@@ -75,10 +80,12 @@ export async function start(engine, opts = {}) {
   game.objectives = game.add(new Objectives(game));
   game.hints = game.add(new Hints(game));
   game.livesHud = game.add(new LivesHud(game));
+  game.radarHud = game.add(new RadarHud(game));
   game.results = game.add(new Results(game));
   // co-op (game/coop): first in the tick order, so the room's messages are applied before the systems tick; inert alone
   game.coop = new Coop(game);
   game.systems.unshift(game.coop);
+  game.radar.bindCoop(game.coop);
   const dev = new Dev(game);
   game.menu = game.add(new Menu(game, /[?&]dev\b/.test(location.search) ? dev : null));
   registerSceneTracks(game);

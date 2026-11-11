@@ -390,8 +390,12 @@ try {
   shotsTaken.push(await shot('13-l1-beyond.png'));
 
   // ------------------------------------------------------------------------------------------- the pause menu
-  // played alone, Escape's menu stops the game clock until it closes
-  const before = await G((g) => g.env.now());
+  // played alone, Escape's menu stops the game clock until it closes (the loop held from the clock's read to the
+  // press, so no real-time frame between them moves it: only ff's frames do)
+  const before = await G((g) => {
+    window.__rovloc.engine.loop.stop();
+    return g.env.now();
+  });
   await tab.keyboard.press('Escape');
   await ff(2);
   s = await G((g, dev, t) => ({ open: g.env.menuOpen(), advanced: Math.round((g.env.now() - t) * 100) / 100 }), before);
