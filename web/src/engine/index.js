@@ -3,7 +3,7 @@
 //   const engine = await Engine.create({ root, assets, onProgress });
 //   engine.world      decoded data + scene + BVH: raycast(origin, dir, maxDist, {ignoreEntities?}) -> hit | null,
 //                     lineClear(a, b) -> boolean, probeAt(pos) -> THREE.Color, zoneAt(pos), levelAt(pos), meta (world.json)
-//   engine.player     MoveState machine + meters (stamina / oxygen / battery), pushOverride(token, state) /
+//   engine.player     MoveState machine + meters (stamina / battery), pushOverride(token, state) /
 //                     popOverride(token), lock(reason) / unlock(reason), teleport(cframe), eye(), look(),
 //                     setCameraOverride(token, fn | null, priority), setMode, setMotionOverride, flashlight, panic, ...
 //                     The body moves on the 30 Hz tick (2 substeps of 1/60 s); rootPosition() is the tick state and
@@ -50,8 +50,7 @@ import { World } from './world.js';
 const ZONE_INTERVAL = 0.2; // AudioController: 5 Hz acoustics / ambience
 const LEVEL_BEDS = {
   Lobby: 'DroneLobby', Level0_Basement: 'DroneBasement', Level1_Hallways: 'DroneHallways',
-  Level2_ScienceHall: 'DroneScience', Level3_Gymnasium: 'DroneGym', Level4_FloodedPool: 'DronePool',
-  Level5_Roof: 'DroneRoof', Exterior: 'DroneRoof',
+  Level2_Auditorium: 'DroneHallways', Level3_Roof: 'DroneRoof', Exterior: 'DroneRoof',
 };
 
 /**
@@ -339,7 +338,6 @@ export class Engine {
     this.ui.updateStatus(realDt, [
       { id: 'Battery', label: getString('Hud.Battery'), fraction: m.battery.fraction, color: 'rgb(204,158,88)', active: this.player.flashlight.on },
       { id: 'Stamina', label: getString('Hud.Stamina'), fraction: m.stamina.fraction, color: 'rgb(150,158,132)', active: false },
-      { id: 'Oxygen', label: getString('Hud.Oxygen'), fraction: m.oxygen.fraction, color: 'rgb(110,148,160)', active: m.oxygen.rate !== 0 },
     ], this.syringes || 0);
     this.ui.update(realDt);
 
@@ -393,11 +391,9 @@ export class Engine {
     const state = this.player.moveState;
     let env = zone ? zone.acoustic || 'Room' : 'Outdoor';
     if (state === 'VentCrawling' || state === 'VentScurrying') env = 'Vent';
-    if (state === 'Underwater' || state === 'Grabbed') env = 'Underwater';
     this.audio.setZoneEnvironment(env);
     let bed = zone && zone.ambience ? zone.ambience : null;
     if (!bed) bed = LEVEL_BEDS[this.currentLevel || this.world.levelAt(p) || 'Exterior'] || null;
-    if (state === 'Underwater' || state === 'Grabbed') bed = 'UnderwaterBed';
     if (this.ambienceEnabled !== false) this.audio.setAmbience(bed);
   }
 

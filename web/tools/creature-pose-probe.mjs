@@ -70,7 +70,6 @@ console.log('stalk 7    ', fmt(run('Patrol', { seconds: 3, speed: 7 })));
 console.log('chase 16.5 ', fmt(run('Chase', { seconds: 3, speed: 16.5 })));
 console.log('investigate', fmt(run('Investigate', { seconds: 3, speed: 4 })));
 console.log('stunned    ', fmt(run('Stunned', { seconds: 2 })));
-console.log('swim       ', fmt(run('Swim', { seconds: 2, speed: 4 })));
 console.log('dormant    ', fmt(run('Dormant', { seconds: 2 })));
 const victim = new THREE.Vector3(0, ground + 4.6, -4.2);
 const j = run('Patrol', { seconds: 2.4, action: 'Jumpscare', actionAt: 36, target: victim, sampleEvery: 6 });

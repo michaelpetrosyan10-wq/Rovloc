@@ -8,8 +8,9 @@
 //   snapTrap()             spring the nearest armed trap on yourself          seal()  seal the current airlock now
 //   seed(n)                pin the next runs' seed (null: random)          completeObjective(level?) the floor done at once
 //   beat(kind?)            a basement beat now                                 escape() count yourself escaped
-//   signature(level)       the level's signature moment: L0 a trap, L1 the classroom scare, L2 a flask throw,
-//                          L3 a locker check, L4 a pool grab, L5 the door smash and the finale
+//   roof(smash|ledge)      the roof door sequence now, or the Creature on the ledge once someone has jumped
+//   signature(level)       the level's signature moment: the basement a trap, the Hallways the classroom scare, the
+//                          roof the jump (a pack on, off the gap, the cord pulled)
 
 import * as THREE from 'three';
 import { TutorialConfig } from './config.js';
@@ -47,8 +48,6 @@ export class Dev {
     if (g.traps.caught) g.traps._free(g.traps.caught, 'Release');
     if (g.vents.inVent()) g.vents.leave();
     g.lockers.release();
-    if (g.pool.grab) g.pool.releaseGrab('Ended');
-    g.pool.leaveWater(true);
     g.match.spawnAt(level, 0);
     g.traps.noteTeleport();
     g.enterLevel(level);
@@ -99,6 +98,17 @@ export class Dev {
     return this.game.match.markEscaped();
   }
 
+  /**
+   * The roof's dev command (`roof smash | ledge`): the door sequence now (only while the squad is arriving), or the
+   * Creature on the ledge once someone is off the roof.
+   */
+  roof(action) {
+    this._mark();
+    if (action === 'smash') return this.game.level3.devSmash();
+    if (action === 'ledge') return this.game.level3.devLedge();
+    return false;
+  }
+
   /** The level's signature moment, set up around the player. */
   signature(level) {
     const g = this.game;
@@ -106,10 +116,7 @@ export class Dev {
     switch (level) {
       case 'Level0_Basement': return this.snapTrap();
       case 'Level1_Hallways': return g.level1.devScare();
-      case 'Level2_ScienceHall': return g.flasks.devThrow();
-      case 'Level3_Gymnasium': return g.lockers.devCheck();
-      case 'Level4_FloodedPool': return g.pool.devGrab();
-      case 'Level5_Roof': return g.level5.devFinale();
+      case 'Level3_Roof': return g.level3.devJump();
       default: return false;
     }
   }

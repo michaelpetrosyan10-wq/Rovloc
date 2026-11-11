@@ -2,9 +2,9 @@
 //
 //   * Pose: SetPose(poseMode) changes the hitbox (the rig's meta.creature.hitboxes once useRigMetrics has them, else
 //     CreatureConfig.Hitbox): tall for Biped (11 studs), shorter for Hunched (9), a low long box on the rail for
-//     Quadruped, on the water line for Swim.
+//     Quadruped.
 //   * Hidden: a hidden Creature's hitbox stops answering queries; the view hides the rig.
-//   * Kinematic modes (the vent rail, swimming, scripted holds, dormancy) anchor the root and place it by CFrame; the
+//   * Kinematic modes (the vent rail, scripted holds, dormancy) anchor the root and place it by CFrame; the
 //     floor mode leaves it unanchored and the walker (the Humanoid) walks it at WalkSpeed toward its MoveTo target,
 //     turning with AutoRotate.
 //   * Facing on the floor: Face(direction) turns the root toward a direction with AutoRotate off (the
@@ -13,7 +13,7 @@
 //     world, against the Monster group's geometry (env.monsterColliders: Default parts and Default-group entity
 //     colliders; MonsterPassthrough desks, lockers and door leaves are walked through). Below it a floor probe keeps
 //     the root HipHeight + RootSize.Y / 2 above whatever floor it stands on, stepping up and down small ledges; with
-//     no floor in reach it falls under gravity (walking off a pool coping drops it into the water).
+//     no floor in reach it falls under gravity.
 //   * Stuck detection is a pure tracker: no progress of MinProgress studs for Repath.StuckSeconds while trying to move.
 
 import * as THREE from 'three';
@@ -85,7 +85,7 @@ export class CreatureBody {
   constructor(physics) {
     this.physics = physics;
     this.cframe = new CFrame();
-    /** @type {'Biped'|'Hunched'|'Quadruped'|'Swim'} */
+    /** @type {'Biped'|'Hunched'|'Quadruped'} */
     this.pose = 'Biped';
     this.anchored = true;
     this.hidden = false;
@@ -115,7 +115,7 @@ export class CreatureBody {
     this.hitbox = sizes[this.pose] || sizes.Biped;
   }
 
-  /** @param {'Biped'|'Hunched'|'Quadruped'|'Swim'} pose */
+  /** @param {'Biped'|'Hunched'|'Quadruped'} pose */
   setPose(pose) {
     if (this.pose === pose) return;
     this.pose = pose;

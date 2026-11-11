@@ -21,11 +21,10 @@ export const CreatureConfig = Object.freeze({
     Biped: Object.freeze([2.6, 11, 2.7]),
     Hunched: Object.freeze([2.6, 9, 4.2]),
     Quadruped: Object.freeze([2.8, 2.8, 6]),
-    Swim: Object.freeze([3, 3, 10]),
   }),
   // Eye position above the root centre, per PoseMode (Perception and the jumpscare camera); creatureMetrics takes
   // meta.creature.eyeHeightAboveRoot (the rig export) over these when present.
-  EyeHeightAboveRoot: Object.freeze({ Biped: 5.64, Hunched: 3.6, Quadruped: 0.5, Swim: 0.4, Stunned: 4.6 }),
+  EyeHeightAboveRoot: Object.freeze({ Biped: 5.64, Hunched: 3.6, Quadruped: 0.5, Stunned: 4.6 }),
   Speeds: Object.freeze({
     Dormant: 0,
     Patrol: 7, // Stalk: slower than a walking player (11)
@@ -35,8 +34,6 @@ export const CreatureConfig = Object.freeze({
     HidingResponse: 7,
     Teleport: 7, // the stalk toward its target after it materialises
     Stunned: 3,
-    AquaticStalk: 6.5, // slower than a freestyle swimmer (9), faster than one treading water (4)
-    AquaticLunge: 18,
     Scripted: 16,
     VentChase: 17, // legacy: the old vent crawl's pace (the view scales its duct scrape by it); never used by the brain
   }),
@@ -119,22 +116,6 @@ export const CreatureConfig = Object.freeze({
   }),
   Repath: Object.freeze({ ChaseInterval: 0.35, PatrolInterval: 2, StuckSeconds: 2.5 }),
   Jumpscare: Object.freeze({ LungeSeconds: 0.45, HoldSeconds: 1.4, FaceDistance: 1.6 }),
-  // The pool (Level 4 fairness): every lunge is telegraphed (rising bubbles, a ripple ring and a low growl at its
-  // origin) for TelegraphSeconds and may then run for LungeWindow before a new telegraph is needed; LungeCooldown
-  // after a lunge that missed. Any swim but a lunge is capped at the AquaticStalk pace. The Creature enters and leaves
-  // the water only by FadeOut / FadeIn out of sight (FadeOnly), never climbing out at the deck, and never through the
-  // vents. PoolGraceSeconds after the player first enters a pool room it leaves them alone there; after any grab it
-  // retreats to the far end of the water for GrabRetreatSeconds.
-  Water: Object.freeze({
-    LungeRange: 9,
-    TelegraphSeconds: 1.2,
-    LungeWindow: 2.5,
-    LungeCooldown: 2,
-    FadeOnly: true,
-    ExitMin: 30, // studs from every player, at least, where it comes back onto land
-    PoolGraceSeconds: 20,
-    GrabRetreatSeconds: 15,
-  }),
   // DOORS-Jack fake-outs: about one hide spot in FakeoutOneIn holds one (seeded per run), at most one per floor per player
   FakeoutOneIn: 12,
 });
@@ -230,12 +211,8 @@ export const CameraConfig = Object.freeze({
     VentCrawling: -0.6,
     VentScurrying: -0.6,
     DownedCrawling: -0.8,
-    Treading: 0.4,
-    Freestyle: 0.2,
-    Underwater: -0.6,
     Hiding: 1.3,
     Trapped: 1.1,
-    Grabbed: -0.6,
     Parachuting: 1.5,
     Scripted: 1.5,
   }),
@@ -259,12 +236,11 @@ export const WorldDefaults = Object.freeze({
  * Search, HidingResponse and Teleport are new.
  */
 export const MonsterStates = Object.freeze([
-  'Dormant', 'Patrol', 'InvestigateNoise', 'WallChase', 'Search', 'HidingResponse', 'Teleport', 'Stunned',
-  'AquaticStalk', 'Scripted',
+  'Dormant', 'Patrol', 'InvestigateNoise', 'WallChase', 'Search', 'HidingResponse', 'Teleport', 'Stunned', 'Scripted',
 ]);
 
 /** Enums.PoseMode (the body's; the view contract's poseMode adds 'Stunned' and never says 'Quadruped'). */
-export const PoseModes = Object.freeze(['Biped', 'Hunched', 'Quadruped', 'Swim']);
+export const PoseModes = Object.freeze(['Biped', 'Hunched', 'Quadruped']);
 
 /** The view contract's one-shot actions (service.js viewState). */
 export const ViewActions = Object.freeze(['Stare', 'ReachIn', 'LookAway', 'FadeOut', 'FadeIn', 'Jumpscare']);
@@ -273,4 +249,4 @@ export const ViewActions = Object.freeze(['Stare', 'ReachIn', 'LookAway', 'FadeO
 export const NoisePriorities = Object.freeze(['Low', 'Normal', 'High', 'Critical']);
 
 /** Enums.JumpscareKind */
-export const JumpscareKinds = Object.freeze(['Hallway', 'Vent', 'Locker', 'Underwater']);
+export const JumpscareKinds = Object.freeze(['Hallway', 'Vent', 'Locker']);

@@ -1,5 +1,8 @@
 // Game configuration ported value-for-value from Shared/Config (GameConfig, DifficultyConfig, PerkConfig,
-// TutorialConfig) and Shared/Enums (LevelId order, Difficulty, PerkId). Seconds and studs unless a name says otherwise.
+// TutorialConfig, WorldConfig's level order) and Shared/Enums (Difficulty, PerkId). Seconds and studs unless a name
+// says otherwise.
+
+import { WorldConfig } from '../engine/config.js';
 
 /** GameConfig.luau */
 export const GameConfig = Object.freeze({
@@ -28,15 +31,9 @@ export const GameConfig = Object.freeze({
   FlaskVentHopRadius: 2,
   BreathHoldMaxSeconds: 7,
   BreathRecoverPerSecond: 0.6,
-  StrugglePressesToEscape: 14, // Level 4 fairness (was 22)
-  StruggleMaxPressesPerSecond: 12,
   ParachutePackCount: 4,
   ParachuteDescentSpeed: 9,
   StaminaMax: 100,
-  OxygenMax: 100,
-  OxygenDrain: 7,
-  OxygenDrainGrabbed: 5, // slower than a dive while held (was 9): time to struggle free
-  OxygenRegen: 30,
   BatteryMax: 100,
   BatteryDrain: 0.6325, // +15 % (harder Standard; the flashlight drains the same on every difficulty)
   BatteryPickupCharge: 45,
@@ -45,23 +42,25 @@ export const GameConfig = Object.freeze({
   CrouchSpeed: 5.5,
   VentCrawlSpeed: 4.5,
   VentScurrySpeed: 9,
-  TreadSpeed: 4,
-  FreestyleSpeed: 9,
-  UnderwaterSpeed: 5,
   OneShotLead: 0.2,
   ServerTickHz: 10,
   CreditsPerLevelCleared: 20,
   CreditsEscapeBonus: 100,
 });
 
-/** Enums.LevelId in run order. */
-export const LevelOrder = Object.freeze(['Level0_Basement', 'Level1_Hallways', 'Level2_ScienceHall',
-  'Level3_Gymnasium', 'Level4_FloodedPool', 'Level5_Roof']);
+/** The school's levels in climbing order (WorldConfig.LevelOrder; data-test holds it to the export's). */
+export const LevelOrder = WorldConfig.LevelOrder;
 
 /** The level after `levelId` in run order (LevelDirector.nextLevel), or null after the roof. */
 export function nextLevel(levelId) {
   const i = LevelOrder.indexOf(levelId);
   return i >= 0 && i + 1 < LevelOrder.length ? LevelOrder[i + 1] : null;
+}
+
+/** The level before `levelId` in run order (WorldConfig.previousLevel), or null on the basement. */
+export function previousLevel(levelId) {
+  const i = LevelOrder.indexOf(levelId);
+  return i > 0 ? LevelOrder[i - 1] : null;
 }
 
 /** Enums.Difficulty */
@@ -70,8 +69,7 @@ export const Difficulties = Object.freeze(['Standard', 'Nightmare']);
 /**
  * DifficultyConfig.luau
  * @typedef {{creatureSpeedMultiplier: number, hearingMultiplier: number, sightRangeMultiplier: number,
- *   trapCount: number, batteriesPerLevel: number, flasksScienceHall: number, flasksPool: number,
- *   lockedGrateFraction: number, catchCooldownSeconds: number, maxChaseSeconds: number,
+ *   trapCount: number, batteriesPerLevel: number, lockedGrateFraction: number, catchCooldownSeconds: number, maxChaseSeconds: number,
  *   postAirlockGraceSeconds: number, creditMultiplier: number}} DifficultySpec
  * @type {Readonly<Record<string, DifficultySpec>>}
  */
@@ -82,8 +80,6 @@ export const DifficultyConfig = Object.freeze({
     sightRangeMultiplier: 1,
     trapCount: 10,
     batteriesPerLevel: 2, // harder Standard: one fewer per floor
-    flasksScienceHall: 6,
-    flasksPool: 2,
     lockedGrateFraction: 0.25,
     catchCooldownSeconds: 14.4, // harder Standard: -20 %
     maxChaseSeconds: 40,
@@ -96,8 +92,6 @@ export const DifficultyConfig = Object.freeze({
     sightRangeMultiplier: 1.15,
     trapCount: 16,
     batteriesPerLevel: 1,
-    flasksScienceHall: 4,
-    flasksPool: 1,
     lockedGrateFraction: 0.45,
     catchCooldownSeconds: 8.8, // Nightmare 11 s, -20 % with Standard
     maxChaseSeconds: 65,
@@ -186,18 +180,17 @@ export const TutorialConfig = Object.freeze({
       id: 'Locker', text: 'Hint.Locker', setting: 'HintLocker', radius: 10,
       inputs: [{ action: 'Interact', label: 'Hint.Input.Hide' }, { action: 'HoldBreath', label: 'Hint.Input.HoldBreath' }],
     },
-    { id: 'Water', text: 'Hint.Water', inputs: [{ action: 'Dive', label: 'Hint.Input.Dive' }], setting: 'HintWater' },
     { id: 'LowBattery', text: 'Hint.LowBattery', inputs: [{ action: 'Flashlight', label: 'Hint.Input.Light' }], setting: 'HintLowBattery' },
   ]),
   LowBatteryFraction: 0.2,
-  Floors: Object.freeze({
-    Level0_Basement: { title: 'Floor.Level0.Title', name: 'Floor.Level0.Name', tip: 'Objective.Tip.Level0', stairwell: 'East' },
-    Level1_Hallways: { title: 'Floor.Level1.Title', name: 'Floor.Level1.Name', tip: 'Objective.Tip.Level1', stairwell: 'West' },
-    Level2_ScienceHall: { title: 'Floor.Level2.Title', name: 'Floor.Level2.Name', tip: 'Objective.Tip.Level2', stairwell: 'East' },
-    Level3_Gymnasium: { title: 'Floor.Level3.Title', name: 'Floor.Level3.Name', tip: 'Objective.Tip.Level3', stairwell: 'West' },
-    Level4_FloodedPool: { title: 'Floor.Level4.Title', name: 'Floor.Level4.Name', tip: 'Objective.Tip.Level4', stairwell: 'East' },
-    Level5_Roof: { title: 'Floor.Level5.Title', name: 'Floor.Level5.Name', tip: 'Objective.Tip.Level5', stairwell: null },
-  }),
+  // Every school level by id: its Strings keys are Floor.<id>.Title, Floor.<id>.Name and Objective.Tip.<id>; the
+  // stairwell is the side of the middle stairwell up (none on the roof).
+  Floors: Object.freeze(Object.fromEntries(LevelOrder.map((id) => [id, Object.freeze({
+    title: `Floor.${id}.Title`,
+    name: `Floor.${id}.Name`,
+    tip: `Objective.Tip.${id}`,
+    stairwell: (WorldConfig.Stairwells.find((s) => s.from === id) || {}).tower || null,
+  })]))),
   LobbySteps: Object.freeze([
     { id: 'Bus', text: 'Objective.Lobby.Bus', optional: false },
     { id: 'Ready', text: 'Objective.Lobby.Ready', optional: false },
@@ -231,7 +224,7 @@ export const TutorialConfig = Object.freeze({
 
 /** The hidden settings the game keeps (SettingsSchema's hidden Bools). */
 export const HiddenSettings = Object.freeze(['TutorialDone', 'HintBearTrap', 'HintVentGrate', 'HintFlask',
-  'HintLocker', 'HintDownedTeammate', 'HintWater', 'HintLowBattery', 'HintAirlock']);
+  'HintLocker', 'HintDownedTeammate', 'HintLowBattery', 'HintAirlock']);
 
 /** Enums.StatKey (RunStatsService counters). */
 export const StatKeys = Object.freeze(['TrapsTriggered', 'VentsCrawled', 'TimesDowned', 'Revives', 'FlasksThrown',

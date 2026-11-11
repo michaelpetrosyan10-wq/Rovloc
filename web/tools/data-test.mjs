@@ -16,7 +16,10 @@
 //    draws again away from the world matches the export: each chemical flask is its anchor's variant and looks as
 //    flaskFx.js draws that variant (ChemicalFlaskBuilder.lookOf on the world's Rng: liquid tiers, crack, colour).
 //    Removals (docs/design/game-spec-v2.md 6): the four-level school only, and nothing of the cut floors, the old roof's
-//    objective or the pool anywhere in the baked data (levels, layouts, entities, anchors, rooms, doors, volumes, routes).
+//    objective or the pool anywhere in the baked data (levels, layouts, entities, anchors, rooms, doors, volumes, routes)
+//    nor in the website's own sources (web/src, web/tools: no cut id, mechanic or name survives the port). The web's
+//    mirrors of the world's config (engine/config.js WorldConfig, game/config.js LevelOrder and TutorialConfig.Floors,
+//    the Creature's level order, the spawn rule's levels, the co-op codec's level list) are the export's.
 // 3. Flicker groups: world-wide 16-bit ids within the namespace and the engine's flicker texture, every light's group
 //    resolving (its FlickerGroup, its level), and each tunnel floor's power circuits (Mains: / Circuit:) pooling as
 //    one family: the bake's pooling rule, the family in world.json, one probe grid per family.
@@ -58,7 +61,10 @@ import {
 import { createSharedUniforms } from '../src/engine/materials.js';
 import { crackFrame, flaskLook, liquidColor, liquidTiers } from '../src/game/mechanics/flaskFx.js';
 import { Rng, cfMatrix, cfPos, hash as fnv, shuffle } from '../src/game/util.js';
-import { LevelOrder as WebLevelOrder } from '../src/game/config.js';
+import { WorldConfig as WebWorldConfig } from '../src/engine/config.js';
+import { LevelOrder as WebLevelOrder, TutorialConfig } from '../src/game/config.js';
+import { SpawnTuning } from '../src/game/objectives/config.js';
+import { Levels as NetLevels } from '../src/net/codec.js';
 import { WorldData, variantOf } from '../src/game/worldData.js';
 import { POWER_CIRCUIT, dominantGroup } from './bake/light.mjs';
 
@@ -825,6 +831,87 @@ for (const e of meta.entities) {
   check(hits.length === 0, `${hits.length} ids of the old floors 4 and 5 (L4_ / L5_) in the baked data`);
   if (failures === before) console.log(`  ok   removals: the four-level school, ${CUT.length} cut names and the L4_ / L5_ ids absent from ${(text.length / 1e6).toFixed(1)} MB of meta`);
 }
+// removals in the website's own sources: no cut floor's id, no old floor 4 / 5 id, and no swimming, oxygen, struggle,
+// reagent, acid flask, fume hood, gym generator, coach's key, valve wheel, bolt cutters, crate chain, floodlight or
+// landing field anywhere under web/src and web/tools (this file names them here on purpose and is not scanned). The
+// one "Swim" left is a sample's name (SoundLibrary's Swimming loop, kept for the rain and the drones).
+{
+  const before = failures;
+  const webRoot = path.join(here, '..');
+  const sources = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (/\.(m?js|css|html|luau|py)$/.test(entry.name) && p !== fileURLToPath(import.meta.url)) sources.push(p);
+    }
+  };
+  walk(path.join(webRoot, 'src'));
+  walk(path.join(webRoot, 'tools'));
+  const LEFTOVERS = [
+    ['the Science Hall', /ScienceHall/], ['the Gym', /Gymnasium/], ['the pool floor', /FloodedPool/],
+    ['the old roof id', /Level5_Roof/], ['the old floor 4', /Level4_/], ['old floor 4 / 5 ids', /\bL[45]_/],
+    ['swimming', /swim/i], ['oxygen', /oxygen/i], ['the struggle', /struggle/i], ['reagents', /reagent/i],
+    ['the acid flask', /acid ?flask/i], ['the fume hood', /fume ?hood/i],
+    ['the gym generator', /\bGenerator\b|GeneratorStart|gym'?s generator|the generator (start|run|roar)/],
+    ['the coach\'s key', /coach'?s? ?key/i], ['the valve wheel', /valve ?wheel|HatchValve|TurnValve|FitValve/i],
+    ['the bolt cutters', /bolt ?cutter/i], ['the crate chain', /crate ?chain|CutCrate|crateOpen|crateCut/i],
+    ['the floodlights', /floodlight/i], ['the landing field', /landing ?field/i],
+  ];
+  let scanned = 0;
+  for (const file of sources) {
+    let text = fs.readFileSync(file, 'utf8');
+    // the sample named after Roblox's Swimming loop (engine/audio/samples.js) and the recipes that play it
+    text = text.replace(/"sample":"Swim"/g, '');
+    if (file.endsWith(path.join('audio', 'samples.js'))) text = text.replace(/\bSwim\b/g, '');
+    scanned++;
+    for (const [what, pattern] of LEFTOVERS) {
+      const m = text.match(pattern);
+      if (m) {
+        const line = text.slice(0, m.index).split('\n').length;
+        check(false, `${path.relative(webRoot, file)}:${line} names ${what} (cut): "${m[0]}"`);
+      }
+    }
+  }
+  check(scanned > 100, `${scanned} website sources scanned`);
+  if (failures === before) console.log(`  ok   removals: ${scanned} website sources free of the ${LEFTOVERS.length} cut names and mechanics`);
+}
+// the website's mirrors of the world's config are the export's: the level order and every per-level table keyed by
+// level id
+{
+  const before = failures;
+  const wc = meta.worldConfig || {};
+  const order = wc.LevelOrder || [];
+  check(order.join() === WebLevelOrder.join() && order.join() === WebWorldConfig.LevelOrder.join(),
+    `the web's LevelOrder ${WebLevelOrder.join(', ')} (export: ${order.join(', ')})`);
+  for (const id of order) {
+    const mine = WebWorldConfig.Levels[id];
+    const theirs = (wc.Levels || {})[id];
+    check(!!mine && !!theirs && mine.elevation === theirs.elevation && mine.height === theirs.height,
+      `${id}: elevation ${mine ? mine.elevation : '-'} / height ${mine ? mine.height : '-'} (export: ${theirs ? `${theirs.elevation} / ${theirs.height}` : '-'})`);
+    const floor = TutorialConfig.Floors[id];
+    const stair = (wc.Stairwells || []).find((s) => s.from === id && s.slot === 'Middle');
+    check(!!floor && floor.title === `Floor.${id}.Title` && floor.name === `Floor.${id}.Name` && floor.tip === `Objective.Tip.${id}` &&
+      floor.stairwell === (stair ? stair.tower : null), `TutorialConfig.Floors.${id}`);
+    check(NetLevels.includes(id), `the co-op codec names ${id}`);
+  }
+  check(Object.keys(WebWorldConfig.Levels).sort().join() === [...order].sort().join(), `WorldConfig.Levels: ${Object.keys(WebWorldConfig.Levels).join(', ')}`);
+  check(Object.keys(TutorialConfig.Floors).join() === order.join(), `TutorialConfig.Floors: ${Object.keys(TutorialConfig.Floors).join(', ')}`);
+  check(SpawnTuning.Levels.every((id) => order.includes(id)), `SpawnTuning.Levels: ${SpawnTuning.Levels.join(', ')}`);
+  for (const k of ['GroundY', 'SlabThickness', 'VentBore', 'ParapetHeight']) check(WebWorldConfig[k] === wc[k], `WorldConfig.${k} ${WebWorldConfig[k]} (export: ${wc[k]})`);
+  check(WebWorldConfig.LobbyOrigin.join() === (wc.LobbyOrigin || []).join(), 'WorldConfig.LobbyOrigin');
+  for (const side of ['East', 'West']) {
+    const mine = WebWorldConfig.Towers[side];
+    const theirs = (wc.Towers || {})[side] || {};
+    check(['minX', 'maxX', 'minZ', 'maxZ'].every((k) => mine[k] === theirs[k]), `WorldConfig.Towers.${side}`);
+  }
+  const middles = (wc.Stairwells || []).filter((s) => s.slot === 'Middle');
+  check(WebWorldConfig.Stairwells.length === middles.length && WebWorldConfig.Stairwells.every((s) => {
+    const t = middles.find((m) => m.id === s.id);
+    return !!t && ['from', 'to', 'tower', 'fromRoom', 'toRoom'].every((k) => s[k] === t[k]);
+  }), `WorldConfig.Stairwells: ${WebWorldConfig.Stairwells.map((s) => s.id).join(', ')}`);
+  if (failures === before) console.log(`  ok   the web's world config mirrors: ${order.length} levels by id, towers, stairwells, floors, spawn levels, codec`);
+}
 // routes: three candidate stairwells per floor pair, each complete (exit fire doors, entry doors, Checkpoint volume,
 // arrival spawns, an ExitLock on every exit candidate of a floor with a lock step and none elsewhere, the Creature's
 // spot in every roof housing), its doors carrying the jam data, every
@@ -1127,20 +1214,12 @@ console.log('== run plan (the web replays RunDirector)');
   const plansFile = path.join(buildDir, 'cache', 'run-plans.json');
   check(fs.existsSync(plansFile), `RunDirector's plans exported (${plansFile})`);
   let replayed = 0;
-  const school = (meta.worldConfig && meta.worldConfig.LevelOrder) || [];
-  const unported = school.filter((level) => !WebLevelOrder.includes(level));
-  const ported = (level) => !unported.includes(level);
   if (fs.existsSync(plansFile)) {
     const plans = JSON.parse(fs.readFileSync(plansFile, 'utf8'));
-    // RunDirector plans picks only on a floor with an item; the web's port (worldData.pickObjective) still expects an
-    // item on every floor it is given, so it replays the floors that have one (the itemless Auditorium crossing has no
-    // picks to replay; WP02 teaches the port such floors)
+    // RunDirector plans picks only on a floor with an item (the Auditorium's crossing has none), and so does the port
     const floors = (meta.objectives && meta.objectives.floors) || [];
     const itemless = new Set(floors.filter((f) => !f.item).map((f) => f.levelId));
-    const wd = new WorldData({ ...meta, objectives: { ...meta.objectives, floors: floors.filter((f) => f.item) } });
-    // the port walks the web's own level list (src/game/config.js LevelOrder) for batteries, grates and routes: a school
-    // level the web does not list yet is not replayed (reported below), and every other level is replayed in full, so
-    // the check is whole again the moment the web lists the four-level school (WP02)
+    const wd = new WorldData(meta);
     const sorted = (a) => [...a].sort();
     // (Lune's JSON writes an empty Luau table as {})
     const arr = (x) => (Array.isArray(x) ? x : []);
@@ -1150,6 +1229,8 @@ console.log('== run plan (the web replays RunDirector)');
       const planned = Object.keys(want.objectives || {});
       check(planned.length === floors.length - itemless.size && planned.every((level) => !itemless.has(level)),
         `${tag}: RunDirector picks on the floors with an item (${planned.join(', ')})`);
+      check(Object.keys(got.objectives).sort().join() === [...planned].sort().join(),
+        `${tag}: the port picks on the same floors (${Object.keys(got.objectives).join(', ')})`);
       for (const [level, picks] of Object.entries(want.objectives || {})) {
         const mine = got.objectives[level];
         const anchors = arr(picks.anchors);
@@ -1157,28 +1238,26 @@ console.log('== run plan (the web replays RunDirector)');
         check(!!mine && same(mine.anchors, anchors), `${tag} ${level} objective picks ${mine ? mine.anchors.join(',') : '-'} (RunDirector: ${anchors.join(',')})`);
         check(!!mine && same(mine.guards, guards), `${tag} ${level} guard traps ${mine ? mine.guards.join(',') : '-'} (RunDirector: ${guards.join(',')})`);
       }
-      const props = sorted(arr(want.props).filter((p) => ['BearTrap', 'ChemicalFlask', 'Battery'].includes(p.kind) && ported(p.levelId)).map((p) => p.anchorId));
+      const props = sorted(arr(want.props).filter((p) => ['BearTrap', 'ChemicalFlask', 'Battery'].includes(p.kind)).map((p) => p.anchorId));
       check(same(sorted(got.props), props), `${tag} trap / flask / battery anchors (${got.props.size} vs ${props.length})`);
       // every prop as RunDirector plans it: its anchor's own variant, and no objective item with a slot (no floor has
       // kinds), so the entity the export built on that anchor is the run's prop
       for (const p of arr(want.props)) {
         check(variantOf(p.kind, p.levelId, p.anchorId) === p.variant, `${tag} ${p.anchorId}: variantOf ${variantOf(p.kind, p.levelId, p.anchorId)} (RunDirector: ${p.variant})`);
         const picks = got.objectives[p.levelId];
-        if (picks && picks.anchors.includes(p.anchorId)) check(picks.slots[p.anchorId] === undefined, `${tag} ${p.anchorId} has no slot`);
+        if (picks && picks.anchors.includes(p.anchorId)) check((p.slot ?? null) === null && !('slots' in picks), `${tag} ${p.anchorId} has no slot`);
       }
       check(got.placements.size === 0, `${tag} every chosen anchor has its own entity`);
       const locked = sorted(arr(want.lockedGrates));
       check(same(sorted(got.lockedGrates), locked), `${tag} locked grates ${sorted(got.lockedGrates).join(',')} (RunDirector: ${locked.join(',')})`);
       const routes = wd.routes(want.seed);
       for (const [from, id] of Object.entries(want.route || {})) {
-        if (!ported(from)) continue;
         check(routes[from] && routes[from].stairwellId === id, `${tag} ${from} leaves by ${routes[from] ? routes[from].stairwellId : '-'} (RunDirector: ${id})`);
       }
       replayed++;
     }
   }
   if (failures === before) console.log(`  ok   Rng golden values; ${replayed} RunDirector plans replayed pick for pick`);
-  if (unported.length) console.log(`  skip props and routes of ${unported.join(', ')}: not in the web's LevelOrder yet (src/game/config.js, WP02)`);
 }
 
 // the shared rules: the configs in meta, the golden rows, the run plan's spec v2 picks, the CreatureBlocks

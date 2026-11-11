@@ -4,14 +4,13 @@
 //
 //   engine.loop       time, realTime, onTick(fn, priority) (30 Hz), onFrame(fn, priority), setPaused
 //   engine.world      meta (world.json), raycast, lineClear, zoneAt, levelAt, probeAt, scene (the game's effects:
-//                     flask shards, splashes, clouds, the aim arc, are plain three.js objects added to it)
+//                     flask shards, clouds, the aim arc, are plain three.js objects added to it)
 //   engine.player     teleport, rootPosition, feetPosition, eye, look, setLook, moveState, speed, mode / setMode,
 //                     pushOverride / popOverride, lock / unlock / isLocked, setLifeState, setMetersActive, meters,
-//                     addStamina, refillStamina, setOxygenRate, addOxygen, addBattery, oxygenDepleted,
-//                     moveStateChanged, setCameraOverride, forceCameraState, setPitchLimits, shake, setHandPose,
+//                     addStamina, refillStamina, addBattery, moveStateChanged, setCameraOverride, forceCameraState, setPitchLimits, shake, setHandPose,
 //                     setMotionOverride, body, intent, flashlight (on, setOn), panic (setFloor, panic,
 //                     setBreathSuppressed, setCreatureSource), cameraEnabled, resetForRun, viewmodel.hands.right
-//   engine.noise      emit(position, kind, opts), on(fn), splashCrossed, resetSplash, splashValue(now)
+//   engine.noise      emit(position, kind, opts), on(fn)
 //   engine.audio      play(name, opts) -> voice {stop(fade), setVolume, setPosition}, setAmbience,
 //                     setEnvironmentOverride(token, name), stopAll
 //   engine.ui         root, hud, panel, ring, keyCap, inlineKey, toast, hint, clearHint, caption, card, fade, black,
@@ -52,7 +51,7 @@ export class Env {
   constructor(engine) {
     if (!engine || !engine.world || !engine.player) throw new Error('game: the engine is missing its world or player');
     this.engine = engine;
-    /** world.json as W1 exported it (anchors, triggers, entities, rooms, vents, pools, plan, ...). */
+    /** world.json as W1 exported it (anchors, triggers, entities, rooms, vents, plan, ...). */
     this.meta = engine.world.meta || engine.world.data;
     if (!this.meta || !this.meta.entities) throw new Error('game: the engine exposes no world metadata');
     this.THREE = THREE;
@@ -192,7 +191,7 @@ export class Env {
     return this.engine.player.mode;
   }
 
-  /** 'OnFoot' | 'Vent' | 'Swim' */
+  /** 'OnFoot' | 'Vent' */
   setMode(mode) {
     this.engine.player.setMode(mode);
   }
@@ -232,7 +231,7 @@ export class Env {
     this.engine.player.setMetersActive(active);
   }
 
-  /** @returns {{stamina: any, oxygen: any, battery: any}} meters with value / max / fraction / set / setMax */
+  /** @returns {{stamina: any, battery: any}} meters with value / max / fraction / set / setMax */
   meters() {
     return this.engine.player.meters;
   }
@@ -245,21 +244,8 @@ export class Env {
     this.engine.player.refillStamina();
   }
 
-  setOxygenRate(rate) {
-    this.engine.player.setOxygenRate(rate);
-  }
-
-  addOxygen(delta) {
-    this.engine.player.addOxygen(delta);
-  }
-
   addBattery(delta) {
     this.engine.player.addBattery(delta);
-  }
-
-  /** @param {() => void} fn */
-  onOxygenDepleted(fn) {
-    return this.engine.player.oxygenDepleted.connect(fn);
   }
 
   /** @param {(next: string, prev: string) => void} fn */
@@ -311,7 +297,7 @@ export class Env {
     return this.engine.player.body;
   }
 
-  /** The movement intents ({crouch, sprint, dive}). */
+  /** The movement intents ({crouch, sprint}). */
   intent() {
     return this.engine.player.intent;
   }
@@ -352,18 +338,6 @@ export class Env {
 
   onNoise(fn) {
     return this.engine.noise.on(fn);
-  }
-
-  onSplashCrossed(fn) {
-    return this.engine.noise.splashCrossed.connect(fn);
-  }
-
-  resetSplash() {
-    this.engine.noise.resetSplash();
-  }
-
-  splashValue() {
-    return this.engine.noise.splashValue(this.now());
   }
 
   /** Mutes the locomotion sampler (lobby, cutscenes). */
@@ -531,15 +505,6 @@ export class Env {
   }
 
   /** {x right, y forward}, length <= 1. */
-  /**
-   * Whether the jump input (Space / gamepad A) is down whatever the context: a swimmer swims up and climbs out with
-   * it (Roblox's jump request) although Jump is not a Swim action. Touch swimmers climb by swimming into the edge.
-   */
-  jumpDown() {
-    const input = this.engine.input;
-    return input.keys.has('Space') || !!input.gamepadButtons[0] || this.engine.player.jumpHeld === true;
-  }
-
   moveVector() {
     return this.engine.input.moveVector();
   }
@@ -714,7 +679,7 @@ export class Env {
     this.engine.lighting.setOverride(lightId, brightness);
   }
 
-  /** Holds a flicker group (an id from meta.flickerGroups) at a factor: the power cut, the floodlights; null releases. */
+  /** Holds a flicker group (an id from meta.flickerGroups) at a factor: the power cut; null releases. */
   setGroupFactor(groupId, factor) {
     this.engine.lighting.setGroupFactor(groupId, factor);
   }

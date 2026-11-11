@@ -13,7 +13,6 @@
 //   * Withdrawing: entered with ctx.reposition (after a catch or a stun) it first walks, at InvestigateNoise speed, to
 //     a waypoint out of every player's sight 35..140 studs from them, then patrols. (A chase that gives up fades out
 //     instead: the service's warp, before Patrol starts.)
-// In the water (Level 4) the first goal on land is reached by a warp: the Mover fades it out and in on land.
 
 import * as THREE from 'three';
 import { CreatureConfig } from '../config.js';
@@ -236,7 +235,7 @@ export function enter(ctx) {
   run.looks = [];
   run.withdrawTo = null;
   ctx.mover.setRepathInterval(CreatureConfig.Repath.PatrolInterval);
-  if (ctx.mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
+  ctx.body.setPose('Biped');
   if (ctx.reposition) {
     ctx.reposition = false;
     const point = ctx.repositionPoint(WITHDRAW_MIN, WITHDRAW_MAX);

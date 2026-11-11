@@ -44,7 +44,7 @@ export function enter(ctx) {
   ctx.body.setWalkSpeed(speed);
   ctx.mover.setRepathInterval(CreatureConfig.Repath.PatrolInterval / 2);
   ctx.body.face(null);
-  if (ctx.mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
+  ctx.body.setPose('Biped');
   const at = ctx.searchFrom ? ctx.searchFrom.clone() : ctx.body.getPosition().clone();
   run.at = at;
   run.phase = 'Approach';
@@ -108,14 +108,14 @@ export function update(ctx) {
   run.index += 1;
   run.stage = 'Start';
   run.inspection = null;
-  if (mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
+  ctx.body.setPose('Biped');
 }
 
 /** @param {import('../service.js').Context} ctx */
 export function exit(ctx) {
   const run = runOf(ctx);
   run.inspection = null;
-  if (ctx.mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
+  ctx.body.setPose('Biped');
   ctx.body.face(null);
   ctx.searchFrom = null;
 }

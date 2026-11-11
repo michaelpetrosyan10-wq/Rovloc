@@ -4,10 +4,9 @@
 //   getState() -> MonsterState            getTarget() -> truthy while it hunts the player
 //   stun(seconds, from)                   alert(position, priority)
 //   acquireScripted(token) -> handle {moveTo(position, speed?), teleport(cframe), setPose(poseMode), setHidden(bool),
-//                                     face(position), release(nextState?), setTarget(on)} | null
+//                                     face(position), release(nextState?), setTarget(target)} | null
 //   registerLockerInspector(fn)           fn(lockerId) -> Promise<'Empty' | 'HiddenSafe' | 'Caught'>
-//   registerPoolGrabber(fn)               fn() -> boolean (true when the grab started)
-//   setSpeedScale(scale)                  catchGrabbed() -> boolean
+//   setSpeedScale(scale)
 //   events stateChanged(state, prev), caught(kind), jumpscareFinished(kind, outcome)
 //   activateLevel(levelId) / deactivate()
 //
@@ -63,11 +62,12 @@ export function createCreatureApi(engine, creature) {
  * @typedef {Object} ScriptedHandle
  * @property {(position: THREE.Vector3, speed?: number) => void} moveTo
  * @property {(cframe: THREE.Matrix4|number[]) => void} teleport
- * @property {(poseMode: 'Biped'|'Hunched'|'Quadruped'|'Swim') => void} setPose
+ * @property {(poseMode: 'Biped'|'Hunched'|'Quadruped') => void} setPose
  * @property {(hidden: boolean) => void} setHidden
  * @property {(position: THREE.Vector3) => void} face
  * @property {(nextState?: string) => void} release
- * @property {(on: boolean) => void} setTarget
+ * @property {(target: true|object|null) => void} setTarget its stare: true this page's player, a co-op roster handle
+ *   (coop/creature.js handleOf) a teammate, null nobody
  * @property {(name: string) => void} action
  */
 
@@ -83,8 +83,6 @@ export class CreatureApi {
     this.caught = new Signal();
     /** @type {Signal<[string, string]>} */
     this.jumpscareFinished = new Signal();
-    /** @type {Signal<[THREE.Vector3, number]>} a pool lunge is telegraphed at (origin, seconds) */
-    this.lungeTelegraph = new Signal();
     /** @type {Signal<[THREE.Vector3, boolean, number]>} a teleport's warning: (spot, aimed at this page's player, seconds) */
     this.teleportWarning = new Signal();
     /** @type {Signal<[string]>} this page's player got a reveal scare (kind) */
@@ -99,7 +97,6 @@ export class CreatureApi {
       this._bridge('stateChanged', this.stateChanged);
       this._bridge('caught', this.caught);
       this._bridge('jumpscareFinished', this.jumpscareFinished);
-      this._bridge('lungeTelegraph', this.lungeTelegraph);
       for (const name of ['teleportWarning', 'revealed', 'stared', 'gaveUp', 'grunted']) this._bridge(name, this[name]);
     }
   }
@@ -170,7 +167,7 @@ export class CreatureApi {
 
   /**
    * The CreatureHitbox (CreatureRigBuilder.setHitbox: the pose's box on the root, floor poses standing on the floor,
-   * the crouched and swimming ones pushed forward), or null when hidden or absent. The pose is the one it stands in
+   * the crouched ones pushed forward), or null when hidden or absent. The pose is the one it stands in
    * (the view contract's poseMode): Hunched under a low lintel or tunnel, where the 11-stud Biped box would reach
    * into the ceiling.
    * @returns {{matrix: THREE.Matrix4, inv: THREE.Matrix4, size: number[]}|null}
@@ -180,7 +177,7 @@ export class CreatureApi {
     const body = c && c.service ? c.service.body : null;
     if (!body || body.hidden || !c.service.running) return null;
     const contract = typeof c.service.viewState === 'function' ? c.service.viewState().poseMode : null;
-    const pose = contract === 'Hunched' || contract === 'Swim' ? contract : body.pose || 'Biped';
+    const pose = contract === 'Hunched' ? contract : body.pose || 'Biped';
     const size = CreatureConfig.Hitbox[pose] || CreatureConfig.Hitbox.Biped;
     const layout = HITBOX_LAYOUTS[pose] || HITBOX_LAYOUTS.Biped;
     const y = layout.floor ? size[1] / 2 - ROOT_HEIGHT : 0;
@@ -188,10 +185,9 @@ export class CreatureApi {
     return { matrix, inv: this._boxInv.copy(matrix).invert(), size };
   }
 
-  /** Whether it is chasing the player right now (WallChase / AquaticStalk with us as its target). */
+  /** Whether it is chasing the player right now (WallChase with us as its target). */
   chasingPlayer() {
-    const s = this.getState();
-    return (s === 'WallChase' || s === 'AquaticStalk') && this.hasTarget();
+    return this.getState() === 'WallChase' && this.hasTarget();
   }
 
   /** The view contract ({state, speed, poseMode, action, actionStartedAt, fade}), or null. */
@@ -222,10 +218,6 @@ export class CreatureApi {
 
   setSpeedScale(scale) {
     this._call('setSpeedScale', scale);
-  }
-
-  catchGrabbed() {
-    return !!this._call('catchGrabbed');
   }
 
   activateLevel(levelId) {
@@ -270,11 +262,6 @@ export class CreatureApi {
     this._call('registerLockerInspector', fn);
   }
 
-  /** @param {(player?: any) => boolean} fn */
-  registerPoolGrabber(fn) {
-    this._call('registerPoolGrabber', fn);
-  }
-
   /**
    * Exclusive control for a cutscene (null when there is no Creature or another script / a catch holds it).
    * @param {string} token
@@ -300,7 +287,7 @@ export class CreatureApi {
       setHidden: (hidden) => call('setHidden', hidden),
       face: (position) => call('face', position),
       release: (nextState) => call('release', nextState),
-      setTarget: (on) => call('setTarget', on ? true : null),
+      setTarget: (target) => call('setTarget', target === true ? true : target || null),
       action: (name) => {
         if (typeof raw.playAction === 'function') call('playAction', name);
         else this._call('playAction', name);
@@ -314,6 +301,5 @@ const HITBOX_LAYOUTS = {
   Biped: { floor: true, forward: 0.35 },
   Hunched: { floor: true, forward: 1.3 },
   Quadruped: { floor: false, forward: 0.9 },
-  Swim: { floor: false, forward: 0.5 },
 };
 const _offset = new THREE.Matrix4();

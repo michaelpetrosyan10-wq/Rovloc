@@ -10,8 +10,7 @@
 // ReachIn (it saw you get in) tears the door off like a failed breath check.
 //
 // A locker is Free, Entering, Hidden, Exiting or Smashed (its door torn off by the Creature: never usable again this
-// run). The Hide prompt (0.25 s hold) serves every unsmashed locker, except one Floor 3's key search holds ajar
-// (setSearchOpen).
+// run). The Hide prompt (0.25 s hold) serves every unsmashed locker.
 //
 // Getting in (canHide: the run is live, Alive, no control lock, on foot, not hiding already, the locker Free, the
 // Creature not chasing you; Hud.LockerOccupied / Hud.LockerSeen tell the refusals that matter). At once: the Locker
@@ -80,7 +79,6 @@ const CHASES = new Set(['WallChase']);
 const AT_SPOT_STATES = new Set(['InvestigateNoise', 'Search', 'HidingResponse']);
 const FAKEOUT_DELAY = 0.12;
 const CLEAR_HALF_WIDTH = 0.9;
-const SEARCH_OPEN = 0.42; // Floor 3's key search (objectives/floor3.js): a searched locker's door stands this far open
 
 // LockerBuilder
 const DOOR_OPEN_ANGLE = (110 * Math.PI) / 180;
@@ -361,7 +359,6 @@ export class Lockers {
     this.fakeoutBudget.reset();
     for (const locker of this.lockers.values()) {
       locker.state = 'Free';
-      locker.searchOpen = false;
       locker.motion = null;
       locker.schedule = null;
       locker.check = null;
@@ -1067,32 +1064,10 @@ export class Lockers {
 
   // ---------------------------------------------------------------------------------------------------- reads
 
-  /** Whether a breath check (or an empty peek) is running anywhere (LockerHidingService.IsChecking). */
-  isChecking() {
-    if (this.peeks.length) return true;
-    for (const l of this.lockers.values()) if (l.check) return true;
-    return false;
-  }
-
   /** A locker's state ('Free' | 'Entering' | 'Hidden' | 'Exiting' | 'Smashed'), or null. */
   stateOf(id) {
     const l = this.lockers.get(id);
     return l ? l.state : null;
-  }
-
-  /**
-   * Floor 3's key search: swings a free locker's door ajar (SEARCH_OPEN of fully open, the locker creak) or shut again;
-   * its Hide prompt waits while it stands open. False when it is not free or already so.
-   */
-  setSearchOpen(id, open) {
-    const locker = this.lockers.get(id);
-    if (!locker || locker.state !== 'Free' || !!locker.searchOpen === !!open) return false;
-    const now = this.env.now();
-    const from = locker.motion ? valueAt(locker.motion, now)[0] : locker.searchOpen ? SEARCH_OPEN : 0;
-    locker.searchOpen = !!open;
-    this._startDoor(locker, 'Swing', from, open ? SEARCH_OPEN : 0, open ? OpenSeconds : CloseSeconds, now + LEAD);
-    if (locker.handle) locker.handle.setEnabled(!open);
-    return true;
   }
 
   /** The locker the player is in (id), or null (the Creature's lockerOccupied hook). */
@@ -1117,7 +1092,7 @@ export class Lockers {
     return true;
   }
 
-  /** Dev: hides in the nearest free locker on this level and, once settled, starts a breath check (Level 3's moment). */
+  /** Dev: hides in the nearest free locker on this level and, once settled, starts a breath check. */
   devCheck() {
     const env = this.env;
     const root = env.rootPosition(new THREE.Vector3());
@@ -1142,6 +1117,8 @@ export class Lockers {
     this.devCheckPending = true;
     return true;
   }
+
+
 }
 
 /** Which part of a check the prompt shows at `now` (LockerController.promptStage). */

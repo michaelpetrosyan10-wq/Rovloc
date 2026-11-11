@@ -5,7 +5,7 @@
 //     CreatureNearDistance (1) and CreatureFarDistance (0) on a smoothstep, full with line of sight from my eye to its
 //     eye, OccludedShare of it through walls. Sensed at 10 Hz.
 //   * chase floor: the Creature targets me in WallChase / VentChase.
-//   * floors: setFloor(token, value) from later systems (struggles, scripted beats); the highest wins.
+//   * floors: setFloor(token, value) from later systems (scripted beats, the roof door); the highest wins.
 //   * Downed: +DownedBonus.
 // Panic rises at RiseSpeed / falls at FallSpeed per second. Outputs: the post grade (saturation, contrast, red tint),
 // the vignette (rests at the level film's vignette, closes in with panic, throbs with the heartbeat), the FOV bonus

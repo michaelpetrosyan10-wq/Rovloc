@@ -1,8 +1,7 @@
 // Stunned: blinded by a chemical cloud (stun, GameConfig.StunSeconds). The Creature claws at its face and stumbles back
-// away from the cloud at Stunned speed: on floors a short stagger straight back (veering off a wall behind it,
-// flailing in place when boxed in), in the water a backward glide. No catches, no noises heard, nobody targeted. When
-// the stun ends the brain sends it off to withdraw (Patrol, out of sight). The view contract's poseMode reads
-// 'Stunned' throughout (the stun flail).
+// away from the cloud at Stunned speed: a short stagger straight back (veering off a wall behind it, flailing in place
+// when boxed in). No catches, no noises heard, nobody targeted. When the stun ends the brain sends it off to withdraw
+// (Patrol, out of sight). The view contract's poseMode reads 'Stunned' throughout (the stun flail).
 
 export const Name = 'Stunned';
 const FLAIL_SECONDS = 0.5;

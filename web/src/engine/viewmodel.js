@@ -7,7 +7,7 @@
 //   Flashlight  right hand holding the torch along the look (follows PITCH_SHARE of the pitch from the shoulder),
 //               lowered to the hip while sprinting; Free: hands down (out of view); Pry / Ripcord / SlitGrip: both
 //               hands at fixed offsets in the target's frame; Flask: the right hand at the target itself.
-// While the body needs both hands (crawling, swimming, grabbed, parachuting) Flashlight / Flask fall back to Free.
+// While the body needs both hands (crawling, parachuting) Flashlight / Flask fall back to Free.
 // `hands.right` / `hands.left` are the hand frames: held props (a flask) can be parented to them.
 
 import * as THREE from 'three';
@@ -21,8 +21,7 @@ const LOWERED_TILT = (-38 * Math.PI) / 180;
 const PITCH_SHARE = 0.8;
 const LOWER_SPEED = 9;
 const HAND_MOUNT = new THREE.Vector3(0, -0.08, -0.12);
-const BUSY = new Set(['VentCrawling', 'VentScurrying', 'DownedCrawling', 'Treading', 'Freestyle', 'Underwater',
-  'Grabbed', 'Parachuting']);
+const BUSY = new Set(['VentCrawling', 'VentScurrying', 'DownedCrawling', 'Parachuting']);
 export const Poses = Object.freeze(['Flashlight', 'Free', 'Pry', 'Ripcord', 'SlitGrip', 'Flask']);
 
 const BODY_COLOR = [38, 40, 43];

@@ -4,25 +4,20 @@
 //
 // The locomotion sampler (LocomotionNoiseSampler) lives here too: the player reports its MoveState and observed
 // horizontal speed at 10 Hz and pulses the louder of the MoveState tier and the speed tier, paced by the kind's
-// interval. Lobby rooms are silent (the safe zone). Water noises feed the splash meter; crossing its grab threshold
-// fires `splashCrossed` (re-armed only after decaying below rearmBelow).
+// interval. Lobby rooms are silent (the safe zone).
 
 import { NoiseConfig, NoiseKinds } from './config.js';
 import { Signal } from './signal.js';
 
 const MEDIUM_BY_STATE = {
   Standing: 'Air', Sprinting: 'Air', Crouching: 'Air', DownedCrawling: 'Air', VentCrawling: 'Vent',
-  VentScurrying: 'Vent', Treading: 'Water', Freestyle: 'Water', Underwater: 'Water',
+  VentScurrying: 'Vent',
 };
 const TIER_BY_STATE = {
   Standing: 'Walk', Sprinting: 'Sprint', Crouching: 'CrouchWalk', DownedCrawling: 'CrouchWalk',
-  VentCrawling: 'SlowVentCrawl', VentScurrying: 'VentScurry', Treading: 'Treading', Freestyle: 'Freestyle',
-  Underwater: 'Treading',
+  VentCrawling: 'SlowVentCrawl', VentScurrying: 'VentScurry',
 };
-const SPEED_TIERS = { Air: NoiseConfig.SpeedTiers, Vent: NoiseConfig.VentSpeedTiers, Water: NoiseConfig.WaterSpeedTiers };
-const SPLASH = NoiseConfig.SplashMeter;
-const SPLASH_GAIN = { Freestyle: SPLASH.perFreestylePulse, Splash: SPLASH.perSplash, Treading: SPLASH.perTreadingPulse };
-const SPLASH_CAP_FACTOR = 1.5;
+const SPEED_TIERS = { Air: NoiseConfig.SpeedTiers, Vent: NoiseConfig.VentSpeedTiers };
 const PACE_EPSILON = 1e-6;
 
 /**
@@ -31,7 +26,7 @@ const PACE_EPSILON = 1e-6;
  * @property {string} kind NoiseConfig kind
  * @property {number} radius studs (NoiseConfig radius x radiusMultiplier)
  * @property {'Low'|'Normal'|'High'|'Critical'} priority
- * @property {'Air'|'Vent'|'Water'} medium
+ * @property {'Air'|'Vent'} medium
  * @property {string|null} level LevelId of the source
  * @property {string|null} ventNodeId
  * @property {'player'|string} source
@@ -45,9 +40,6 @@ export class NoiseBus {
     this.world = deps.world;
     /** @type {Signal<[NoiseEvent]>} */
     this.emitted = new Signal();
-    /** @type {Signal<[NoiseEvent]>} the splash meter crossed its grab threshold */
-    this.splashCrossed = new Signal();
-    this.splash = { value: 0, at: 0, crossed: false };
     this.lastPulseAt = null;
     this.trackMedium = undefined;
     this.silent = false;
@@ -83,8 +75,6 @@ export class NoiseBus {
       time: this.loop.time,
     };
     this.emitted.fire(event);
-    const gain = SPLASH_GAIN[kind] || 0;
-    if (gain > 0 && this.addSplash(gain, this.loop.time)) this.splashCrossed.fire(event);
     return event;
   }
 
@@ -134,28 +124,5 @@ export class NoiseBus {
     if (this.lastPulseAt !== null && interval > 0 && now - this.lastPulseAt < interval - PACE_EPSILON) return null;
     this.lastPulseAt = now;
     return this.emit(position, kind, { source: 'player', level: opts.level, ventNodeId: opts.ventNodeId });
-  }
-
-  splashValue(now) {
-    return Math.max(0, this.splash.value - SPLASH.decayPerSecond * Math.max(0, now - this.splash.at));
-  }
-
-  /** Adds to the splash meter; true exactly when this add crossed the grab threshold. */
-  addSplash(amount, now) {
-    const m = this.splash;
-    let value = this.splashValue(now);
-    if (m.crossed && value < SPLASH.rearmBelow) m.crossed = false;
-    if (Number.isFinite(amount) && amount > 0) value = Math.min(SPLASH.grabThreshold * SPLASH_CAP_FACTOR, value + amount);
-    m.value = value;
-    m.at = Math.max(m.at, now);
-    if (!m.crossed && value >= SPLASH.grabThreshold) {
-      m.crossed = true;
-      return true;
-    }
-    return false;
-  }
-
-  resetSplash() {
-    this.splash = { value: 0, at: this.loop.time, crossed: false };
   }
 }

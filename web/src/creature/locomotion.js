@@ -1,10 +1,6 @@
 // Locomotion: how the Creature gets anywhere. One Mover runs a plan: a queue of legs stepped every motion tick, so
-// kinematic motion is smooth.
-//
-// Mediums. Floor (the walker walks an unanchored root) and Water (the root is anchored and glides under a pool's
-// surface, PoseMode Swim). It never enters a duct or a crawlway (Tunnels: VentChase is gone). goTo(point) plans what
-// the change of medium needs: a pool is entered and left only by a Warp (the service's FadeOut, a placement out of
-// everyone's sight, a FadeIn), never by walking down the deck or climbing out.
+// kinematic motion is smooth. The walker walks an unanchored root; it never enters a duct or a crawlway (Tunnels:
+// VentChase is gone).
 //
 // Legs.
 //   Walk     floor pathfinding (FloorNav: the zone graph's portals, agent radius 2); waypoints followed with MoveTo,
@@ -12,19 +8,14 @@
 //            straight line it walks straight at it. Two failed computations fail the plan ("Failed"); no progress for
 //            Repath.StuckSeconds forces a fresh route, and a second stall soon after reports "Stuck" (the brain then
 //            repositions the Creature out of everyone's sight).
-//   Swim     a straight glide under the surface, clamped inside the basin's water, at most the water pace
-//            (setWaterSpeedCap: the AquaticStalk speed) unless the leg is a telegraphed lunge.
-//   Warp     into or out of the water: engine.warp(goal, medium) starts the service's fade relocation; the leg ends
-//            when it is over (the body placed there, the medium switched).
 //   Hold     stand still for a moment, optionally facing a direction.
-// Warp and Hold are uninterruptible: a new plan asked for while one runs replaces the rest once it ends.
+// Hold is uninterruptible: a new plan asked for while one runs replaces the rest once it ends.
 
 import * as THREE from 'three';
 import { CFrame } from './cframe.js';
 import { CreatureConfig } from './config.js';
 import { StuckTracker } from './body.js';
 import { flatDirection, horizontalDistance } from './util.js';
-import { SWIM_DEPTH, clampToWater, inWater } from './water.js';
 
 const WAYPOINT_REACH = 2.5;
 const ARRIVE_VERTICAL = 6;
@@ -37,46 +28,24 @@ const MAX_PATH_FAILURES = 2;
 const STALL_WINDOW = 12;
 const RETREAT_DISTANCE = 9;
 const RETREAT_ANGLES = [0, 35, -35, 70, -70];
-const SWIM_RETREAT = 12;
 const DEFAULT_REPATH = CreatureConfig.Repath.PatrolInterval;
-const BUSY_KINDS = new Set(['Warp', 'Hold']);
-
-export { SWIM_DEPTH };
+const BUSY_KINDS = new Set(['Hold']);
 
 /**
- * @typedef {'Floor'|'Water'} Medium
  * @typedef {'Idle'|'Moving'|'Failed'|'Stuck'} MoveStatus
  * @typedef {{computePath: (from: THREE.Vector3, to: THREE.Vector3) => ({waypoints: THREE.Vector3[]}|null),
- *   clear: (from: THREE.Vector3, to: THREE.Vector3) => boolean,
- *   warp?: (goal: THREE.Vector3, medium: Medium) => boolean, warping?: () => boolean}} Engine
- * @typedef {{arrive?: number, depth?: number, lunge?: boolean}} GoOptions
+ *   clear: (from: THREE.Vector3, to: THREE.Vector3) => boolean}} Engine
+ * @typedef {{arrive?: number}} GoOptions
  */
 
 function newLeg(kind) {
-  return { kind, goal: null, arrive: 1.5, depth: SWIM_DEPTH, lunge: false, medium: null, seconds: 0, elapsed: 0,
-    face: null, started: false };
+  return { kind, goal: null, arrive: 1.5, seconds: 0, elapsed: 0, face: null, started: false };
 }
 
 function walkLeg(goal, arrive = 1.5) {
   const leg = newLeg('Walk');
   leg.goal = goal.clone();
   leg.arrive = arrive;
-  return leg;
-}
-
-function swimLeg(goal, arrive = 1.5, depth = SWIM_DEPTH, lunge = false) {
-  const leg = newLeg('Swim');
-  leg.goal = goal.clone();
-  leg.arrive = arrive;
-  leg.depth = depth;
-  leg.lunge = lunge;
-  return leg;
-}
-
-function warpLeg(goal, medium) {
-  const leg = newLeg('Warp');
-  leg.goal = goal.clone();
-  leg.medium = medium;
   return leg;
 }
 
@@ -97,17 +66,11 @@ export class Mover {
     this.body = body;
     this.engine = engine;
     this.now = now;
-    /** @type {import('./water.js').Basin[]} */
-    this.basins = [];
-    /** @type {Medium} */
-    this.medium = 'Floor';
     this.legs = [];
     this.queued = null;
     /** @type {MoveStatus} */
     this.status = 'Idle';
     this.speed = CreatureConfig.Speeds.Patrol;
-    /** The most any swim but a lunge moves (studs/s). */
-    this.waterSpeed = Infinity;
     this.repathInterval = DEFAULT_REPATH;
     this.walk = this._newWalk();
     this.stuck = new StuckTracker(CreatureConfig.Repath.StuckSeconds);
@@ -133,25 +96,6 @@ export class Mover {
   }
 
   // ------------------------------------------------------------------ helpers
-
-  basinAt(position) {
-    for (const basin of this.basins) if (inWater(basin, position)) return basin;
-    return null;
-  }
-
-  _nearestBasin(position) {
-    let best = null;
-    let bestDistance = Infinity;
-    for (const basin of this.basins) {
-      const centre = new THREE.Vector3((basin.minX + basin.maxX) / 2, position.y, (basin.minZ + basin.maxZ) / 2);
-      const d = horizontalDistance(centre, position);
-      if (d < bestDistance) {
-        best = basin;
-        bestDistance = d;
-      }
-    }
-    return best;
-  }
 
   _stopWalking() {
     const w = this.walk;
@@ -229,8 +173,7 @@ export class Mover {
       this.body.face(null);
     }
     if (this.body.anchored) this.body.setAnchored(false);
-    if (this.body.pose === 'Quadruped' || this.body.pose === 'Swim') this.body.setPose('Biped');
-    this.medium = 'Floor';
+    if (this.body.pose === 'Quadruped') this.body.setPose('Biped');
   }
 
   // ------------------------------------------------------------------ legs
@@ -243,17 +186,6 @@ export class Mover {
     const position = this.body.getPosition();
     const t = this.now();
     const w = this.walk;
-    if (this.basinAt(position)) {
-      // fell off the coping: it swims from here (and leaves the water only by a warp)
-      this._stopWalking();
-      this.medium = 'Water';
-      this.body.setAnchored(true);
-      this.body.setPose('Swim');
-      const rest = this.legs.slice(1);
-      const replan = this._planTo(goal, { arrive: leg.arrive });
-      this.legs = replan.concat(rest);
-      return false;
-    }
     if (horizontalDistance(position, goal) <= leg.arrive && Math.abs(position.y - goal.y) <= ARRIVE_VERTICAL) {
       this._stopWalking();
       this.stuck.reset();
@@ -298,47 +230,6 @@ export class Mover {
     return false;
   }
 
-  _stepSwim(leg, dt) {
-    const goal = leg.goal;
-    if (!goal) return true;
-    if (!leg.started) {
-      leg.started = true;
-      this._stopWalking();
-    }
-    if (!this.body.anchored) this.body.setAnchored(true);
-    this.body.setPose('Swim');
-    this.medium = 'Water';
-    const position = this.body.getPosition();
-    const basin = this.basinAt(goal) || this.basinAt(position) || this._nearestBasin(position);
-    const target = basin ? clampToWater(basin, goal, leg.depth) : goal;
-    const delta = target.clone().sub(position);
-    const distance = delta.length();
-    if (distance <= leg.arrive) return true;
-    const speed = leg.lunge ? this.speed : Math.min(this.speed, this.waterSpeed);
-    const step = Math.min(distance, speed * dt);
-    const next = position.clone().addScaledVector(delta, step / distance);
-    const f = flatDirection(delta);
-    if (f) this.body.setCFrame(CFrame.lookAt(next, next.clone().add(f)));
-    else this.body.setCFrame(this.body.getCFrame().withPosition(next));
-    return false;
-  }
-
-  _stepWarp(leg) {
-    if (!leg.started) {
-      leg.started = true;
-      this._stopWalking();
-      const started = !!(this.engine.warp && this.engine.warp(leg.goal, leg.medium));
-      if (!started) {
-        this._fail('Failed');
-        return false;
-      }
-      return false;
-    }
-    if (this.engine.warping && this.engine.warping()) return false;
-    this.medium = leg.medium;
-    return true;
-  }
-
   _stepHold(leg, dt) {
     if (!leg.started) {
       leg.started = true;
@@ -353,43 +244,12 @@ export class Mover {
     switch (leg.kind) {
       case 'Walk':
         return this._stepWalk(leg);
-      case 'Swim':
-        return this._stepSwim(leg, dt);
-      case 'Warp':
-        return this._stepWarp(leg);
       default:
         return this._stepHold(leg, dt);
     }
   }
 
-  _planTo(goal, options) {
-    const arrive = options && options.arrive ? options.arrive : 1.5;
-    const depth = options && options.depth ? options.depth : SWIM_DEPTH;
-    const from = this.medium;
-    const goalBasin = this.basinAt(goal);
-    if (from === 'Floor' && goalBasin) {
-      // into the water: fade out here, in under the surface out of everyone's sight
-      return [warpLeg(clampToWater(goalBasin, goal, depth), 'Water')];
-    }
-    if (from === 'Water' && !goalBasin) {
-      // out of the water: never climbing out at the deck; fade out under it and in on land out of sight
-      return [warpLeg(goal, 'Floor')];
-    }
-    if (from === 'Water') return [swimLeg(goal, arrive, depth, !!(options && options.lunge))];
-    return [walkLeg(goal, arrive)];
-  }
-
   // ------------------------------------------------------------------ API
-
-  /** The most any swim but a lunge may move (the AquaticStalk pace). */
-  setWaterSpeedCap(speed) {
-    this.waterSpeed = Number.isFinite(speed) && speed > 0 ? speed : Infinity;
-  }
-
-  /** @param {any} _graph (unused: the Creature never enters the ducts) @param {import('./water.js').Basin[]} basins */
-  setLevel(_graph, basins) {
-    this.basins = basins;
-  }
 
   setSpeed(speed) {
     this.speed = Math.max(0, speed);
@@ -401,25 +261,17 @@ export class Mover {
 
   /** @param {THREE.Vector3} position @param {GoOptions} [options] */
   goTo(position, options) {
-    const plan = this._planTo(position, options);
-    if (plan.length === 0) {
-      this._fail('Failed');
-      return;
-    }
+    const leg = walkLeg(position, options && options.arrive ? options.arrive : 1.5);
     // the same walk goal keeps its route (the Walk leg re-plans on its own as the goal drifts)
     const current = this.legs[0];
-    const first = plan[0];
-    if (plan.length === 1 && current && current.kind === first.kind && (current.kind === 'Walk' || current.kind === 'Swim') &&
-      this.queued === null) {
-      current.goal = first.goal;
-      current.arrive = first.arrive;
-      current.depth = first.depth;
-      current.lunge = first.lunge;
+    if (current && current.kind === 'Walk' && this.queued === null) {
+      current.goal = leg.goal;
+      current.arrive = leg.arrive;
       this.legs = [current];
       this.status = 'Moving';
       return;
     }
-    this._install(plan);
+    this._install([leg]);
   }
 
   /** Stumbles back away from `awayFrom` (a stun): straight back, veering off a wall behind, flailing when boxed in. */
@@ -427,10 +279,6 @@ export class Mover {
     const position = this.body.getPosition();
     const away = flatDirection(position.clone().sub(awayFrom)) ||
       flatDirection(this.body.getCFrame().lookVector.negate()) || new THREE.Vector3(0, 0, 1);
-    if (this.medium === 'Water') {
-      this._install([swimLeg(position.clone().addScaledVector(away, SWIM_RETREAT), 1, SWIM_DEPTH)]);
-      return;
-    }
     for (const degrees of RETREAT_ANGLES) {
       const direction = CFrame.angles(0, (degrees * Math.PI) / 180, 0).vectorToWorld(away);
       const goal = position.clone().addScaledVector(direction, RETREAT_DISTANCE);
@@ -447,26 +295,19 @@ export class Mover {
   }
 
   stop() {
-    const current = this.legs[0];
-    if (current && current.kind === 'Warp' && current.started) {
-      this.legs = [current];
-    } else {
-      this.legs = [];
-      this._stopWalking();
-    }
+    this.legs = [];
+    this._stopWalking();
     this.queued = null;
-    this.status = this.legs.length ? 'Moving' : 'Idle';
+    this.status = 'Idle';
   }
 
-  /** @param {Medium} [medium] */
-  reset(medium) {
+  reset() {
     this.legs = [];
     this.queued = null;
     this._stopWalking();
     this.stuck.reset();
     this.walk.stalls = 0;
     this.status = 'Idle';
-    this.medium = medium || (this.basinAt(this.body.getPosition()) ? 'Water' : 'Floor');
   }
 
   face(direction) {
@@ -502,18 +343,9 @@ export class Mover {
     return this.status;
   }
 
-  getMedium() {
-    return this.medium;
-  }
-
   busy() {
     const current = this.legs[0];
     return (!!current && BUSY_KINDS.has(current.kind)) || this.queued !== null;
-  }
-
-  /** Whether a Warp leg is running or waiting. */
-  warpPending() {
-    return this.legs.some((l) => l.kind === 'Warp') || (!!this.queued && this.queued.some((l) => l.kind === 'Warp'));
   }
 
   goal() {

@@ -44,23 +44,23 @@ async function until(fn, ms = 4000) {
     normalizeRoomCode('ABCD') === null && normalizeRoomCode(' ab-cde ') === 'ABCDE');
 
   const pose = { x: -776.3, y: 3.5, z: 38.25, yaw: 5.9, pitch: -0.4, moveState: 'Crouching', life: 'Downed',
-    flags: PoseFlags.Torch | PoseFlags.Carrying, held: 'Flask', oxygen: 0.5, stamina: 0.25, battery: 1, health: 0.01,
+    flags: PoseFlags.Torch | PoseFlags.Carrying, held: 'Flask', stamina: 0.25, battery: 1, health: 0.01,
     level: 'Level1_Hallways' };
   const bytes = encodePosePacket(7, pose);
   const back = decodePacket(bytes);
   const p = back.pose;
-  check('pose packet: 26 bytes, round trip within quantisation', bytes.length === 26 && back.kind === 1 && back.seq === 7 &&
+  check('pose packet: 25 bytes, round trip within quantisation', bytes.length === 25 && back.kind === 1 && back.seq === 7 &&
     Math.abs(p.x - pose.x) < 0.02 && Math.abs(p.z - pose.z) < 0.02 && Math.abs(p.yaw - pose.yaw) < 1e-3 &&
     Math.abs(p.pitch - pose.pitch) < 1e-3 && p.moveState === 'Crouching' && p.life === 'Downed' && p.held === 'Flask' &&
     p.flags === pose.flags && p.level === 'Level1_Hallways', { length: bytes.length, p });
   const players = [0, 1, 2, 3].map((slot) => ({ slot, pose: { ...pose, x: pose.x + slot } }));
   const creature = { present: true, hidden: false, inVent: true, awake: true, x: 10, y: 20, z: 30, yaw: 1, state: 'WallChase',
-    pose: 'Quadruped', level: 'Level2_ScienceHall', target: 2, grabbed: -1 };
+    pose: 'Quadruped', level: 'Level2_Auditorium', target: 2 };
   const world = encodeWorldPacket(9, players, creature);
   const w = decodePacket(world);
-  check('world packet: four players and the Creature in 117 bytes (under 300 per player)', world.length === 117 &&
+  check('world packet: four players and the Creature in 112 bytes (under 300 per player)', world.length === 112 &&
     w.players.length === 4 && w.players[3].slot === 3 && w.creature.state === 'WallChase' && w.creature.target === 2 &&
-    w.creature.grabbed === -1 && w.creature.inVent, world.length);
+    w.creature.level === 'Level2_Auditorium' && w.creature.inVent, world.length);
   const moved = encodeWorldPacket(10, players.map((q, i) => (i === 1 ? { slot: 1, pose: { ...q.pose, x: q.pose.x + 0.5 } } : q)), creature);
   const d = deltaEncode(world, moved);
   check('delta: a world packet where one player moved shrinks to a few bytes and decodes exactly',
@@ -87,8 +87,7 @@ const relay = await startRelay(0);
   });
   const enc = (s) => new TextEncoder().encode(s);
   for (let i = 0; i < 30; i++) ta.send('b', 'events', enc(`e${i}`));
-  const still = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, moveState: 'Standing', life: 'Alive', flags: 0, held: 'None', oxygen: 1,
-    stamina: 1, battery: 1, health: 1, level: 'Lobby' };
+  const still = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, moveState: 'Standing', life: 'Alive', flags: 0, held: 'None', stamina: 1, battery: 1, health: 1, level: 'Lobby' };
   const base = encodeWorldPacket(1, [{ slot: 0, pose: still }], null);
   ta.send('b', 'state', base);
   ta.flush();

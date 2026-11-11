@@ -1,11 +1,10 @@
-// locks.js: the lock props (LockBuilder's ExitLock, StoreLock and CrateChain entities) as the game drives them.
+// locks.js: the lock props (LockBuilder's ExitLock entities) as the game drives them.
 //
 // A LockFixture is reset Locked at every run start (every node back to its built pose, shown). Its Locked prompt
-// (hold 0, the floor's "Locked — <reason>") rattles the padlock or chain, or beeps the keypad's denial, and makes no
-// noise. release() takes it off: Padlock: the padlock springs and drops to the floor; Chain: the chain slithers off the
-// leaves (or the crate) and the padlock drops; Keypad: the LED turns green with the accept chirp and the bar slides
-// clear along its X. detach() hides the parts that ride the door leaves once the door swings (a dropped padlock and
-// chain stay where they fell).
+// (hold 0, the floor's "Locked — <reason>") rattles the padlock, or beeps the keypad's denial, and makes no noise.
+// release() takes it off: Padlock: the padlock springs and drops to the floor; Keypad: the LED turns green with the
+// accept chirp and the bar slides clear along its X. detach() hides the parts that ride the door leaves once the door
+// swings (a dropped padlock stays where it fell).
 
 import * as THREE from 'three';
 import { Ease } from './kit.js';
@@ -14,7 +13,7 @@ import { cfMatrix, cfPos } from '../util.js';
 
 const KEYPAD_GREEN = [0.25, 1, 0.35];
 const BAR_SLIDE = 2.6;
-const DROP_TILT = (75 * Math.PI) / 180;
+const DROP_TILT = (60 * Math.PI) / 180;
 
 export class LockFixture {
   /**
@@ -37,15 +36,10 @@ export class LockFixture {
     this.state = 'Locked';
   }
 
-  /** The lock's prompt point (LockPrompt) and its chain centre (the acid's target). */
+  /** The lock's prompt point (LockPrompt). */
   promptPoint(out = new THREE.Vector3()) {
     const m = this.env.attachmentWorld(this.id, 'LockPrompt', _m);
     return m ? out.setFromMatrixPosition(m) : cfPos(this.info.pivot, out);
-  }
-
-  chainCentre(out = new THREE.Vector3()) {
-    const a = this.info && this.info.attachments.ChainCentre;
-    return a ? cfPos(a, out) : this.promptPoint(out);
   }
 
   reset() {
@@ -75,11 +69,7 @@ export class LockFixture {
       this._slide('Bar', BAR_SLIDE, seconds);
     } else {
       g.playAt('ObjPadlockClack', at);
-      if (this.built.has('Padlock')) this._drop('Padlock', seconds * 0.7, 0);
-      if (this.built.has('Chain')) {
-        g.playAt('ObjChainDrop', this.chainCentre(_p));
-        this._drop('Chain', seconds, 0.12);
-      }
+      if (this.built.has('Padlock')) this._drop('Padlock', seconds * 0.7);
     }
     this.tweens.add({ seconds, update: () => {}, done: () => done && done() });
   }
@@ -99,14 +89,13 @@ export class LockFixture {
   }
 
   /** Drops a node to the floor under it, tipping over as it falls. */
-  _drop(node, seconds, delay) {
+  _drop(node, seconds) {
     const base = this.built.get(node);
     if (!base) return;
     const p = new THREE.Vector3().setFromMatrixPosition(base);
     const fall = Math.max(0, p.y - this.floorY - 0.12);
-    const tilt = node === 'Chain' ? DROP_TILT : DROP_TILT * 0.8;
-    this.tweens.add({ seconds, delay, ease: Ease.bounce, update: (t) => {
-      _f.makeTranslation(0, -fall * t, 0).multiply(base).multiply(_r.makeRotationX(tilt * Math.min(1, t * 1.2)));
+    this.tweens.add({ seconds, ease: Ease.bounce, update: (t) => {
+      _f.makeTranslation(0, -fall * t, 0).multiply(base).multiply(_r.makeRotationX(DROP_TILT * Math.min(1, t * 1.2)));
       this.env.setNodePivot(this.id, node, _f);
     } });
   }

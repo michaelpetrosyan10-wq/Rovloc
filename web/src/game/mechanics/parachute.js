@@ -3,39 +3,40 @@
 // Packs: the crate's ParachutePack nodes, each with its ParachuteGrab prompt (0.5 s). An Alive player on the live roof
 // who wears no pack takes one (Hud.ParachuteHaveOne refuses a second): the pack vanishes from the crate, the buckles
 // click (PackBuckle), Hud.ParachuteTaken: Packed. A pack goes back into the crate when its wearer dies before jumping.
-// While the roof objective keeps the crate chained (setCrateOpen(false)) no pack can be taken.
 //
 // The jump (advance, at the tick rate while the roof is the live level):
 //   None / Packed  a root off the roof (offRoof: LeaveClear past the exterior wall's outer face, or past the face and
-//                  dropping under the deck; the stair towers never count): with a pack, Freefall; without one, Falling,
-//                  executed ("Fall") past FatalDrop or on whatever it hits.
+//                  dropping under the deck; the stair towers never count): Freefall. A jumper without a pack has a
+//                  spare one buckled on as they go: nobody dies in the fall.
 //   Freefall       the cord (Ripcord: Space / A / PULL CORD) opens the canopy; so does the ground coming up to
 //                  AutoDeployClearance or FreefallMax in the air (the late, harder canopy: a hard landing). Down on
 //                  something first: landed hard.
 //   Canopy         the root flies at canopyVelocity (DescentSpeed down, DriftSpeed out along the edge's outward normal),
 //                  the Parachuting MoveState, CanopyDeploy and the canopy fluttering; the camera turns over LOOKBACK_BLEND
-//                  to stare back up at the ledge with the canopy's sway (lookback) after the opening jolt; the HUD
-//                  hides, the storm stops (the finale owns the sky) and the Cutscene context holds the view. Down
-//                  (landed: within the standing height + LandingSlack over the ground) or CanopyMax in the air: Landed.
+//                  to stare back up at the ledge with the canopy's sway (lookback) after the opening jolt (whatever
+//                  stands on the ledge, the Creature once the squad has jumped, is watched from under the canopy); the
+//                  HUD hides, the storm stops and the Cutscene context holds the view. Down (landed: within the
+//                  standing height + LandingSlack over the ground) or CanopyMax in the air: Landed.
 //   Landed         ParachuteLanding (HardLanding after an auto-deploy), the knees taking it (landingDip), the body held
-//                  (the Parachute lock) for the finale camera; a Downed jumper is back on their feet. Level 5 escapes
-//                  them and ends the hold once the finale has played (releaseHold).
-// forceLand puts a jumper still in the air on the ground under them (the finale's fade). The edge hint near the gap:
-// Hud.RoofLeap with a pack on, Hud.RoofNoPack without; Hud.Ripcord.<device> while falling; the wind roars with speed.
+//                  (the Parachute lock) until the roof lets it go (level3.js escapes them at the touchdown and ends
+//                  the hold at once: releaseHold); a Downed jumper is back on their feet. LANDING_SETTLE after the
+//                  touchdown, once the hold is off, the view (camera, HUD, hands) is the player's again and the results
+//                  may show.
+// forceLand puts a jumper still in the air on the ground under them. The edge hint near the gap: Hud.RoofLeap with a
+// pack on; Hud.Ripcord.<device> while falling; the wind roars with speed.
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
 import { S } from '../strings.js';
 import { cfPos, clamp01, frameAt, lookAtMatrix, smoothstep, yawOf } from '../util.js';
 
-const LEVEL = 'Level5_Roof';
+const LEVEL = 'Level3_Roof';
 const LEAVE_CLEAR = 2.2;
 const DROP_Y = 1.5;
 const DESCENT = GameConfig.ParachuteDescentSpeed;
 const HARD_DESCENT = 15;
 const DRIFT = 7;
 const AUTO_CLEARANCE = 32;
-const FATAL_DROP = 26;
 const FREEFALL_MAX = 3.5;
 const CANOPY_MAX = 30;
 const ROOT_HEIGHT = 3;
@@ -45,12 +46,11 @@ const LEDGE_AIM = 2.5;
 const LANDING_REVIVE = 0.35;
 const GROUND_REACH = 400;
 const LOOKBACK_BLEND = 0.9;
-const FOCUS_FOV = 46;
-const BASE_FOV = 70;
 const RIPCORD_SECONDS = 0.35;
 const WIND_SPEED_FULL = 120;
 const SHAKE_EVERY = 0.15;
 const PACK_HOLD = 0.5;
+const LANDING_SETTLE = 1.6;
 const TAU = Math.PI * 2;
 
 /** The roof's measures (ParachuteMotion) from the export: the deck, the footprint, the wall face, the gap, the towers. */
@@ -165,15 +165,15 @@ export class Parachute {
     this.since = 0;
     this.pack = null;
     this.leftFrom = null;
+    this.leftAt = null;
     this.direction = null;
     this.velocity = null;
     this.auto = false;
     this.deployedAt = null;
     this.landedAt = null;
     this.hard = false;
+    this.held = false;
     this.pullAt = null;
-    this.focus = 0;
-    this.focusHead = null;
     this.wind = null;
     this.flutter = null;
     this.hintKey = null;
@@ -190,9 +190,9 @@ export class Parachute {
 
   // ---------------------------------------------------------------------------------------------------- reads
 
-  /** Whether the player has jumped (off the roof with or without a pack). */
+  /** Whether the player has jumped (off the roof). */
   jumped() {
-    return this.state === 'Freefall' || this.state === 'Canopy' || this.state === 'Landed' || this.state === 'Falling';
+    return this.state === 'Freefall' || this.state === 'Canopy' || this.state === 'Landed';
   }
 
   /** Whether a point stands in a stair tower beside the school (the stairwell, not the roof). */
@@ -223,14 +223,8 @@ export class Parachute {
 
   /** A read-only view of the jump (ParachuteService.GetJump). */
   jump() {
-    return { state: this.state, since: this.since, leftFrom: this.leftFrom, deployedAt: this.deployedAt, landedAt: this.landedAt,
-      auto: this.auto, hard: this.hard };
-  }
-
-  /** The finale's focus track: the lookback tightening from the ledge onto the Creature's eyes (0..1). */
-  setFinaleFocus(head, value) {
-    this.focusHead = head ? head.clone() : null;
-    this.focus = clamp01(value);
+    return { state: this.state, since: this.since, leftFrom: this.leftFrom, leftAt: this.leftAt, deployedAt: this.deployedAt,
+      landedAt: this.landedAt, auto: this.auto, hard: this.hard };
   }
 
   // ---------------------------------------------------------------------------------------------------- packs
@@ -250,7 +244,7 @@ export class Parachute {
   /** Co-op: the teammate's pack went back into the crate. */
   _returnedElsewhere(pack) {
     pack.taken = false;
-    if (pack.handle) pack.handle.setEnabled(this.crateOpen !== false);
+    if (pack.handle) pack.handle.setEnabled(true);
     if (this.crate) this.env.setEntityVisible(this.crate.id, true, pack.node);
   }
 
@@ -287,15 +281,9 @@ export class Parachute {
     if (this.state === 'Packed') this.state = 'None';
     if (!pack) return;
     pack.taken = false;
-    if (pack.handle) pack.handle.setEnabled(this.crateOpen !== false);
+    if (pack.handle) pack.handle.setEnabled(true);
     this.env.setEntityVisible(this.crate.id, true, pack.node);
     this._release(pack);
-  }
-
-  /** The roof objective's lock: while the crate is chained (false) no pack can be taken. */
-  setCrateOpen(open) {
-    this.crateOpen = !!open;
-    for (const p of this.packs) if (p.handle) p.handle.setEnabled(this.crateOpen && !p.taken);
   }
 
   /** Dev `chute give`: a pack on (no crate pack taken). */
@@ -322,11 +310,14 @@ export class Parachute {
     return hit ? hit.point.y : null;
   }
 
+  /** The root leaves the roof: Freefall (a jumper without a pack has a spare one buckled on as they go). */
   _leap(root) {
     const env = this.env;
+    if (this.state === 'None') this.game.playAt('PackBuckle', root);
     this.state = 'Freefall';
     this.since = env.now();
     this.leftFrom = root.clone();
+    this.leftAt = this.since;
     this.direction = outward(this.geo, root);
     env.pushContext('Parachute', 'Parachute');
     env.hint(S(`Hud.Ripcord.${env.device()}`), 4);
@@ -380,6 +371,7 @@ export class Parachute {
     const root = env.rootPosition(new THREE.Vector3());
     g.playAt(hard ? 'HardLanding' : 'ParachuteLanding', root);
     g.lock('Parachute');
+    this.held = true;
     if (g.life.state === 'Downed') g.life.revive(LANDING_REVIVE);
     if (!wasCanopy) {
       env.setStormEnabled(false);
@@ -400,11 +392,11 @@ export class Parachute {
     return true;
   }
 
-  /** ReleaseHold: the lander's hold ends once the finale has played for them. */
+  /** ReleaseHold: the lander's hold ends (the view follows LANDING_SETTLE after the touchdown, frame()). */
   releaseHold() {
-    if (this.state !== 'Landed') return false;
+    if (this.state !== 'Landed' || !this.held) return false;
+    this.held = false;
     this.game.unlock('Parachute');
-    this._releaseView();
     return true;
   }
 
@@ -436,7 +428,6 @@ export class Parachute {
     const eye = env.eye(_eye);
     const ledge = edgePoint(this.geo, this.leftFrom || eye, _ledge).add(_up.set(0, LEDGE_AIM, 0));
     const aim = _aim.copy(ledge);
-    if (this.focusHead && this.focus > 0) aim.lerp(this.focusHead, this.focus);
     if (Math.hypot(aim.x - eye.x, aim.z - eye.z) < 0.5) aim.z += 0.5;
     const scale = clamp01(env.setting('MotionScale') ?? 1);
     const t = now - (this.deployedAt ?? now);
@@ -450,8 +441,6 @@ export class Parachute {
     // the base look follows, so the view is the player's own when the hold ends
     _dir.set(-view.elements[8], -view.elements[9], -view.elements[10]);
     env.setLook(yawOf(_dir), Math.asin(Math.max(-1, Math.min(1, _dir.y))));
-    // the view narrows onto the Creature with the finale's focus (the camera stack reads frame.fov)
-    view.fov = this.focus > 0 ? BASE_FOV + (FOCUS_FOV - BASE_FOV) * this.focus : undefined;
     return view;
   }
 
@@ -505,15 +494,15 @@ export class Parachute {
     this.state = 'None';
     this.pack = null;
     this.leftFrom = null;
+    this.leftAt = null;
     this.direction = null;
     this.velocity = null;
     this.auto = false;
     this.deployedAt = null;
     this.landedAt = null;
     this.hard = false;
+    this.held = false;
     this.pullAt = null;
-    this.focus = 0;
-    this.focusHead = null;
     this.hintKey = null;
   }
 
@@ -528,17 +517,8 @@ export class Parachute {
     if (life !== 'Alive' && life !== 'Downed') return;
     switch (this.state) {
       case 'None':
-        if (offRoof(this.geo, root)) {
-          this.state = 'Falling';
-          this.since = now;
-          this.leftFrom = root.clone();
-        }
-        break;
       case 'Packed':
         if (offRoof(this.geo, root)) this._leap(root);
-        break;
-      case 'Falling':
-        if (down || root.y <= this.geo.deckY - FATAL_DROP) g.life.execute('Fall');
         break;
       case 'Freefall':
         if (down) this._land(true);
@@ -557,16 +537,18 @@ export class Parachute {
   frame(dt) {
     const env = this.env;
     const g = this.game;
-    // the edge hint near the gap
+    // the edge hint near the gap, with a pack on
     if (g.live() && g.level === LEVEL && (this.state === 'None' || this.state === 'Packed') && g.life.state === 'Alive') {
       const root = env.rootPosition(_root);
-      const key = !offRoof(this.geo, root) && rectDistance(this.geo.gap, root) <= WARN_DISTANCE
-        ? (this.state === 'Packed' ? 'Hud.RoofLeap' : 'Hud.RoofNoPack') : null;
+      const key = this.state === 'Packed' && !offRoof(this.geo, root) && rectDistance(this.geo.gap, root) <= WARN_DISTANCE
+        ? 'Hud.RoofLeap' : null;
       if (key !== this.hintKey) {
         this.hintKey = key;
         if (key) env.hint(S(key), 4);
       }
     }
+    // the landing has settled and the hold is off: the view is the player's again
+    if (this.state === 'Landed' && this.viewHeld && !this.held && env.now() - this.landedAt >= LANDING_SETTLE) this._releaseView();
     if (this.state === 'Freefall') {
       const v = env.body().velocity;
       const speed = Math.abs(v.y);

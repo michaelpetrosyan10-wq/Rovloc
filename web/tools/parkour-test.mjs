@@ -1004,7 +1004,7 @@ async function gameRun(fps) {
       const crawled = g.vents.inVent();
       if (g.vents.inVent()) g.vents.leave();
       input.keys.clear();
-      dev.gotoLevel('Level5_Roof');
+      dev.gotoLevel('Level3_Roof');
       await step30(30);
       // the parachute: a pack and off the gap, the ripcord after 10 ticks, the canopy down to the landing
       const chute = [];

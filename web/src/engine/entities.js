@@ -1,6 +1,6 @@
 // Entities: every interactive / scripted object kept out of the static merge so it can move (fixture doors, the
-// hallway gate, vent grates, bear traps, hideable lockers, flasks, batteries, the parachute crate, the floodlight
-// switch, ready pads, terminals).
+// hallway gate, vent grates, bear traps, hideable lockers, flasks, batteries, the parachute crate, ready pads,
+// terminals).
 //
 // An entity has a pivot (its Roblox model CFrame) and nodes: the root ("") and its moving leaves (a door's leaves, a
 // grate's panel and screws, a trap's jaws). W1 batches every entity's parts per level x bucket x material in world
@@ -41,7 +41,7 @@ const IDENTITY = new THREE.Matrix4();
  * @typedef {Object} Entity
  * @property {string} id
  * @property {string} type AirlockDoor, HallwayGate, ClassroomDoor, RoofStairDoor, VentGrate, BearTrap, Locker,
- *   ChemicalFlask, Battery, ParachuteCrate, FloodlightSwitch, ReadyPad, Terminal
+ *   ChemicalFlask, Battery, ParachuteCrate, ReadyPad, Terminal
  * @property {string} level
  * @property {Record<string, any>} attributes
  * @property {string[]} tags

@@ -16,10 +16,10 @@
 //    --compose-only re-composes from the cached renders.
 //
 // Everything in frame exists in the game: the levels, props, lights, the Creature's rig, poses and pupils, the torch,
-// the locker slits, the pool, the generator, the finale's lightning. Nothing is painted in but the type.
+// the locker slits, the basement's breaker panel. Nothing is painted in but the type.
 //
-// Outputs (docs/store): icon.png (= icon-a), icon-a.png, icon-b.png (512), thumb-1-keyart.png .. thumb-5-roof.png
-// (1920x1080), logo.png (transparent), logo-on-dark.png (1920x1080).
+// Outputs (docs/store): icon.png (= icon-a), icon-a.png, icon-b.png (512), thumb-1-keyart.png, thumb-2-hide.png,
+// thumb-4-objective.png (1920x1080), logo.png (transparent), logo-on-dark.png (1920x1080).
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -214,11 +214,6 @@ function installArt() {
       art.ff(2.5);
       return ok && g.lockers.occupiedId() === id;
     },
-    /** Lets the Creature go (back to the game's own scripts, e.g. the finale). */
-    release() {
-      const s = g.creature.c.service;
-      if (s.scripted && s.scripted.token === TOKEN) s._releaseScripted('Dormant');
-    },
     /** The head's roll (its face frame's right vector, up component) and how squarely it faces `from`. */
     head(from) {
       const f = g.creature.c.service.view.faceWorld();
@@ -250,17 +245,17 @@ function installArt() {
 // `size` is the output size; the render is size x scale. `meta` (returned) is kept for the composer.
 const SHOTS = [
   {
-    // The icon: the Creature's face caught in the torch, frontal and level, in the dark gym (its far wall 80 studs
-    // back). The head twitches between tilts on its own; the frame waits for a level one.
+    // The icon: the Creature's face caught in the torch, frontal and level, in the Auditorium's dark east gallery
+    // (37 studs of it behind). The head twitches between tilts on its own; the frame waits for a level one.
     name: 'icon-a',
     size: [512, 512],
     icon: true,
     run: async (art, g, dev, e, T) => {
-      art.prepare('Level3_Gymnasium');
-      art.creature(40, 50, 80, { x: 0, z: 80 });
+      art.prepare('Level2_Auditorium');
+      art.creature(366, 34, 70, { x: 366, z: 200 });
       art.ff(0.4);
       const face = art.face();
-      const cam = face.clone().add(new T.Vector3(-6.2, -0.75, 0));
+      const cam = face.clone().add(new T.Vector3(0, -0.75, 6.2));
       art.player(cam.x, cam.y - art.EYE, cam.z, face);
       art.cam({ pos: cam, look: () => art.face().add(new T.Vector3(0, -0.12, 0)), fov: 21 });
       art.ff(0.6);
@@ -276,12 +271,12 @@ const SHOTS = [
     size: [512, 512],
     icon: true,
     run: async (art, g, dev, e, T) => {
-      art.prepare('Level3_Gymnasium');
-      art.creature(40, 50, 80, { x: 0, z: 74 });
+      art.prepare('Level2_Auditorium');
+      art.creature(366, 34, 70, { x: 360, z: 200 });
       art.ff(0.4);
       const face = art.face();
-      const cam = face.clone().add(new T.Vector3(-5.6, -0.8, -2.4));
-      const light = face.clone().add(new T.Vector3(-4.2, -1.6, 3.6));
+      const cam = face.clone().add(new T.Vector3(-2.4, -0.8, 5.6));
+      const light = face.clone().add(new T.Vector3(3.6, -1.6, 4.2));
       art.player(light.x, light.y - art.EYE, light.z, face);
       art.cam({ pos: cam, look: () => art.face().add(new T.Vector3(0, -0.62, 0)), fov: 25 });
       art.ff(0.6);
@@ -291,45 +286,37 @@ const SHOTS = [
     },
   },
   {
-    // Hiding: from inside a boys' locker room locker, through the slits; the Creature walks past under the far working
-    // tube, its head turned to the locker. The torch is off in a locker, as in the game.
+    // Hiding: from inside a Level 1 main office locker, through the slits; the Creature walks past across the office,
+    // its head turned to the locker. The torch is off in a locker, as in the game.
     name: 'thumb-2-hide',
     size: [1920, 1080],
     run: async (art, g, dev, e, T) => {
-      art.prepare('Level3_Gymnasium');
-      if (!art.hideIn('L3_Locker_08')) throw new Error('could not hide in L3_Locker_08');
+      art.prepare('Level1_Hallways');
+      if (!art.hideIn('L1_Locker_02')) throw new Error('could not hide in L1_Locker_02');
       e.player.flashlight.setOn(false);
       art.cam(null);
       art.ff(0.2);
-      art.creature(165, 50, 68.5, { x: 147, z: 69.5 });
-      art.handle().moveTo(new T.Vector3(147, 50 + art.RH, 69.5), 2.0);
+      art.creature(141, 18, 16, { x: 141, z: 0 });
+      art.handle().moveTo(new T.Vector3(141, 18 + art.RH, 1), 2.0);
       art.ff(1.25);
-      art.freeze(33, 0.14, 0.01);
+      art.freeze(33, 0.35, 0.01);
       art.ff(0.1);
       return { face: art.project(art.face()) };
     },
   },
   {
-    // An objective moment, Floor 2: the chem prep room's fume hood, brewed (the three reagent jars loaded, the sash up,
-    // the acid flask's Neon glowing beside them), and the Creature just in through the west door from the science
-    // wing, caught in the torch.
+    // An objective moment, the basement: the electrical room's breaker panel (the power to restore), and the Creature
+    // across the room from it, caught in the torch.
     name: 'thumb-4-objective',
     size: [1920, 1080],
     run: async (art, g, dev, e, T) => {
-      art.prepare('Level2_ScienceHall');
-      const f = g.floors.floor('Level2_ScienceHall');
-      if (f.acidState !== 'Ready') {
-        for (let i = 0; i < 3; i++) f.carry.add('Reagent');
-        f._load();
-        art.ff(2);
-        f._brewed();
-      }
+      art.prepare('Level0_Basement');
       art.ff(0.5);
-      art.creature(97, 34, 62.5, { x: 118, z: 63.5 });
-      art.player(118, 34, 63.5, { x: 97, y: 39.5, z: 62.5 });
-      art.cam({ pos: new T.Vector3(118, 38.6, 63.5), look: new T.Vector3(101.5, 38.6, 52), fov: 56 });
+      art.creature(310, 0, 96, { x: 324, z: 106 });
+      art.player(324, 0, 106, { x: 310, y: 5.5, z: 96 });
+      art.cam({ pos: new T.Vector3(324, 4.6, 106), look: new T.Vector3(314, 4.2, 93), fov: 56 });
       art.ff(1.0);
-      return { face: art.project(art.face()), hood: art.project({ x: 107.5, y: 37.2, z: 41.5 }) };
+      return { face: art.project(art.face()), panel: art.project({ x: 316, y: 3.5, z: 89 }) };
     },
   },
   {
@@ -344,49 +331,6 @@ const SHOTS = [
       art.cam({ look: new T.Vector3(39.5, 18 + 5.0, 75.6), fov: 64 });
       art.ff(1.5);
       return { face: art.project(art.face()) };
-    },
-  },
-  {
-    // The flooded pool: crouched at the deck edge, the torch on the black water, the Creature's head breaking the
-    // surface in the beam (its body pale under it), the lane rope and a kickboard floating by.
-    name: 'thumb-3-pool',
-    size: [1920, 1080],
-    run: async (art, g, dev, e, T) => {
-      art.prepare('Level4_FloodedPool');
-      art.player(125.6, 82, 103.5, { x: 137, y: 81, z: 99 });
-      art.ff(0.5);
-      art.creatureAt({ x: 138.5, y: 80.72, z: 98.6 }, { x: 125.6, z: 103.5 }, 'Swim');
-      art.ff(0.4);
-      art.aim(art.face().add(new T.Vector3(0, -1.3, 0)));
-      const cam = new T.Vector3(125.6, 84.7, 103.5);
-      art.cam({ pos: cam, look: () => art.face().add(new T.Vector3(0, 0.3, 0)), fov: 37 });
-      art.ff(1.0);
-      return { face: art.project(art.face()) };
-    },
-  },
-  {
-    // The roof finale (the real one: dev.signature jumps with a pack and pulls the cord; the finale takes the
-    // Creature): under the canopy, looking back up at the ledge in the first lightning strike's afterglow.
-    name: 'thumb-5-roof',
-    size: [1920, 1080],
-    run: async (art, g, dev, e, T) => {
-      art.prepare('Level5_Roof', 1);
-      art.release();
-      const old = g.level5.finale;
-      dev.signature('Level5_Roof');
-      art.ff(1.5);
-      for (let k = 0; k < 80 && (!g.level5.finale || g.level5.finale === old); k++) art.ff(0.1);
-      const fin = g.level5.finale;
-      if (!fin) throw new Error('the finale did not start');
-      const until = (t) => fin.startAt + t - g.env.now();
-      let wait = until(1.25);
-      if (wait > 0) art.ff(wait);
-      const face = art.face().clone();
-      art.cam({ look: () => face.clone().add(new T.Vector3(0, -2.7, -0.3)), fov: 15.5 });
-      wait = until(1.97);
-      if (wait > 0) art.ff(wait);
-      if (g.creature.isHidden()) throw new Error('the Creature is not on the ledge');
-      return { face: art.project(art.face()), flash: e.lighting.flash };
     },
   },
 ];
@@ -838,35 +782,15 @@ const COMPOSE = {
     C.place(x, logo.caption('HIDE', 11), 250, 885, 440, 'left');
     return cv;
   },
-  'thumb-3-pool': (C, raw, meta, logo) => {
-    const cv = C.downscale(raw, 1920, 1080);
-    C.grade(cv, { exposure: 0.95, knee: 0.58, gamma: 1.45, contrast: 0.3, pivot: 0.2, saturation: 0.95, lift: 0.01,
-      shadows: [0.86, 1.0, 1.08], highlights: [1.03, 1.0, 0.94], vignette: 0.38, cx: meta.face.x, cy: meta.face.y });
-    C.bloom(cv, { threshold: 0.75, strength: 0.55, radius: 8 });
-    const x = C.ctx(cv);
-    C.shade(x, 960, 880, 700, 150, 0.55);
-    C.place(x, logo.caption('DON’T SPLASH', 23), 960, 870, 1000, 'center');
-    return cv;
-  },
   'thumb-4-objective': (C, raw, meta, logo) => {
     const cv = C.downscale(raw, 1920, 1080);
     C.grade(cv, { exposure: 1.35, knee: 0.74, gamma: 1.18, contrast: 0.3, pivot: 0.2, saturation: 0.88, lift: 0.008,
       shadows: [0.9, 1.0, 1.08], highlights: [1.05, 1.0, 0.92], vignette: 0.32,
-      spot: { x: meta.hood.x, y: meta.hood.y, r: 0.16, gain: 0.55 } });
+      spot: { x: meta.panel.x, y: meta.panel.y, r: 0.16, gain: 0.55 } });
     C.bloom(cv, { threshold: 0.74, strength: 0.6, radius: 8 });
     const x = C.ctx(cv);
     C.shade(x, 1300, 900, 600, 150, 0.65);
     C.place(x, logo.caption('4-PLAYER CO-OP', 41), 1728, 885, 900, 'right');
-    return cv;
-  },
-  'thumb-5-roof': (C, raw, meta, logo) => {
-    const cv = C.downscale(raw, 1920, 1080);
-    C.grade(cv, { exposure: 1.15, knee: 0.78, gamma: 1.05, contrast: 0.45, pivot: 0.28, saturation: 1.05, lift: 0.0,
-      shadows: [0.86, 0.9, 1.1], highlights: [1.04, 0.98, 1.06], vignette: 0.45, cx: meta.face.x, cy: meta.face.y });
-    C.bloom(cv, { threshold: 0.8, strength: 0.45, radius: 12 });
-    const x = C.ctx(cv);
-    C.shade(x, 960, 880, 640, 150, 0.6);
-    C.place(x, logo.caption('ESCAPE', 5), 960, 870, 720, 'center');
     return cv;
   },
 };

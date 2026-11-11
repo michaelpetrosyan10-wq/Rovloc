@@ -2,40 +2,25 @@
 // the services (the Roblox port mirrors these numbers).
 //
 // ObjectiveConfig itself travels as data: meta.objectives.floors (per floor: floor, levelId, id, title, item {prop,
-// candidate, count, guarded?, slots?, hold, object}, steps [{id, count, label, seconds?}], lockStep, lockVariant,
-// lockReason, holds by prompt kind), meta.objectives.levels[levelId].candidates (layout order) and .places (the
-// nearest hiding spot of every step). Nothing here repeats a count, a hold or a candidate: those are read from the data.
+// candidate, count, guarded?, hold, object} or none, steps [{id, count, label}], lockStep, lockVariant, lockReason,
+// holds by prompt kind), meta.objectives.levels[levelId].candidates (layout order) and .places (the nearest hiding spot
+// of every step). Nothing here repeats a count, a hold or a candidate: those are read from the data.
 
 /** The web tuning (seconds and studs). */
 export const ObjectiveTuning = Object.freeze({
-  /** A working hold (unlock, mix, turn, cut) emits its Normal noise at the start and then once a second. */
+  /** A working hold (an unlock) emits its Normal noise at the start and then once a second. */
   WorkNoisePeriod: 1,
-  /** Noise kinds (engine/config.js NoiseKinds): working holds, loud single actions, the generator. */
+  /** Noise kinds (engine/config.js NoiseKinds): working holds, loud single actions. */
   WorkNoise: 'ObjectiveWork',
   LoudNoise: 'ObjectiveClunk',
-  GeneratorNoise: 'GeneratorStart',
-  /** Floor 3: a locker search hold, how long an empty one stands ajar (its swing: lockers.js SEARCH_OPEN 0.42). */
-  SearchHold: 1,
-  SearchEmptySeconds: 0.9,
-  /** Floor 2: a thrown acid flask burns the chain when it breaks within this of ChainCentre (ObjectiveConfig: 3). */
-  ChainHitRadius: 3,
   /** The unlock: the lock comes off over LockOffSeconds, the door swings DoorDelay after the clunk. */
   LockOffSeconds: 0.9,
   DoorDelay: 0.75,
-  /** Floor 0: the basement's mains lights while the power is out (their flicker groups' factor) and the switch-on. */
+  /** The basement: its mains lights while the power is out (their flicker groups' factor) and the switch-on. */
   PowerOffFactor: 0.04,
   PowerOnSeconds: 2.6,
-  /** Floor 0: the breaker lever's throw (ObjectiveConfig LeverThrow, degrees about the lever's X axis). */
+  /** The basement: the breaker lever's throw (ObjectiveConfig LeverThrow, degrees about the lever's X axis). */
   LeverThrowDegrees: 110,
-  /** Floor 2: the sash slides from its built pose to SashOpen over this while mixing. */
-  SashSeconds: 0.8,
-  /** Floor 3: the work lamp's brightness once the generator runs (the LampLens SpotLight's Brightness). */
-  WorkLampBrightness: 3,
-  /** Floor 4: the hatch swings to HatchOpen over this once the valve is turned; the wheel turns this many times. */
-  HatchSeconds: 1.6,
-  ValveTurns: 2.5,
-  /** Floor 5: the chain and padlock drop this far below their rest. */
-  ChainDrop: 1.1,
   /** The Tab nudge on a floor with an objective: available this long after arriving, then every Cooldown. */
   NudgeDelay: 20,
   NudgeCooldown: 30,
@@ -43,8 +28,10 @@ export const ObjectiveTuning = Object.freeze({
   HintRadius: 12,
 });
 
-/** The Creature's start on Levels 2 and 3 (spawns.js). */
+/** The Creature's start on the basement and the Auditorium (spawns.js). */
 export const SpawnTuning = Object.freeze({
+  /** The levels whose Creature start this rule places (the Hallways keep their scripted scare, the roof its door). */
+  Levels: Object.freeze(['Level0_Basement', 'Level2_Auditorium']),
   /** Walking distance band (zone graph: rooms + doorways) from the entry airlock. */
   MinDistance: 70,
   MaxDistance: 140,
@@ -80,7 +67,7 @@ export function stepOf(spec, id) {
 
 /**
  * A room's spoken name from its layout id: the level prefix dropped, words split at underscores and capitals
- * ("L2_ChemPrep_205" -> "Chem Prep 205", "L0_Storage_NW" -> "Storage NW", "L3_LockerRoom_Boys" -> "Locker Room Boys").
+ * ("L1_Classroom_108" -> "Classroom 108", "L0_Storage_NW" -> "Storage NW", "L1_JanitorCloset" -> "Janitor Closet").
  */
 export function roomName(id) {
   if (!id) return '';

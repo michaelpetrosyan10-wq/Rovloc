@@ -10,7 +10,7 @@
 //   perceive  Perception.scan over the players (unless ignored; nothing while it is hidden or fading), every noise pulse
 //             since the last tick through Hearing.perceive (the pacing's HearingScale), plus scripted alerts. It
 //             remembers the target's last seen or heard position, the rooms it heard noises in (the Stalk leans toward
-//             them), a swimmer on the pool level and who was loud lately (a teleport target weighs more).
+//             them) and who was loud lately (a teleport target weighs more).
 //   pace      Pacing.tick (chasing, target in sight, nearest player).
 //   decide    Brain.decide over a Summary (the transition table); entering a state runs the old state's exit and the
 //             new one's enter; the current state updates once per tick (not while a catch or a warp runs).
@@ -18,12 +18,11 @@
 //
 // States: Dormant, Patrol (the Stalk, 7), InvestigateNoise (9), WallChase (the Chase, 16.5: ChaseLost s without sight
 // -> Search, MaxChase s -> it gives up and fades out), Search (the hiding spots near the last seen point, 12..18 s),
-// HidingResponse (it saw them hide: LookAways, ReachIn at 30 s), Teleport (warning, FadeIn, stare, stalk), Stunned,
-// AquaticStalk (Level 4) and Scripted. Nothing outside Scripted moves faster than CreatureConfig.SpeedCap.
+// HidingResponse (it saw them hide: LookAways, ReachIn at 30 s), Teleport (warning, FadeIn, stare, stalk), Stunned
+// and Scripted. Nothing outside Scripted moves faster than CreatureConfig.SpeedCap.
 //
-// Warps: every FadeOut / FadeIn relocation (a teleport, a chase giving up, the pool entered or left, a concealed
-// Creature revealing itself) runs through one machine (this.warp): FadeOut (FadeOutSeconds; the catch and the senses
-// off) -> Hidden (placed at the destination; waits until no player can see it there, or picks another spot) ->
+// Warps: every FadeOut / FadeIn relocation (a teleport, a chase giving up, a concealed Creature revealing itself)
+// runs through one machine (this.warp): FadeOut (FadeOutSeconds; the catch and the senses off) -> Hidden (placed at the destination; waits until no player can see it there, or picks another spot) ->
 // Warning (teleports only: WarningSeconds, the teleportWarning signal: lights, torch, hiss) -> FadeIn (FadeInSeconds)
 // -> Stare (teleports only: StareSeconds, the reveal check). The brain holds its state while a warp runs.
 //
@@ -31,15 +30,13 @@
 //   state            the MonsterState above
 //   speed            the root's measured horizontal speed, studs/s (0 standing, 7 stalking, 16.5 chasing)
 //   poseMode         'Biped' | 'Hunched' (under a low lintel or tunnel, or about to walk under one: the clearance at
-//                    its root or along its way just ahead below HunchBelow; or sniffing at a hiding spot) | 'Swim' |
-//                    'Stunned'. The brain's eye is this pose's eye.
+//                    its root or along its way just ahead below HunchBelow; or sniffing at a hiding spot) | 'Stunned'. The brain's eye is this pose's eye.
 //   action           'Stare' | 'ReachIn' | 'LookAway' | 'FadeOut' | 'FadeIn' | 'Jumpscare' | null
 //   actionStartedAt  the game clock (service.now()) when that action began
 //   fade             0..1, how visible it is (FadeOut 1 -> 0 over 0.6 s, hidden 0, FadeIn 0 -> 1 over 0.8 s)
 // A co-op client's puppet (game/coop/creature.js) publishes the same fields from the host's state.
 //
-// Catches go through the JumpscareHandler (Hallway on floors, Locker through a ReachIn, Underwater through
-// catchGrabbed). While a catch runs the brain leaves the body alone; when it finishes the movement is re-synced, the
+// Catches go through the JumpscareHandler (Hallway on floors, Locker through a ReachIn). While a catch runs the brain leaves the body alone; when it finishes the movement is re-synced, the
 // pacing notes the catch (cooldown, Relax) and the Creature withdraws out of sight. A mover that stalls for good is put
 // back at the nearest standing spot nobody can see, and only while nobody can see the Creature either.
 //
@@ -63,8 +60,7 @@ import { Pacing, repositionPoint } from './pacing.js';
 import * as Perception from './perception.js';
 import { Random, Signal, clamp, clamp01, flatDirection, horizontalDistance, isFiniteNumber, isFiniteVector } from './util.js';
 import { buildGraph, nearest as railNearest } from './ventgraph.js';
-import { SWIM_DEPTH, clampToWater } from './water.js';
-import * as AquaticStalk from './states/aquatic.js';
+import { WorldConfig } from '../engine/config.js';
 import * as Dormant from './states/dormant.js';
 import * as HidingResponse from './states/hiding.js';
 import * as InvestigateNoise from './states/investigate.js';
@@ -75,15 +71,12 @@ import * as Stunned from './states/stunned.js';
 import * as Teleport from './states/teleport.js';
 import * as WallChase from './states/wallchase.js';
 
-const STATES = { Dormant, Patrol, InvestigateNoise, WallChase, Search, HidingResponse, Teleport, Stunned, AquaticStalk, Scripted };
+const STATES = { Dormant, Patrol, InvestigateNoise, WallChase, Search, HidingResponse, Teleport, Stunned, Scripted };
 
 const TICK = 1 / GameConfig.ServerTickHz;
 const T = CreatureConfig.Teleport;
 const H = CreatureConfig.Hiding;
 export const WAKE_DELAY = 4;
-const SWIMMER_MEMORY = 6;
-const GRAB_ARMED_SECONDS = 10;
-const GRAB_GRACE = 1;
 const CATCH_TIMEOUT = GameConfig.OneShotLead + CreatureConfig.Jumpscare.LungeSeconds + CreatureConfig.Jumpscare.HoldSeconds + 4;
 const HEARD_ZONE_TTL = Patrol.HeardTtl;
 const NOISE_QUEUE_LIMIT = 64;
@@ -101,8 +94,7 @@ const STUN_PRESET = 'Screech';
 const GRUNT_PRESET = 'CreatureGrunt';
 const MIN_SPEED_SCALE = 0.5;
 const MAX_SPEED_SCALE = 2;
-const SWIM_STATES = new Set(['Treading', 'Freestyle', 'Underwater', 'Grabbed']);
-const LEVEL_ORDER = ['Level0_Basement', 'Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium', 'Level4_FloodedPool', 'Level5_Roof'];
+const LEVEL_ORDER = WorldConfig.LevelOrder;
 const RANDOM_SEED = 20251029;
 const TRAIL_SECONDS = 15;
 const TRAIL_EVERY = 0.5;
@@ -115,7 +107,6 @@ const SAMPLE_SPACING = 5;
 const TUNNEL_KINDS = new Set(['Corridor', 'Tunnel', 'Gallery', 'Hallway']); // not keep-rooms
 const WARP_WAIT = 3; // a spot still in view this long after it was picked is swapped for another
 const WARP_GIVE_UP = 12; // hidden this long: any spot out of sight will do
-const MURK_RANGE = 10; // a swimmer under the surface is seen only this close
 const STAGE_LIFTS = [-1, 0, 1]; // the walker's body (its root box) from the root: a catch's staging step clears it
 const SPEED_DAMP = 10;
 const LOUD_RANK = 3;
@@ -137,7 +128,7 @@ const NO_REMOTES = Object.freeze([]);
  * @property {() => string} lifeState
  * @property {() => number} downedCount
  * @property {() => string} moveState
- * @property {() => string} mode 'OnFoot' | 'Vent' | 'Swim'
+ * @property {() => string} mode 'OnFoot' | 'Vent'
  * @property {() => boolean} inVent
  * @property {() => boolean} flashlightOn
  * @property {() => string|null} lockerId the hiding spot they are in
@@ -189,11 +180,7 @@ export function levelIndex(levelId) {
  * @property {(minDistance: number, maxDistance: number) => THREE.Vector3|null} repositionPoint
  * @property {() => THREE.Vector3[]} playerPositions
  * @property {() => Function|null} lockerInspector
- * @property {() => Function|null} poolGrabber
- * @property {(player: any) => boolean} grabArmed
- * @property {(player: any) => void} setGrabbed
  * @property {(player: any) => boolean} inVent
- * @property {(player: any) => boolean} swimming
  * @property {(player: any) => boolean} playing
  * @property {(player: any) => boolean} isHiding
  * @property {(player: any) => string|null} hideSpotOf
@@ -225,8 +212,6 @@ export class MonsterAI {
     this.caught = new Signal();
     /** (victim, kind, outcome) when a catch ends: "Downed", "Executed" or "Aborted". */
     this.jumpscareFinished = new Signal();
-    /** (origin, seconds) when a pool lunge is telegraphed (the pool shows the bubbles and the ripple there). */
-    this.lungeTelegraph = new Signal();
     /** (spot: floor point, target, seconds) a teleport's warning starts: the lights there flicker, a hiss rises. */
     this.teleportWarning = new Signal();
     /** (target, kind) the target looked at it as it formed (or a hiding spot's fake-out): their reveal scare. */
@@ -267,23 +252,13 @@ export class MonsterAI {
     this.devHuntUntil = 0;
     this.catching = null;
     this.pendingReach = null;
-    this.grabbed = null;
-    this.grabbedHeldAt = 0;
     this.scripted = null;
     this.noiseQueue = [];
     this.alerts = [];
     this.lastSeen = new Map();
-    this.splashArmed = new Map();
-    this.swimmerAt = -Infinity;
-    this.swimmerPlayer = null;
-    /** When a player first stood in a pool room on this level (the pool grace runs from it), or null. */
-    this.poolEnteredAt = null;
-    /** Until when it retreats to the far end of the water after a grab. */
-    this.poolRetreatUntil = -Infinity;
     this.ignored = false;
     this.accumulated = 0;
     this.lockerInspector = null;
-    this.poolGrabber = null;
     /** @type {() => RemotePlayer[]} the co-op host's remote players (none when played alone) */
     this.roster = () => NO_REMOTES;
     /** @type {Map<any, any>} per player: trail, speed, stare, hiding and life last seen */
@@ -360,9 +335,6 @@ export class MonsterAI {
     this.jumpscareView = null;
 
     env.onNoise((event) => this._onNoise(event));
-    env.onSplashCrossed(() => {
-      if (this.running) this.splashArmed.set(PLAYER, this.now());
-    });
   }
 
   // ------------------------------------------------------------------ co-op roster
@@ -422,11 +394,6 @@ export class MonsterAI {
     this._onNoise(event);
   }
 
-  /** A remote swimmer's splashing crossed the grab threshold (the local one comes through onSplashCrossed). */
-  noteSplash(player) {
-    if (this.running && player) this.splashArmed.set(player, this.now());
-  }
-
   /** A teammate pulled `player` out of their hiding spot (the THRESHOLD throw): no catch for it; it is startled. */
   notePulled(player) {
     if (!this.running || !player) return;
@@ -446,11 +413,9 @@ export class MonsterAI {
       if (c.hiding && c.hiding.player === player) c.stateDone = true;
     }
     if (this.hideWatch && this.hideWatch.player === player) this.hideWatch = null;
-    if (this.swimmerPlayer === player) this.swimmerPlayer = null;
-    if (this.grabbed === player) this.grabbed = null;
     if (this.lastTeleportTarget === player) this.lastTeleportTarget = null;
     if (this.pendingReach && this.pendingReach.player === player) this.pendingReach = null;
-    for (const map of [this.lastSeen, this.splashArmed, this.records, this.pulled]) map.delete(player);
+    for (const map of [this.lastSeen, this.records, this.pulled]) map.delete(player);
     if (this.jumpscare.getVictim() === player) this.jumpscare.abort('Left');
   }
 
@@ -513,11 +478,6 @@ export class MonsterAI {
     return this._players().filter((p) => this._playing(p));
   }
 
-  _swimming(player) {
-    if (player === PLAYER) return this.env.playerMode() === 'Swim' || SWIM_STATES.has(this.env.playerMoveState());
-    return !!player && !!player.mode && (player.mode() === 'Swim' || SWIM_STATES.has(player.moveState()));
-  }
-
   _inVent(player) {
     if (player === PLAYER) return this.env.playerInVent();
     return !!player && !!player.inVent && player.inVent();
@@ -555,7 +515,6 @@ export class MonsterAI {
   /** How high its head stands over a root at `point` on land: hunched where the head room there is low. */
   _headLift(point) {
     const eyes = this.metrics.eyeHeights;
-    if (this.mover && this.mover.basinAt(point)) return eyes.Biped;
     const nav = this._nav(this.creatureLevel);
     return nav && nav.clearanceAt(point) < CreatureConfig.HunchBelow ? eyes.Hunched : eyes.Biped;
   }
@@ -579,11 +538,9 @@ export class MonsterAI {
 
   /**
    * Whether a player sees the Creature with its root at `point`: inside their view cone (Teleport.ViewHalfAngle of
-   * their look) with a clear line to its head or its chest, or right at their eye. Under a pool's surface only a
-   * player within MURK_RANGE sees it.
+   * their look) with a clear line to its head or its chest, or right at their eye.
    */
   _inViewOfAnyone(point) {
-    const murky = !!this.mover && !!this.mover.basinAt(point);
     const head = this._headLift(point);
     for (const player of this._playingPlayers()) {
       const eye = this._playerEye(player);
@@ -593,7 +550,7 @@ export class MonsterAI {
         const q = new THREE.Vector3(point.x, point.y + lift, point.z);
         const d = eye.distanceTo(q);
         if (d <= NEAR_EYE) return true;
-        if (d > SIGHT_RANGE_LIMIT || (murky && d > MURK_RANGE)) continue;
+        if (d > SIGHT_RANGE_LIMIT) continue;
         if (Perception.stareAngle(eye, look, q) <= T.ViewHalfAngle && this._lineClear(eye, q)) return true;
       }
     }
@@ -619,20 +576,14 @@ export class MonsterAI {
     return out;
   }
 
-  /** Root positions the Creature can stand at: every patrol waypoint (under water where the waypoint is). */
+  /** Root positions the Creature can stand at: every patrol waypoint. */
   _standingSpots(info) {
-    const out = [];
-    for (const w of info.waypoints) {
-      const p = w.position;
-      if (this.mover && this.mover.basinAt(p)) out.push(p.clone());
-      else out.push(new THREE.Vector3(p.x, p.y + ROOT_HEIGHT, p.z));
-    }
-    return out;
+    return info.waypoints.map((w) => new THREE.Vector3(w.position.x, w.position.y + ROOT_HEIGHT, w.position.z));
   }
 
-  /** Root positions over the whole floor: the waypoints, then the nav's lattice (land only). */
+  /** Root positions over the whole floor: the waypoints, then the nav's lattice. */
   _landSpots(info) {
-    const out = this._standingSpots(info).filter((p) => !(this.mover && this.mover.basinAt(p)));
+    const out = this._standingSpots(info);
     const nav = this._nav(info.levelId);
     if (nav) for (const s of nav.samplePoints(SAMPLE_SPACING)) out.push(new THREE.Vector3(s.position.x, s.position.y + ROOT_HEIGHT, s.position.z));
     return out;
@@ -744,9 +695,7 @@ export class MonsterAI {
 
   _poseMode() {
     if (this.state === 'Stunned') return 'Stunned';
-    const pose = this.body.pose;
-    if (pose === 'Swim') return 'Swim';
-    if (pose === 'Hunched') return 'Hunched';
+    if (this.body.pose === 'Hunched') return 'Hunched';
     return this.clearance < CreatureConfig.HunchBelow ? 'Hunched' : 'Biped';
   }
 
@@ -771,14 +720,11 @@ export class MonsterAI {
     const b = this.body;
     const m = this.mover;
     if (!m) return;
-    m.reset('Floor');
+    m.reset();
     b.face(null);
     b.setAnchored(true);
     b.placeAt(cframe);
-    const water = m.basinAt(cframe.position) !== null;
-    m.reset(water ? 'Water' : 'Floor');
-    if (water) b.setPose('Swim');
-    else if (b.pose === 'Swim' || b.pose === 'Quadruped') b.setPose('Biped');
+    if (b.pose === 'Quadruped') b.setPose('Biped');
     this.clearance = this._headroom(cframe.position);
   }
 
@@ -811,9 +757,6 @@ export class MonsterAI {
     this.stareTrigger = null;
     this.pendingReach = null;
     this.lookAway = null;
-    this.swimmerPlayer = null;
-    this.swimmerAt = -Infinity;
-    this.poolRetreatUntil = -Infinity;
     this.chaseStarted = null;
   }
 
@@ -826,11 +769,9 @@ export class MonsterAI {
     this.creatureLevel = levelId;
     c.level = info;
     c.graph = this._graph(levelId);
-    m.setLevel(c.graph, info ? info.basins : []);
     this.env.setNavLevel(levelId);
     this._forgetMind();
     this._cancelWarp();
-    this.poolEnteredAt = null;
     let spawn = info ? info.spawn : null;
     if (!spawn && info && info.waypoints[0]) spawn = CFrame.at(this._standingSpots(info)[0]);
     if (spawn) this._placeBody(spawn);
@@ -844,7 +785,7 @@ export class MonsterAI {
   // ------------------------------------------------------------------ warps (FadeOut / FadeIn relocations)
 
   /**
-   * Starts a warp: {kind: 'Teleport'|'GiveUp'|'Pool'|'Reveal', to?: CFrame, pick?: () => CFrame|null, warning?, stare?,
+   * Starts a warp: {kind: 'Teleport'|'GiveUp'|'Reveal', to?: CFrame, pick?: () => CFrame|null, warning?, stare?,
    * plan?, startHidden?}. The destination is `to`, else what `pick` returns (asked again when it stays in view).
    */
   _startWarp(opts) {
@@ -886,7 +827,6 @@ export class MonsterAI {
     const p = cframe.position;
     if (this._nearestPlayerDistanceTo(p) < T.MinStraight) return false;
     if (kind === 'Teleport') return !this._inViewOfAnyone(p);
-    if (this.mover && this.mover.basinAt(p)) return !this._inViewOfAnyone(p);
     return !this._visible(p);
   }
 
@@ -998,8 +938,7 @@ export class MonsterAI {
     this.warp = null;
     if (this.action === 'FadeIn' || this.action === 'Stare' || this.action === 'FadeOut') this._setAction(null);
     this.body.setHidden(false);
-    const m = this.mover;
-    if (m) m.reset(m.basinAt(this.body.getPosition()) ? 'Water' : 'Floor');
+    if (this.mover) this.mover.reset();
     if (w && w.kind === 'Teleport') this.lastSeenAny = Math.max(this.lastSeenAny, this.now());
   }
 
@@ -1028,47 +967,6 @@ export class MonsterAI {
     const toward = this._nearestRoot(point);
     const facing = (toward && flatDirection(toward.clone().sub(point))) || flatDirection(this.body.getCFrame().lookVector) ||
       new THREE.Vector3(0, 0, -1);
-    return CFrame.lookAt(point, point.clone().add(facing));
-  }
-
-  /** Warps for the Mover (into / out of a pool): a fade out here and in at the destination, out of sight. */
-  _warpForMover(goal, medium) {
-    if (this.warp || !this.ctx) return false;
-    if (medium === 'Water') {
-      const basin = this.mover ? this.mover.basinAt(goal) : null;
-      this._startWarp({ kind: 'Pool', pick: () => this._waterSpot(basin, goal) });
-    } else {
-      this._startWarp({ kind: 'Pool', pick: () => this._landSpot(goal) });
-    }
-    return true;
-  }
-
-  /** A point under the water of `basin`, nearest `goal`, that no swimmer close by would see. */
-  _waterSpot(basin, goal) {
-    if (!basin) return null;
-    const candidates = [clampToWater(basin, goal, SWIM_DEPTH)];
-    for (const x of [basin.minX, (basin.minX + basin.maxX) / 2, basin.maxX]) {
-      for (const z of [basin.minZ, (basin.minZ + basin.maxZ) / 4, (basin.minZ + basin.maxZ) / 2, (3 * basin.maxZ + basin.minZ) / 4, basin.maxZ]) {
-        candidates.push(clampToWater(basin, new THREE.Vector3(x, basin.surfaceY - SWIM_DEPTH, z), SWIM_DEPTH));
-      }
-    }
-    candidates.sort((a, b) => a.distanceTo(goal) - b.distanceTo(goal));
-    for (const p of candidates) {
-      const cf = CFrame.lookAt(p, p.clone().add(flatDirection(goal.clone().sub(p)) || new THREE.Vector3(0, 0, -1)));
-      if (this._clearToAppear(cf, 'Pool')) return cf;
-    }
-    return null;
-  }
-
-  /** A land spot out of the pool (ExitMin from everyone, out of sight), nearest `goal`. */
-  _landSpot(goal) {
-    const info = this.ctx ? this.ctx.level : null;
-    if (!info) return null;
-    const point = repositionPoint(this._landSpots(info), this._playerEyes(), goal, CreatureConfig.Water.ExitMin, Infinity,
-      (p) => this._visible(p));
-    if (!point) return null;
-    const toward = this._nearestRoot(point);
-    const facing = (toward && flatDirection(toward.clone().sub(point))) || new THREE.Vector3(0, 0, -1);
     return CFrame.lookAt(point, point.clone().add(facing));
   }
 
@@ -1107,7 +1005,7 @@ export class MonsterAI {
     if (t < this.teleportReadyAt || t < this.nextTeleportTry) return false;
     if (t - this.lastSeenAny < T.UnseenSeconds) return false;
     if (t < this.lastCatchAt + T.AfterCatch || t < this.lastDownAt + T.AfterCatch) return false;
-    if (m.getMedium() !== 'Floor' || this.env.teleportBlocked()) return false;
+    if (this.env.teleportBlocked()) return false;
     const plan = this._planTeleport();
     if (!plan) {
       this.nextTeleportTry = t + TELEPORT_RETRY;
@@ -1117,9 +1015,9 @@ export class MonsterAI {
     return true;
   }
 
-  /** The players a teleport may go for: hunted, on its level, on foot (not hiding, in a duct or swimming). */
+  /** The players a teleport may go for: hunted, on its level, on foot (not hiding or in a duct). */
   _teleportTargets() {
-    return this._huntablePlayers().filter((p) => !this._inVent(p) && !this._swimming(p) &&
+    return this._huntablePlayers().filter((p) => !this._inVent(p) &&
       this._moveStateOf(p) !== 'Hiding' && this._onLevel(p));
   }
 
@@ -1235,62 +1133,6 @@ export class MonsterAI {
     return true;
   }
 
-  // ------------------------------------------------------------------ the pool (Level 4 fairness)
-
-  /** Whether `p` stands in a pool room (a room holding a basin) of the Creature's level. */
-  _inPoolRoomAt(p) {
-    const info = this.ctx ? this.ctx.level : null;
-    if (!p || !info || info.basins.length === 0) return false;
-    if (this.mover && this.mover.basinAt(p)) return true;
-    const room = Brain.roomAt(info, p);
-    return !!room && room.kind === 'Pool';
-  }
-
-  _inPoolRoom(player) {
-    return this._swimming(player) || this._inPoolRoomAt(this._rootOf(player));
-  }
-
-  /** The pool grace starts the first time a player stands in a pool room on this level. */
-  _updatePoolGrace(t) {
-    if (this.poolEnteredAt !== null) return;
-    if (this._playingPlayers().some((p) => this._inPoolRoom(p))) this.poolEnteredAt = t;
-  }
-
-  /** The grace after first entering the pool room, or the retreat after a grab: it leaves the pool room alone. */
-  _poolQuiet(t) {
-    const grace = this.poolEnteredAt !== null && t < this.poolEnteredAt + CreatureConfig.Water.PoolGraceSeconds;
-    return grace || t < this.poolRetreatUntil;
-  }
-
-  /** While it retreats after a grab: the point of its pool farthest from the player (else null). */
-  _poolRetreatPoint() {
-    const m = this.mover;
-    if (!m || this.now() >= this.poolRetreatUntil || m.getMedium() !== 'Water') return null;
-    const here = this.body.getPosition();
-    const basin = m.basinAt(here);
-    if (!basin) return null;
-    const from = this._nearestRoot(here) || here;
-    let best = null;
-    let bestDistance = -1;
-    for (const x of [basin.minX, (basin.minX + basin.maxX) / 2, basin.maxX]) {
-      for (const z of [basin.minZ, (basin.minZ + basin.maxZ) / 2, basin.maxZ]) {
-        const p = clampToWater(basin, new THREE.Vector3(x, basin.surfaceY - SWIM_DEPTH, z));
-        const d = horizontalDistance(p, from);
-        if (d > bestDistance) {
-          best = p;
-          bestDistance = d;
-        }
-      }
-    }
-    return best;
-  }
-
-  /** A lunge is coming: a low growl at its origin and the pool's bubbles and ripple ring (lungeTelegraph). */
-  _telegraph(origin, seconds) {
-    this.env.play('CreatureGrowl', { position: origin.clone(), speed: 0.72, volume: 1.2 });
-    this.lungeTelegraph.fire(origin.clone(), seconds);
-  }
-
   /** Teleports to the nearest standing spot (>= UNSTICK_MIN away) nobody can see, only while nobody sees it here. */
   _relocateUnseen() {
     const c = this.ctx;
@@ -1331,8 +1173,6 @@ export class MonsterAI {
       vertical: Math.abs(here.y - target.y),
       reach: this.metrics.reach,
       targetInVent: this._inVent(player),
-      creatureInWater: this.mover.getMedium() === 'Water',
-      targetSwimming: this._swimming(player),
       lineClear: this._lineClear(this._creatureEye(), eye),
       bodyClear: this._bodyClear(player),
       playing: this._huntable(player),
@@ -1444,8 +1284,6 @@ export class MonsterAI {
     if (next === 'WallChase') {
       const chosen = this.stareTrigger || (c.target && this._sees(c.target) ? c.target : this._bestSeen());
       this._chase(chosen, t);
-    } else if (next === 'AquaticStalk') {
-      this._setTarget(this.swimmerPlayer);
     } else if (next === 'InvestigateNoise') {
       const heard = c.heard;
       const memory = c.memory;
@@ -1491,9 +1329,6 @@ export class MonsterAI {
         const other = this._bestSeen();
         if (other) this._setTarget(other);
       }
-    } else if (this.state === 'AquaticStalk') {
-      const swimmer = this.swimmerPlayer;
-      if (swimmer && target !== swimmer && !(target && this._sees(target))) this._setTarget(swimmer);
     } else if (this.state === 'Patrol' || this.state === 'InvestigateNoise' || this.state === 'Search') {
       const best = c.sightings[0];
       this._setTarget(best ? best.player : null);
@@ -1511,10 +1346,6 @@ export class MonsterAI {
     const source = this._playerByUserId(noise.sourceUserId);
     if (source && this._huntable(source)) {
       if (noise.rank >= LOUD_RANK) this._record(source).loudAt = t;
-      if (noise.medium === 'Water' && this._swimming(source)) {
-        this.swimmerAt = t;
-        this.swimmerPlayer = source;
-      }
       this._remember(source, noise.position, t);
     }
     if (best === null || noise.rank > best.rank || (noise.rank === best.rank && noise.strength > best.strength)) return noise;
@@ -1604,7 +1435,6 @@ export class MonsterAI {
       facing: this.lookAway || this.body.getCFrame().lookVector,
       blindPeripheral: this.lookAway !== null,
       difficulty: this.difficulty,
-      aquatic: this.body.pose === 'Swim' || this.state === 'AquaticStalk',
       targetUserId: c.target ? c.target.userId : null,
       raycast: (a, b) => this._lineClear(a, b),
     };
@@ -1628,8 +1458,7 @@ export class MonsterAI {
         });
       }
     }
-    const quiet = this._poolQuiet(t);
-    const sightings = Perception.scan(viewer, observations).filter((s) => !(quiet && this._inPoolRoom(s.player)));
+    const sightings = Perception.scan(viewer, observations);
     c.sightings = sightings;
     if (sightings.length) this.lastSeenAny = t;
     for (const s of sightings) {
@@ -1637,10 +1466,6 @@ export class MonsterAI {
       if (s.player === c.target) this.chaseSeenAt = t;
       const position = this._rootOf(s.player);
       if (position) this._remember(s.player, position, t);
-      if (c.level && c.level.basins.length > 0 && this._swimming(s.player)) {
-        this.swimmerAt = t;
-        this.swimmerPlayer = s.player;
-      }
     }
     const listener = {
       position: this._creatureEye(),
@@ -1661,7 +1486,6 @@ export class MonsterAI {
     this.noiseQueue = [];
     for (const event of events) {
       if (this.ignored && this._playerByUserId(event.sourceUserId)) continue;
-      if (quiet && (event.medium === 'Water' || this._inPoolRoomAt(event.position))) continue;
       const heard = Hearing.perceive(event, listener);
       if (!heard) continue;
       const room = c.level ? Brain.roomAt(c.level, heard.position) : null;
@@ -1679,7 +1503,7 @@ export class MonsterAI {
     }
     const pending = this.alerts;
     this.alerts = [];
-    for (const alert of pending) if (!(quiet && this._inPoolRoomAt(alert.position))) best = this._noteHeard(alert, best, t);
+    for (const alert of pending) best = this._noteHeard(alert, best, t);
     c.heard = best;
     for (const [zone, heard] of Object.entries(c.heardZones)) if (t - heard.at > HEARD_ZONE_TTL) delete c.heardZones[zone];
     for (const [player, at] of [...this.pulled]) if (t - at > PULL_MEMORY) this.pulled.delete(player);
@@ -1700,7 +1524,6 @@ export class MonsterAI {
 
   _summarize(t) {
     const c = this.ctx;
-    const m = this.mover;
     const p = this.pacing;
     const spec = difficultySpec(this.difficulty);
     const devHunt = t < this.devHuntUntil;
@@ -1708,7 +1531,6 @@ export class MonsterAI {
     // the stalk after a teleport: sight alone starts no chase, only a stare or coming close
     if (this.state === 'Teleport' && Teleport.stalking(c)) sees = c.sightings.some((s) => s.distance <= T.StalkNear);
     const chaseSeconds = this.chaseStarted !== null ? t - this.chaseStarted : 0;
-    const level = c.level;
     const canHunt = devHunt || p.canHunt(t);
     /** @type {import('./brain.js').Summary} */
     const summary = {
@@ -1717,7 +1539,7 @@ export class MonsterAI {
       scripted: this.scripted !== null,
       stunned: t < this.stunUntil,
       awake: this.awake,
-      catching: this.catching !== null || this.grabbed !== null || this.pendingReach !== null,
+      catching: this.catching !== null || this.pendingReach !== null,
       warping: this.warp !== null,
       canHunt,
       sees,
@@ -1729,39 +1551,17 @@ export class MonsterAI {
       lostSeconds: this.state === 'WallChase' ? t - this.chaseSeenAt : 0,
       maxChase: spec.maxChaseSeconds,
       chaseLost: spec.chaseLostSeconds,
-      swimmer: level !== null && level.basins.length > 0 && t - this.swimmerAt <= SWIMMER_MEMORY,
-      inWater: m.getMedium() === 'Water',
-      retreating: t < this.poolRetreatUntil,
       teleportDue: false,
       stateDone: c.stateDone,
     };
     if (this.state === 'Patrol' && canHunt && this.awake && !summary.sees && !summary.stared && !summary.hidingWatch &&
-      !summary.heard && !summary.swimmer && !summary.catching && !summary.warping && !summary.stunned && !summary.scripted) {
+      !summary.heard && !summary.catching && !summary.warping && !summary.stunned && !summary.scripted) {
       summary.teleportDue = this._teleportDue(t);
     }
     return summary;
   }
 
   // ------------------------------------------------------------------ upkeep
-
-  _updateGrab(t) {
-    const victim = this.grabbed;
-    const c = this.ctx;
-    const p = this.pacing;
-    if (!victim || !c || !p) return;
-    const holding = this._moveStateOf(victim) === 'Grabbed';
-    if (holding) this.grabbedHeldAt = t;
-    const life = this._lifeOf(victim);
-    if (!(life === 'Alive' || life === 'Downed') || (!holding && t - this.grabbedHeldAt > GRAB_GRACE)) {
-      this.grabbed = null;
-      p.noteCatch(t);
-      this.lastCatchAt = t;
-      c.reposition = true;
-      this.poolRetreatUntil = t + CreatureConfig.Water.GrabRetreatSeconds;
-      this.splashArmed.delete(victim);
-      AquaticStalk.released(c);
-    }
-  }
 
   /** A mover that stalled for good is moved unseen to a standing spot; the state restarts. */
   _handleMover() {
@@ -1770,7 +1570,7 @@ export class MonsterAI {
     if (!m || !c) return;
     if (m.getStatus() !== 'Stuck') return;
     if (this._relocateUnseen()) this.current.enter(c, this.state);
-    else m.reset(m.getMedium());
+    else m.reset();
   }
 
   _settleCatch(outcome) {
@@ -1781,7 +1581,7 @@ export class MonsterAI {
     this.catching = null;
     if (this.action === 'Jumpscare' || this.action === 'ReachIn') this._setAction(null);
     if (!c || !m || !p || !active) return;
-    m.reset(m.getMedium());
+    m.reset();
     const t = this.now();
     if (outcome !== 'Aborted') {
       p.noteCatch(t);
@@ -1814,23 +1614,13 @@ export class MonsterAI {
       if (!this.jumpscare.abort('Timeout')) this._settleCatch('Aborted');
     }
     this._stepReach(t);
-    this._updateGrab(t);
     if (this.scripted) {
       this.noiseQueue = [];
       this.alerts = [];
       return;
     }
-    this._updatePoolGrace(t);
-    m.setWaterSpeedCap(c.speedOf('AquaticStalk'));
     this._watchPlayers(t, dt);
     this._sense(t);
-    // leaving the water, not yet gone: a swimmer turns it back (the warp is called off where it still is)
-    const w = this.warp;
-    if (w && w.kind === 'Pool' && !w.placed && m.getMedium() === 'Water' && t - this.swimmerAt <= SWIMMER_MEMORY) {
-      this._cancelWarp();
-      this.body.setHidden(false);
-      m.reset('Water');
-    }
     const target = c.target;
     c.phase = p.tick(dt, {
       chasing: Brain.isChase(this.state),
@@ -1884,7 +1674,7 @@ export class MonsterAI {
    */
   _headroom(root) {
     const m = this.mover;
-    const nav = m && m.getMedium() === 'Floor' ? this._nav(this.creatureLevel) : null;
+    const nav = m ? this._nav(this.creatureLevel) : null;
     if (!nav) return Infinity;
     return nav.headroomAlong(root, m.routeAhead(), this.body.walkSpeed);
   }
@@ -1950,19 +1740,7 @@ export class MonsterAI {
       },
       playerPositions: () => this._playerEyes(),
       lockerInspector: () => this.lockerInspector,
-      poolGrabber: () => this.poolGrabber,
-      grabArmed: (player) => {
-        const at = this.splashArmed.get(player);
-        return at !== undefined && this.now() - at <= GRAB_ARMED_SECONDS && !this._poolQuiet(this.now());
-      },
-      telegraph: (origin, seconds) => this._telegraph(origin, seconds),
-      poolRetreat: () => this._poolRetreatPoint(),
-      setGrabbed: (player) => {
-        this.grabbed = player;
-        this.grabbedHeldAt = this.now();
-      },
       inVent: (player) => this._inVent(player),
-      swimming: (player) => this._swimming(player),
       playing: (player) => this._huntable(player),
       isHiding: (player) => this._moveStateOf(player) === 'Hiding',
       hideSpotOf: (player) => this._hideSpotOf(player),
@@ -1994,15 +1772,12 @@ export class MonsterAI {
   }
 
   /**
-   * Which points it can walk to from where it stands now (through the portals open now; a point in a pool counts, it
-   * gets in by a warp): a test (point) => boolean, or null off the floor.
+   * Which points it can walk to from where it stands now (through the portals open now): a test (point) => boolean,
+   * or null without a floor to walk.
    */
   _reachableTest() {
-    const m = this.mover;
-    const nav = m && m.getMedium() === 'Floor' ? this._nav(this.creatureLevel) : null;
-    if (!nav) return null;
-    const walk = nav.reachable(this.body.getPosition());
-    return (point) => m.basinAt(point) !== null || walk(point);
+    const nav = this.mover ? this._nav(this.creatureLevel) : null;
+    return nav ? nav.reachable(this.body.getPosition()) : null;
   }
 
   /** Down the tunnel, away from the spot it watches: the more open of its two sides (a level-headed look). */
@@ -2036,8 +1811,6 @@ export class MonsterAI {
         return nav ? nav.computePath(from, to) : null;
       },
       clear: (from, to) => this.env.monsterClear(from, to),
-      warp: (goal, medium) => this._warpForMover(goal, medium),
-      warping: () => this.warp !== null,
     }, () => this.now());
     this.ctx = this._newContext();
     const fallback = levelId && levelIndex(levelId) >= 1 ? levelId : LEVEL_ORDER[0];
@@ -2071,9 +1844,7 @@ export class MonsterAI {
     this.devHuntUntil = 0;
     this.catching = null;
     this.pendingReach = null;
-    this.grabbed = null;
     this.scripted = null;
-    this.splashArmed.clear();
     this.accumulated = 0;
     this.lastCatchAt = -Infinity;
     this.lastDownAt = -Infinity;
@@ -2091,7 +1862,6 @@ export class MonsterAI {
     this.running = false;
     this.scripted = null;
     this.catching = null;
-    this.grabbed = null;
     this._forgetMind();
     this.warp = null;
     this.action = null;
@@ -2105,7 +1875,6 @@ export class MonsterAI {
     this.wakeAt = null;
     this.paused = false;
     this.speedScale = 1;
-    this.splashArmed.clear();
     this.lastSeen.clear();
     this.body.setHidden(true);
     this.env.setNavLevel(null);
@@ -2121,7 +1890,6 @@ export class MonsterAI {
     p.noteAirlock(t);
     if (this.catching) this.jumpscare.abort('Level');
     this.stunUntil = 0;
-    this.grabbed = null;
     this.pendingReach = null;
     if (this.creatureLevel !== levelId) this._relocate(levelId, true);
     else this._forgetMind();
@@ -2217,8 +1985,6 @@ export class MonsterAI {
       const near = this._nearestPlayerTo(here, null);
       const position = near ? this._rootOf(near) : null;
       c.investigation = { position: this._floorPointNear(position || here), rank: EXACT_RANK, at: t };
-    } else if (wanted === 'AquaticStalk') {
-      if (this.swimmerPlayer === null) wanted = 'Patrol';
     } else if (wanted === 'Stunned') {
       this.stunUntil = Math.max(this.stunUntil, t + GameConfig.StunSeconds);
       c.stunFrom = here.clone().add(this.body.getCFrame().lookVector);
@@ -2245,7 +2011,7 @@ export class MonsterAI {
         this._placeBody(cf);
       },
       setPose: (poseMode) => {
-        if (!live() || !['Biped', 'Hunched', 'Quadruped', 'Swim'].includes(poseMode)) return;
+        if (!live() || !['Biped', 'Hunched', 'Quadruped'].includes(poseMode)) return;
         this.body.setPose(poseMode);
       },
       setHidden: (hidden) => {
@@ -2322,27 +2088,6 @@ export class MonsterAI {
     this.lockerInspector = typeof fn === 'function' ? fn : null;
   }
 
-  registerPoolGrabber(fn) {
-    this.poolGrabber = typeof fn === 'function' ? fn : null;
-  }
-
-  /** The swimmer being held ran out of air: the Underwater jumpscare instead of drowning. */
-  catchGrabbed(player = PLAYER) {
-    const c = this.ctx;
-    const m = this.mover;
-    if (!(this.running && c && m) || this.grabbed !== player) return false;
-    if (this.catching !== null || this.jumpscare.isBusy() || this.now() < this.stunUntil) return false;
-    if (!this.jumpscare.catch(player, 'Underwater')) return false;
-    this.grabbed = null;
-    AquaticStalk.released(c);
-    this.catching = { player, kind: 'Underwater', at: this.now() };
-    this.lastCatchAt = this.now();
-    this._setAction('Jumpscare');
-    m.stop();
-    this.caught.fire(player, 'Underwater');
-    return true;
-  }
-
   /** Pauses (true) or resumes the brain; a paused Creature stands where it is. */
   setPaused(value) {
     this.paused = !!value;
@@ -2354,7 +2099,6 @@ export class MonsterAI {
    * fields (viewState: state, speed, poseMode, action, actionStartedAt, fade).
    */
   snapshot() {
-    const m = this.mover;
     const c = this.ctx;
     return {
       running: this.running,
@@ -2363,13 +2107,11 @@ export class MonsterAI {
       reason: this.lastReason,
       pose: this.body.pose,
       inVent: false,
-      medium: m ? m.getMedium() : 'Floor',
       segment: null,
       hidden: this.body.hidden,
       levelId: this.creatureLevel,
       targetingPlayer: !!c && c.target === PLAYER,
       targetUserId: c && c.target ? c.target.userId : null,
-      grabbed: this.grabbed !== null,
       awake: this.awake,
       catching: this.catching !== null,
       warping: this.warp ? this.warp.phase : null,
@@ -2395,7 +2137,6 @@ export class MonsterAI {
       this.creatureLevel = levelId;
       c.level = info;
       c.graph = this._graph(levelId);
-      this.mover.setLevel(c.graph, info ? info.basins : []);
       this.env.setNavLevel(levelId);
       this._forgetMind();
     }
@@ -2489,12 +2230,6 @@ export class MonsterAI {
       if (!front) return 'you are not in a hiding spot';
       this.hideWatch = { player: PLAYER, spot, front, since: t };
       this._transition({ state: 'HidingResponse', reason: 'ai HidingResponse', reposition: false, giveUp: false }, t);
-    } else if (wanted === 'AquaticStalk') {
-      if (!(c.level && c.level.basins.length > 0)) return 'no pool on this level';
-      this.swimmerAt = t;
-      this.swimmerPlayer = PLAYER;
-      this._setTarget(PLAYER);
-      this._enterState('AquaticStalk', t);
     }
     return `Creature ${wanted} (hunting allowed for ${DEV_FORCE_SECONDS}s)`;
   }
@@ -2524,7 +2259,7 @@ export class MonsterAI {
       const s = this.pacing ? this.pacing.snapshot() : null;
       const t = this.now();
       return `${this.state} for ${(t - this.stateSince).toFixed(1)}s (${this.lastReason}) | target ${this.ctx.target ? 'you' : 'none'}` +
-        ` | pose ${this._poseMode()} | ${this.mover.getMedium()}${this.body.hidden ? ', hidden' : ''}` +
+        ` | pose ${this._poseMode()}${this.body.hidden ? ', hidden' : ''}` +
         `${this.warp ? `, warp ${this.warp.kind}/${this.warp.phase}` : ''} | ${this.creatureLevel}` +
         ` | next teleport in ${Math.max(0, this.teleportReadyAt - t).toFixed(0)}s` +
         (s ? ` | pacing ${s.phase}, tension ${s.tension.toFixed(2)}` : '') + (this.paused ? ' | PAUSED' : !this.awake ? ' | asleep' : '');
@@ -2557,7 +2292,7 @@ export class MonsterAI {
  * @typedef {Object} ScriptedHandle
  * @property {(position: {x: number, y: number, z: number}, speed?: number) => void} moveTo
  * @property {(cframe: CFrame|THREE.Matrix4|number[]) => void} teleport
- * @property {(poseMode: 'Biped'|'Hunched'|'Quadruped'|'Swim') => void} setPose
+ * @property {(poseMode: 'Biped'|'Hunched'|'Quadruped') => void} setPose
  * @property {(hidden: boolean) => void} setHidden
  * @property {(position: {x: number, y: number, z: number}) => void} face
  * @property {(nextState?: string) => void} release

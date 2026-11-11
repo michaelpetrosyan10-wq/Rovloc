@@ -1,5 +1,5 @@
-// spawns.js: where the Creature starts on Levels 0, 2 and 3, and its grace (Level 1 keeps its scripted scare start,
-// Level 4 its pool, Level 5 its roof door: see level5.js). The basement is hunted too now (Tunnels §2.3).
+// spawns.js: where the Creature starts on the basement and the Auditorium (SpawnTuning.Levels), and its grace (the
+// Hallways keep their scripted scare start, the roof its door: see level3.js).
 //
 // Candidates: the level's PatrolWaypoint and CreatureSpawn anchors (a level without PatrolWaypoints, today's basement,
 // offers the patrol points the Creature derives from its rooms instead) that pass all three rules:
@@ -22,7 +22,7 @@ import { CreatureMetrics } from '../creatureApi.js';
 import { SpawnTuning } from './config.js';
 import { cfPos, lookAtMatrix, seededRandom } from '../util.js';
 
-const LEVELS = new Set(['Level0_Basement', 'Level2_ScienceHall', 'Level3_Gymnasium']);
+const LEVELS = new Set(SpawnTuning.Levels);
 const TOKEN = 'CreatureSpawn';
 const LOUD = new Set(['High', 'Critical']);
 const RETRY = 0.25;

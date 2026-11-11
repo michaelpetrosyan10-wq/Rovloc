@@ -118,20 +118,17 @@ export function eyeOffset(metrics, yaw, pitch, out = new THREE.Vector3()) {
 
 const MOVE_TO_CAMERA = {
   Standing: 'Standing', Sprinting: 'Standing', Crouching: 'Crouching', VentCrawling: 'VentCrawling',
-  VentScurrying: 'VentCrawling', DownedCrawling: 'DownedCrawling', Treading: 'SurfaceSwimming',
-  Freestyle: 'SurfaceSwimming', Underwater: 'UnderwaterSwimming', Hiding: 'LockerPeeking', Trapped: 'Standing',
-  Grabbed: 'UnderwaterSwimming', Parachuting: 'Standing', Scripted: 'Standing',
+  VentScurrying: 'VentCrawling', DownedCrawling: 'DownedCrawling', Hiding: 'LockerPeeking', Trapped: 'Standing',
+  Parachuting: 'Standing', Scripted: 'Standing',
 };
 const PRIMARY_MOVE = {
   Standing: 'Standing', Crouching: 'Crouching', VentCrawling: 'VentCrawling', DownedCrawling: 'DownedCrawling',
-  LockerPeeking: 'Hiding', SurfaceSwimming: 'Treading', UnderwaterSwimming: 'Underwater',
-  ParachuteLookback: 'Parachuting',
+  LockerPeeking: 'Hiding', ParachuteLookback: 'Parachuting',
 };
 const P = CameraConfig.Pitch;
 const PITCH = {
   Standing: [P.Min, P.Max], Crouching: [P.Min, P.Max], VentCrawling: [P.VentMin, P.VentMax],
-  DownedCrawling: [-50, 65], LockerPeeking: [-25, 25], SurfaceSwimming: [-70, 75],
-  UnderwaterSwimming: [P.Min, P.Max], ParachuteLookback: [P.Min, P.Max],
+  DownedCrawling: [-50, 65], LockerPeeking: [-25, 25], ParachuteLookback: [P.Min, P.Max],
 };
 const B = CameraConfig.Bob;
 const STILL = { amplitude: 0, frequency: 1, nominalSpeed: GameConfig.WalkSpeed };
@@ -142,15 +139,12 @@ const BOB = {
   VentCrawling: { amplitude: B.VentMultiplier, frequency: 0.7, nominalSpeed: GameConfig.VentCrawlSpeed },
   VentScurrying: { amplitude: B.VentMultiplier * 1.4, frequency: 0.95, nominalSpeed: GameConfig.VentScurrySpeed },
   DownedCrawling: { amplitude: 0.9, frequency: 0.5, nominalSpeed: GameConfig.DownedMoveSpeed },
-  Treading: { amplitude: 0.35, frequency: 0.45, nominalSpeed: GameConfig.TreadSpeed },
-  Freestyle: { amplitude: 0.6, frequency: 0.65, nominalSpeed: GameConfig.FreestyleSpeed },
-  Underwater: { amplitude: 0.3, frequency: 0.4, nominalSpeed: GameConfig.UnderwaterSpeed },
-  Hiding: STILL, Trapped: STILL, Grabbed: STILL, Parachuting: STILL, Scripted: STILL,
+  Hiding: STILL, Trapped: STILL, Parachuting: STILL, Scripted: STILL,
 };
 
 export const CameraStates = Object.freeze({
   List: Object.freeze(['Standing', 'Crouching', 'VentCrawling', 'DownedCrawling', 'LockerPeeking',
-    'SurfaceSwimming', 'UnderwaterSwimming', 'ParachuteLookback']),
+    'ParachuteLookback']),
   fromMoveState: (moveState) => MOVE_TO_CAMERA[moveState] || 'Standing',
   /** Vertical trim of a MoveState relative to its camera state's primary MoveState. */
   eyeTrim(moveState, cameraState) {
@@ -303,7 +297,7 @@ export class ViewBob {
 // CameraStack
 // ---------------------------------------------------------------------------------------------------------------
 
-export const OverridePriority = Object.freeze({ Trapped: 1, Struggle: 2, Spectating: 3, Jumpscare: 4, Cutscene: 5 });
+export const OverridePriority = Object.freeze({ Trapped: 1, Spectating: 3, Jumpscare: 4, Cutscene: 5 });
 const DEFAULT_BLEND_IN = 0.35;
 const DEFAULT_BLEND_OUT = 0.5;
 
@@ -319,8 +313,8 @@ export class CameraStack {
   }
 
   /**
-   * @param {string} token a name for the layer (CameraOverride kinds are the Roblox ones: Trapped, Struggle,
-   *   Spectating, Jumpscare, Cutscene)
+   * @param {string} token a name for the layer (CameraOverride kinds are the Roblox ones: Trapped, Spectating,
+   *   Jumpscare, Cutscene)
    * @param {Function|null} fn
    * @param {number|{priority?: number, fov?: number, blendIn?: number, blendOut?: number}} [priority]
    */

@@ -5,7 +5,7 @@
 // (only for a squad) and the difficulty; the run time, the best time and NEW BEST TIME; the credits counting up; the
 // stat rows; "This run was not saved." when it paid nothing. PLAY AGAIN (click / tap, gamepad A, Enter) and the
 // auto-return countdown with a draining bar. While it is up the cursor is free, gameplay input is off (Menu context)
-// and the HUD is hidden. It waits while a finale shot or a jumpscare owns the view (Cutscene context, Cutscene /
+// and the HUD is hidden. It waits while the escape shot or a jumpscare owns the view (Cutscene context, Cutscene /
 // Jumpscare / Parachute lock), at most 10 s, then fades in from black.
 
 import { S } from '../strings.js';

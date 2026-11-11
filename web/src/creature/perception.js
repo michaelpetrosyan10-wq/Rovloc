@@ -7,7 +7,7 @@
 // the BVH; walls, lockers, desks and debris block it.
 //
 // Who can be seen: only a playing player (Alive or Downed). Never: MoveState Hiding; a player in a duct or a crawlway
-// (it never goes in after them); an Underwater player unless the Creature swims (PoseMode Swim or AquaticStalk).
+// (it never goes in after them).
 // How far (Tunnels §2.2): SightTorch with their torch on, SightLit with it off in a lit pool (the level's probe
 // irradiance at their chest above LitIrradiance), SightDark with it off in the dark; crouched x CrouchFactor; times
 // the difficulty's sightRangeMultiplier. The view cone is SightHalfAngle (MovingHalfAngle while they move), and anything
@@ -38,7 +38,7 @@ export const ScoreWeights = Object.freeze({ Closeness: 1, InCone: 0.35, Lit: 0.2
 /**
  * @typedef {{player: any, eye: THREE.Vector3, playing: boolean, downed: boolean, moveState: string, torch: boolean,
  *   lit: boolean, moving: boolean, inVent: boolean}} Observation
- * @typedef {{eye: THREE.Vector3, facing: THREE.Vector3, difficulty: string, aquatic: boolean, targetUserId: number|null,
+ * @typedef {{eye: THREE.Vector3, facing: THREE.Vector3, difficulty: string, targetUserId: number|null,
  *   blindPeripheral?: boolean, raycast: (a: THREE.Vector3, b: THREE.Vector3) => boolean}} Viewer
  * @typedef {{player: any, eye: THREE.Vector3, distance: number, inCone: boolean, lit: boolean, score: number}} Sighting
  */
@@ -97,11 +97,10 @@ export function segmentNodes(graph, segment) {
   return null;
 }
 
-/** Why a player is out of the candidate set (null: still a candidate). @param {Viewer} viewer @param {Observation} o */
-export function excluded(viewer, o) {
+/** Why a player is out of the candidate set (null: still a candidate). @param {Observation} o */
+export function excluded(o) {
   if (!o.playing) return 'NotPlaying';
   if (o.moveState === 'Hiding') return 'Hiding';
-  if (o.moveState === 'Underwater' && !viewer.aquatic) return 'Underwater';
   if (o.inVent) return 'InVent';
   return null;
 }
@@ -118,7 +117,7 @@ export function score(distance, range, inCone, lit, isTarget, downed) {
 
 /** The Sighting of one player, or null (the line test runs last). @param {Viewer} viewer @param {Observation} o */
 export function judge(viewer, o) {
-  if (excluded(viewer, o) !== null) return null;
+  if (excluded(o) !== null) return null;
   const distance = o.eye.distanceTo(viewer.eye);
   if (distance > sightRange(o, viewer.difficulty)) return null;
   const half = o.moving ? SENSES.MovingHalfAngle : SENSES.SightHalfAngle;

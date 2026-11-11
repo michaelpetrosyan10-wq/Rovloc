@@ -11,12 +11,13 @@
 //   title     the title screen, the walkthrough, the lobby; up the bus onto a ready pad, the countdown, the deploy.
 //   run       every floor from Level 0 to the roof: each is explored with randomized movement (walking the corridors
 //             and rooms on routes from the Creature's own floor pathfinding, sprint bursts, crouching, jumps, the torch,
-//             looking round, taking batteries and flasks, throwing flasks, prying out of traps, hiding in lockers,
-//             swimming and diving, the floodlight switch) and then left by its exit airlock; Level 1's gate is passed
-//             by its bypass vent (kick or unscrew the grate, crouch in, crawl the duct, out of the far grate). Levels
-//             are entered naturally while the run lives; after a death the run is restarted with Play Again and the
-//             next floor is reached by the level skip (a teleport to its start: the natural route was already played).
-//             The roof: a pack from the crate, the jump, the ripcord, the finale, the results, Play Again.
+//             looking round, taking batteries, prying out of traps, hiding in a Level 1 locker) and then left by its exit
+//             airlock; Level 1's gate is passed by its bypass vent (kick or unscrew the grate, crouch in, crawl the duct,
+//             out of the far grate); the Auditorium is crossed (its exit is open from the start). Levels are entered
+//             naturally while the run lives; after a death the run is restarted with Play Again and the next floor is
+//             reached by the level skip (a teleport to its start: the natural route was already played).
+//             The roof: a pack from the crate, the jump, the ripcord, the Creature on the ledge, the landing, the
+//             results, Play Again.
 //   pause     Escape pauses the clock and resumes it, the pointer lock lost mid-run opens the menu, a window blur
 //             releases held keys.
 //   save      settings survive a reload; a corrupted save boots clean.
@@ -39,6 +40,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { GameConfig, WorldConfig } from '../src/engine/config.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -154,7 +157,7 @@ function pageLib() {
     if (inRun && fin(root)) {
       const box = levelBox(g.level);
       const tower = inTower(root);
-      const roof = g.level === 'Level5_Roof';
+      const roof = g.level === 'Level3_Roof';
       // in a stair tower or an airlock vestibule (the previous floor's, after the seal) the player is between floors
       const z = g.env.zoneAt(root);
       const between = !!z && (/^Stairwell/.test(z.id) || z.kind === 'Airlock');
@@ -215,7 +218,7 @@ function pageLib() {
     }
     const onLevel = s.levelId === g.level;
     const visible = !s.hidden && onLevel && s.state !== 'Dormant';
-    if (visible && s.medium === 'Floor' && !s.catching && !s.grabbed) {
+    if (visible && !s.catching) {
       const hit = e.world.raycast(new T.Vector3(pos.x, pos.y + 1, pos.z), down, 60);
       const above = hit ? pos.y - hit.point.y : Infinity;
       if (above > CREATURE_ROOT + 1.75) {
@@ -232,13 +235,13 @@ function pageLib() {
     const last = pt.creature.last;
     if (hunting && last && last.distanceTo(pos) < 0.05) {
       if (pt.creature.stillSince === null) pt.creature.stillSince = now;
-      if (now - pt.creature.stillSince > 12) pt.note('creature-stuck', { state: s.state, medium: s.medium, segment: s.segment }, pos);
+      if (now - pt.creature.stillSince > 12) pt.note('creature-stuck', { state: s.state, segment: s.segment }, pos);
     } else pt.creature.stillSince = null;
     pt.creature.last = pos;
   };
 
   // UI: prompts overlapping / off screen; a throw hint left up where no throw is possible
-  const NO_THROW_CONTEXTS = new Set(['Locker', 'Trapped', 'Struggle', 'Cutscene', 'Parachute', 'Downed']);
+  const NO_THROW_CONTEXTS = new Set(['Locker', 'Trapped', 'Cutscene', 'Parachute', 'Downed']);
   pt.watchUi = () => {
     const ui = e.ui;
     const vw = window.innerWidth;
@@ -312,9 +315,9 @@ function pageLib() {
     const ce = c.eye ? new T.Vector3(c.eye.x, c.eye.y, c.eye.z) : new T.Vector3(c.position.x, c.position.y + 2, c.position.z);
     const d = ce.distanceTo(eye);
     const clear = g.env.lineClear(ce, eye, { ignoreEntities: true });
-    const entry = { t: r1(g.env.now()), level: g.level, kind, distance: r1(d), clear, ms: g.env.moveState(), state: c.state, medium: c.medium };
+    const entry = { t: r1(g.env.now()), level: g.level, kind, distance: r1(d), clear, ms: g.env.moveState(), state: c.state };
     pt.catches.push(entry);
-    if (!clear && d > 4 && kind !== 'Locker' && kind !== 'Pool' && kind !== 'Vent') pt.note('catch-through-wall', entry, eye, true);
+    if (!clear && d > 4 && kind !== 'Locker' && kind !== 'Vent') pt.note('catch-through-wall', entry, eye, true);
   });
 
   // ------------------------------------------------------------------------------------------------ the stepper
@@ -375,6 +378,7 @@ function pageLib() {
     if (cond.ctx && g.env.context() === cond.ctx) return true;
     if (cond.life && g.life.state === cond.life) return true;
     if (cond.chute && g.parachute.state === cond.chute) return true;
+    if (cond.outcome && g.match.outcome === cond.outcome) return true;
     return false;
   };
 
@@ -741,21 +745,6 @@ async function holdInteract(D, limit = 4) {
   await D.run(0.1);
 }
 
-/** Grabbed in the pool: mash Space (STRUGGLE) like a player until free (or the run ends). */
-async function struggle(D) {
-  const held = [...D.held];
-  await D.upAll();
-  let s = await D.st();
-  for (let i = 0; i < 60 && s.ms === 'Grabbed' && s.life === 'Alive'; i++) {
-    await D.press('Space', 0.06);
-    await D.run(0.06);
-    s = await D.st();
-  }
-  report.coverage.struggles = (report.coverage.struggles || 0) + 1;
-  for (const k of held) await D.down(k);
-  return s;
-}
-
 /** Trapped: look down at the jaws and hold E until free (the real pry). */
 async function pry(D) {
   await D.upAll();
@@ -801,10 +790,6 @@ async function goTo(D, target, opts = {}) {
         result = { ok: false, reason: `interrupted:${s.phase}:${s.life}:${s.level}` };
         break;
       }
-      if (s.ms === 'Grabbed') {
-        await struggle(D);
-        continue;
-      }
       if (s.ms === 'Trapped' && opts.stopOnTrap) {
         result = { ok: true, trapped: true };
         break;
@@ -824,11 +809,6 @@ async function goTo(D, target, opts = {}) {
         break;
       }
       if (s.now - start.now > timeout) break;
-      if (r.stuck && s.mode === 'Swim') {
-        // at a pool edge: climb out (jump), as the swim hint says
-        await D.press('Space', 0.5);
-        continue;
-      }
       // circling without getting nearer (a counter in the way the whiskers keep turning back to): a detour
       const left = Math.hypot(s.root[0] - target[0], s.root[2] - target[2]);
       if (left < best - 1) {
@@ -941,7 +921,8 @@ async function floorRooms(D, level) {
   }, level);
 }
 
-const LEVELS = ['Level0_Basement', 'Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium', 'Level4_FloodedPool', 'Level5_Roof'];
+const LEVELS = WorldConfig.LevelOrder;
+const ROOF = LEVELS[LEVELS.length - 1];
 
 // ---------------------------------------------------------------------------------------------------- vents
 
@@ -1205,64 +1186,7 @@ async function trapMoment(D) {
   check('Level 0: looking down and holding E pries it open', res.after.ms !== 'Trapped', { ms: res.after.ms, ctx: res.after.ctx });
 }
 
-/** Level 2: a flask in the hand, wound up with the real mouse button and thrown down the longest open line. */
-async function flaskMoment(D) {
-  let s = await D.st();
-  if (!s.held) {
-    const f = await D.G((g) => {
-      const root = g.env.rootPosition(new g.env.THREE.Vector3());
-      const list = g.flasks.pickupsOn(g.level).sort((a, b) => a.position.distanceTo(root) - b.position.distanceTo(root));
-      return list.length ? list[0].position.toArray() : null;
-    });
-    if (!f) return check('Level 2: a flask to pick up', false);
-    const walk = await goTo(D, [f[0], f[1] - 3, f[2]], { arrive: 2.2, random: false, timeout: 60 });
-    await D.G((g, pt, p) => {
-      const eye = g.env.eye(new g.env.THREE.Vector3());
-      const dx = p[0] - eye.x;
-      const dz = p[2] - eye.z;
-      g.env.setLook(Math.atan2(-dx, -dz), Math.atan2(p[1] - eye.y, Math.hypot(dx, dz)));
-    }, f);
-    await D.run(0.3);
-    s = await D.st();
-    if (s.prompt && /flask/i.test(s.prompt.object)) await holdInteract(D);
-    s = await D.st();
-    check('Level 2: picking up a flask (hold E)', s.held, { walk, prompt: s.prompt });
-    if (!s.held) return;
-  }
-  await D.G((g) => {
-    const T = g.env.THREE;
-    const eye = g.env.eye(new T.Vector3());
-    let best = { yaw: 0, d: 0 };
-    for (let i = 0; i < 24; i++) {
-      const yaw = (i / 24) * Math.PI * 2;
-      const hit = g.env.raycast(eye, new T.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), 60, { ignoreEntities: false });
-      const d = hit ? hit.distance : 60;
-      if (Math.min(d, 30) > Math.min(best.d, 30)) best = { yaw, d };
-    }
-    g.env.setLook(best.yaw, 0.1);
-  });
-  // the real mouse: a click locks the pointer, then the button held winds up and its release throws
-  await D.tab.mouse.move(640, 360);
-  if (!(await D.tab.evaluate(() => !!document.pointerLockElement))) {
-    await D.tab.mouse.down();
-    await D.tab.mouse.up();
-    await D.run(0.2);
-  }
-  const locked = await D.tab.evaluate(() => !!document.pointerLockElement);
-  await D.tab.mouse.down();
-  await D.run(0.5);
-  const wind = await D.G((g) => ({ winding: g.flasks.windStart !== null, arc: g.flasks.arcAlpha }));
-  await D.shot('flask-aim');
-  const thrown0 = await D.G((g) => g.stats.get('FlasksThrown'));
-  await D.tab.mouse.up();
-  await D.run(1.2);
-  const after = await D.G((g) => ({ thrown: g.stats.get('FlasksThrown'), clouds: g.flasks.clouds.length, held: !!g.flasks.held }));
-  check('Level 2: the mouse button winds a flask up (aim arc) and its release throws it', locked && wind.winding &&
-    after.thrown === thrown0 + 1 && !after.held, { locked, wind, after });
-  await D.shot('flask-cloud');
-}
-
-/** Level 3: hiding in the nearest free locker, the hint state inside, holding the breath, stepping out. */
+/** Level 1: hiding in the nearest free locker, the hint state inside, holding the breath, stepping out. */
 async function lockerMoment(D) {
   const lockers = await D.G((g) => {
     const T = g.env.THREE;
@@ -1287,7 +1211,7 @@ async function lockerMoment(D) {
     await holdInteract(D);
     await D.run(1.8);
     s = await D.st();
-    check('Level 3: climbing into a locker (Hide)', s.ms === 'Hiding' && s.ctx === 'Locker', { ms: s.ms, ctx: s.ctx, locker: l.id });
+    check('Level 1: climbing into a locker (Hide)', s.ms === 'Hiding' && s.ctx === 'Locker', { ms: s.ms, ctx: s.ctx, locker: l.id });
     await D.shot('locker-inside');
     await D.down('Space');
     await D.run(1.5);
@@ -1296,136 +1220,30 @@ async function lockerMoment(D) {
     await D.press('KeyE', 0.15);
     await D.run(1.6);
     s = await D.st();
-    check('Level 3: stepping out of the locker', s.ms !== 'Hiding' && s.ctx === 'OnFoot', { ms: s.ms, ctx: s.ctx });
+    check('Level 1: stepping out of the locker', s.ms !== 'Hiding' && s.ctx === 'OnFoot', { ms: s.ms, ctx: s.ctx });
     return;
   }
-  check('Level 3: a reachable locker with its Hide prompt', false, lockers);
+  check('Level 1: a reachable locker with its Hide prompt', false, lockers);
 }
 
-/** Level 4: into the pool, a dive, across (the pool crossing pass), and out at the far edge; the floodlight switch. */
-async function poolMoment(D) {
-  // a crossing line: the z where open water runs from one deck to the other (no walkway piece to surface under)
-  const lane = await D.G((g) => {
-    const T = g.env.THREE;
-    const e = window.__rovloc.engine;
-    const b = g.world.pools.find((p) => p.id.includes('Basin'));
-    if (!b) return null;
-    const down = new T.Vector3(0, -1, 0);
-    const floorAt = (x, z) => {
-      const h = e.world.raycast(new T.Vector3(x, b.surfaceY + 9, z), down, 30);
-      return h ? h.point.y : -Infinity;
-    };
-    let best = null;
-    for (let z = b.rect.z + 5; z <= b.rect.z + b.rect.d - 5; z += 2) {
-      let west = null;
-      let east = null;
-      let blocked = false;
-      for (let x = b.rect.x - 4; x <= b.rect.x + b.rect.w + 4; x += 1) {
-        // open water across the swimmer's width: nothing to climb onto or surface under either side of the line
-        const y = Math.max(floorAt(x, z - 2.5), floorAt(x, z), floorAt(x, z + 2.5));
-        const water = y < b.surfaceY - 2;
-        if (water && west === null) west = x;
-        if (!water && west !== null && east === null) east = x;
-        if (water && east !== null) blocked = true; // a walkway piece mid-pool
-      }
-      if (west === null || east === null || blocked) continue;
-      const score = Math.abs(z - (b.rect.z + b.rect.d / 2));
-      if (!best || score < best.score) best = { z, west, east, score, surface: b.surfaceY };
-    }
-    return best;
+/** The roof: a pack from the crate, the run to the gap, the jump, the ripcord, the Creature on the ledge, the landing. */
+async function roofMoment(D) {
+  const pack = await D.G((g) => {
+    const p = g.parachute.freePackPoint(g.env.rootPosition(new g.env.THREE.Vector3()));
+    return p ? p.toArray() : null;
   });
-  check('Level 4: a lane of open water across the pool (deck to deck)', !!lane, lane);
-  if (!lane) return;
-  let walk = await goTo(D, [lane.west - 3, 82, lane.z], { arrive: 1.2, timeout: 70 });
-  await D.G((g) => g.env.setLook(-Math.PI / 2, -0.1)); // face east, over the water
-  await D.down('KeyW');
-  let into = await D.run(3, { until: { ctx: 'Swim' } });
-  for (let i = 0; i < 3 && !into.until; i++) {
-    await D.press('Space', 0.3); // a lip at the edge: jump in
-    into = await D.run(1.5, { until: { ctx: 'Swim' } });
-  }
-  await D.run(0.4); // the MoveState follows the mode on the next ticks
-  let s = await D.st();
-  check('Level 4: walking off the deck into the pool swims', ['Treading', 'Freestyle', 'Underwater'].includes(s.ms), { ms: s.ms, walk, root: s.root });
-  await D.run(0.6);
-  await D.up('KeyW');
-  await D.down('KeyC');
-  await D.run(2);
-  s = await D.st();
-  await D.shot('underwater');
-  await D.up('KeyC');
-  check('Level 4: diving (hold C) goes under', s.ms === 'Underwater', { ms: s.ms });
-  await D.run(2);
-  // across to the east deck at the surface (freestyle, the Creature's AquaticStalk is slower), and out
-  await D.G((g, pt, a) => pt.go([[a.east + 2, 81, a.z]], { arrive: 2.5, pitch: 0, avoid: false }), lane);
-  await D.down('KeyW');
-  await D.down('ShiftLeft');
-  for (let i = 0; i < 40; i++) {
-    const r = await D.run(0.5);
-    s = await D.st();
-    if (s.ms === 'Grabbed') s = await struggle(D);
-    if (r.arrived || s.mode === 'OnFoot' || s.life !== 'Alive') break;
-    if (r.stuck) await D.press('Space', 0.4); // at the edge: climb
-  }
-  await D.G((g, pt) => pt.stop());
-  for (let i = 0; i < 8 && ['Treading', 'Freestyle', 'Underwater'].includes((await D.st()).ms); i++) {
-    await D.down('Space');
-    await D.run(0.6);
-    await D.up('Space');
-  }
-  await D.upAll();
-  await D.run(0.5);
-  s = await D.st();
-  check('Level 4: swimming across and climbing out at the far edge', s.life === 'Alive' && s.mode === 'OnFoot' && s.root[0] >= lane.east - 1,
-    { ms: s.ms, root: s.root, life: s.life, lane });
-  if (s.life !== 'Alive') return;
-  // the floodlight switch
-  const sw = await D.G((g) => {
-    const e = g.world.entities('FloodlightSwitch', g.level)[0];
-    if (!e) return null;
-    const T = g.env.THREE;
-    const p = new T.Vector3().fromArray(e.pivot);
-    return { at: [p.x, 82, p.z], pivot: e.pivot.slice(0, 3) };
-  });
-  if (!sw) return;
-  walk = await goTo(D, sw.at, { arrive: 2.5, timeout: 80 });
+  if (!pack) return check('the roof: a free pack in the crate', false);
+  let walk = await goTo(D, pack, { arrive: 1.8, timeout: 60, sprint: true, pickups: false });
   await D.G((g, pt, p) => {
     const eye = g.env.eye(new g.env.THREE.Vector3());
     g.env.setLook(Math.atan2(-(p[0] - eye.x), -(p[2] - eye.z)), Math.atan2(p[1] - eye.y, Math.hypot(p[0] - eye.x, p[2] - eye.z)));
-  }, sw.pivot);
-  await D.run(0.3);
-  s = await D.st();
-  if (s.prompt && /flood/i.test(`${s.prompt.text} ${s.prompt.object}`)) await holdInteract(D);
-  await D.run(3);
-  const on = await D.G((g) => g.level4.flipped);
-  check('Level 4: the floodlight switch (hold E) throws the lights on', on, { walk, prompt: s.prompt });
-  await D.shot('floodlights');
-}
-
-/** Level 5: a pack from the crate, the run to the gap, the jump, the ripcord, the finale, the results. */
-async function roofMoment(D) {
-  // the crate is chained until the roof objective is done (tools/objective-run.mjs cuts it for real)
-  await D.G((g, pt) => g.floors && !g.floors.exitOpen('Level5_Roof') && pt.dev.completeObjective('Level5_Roof'));
-  const crate = await D.G((g) => {
-    const e = g.world.entities('ParachuteCrate')[0];
-    return e ? e.pivot.slice(0, 3) : null;
-  });
-  // out across the deck first, well clear of the parapet's gap, then to the crate's far side
-  await goTo(D, [crate[0] + 14, crate[1], crate[2] - 14], { arrive: 2, timeout: 40, sprint: true });
-  let walk = await goTo(D, [crate[0] + 3.5, crate[1], crate[2]], { arrive: 1.5, timeout: 60, sprint: true });
-  await D.G((g, pt, p) => {
-    const eye = g.env.eye(new g.env.THREE.Vector3());
-    g.env.setLook(Math.atan2(-(p[0] - eye.x), -(p[2] - eye.z)), -0.45);
-  }, crate);
+  }, pack);
   await D.run(0.3);
   let s = await D.st();
   if (s.prompt && /parachute/i.test(`${s.prompt.text} ${s.prompt.object}`)) await holdInteract(D);
   s = await D.st();
-  check('Level 5: taking a parachute pack from the crate', s.chute === 'Packed', { chute: s.chute, prompt: s.prompt, walk });
-  const gap = await D.G((g) => {
-    const geo = g.parachute.geo.gap;
-    return [(geo.minX + geo.maxX) / 2, g.parachute.geo.deckY, (geo.minZ + geo.maxZ) / 2];
-  });
+  check('the roof: taking a parachute pack from the crate', s.chute === 'Packed', { chute: s.chute, prompt: s.prompt, walk });
+  const gap = await D.G((g) => g.parachute.gapCentre().toArray());
   walk = await goTo(D, [gap[0] + 4, gap[1], gap[2]], { arrive: 1.5, timeout: 60, sprint: true });
   await D.shot('roof-gap');
   await D.G((g) => g.env.setLook(Math.PI / 2, -0.1)); // west, out of the gap
@@ -1434,36 +1252,41 @@ async function roofMoment(D) {
   await D.run(4, { until: { chute: 'Freefall' } });
   await D.upAll();
   s = await D.st();
-  check('Level 5: off the gap with a pack: freefall', s.chute === 'Freefall' || s.chute === 'Canopy', { chute: s.chute, root: s.root, walk });
+  check('the roof: off the gap with a pack: freefall', s.chute === 'Freefall' || s.chute === 'Canopy', { chute: s.chute, root: s.root, walk });
   await D.run(0.4);
   await D.press('Space', 0.1);
   await D.run(1.5);
   s = await D.st();
-  check('Level 5: the ripcord (Space) opens the canopy', s.chute === 'Canopy' || s.chute === 'Landed', { chute: s.chute });
+  check('the roof: the ripcord (Space) opens the canopy', s.chute === 'Canopy' || s.chute === 'Landed', { chute: s.chute });
   await D.shot('canopy');
-  for (let i = 0; i < 24 && !(await D.G((g) => !!g.level5.finale)); i++) await D.run(0.5);
-  await finaleLedgeCheck(D);
-  const finale = await D.run(12, { until: { phase: 'Results' } });
-  await D.shot('finale-end');
-  await D.run(4, { until: { phase: 'Results' } });
+  for (let i = 0; i < 12 && (await D.G((g) => g.level3.phase)) !== 'Ledge'; i++) await D.run(0.5);
+  await ledgeCheck(D);
+  const landed = await D.run(30, { until: { chute: 'Landed' } });
+  // the roof's checks run at ServerTickHz (as on Roblox): the escape follows within one of the touchdown
+  const escaped = landed.until && ((await D.G((g) => g.match.outcome)) === 'Escaped' ||
+    !!(await D.run(1 / GameConfig.ServerTickHz, { until: { outcome: 'Escaped' } })).until);
   s = await D.st();
-  check('Level 5: the finale plays out to the results', s.phase === 'Results' || finale.until, { phase: s.phase, chute: s.chute });
+  check('the roof: landed below, escaped at the touchdown (within one roof check)', landed.until && escaped &&
+    s.chute === 'Landed', { chute: s.chute, phase: s.phase });
+  const results = await D.run(4, { until: { phase: 'Results' } });
+  await D.shot('landing');
+  s = await D.st();
+  check('the roof: the landing goes to the results', s.phase === 'Results' || results.until, { phase: s.phase, chute: s.chute });
 }
 
-/** The finale's ledge from below: the Creature must stand on the visible roof edge (the haze bug), not float. */
-async function finaleLedgeCheck(D) {
-  const at = await D.G((g) => (g.level5.finale ? g.level5.finale.startAt + 1.5 - g.env.now() : null));
-  if (at === null) return;
-  if (at > 0) await D.run(at);
-  const v = await D.G((g) => {
+/** The ledge from below: the Creature must stand on the visible roof edge (the haze bug), not float over nothing. */
+async function ledgeCheck(D) {
+  const v = await D.G((g, pt, below) => {
     const e = window.__rovloc.engine;
     const T = g.env.THREE;
     const c = g.creature.position(new T.Vector3());
-    return { focus: [...e.world.focus], creatureHidden: g.creature.isHidden(), creature: c.toArray().map((x) => Math.round(x * 10) / 10),
-      roofDrawn: e.world.focus.has('Level5_Roof'), facadeDrawn: e.world.focus.has('Level4_FloodedPool') };
-  });
-  check('Level 5 finale: the roof and the facade are drawn under the Creature on the ledge', v.roofDrawn && v.facadeDrawn, v);
-  await D.shot('finale-ledge');
+    return { phase: g.level3.phase, focus: [...e.world.focus], creatureHidden: g.creature.isHidden(),
+      creature: c.toArray().map((x) => Math.round(x * 10) / 10), roofDrawn: e.world.focus.has(g.level),
+      facadeDrawn: e.world.focus.has(below) };
+  }, LEVELS[LEVELS.length - 2]);
+  check('the roof: the Creature on the ledge, the roof and the facade drawn under it', v.phase === 'Ledge' && !v.creatureHidden &&
+    v.roofDrawn && v.facadeDrawn, v);
+  await D.shot('ledge');
 }
 
 // ---------------------------------------------------------------------------------------------------- phases
@@ -1617,7 +1440,7 @@ async function phaseRun(D) {
     await D.shot(`${level}-start`);
     await uiAudit(D, level);
     if (level === 'Level0_Basement') await trapMoment(D);
-    if (level === 'Level5_Roof') {
+    if (level === ROOF) {
       await D.run(2);
       await roofMoment(D);
       await heap(D.tab, 'results');
@@ -1641,9 +1464,7 @@ async function phaseRun(D) {
     }
     s = await D.st();
     if (s.life === 'Alive' && s.level === level) {
-      if (level === 'Level2_ScienceHall') await flaskMoment(D);
-      if (level === 'Level3_Gymnasium') await lockerMoment(D);
-      if (level === 'Level4_FloodedPool') await poolMoment(D);
+      if (level === 'Level1_Hallways') await lockerMoment(D);
     }
     s = await D.st();
     if (s.life !== 'Alive' || s.level !== level) continue;
@@ -1831,7 +1652,7 @@ async function phaseTouch() {
   await D.run(2);
   await layout('in-run (on foot)');
   await D.shot('touch-run');
-  await D.G((g, pt) => pt.dev.gotoLevel('Level3_Gymnasium'));
+  await D.G((g, pt) => pt.dev.gotoLevel('Level1_Hallways'));
   await D.run(1);
   await D.G((g, pt) => g.creature.devCommand('ignoreme'));
   const hid = await D.G((g, pt) => {

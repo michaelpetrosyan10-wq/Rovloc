@@ -60,7 +60,7 @@ function begin(ctx, run, investigation) {
   run.stage = 'Start';
   run.inspection = null;
   run.approachUntil = ctx.now() + APPROACH_SECONDS;
-  if (ctx.mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
+  ctx.body.setPose('Biped');
   const goal = investigation ? investigation.position : ctx.body.getPosition();
   ctx.mover.goTo(goal, { arrive: ARRIVE });
 }
@@ -77,7 +77,7 @@ function nextStep(ctx, run) {
   run.index += 1;
   run.stage = 'Start';
   run.inspection = null;
-  if (ctx.mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
+  ctx.body.setPose('Biped');
 }
 
 function startHold(ctx, run, step) {
@@ -156,7 +156,7 @@ export function update(ctx) {
 export function exit(ctx) {
   const run = runOf(ctx);
   run.inspection = null;
-  if (ctx.mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
+  ctx.body.setPose('Biped');
   ctx.body.face(null);
   ctx.investigation = null;
 }

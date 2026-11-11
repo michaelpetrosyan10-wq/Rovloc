@@ -5,11 +5,11 @@
 //             right / GOAL), fading after TrackerHold seconds idle; in the lobby it stays, with the optional lines
 //             (vote, perks) ticking off and a HOW TO PLAY button (H / d-pad left / tap) that replays the walkthrough.
 //   Goals     lobby: the bus -> a pad -> waiting -> the countdown; every floor: its objective (the title and each step
-//             with its count, done steps ticked, the current one marked; a running countdown keeps the sheet up) until
-//             its exit unlocks, then "Get to the <compass> stairwell" (the run's route); once its doors count down get
-//             in (or hold it from inside); Floor 1 after the gate slams: a vent around it, crawl through (as the tip);
-//             the roof after the crate is cut: run for the parachutes once the door is smashed, the gap with a pack on,
-//             the cord, landed.
+//             with its count, done steps ticked, the current one marked) until its exit unlocks, then "Get to the
+//             <compass> stairwell" (the run's route; a floor that is only crossed shows the way to its stairwell from
+//             the start); once its doors count down get in (or hold it from inside); Floor 1 after the gate slams: a
+//             vent around it, crawl through (as the tip); the roof: out of the stair housing, find the parachutes, run
+//             for them once the door is smashed, the gap with a pack on, the cord, landed.
 //   Marker    a floating diamond over the lobby's current step (the bus's rear door, then the nearest free pad).
 //   Directions the Objective action shows a chevron around the crosshair at the goal with its distance and the marker
 //             over it for DirectionShow seconds, then cools down for DirectionCooldown. On an objective floor it points
@@ -38,6 +38,7 @@ const BEYOND_MARGIN = 3;
 const FADE_IN = 4;
 const FADE_OUT = 2.5;
 const VENT_STATES = new Set(['VentCrawling', 'VentScurrying']);
+const ROOF_LEVEL = 'Level3_Roof';
 
 /** ObjectiveTracker.levelObjective */
 export function levelObjective(input) {
@@ -48,7 +49,7 @@ export function levelObjective(input) {
     if (input.insideAirlock) return { text: 'Objective.Airlock.Wait', tip: null, target: null };
     return { text: 'Objective.Airlock.Get', tip: null, target: 'Exit' };
   }
-  if (input.level === 'Level5_Roof') {
+  if (input.level === ROOF_LEVEL) {
     const p = input.parachute;
     if (p === 'Landed') return { text: 'Objective.Roof.Landed', tip: null, target: null };
     if (p === 'Freefall') return { text: 'Objective.Roof.Cord', tip: null, target: null };
@@ -62,7 +63,6 @@ export function levelObjective(input) {
     if (input.inVent) return { text: 'Objective.GateVent', tip: null, target: null };
     return { text: 'Objective.Gate', tip, target: 'BypassVent' };
   }
-  if (input.level === 'Level4_FloodedPool') return { text: 'Objective.PoolStairs', tip, target: 'Exit' };
   // the run route's stair tower (East / West / NorthEast / ...), else the floor's side
   return { text: `Objective.Stairwell.${input.tower || floor.stairwell || 'East'}`, tip, target: 'Exit' };
 }
@@ -254,7 +254,7 @@ export class Objectives {
     const exitPoint = nearest(exits, root);
     const gate = level === 'Level1_Hallways' ? g.doors.find(level, 'HallwayGate') : null;
     const gatePoint = gate ? gate.centre : null;
-    const roof = level === 'Level5_Roof' ? g.level5 : null;
+    const roof = level === ROOF_LEVEL ? g.level3 : null;
     const roofDoor = roof ? roof.roofDoor() : null;
     const zone = g.world.roomAt(root, level);
     const airlock = g.airlock;
@@ -397,9 +397,7 @@ export class Objectives {
     const text = lobby ? lobby.text : objective ? objective.text : null;
     const tipKey = objective ? objective.tip : null;
     // a new goal or a step changing (a count, a tick) brings the tracker back
-    const stepKey = steps ? steps.map((s) => `${s.done ? 1 : 0}${s.active ? 1 : 0}${s.timed ? '' : s.text}`).join('|') : '';
-    // a running countdown (the door motor) keeps the tracker up
-    if (steps && steps.some((s) => s.timed && s.active)) this.activeAt = this.clock;
+    const stepKey = steps ? steps.map((s) => `${s.done ? 1 : 0}${s.active ? 1 : 0}${s.text}`).join('|') : '';
     const shown = `${title || text}#${stepKey}`;
     if (shown !== this.lastText) {
       this.lastText = shown;

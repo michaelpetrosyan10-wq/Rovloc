@@ -8,12 +8,11 @@
 // then each floor's signature moment:
 //   Level 1 the classroom scare (walking into Classroom 108), the gate slamming, and the bypass vent (kick the grate:
 //   its panel and screws land in both looks; crouch in, crawl the duct, kick the far grate, out beyond the gate),
-//   Escape pausing the clock and closing again;
-//   then, by the dev level skip with the Creature
-//   told to ignore the player (so a hunt cannot end the run before every moment is checked): Level 2 a flask (held,
-//   wound up with the aim arc, thrown, the shatter cloud), Level 3 a locker check (hiding, HOLD YOUR BREATH, held
-//   through the peek, stepping out), Level 4 a pool grab (the struggle, mashed free) and the floodlight switch,
-//   Level 5 the jump and the finale (the canopy, the lightning on the ledge, the landing, ESCAPED, the results).
+//   Escape pausing the clock and closing again, a locker check (hiding, HOLD YOUR BREATH, held through the peek,
+//   stepping out);
+//   then, by the dev level skip with the Creature told to ignore the player (so a hunt cannot end the run before every
+//   moment is checked): Level 2 the Auditorium (its exit open from the start, the Creature held at its start), Level 3
+//   the roof (the door smash, the jump, the canopy, the Creature on the ledge, the landing, ESCAPED, the results).
 // Every step asserts the game's state; each moment is screenshotted into the shots directory (default
 // build/cache/game-shots). Headless WebGL is SwiftShader (slow), so the game clock is fast-forwarded between shots by
 // stepping the engine loop with rendering skipped. Exit code 1 on any failure.
@@ -23,6 +22,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { GameConfig } from '../src/engine/config.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -342,118 +343,91 @@ try {
   s = await G((g, dev, t) => ({ open: g.env.menuOpen(), advanced: Math.round((g.env.now() - t) * 100) / 100 }), before);
   check('closing the menu resumes it', !s.open && s.advanced > 0.8, s);
 
-  // ------------------------------------------------------------------------------------------- Level 2: a flask
-  await G((g, dev) => dev.gotoLevel('Level2_ScienceHall'));
-  await ff(1);
-  s = await state();
-  check('dev skip to Level 2', s.level === 'Level2_ScienceHall' && s.phase === 'InRun', s);
-  await G((g) => {
-    const f = g.flasks.pickupsOn('Level2_ScienceHall')[0];
-    if (!f) return;
-    g.env.teleport({ position: { x: f.position.x, y: f.position.y + 1.5, z: f.position.z + 3.5 }, yaw: 0 });
-    g.env.setLook(0, -0.35);
-  });
-  await ff(0.3);
-  shotsTaken.push(await shot('14-l2-flask.png'));
-  // aim down the longest open line in the room so the flask carries before it breaks
-  await G((g) => {
-    const T = g.env.THREE;
-    const eye = g.env.eye(new T.Vector3());
-    let best = { yaw: 0, d: 0 };
-    for (let i = 0; i < 24; i++) {
-      const yaw = (i / 24) * Math.PI * 2;
-      const dir = new T.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-      const hit = g.env.raycast(eye, dir, 60, { ignoreEntities: false });
-      const d = hit ? hit.distance : 60;
-      if (Math.min(d, 30) > Math.min(best.d, 30)) best = { yaw, d };
-    }
-    g.env.setLook(best.yaw, 0.12);
-  });
-  // a flask in the hand, the throw held: the wind-up and the aim arc; released: the throw (the real input path)
-  const given = await G((g) => g.flasks.give());
-  await G((g) => g.env.injectAction('Throw', 'smoke', true));
-  await ff(0.45);
-  s = await G((g) => ({ held: !!g.flasks.held, winding: g.flasks.windStart !== null, arc: g.flasks.arcAlpha }));
-  check('holding Throw winds up with the aim arc', given && s.held && s.winding && s.arc > 0.5, s);
-  shotsTaken.push(await shot('15-l2-aim.png'));
-  await G((g) => g.env.injectAction('Throw', 'smoke', false));
-  await ff(0.9);
-  const thrown = true;
-  s = await G((g) => ({ thrown: g.stats.get('FlasksThrown'), clouds: g.flasks.clouds.length, flights: g.flasks.flights.length }));
-  check('a flask throw shatters into a cloud', thrown && s.thrown >= 1 && s.clouds >= 1, s);
-  shotsTaken.push(await shot('16-l2-cloud.png'));
-
-  // ------------------------------------------------------------------------------------------- Level 3: a locker
-  await G((g, dev) => dev.gotoLevel('Level3_Gymnasium'));
-  await ff(1);
-  await G((g, dev) => dev.signature('Level3_Gymnasium'));
+  // ------------------------------------------------------------------------------------------- Level 1: a locker
+  await G((g) => g.lockers.devCheck());
   await ff(2.2);
   s = await G((g) => ({ hiding: g.lockers.occupiedId(), ms: g.env.moveState(), ctx: g.env.context(),
     window: !!(g.lockers.session && g.lockers.session.window) }));
   check('climbing into a locker and its breath check', !!s.hiding && s.ms === 'Hiding' && s.ctx === 'Locker' && s.window, s);
   await tab.keyboard.down('Space');
   await ff(0.8);
-  shotsTaken.push(await shot('17-l3-holdbreath.png'));
+  shotsTaken.push(await shot('14-l1-holdbreath.png'));
   await ff(6);
   await tab.keyboard.up('Space');
   await ff(0.3);
   s = await G((g) => ({ verdict: g.lockers.session && g.lockers.session.window ? g.lockers.session.window.verdict : null,
     life: g.life.state, stat: g.stats.get('LockersHidden') }));
   check('holding the breath through the peek is HiddenSafe', s.verdict === 'HiddenSafe' && s.life === 'Alive', s);
-  shotsTaken.push(await shot('18-l3-safe.png'));
+  shotsTaken.push(await shot('15-l1-safe.png'));
   await tab.keyboard.press('KeyE');
   await ff(2);
   s = await G((g) => ({ hiding: g.lockers.occupiedId(), ms: g.env.moveState(), ctx: g.env.context() }));
   check('stepping out of the locker', !s.hiding && s.ms !== 'Hiding' && s.ctx === 'OnFoot', s);
 
-  // ------------------------------------------------------------------------------------------- Level 4: the pool
-  await G((g, dev) => dev.gotoLevel('Level4_FloodedPool'));
+  // ------------------------------------------------------------------------------------------- Level 2: the Auditorium
+  await G((g, dev) => dev.gotoLevel('Level2_Auditorium'));
   await ff(1);
-  await G((g, dev) => dev.signature('Level4_FloodedPool'));
-  await ff(1.4);
-  s = await G((g) => ({ grab: !!g.pool.grab, ms: g.env.moveState(), ctx: g.env.context(), swimming: g.pool.swimming() }));
-  check('a pool grab drags the swimmer under', s.grab && s.ms === 'Grabbed' && s.ctx === 'Struggle', s);
-  shotsTaken.push(await shot('19-l4-grab.png'));
-  for (let i = 0; i < 30; i++) {
-    await tab.keyboard.press('Space');
-    await ff(0.1);
-  }
-  await ff(0.5);
-  s = await G((g) => ({ grab: !!g.pool.grab, ms: g.env.moveState(), ctx: g.env.context(), life: g.life.state }));
-  check('mashing STRUGGLE breaks free', !s.grab && s.ms !== 'Grabbed' && s.life === 'Alive', s);
-  shotsTaken.push(await shot('20-l4-free.png'));
-  await G((g) => g.level4.devFloodlights());
-  await ff(2.5);
-  s = await G((g) => ({ on: g.level4.flipped }));
-  check('the floodlight switch throws', s.on, s);
-  shotsTaken.push(await shot('21-l4-floodlights.png'));
+  s = await G((g) => {
+    const f = g.floors.floor(g.level);
+    const door = g.doors.get(g.route(g.level).exitDoorIds[0]);
+    return { level: g.level, phase: g.phase, unlocked: f.unlocked, door: door.state, holding: g.floors.spawns.holding(g.level),
+      creature: g.creature.getState() };
+  });
+  check('dev skip to the Auditorium: the exit open from the start, the Creature held at its start for its grace',
+    s.level === 'Level2_Auditorium' && s.phase === 'InRun' && s.unlocked && s.door === 'Open' && s.holding &&
+    s.creature === 'Scripted', s);
+  shotsTaken.push(await shot('16-l2-auditorium.png'));
 
-  // ------------------------------------------------------------------------------------------- Level 5: the finale
-  await G((g, dev) => dev.gotoLevel('Level5_Roof'));
-  await ff(1);
-  await G((g, dev) => dev.signature('Level5_Roof'));
+  // ------------------------------------------------------------------------------------------- Level 3: the roof
+  await G((g, dev) => dev.gotoLevel('Level3_Roof'));
   await ff(1.5);
-  s = await G((g) => ({ chute: g.parachute.state, phase: g.level5.phase }));
+  s = await G((g) => ({ phase: g.level3.phase, door: g.level3.roofDoor().state, held: !!g.level3.handle }));
+  check('the roof: the Creature held behind the arrival housing\'s door, the door swung open', s.phase === 'Arrival' &&
+    s.door === 'Open' && s.held, s);
+  await G((g, dev) => dev.roof('smash'));
+  await ff(4.3);
+  shotsTaken.push(await shot('17-l3-smash.png'));
+  await ff(2);
+  s = await G((g) => ({ phase: g.level3.phase, door: g.level3.roofDoor().state, released: g.level3.smash && g.level3.smash.released }));
+  check('the roof door smashed and the Creature let go', s.door === 'Smashed' && s.released && s.phase === 'Chase', s);
+  await G((g, dev) => dev.signature('Level3_Roof'));
+  await ff(1.5);
+  s = await G((g) => ({ chute: g.parachute.state, phase: g.level3.phase }));
   check('off the gap with a pack: the canopy opens', s.chute === 'Canopy' || s.chute === 'Landed', s);
-  shotsTaken.push(await shot('22-l5-canopy.png'));
-  await ff(2.2);
-  s = await G((g) => ({ chute: g.parachute.state, phase: g.level5.phase, finale: !!g.level5.finale }));
-  check('the finale starts over the canopy', s.finale, s);
-  // the main strike of the first flash shows it on the ledge; the focus then holds on its face
-  const untilFinale = (t) => G((g, dev, at) => g.level5.finale.startAt + at - g.env.now(), t);
-  let wait = await untilFinale(1.48);
-  if (wait > 0) await ff(wait);
-  shotsTaken.push(await shot('23-l5-lightning.png'));
-  wait = await untilFinale(2.4);
-  if (wait > 0) await ff(wait);
-  shotsTaken.push(await shot('24-l5-ledge.png'));
-  await ff(7);
-  s = await G((g) => ({ chute: g.parachute.state, outcome: g.match.outcome, phase: g.phase }));
-  check('landed below: ESCAPED', s.chute === 'Landed' && (s.outcome === 'Escaped' || s.phase === 'RunEnded' || s.phase === 'Results'), s);
+  shotsTaken.push(await shot('18-l3-canopy.png'));
+  await ff(2.5);
+  s = await G((g) => ({ phase: g.level3.phase, hidden: g.creature.isHidden(), chute: g.parachute.state }));
+  check('the Creature stands on the ledge over the jumper', s.phase === 'Ledge' && !s.hidden, s);
+  shotsTaken.push(await shot('19-l3-ledge.png'));
+  // the rest of the descent stepped in the page one frame at a time (no real frames in between) up to the touchdown, then
+  // one roof check (the roof's checks run at ServerTickHz, as on Roblox: Roof.spec times the escape within that)
+  s = await tab.evaluate(({ tick, limit }) => {
+    const e = window.__rovloc.engine;
+    const g = window.__rovlocGame.game;
+    const loop = e.loop;
+    loop.stop();
+    const render = e.renderer.render;
+    e.renderer.render = () => {};
+    try {
+      for (let i = 0; i < limit * 30 && g.parachute.state !== 'Landed'; i++) loop._run(1 / 30, 1 / 30);
+      const landedAt = g.parachute.landedAt;
+      while (g.parachute.state === 'Landed' && g.match.outcome === 'Pending' && g.env.now() - landedAt < tick) {
+        loop._run(1 / 30, 1 / 30);
+      }
+      return { chute: g.parachute.state, outcome: g.match.outcome, lock: g.controlLock(),
+        escapedAfter: g.match.escapedAt === null || landedAt === null ? null : g.match.escapedAt - landedAt };
+    } finally {
+      e.renderer.render = render;
+      loop.start();
+    }
+  }, { tick: 1 / GameConfig.ServerTickHz, limit: 10 });
+  check('landed below: ESCAPED at the touchdown (within one roof check), the landing hold released', s.chute === 'Landed' &&
+    s.outcome === 'Escaped' && s.escapedAfter !== null && s.escapedAfter >= 0 &&
+    s.escapedAfter <= 1 / GameConfig.ServerTickHz + 1e-6 && s.lock === 'None', s);
   await ff(3);
-  s = await G((g) => ({ phase: g.phase }));
-  check('the results screen', s.phase === 'Results', s);
-  shotsTaken.push(await shot('25-results.png'));
+  s = await G((g) => ({ phase: g.phase, showing: g.results.showing }));
+  check('the results screen', s.phase === 'Results' && s.showing, s);
+  shotsTaken.push(await shot('20-results.png'));
 } catch (err) {
   check('smoke run completed', false, String(err && err.stack ? err.stack : err));
   try {

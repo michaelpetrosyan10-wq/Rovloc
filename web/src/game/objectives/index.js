@@ -1,5 +1,6 @@
-// index.js: the floor objectives system (the web ObjectiveService): one FloorObjective per floor (floor0..5.js) built
-// from meta.objectives, the carry, the objective effects and the Creature's start rule (spawns.js), driven by the game
+// index.js: the floor objectives system (the web ObjectiveService): one FloorObjective per floor built from
+// meta.objectives (the basement's floor0.js, the Hallways' floor1.js; a floor with no script of its own, the
+// Auditorium's plain crossing, is the base FloorObjective), the carry, the objective effects and the Creature's start rule (spawns.js), driven by the game
 // like every other system. Registered after the doors, the mechanics, the airlock and the Creature's level hook, so
 // at a run start the doors are reset before the exits are locked and on a level's activation the Creature has been
 // moved there before the start rule takes it.
@@ -12,15 +13,13 @@ import { Carry } from './carry.js';
 import { ObjectiveFx } from './fx.js';
 import { CreatureSpawns } from './spawns.js';
 import { registerObjectiveSounds } from './sounds.js';
+import { FloorObjective } from './base.js';
 import { Floor0 } from './floor0.js';
 import { Floor1 } from './floor1.js';
-import { Floor2 } from './floor2.js';
-import { Floor3 } from './floor3.js';
-import { Floor4 } from './floor4.js';
-import { Floor5 } from './floor5.js';
 import { S } from '../strings.js';
 
-const FLOORS = [Floor0, Floor1, Floor2, Floor3, Floor4, Floor5];
+/** The floor scripts by level id (any other floor with an objective runs the base FloorObjective). */
+const FLOORS = Object.freeze({ Level0_Basement: Floor0, Level1_Hallways: Floor1 });
 
 export class FloorObjectives {
   /** @param {import('../game.js').Game} game */
@@ -34,8 +33,8 @@ export class FloorObjectives {
     /** @type {Map<string, import('./base.js').FloorObjective>} */
     this.floors = new Map();
     for (const spec of (game.world.meta.objectives && game.world.meta.objectives.floors) || []) {
-      const Kind = FLOORS[spec.floor];
-      if (Kind) this.floors.set(spec.levelId, new Kind(this, spec));
+      const Kind = FLOORS[spec.levelId] || FloorObjective;
+      this.floors.set(spec.levelId, new Kind(this, spec));
     }
   }
 
@@ -101,7 +100,7 @@ export class FloorObjectives {
     const compass = route && route.compass ? S(`Obj.Compass.${route.compass}`) : null;
     return {
       title: S(f.spec.title),
-      steps: f.stepLines(this.game.env.now()),
+      steps: f.stepLines(),
       unlocked: f.unlocked,
       exit: f.spec.lockVariant ? (compass ? S('Obj.Exit.Named', compass) : S('Objective.Step.Exit')) : null,
       exitLabel: compass ? S('Obj.Exit.Marker', compass) : null,
@@ -137,7 +136,6 @@ export class FloorObjectives {
         }
       }
     }
-    for (const f of this.floors.values()) if (f.carrierGone) f.carrierGone(owner);
     return dropped;
   }
 

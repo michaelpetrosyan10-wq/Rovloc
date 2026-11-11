@@ -1,5 +1,5 @@
-// flasks.js: the Science Hall's volatile chemical flasks (ChemicalProjectileService + ChemicalThrowController), for
-// the one player. Level 2 keeps them in stock (level2.js).
+// flasks.js: the volatile chemical flasks (ChemicalProjectileService + ChemicalThrowController), for the one player.
+// The four-level school plans none (no FlaskCandidate anchors); spawnAt sets one out (dev, the host's co-op copy).
 //
 // World flasks: the run's planned ChemicalFlask props (the export's entities, one per FlaskCandidate anchor; a flask's
 // look is its anchor's variant, RunDirector.variantOf, in the world, in the hand and in flight, as on Roblox). The
@@ -7,7 +7,7 @@
 // refused with Hud.FlaskHandsFull); taking it plays the Pickup cue there and lifts the prop out of the world. One
 // flask at a time: it rides the right hand in the "Flask" pose (carried low in the right of the view, drawn back
 // beside the head while winding up, swung through on the throw) whenever the hands are free (not hiding, trapped,
-// grabbed, parachuting or scripted, whose systems own the hands then).
+// parachuting or scripted, whose systems own the hands then).
 //
 // Throwing ("Throw", a Hold: LMB / R2 / THROW). A press winds up when canWindUp allows (Alive, holding, no control
 // lock, a MoveState that may throw, FlaskThrowCooldown since the last throw). While it is held the dotted aim arc
@@ -15,8 +15,8 @@
 // draws back): from the eye plus the release offset, pulled back from walls, along the look at FlaskThrowSpeed (a
 // short toss in a duct); FlasksThrown + 1. A context change that takes the action away cancels the wind-up.
 //
-// Flight: every tick the flask flies on in cast segments of at most STEP_SECONDS against the world, the Creature's
-// hitbox and the pool's surfaces; the first contact shatters it there, FlaskMaxFlightSeconds without one expires it.
+// Flight: every tick the flask flies on in cast segments of at most STEP_SECONDS against the world and the Creature's
+// hitbox; the first contact shatters it there, FlaskMaxFlightSeconds without one expires it.
 // The flask tumbles along the parabola between ticks.
 //
 // Shatter: the FlaskShatter noise (the Vent medium and the duct's node when it broke in a duct), the FlaskShatter cue
@@ -27,8 +27,7 @@
 // Stun(StunSeconds, the shatter point) and counts Stuns.
 //
 // Downed players keep their flask (and cannot throw it); death, spectating and the end of the run empty the hand.
-// Objective flasks (holdObjective: Floor 2's acid) ride the hand the same way; their break calls their owner instead of
-// clouding, a flight that never breaks tells it the flask is lost. World flasks stand on the anchors the plan chose.
+// World flasks stand on the anchors the plan chose.
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
@@ -36,7 +35,7 @@ import { S } from '../strings.js';
 import { cfMatrix, clamp01, frameAt, smoothstep } from '../util.js';
 import { variantOf } from '../worldData.js';
 import * as Ballistics from './ballistics.js';
-import { AcidFlaskModel, FlaskEffects, FlaskModel, FlaskCentreY, GripY, liquidColor } from './flaskFx.js';
+import { FlaskEffects, FlaskModel, FlaskCentreY, GripY, liquidColor } from './flaskFx.js';
 
 const PICKUP_HOLD = 0.35;
 const STEP_SECONDS = 1 / 60;
@@ -49,7 +48,7 @@ const REACH_PULL = 0.25;
 const TOP_INSET = 0.3;
 const UNSTUNNABLE = new Set(['Stunned', 'Scripted', 'Dormant']);
 const POLL = 1 / GameConfig.ServerTickHz;
-const LIVE_CONTEXTS = new Set(['OnFoot', 'Vent', 'Swim']);
+const LIVE_CONTEXTS = new Set(['OnFoot', 'Vent']);
 
 // throw timing (ChemicalThrowController)
 const WINDUP_SECONDS = 0.3;
@@ -150,9 +149,6 @@ export class Flasks {
         handle: null,
       });
     }
-    this.waters = game.world.triggers('PoolWater').map((t) => ({
-      level: t.level, size: t.size, inv: cfMatrix(t.cframe).invert(), up: upOf(t.cframe),
-    }));
     this.fx = new FlaskEffects(this.env);
     this.held = null;
     this.heldModel = null;
@@ -213,8 +209,7 @@ export class Flasks {
     if (flask && flask.state !== 'World') flask.state = 'Gone';
     else if (flask) this._gone(flask);
     const variant = flask ? flask.variant : 0;
-    const ghost = { id: d.id, variant, tint: d.tint || null, color: d.tint ? new THREE.Color(...d.tint) : liquidColor(variant),
-      objective: !!d.objective, state: 'Flying' };
+    const ghost = { id: d.id, variant, color: liquidColor(variant), state: 'Flying' };
     const flight = {
       flask: ghost,
       ghost: true,
@@ -449,7 +444,7 @@ export class Flasks {
     const coop = game.coop;
     if (coop && coop.active) {
       coop.mechanics.share('flask', { ev: 'throw', id: flask.id, o: origin.toArray(), v: flight.velocity.toArray(),
-        level: flight.level, tint: flask.tint || null, objective: !!flask.objective });
+        level: flight.level });
     }
     return true;
   }
@@ -463,8 +458,8 @@ export class Flasks {
 
   // ---------------------------------------------------------------------------------------------------- flight
 
-  /** The first contact on from -> to: the world, the Creature's hitbox, a pool surface. */
-  _cast(from, to, level) {
+  /** The first contact on from -> to: the world or the Creature's hitbox. */
+  _cast(from, to) {
     _seg.subVectors(to, from);
     const len = _seg.length();
     if (len < 1e-4) return null;
@@ -480,14 +475,6 @@ export class Flasks {
         best = { position: p, normal: _dir.clone().negate(), fraction: f, kind: 'Creature' };
       }
     }
-    for (const w of this.waters) {
-      if (w.level !== level) continue;
-      const f = Ballistics.surfaceCrossing(w.inv, w.size, from, to);
-      if (f !== null && (!best || f < best.fraction)) {
-        const down = _seg.dot(w.up) > 0;
-        best = { position: from.clone().lerp(to, f), normal: w.up.clone().multiplyScalar(down ? -1 : 1), fraction: f, kind: 'Water' };
-      }
-    }
     return best;
   }
 
@@ -495,7 +482,7 @@ export class Flasks {
     for (const flight of this.flights) {
       if (flight.done) continue;
       const result = Ballistics.advance(flight.origin, flight.velocity, flight.gravity, flight.t, now - flight.startAt,
-        GameConfig.FlaskMaxFlightSeconds, STEP_SECONDS, (a, b) => this._cast(a, b, flight.level));
+        GameConfig.FlaskMaxFlightSeconds, STEP_SECONDS, (a, b) => this._cast(a, b));
       flight.t = result.t;
       if (result.hit) this._shatter(flight, result.hit);
       else if (result.expired) this._finish(flight);
@@ -507,7 +494,6 @@ export class Flasks {
     flight.done = true;
     this._dropModel(flight);
     flight.flask.state = 'Gone';
-    if (!flight.ghost && flight.flask.onLost) flight.flask.onLost();
   }
 
   /** The VentGraph node of the duct `point` lies inside, or null (ChemicalProjectileService.ductNode). */
@@ -566,28 +552,20 @@ export class Flasks {
     const centre = point.clone().addScaledVector(normal, CLOUD_LIFT);
     const now = env.now();
     if (flight.ghost) {
-      // a teammate's throw: the break as it looks and sounds here; their own page clouds, stuns and judges it
+      // a teammate's throw: the break as it looks and sounds here; their own page clouds and stuns
       game.playAt('FlaskShatter', point);
-      this.fx.shatter(point, normal, centre, flight.flask.color, GameConfig.FlaskCloudSeconds, inVent, hit.kind);
-      if (!flight.flask.objective && this.game.pool) this.game.pool.noteShatter(point);
+      this.fx.shatter(point, normal, centre, flight.flask.color, GameConfig.FlaskCloudSeconds, inVent);
       return;
     }
     if (game.live()) {
       game.noise(point, 'FlaskShatter', inVent ? { medium: 'Vent', ventNodeId: ventNode } : {});
     }
     game.playAt('FlaskShatter', point);
-    if (flight.flask.objective) {
-      // an objective flask (Floor 2's acid) breaks with its own fumes and no stun cloud; its owner judges the hit
-      this.fx.shatter(point, normal, centre, flight.flask.color, GameConfig.FlaskCloudSeconds, inVent, hit.kind);
-      if (flight.flask.onShatter) flight.flask.onShatter(point, hit);
-      return;
-    }
     const hiss = game.playAt('ChemHiss', centre, { loop: true });
-    this.fx.shatter(point, normal, centre, flight.flask.color, GameConfig.FlaskCloudSeconds, inVent, hit.kind);
+    this.fx.shatter(point, normal, centre, flight.flask.color, GameConfig.FlaskCloudSeconds, inVent);
     const cloud = { point: point.clone(), centre, level: flight.level, ventNode, inVent, expiresAt: now + GameConfig.FlaskCloudSeconds,
       spent: false, hiss };
     this.clouds.push(cloud);
-    if (this.game.pool) this.game.pool.noteShatter(point);
     this._evaluate(cloud, now);
   }
 
@@ -695,7 +673,7 @@ export class Flasks {
 
   /**
    * While holding a flask the hint line says how to throw it (once per flask and device), only where a throw is
-   * possible: it waits out a locker, a trap, a grab or a cutscene, and one still up when the player gets into such a
+   * possible: it waits out a locker, a trap or a cutscene, and one still up when the player gets into such a
    * spot is taken down (it read "Hold LMB to aim" inside a locker).
    */
   _hint() {
@@ -733,30 +711,12 @@ export class Flasks {
     this._aim(eye, dir);
     const origin = this._release(eye, dir, new THREE.Vector3());
     const velocity = dir.multiplyScalar(Ballistics.throwSpeed(this.env.moveState()));
-    const level = this.game.level;
     const traced = Ballistics.trace(origin, velocity, Ballistics.Gravity, GameConfig.FlaskMaxFlightSeconds, ARC_STEP,
-      (a, b) => this._cast(a, b, level));
+      (a, b) => this._cast(a, b));
     this.fx.showArc(Ballistics.resample(traced.points, ARC_DOTS), traced.hit, this.held.color, this.arcAlpha);
   }
 
   // ---------------------------------------------------------------------------------------------------- dev
-
-  /**
-   * An objective flask in a free hand (Floor 2's acid, AcidFlaskModel): `flask` carries {id, variant, color, tint (its
-   * colour for a teammate's page), gripOffset, objective: true, onShatter(point, hit), onLost()}; it is held, aimed and
-   * thrown like a chemical flask. False when the hand is full or the player cannot hold one now.
-   */
-  holdObjective(flask) {
-    if (this.held || !this.game.run || this.game.life.state !== 'Alive') return false;
-    flask.state = 'Held';
-    this._hold(flask);
-    return true;
-  }
-
-  /** Takes the flask out of the hand without throwing it (poured out); returns it, or null. */
-  takeHeld() {
-    return this.held ? this._emptyHand() : null;
-  }
 
   /** Give: puts a flask in a playing player's free hand (dev); false without a spare flask. */
   give() {
@@ -770,7 +730,7 @@ export class Flasks {
     return true;
   }
 
-  /** Dev: a flask in the hand thrown at once along the look (the signature moment of Level 2). */
+  /** Dev: a flask in the hand thrown at once along the look. */
   devThrow() {
     if (!this.held && !this.give()) return false;
     this.lastThrowAt = null;
@@ -778,12 +738,9 @@ export class Flasks {
   }
 }
 
-/**
- * The model a flask shows in a hand or in flight (ChemicalThrowController): an objective flask (Floor 2's acid) is
- * AcidFlaskBuilder's, every other ChemicalFlaskBuilder's of its variant.
- */
+/** The model a flask shows in a hand or in flight (ChemicalThrowController): ChemicalFlaskBuilder's of its variant. */
 function modelOf(flask) {
-  return flask.objective ? new AcidFlaskModel() : new FlaskModel(flask.variant);
+  return new FlaskModel(flask.variant);
 }
 
 /** Fewest duct edges between nodes (null when more than maxHops or unknown). */
@@ -842,10 +799,6 @@ function segmentBox(inv, size, from, to) {
     if (t0 > t1) return null;
   }
   return t0;
-}
-
-function upOf(cf) {
-  return new THREE.Vector3(cf[4], cf[7], cf[10]).normalize();
 }
 
 const _hand = new THREE.Matrix4();

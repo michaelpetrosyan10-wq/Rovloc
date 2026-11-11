@@ -1,11 +1,11 @@
 // doors.js: the run's fixture doors (DoorService + DoorMotion + DoorController): the stairwell airlock fire doors, the
-// Level 1 hallway gate and ajar classroom door, the roof stairwell door, the Level 3 equipment store door. The only
-// writer of DoorState and of every leaf pose.
+// Level 1 hallway gate and ajar classroom door, the roof stairwell doors. The only writer of DoorState and of every
+// leaf pose.
 //
 // States: Open = the fully open pose; Closed and Locked = the shut pose (Locked refuses requestOpen, scripts may still
 // set it open); Smashed = torn apart, final. Initial: airlock doors Open (built open), the gate Open (rolled up), the
-// classroom door Open at its built ajar pose, the roof door Closed and the equipment store door Locked (snapped shut
-// silently); the floor objectives lock each exit fire door at the run start (objectives/base.js).
+// classroom door Open at its built ajar pose, the roof doors Closed; the floor objectives with a lock step lock their
+// exit fire door at the run start (objectives/base.js).
 // Motion: a value (openness 0 shut .. 1 open, or smash progress) from `from` to `to` over `seconds` starting
 // OneShotLead from now, eased (InOut swings, In for the gate dropping, Linear smashes). The leaves are posed every
 // frame from the motion (smooth), the logic steps at 30 Hz: a swing that would touch the player over the next
@@ -63,9 +63,7 @@ export function impactShake(kind, distance) {
 const INITIAL = { Airlock: 'Open', Gate: 'Open', Ajar: 'Open', RoofDoor: 'Closed' };
 const TRAVEL = { Airlock: { open: 1.6, close: 1.6 }, Gate: { open: 2.8, close: 0.35 }, Ajar: { open: 1.2, close: 0.9 },
   RoofDoor: { open: 1.2, close: 0.9 } };
-const FIXTURE_TYPES = ['AirlockDoor', 'HallwayGate', 'ClassroomDoor', 'RoofStairDoor', 'StoreDoor'];
-// the Level 3 equipment store's steel door (DoorKind RoofDoor) starts Locked: the coach's key opens it (floor3.js)
-const INITIAL_BY_TYPE = { StoreDoor: 'Locked' };
+const FIXTURE_TYPES = ['AirlockDoor', 'HallwayGate', 'ClassroomDoor', 'RoofStairDoor'];
 
 /** DoorService.plan */
 export function planFor(current, next) {
@@ -177,8 +175,8 @@ export class Doors {
       toLevel: info.attributes.ToLevel || null,
       leaves,
       centre,
-      initial: INITIAL_BY_TYPE[info.type] || INITIAL[kind] || 'Open',
-      state: INITIAL_BY_TYPE[info.type] || INITIAL[kind] || 'Open',
+      initial: INITIAL[kind] || 'Open',
+      state: INITIAL[kind] || 'Open',
       openness: 0,
       smash: 0,
       smashFrom: 0,

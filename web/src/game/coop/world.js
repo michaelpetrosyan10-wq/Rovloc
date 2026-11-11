@@ -1,7 +1,7 @@
 // world.js: the host's world, mirrored on the clients.
 //
-// Host-run systems. The level controllers (Level0-5: the basement beats, the classroom scare, the flask restock, the
-// gym's pressure, the roof finale) and the Creature's level hook decide on the host only: on a client they are marked
+// Host-run systems. The level controllers (Level0, Level1, Level3: the basement beats, the classroom scare, the roof)
+// and the Creature's level hook decide on the host only: on a client they are marked
 // `hostOnly` and the game skips their ticks and level hooks (game.js _follows). What they do is sent as it happens,
 // while one of them is the running system (game.current): scene timelines ({t: 'seq'}, start time relative, Vector3 /
 // Matrix4 args encoded, `subject` true on the page of the player the scene happened to), lighting changes ({t: 'light'}:
@@ -16,7 +16,7 @@
 import * as THREE from 'three';
 
 const DIGEST_SECONDS = 1;
-export const HOST_ONLY = new Set(['Level0', 'Level1', 'Level2', 'Level3', 'Level5', 'CreatureLevels']);
+export const HOST_ONLY = new Set(['Level0', 'Level1', 'Level3', 'CreatureLevels']);
 
 /** Encodes timeline args (Vector3 -> {v: [x, y, z]}, Matrix4 -> {m: [16]}); functions are dropped. */
 export function encodeArgs(args) {
@@ -67,8 +67,6 @@ export class WorldNet {
     this.strikes = new Map();
     /** the member a scene being started happened to (Level 1 sets it around its play) */
     this.sceneSubject = null;
-    /** mirror() is running: a host-run part of a shared system */
-    this.forced = false;
     this.handlers = {
       seq: (from, msg) => this._onSeq(msg),
       light: (from, msg) => this._onLight(msg),
@@ -96,20 +94,8 @@ export class WorldNet {
   /** Whether the running code is a host-run system (its effects are mirrored). */
   _mirroring() {
     if (!this.coop.isHost() || this.coop.actor) return false;
-    if (this.forced) return true;
     const s = this.game.current;
     return !!s && !!s.hostOnly;
-  }
-
-  /** Host: runs `fn` with its scenes, lights, sounds and toasts mirrored on the clients (a host-run part of a system). */
-  mirror(fn) {
-    const before = this.forced;
-    this.forced = true;
-    try {
-      return fn();
-    } finally {
-      this.forced = before;
-    }
   }
 
   /** Replaces obj[name] with a wrapper (restored when the room closes). */

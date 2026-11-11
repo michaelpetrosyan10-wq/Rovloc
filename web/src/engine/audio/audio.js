@@ -4,7 +4,7 @@
 // Reverb -> Echo, gain) <- World / Monster / Player | Body (EQ) | UI. User volumes come from the settings (Body follows
 // Player); presets duck other buses while they play. setEnvironment(preset) eases every slot of the chain (and the
 // Ambience / Body EQs) to that AcousticPreset's values; the room the listener stands in picks it (a vent -> Vent,
-// submerged -> Underwater, outside every room -> Outdoor), setEnvironmentOverride wins over both.
+// outside every room -> Outdoor), setEnvironmentOverride wins over both.
 //
 // Voices (SoundSynthesizer). play(name, opts) builds a voice from the SynthPresets recipe: every layer trigger is a
 // grain (an AudioBufferSource on one of the 11 synthesized sources) with the recipe's speed / region slice / jitter /
@@ -257,7 +257,7 @@ export class Audio {
   }
 
   /**
-   * The pause menu: the game's buses fade out (a struggle's thrashing, a crawl loop or the Creature's steps no longer
+   * The pause menu: the game's buses fade out (a crawl loop or the Creature's steps no longer
    * play on under a frozen game) and back in on resume; the menu's own UI sounds keep playing.
    */
   setPausedMix(on) {
@@ -268,7 +268,7 @@ export class Audio {
 
   // ------------------------------------------------------------------ environment
 
-  /** Eases the room acoustics to an AcousticPreset (Room, Corridor, Hall, Vent, Underwater, Outdoor, Stairwell, Basement, Lobby). */
+  /** Eases the room acoustics to an AcousticPreset (Room, Corridor, Hall, Vent, Outdoor, Stairwell, Basement, Lobby). */
   setEnvironment(name, fade = ENV_FADE) {
     if (!this.ctx) return;
     const spec = Environments[name] || Environments.Room;
@@ -561,7 +561,7 @@ export class Audio {
 
   // ------------------------------------------------------------------ ambience
 
-  /** Crossfades the ambience bed (a Drone preset, or UnderwaterBed; null = silence) and its stingers. */
+  /** Crossfades the ambience bed (a Drone preset; null = silence) and its stingers. */
   setAmbience(name, fade = BED_FADE) {
     if (name === this.bedName) return;
     this.bedName = name;

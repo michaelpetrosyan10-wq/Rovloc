@@ -35,8 +35,6 @@ const FACING_DOT = 0.4;
 const EXIT_DEPTH = WALL_HALF - 0.1;
 const EXIT_REACH = WALL_HALF + 3;
 const EXIT_SIDE_STEP = 0.75;
-const SWIM_BELOW = 2.2;
-const SWIM_ABOVE = 1.2;
 const ROOT_HEIGHT = 3;
 const VENT_CENTRE_HEIGHT = 2;
 const ENTRY_COOLDOWN = 1;
@@ -69,7 +67,6 @@ const ACCEL_TIME = 0.14;
 const DECEL_TIME = 0.09;
 const SPEED_EPS = 1e-3;
 const CRAWL_SPEEDS = { VentCrawling: GameConfig.VentCrawlSpeed, VentScurrying: GameConfig.VentScurrySpeed, DownedCrawling: GameConfig.DownedMoveSpeed };
-const SWIM_ENTRY = new Set(['Treading', 'Freestyle', 'Underwater']);
 // presentation
 const KNOCK_COOLDOWN = 0.3;
 const KNOCK_SHAKE = 0.45;
@@ -434,7 +431,7 @@ export class Vents {
 
   passable(id) {
     const g = this.grates.get(id);
-    return !!g && !g.blocked && (g.state === 'Open' || g.state === 'Kicked');
+    return !!g && (g.state === 'Open' || g.state === 'Kicked');
   }
 
   /** VentController.panelStop: the ball stops short of a shut grate's panel at the wall's room face. */
@@ -513,7 +510,7 @@ export class Vents {
     if (grate.state === state) return;
     grate.state = state;
     this.env.setEntityAttribute(grate.id, 'GrateState', state);
-    const serves = !grate.blocked && (state === 'Closed' || state === 'Unscrewing' || state === 'Locked');
+    const serves = state === 'Closed' || state === 'Unscrewing' || state === 'Locked';
     for (const p of grate.prompts) {
       p.setEnabled(serves);
       p.setText(p.kind === 'Kick' ? S('Prompt.Kick') : S('Prompt.Unscrew'), S(state === 'Locked' ? 'Prompt.GrateLocked' : 'Prompt.Grate'));
@@ -670,28 +667,10 @@ export class Vents {
     return dir.dot(_w) >= FACING_DOT;
   }
 
-  /** A swimmer at a pool grate's mouth, on the water surface, looking in (CrawlRules.inSwimMouthBox). */
-  trySwimEntry(surfaceY) {
-    const env = this.env;
-    if (this.crawl || env.now() < this.cooldownUntil || this.game.life.state !== 'Alive' || this.game.controlLock() !== 'None') return false;
-    if (!SWIM_ENTRY.has(env.moveState())) return false;
-    const root = env.rootPosition(_root);
-    for (const grate of this.grates.values()) {
-      if (grate.level !== this.game.level || !this.passable(grate.id)) continue;
-      if (!this._inMouth(grate, root) || !this._facesWall(grate)) continue;
-      const above = root.y - surfaceY;
-      if (above < -SWIM_BELOW || above > SWIM_ABOVE) continue;
-      this._enter(grate);
-      return true;
-    }
-    return false;
-  }
-
   _enter(grate) {
     const env = this.env;
     const graph = grate.graph;
     if (!graph) return;
-    if (this.game.pool) this.game.pool.leaveWater();
     env.setMode('Vent');
     const entry = new THREE.Vector3().setFromMatrixPosition(grate.entry);
     entry.y = grate.wall.elements[13];
@@ -760,18 +739,6 @@ export class Vents {
   stateOf(id) {
     const g = this.grates.get(id);
     return g ? g.state : 'Closed';
-  }
-
-  /**
-   * Blocks a grate for the player (Floor 4's shut maintenance hatch covers its grate): no prompts, no crawling in or
-   * out, whatever its state. Unblocked, it serves as its state says.
-   */
-  setBlocked(id, blocked) {
-    const g = this.grates.get(id);
-    if (!g) return;
-    g.blocked = !!blocked;
-    const serves = !g.blocked && (g.state === 'Closed' || g.state === 'Unscrewing' || g.state === 'Locked');
-    for (const p of g.prompts) p.setEnabled(serves);
   }
 
   /** Whether the player is crawling. */

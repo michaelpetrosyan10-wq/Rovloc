@@ -425,11 +425,8 @@ export class Coop {
     if (env.flashlightOn()) flags |= PoseFlags.Torch;
     if (ms === 'Crouching') flags |= PoseFlags.Crouch;
     if (env.mode() === 'Vent') flags |= PoseFlags.Vent;
-    if (env.mode() === 'Swim') flags |= PoseFlags.Swim;
-    if (ms === 'Underwater') flags |= PoseFlags.Underwater;
     if (ms === 'Hiding' || (g.lockers && g.lockers.occupiedId())) flags |= PoseFlags.Hidden;
     if (g.traps && g.traps.caught) flags |= PoseFlags.Trapped;
-    if (ms === 'Grabbed') flags |= PoseFlags.Grabbed;
     if (ms === 'Sprinting') flags |= PoseFlags.Lowered;
     if (g.airlock && g.airlock.inside) flags |= PoseFlags.Airlock;
     if (g.floors && g.floors.carry.lines().length) flags |= PoseFlags.Carrying;
@@ -437,12 +434,12 @@ export class Coop {
     if (this.runNet.reviving) flags |= PoseFlags.Reviving;
     if (g.parachute && g.parachute.hasPack && g.parachute.hasPack()) flags |= PoseFlags.Pack;
     let held = 'None';
-    if (g.flasks && g.flasks.held) held = g.flasks.held.objective ? 'AcidFlask' : 'Flask';
+    if (g.flasks && g.flasks.held) held = 'Flask';
     else if (flags & PoseFlags.Pack) held = 'Pack';
     else if (flags & PoseFlags.Carrying) held = 'Item';
     return {
       x: root.x, y: root.y, z: root.z, yaw: look.yaw, pitch: look.pitch, moveState: ms, life: g.life ? g.life.state : 'Lobby',
-      flags, held, oxygen: meters.oxygen.fraction, stamina: meters.stamina.fraction, battery: meters.battery.fraction,
+      flags, held, stamina: meters.stamina.fraction, battery: meters.battery.fraction,
       health: g.life ? g.life.health / GameConfig.MaxHealth : 1, level: g.run ? g.level || null : 'Lobby',
     };
   }

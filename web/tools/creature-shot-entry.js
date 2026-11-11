@@ -1,6 +1,6 @@
 // The game module of the Creature screenshot build (tools/creature-shot.mjs links it through build.mjs --entry): the
 // real engine and the real Creature (createCreature: brain, rig, lighting, look, smoke, jumpscare view), held by a
-// Scripted handle and posed by hand in a lit stretch of corridor on Levels 1 to 3, the player's camera a few studs
+// Scripted handle and posed by hand in a lit stretch of corridor on Level 1 or 2, the player's camera a few studs
 // away with the torch on. The R <-> A contract fields (action, actionStartedAt, fade, poseMode, speed) are fed into the
 // service's snapshot by a wrapper here, the way the behaviour publishes them.
 //
@@ -26,7 +26,7 @@ import { CFrame } from '../src/creature/cframe.js';
 import { ROOT_HEIGHT } from '../src/creature/config.js';
 import { spacing } from '../src/creature/jumpscare.js';
 
-const LEVELS = ['Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium'];
+const LEVELS = ['Level1_Hallways', 'Level2_Auditorium'];
 const TOKEN = 'creature-shot';
 const PLAYER_ROOT = 3; // the player's root above the floor
 const FPS = 30;

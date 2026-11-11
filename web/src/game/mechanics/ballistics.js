@@ -5,8 +5,6 @@
 // eye plus ReleaseOffset in the throw's frame (right of, below and just ahead of the eye), pulled back toward the eye
 // when something solid is in between. Speed GameConfig.FlaskThrowSpeed (x VentTossMultiplier while crawling a duct).
 // advance walks the parabola in segments of at most `maxStep` seconds, casting each; the first contact ends it.
-// surfaceCrossing finds where a segment crosses the top face of a PoolWater box (a flask landing in the pool shatters
-// at its surface).
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
@@ -19,15 +17,15 @@ export const DefaultStep = 1 / 30;
 const MIN_STEP = 1 / 240;
 const MAX_SEGMENTS = 4096;
 
-const BLOCKED = new Set(['Hiding', 'Trapped', 'Scripted', 'Grabbed', 'Parachuting']);
+const BLOCKED = new Set(['Hiding', 'Trapped', 'Scripted', 'Parachuting']);
 const DUCT = new Set(['VentCrawling', 'VentScurrying']);
 
 /**
- * @typedef {{position: THREE.Vector3, normal: THREE.Vector3, fraction: number, kind: 'World'|'Creature'|'Water'}} Hit
+ * @typedef {{position: THREE.Vector3, normal: THREE.Vector3, fraction: number, kind: 'World'|'Creature'}} Hit
  * @typedef {(from: THREE.Vector3, to: THREE.Vector3) => Hit|null} Cast
  */
 
-/** Whether a player in `moveState` may throw (not hidden, trapped, scripted, grabbed or parachuting). */
+/** Whether a player in `moveState` may throw (not hidden, trapped, scripted or parachuting). */
 export function mayThrowIn(moveState) {
   return !BLOCKED.has(moveState);
 }
@@ -141,23 +139,6 @@ export function resample(points, count) {
   return out;
 }
 
-/**
- * Where (0..1 along the segment) from -> to crosses the top face of the box (inverse frame `inv`, `size`) inside its
- * footprint, either way; null when it does not.
- */
-export function surfaceCrossing(inv, size, from, to) {
-  const a = _a.copy(from).applyMatrix4(inv);
-  const b = _c.copy(to).applyMatrix4(inv);
-  const top = size[1] * 0.5;
-  const da = a.y - top;
-  const db = b.y - top;
-  if (da * db > 0 || Math.abs(b.y - a.y) < 1e-9) return null;
-  const fraction = Math.min(1, Math.max(0, da / (a.y - b.y)));
-  const p = a.lerp(b, fraction);
-  if (Math.abs(p.x) > size[0] * 0.5 || Math.abs(p.z) > size[2] * 0.5) return null;
-  return fraction;
-}
-
 const _f = new THREE.Vector3();
 const _r = new THREE.Vector3();
 const _u = new THREE.Vector3();
@@ -165,7 +146,5 @@ const _b = new THREE.Vector3();
 const _o = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _g = new THREE.Vector3();
-const _a = new THREE.Vector3();
-const _c = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _yAxis = new THREE.Vector3(0, 1, 0);

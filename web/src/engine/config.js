@@ -28,21 +28,13 @@ export const GameConfig = Object.freeze({
   FlaskVentHopRadius: 2,
   BreathHoldMaxSeconds: 7,
   BreathRecoverPerSecond: 0.6,
-  StrugglePressesToEscape: 14, // Level 4 fairness (was 22)
-  StruggleMaxPressesPerSecond: 12,
   ParachutePackCount: 4,
   ParachuteDescentSpeed: 9,
   StaminaMax: 100,
   StaminaSprintDrain: 7, // a full sprint lasts about 14 s (Tunnels: the Creature chases at 16.5, you sprint at 19)
   StaminaScurryDrain: 22,
-  StaminaFreestyleDrain: 20,
-  StaminaTreadDrain: 2,
   StaminaRegen: 14,
   StaminaRegenDelay: 1.2,
-  OxygenMax: 100,
-  OxygenDrain: 7,
-  OxygenDrainGrabbed: 5, // slower than a dive while held (was 9): time to struggle free
-  OxygenRegen: 30,
   BatteryMax: 100,
   BatteryDrain: 0.6325, // +15 % (harder Standard; the flashlight drains the same on every difficulty)
   BatteryPickupCharge: 45,
@@ -51,9 +43,6 @@ export const GameConfig = Object.freeze({
   CrouchSpeed: 5.5,
   VentCrawlSpeed: 4.5,
   VentScurrySpeed: 9,
-  TreadSpeed: 4,
-  FreestyleSpeed: 9,
-  UnderwaterSpeed: 5,
   OneShotLead: 0.2,
   OneShotMaxLate: 1.5,
   ServerTickHz: 10,
@@ -82,8 +71,6 @@ export const CameraConfig = Object.freeze({
     VentCrawling: [0, -2.1, -0.5],
     DownedCrawling: [0, -2.3, 0],
     LockerPeeking: [0, -0.15, 0],
-    SurfaceSwimming: [0, -1.1, 0],
-    UnderwaterSwimming: [0, -1.6, -0.3],
     ParachuteLookback: [0, 0, 0],
   }),
   EyeHeightAboveRoot: Object.freeze({
@@ -93,12 +80,8 @@ export const CameraConfig = Object.freeze({
     VentCrawling: -0.6,
     VentScurrying: -0.6,
     DownedCrawling: -0.8,
-    Treading: 0.4,
-    Freestyle: 0.2,
-    Underwater: -0.6,
     Hiding: 1.3,
     Trapped: 1.1,
-    Grabbed: -0.6,
     Parachuting: 1.5,
     Scripted: 1.5,
   }),
@@ -134,7 +117,7 @@ export const CameraConfig = Object.freeze({
 
 /**
  * NoiseConfig.luau. Every noise pulse has a stud radius and a priority.
- * @type {Readonly<Record<string, {radius: number, priority: 'Low'|'Normal'|'High'|'Critical', medium: 'Air'|'Vent'|'Water', interval: number}>>}
+ * @type {Readonly<Record<string, {radius: number, priority: 'Low'|'Normal'|'High'|'Critical', medium: 'Air'|'Vent', interval: number}>>}
  */
 export const NoiseKinds = Object.freeze({
   // Tunnels retune (design §2.2): the Creature hears a sprint from far away, a walk from the next junction, a crouch
@@ -142,7 +125,6 @@ export const NoiseKinds = Object.freeze({
   CrouchWalk: { radius: 5, priority: 'Low', medium: 'Air', interval: 0.6 },
   SlowVentCrawl: { radius: 8, priority: 'Low', medium: 'Vent', interval: 0.7 },
   GrateUnscrew: { radius: 10, priority: 'Low', medium: 'Air', interval: 0.9 },
-  Treading: { radius: 12, priority: 'Low', medium: 'Water', interval: 0.8 },
   Walk: { radius: 22, priority: 'Normal', medium: 'Air', interval: 0.45 },
   Gasp: { radius: 40, priority: 'High', medium: 'Air', interval: 0 },
   FlaskShatter: { radius: 50, priority: 'High', medium: 'Air', interval: 0 },
@@ -151,8 +133,6 @@ export const NoiseKinds = Object.freeze({
   // climbing into a hiding spot (a locker, a barrel, a cabinet): quietly, or hurried (sprinting a moment before)
   HideEnter: { radius: 8, priority: 'Low', medium: 'Air', interval: 0 },
   HideEnterHurried: { radius: 14, priority: 'Normal', medium: 'Air', interval: 0 },
-  Freestyle: { radius: 75, priority: 'High', medium: 'Water', interval: 0.35 },
-  Splash: { radius: 75, priority: 'High', medium: 'Water', interval: 0 },
   VentScurry: { radius: 90, priority: 'High', medium: 'Vent', interval: 0.3 },
   GrateKick: { radius: 130, priority: 'Critical', medium: 'Air', interval: 0 },
   FloorDebris: { radius: 130, priority: 'Critical', medium: 'Air', interval: 0 },
@@ -162,11 +142,10 @@ export const NoiseKinds = Object.freeze({
   Scripted: { radius: 0, priority: 'Low', medium: 'Air', interval: 0 },
   // co-op text chat, should the web ever get one (there is no voice chat on the web)
   ChatMessage: { radius: 25, priority: 'Normal', medium: 'Air', interval: 0 },
-  // floor objectives: a working hold (keys in a lock, the mix, the valve, the cutters) once a second, a loud single
-  // action (the breaker, a lock clunking open, the chain snapping), the generator starting
+  // floor objectives: a working hold (keys in a lock) once a second, a loud single action (the breaker, an exit
+  // unlocking)
   ObjectiveWork: { radius: 34, priority: 'Normal', medium: 'Air', interval: 0 },
   ObjectiveClunk: { radius: 110, priority: 'High', medium: 'Air', interval: 0 },
-  GeneratorStart: { radius: 170, priority: 'Critical', medium: 'Air', interval: 0 },
 });
 
 export const NoiseConfig = Object.freeze({
@@ -180,18 +159,6 @@ export const NoiseConfig = Object.freeze({
     { minSpeed: 6.5, kind: 'VentScurry' },
     { minSpeed: 0.75, kind: 'SlowVentCrawl' },
   ],
-  WaterSpeedTiers: [
-    { minSpeed: 6.5, kind: 'Freestyle' },
-    { minSpeed: 0.75, kind: 'Treading' },
-  ],
-  SplashMeter: Object.freeze({
-    perFreestylePulse: 1,
-    perSplash: 2.5,
-    perTreadingPulse: 0.1,
-    decayPerSecond: 0.35,
-    grabThreshold: 6,
-    rearmBelow: 4,
-  }),
   WallOcclusion: 0.6,
   MaxOccludingWalls: 3,
   VentPropagationMultiplier: 1.4,
@@ -204,29 +171,27 @@ export const NoiseConfig = Object.freeze({
  * LeftControl is not bound on the web: Ctrl+W (crouch while walking) would close the browser tab.
  */
 export const InputBindings = Object.freeze({
-  Sprint: { kind: 'Hold', keyboard: ['ShiftLeft'], gamepad: [10], touch: { label: 'RUN', position: [1, -170, 1, -230], size: 76 }, contexts: ['OnFoot', 'Vent', 'Swim'] },
-  // CROUCH / DIVE sit clear above JUMP (their circles overlapped at -150 / -90)
+  Sprint: { kind: 'Hold', keyboard: ['ShiftLeft'], gamepad: [10], touch: { label: 'RUN', position: [1, -170, 1, -230], size: 76 }, contexts: ['OnFoot', 'Vent'] },
+  // CROUCH sits clear above JUMP (their circles overlapped at -150 / -90)
   Crouch: { kind: 'Toggle', keyboard: ['KeyC'], gamepad: [1], touch: { label: 'CROUCH', position: [1, -90, 1, -172], size: 76 }, contexts: ['OnFoot'] },
-  Dive: { kind: 'Hold', keyboard: ['KeyC'], gamepad: [1], touch: { label: 'DIVE', position: [1, -90, 1, -172], size: 76 }, contexts: ['Swim'] },
-  Flashlight: { kind: 'Tap', keyboard: ['KeyF'], gamepad: [12], touch: { label: 'LIGHT', position: [1, -90, 1, -310], size: 64 }, contexts: ['OnFoot', 'Vent', 'Swim', 'Downed', 'Trapped', 'Locker'] },
-  Interact: { kind: 'Hold', keyboard: ['KeyE'], gamepad: [2], touch: null, contexts: ['OnFoot', 'Vent', 'Swim', 'Trapped', 'Locker'] },
+  Flashlight: { kind: 'Tap', keyboard: ['KeyF'], gamepad: [12], touch: { label: 'LIGHT', position: [1, -90, 1, -310], size: 64 }, contexts: ['OnFoot', 'Vent', 'Downed', 'Trapped', 'Locker'] },
+  Interact: { kind: 'Hold', keyboard: ['KeyE'], gamepad: [2], touch: null, contexts: ['OnFoot', 'Vent', 'Trapped', 'Locker'] },
   Kick: { kind: 'Tap', keyboard: ['KeyR'], gamepad: [3], touch: null, contexts: ['OnFoot', 'Vent'] },
-  Throw: { kind: 'Hold', keyboard: ['Mouse0'], gamepad: [7], touch: { label: 'THROW', position: [1, -250, 1, -150], size: 76 }, contexts: ['OnFoot', 'Vent', 'Swim'] },
+  Throw: { kind: 'Hold', keyboard: ['Mouse0'], gamepad: [7], touch: { label: 'THROW', position: [1, -250, 1, -150], size: 76 }, contexts: ['OnFoot', 'Vent'] },
   HoldBreath: { kind: 'Hold', keyboard: ['Space'], gamepad: [0], touch: { label: 'HOLD BREATH', position: [1, -110, 1, -130], size: 110 }, contexts: ['Locker'] },
-  Struggle: { kind: 'Mash', keyboard: ['Space'], gamepad: [0], touch: { label: 'STRUGGLE', position: [0.5, 0, 1, -140], size: 130 }, contexts: ['Struggle'] },
-  Syringe: { kind: 'Tap', keyboard: ['KeyG'], gamepad: [13], touch: { label: 'SYRINGE', position: [1, -170, 1, -310], size: 64 }, contexts: ['OnFoot', 'Downed', 'Vent', 'Swim'] },
+  Syringe: { kind: 'Tap', keyboard: ['KeyG'], gamepad: [13], touch: { label: 'SYRINGE', position: [1, -170, 1, -310], size: 64 }, contexts: ['OnFoot', 'Downed', 'Vent'] },
   Ripcord: { kind: 'Tap', keyboard: ['Space'], gamepad: [0], touch: { label: 'PULL CORD', position: [0.5, 0, 1, -140], size: 130 }, contexts: ['Parachute'] },
   SpectatePrev: { kind: 'Tap', keyboard: ['KeyQ'], gamepad: [4], touch: { label: '<', position: [0, 70, 0.5, 0], size: 70 }, contexts: ['Spectator'] },
   SpectateNext: { kind: 'Tap', keyboard: ['KeyE'], gamepad: [5], touch: { label: '>', position: [1, -70, 0.5, 0], size: 70 }, contexts: ['Spectator'] },
-  Menu: { kind: 'Tap', keyboard: ['KeyM', 'Escape'], gamepad: [8, 9], touch: { label: 'MENU', position: [0, 60, 0, 60], size: 56 }, contexts: ['Menu', 'OnFoot', 'Vent', 'Swim', 'Downed', 'Trapped', 'Locker', 'Spectator'] },
-  Objective: { kind: 'Tap', keyboard: ['Tab'], gamepad: [15], touch: { label: 'GOAL', position: [0, 60, 0, 124], size: 56 }, contexts: ['OnFoot', 'Vent', 'Swim'] },
+  Menu: { kind: 'Tap', keyboard: ['KeyM', 'Escape'], gamepad: [8, 9], touch: { label: 'MENU', position: [0, 60, 0, 60], size: 56 }, contexts: ['Menu', 'OnFoot', 'Vent', 'Downed', 'Trapped', 'Locker', 'Spectator'] },
+  Objective: { kind: 'Tap', keyboard: ['Tab'], gamepad: [15], touch: { label: 'GOAL', position: [0, 60, 0, 124], size: 56 }, contexts: ['OnFoot', 'Vent'] },
   // The default character controls (Roblox PlayerModule): live wherever no context action claims Space.
   Jump: { kind: 'Hold', keyboard: ['Space'], gamepad: [0], touch: { label: 'JUMP', position: [1, -95, 1, -90], size: 70 }, contexts: ['OnFoot'] },
 });
 
 /** Context priority, highest first (Enums.InputContext). OnFoot is the baseline. */
-export const InputContexts = Object.freeze(['Menu', 'Cutscene', 'Struggle', 'Locker', 'Trapped', 'Downed', 'Vent',
-  'Swim', 'Parachute', 'OnFoot', 'Spectator']);
+export const InputContexts = Object.freeze(['Menu', 'Cutscene', 'Locker', 'Trapped', 'Downed', 'Vent', 'Parachute',
+  'OnFoot', 'Spectator']);
 
 /** SettingsSchema.luau (labels are Strings keys) + the web's Quality entry, which the Roblox engine picked by itself. */
 export const SettingsList = Object.freeze([
@@ -255,7 +220,6 @@ export const SettingsList = Object.freeze([
   { key: 'HintFlask', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
   { key: 'HintLocker', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
   { key: 'HintDownedTeammate', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
-  { key: 'HintWater', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
   { key: 'HintLowBattery', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
   { key: 'HintAirlock', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
 ]);
@@ -270,37 +234,30 @@ export const WorldConfig = Object.freeze({
   Levels: Object.freeze({
     Level0_Basement: { elevation: 0, height: 16 },
     Level1_Hallways: { elevation: 18, height: 14 },
-    Level2_ScienceHall: { elevation: 34, height: 14 },
-    Level3_Gymnasium: { elevation: 50, height: 30 },
-    Level4_FloodedPool: { elevation: 82, height: 28 },
-    Level5_Roof: { elevation: 112, height: 0 },
+    Level2_Auditorium: { elevation: 34, height: 28 },
+    Level3_Roof: { elevation: 64, height: 0 },
   }),
-  LevelOrder: Object.freeze(['Level0_Basement', 'Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium',
-    'Level4_FloodedPool', 'Level5_Roof']),
+  LevelOrder: Object.freeze(['Level0_Basement', 'Level1_Hallways', 'Level2_Auditorium', 'Level3_Roof']),
   LobbyOrigin: [-800, 0, 0],
   Towers: Object.freeze({
-    West: { minX: -28, maxX: 0, minZ: 64, maxZ: 96 },
-    East: { minX: 240, maxX: 268, minZ: 64, maxZ: 96 },
+    West: { minX: -28, maxX: 0, minZ: 128, maxZ: 160 },
+    East: { minX: 400, maxX: 428, minZ: 128, maxZ: 160 },
   }),
   Stairwells: Object.freeze([
     { id: 'Stairwell_0_1', from: 'Level0_Basement', to: 'Level1_Hallways', tower: 'East', fromRoom: 'L0_AirlockEast', toRoom: 'L1_AirlockEast' },
-    { id: 'Stairwell_1_2', from: 'Level1_Hallways', to: 'Level2_ScienceHall', tower: 'West', fromRoom: 'L1_AirlockWest', toRoom: 'L2_AirlockWest' },
-    { id: 'Stairwell_2_3', from: 'Level2_ScienceHall', to: 'Level3_Gymnasium', tower: 'East', fromRoom: 'L2_AirlockEast', toRoom: 'L3_AirlockEast' },
-    { id: 'Stairwell_3_4', from: 'Level3_Gymnasium', to: 'Level4_FloodedPool', tower: 'West', fromRoom: 'L3_AirlockWest', toRoom: 'L4_AirlockWest' },
-    { id: 'Stairwell_4_5', from: 'Level4_FloodedPool', to: 'Level5_Roof', tower: 'East', fromRoom: 'L4_AirlockEast', toRoom: 'L5_RoofAccess' },
+    { id: 'Stairwell_1_2', from: 'Level1_Hallways', to: 'Level2_Auditorium', tower: 'West', fromRoom: 'L1_AirlockWest', toRoom: 'L2_AirlockWest' },
+    { id: 'Stairwell_2_3', from: 'Level2_Auditorium', to: 'Level3_Roof', tower: 'East', fromRoom: 'L2_AirlockEast', toRoom: 'L3_RoofAccess' },
   ]),
   VentBore: 3.5,
-  WaterSurfaceOffset: -1,
   ParapetHeight: 3.5,
 });
 
 /** The MoveStates (Enums.MoveState). */
 export const MoveStates = Object.freeze(['Standing', 'Sprinting', 'Crouching', 'VentCrawling', 'VentScurrying',
-  'DownedCrawling', 'Treading', 'Freestyle', 'Underwater', 'Hiding', 'Trapped', 'Grabbed', 'Parachuting', 'Scripted']);
+  'DownedCrawling', 'Hiding', 'Trapped', 'Parachuting', 'Scripted']);
 
 /** Override MoveStates, highest priority first (PlayerStateService.OverridePriority). */
-export const OverridePriority = Object.freeze(['Scripted', 'Grabbed', 'Trapped', 'Hiding', 'Parachuting',
-  'DownedCrawling']);
+export const OverridePriority = Object.freeze(['Scripted', 'Trapped', 'Hiding', 'Parachuting', 'DownedCrawling']);
 
 /** Humanoid.WalkSpeed per MoveState (PlayerStateService WALK_SPEED). */
 export const WalkSpeeds = Object.freeze({
@@ -310,12 +267,8 @@ export const WalkSpeeds = Object.freeze({
   VentCrawling: GameConfig.VentCrawlSpeed,
   VentScurrying: GameConfig.VentScurrySpeed,
   DownedCrawling: GameConfig.DownedMoveSpeed,
-  Treading: GameConfig.TreadSpeed,
-  Freestyle: GameConfig.FreestyleSpeed,
-  Underwater: GameConfig.UnderwaterSpeed,
   Hiding: 0,
   Trapped: 0,
-  Grabbed: 0,
   Parachuting: GameConfig.WalkSpeed,
   Scripted: 0,
 });
@@ -324,8 +277,6 @@ export const WalkSpeeds = Object.freeze({
 export const StaminaDrain = Object.freeze({
   Sprinting: GameConfig.StaminaSprintDrain,
   VentScurrying: GameConfig.StaminaScurryDrain,
-  Freestyle: GameConfig.StaminaFreestyleDrain,
-  Treading: GameConfig.StaminaTreadDrain,
 });
 
 /** Roblox Enum.Material names -> footstep SurfaceKind (CharacterAnimationController's Palette-derived table). */

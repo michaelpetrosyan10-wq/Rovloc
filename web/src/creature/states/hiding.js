@@ -73,7 +73,7 @@ export function enter(ctx) {
   ctx.mover.setSpeed(speed);
   ctx.body.setWalkSpeed(speed);
   ctx.mover.setRepathInterval(CreatureConfig.Repath.ChaseInterval);
-  if (ctx.mover.getMedium() === 'Floor') ctx.body.setPose('Biped');
+  ctx.body.setPose('Biped');
   ctx.body.face(null);
   ctx.mover.goTo(run.stand, { arrive: ARRIVE });
 }

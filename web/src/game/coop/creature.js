@@ -1,10 +1,10 @@
 // creature.js: the Creature in a co-op run. One brain, on the host; a puppet on every client.
 //
 // Host. The brain's roster (MonsterAI.setRoster) gets a RemotePlayer handle per teammate in play, read from their
-// newest pose: root, look, MoveState, duct / swim mode, torch, life state, downs, the locker they hide in. It sees, hears
-// and chases whichever player its rules pick (the Roblox brain's choice among a server's players). A teammate's noises
+// newest pose: root, look, MoveState, duct mode, torch, life state, downs, the locker they hide in. It sees, hears and
+// chases whichever player its rules pick (the Roblox brain's choice among a server's players). A teammate's noises
 // come as {t: 'noise'} from their page (hearRemote, deduplicated against the host's own copy of a replayed action's
-// noise), their splash threshold as {t: 'splash'}. A catch of a teammate runs in the host's JumpscareHandler; their
+// noise). A catch of a teammate runs in the host's JumpscareHandler; their
 // page gets {t: 'catch'} (the kind, the moment's times, the face, the turn) and plays the moment as its own (lock,
 // JumpscareView, the sting), then {t: 'catchEnd', o} applies Down or Execute there, or {t: 'catchAbort'}. Only the caught
 // player sees their jumpscare; everyone hears the screech.
@@ -16,7 +16,7 @@
 // run from that. What the page's own systems ask of it is answered from the host's state (state, target = you, duct,
 // hidden); what they tell it is forwarded (stun, alert) or declined (acquireScripted: the scenes are the host's).
 // The host also asks a client to run a locker check on its own hiding player ({t: 'breathReq'} -> its registered
-// inspector -> {t: 'breath', v}) and to start a pool grab on its swimmer ({t: 'grabReq'}).
+// inspector -> {t: 'breath', v}). A level scene's stare at a teammate goes through their roster handle (handleOf).
 //
 // Tunnels (the Tall Man). The host's brain stares back at every player through their pose's yaw and pitch (the
 // handle's look). The world packet carries the states the codec knows (Search and HidingResponse go as
@@ -51,7 +51,6 @@ const SNAP_SQ = 144; // a jump this long between two of the host's samples is a 
 const STILL = 0.05; // studs: a step shorter than this gives no heading
 const DEDUPE_SECONDS = 1.5;
 const BUFFER = 10;
-const SWIM_STATES = new Set(['Treading', 'Freestyle', 'Underwater', 'Grabbed']);
 
 const vec = (p) => [p.x, p.y, p.z];
 
@@ -77,7 +76,6 @@ export class CreatureNet {
     this.nextRequest = 1;
     this.handlers = {
       noise: (from, msg) => this._onNoise(from, msg),
-      splash: (from) => this._onSplash(from),
       cstun: (from, msg) => this._onStun(from, msg),
       calert: (from, msg) => this._onAlert(from, msg),
       catch: (from, msg) => this._onCatch(msg),
@@ -85,9 +83,6 @@ export class CreatureNet {
       catchAbort: () => this._onCatchAbort(),
       breathReq: (from, msg) => this._onBreathRequest(msg),
       breath: (from, msg) => this._onBreath(from, msg),
-      grabReq: () => this._onGrabRequest(),
-      grabbed: (from, msg) => this._onGrabbed(from, msg),
-      drowned: () => this._onDrowned(),
       cst: (from, msg) => this._onCreatureState(msg),
       cwarn: (from, msg) => this._onWarn(msg),
       cgrunt: (from, msg) => this._onGrunt(msg),
@@ -148,12 +143,6 @@ export class CreatureNet {
       this.localInspector = originalInspector();
       service.registerLockerInspector((lockerId) => this._inspect(lockerId));
       this.restore.push(() => service.registerLockerInspector(this.localInspector));
-      set(c, 'registerPoolGrabber', (fn) => {
-        this.localGrabber = typeof fn === 'function' ? fn : null;
-      });
-      this.localGrabber = service.poolGrabber;
-      service.registerPoolGrabber((player) => this._grab(player));
-      this.restore.push(() => service.registerPoolGrabber(this.localGrabber));
       this._relayEvents(c);
       return;
     }
@@ -176,24 +165,13 @@ export class CreatureNet {
     set(c, 'alert', (position, priority) => {
       if (position) this.coop.toHost({ t: 'calert', p: vec(position), pr: priority });
     });
-    // the drowning catch is the host's; if it cannot start there the host says so and the air runs out here
-    set(c, 'catchGrabbed', () => {
-      this.coop.toHost({ t: 'grabbed', drown: true });
-      return true;
-    });
     set(c, 'registerLockerInspector', (fn) => {
       this.localInspector = typeof fn === 'function' ? fn : null;
     });
-    set(c, 'registerPoolGrabber', (fn) => {
-      this.localGrabber = typeof fn === 'function' ? fn : null;
-    });
     this.localInspector = service.lockerInspector;
-    this.localGrabber = service.poolGrabber;
-    // the local noise and splash go to the host's brain
+    // the local noise goes to the host's brain
     const offNoise = this.env.onNoise((n) => this._forwardNoise(n));
     this.restore.push(offNoise);
-    const offSplash = this.env.onSplashCrossed(() => this.coop.toHost({ t: 'splash' }));
-    this.restore.push(offSplash);
   }
 
   /** Host: the brain's Tall Man events, to the pages they concern. */
@@ -234,6 +212,12 @@ export class CreatureNet {
 
   // ---------------------------------------------------------------------------------------------------- host
 
+  /** The brain's handle of a teammate (a scene's stare at them: acquireScripted's setTarget), or null. */
+  handleOf(memberId) {
+    const m = this._member(memberId);
+    return m && m.pose ? this._handle(m) : null;
+  }
+
   /** The brain's remote players: teammates in play with a pose. */
   roster() {
     const out = [];
@@ -268,9 +252,7 @@ export class CreatureNet {
       mode: () => {
         const p = pose();
         if (!p) return 'OnFoot';
-        if (p.flags & PoseFlags.Vent) return 'Vent';
-        if (p.flags & PoseFlags.Swim || SWIM_STATES.has(p.moveState)) return 'Swim';
-        return 'OnFoot';
+        return p.flags & PoseFlags.Vent ? 'Vent' : 'OnFoot';
       },
       look: () => {
         const p = pose();
@@ -327,8 +309,6 @@ export class CreatureNet {
     const look = c.service.body.getCFrame().lookVector;
     let target = -1;
     if (s.targetUserId !== null && s.targetUserId !== undefined) target = s.targetUserId - 1;
-    const held = c.service.grabbed;
-    const grabbed = held ? held.userId - 1 : -1;
     // the exact state and the action, reliably, whenever they change
     const sent = this.sentFx;
     if (!sent || sent.state !== s.state || sent.action !== s.action || sent.actionAt !== s.actionStartedAt) {
@@ -337,7 +317,7 @@ export class CreatureNet {
     }
     return { present: true, hidden: s.hidden, inVent: s.inVent, awake: s.awake, x: s.position.x, y: s.position.y,
       z: s.position.z, yaw: Math.atan2(-look.x, -look.z), state: WIRE_STATE[s.state] || s.state, pose: s.pose, level: s.levelId,
-      target, grabbed };
+      target };
   }
 
   _member(from) {
@@ -361,12 +341,6 @@ export class CreatureNet {
       this.game.floors.spawns.hearRemote({ position, kind: event.kind, radius: event.radius, priority: event.priority,
         level: event.levelId });
     }
-  }
-
-  _onSplash(from) {
-    const m = this._member(from);
-    const c = this._creature();
-    if (m && c && c.service) c.service.noteSplash(this._handle(m));
   }
 
   _onStun(from, msg) {
@@ -402,29 +376,6 @@ export class CreatureNet {
     if (!req || req.member !== from) return;
     this.breathRequests.delete(msg.r);
     req.resolve(msg.v === 'Caught' || msg.v === 'HiddenSafe' ? msg.v : 'Empty');
-  }
-
-  /** The brain's pool grabber: the host's swimmer locally, a teammate on their page (granted at once). */
-  _grab(player) {
-    const h = [...this.handles.values()].find((x) => x === player);
-    if (!h) return this.localGrabber ? this.localGrabber(player) : false;
-    if (!h.member.playing() || h.member.caught) return false;
-    this.coop.send(h.member.id, { t: 'grabReq' });
-    return true;
-  }
-
-  _onGrabbed(from, msg) {
-    const m = this._member(from);
-    const c = this._creature();
-    if (!m || !c || !c.service) return;
-    if (msg.drown && !c.service.catchGrabbed(this._handle(m))) this.coop.send(from, { t: 'drowned' });
-  }
-
-  /** Client: the host's Creature could not take this page's drowning swimmer: the air runs out. */
-  _onDrowned() {
-    const game = this.game;
-    this.env.addOxygen(-1e6);
-    if (game.life.state === 'Alive') game.life.down('Drowned');
   }
 
   // ---------------------------------------------------------------------------------------------------- client
@@ -512,8 +463,8 @@ export class CreatureNet {
     }
     this.puppetLast = { x: at.x, z: at.z, t: now };
     // the head room, by the host's hunch rule every tick (FloorNav.headroomAlong): at its root and along the way it
-    // walks, its head's lead plus what its pace covers while it bends; off the floor (swimming) there is none
-    const nav = s.level && s.pose !== 'Swim' && service._nav ? service._nav(s.level) : null;
+    // walks, its head's lead plus what its pace covers while it bends
+    const nav = s.level && service._nav ? service._nav(s.level) : null;
     this.clearance = nav ? nav.headroomAlong(at, this._routeAhead(at), this.puppetSpeed) : Infinity;
   }
 
@@ -566,7 +517,6 @@ export class CreatureNet {
     else if (action === 'FadeIn' && s && !s.hidden) fade = Math.min(1, (now - actionStartedAt) / FADE_IN);
     let poseMode = 'Biped';
     if (state === 'Stunned') poseMode = 'Stunned';
-    else if (s && s.pose === 'Swim') poseMode = 'Swim';
     else if ((s && s.pose === 'Hunched') || this.clearance < CreatureConfig.HunchBelow) poseMode = 'Hunched';
     return { state, speed: this.puppetSpeed, poseMode, action, actionStartedAt, fade };
   }
@@ -592,7 +542,6 @@ export class CreatureNet {
       levelId: s ? s.level : null,
       targetingPlayer: this._targetsMe(),
       targetUserId: null,
-      grabbed: !!s && !!this.coop.me && s.grabbed === this.coop.me.slot,
       awake: !!s && s.awake,
       catching: !!this.catching,
       pacing: null,
@@ -742,10 +691,6 @@ export class CreatureNet {
       console.error('[coop] locker check failed', err);
     }
     this.coop.toHost({ t: 'breath', r: msg.r, v: verdict });
-  }
-
-  _onGrabRequest() {
-    if (this.localGrabber) this.localGrabber(this._creature() ? this._creature().PLAYER : null);
   }
 
   endRun() {

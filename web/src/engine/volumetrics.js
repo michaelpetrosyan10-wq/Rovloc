@@ -1,8 +1,8 @@
 // Volumetrics: the visible air (LightingController/Volumetrics + FixtureGlow cones).
 //
 //   * Shafts. The nearest `budget.shafts` burning fixtures whose kind throws a haze cone (Fluorescent, ClassroomGlow,
-//     Bulb, Floodlight, EmergencyRed) show one: a camera-facing additive quad from the lamp (width0) toward the floor
-//     (width1, at most `length` studs; floodlights aim along their face), bright at the lamp and fading toward the
+//     Bulb, EmergencyRed) show one: a camera-facing additive quad from the lamp (width0) toward the floor (width1, at
+//     most `length` studs; an aimed cone follows the lamp's face), bright at the lamp and fading toward the
 //     floor, in the light's colour, brightening and dying with its flicker group, scaled by the film's `shafts`.
 //     Sources behind the camera rank 1.8x further; nothing beyond 90 studs. The choice refreshes at 4 Hz, brightness
 //     fades at 1.6/s.
@@ -18,7 +18,6 @@ const CONES = {
   Fluorescent: { width0: 3.2, width1: 9.5, length: 13, strength: 1, aimed: false },
   ClassroomGlow: { width0: 3, width1: 9, length: 12, strength: 0.9, aimed: false },
   Bulb: { width0: 0.7, width1: 7, length: 11, strength: 1.15, aimed: false },
-  Floodlight: { width0: 1.8, width1: 14, length: 26, strength: 1.3, aimed: true },
   EmergencyRed: { width0: 0.9, width1: 5, length: 7, strength: 0.7, aimed: false },
 };
 const OFF_LEVEL = 0.02; // FixtureGlow.OffLevel

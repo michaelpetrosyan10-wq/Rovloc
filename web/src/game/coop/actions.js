@@ -2,7 +2,7 @@
 // env.addPrompt, which hands it here (env.promptHook); its `net` policy decides what a trigger does:
 //
 //   'local' (the default)  this page only: the lobby terminals, a locked door's rattle, the trapped player's own pry.
-//   'world'                shared world state (the objectives' items and stations, the vent grates, the floodlights):
+//   'world'                shared world state (the objectives' items and stations, the vent grates):
 //                          the page that pressed it asks the host ({t: 'act', k, ph}); the host checks the actor is
 //                          in the run, alive and within reach of the prompt (their last pose) and sends it to every
 //                          page, its own included ({t: 'act', k, ph, a}); each page then runs the prompt's own

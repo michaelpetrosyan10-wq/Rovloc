@@ -15,8 +15,7 @@
 // trailing), Investigate (lower, neck craned, sniffing pecks, one hand feeling the air), Chase (the lope: long strides
 // with a flight phase, a hard lean, the arms swinging low, the head dead level on its target), VentCrawl /
 // VentRetreat (the old duct crawl, kept for the legacy vent states), Stunned (both hands raking at the mask,
-// staggering on buckling knees), Swim (an eel's wave head to toe), Scripted (neutral, staring at its target). Any
-// upright state hunches under a low ceiling (setHunch: PoseMode Hunched) to about Rig.HunchedHeight.
+// staggering on buckling knees), Scripted (neutral, staring at its target). Any upright state hunches under a low ceiling (setHunch: PoseMode Hunched) to about Rig.HunchedHeight.
 // Actions: NeckSnap, Lunge (= Jumpscare: it bows to the victim, the long neck reaching down until the mask hangs level
 // with their eye about 1.4 studs off, cocked over; the hands come up around their head; the hinge parts a little as the
 // mask's slit tears into its maw), LockerRip, DoorSmash, Vanish, Reveal, FadeOut / FadeIn (the teleport's dissolve poses),
@@ -37,7 +36,6 @@ const PLANT = { Left: 0, Right: 0.5 };
 
 const names = (suffix) => ({ Left: `Left${suffix}`, Right: `Right${suffix}` });
 const HIP = names('Hip');
-const KNEE = names('Knee');
 const ANKLE = names('Ankle');
 const SHOULDER = names('Shoulder');
 const ELBOW = names('Elbow');
@@ -59,7 +57,7 @@ const HEAD = 'Head';
 export const REQUIRED = ['Root', 'Waist', 'Neck', 'Jaw', 'LeftShoulder', 'LeftElbow', 'LeftWrist', 'RightShoulder',
   'RightElbow', 'RightWrist', 'LeftHip', 'LeftKnee', 'LeftAnkle', 'RightHip', 'RightKnee', 'RightAnkle'];
 
-export const States = Object.freeze(['Dormant', 'Patrol', 'Investigate', 'Chase', 'VentCrawl', 'VentRetreat', 'Stunned', 'Swim', 'Scripted']);
+export const States = Object.freeze(['Dormant', 'Patrol', 'Investigate', 'Chase', 'VentCrawl', 'VentRetreat', 'Stunned', 'Scripted']);
 export const Actions = Object.freeze(['NeckSnap', 'Lunge', 'LockerRip', 'DoorSmash', 'Vanish', 'Reveal', 'Stare', 'ReachIn',
   'LookAway', 'FadeOut', 'FadeIn', 'Jumpscare']);
 
@@ -1112,45 +1110,6 @@ function ventRetreat(ctx, pose) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// States: water
-// ---------------------------------------------------------------------------------------------------------------
-
-const SWIM_HAIR = { gravity: 0.2, stream: 0.85, sway: 0.12, bore: false };
-const SWIM_FLOOR = -1e6;
-
-function swim(ctx, pose) {
-  const m = measure(ctx.map);
-  const phase = ctx.phase;
-  const amplitude = rad(13) * Math.max(ctx.moveAmount, 0.35);
-  const heading = (lag, gain) => amplitude * gain * Math.sin(TAU * (phase - lag));
-  const head = heading(0, 0.35);
-  const chest = heading(0.12, 0.8);
-  const pelvis = heading(0.24, 1);
-  const thighs = heading(0.36, 1.5);
-  const shins = heading(0.48, 2.2);
-  pose.set(ROOT, prone(-Math.PI / 2 + rad(4), pelvis, ctx.leanRoll * 0.5));
-  pose.set(WAIST, euler(rad(14) + ctx.breath * rad(1), 0, -(chest - pelvis)));
-  const neckNow = pose.pivot(NECK);
-  shiftBody(pose, V(0, -0.15 - neckNow.y, -3.6 - neckNow.z));
-  const g = runtimeOf(ctx.map).gaze;
-  headTo(pose, lookRotation(g.yaw * 0.6 + head, rad(-30) + g.pitch * 0.5, g.roll * 0.5), true);
-  for (const side of SIDES) {
-    const s = SIGN[side];
-    const ripple = Math.sin(TAU * (phase - 0.3));
-    pose.set(SHOULDER[side], euler(rad(-18) + rad(6) * ripple * s, 0, s * (rad(10) + rad(5) * ripple)));
-    pose.set(ELBOW[side], euler(rad(-4) + rad(8) * Math.max(0, ripple * s), 0, 0));
-    pose.set(WRIST[side], euler(rad(-10), 0, -s * rad(10) * ripple));
-    pose.set(HIP[side], euler(rad(2), 0, -(thighs - pelvis) + s * rad(2)));
-    pose.set(KNEE[side], euler(-rad(6), 0, -(shins - thighs)));
-    pose.set(ANKLE[side], euler(-rad(55), 0, 0));
-  }
-  setJaw(pose, 0);
-  for (const side of SIDES) fingers(pose, m, side, rad(-8), rad(4), rad(8), ctx.time * 1.5);
-  applyActions(ctx, pose, m);
-  hair(ctx, pose, m, SWIM_HAIR, SWIM_FLOOR);
-}
-
-// ---------------------------------------------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -1293,11 +1252,10 @@ function lunge(ctx, pose, m, elapsed, run) {
   const jolt = impulse(elapsed - 0.36, 0.03, 9);
   const tremor = smoothstep(LUNGE, LUNGE + 0.1, elapsed) * stepped(ctx.time, 24, run.seed) * (1 + 1.5 * smoothstep(0.85, 1.0, elapsed) * (1 - smoothstep(1.25, 1.45, elapsed)));
   const bore = QUADRUPED.has(ctx.state);
-  const swimming = ctx.state === 'Swim';
   const target = targetPoint(ctx, m, 4.2);
   // it bows to the victim: the knees fold, the chest bends far forward, the long neck reaching down until the mask
   // hangs level with their eye
-  if (!bore && !swimming) {
+  if (!bore) {
     // solved on each state's base pose before the bow (the animator blends states, each posing the actions on its own
     // base), again every LOOM_RESOLVE seconds (the base pose may change under it)
     run.looms ||= {};
@@ -1567,7 +1525,6 @@ const states = {
   VentCrawl: { pose: posed(ventCrawl), cycle: crawlCycle(VENT), footsteps: { plants: CRAWL_PLANT, volume: 0.55, sprint: false }, blendSpeed: 14, exertion: 0.6 },
   VentRetreat: { pose: posed(ventRetreat), cycle: crawlCycle(RETREAT), footsteps: { plants: CRAWL_PLANT, volume: 0.65, sprint: false }, blendSpeed: 14, exertion: 1 },
   Stunned: { pose: posed(stunned), cycle: cycleFor(STAGGER, 1.6), footsteps: { plants: PLANT, volume: 0.9, sprint: false }, blendSpeed: 10, plantFeet: true, exertion: 1 },
-  Swim: { pose: posed(swim), cycle: { length: () => 9, rate: 0.35 }, blendSpeed: 4, exertion: 0.3 },
   Scripted: { pose: posed(scripted), cycle: cycleFor(NEUTRAL, 1.3), footsteps: { plants: PLANT, volume: 0.9, sprint: false }, blendSpeed: 7, plantFeet: true },
 };
 
@@ -1603,7 +1560,7 @@ export function isAction(name) {
 }
 
 const STATE_ALIASES = Object.freeze({
-  Patrol: 'Patrol', Stalk: 'Patrol', AquaticStalk: 'Patrol', Teleport: 'Patrol', HidingResponse: 'Patrol',
+  Patrol: 'Patrol', Stalk: 'Patrol', Teleport: 'Patrol', HidingResponse: 'Patrol',
   InvestigateNoise: 'Investigate', Investigate: 'Investigate', Search: 'Investigate',
   WallChase: 'Chase', VentChase: 'Chase', Chase: 'Chase', Stunned: 'Stunned', Scripted: 'Scripted', Dormant: 'Dormant',
 });
@@ -1615,7 +1572,6 @@ const STATE_ALIASES = Object.freeze({
  */
 export function resolveState(monsterState, poseMode, inVent) {
   if (poseMode === 'Quadruped' || inVent === true) return monsterState === 'Stunned' ? 'VentRetreat' : 'VentCrawl';
-  if (poseMode === 'Swim') return monsterState === 'Stunned' ? 'Stunned' : 'Swim';
   if (poseMode === 'Stunned') return 'Stunned';
   if (monsterState === 'Scripted' && poseMode === 'Hunched') return 'Dormant';
   const known = STATE_ALIASES[monsterState];

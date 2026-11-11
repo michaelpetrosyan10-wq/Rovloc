@@ -31,13 +31,14 @@ import { ZoneCulling } from './pvs.js';
 const NEON_STRENGTH = 2.4; // Roblox Neon renders well above its colour; the bloom catches it on High
 const STAIRWELLS = 'Stairwells';
 /**
- * Draw order per bucket: opaque, Neon, wear (multiplied onto the walls), decals (alpha-blended), then glass and water.
+ * Draw order per bucket: opaque, Neon, wear (multiplied onto the walls), decals (alpha-blended), then glass.
  */
 export const RENDER_ORDER = Object.freeze({ opaque: 0, emissive: 1, wear: 3, decal: 5, transparent: 10 });
 const EXTERIOR = 'Exterior';
-const EXTERIOR_FROM = new Set(['Level5_Roof']);
+// The open roof (the top school level) sees the outside.
+const EXTERIOR_FROM = new Set([WorldConfig.LevelOrder[WorldConfig.LevelOrder.length - 1]]);
 // The school's floors above ground: their outer walls, windows and slab edges are the building seen from outside.
-const FACADE_LEVELS = /^Level[1-5]_/;
+const FACADE_LEVELS = new Set(WorldConfig.LevelOrder.slice(1));
 const FACADE_REACH = 600; // outdoors (the street, the canopy ride) within this of the school, its facade shows
 const FACADE_EDGE = 14; // on the roof within this of the outer wall, the floors below show over the parapet
 
@@ -55,7 +56,7 @@ export class World {
   constructor(decoded, images, deps) {
     this.decoded = decoded;
     this.meta = decoded.meta;
-    /** The parsed world.json (levels, lights, entities, anchors, triggers, zones, rooms, pools, graphs, ...). */
+    /** The parsed world.json (levels, lights, entities, anchors, triggers, zones, rooms, graphs, ...). */
     this.data = decoded.meta;
     this.images = images || {};
     this.shared = deps.shared;
@@ -352,7 +353,7 @@ export class World {
     /** The school's footprint (the union of its floors' boxes): where its facade stands. */
     this.schoolFootprint = null;
     for (const e of this.levelBoxes) {
-      if (!FACADE_LEVELS.test(e.id)) continue;
+      if (!FACADE_LEVELS.has(e.id)) continue;
       if (!this.schoolFootprint) this.schoolFootprint = e.box.clone();
       else this.schoolFootprint.union(e.box);
     }
@@ -420,7 +421,7 @@ export class World {
     }
     for (const l of out) if (EXTERIOR_FROM.has(l)) out.add(EXTERIOR);
     // Outdoors the Exterior box holds the point, so without this only the street and the stair towers drew: the
-    // building vanished under the canopy ride and the Creature stood on the finale's ledge over nothing.
+    // building vanished under the canopy ride and the Creature stood on the ledge over nothing.
     const outdoors = !level || level === EXTERIOR;
     if (outdoors || EXTERIOR_FROM.has(level)) {
       const f = this.schoolFootprint;
@@ -430,7 +431,7 @@ export class World {
         const inside = dx === 0 && dz === 0;
         const edge = inside ? Math.min(position.x - f.min.x, f.max.x - position.x, position.z - f.min.z, f.max.z - position.z) : 0;
         if (outdoors ? Math.hypot(dx, dz) <= FACADE_REACH : !inside || edge <= FACADE_EDGE) {
-          for (const id of this.levelGroups.keys()) if (FACADE_LEVELS.test(id)) out.add(id);
+          for (const id of this.levelGroups.keys()) if (FACADE_LEVELS.has(id)) out.add(id);
         }
       }
     }
@@ -490,7 +491,7 @@ export class World {
     if (!level || level === STAIRWELLS || !this.decoded.probes[level]) level = this.nearestLevel(pos.y);
     const grid = (level && this.decoded.probes[level]) || this.decoded.probes.Stairwells;
     if (!grid) return out.setRGB(0.04, 0.045, 0.055);
-    // scripted groups (the pool floodlights, the classroom glow) add their own grids at their current level
+    // scripted groups (the classroom glow) add their own grids at their current level
     sampleProbe(grid, pos.x, pos.y, pos.z, _probe, this.shared.uFlickerData);
     return out.setRGB(_probe[0], _probe[1], _probe[2]);
   }

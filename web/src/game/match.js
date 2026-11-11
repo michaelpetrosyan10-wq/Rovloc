@@ -6,20 +6,20 @@
 //                       the run's routes and plan come from it and are applied to the world (props and grate locks), every
 //                       system's beginRun runs, the player spawns at Level 0's first PlayerSpawn slot, Level 0 is
 //                       entered, then InRun activates it.
-//   Outcomes            Pending -> Escaped (Level 5's landing) / Dead (anything else when the run resolves). One
+//   Outcomes            Pending -> Escaped (the roof's landing) / Dead (anything else when the run resolves). One
 //                       evaluator, coalesced to the next tick, on every life change and escape: Wipe when nobody is
 //                       Alive and nobody Downed holds a syringe charge, Escape when the same holds after an escape.
 //   Resolution          RunEnded, the reward (CreditsPerLevelCleared x floors sealed + CreditsEscapeBonus; Escapes + 1
 //                       and BestTime on an escape; once per run through LastRunId; nothing for a dev run), the summary
 //                       to the results screen, Results.
-//   Results             ResultsSeconds (+ 8 after an escape: the finale plays first) or Play Again, then Resetting
+//   Results             ResultsSeconds (+ 8 after an escape: the landing shot plays first) or Play Again, then Resetting
 //                       (every system's endRun) and back to the Lobby; Play Again arrives Ready.
 
 import { DifficultyConfig, GameConfig } from './config.js';
 import { applyReward, rewardFor } from './profile.js';
 import { normalizeSeed } from './worldData.js';
 
-const ESCAPE_FINALE_SECONDS = 8;
+const ESCAPE_SHOT_SECONDS = 8;
 const RUN_ID_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
 /**
@@ -120,7 +120,7 @@ export class Match {
 
   // ---------------------------------------------------------------------------------------------------- outcomes
 
-  /** Level 5's escape (the landing). */
+  /** The roof's escape (the landing below). */
   markEscaped() {
     const game = this.game;
     if (!game.run || this.resolved || game.phase !== 'InRun' || this.outcome !== 'Pending') return false;
@@ -237,7 +237,7 @@ export class Match {
       saved,
       verdict,
     };
-    this.resultsEndsAt = now + GameConfig.ResultsSeconds + (escaped ? ESCAPE_FINALE_SECONDS : 0);
+    this.resultsEndsAt = now + GameConfig.ResultsSeconds + (escaped ? ESCAPE_SHOT_SECONDS : 0);
     this.resultsTotal = this.resultsEndsAt - now;
     game.setPhase('Results');
   }

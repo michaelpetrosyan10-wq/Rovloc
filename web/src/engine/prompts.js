@@ -6,7 +6,7 @@
 // nearest wins (ties go to the one nearer the centre of the view); one without line of sight still never answers
 // through a wall. Holding Interact fills its ring over holdSeconds (0 = instant); releasing drains it; leaving range
 // cancels. onTriggered fires once per completed hold (before its onHoldEnded). Touch / a free cursor press the row
-// itself. The input context must have Interact live (on foot, in a vent, swimming, trapped, in a locker).
+// itself. The input context must have Interact live (on foot, in a vent, trapped, in a locker).
 
 import * as THREE from 'three';
 

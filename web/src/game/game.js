@@ -75,8 +75,6 @@ export class Game {
     this.levelDeactivated = new Signal();
     /** @type {import('./creatureApi.js').ScriptedHandle|null} the scripted Creature a level scene holds */
     this.creatureHandle = null;
-    /** @type {Set<string>} lights a level keeps lit past their scene (the pool floodlights) */
-    this.lightsKeptLit = new Set();
     /** @type {import('./coop/index.js').Coop|null} the co-op room (start.js); inactive when played alone */
     this.coop = null;
     /** the system whose tick / handler is running (co-op mirrors the host's level scenes by it) */
@@ -168,7 +166,7 @@ export class Game {
 
   // ---------------------------------------------------------------------------------------------------- locks
 
-  /** CharacterService.Lock: a ControlLock reason (Trap, Locker, Jumpscare, Cutscene, Drag, Parachute, Airlock). */
+  /** CharacterService.Lock: a ControlLock reason (Trap, Locker, Jumpscare, Cutscene, Parachute, Airlock). */
   lock(reason) {
     this.locks.set(reason, true);
     this.env.lock(reason);
@@ -182,7 +180,7 @@ export class Game {
   /** The ControlLock the HUD reads ('None' when free); a jumpscare the Creature holds counts too. */
   controlLock() {
     if (this.env.hasLock('Jumpscare')) return 'Jumpscare';
-    for (const r of ['Cutscene', 'Drag', 'Locker', 'Trap', 'Parachute', 'Airlock']) if (this.locks.has(r)) return r;
+    for (const r of ['Cutscene', 'Locker', 'Trap', 'Parachute', 'Airlock']) if (this.locks.has(r)) return r;
     for (const r of this.locks.keys()) return r;
     return 'None';
   }
@@ -259,14 +257,14 @@ export class Game {
   }
 
   /**
-   * The players a level's scene can happen to: [{id, local, eye, root, zone, inVent}] for everyone in play (co-op, on
-   * the host: the whole squad; alone: the player, while playing).
+   * The players a level's scene can happen to: [{id, local, eye, root, zone, inVent, life}] for everyone in play (co-op,
+   * on the host: the whole squad; alone: the player, while playing).
    */
   subjects() {
     if (this.coop) return this.coop.runNet.subjects();
     if (!this.playing()) return [];
     return [{ id: null, local: true, eye: this.eye(new THREE.Vector3()), root: this.env.rootPosition(new THREE.Vector3()),
-      zone: this.zoneId(), inVent: !!(this.vents && this.vents.inVent()) }];
+      zone: this.zoneId(), inVent: !!(this.vents && this.vents.inVent()), life: this.life.state }];
   }
 
   /** Could anyone in play see `point` (co-op: every player, on the host; alone: seen())? */

@@ -6,11 +6,11 @@
 //     The factor of every group (ids are world-wide) is written into the shared flicker table and texture each frame,
 //     which scales each vertex's baked share of that group (and the Neon glow of its tubes).
 //   * Overrides, three layers per group, so none releases another's:
-//       - setOverride(lightId, brightness|null) pins a light (Timeline tracks, the boiler surge, the pool
-//         floodlights, the classroom glow): a baked light's group factor becomes brightness / base (above every
+//       - setOverride(lightId, brightness|null) pins a light (Timeline tracks, the boiler surge, the classroom
+//         glow): a baked light's group factor becomes brightness / base (above every
 //         other layer, as a Roblox light override is above the power cut); a dynamic light burns at that brightness;
-//       - setGroupFactor(groupId, factor|null) holds a whole group (the basement's power cut and its switch-on, the
-//         pool floodlights' switch) in place of its own flicker;
+//       - setGroupFactor(groupId, factor|null) holds a whole group (the basement's power cut and its switch-on) in
+//         place of its own flicker;
 //       - setGroupStutter(groupId, factor|null) is a passing stutter (the Creature's teleport warning): it replaces
 //         the group's own flicker, but a held group it can only dim (a cut circuit stays dark).
 //     burst(lightId) surges a bulb to 4x, stutters and kills it for the run.
@@ -69,17 +69,16 @@ const FILM_PATCHES = {
   Lobby: { exposure: 0.1, contrast: 0.14, saturation: -0.12, bloomIntensity: 0.8, bloomSize: 32, bloomThreshold: 1.15, density: 0.28, offset: 0.1, haze: 1.4, hazeColor: rgb(60, 52, 44), decay: rgb(30, 24, 20), dofFar: 0.1, dofRadius: 50, vignette: 0.26, shafts: 0.8, dust: 0.8, moon: 0 },
   Level0_Basement: { exposure: 0.05, saturation: -0.18, bloomIntensity: 0.95, bloomSize: 36, bloomThreshold: 1.05, density: 0.42, offset: 0.04, haze: 2.4, glare: 0.35, hazeColor: rgb(62, 50, 36), decay: rgb(34, 24, 14), sunRays: 0, dofFar: 0.16, dofFocus: 34, dofRadius: 40, vignette: 0.36, shafts: 1.25, dust: 1.4, moon: 0 },
   Level1_Hallways: { saturation: -0.24, hazeColor: rgb(42, 52, 48), decay: rgb(20, 28, 26) },
-  Level2_ScienceHall: { exposure: 0.1, bloomIntensity: 0.9, bloomThreshold: 1.1, density: 0.32, haze: 1.7, hazeColor: rgb(38, 52, 54), decay: rgb(18, 28, 30), shafts: 0.95, dust: 0.9 },
-  Level3_Gymnasium: { bloomIntensity: 0.9, bloomSize: 38, bloomThreshold: 1.1, density: 0.38, haze: 2.1, hazeColor: rgb(46, 52, 42), decay: rgb(24, 28, 20), dofFocus: 44, dofRadius: 52, shafts: 1.15, dust: 1.2, moon: 1.15 },
-  Level4_FloodedPool: { exposure: 0.12, contrast: 0.22, saturation: -0.16, bloomIntensity: 1, bloomSize: 40, bloomThreshold: 1, density: 0.46, offset: 0.02, haze: 2.6, glare: 0.3, hazeColor: rgb(40, 54, 62), decay: rgb(18, 30, 38), dofFar: 0.16, vignette: 0.34, shafts: 1.2, dust: 0.6, moon: 1.1 },
-  Level5_Roof: { exposure: 0.2, contrast: 0.16, bloomIntensity: 0.75, bloomSize: 30, bloomThreshold: 1.2, density: 0.36, offset: 0.12, haze: 2.2, glare: 0.1, hazeColor: rgb(40, 44, 54), decay: rgb(20, 24, 30), sunRays: 0.06, dofFar: 0.12, dofFocus: 48, dofRadius: 60, vignette: 0.3, shafts: 0.8, dust: 0, moon: 0 },
+  Level2_Auditorium: { exposure: 0.1, bloomIntensity: 0.9, bloomThreshold: 1.1, density: 0.32, haze: 1.7, hazeColor: rgb(38, 52, 54), decay: rgb(18, 28, 30), shafts: 0.95, dust: 0.9 },
+  Level3_Roof: { exposure: 0.2, contrast: 0.16, bloomIntensity: 0.75, bloomSize: 30, bloomThreshold: 1.2, density: 0.36, offset: 0.12, haze: 2.2, glare: 0.1, hazeColor: rgb(40, 44, 54), decay: rgb(20, 24, 30), sunRays: 0.06, dofFar: 0.12, dofFocus: 48, dofRadius: 60, vignette: 0.3, shafts: 0.8, dust: 0, moon: 0 },
 };
 /** LightingMood.LEVELS grade tints. */
 const GRADES = {
   Lobby: rgb(255, 240, 222), Level0_Basement: rgb(255, 236, 214), Level1_Hallways: rgb(236, 255, 244),
-  Level2_ScienceHall: rgb(232, 252, 252), Level3_Gymnasium: rgb(244, 255, 236), Level4_FloodedPool: rgb(226, 244, 255),
-  Level5_Roof: rgb(234, 240, 255),
+  Level2_Auditorium: rgb(232, 252, 252), Level3_Roof: rgb(234, 240, 255),
 };
+/** The open roof: its film and grade are the outdoors' (LightingMood OUTDOOR_FILM). */
+const OUTDOOR_LEVEL = 'Level3_Roof';
 
 const NUMERIC_FILM = ['exposure', 'trim', 'contrast', 'saturation', 'lift', 'bloomIntensity', 'bloomThreshold', 'density',
   'haze', 'vignette', 'shafts', 'dust', 'moon', 'dofFar'];
@@ -351,7 +350,7 @@ export class Lighting {
 
   /**
    * Holds a whole flicker group at `factor` in place of its own flicker (null releases): the basement's power cut and
-   * its switch-on, Scripted:Floodlights 1 at the L4 switch.
+   * its switch-on.
    */
   setGroupFactor(groupId, factor) {
     const g = this.groups.get(groupId);
@@ -367,7 +366,7 @@ export class Lighting {
     if (g) g.stutter = factor === null || factor === undefined ? null : factor;
   }
 
-  /** The id of a flicker group by its name ("Scripted:Floodlights"; names are unique world-wide), or 0. */
+  /** The id of a flicker group by its name ("Mains:Level0_Basement"; names are unique world-wide), or 0. */
   groupId(name) {
     for (const g of this.groups.values()) if (g.name === name) return g.id;
     return 0;
@@ -438,14 +437,14 @@ export class Lighting {
     const key = levelInfo ? levelInfo.film : level ? null : 'Outdoor';
     if (film && film.levels && key && film.levels[key]) return normalizeFilm({ ...film.base, ...film.levels[key] });
     if (film && film.base && !key) return normalizeFilm(film.base);
-    const k = level === 'Exterior' || !level ? 'Level5_Roof' : level === 'Stairwells' ? null : level;
+    const k = level === 'Exterior' || !level ? OUTDOOR_LEVEL : level === 'Stairwells' ? null : level;
     return k && FILM_PATCHES[k] ? normalizeFilm({ ...BASE_FILM, ...FILM_PATCHES[k] }) : normalizeFilm(BASE_FILM);
   }
 
   /** The area grade tint of a layout (LightingMood.LEVELS grade). */
   gradeFor(level, out) {
     const moods = this.world.meta.lighting && this.world.meta.lighting.moods;
-    const key = level === 'Exterior' ? 'Level5_Roof' : level;
+    const key = level === 'Exterior' ? OUTDOOR_LEVEL : level;
     const g = moods && moods[key] && moods[key].grade;
     if (g) return setLinear(out, g);
     const fallback = GRADES[key];
@@ -504,7 +503,7 @@ export class Lighting {
     this.snap = false;
 
     // lightning
-    this.outdoors = level === 'Level5_Roof' || level === 'Exterior' || !level;
+    this.outdoors = level === OUTDOOR_LEVEL || level === 'Exterior' || !level;
     this._storm(t);
     let sky = 0;
     for (let i = this.flashes.length - 1; i >= 0; i--) {

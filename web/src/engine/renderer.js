@@ -116,7 +116,7 @@ uniform float uVignetteDepth;
 uniform float uAspect;
 uniform float uGrain;
 uniform float uTime;
-uniform vec4 uOverlay; // rgb colour, a amount (underwater murk, flashes)
+uniform vec4 uOverlay; // rgb colour, a amount (flashes)
 uniform float uBlur;   // 0..1 cheap radial softening (panic depth of field stand-in)
 uniform vec2 uTexel;
 uniform float uFxaa;   // 1: FXAA on the scene fetch

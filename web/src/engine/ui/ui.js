@@ -2,8 +2,8 @@
 //
 //   * Primitives: panel, meter (thin rounded bar), ring (SVG progress ring, clockwise from 12), keyCap (keyboard key,
 //     gamepad button or touch mark for an action on the current device), roundButton.
-//   * Status bars: battery (amber), stamina (moss), oxygen (cyan), bottom-left (top-left on touch). A bar shows fully
-//     while it changes or matters (oxygen underwater, battery while lit), rests dim when partly spent and quiet,
+//   * Status bars: battery (amber), stamina (moss), bottom-left (top-left on touch). A bar shows fully while it
+//     changes or matters (battery while lit), rests dim when partly spent and quiet,
 //     fades away when full and idle; under 20 % it warms toward ember and pulses (faster under 10 %).
 //   * Prompts: rows at their world anchor (projected each frame), a hold ring around the key glyph, the object text
 //     above the action; rows fade in and out, the ring fills while holding and drains when released. On touch the
@@ -403,7 +403,7 @@ export class UI {
   // ------------------------------------------------------------------ status bars
 
   /**
-   * Draws the meters (battery / stamina / oxygen) each frame.
+   * Draws the meters (battery / stamina) each frame.
    * @param {number} dt
    * @param {Array<{id: string, label: string, fraction: number, color: string, active: boolean}>} meters
    * @param {number} [syringes] charges left (pips)
@@ -671,7 +671,7 @@ export class UI {
     const input = this.input;
     const ctx = input.getContext();
     const unlocked = input.device === 'KeyboardMouse' && input.wantPointerLock && !input.pointerLocked &&
-      !input.isCursorFree() && !this.menuOpen && ctx !== 'Struggle' && ctx !== 'Cutscene';
+      !input.isCursorFree() && !this.menuOpen && ctx !== 'Cutscene';
     this.lockWait = unlocked ? this.lockWait + dt : 0;
     this.lockEl.classList.toggle('on', this.lockWait > 0.6);
     const step = this.hudRate * dt;

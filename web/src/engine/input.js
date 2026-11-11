@@ -2,11 +2,11 @@
 // (InputController.luau + CursorController + MobileControls).
 //
 //   * Contexts. Systems push an InputContext under a token and pop it by the same token; the active context is the
-//     highest-priority pushed one (Menu > Cutscene > Struggle > Locker > Trapped > Downed > Vent > Swim > Parachute
-//     > OnFoot > Spectator), the "OnFoot" baseline when nothing is pushed. Only the actions InputBindings marks live
+//     highest-priority pushed one (Menu > Cutscene > Locker > Trapped > Downed > Vent > Parachute > OnFoot >
+//     Spectator), the "OnFoot" baseline when nothing is pushed. Only the actions InputBindings marks live
 //     in the active context fire.
 //   * Phases. Hold actions fire "Begin" when the first of their inputs goes down and "End" when the last comes up.
-//     Tap, Toggle and Mash actions fire "Begin" on every press (the consumer toggles / counts). A context change
+//     Tap and Toggle actions fire "Begin" on every press (the consumer toggles / counts). A context change
 //     ends held actions that are no longer live.
 //   * Move / look. WASD + arrows / the left stick / the touch thumbstick give the move vector; the mouse (only while
 //     the pointer is locked), the right stick (radial deadzone + curve live in the camera rig) and a look drag on
@@ -33,8 +33,8 @@ const THUMB_RADIUS = 60;
 const TOUCH_MOUSE_GRACE = 900; // ms after a touch in which mouse events are the browser's emulation of it
 const PREVENT = new Set(['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'KeyF']);
 // the contexts the body moves in: only there does the touch layer draw its thumbstick (in a locker it sat under the
-// LEAVE button, in a trap or a struggle it did nothing)
-const STICK_CONTEXTS = new Set(['OnFoot', 'Vent', 'Swim', 'Downed', 'Parachute']);
+// LEAVE button, in a trap it did nothing)
+const STICK_CONTEXTS = new Set(['OnFoot', 'Vent', 'Downed', 'Parachute']);
 
 /** @typedef {'Begin'|'End'} Phase */
 /** @typedef {'KeyboardMouse'|'Gamepad'|'Touch'} Device */

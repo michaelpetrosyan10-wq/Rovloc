@@ -37,12 +37,11 @@ const MIN_DIRECTION = 1e-3;
 
 // Root to root. On its feet it bows to the victim: the chest folds far forward and the long neck reaches down until
 // the mask hangs level with their eye about 1.3 studs off (profile.js, the Lunge), so it stands well back, stepping
-// back off its root if it is closer than that. In a duct (Vent) and in the water it lunges straight in.
+// back off its root if it is closer than that. In a duct (Vent) it lunges straight in.
 const SPACING = {
   Hallway: { distance: 4.2, minimum: 3.4 },
   Locker: { distance: 4.4, minimum: 3.6 },
   Vent: { distance: J.FaceDistance + 1.2, minimum: J.FaceDistance + 0.7 },
-  Underwater: { distance: J.FaceDistance + 1.0, minimum: J.FaceDistance + 0.4 },
 };
 
 /**

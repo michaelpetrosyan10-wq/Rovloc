@@ -1,14 +1,16 @@
 // base.js: what every floor objective shares (the per-floor modules extend FloorObjective).
 //
 // Per run (beginRun): the floor's picks from the run plan (worldData.pickObjective by the run seed) are shown and every
-// other candidate of the floor's item is hidden; the steps start at 0; floors 0-4 shut their exit (the run route's
-// fire doors, snapped Locked) and reset its ExitLock with the Locked prompt. Prompts answer only while the floor is the
-// active level. Items are hold prompts (the item's hold from ObjectiveConfig) that put the item in the carry.
-// Completing the floor's lockStep unlocks it: the lock comes off, the stairwell door's bolts clunk (the loud High noise
-// at the door: the Creature hears it), the door swings open DoorDelay later and the tracker switches to the stairwell.
-// The airlock (airlock.js) only starts once the floor is unlocked. Carried items, kept progress and a dropped item's
-// spot all live in the floor's run state, so being downed, grabbed or revived never loses a step; the run ending
-// (death, the results, Play Again) resets everything for the next run.
+// other candidate of the floor's item is hidden; the steps start at 0; a floor with a lock step shuts its exit (the run
+// route's fire doors, snapped Locked) and resets its ExitLock with the Locked prompt. Prompts answer only while the
+// floor is the active level. Items are hold prompts (the item's hold from ObjectiveConfig) that put the item in the
+// carry. Completing the floor's lockStep unlocks it: the lock comes off, the stairwell door's bolts clunk (the loud
+// High noise at the door: the Creature hears it), the door swings open DoorDelay later and the tracker switches to the
+// stairwell. The airlock (airlock.js) only starts once the floor is unlocked. A floor without an item and without a
+// lock step is a plain crossing (the Auditorium's ReachExit): its exit is open from the start and its steps are done
+// when the squad leaves it. Carried items, kept progress and a dropped item's spot all live in the floor's run state,
+// so being downed or revived never loses a step; the run ending (death, the results, Play Again) resets everything for
+// the next run.
 
 import * as THREE from 'three';
 import { S } from '../strings.js';
@@ -37,7 +39,7 @@ export class FloorObjective {
     this.tweens = new Tweens(this.env);
     const order = new Map(this.world.objectiveCandidates(this.level).map((c, i) => [c.anchorId, i]));
     /** every candidate entity of the floor's item, in layout order */
-    this.items = this.world.entities(spec.item.prop, this.level)
+    this.items = (spec.item ? this.world.entities(spec.item.prop, this.level) : [])
       .sort((a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
     /** @type {Map<string, number>} */
     this.progress = new Map();
@@ -48,8 +50,7 @@ export class FloorObjective {
     this.taken = new Set();
     /** @type {WorkHold[]} */
     this.holds = [];
-    this.voices = [];
-    this.picks = { anchors: [], slots: {}, guards: [] };
+    this.picks = { anchors: [], guards: [] };
     this.lock = null;
     this.lockedPrompt = null;
     this.route = null;
@@ -74,13 +75,6 @@ export class FloorObjective {
     return w;
   }
 
-  /** A looping sound kept until the floor's run ends. */
-  loop(preset, at, opts = {}) {
-    const v = this.game.playAt(preset, at, { loop: true, ...opts });
-    if (v) this.voices.push(v);
-    return v;
-  }
-
   count(stepId) {
     return this.progress.get(stepId) || 0;
   }
@@ -96,12 +90,6 @@ export class FloorObjective {
     if (!s) return;
     this.progress.set(stepId, Math.min(s.count, this.count(stepId) + n));
     if (stepId === this.spec.lockStep && this.done(stepId)) this.unlock();
-    this.refresh();
-  }
-
-  /** Undoes a step (an acid flask lost): it reads undone again. */
-  undo(stepId) {
-    this.progress.set(stepId, 0);
     this.refresh();
   }
 
@@ -137,14 +125,14 @@ export class FloorObjective {
   beginRun(run) {
     this._teardown();
     this.run = run;
-    this.picks = (run.plan.objectives && run.plan.objectives[this.level]) || { anchors: [], slots: {}, guards: [] };
+    this.picks = (run.plan.objectives && run.plan.objectives[this.level]) || { anchors: [], guards: [] };
     this.progress.clear();
-    this.unlocked = false;
+    this.unlocked = !this.spec.lockStep;
     this.active = false;
     this.activatedAt = null;
     for (const e of this.items) {
       this.env.setEntityPivot(e.id, e.pivot);
-      this.env.setEntityVisible(e.id, this.picked(e.id) && this.itemStartsVisible(e));
+      this.env.setEntityVisible(e.id, this.picked(e.id));
     }
     this.route = this.game.route(this.level);
     const lockId = this.route ? this.route.lockEntity : null;
@@ -174,8 +162,6 @@ export class FloorObjective {
     this.taken.clear();
     for (const h of this.holds) h.reset();
     this.holds = [];
-    for (const v of this.voices) v.stop(0.3);
-    this.voices = [];
     this.tweens.clear();
     this.lock = null;
     this.lockedPrompt = null;
@@ -192,7 +178,8 @@ export class FloorObjective {
   deactivate() {
     this.active = false;
     this.tweens.finish();
-    this.onDeactivate();
+    // a floor with nothing to do but cross it is done once the squad leaves it
+    if (!this.spec.item && !this.spec.lockStep) for (const s of this.spec.steps) this.progress.set(s.id, s.count);
     this.refresh();
   }
 
@@ -214,7 +201,7 @@ export class FloorObjective {
       if (this.lock) this.lock.detach();
       for (const d of doors) g.doors.setState(d, 'Open');
     } });
-    this.notify(this.spec.lockVariant ? 'Obj.ExitUnlocked' : 'Obj.CrateOpen');
+    this.notify('Obj.ExitUnlocked');
     this.onUnlock();
   }
 
@@ -250,7 +237,7 @@ export class FloorObjective {
     return true;
   }
 
-  /** Whether a picked item can be taken now: not taken yet and showing (Floor 3's key only once its locker is open). */
+  /** Whether a picked item can be taken now: not taken yet and showing. */
   itemAvailable(entityId) {
     const e = this.env.entity(entityId);
     return this.picked(entityId) && !this.taken.has(entityId) && !!e && !e.hidden;
@@ -265,25 +252,12 @@ export class FloorObjective {
   // ---------------------------------------------------------------------------------------------------- the tracker
 
   /** The tracker lines: [{text, done, active}] for every step. */
-  stepLines(now) {
+  stepLines() {
     const current = this.current();
     return this.spec.steps.map((s) => {
-      const n = this.count(s.id);
-      let text;
-      if (s.seconds) text = S(s.label, Math.ceil(this.secondsLeft(s, now)));
-      else text = s.count > 1 ? S(s.label, n, s.count) : S(s.label);
-      return { id: s.id, text, done: this.done(s.id), active: current === s, timed: !!s.seconds && this.timerRunning(s) };
+      const text = s.count > 1 ? S(s.label, this.count(s.id), s.count) : S(s.label);
+      return { id: s.id, text, done: this.done(s.id), active: current === s };
     });
-  }
-
-  /** A timed step's seconds left (its full length until it starts). */
-  secondsLeft(step) {
-    return step.seconds;
-  }
-
-  /** Whether a timed step's countdown is running. */
-  timerRunning() {
-    return false;
   }
 
   /**
@@ -328,18 +302,11 @@ export class FloorObjective {
 
   // ---------------------------------------------------------------------------------------------------- per floor
 
-  /** Whether a picked item is shown at the run start (Floor 3's key hangs out of sight in its locker). */
-  itemStartsVisible() {
-    return true;
-  }
-
   setup() {}
 
   teardown() {}
 
   onActivate() {}
-
-  onDeactivate() {}
 
   onUnlock() {}
 

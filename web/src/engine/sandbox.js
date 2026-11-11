@@ -1,12 +1,13 @@
 // The engine sandbox: what the build links as the game while src/game/index.js does not exist yet (and what
 // `?sandbox` selects in any build). A free walk through the real school at its run state: the player spawns at a
 // level's first PlayerSpawn anchor, alive, meters running, torch on. URL parameters:
-//   ?level=Level2_ScienceHall   spawn level (default Level1_Hallways)
+//   ?level=Level2_Auditorium    spawn level (default Level1_Hallways)
 //   ?at=x,y,z,yawDegrees        exact root position instead
 // The pause menu (M / Esc) lists every level to jump to. Nothing here is gameplay: W4's game replaces it.
 
-const LEVELS = ['Lobby', 'Level0_Basement', 'Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium',
-  'Level4_FloodedPool', 'Level5_Roof'];
+import { WorldConfig } from './config.js';
+
+const LEVELS = ['Lobby', ...WorldConfig.LevelOrder];
 
 /** Moves the player to a level's first spawn anchor. */
 export function gotoLevel(engine, level) {

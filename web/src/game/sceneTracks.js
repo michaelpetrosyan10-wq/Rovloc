@@ -13,7 +13,7 @@
 //   movingSound  continuous 0..1: the `target` preset riding from args.from to args.to
 //   lightScale   continuous: the `arg` light at that factor of its base brightness
 //   creature     events: a Creature action (NeckSnap, DoorSmash, Reveal, Vanish) on the scripted Creature
-//   roofShake / roofPanic / finaleFocus / finalePanic / finaleFade: the roof scenes (see ParachuteController)
+//   roofShake / roofPanic: the roof door's scene (see ParachuteController)
 
 import * as THREE from 'three';
 import { Args, ClassroomScare, RoofDoor, flinch, pullWeight, pulled, timelines } from './scenes.js';
@@ -34,8 +34,8 @@ export function registerSceneTracks(game) {
     return v instanceof THREE.Vector3 ? v : null;
   };
   /**
-   * Base brightness of a fixture light (its layout brightness: a scripted fixture that starts dark, like the pool
-   * floodlights, strikes up to it), null when unknown or dark.
+   * Base brightness of a fixture light (its layout brightness: a scripted fixture that starts dark strikes up to it),
+   * null when unknown or dark.
    */
   const baseOf = (lightId) => {
     let best = 0;
@@ -177,7 +177,7 @@ export function registerSceneTracks(game) {
     stop(ctx, track) {
       const hold = scaleHolds.get(track);
       scaleHolds.delete(track);
-      if (hold && !(game.lightsKeptLit && game.lightsKeptLit.has(hold.id))) env.setLightOverride(hold.id, null);
+      if (hold) env.setLightOverride(hold.id, null);
     },
   });
 
@@ -213,38 +213,6 @@ export function registerSceneTracks(game) {
     stop() {
       if (roofPanic) env.setPanicFloor('RoofDoor', null);
       roofPanic = false;
-    },
-  });
-  seq.register('finaleFocus', {
-    mode: 'Continuous',
-    apply(ctx, track, value) {
-      if (typeof value === 'number' && game.parachute) game.parachute.setFinaleFocus(vecArg(ctx, Args.Head), value);
-    },
-    stop() {
-      if (game.parachute) game.parachute.setFinaleFocus(null, 0);
-    },
-  });
-  let finalePanic = false;
-  seq.register('finalePanic', {
-    mode: 'Continuous',
-    apply(ctx, track, value) {
-      if (typeof value !== 'number') return;
-      finalePanic = true;
-      env.setPanicFloor('Finale', clamp01(value));
-    },
-    stop() {
-      if (finalePanic) env.setPanicFloor('Finale', null);
-      finalePanic = false;
-    },
-  });
-  seq.register('finaleFade', {
-    mode: 'Continuous',
-    apply(ctx, track, value) {
-      if (typeof value !== 'number') return;
-      env.fade(clamp01(value), 0);
-    },
-    stop(ctx, track, completed) {
-      if (!(completed && track.hold)) env.fade(0, 0.4);
     },
   });
 }

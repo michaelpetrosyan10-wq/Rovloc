@@ -4,7 +4,7 @@
 // LifeState: Lobby (not in a run) · Alive · Downed · Dead · Spectating.
 //   beginRun   Alive at MaxHealth, DownedCount 0, a full battery at the loadout's capacity, switched off.
 //   damage     Alive: health drops; lethal damage is a Down. Downed: any damage executes.
-//   down       the one lethal path (traps, jumpscares, drowning): the first time in a run -> Downed (DownedCount + 1,
+//   down       the one lethal path (traps, jumpscares): the first time in a run -> Downed (DownedCount + 1,
 //              health 1, BleedoutEndsAt = now + BleedoutSeconds, a gasp, RunStats TimesDowned); already downed once
 //              or Downed now -> execute.
 //   revive     Downed -> Alive at a fraction of MaxHealth (default 0.5).  execute: Alive / Downed -> Dead.

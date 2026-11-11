@@ -6,8 +6,7 @@
 //   locker   torn open by the Creature on its occupant's page ('rip': smashed everywhere)
 //   flask    thrown ('throw': its flight drawn everywhere, breaking where it hits; only the thrower's page clouds and
 //            stuns, through the host's Creature)
-//   floor    a floor objective's outcome decided on one page (Floor 2's acid flask: burnt the chain or missed)
-// And the host's own shared world: a flask set out by Level 2's restock ('restock', host -> clients).
+// And the host's own shared world: a flask the host sets out (flasks.spawnAt: 'restock', host -> clients).
 
 export class MechanicsNet {
   /** @param {import('./index.js').Coop} coop */
@@ -39,16 +38,16 @@ export class MechanicsNet {
       if (msg.a !== undefined) return;
       const m = coop.squad.get(from);
       if (!m || !m.participant) return;
-      this._apply(msg.k, msg.d || {}, from);
+      this._apply(msg.k, msg.d || {});
       for (const other of coop.squad.list()) {
         if (!other.local && other.id !== from) coop.send(other.id, { t: 'mech', k: msg.k, d: msg.d, a: from });
       }
       return;
     }
-    if (msg.a !== coop.localId) this._apply(msg.k, msg.d || {}, msg.a);
+    if (msg.a !== coop.localId) this._apply(msg.k, msg.d || {});
   }
 
-  _apply(kind, d, actor) {
+  _apply(kind, d) {
     const g = this.game;
     if (kind === 'trap' && g.traps) {
       if (d.ev === 'snap') g.traps.remoteSnap(d.id);
@@ -58,9 +57,6 @@ export class MechanicsNet {
     } else if (kind === 'flask' && g.flasks) {
       if (d.ev === 'throw') g.flasks.remoteThrow(d);
       else if (d.ev === 'restock') g.flasks.spawnAt(d.level, d.m, d.id);
-    } else if (kind === 'floor' && g.floors) {
-      const f = g.floors.floor(d.level);
-      if (f && f.onSharedEvent) f.onSharedEvent(d.name, d.data || {}, actor);
     }
   }
 }

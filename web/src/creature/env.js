@@ -59,7 +59,7 @@ const FLOOR_NORMAL = 0.35;
  *   the level's hiding spots (lockers, barrels, cabinets; the game's hidespots.js)
  * @property {(id: string) => boolean} [hideSpotOccupied] the player hides in this spot
  * @property {() => string|null} [hideSpotOf] the spot the player hides in
- * @property {() => boolean} [teleportBlocked] the game forbids a teleport now (survive countdown, finale)
+ * @property {() => boolean} [teleportBlocked] the game forbids a teleport now (the roof's door, chase and ledge)
  */
 
 export class CreatureEnv {
@@ -367,10 +367,6 @@ export class CreatureEnv {
     return this._player().moveState;
   }
 
-  playerMode() {
-    return this._player().mode;
-  }
-
   playerLifeState() {
     if (this.hooks.lifeState) return this.hooks.lifeState();
     return this._player().lifeState;
@@ -590,7 +586,7 @@ export class CreatureEnv {
     return this.bakedLight(position) > threshold;
   }
 
-  /** The game forbids a teleport now (an objective's survive countdown, the roof's finale chase, ...). */
+  /** The game forbids a teleport now (the roof's door smash, its chase and the ledge). */
   teleportBlocked() {
     return !!(this.hooks.teleportBlocked && this.hooks.teleportBlocked());
   }
@@ -610,12 +606,6 @@ export class CreatureEnv {
       serverTime: e.time,
       sourceUserId: e.source === 'player' ? 1 : null,
     }));
-  }
-
-  /** The splash meter crossed its grab threshold (NoiseAndDirectorService.SplashThresholdCrossed). */
-  onSplashCrossed(fn) {
-    const s = this.engine.noise.splashCrossed;
-    return s ? s.connect(() => fn()) : () => {};
   }
 
   /** Plays a SynthPresets voice: {position?, follow?, volume?, loop?, speed?, fadeIn?, seed?} -> voice or null. */

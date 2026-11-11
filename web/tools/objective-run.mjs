@@ -1,6 +1,6 @@
 // objective-run.mjs: the floor objectives played through, lobby to landing, with the pre-installed Playwright Chromium.
 //
-//   node tools/objective-run.mjs [--seeds 1029,4242] [--floors L0,L1,L2,L3,L4,L5] [--html <page>] [--no-build]
+//   node tools/objective-run.mjs [--seeds 1029,4242] [--floors L0,L1,L2,L3] [--html <page>] [--no-build]
 //                                [--shots <dir>]
 //
 // --floors stops each seed's run after the last floor listed (from Level 0: `--floors L0` plays the basement, spawn
@@ -8,39 +8,37 @@
 //
 // For every seed (a fresh page with ?dev&seed=N, so the run's picks, plan, routes and Creature start come from it):
 // the lobby's ready pad (real keys), the countdown, the deploy; then every floor's objective with real input and the
-// prompts' real holds (E / R held for each hold, Throw held and let go, C to dive, Space to struggle and to pull the
-// cord). The harness may teleport the player next to a step's spot within a floor (a clear spot within reach, facing
+// prompts' real holds (E held for each hold, Space to pull the cord). The harness may teleport the player next to a step's spot within a floor (a clear spot within reach, facing
 // it, never on an armed trap); every gate is the game's own logic. The Creature is told to ignore the player
 // ("ignoreme") so a hunt cannot end the run; its start rule and grace are still checked:
-//   every floor  the exit is locked before (its door Locked, the airlock idle) and open after; walking at the locked
+//   floors 0-1   the exit is locked before (its door Locked, the airlock idle) and open after; walking at the locked
 //                basement door does not get you through; the tracker shows the title and steps, then the stairwell.
 //   Level 0      three fuses taken, fitted one slot at a time, the breaker thrown (loud), the basement lights back.
 //   Level 1      the scare and the gate; the keys past it; the 4 s unlock with its Normal noise every second.
-//   Level 2      the Creature's start (70-140 studs walking from the entry, out of its sight, not in an objective room,
-//                held until its grace ends or a loud noise of yours); three reagents; the mix let go half way keeps
-//                its progress; a missed acid throw loses only the flask (the hood brews another); the chain burnt by a
-//                throw (first seed) or by the pour (second seed).
-//   Level 3      the start rule again; an empty locker searched (the Hide prompt still there), the key's locker; the
-//                store unlocked; the generator's Critical noise; the 45 s countdown and the exit unlocking after it.
-//   Level 4      the grate under the hatch blocked; a dive for the wheel (the oxygen drains); a grab while carrying it
-//                keeps it; fitted, turned half way (kept) and done: the hatch open, the grate usable.
-//   Level 5      the packs chained; the cutters; the cut (the door smash brought forward while the Creature waits);
-//                a pack, the jump, the cord, the landing, ESCAPED.
+//   Level 2      the Auditorium's crossing: the Creature's start (70-140 studs walking from the entry, out of its sight,
+//                not in an objective room, held until its grace ends or a loud noise of yours); no item, no lock: the
+//                exit open from the start, the tracker on the way to the stairwell; the step done on leaving.
+//   Level 3      the roof: the arrival housing's door open, the Creature hidden behind it; every pack free; the door
+//                smashed after the grace once out; the first seed takes a pack, the others step off without one (a
+//                spare is buckled on); the cord, the landing (escaped at the touchdown, within one roof check at
+//                ServerTickHz, the hold released at once), the Creature on the ledge over the jumper, the ESCAPED results.
 //   Routes       each seed's random exits are logged (North / Middle / South per floor); every stairwell off the
 //                route is jammed (its doors shut and Locked at both ends, the debris shown, the "collapsed" prompt,
 //                walking at it does not get you through) and stays so all run (checked on every floor); the route's
-//                doors show no debris; every arrival spawns in the route's entry vestibule; the roof's finale plays at
-//                the arrival housing (its own roof door smashed, the Creature behind it), corner housings included.
+//                doors show no debris; every arrival spawns in the route's entry vestibule; the roof's door smash plays
+//                at the arrival housing (its own roof door smashed, the Creature behind it), corner housings included.
 //   Grates       at run start every grate shows the look the run's plan picks: rusted shut (Locked) where it locks
 //                one, galvanized everywhere else, never both looks at once.
-// Screenshots (the first seed only): the tracker on each floor, the breaker panel before and after power, the fume
-// hood, the chain burning, the generator, the valve seated, the crate's chain cut. Exit code 1 on any failure.
+// Screenshots (the first seed only): the tracker on each floor, the breaker panel before and after power, the results.
+// Exit code 1 on any failure.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { GameConfig } from '../src/engine/config.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -50,7 +48,7 @@ const opt = (name, fallback) => {
   return i >= 0 && argv[i + 1] ? argv[i + 1] : fallback;
 };
 const SEEDS = opt('--seeds', '1029,4242').split(',').map(Number);
-const FLOORS = opt('--floors', 'L0,L1,L2,L3,L4,L5').split(',').map((f) => Number(f.replace(/^L/, ''))).filter(Number.isFinite);
+const FLOORS = opt('--floors', 'L0,L1,L2,L3').split(',').map((f) => Number(f.replace(/^L/, ''))).filter(Number.isFinite);
 const LAST_FLOOR = Math.max(0, ...FLOORS);
 /** Thrown to end a seed's run after the last floor asked for (not a failure). */
 class FloorsDone extends Error {}
@@ -153,7 +151,7 @@ for (const [si, seed] of SEEDS.entries()) {
   };
   /**
    * Stands the player within reach of a world point, facing it: spots `reach` studs off it on sixteen bearings, on the
-   * surface found under them (or at `y`, a pool's water), with headroom, no wall within a body's width, a clear line to
+   * surface found under them, with headroom, no wall within a body's width, a clear line to
    * the point and no armed trap within 2.5 studs. Each spot is tried in turn (teleport, settle, aim again) until the
    * prompt answering `action` matches `expect`; without `expect` the first spot that settles is kept.
    */
@@ -169,14 +167,10 @@ for (const [si, seed] of SEEDS.entries()) {
           const ang = (i / 16) * Math.PI * 2;
           const x = p.x + Math.sin(ang) * reach;
           const z = p.z + Math.cos(ang) * reach;
-          let root;
-          if (a.y !== null) root = new T.Vector3(x, a.y, z);
-          else {
-            const down = g.env.raycast(new T.Vector3(x, p.y + 1.5, z), new T.Vector3(0, -1, 0), 9, { ignoreEntities: false });
-            if (!down || down.normal.y < 0.7) continue;
-            root = new T.Vector3(x, down.point.y + 3.05, z);
-            if (g.env.raycast(root, new T.Vector3(0, 1, 0), 2.6, { ignoreEntities: false })) continue;
-          }
+          const down = g.env.raycast(new T.Vector3(x, p.y + 1.5, z), new T.Vector3(0, -1, 0), 9, { ignoreEntities: false });
+          if (!down || down.normal.y < 0.7) continue;
+          const root = new T.Vector3(x, down.point.y + 3.05, z);
+          if (g.env.raycast(root, new T.Vector3(0, 1, 0), 2.6, { ignoreEntities: false })) continue;
           if (traps.some((t) => Math.hypot(t.floor.x - root.x, t.floor.z - root.z) < 2.5)) continue;
           let blocked = false;
           for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -189,7 +183,7 @@ for (const [si, seed] of SEEDS.entries()) {
         }
       }
       return out.sort((a, b) => Number(b.same) - Number(a.same)).map((s) => s.at);
-    }, { point, reach: opts.reach || [2.2, 3, 1.6, 4], y: opts.y ?? null });
+    }, { point, reach: opts.reach || [2.2, 3, 1.6, 4] });
     const aim = () => G((g, dev, q) => {
       const eye = g.env.eye();
       const d = { x: q[0] - eye.x, y: q[1] - eye.y, z: q[2] - eye.z };
@@ -317,7 +311,7 @@ for (const [si, seed] of SEEDS.entries()) {
       return { jammed, open, bad };
     });
     check(`${where}: every off-route stairwell door stays shut and Locked with its debris (${j.jammed}); the route's ${j.open} show none`,
-      j.bad.length === 0 && j.jammed === 20 && j.open === 10, j);
+      j.bad.length === 0 && j.jammed === 12 && j.open === 6, j);
   };
   /** Every grate shows the look its run's plan picks (VentGrateBuilder.setLocked): rusted shut where the plan locks it,
    *  galvanized elsewhere, never both; and its state follows. */
@@ -426,7 +420,7 @@ for (const [si, seed] of SEEDS.entries()) {
     console.log(`  route: ${route.map((r) => `${r.level.slice(0, 6)} ${r.slot} (${r.id})`).join(', ')}`);
     routeLog.push({ seed, slots: route.map((r) => r.slot).join('/') });
     const expected = await G((g, dev, sd) => Object.values(g.world.routes(sd)).map((r) => r.stairwellId), seed);
-    check('the run route is the world rule\'s for the seed (one per floor pair, chained)', route.length === 5 &&
+    check('the run route is the world rule\'s for the seed (one per floor pair, chained)', route.length === 3 &&
       route.every((r, i) => r.id === expected[i]), route.map((r) => r.id));
     await jamCheck('run start');
     await grateLookCheck('run start');
@@ -594,282 +588,90 @@ for (const [si, seed] of SEEDS.entries()) {
     const work = (await noises()).filter((n) => n === 'ObjectiveWork').length;
     check('L1: the 4 s unlock with the keys (a Normal noise each second) opens the exit', p && /Unlock/.test(p.text) &&
       work >= 4 && f.unlocked && f.door === 'Open', { p, work, f });
-    await leave('Level2_ScienceHall');
+    await leave('Level2_Auditorium');
     if (LAST_FLOOR < 2) throw new FloorsDone('L1');
 
-    // ================================================================== Level 2: burn the chain
+    // ================================================================== Level 2: the Auditorium, crossed
     await shot('L2-tracker.png');
-    await spawnCheck('Level2_ScienceHall', first ? 'Grace' : 'Noise');
-    f = await floorOf();
-    check('L2: the exit door is Locked', f.door === 'Locked' && !f.unlocked, f);
-    for (const id of picks.Level2_ScienceHall) {
-      const r = await standAt(await at(id, 'PromptPoint'), { expect: /Reagent/ });
-      await hold(1.0);
-      f = await floorOf();
-      check(`L2: reagent ${id} taken`, r.ok && f.carry.Reagent >= 1, { r, carry: f.carry });
-    }
-    const hood = await G((g) => g.world.entities('FumeHood', g.level)[0].id);
-    await standAt(await at(hood, 'MixPrompt'), { reach: [2.4, 3, 2], expect: /Mix/ });
-    await noiseLog();
-    await hold(2);
-    await ff(0.5);
-    s = await G((g) => ({ done: g.floors.floor(g.level).mix.done, loaded: g.floors.floor(g.level).loaded }));
-    check('L2: mixing let go half way keeps its progress', s.loaded && s.done > 1.6 && s.done < 2.4, s);
-    await shot('L2-fumehood.png');
-    await hold(3.4);
-    await ff(0.5);
-    f = await floorOf();
-    check('L2: the mix (5 s, bubbling noise each second) brews the acid', f.steps.MixAcid === 1 &&
-      (await noises()).filter((n) => n === 'ObjectiveWork').length >= 4, f);
-    const takeAcid = async () => {
-      const acid = await G((g) => g.world.entities('AcidFlask', g.level)[0].id);
-      await standAt(await at(acid, 'PromptPoint'), { reach: [2.2, 2.8, 1.8], expect: /Acid/ });
-      await hold(0.8);
-      return G((g) => !!(g.flasks.held && g.flasks.held.objective));
-    };
-    check('L2: the acid flask taken into the hand', await takeAcid());
-    // a miss: thrown away from the chain
-    await G((g) => g.env.setLook(g.env.look().yaw + Math.PI, 0.1));
-    await G((g) => g.env.injectAction('Throw', 'obj', true));
-    await ff(0.45);
-    await G((g) => g.env.injectAction('Throw', 'obj', false));
-    await ff(3.5);
-    f = await floorOf();
-    s = await G((g) => ({ acid: g.floors.floor(g.level).acidState, held: !!g.flasks.held }));
-    check('L2: a missed throw loses only the flask: the hood can brew another', s.acid === 'None' && !s.held &&
-      f.steps.MixAcid === 0 && !f.unlocked, { s, f });
-    await standAt(await at(hood, 'MixPrompt'), { reach: [2.4, 3, 2], expect: /Mix/ });
-    await hold(5.4);
-    await ff(0.5);
-    check('L2: re-mixed and the second flask taken', await takeAcid());
-    const lock2 = await G((g) => g.route(g.level).lockEntity);
-    const chain = await at(lock2, null);
-    const centre = await G((g, dev, id) => g.floors.floor(g.level).lock.chainCentre().toArray(), lock2);
-    if (first) {
-      // thrown at the chain from a few studs off it
-      await G((g) => {
-        const T = g.env.THREE;
-        const route = g.route(g.level);
-        const door = g.doors.get(route.exitDoorIds[0]);
-        const v = route.checkpointVolumes[0];
-        const dir = new T.Vector3(v.cframe[0], door.centre.y, v.cframe[2]).sub(door.centre).setY(0).normalize();
-        const room = g.world.roomAt(door.centre.clone().addScaledVector(dir, -6), g.level);
-        const spot = door.centre.clone().addScaledVector(dir, -6);
-        spot.y = (room ? room.floorY : door.centre.y - 5) + 3;
-        g.env.teleport({ position: spot, yaw: Math.atan2(-dir.x, -dir.z) });
-        g.traps.noteTeleport();
-      });
-      await ff(0.4);
-      await G((g, dev, c) => {
-        const eye = g.env.eye();
-        const d = { x: c[0] - eye.x, y: c[1] - eye.y, z: c[2] - eye.z };
-        g.env.setLook(Math.atan2(-d.x, -d.z), Math.atan2(d.y, Math.hypot(d.x, d.z)) + 0.03);
-      }, centre);
-      await G((g) => g.env.injectAction('Throw', 'obj', true));
-      await ff(0.45);
-      await G((g) => g.env.injectAction('Throw', 'obj', false));
-      await ff(0.5);
-      await shot('L2-chain-burning.png');
-      await ff(4);
-    } else {
-      await standAt(await at(lock2, 'LockPrompt'), { reach: [2.4, 3, 2], expect: /Pour/ });
-      p = await active();
-      check('L2: with the acid in hand the door offers Pour', !!p && /Pour/.test(p.text), p);
-      await hold(2.4);
-      await ff(4.5);
-    }
-    f = await G((g) => ({ unlocked: g.floors.floor('Level2_ScienceHall').unlocked,
-      door: g.doors.get(g.world.route('Level2_ScienceHall', g.run.routes).exitDoorIds[0]).state, level: g.level }));
-    check(`L2: the chain burnt by the ${first ? 'throw' : 'pour'}: the exit unlocked`, f.unlocked && f.door === 'Open' &&
-      f.level === 'Level2_ScienceHall', { f, chain });
-    await leave('Level3_Gymnasium');
-    if (LAST_FLOOR < 3) throw new FloorsDone('L2');
-
-    // ================================================================== Level 3: the gym generator
-    await shot('L3-tracker.png');
-    await spawnCheck('Level3_Gymnasium', first ? 'Noise' : 'Grace');
-    const l3 = await G((g) => {
-      const fl = g.floors.floor(g.level);
-      const wrong = fl.lockers.find((l) => l.id !== fl.keyLocker);
-      return { key: fl.keyLocker, wrong: wrong.id, keyItem: fl.keyEntity.id };
-    });
-    await standAt(await at(l3.wrong, 'HidePrompt'), { reach: [2.2, 2.8, 1.8], action: 'Kick', expect: /Search/ });
-    const hideP = await active('Interact');
-    const searchP = await active('Kick');
-    await hold(1.3, 'KeyR');
-    await ff(1.5);
-    s = await G((g, dev, id) => ({ searched: g.floors.floor(g.level).searched.has(id), found: g.floors.floor(g.level).keyShown,
-      state: g.lockers.stateOf(id) }), l3.wrong);
-    check('L3: searching an empty locker (1 s, R) says so; Hide stays its own prompt', hideP && /Hide/.test(hideP.text) &&
-      searchP && /Search/.test(searchP.text) && s.searched && !s.found && s.state === 'Free', { hideP, searchP, s });
-    await standAt(await at(l3.key, 'HidePrompt'), { reach: [2.2, 2.8, 1.8], action: 'Kick', expect: /Search/ });
-    await hold(1.3, 'KeyR');
-    await ff(0.8);
-    await standAt(await at(l3.keyItem, 'PromptPoint'), { reach: [2, 2.6, 1.6], expect: /Coach/ });
-    p = await active();
-    await hold(1.0);
-    f = await floorOf();
-    check('L3: the key locker searched, the coach\'s key taken', !!p && /Pick Up/.test(p.text) && f.carry.CoachKey === 1, { p, f });
-    const store = await G((g) => g.world.entities('StoreLock', g.level)[0].id);
-    await standAt(await at(store, 'LockPrompt'), { reach: [2.4, 3, 2], expect: /Unlock/ });
-    await hold(2.4);
-    await ff(3);
-    s = await G((g) => ({ door: g.doors.get(g.world.entities('StoreDoor', g.level)[0].id).state }));
-    check('L3: the store unlocked (2 s): its door opens', s.door === 'Open', s);
-    const gen = await G((g) => g.world.entities('Generator', g.level)[0].id);
-    await standAt(await at(gen, 'PullPrompt'), { reach: [2.2, 2.8, 1.8], expect: /Pull Start/ });
-    await noiseLog();
-    await hold(3.3);
-    await ff(1.5);
-    f = await floorOf();
-    check('L3: the generator started (3 s): its Critical noise', f.steps.StartGenerator === 1 &&
-      (await noises()).includes('GeneratorStart'), f);
-    await shot('L3-generator.png');
-    await ff(42);
+    await spawnCheck('Level2_Auditorium', first ? 'Grace' : 'Noise');
     f = await floorOf();
     t = await tracker();
-    check('L3: still winding near the end of the 45 s (the countdown on the tracker)', !f.unlocked && t.steps.some((x) => /winds: \d+s/.test(x)), t);
-    await ff(4);
-    f = await floorOf();
-    check('L3: after 45 s the door motor has wound: the exit unlocked', f.unlocked && f.door === 'Open', f);
-    await leave('Level4_FloodedPool');
-    if (LAST_FLOOR < 4) throw new FloorsDone('L3');
+    const tower2 = await G((g) => g.route(g.level).tower);
+    const towerWord = { East: 'east', NorthEast: 'north-east', SouthEast: 'south-east' }[tower2];
+    check('L2: no item and no lock: the exit is open from the start and the tracker shows the way to the stairwell',
+      f.unlocked && f.door === 'Open' && Object.keys(f.carry).length === 0 && t.title === null &&
+      f.tracker === null && t.steps.length === 1 && t.steps[0] === 'Get to the stairwell' && f.steps.ReachExit === 0 &&
+      !!towerWord && (await G((g) => g.objectives.line.textContent)) === `Find the ${towerWord} stairwell`, { f, t, tower2 });
+    s = await G((g) => ({ locks: g.world.entities('ExitLock', g.level).length, items: g.world.entities('Fuse', g.level).length +
+      g.world.entities('MasterKeys', g.level).length, picks: Object.keys(g.run.plan.objectives) }));
+    check('L2: nothing to find or unlock (no ExitLock, no item, no picks)', s.locks === 0 && s.items === 0 &&
+      !s.picks.includes('Level2_Auditorium'), s);
+    await leave('Level3_Roof');
+    s = await G((g) => ({ done: g.floors.floor('Level2_Auditorium').done('ReachExit'), cleared: g.cleared.has('Level2_Auditorium') }));
+    check('L2: the crossing is done once the squad leaves it', s.done && s.cleared, s);
+    if (LAST_FLOOR < 3) throw new FloorsDone('L2');
 
-    // ================================================================== Level 4: the valve wheel
-    await ff(1);
-    await shot('L4-tracker.png');
-    const valve = await G((g) => {
-      const v = g.world.entities('HatchValve', g.level)[0];
-      return { id: v.id, grate: v.attributes.GrateId };
-    });
-    s = await G((g, dev, v) => ({ passable: g.vents.passable(v.grate), blocked: !!g.vents.grates.get(v.grate).blocked }), valve);
-    f = await floorOf();
-    check('L4: the exit Locked and the hatch\'s grate blocked', f.door === 'Locked' && s.blocked && !s.passable, { f, s });
-    const wheel = picks.Level4_FloodedPool[0];
-    const wp = await at(wheel, 'PromptPoint');
-    await G((g, dev, w) => {
-      g.env.teleport({ position: { x: w[0], y: 80, z: w[2] + 3 }, yaw: 0 });
-      g.traps.noteTeleport();
-    }, wp);
-    await ff(0.6);
-    await tab.keyboard.down('KeyC');
-    for (let i = 0; i < 16; i++) {
-      await G((g, dev, w) => {
-        const eye = g.env.eye();
-        const d = { x: w[0] - eye.x, y: w[1] - eye.y, z: w[2] - eye.z };
-        g.env.setLook(Math.atan2(-d.x, -d.z), Math.atan2(d.y, Math.hypot(d.x, d.z)));
-      }, wp);
-      await ff(0.25);
-      const near = await G((g, dev, w) => g.env.rootPosition().distanceTo(new g.env.THREE.Vector3(...w)), wp);
-      if (near < 3.5) break;
-    }
-    s = await G((g) => ({ ms: g.env.moveState(), ox: g.env.meters().oxygen.value }));
-    await tab.keyboard.down('KeyE');
-    await ff(1.1);
-    await tab.keyboard.up('KeyE');
-    await tab.keyboard.up('KeyC');
-    f = await floorOf();
-    check('L4: dived for the wheel and took it underwater (oxygen draining)', f.carry.ValveWheel === 1 && s.ms === 'Underwater' &&
-      s.ox < 100, { s, carry: f.carry });
-    await G((g) => g.pool.devGrab());
-    await ff(1.2);
-    for (let i = 0; i < 24; i++) {
-      await tab.keyboard.press('Space');
-      await ff(0.1);
-    }
-    await ff(1);
-    f = await floorOf();
-    s = await G((g) => ({ grab: !!g.pool.grab, life: g.life.state }));
-    check('L4: a grab while carrying the wheel does not lose it', !s.grab && s.life === 'Alive' && f.carry.ValveWheel === 1, { s, f });
-    const seat = await G((g, dev, v) => g.floors.floor(g.level).seatPos.toArray(), valve);
-    await G((g, dev, c) => {
-      g.env.teleport({ position: { x: c[0], y: 80.5, z: c[2] + 3.2 }, yaw: 0 });
-      g.traps.noteTeleport();
-    }, seat);
-    await ff(0.8);
-    await G((g, dev, c) => {
-      const eye = g.env.eye();
-      const d = { x: c[0] - eye.x, y: c[1] - eye.y, z: c[2] - eye.z };
-      g.env.setLook(Math.atan2(-d.x, -d.z), Math.atan2(d.y, Math.hypot(d.x, d.z)));
-    }, seat);
-    p = await active();
-    await hold(3.3);
-    f = await floorOf();
-    check('L4: the wheel fitted on the hatch valve (3 s)', !!p && /Fit Valve/.test(p.text) && f.steps.FitWheel === 1, { p, f });
-    await shot('L4-valve-seated.png');
-    await noiseLog();
-    await hold(2);
-    await ff(0.4);
-    s = await G((g) => g.floors.floor(g.level).turn.done);
-    check('L4: turning let go half way keeps how far it turned', s > 1.6 && s < 2.4, s);
-    await hold(2.4);
-    await ff(3);
-    f = await floorOf();
-    s = await G((g, dev, v) => ({ passable: !g.vents.grates.get(v.grate).blocked }), valve);
-    check('L4: the valve turned (Normal noise each second): hatch open, grate usable, exit unlocked', f.unlocked &&
-      f.door === 'Open' && s.passable && (await noises()).filter((n) => n === 'ObjectiveWork').length >= 4, { f, s });
-    await leave('Level5_Roof');
-    if (LAST_FLOOR < 5) throw new FloorsDone('L4');
-
-    // ================================================================== Level 5: cut the crate open
+    // ================================================================== Level 3: the roof, the jump, the landing
     await ff(2);
     const arrival = await G((g) => {
-      const r = g.run.routes.Level4_FloodedPool;
-      const door = g.level5.roofDoor();
-      const geo = g.level5.geo;
+      const r = g.run.routes.Level2_Auditorium;
+      const door = g.level3.roofDoor();
+      const geo = g.level3.geo;
       const root = g.env.rootPosition();
       const inRect = (b, p) => p.x >= b.minX && p.x <= b.maxX && p.z >= b.minZ && p.z <= b.maxZ;
       return { housing: geo.housingId, want: r.entryRoomOfNextLevel, door: door && door.id, wantDoor: r.entryDoorIds[0],
         doorState: door && door.state, inHousing: g.world.inRoom(geo.housingId, root),
-        behindIn: inRect(geo.housing, geo.behindPosition), slot: r.slot };
+        behindIn: inRect(geo.housing, geo.behindPosition), slot: r.slot, phase: g.level3.phase,
+        held: !!g.level3.handle, hidden: g.creature.isHidden() };
     });
-    check(`L5: the finale follows the arrival housing (${arrival.slot}): its roof door opens behind the squad`,
+    check(`L3: the roof follows the arrival housing (${arrival.slot}): its roof door opens, the Creature waits hidden`,
       arrival.housing === arrival.want && arrival.door === arrival.wantDoor && arrival.inHousing && arrival.behindIn &&
-      arrival.doorState === 'Open', arrival);
+      arrival.doorState === 'Open' && arrival.phase === 'Arrival' && arrival.held && arrival.hidden, arrival);
     if (arrival.slot !== 'Middle') {
       await G((g) => {
-        const geo = g.level5.geo;
-        const T = g.env.THREE;
+        const geo = g.level3.geo;
         const p = geo.doorway.clone().addScaledVector(geo.out, 14);
         p.y = geo.doorway.y + 3;
         const yaw = Math.atan2(geo.out.x, geo.out.z);
         g.env.teleport({ position: p, yaw });
         g.env.setLook(yaw, 0.05);
         g.traps.noteTeleport();
-        return new T.Vector3();
       });
       await ff(0.4);
       await shot('route-roof-corner-housing.png');
     }
-    await shot('L5-tracker.png');
-    s = await G((g) => ({ packs: g.parachute.packs.map((x) => x.handle && x.handle.isHolding !== undefined), open: g.parachute.crateOpen,
-      phase: g.level5.phase }));
-    check('L5: the packs are chained in (no pack can be taken)', s.open === false, s);
-    const cutters = picks.Level5_Roof[0];
-    await standAt(await at(cutters, 'PromptPoint'), { expect: /Bolt Cutters/ });
-    await hold(1.0);
-    f = await floorOf();
-    check('L5: the bolt cutters taken', f.carry.BoltCutters === 1, f);
-    const crate = await G((g) => g.world.entities('CrateChain', g.level)[0].id);
-    await standAt(await at(crate, 'LockPrompt'), { reach: [2.4, 3, 2], expect: /Cut Chain/ });
-    p = await active();
-    const before = await G((g) => g.level5.phase);
-    await hold(4.4);
-    await ff(0.4);
-    s = await G((g) => ({ open: g.parachute.crateOpen, phase: g.level5.phase }));
-    f = await floorOf();
-    check('L5: the chain cut (4 s, loud): the crate opens; the door smash brought forward', !!p && /Cut Chain/.test(p.text) &&
-      s.open && f.unlocked && (before !== 'Arrival' || s.phase === 'Smash'), { p, before, s });
-    await ff(1);
-    await shot('L5-crate-cut.png');
-    const pack = await G((g) => g.parachute.freePackPoint(g.env.rootPosition()).toArray());
-    await standAt(pack, { reach: [2, 2.6, 1.6], expect: /Parachute/ });
-    await hold(0.9);
-    s = await G((g) => g.parachute.state);
-    check('L5: a parachute pack taken', s === 'Packed', s);
+    await shot('L3-tracker.png');
+    s = await G((g) => ({ packs: g.parachute.packs.length, free: g.parachute.packs.filter((x) => !x.taken && x.handle).length,
+      floor: !!g.floors.floor('Level3_Roof') }));
+    check('L3: no roof objective: every pack in the crate can be taken from the start', s.packs === 4 && s.free === 4 && !s.floor, s);
+    // out on the roof: the wait behind the door runs out (the grace) and the door is smashed
     await G((g) => {
-      const pg = g.parachute.geo;
-      const gap = pg.gap;
+      const geo = g.level3.geo;
+      const p = geo.doorway.clone().addScaledVector(geo.out, 16);
+      p.y = geo.doorway.y + 3;
+      g.env.teleport({ position: p, yaw: Math.atan2(geo.out.x, geo.out.z) });
+      g.traps.noteTeleport();
+    });
+    await ff(1);
+    const grace = await G((g) => g.level3.firstOutAt !== null && (g.level3.firstOutAt + 20) - g.env.now());
+    await ff(Math.max(0, grace) + 7);
+    s = await G((g, dev, id) => ({ door: g.doors.get(id).state, released: !!g.level3.smash && g.level3.smash.released,
+      phase: g.level3.phase }), arrival.wantDoor);
+    check(`L3: the arrival housing's roof door (${arrival.wantDoor}) smashed after the grace, the Creature let go from behind it`,
+      s.door === 'Smashed' && s.released && s.phase === 'Chase', s);
+    if (first) {
+      // the first seed takes a pack from the crate
+      const pack = await G((g) => g.parachute.freePackPoint(g.env.rootPosition()).toArray());
+      await standAt(pack, { reach: [2, 2.6, 1.6], expect: /Parachute/ });
+      await hold(0.9);
+      s = await G((g) => g.parachute.state);
+      check('L3: a parachute pack taken', s === 'Packed', s);
+    } else {
+      s = await G((g) => g.parachute.state);
+      check('L3: no pack taken (this seed steps off without one)', s === 'None', s);
+    }
+    await G((g) => {
+      const gap = g.parachute.geo.gap;
       const c = g.parachute.gapCentre();
       g.env.teleport({ position: { x: gap.minX + 8, y: c.y + 3.2, z: c.z }, yaw: Math.PI / 2 });
       g.env.setLook(Math.PI / 2, 0);
@@ -881,13 +683,44 @@ for (const [si, seed] of SEEDS.entries()) {
       if ((await G((g) => g.parachute.state)) === 'Freefall') break;
     }
     await tab.keyboard.up('KeyW');
+    s = await G((g) => ({ chute: g.parachute.state, pack: g.parachute.hasPack(), life: g.life.state }));
+    check(first ? 'L3: off the gap with the pack: freefall' : 'L3: off the gap without a pack: a spare buckled on, freefall (nobody dies in the fall)',
+      s.chute === 'Freefall' && s.pack && s.life === 'Alive', s);
     await tab.keyboard.press('Space');
-    await ff(14);
-    s = await G((g) => ({ chute: g.parachute.state, outcome: g.match.outcome, phase: g.phase }));
-    check('L5: off the gap, the cord, landed: ESCAPED', s.chute === 'Landed' && s.outcome === 'Escaped', s);
-    s = await G((g, dev, id) => ({ door: g.doors.get(id).state, smashed: !!g.level5.smash && g.level5.smash.released }), arrival.wantDoor);
-    check(`L5: the arrival housing's roof door (${arrival.wantDoor}) was smashed and the Creature let go from behind it`,
-      s.door === 'Smashed' && s.smashed, s);
+    // the descent stepped in the page one frame at a time (no real frames in between) up to the touchdown, then one roof
+    // check (the roof's checks run at ServerTickHz, as on Roblox: Roof.spec times the escape within that of the touchdown)
+    s = await tab.evaluate(({ tick, limit }) => {
+      const loop = window.__rovloc.engine.loop;
+      const g = window.__rovlocGame.game;
+      const e = window.__rovloc.engine;
+      loop.stop();
+      const render = e.renderer.render;
+      e.renderer.render = () => {};
+      try {
+        for (let i = 0; i < limit * 30 && g.parachute.state !== 'Landed'; i++) loop._run(1 / 30, 1 / 30);
+        const landedAt = g.parachute.landedAt;
+        while (g.parachute.state === 'Landed' && g.match.outcome === 'Pending' && g.env.now() - landedAt < tick) {
+          loop._run(1 / 30, 1 / 30);
+        }
+        return { chute: g.parachute.state, outcome: g.match.outcome, lock: g.controlLock(), life: g.life.state,
+          escapedAfter: g.match.escapedAt === null || landedAt === null ? null : g.match.escapedAt - landedAt };
+      } finally {
+        e.renderer.render = render;
+        loop.start();
+      }
+    }, { tick: 1 / GameConfig.ServerTickHz, limit: 15 });
+    check('L3: the cord, landed: escaped at the touchdown (within one roof check), the landing hold released at once',
+      s.chute === 'Landed' && s.outcome === 'Escaped' && s.escapedAfter !== null && s.escapedAfter >= 0 &&
+      s.escapedAfter <= 1 / GameConfig.ServerTickHz + 1e-6 && s.lock === 'None' && s.life === 'Alive', s);
+    await ff(3);
+    s = await G((g) => ({ phase: g.level3.phase, ledgeAt: g.level3.ledgeAt, hidden: g.creature.isHidden(),
+      view: g.parachute.viewHeld, match: g.phase }));
+    check('L3: the Creature stands on the ledge over the jumper; the view is the player\'s again; the results follow',
+      s.phase === 'Ledge' && s.ledgeAt !== null && !s.hidden && !s.view && s.match === 'Results', s);
+    await ff(1.5);
+    await shot('L3-results.png');
+    s = await G((g) => ({ open: g.results.showing, title: g.results.title.textContent }));
+    check('L3: the ESCAPED results', s.open && /ESCAPED/.test(String(s.title)), s);
   } catch (err) {
     if (err instanceof FloorsDone) {
       console.log(`  stopped after ${err.message} (--floors)`);
@@ -905,6 +738,6 @@ for (const [si, seed] of SEEDS.entries()) {
 
 await browser.close();
 console.log(`screenshots in ${shots}:\n${shotsTaken.map((x) => `  ${path.basename(x)}`).join('\n')}`);
-console.log(`routes (L0/L1/L2/L3/L4 exits): ${routeLog.map((r) => `seed ${r.seed} ${r.slots}`).join('; ')}`);
+console.log(`routes (L0/L1/L2 exits): ${routeLog.map((r) => `seed ${r.seed} ${r.slots}`).join('; ')}`);
 console.log(failures.length ? `\n${failures.length} FAILED:\n  ${failures.join('\n  ')}` : '\nall checks passed');
 process.exit(failures.length ? 1 : 0);

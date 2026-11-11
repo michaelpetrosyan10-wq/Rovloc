@@ -2,12 +2,11 @@
 // authority) and FirstPersonController (MovementController, CameraRig, CameraStates, ViewBob, CameraStack, Flashlight,
 // HandRig, PanicVFX) in one, since single-player needs no prediction or reconciliation.
 //
-// MoveState (deriveState). A held override wins, highest first: Scripted > Grabbed > Trapped > Hiding > Parachuting
-// > DownedCrawling (pushOverride / popOverride by token). Otherwise the mode decides (setMode: OnFoot / Vent / Swim),
-// with canSprint = sprint held && stamina > 0 && not exhausted:
+// MoveState (deriveState). A held override wins, highest first: Scripted > Trapped > Hiding > Parachuting >
+// DownedCrawling (pushOverride / popOverride by token). Otherwise the mode decides (setMode: OnFoot / Vent), with
+// canSprint = sprint held && stamina > 0 && not exhausted:
 //   OnFoot  Crouching if crouch; Sprinting if canSprint && moving (>= 4 studs/s or move input > 0.1); else Standing
 //   Vent    VentScurrying if canSprint, else VentCrawling
-//   Swim    Underwater if dive; Freestyle if canSprint; else Treading
 // Exhaustion latch: set when stamina hits 0 with sprint held, cleared by releasing sprint or a full meter.
 // WalkSpeed per state (GameConfig). Sprinting out of a crouch stands up. Changing mode clears the crouch.
 //
@@ -15,16 +14,14 @@
 // latched by the input handlers and consumed at the next tick (a press shorter than a frame or a tick is never lost;
 // one still pending when its action stops being live, as when the pause menu opens, is dropped; a held jump also
 // jumps again on landing, like a Humanoid), MoveState is derived, then the body advances in SUBSTEPS
-// substeps of 1/60 s (the walking physics, or the strongest motion override: vent rail, swimming, parachute, the
-// drag), the wish direction read from the yaw and the move input at the tick. Everything gameplay reads (the root,
+// substeps of 1/60 s (the walking physics, or the strongest motion override: vent rail, parachute), the wish direction read from the yaw and the move input at the tick. Everything gameplay reads (the root,
 // speed, moving, grounded, footstep noise, landings, stamina) is that tick state. The frame draws the root
 // interpolated between the last two tick states by loop.alpha (drawnRoot); a teleport or any move made outside a
 // tick snaps the drawn root to it.
 //
 // Meters (active only while `metersActive`: a run is live and the player Alive / Downed; otherwise held full):
-//   stamina  drains per state (Sprinting 16, VentScurrying 22, Freestyle 20, Treading 2 per s); StaminaRegenDelay
-//            after draining stops (or a spend) it regenerates at StaminaRegen.
-//   oxygen   rate set by the pool (setOxygenRate / addOxygen); reaching 0 fires oxygenDepleted.
+//   stamina  drains per state (Sprinting, VentScurrying: StaminaDrain); StaminaRegenDelay after draining stops (or a
+//            spend) it regenerates at StaminaRegen.
 //   battery  drains while the torch is lit (FlashlightService); pickups add (addBattery); max can be raised (perk).
 //
 // Camera (per frame): look input -> pitch range of the camera state -> eye = spring-smoothed root height + the
@@ -44,8 +41,8 @@ import { Signal } from './signal.js';
 import { Viewmodel } from './viewmodel.js';
 
 const OVERRIDE_RANK = Object.fromEntries(OverridePriority.map((s, i) => [s, OverridePriority.length - i]));
-const MODE_OF = { VentCrawling: 'Vent', VentScurrying: 'Vent', Treading: 'Swim', Freestyle: 'Swim', Underwater: 'Swim' };
-const NO_JUMP = new Set(['VentCrawling', 'VentScurrying', 'DownedCrawling', 'Hiding', 'Trapped', 'Grabbed']);
+const MODE_OF = { VentCrawling: 'Vent', VentScurrying: 'Vent' };
+const NO_JUMP = new Set(['VentCrawling', 'VentScurrying', 'DownedCrawling', 'Hiding', 'Trapped']);
 const FOOTSTEPS = { Standing: 1, Sprinting: 1, Crouching: 0.45, Scripted: 0.8 };
 const SELF_FOOTSTEP_VOLUME = 0.55;
 const MOVING_SPEED = 4;
@@ -63,12 +60,11 @@ const NOISE_HZ = 10;
 /** Physics substeps per 30 Hz tick: the body steps at 1/60 s. */
 export const SUBSTEPS = 2;
 
-/** A meter: value in [0, max], an externally driven rate per second (oxygen), and its listeners. */
+/** A meter: value in [0, max] and its listeners. */
 export class Meter {
   constructor(max) {
     this.max = max;
     this.value = max;
-    this.rate = 0;
     /** @type {Signal<[number, number]>} (value, max) after a discrete change */
     this.changed = new Signal();
   }
@@ -107,12 +103,9 @@ export class Player {
     this.body = new CharacterBody(world);
     this.meters = {
       stamina: new Meter(GameConfig.StaminaMax),
-      oxygen: new Meter(GameConfig.OxygenMax),
       battery: new Meter(GameConfig.BatteryMax),
     };
     this.metersActive = false;
-    /** @type {Signal<[]>} */
-    this.oxygenDepleted = new Signal();
     /** @type {Signal<[string, string]>} (new, old) */
     this.moveStateChanged = new Signal();
     /** @type {Signal<[THREE.Vector3, string, boolean]>} (position, surface, sprint) */
@@ -123,7 +116,7 @@ export class Player {
     this.mode = 'OnFoot';
     /** @type {Map<string, string>} */
     this.overrides = new Map();
-    this.intent = { crouch: false, sprint: false, dive: false };
+    this.intent = { crouch: false, sprint: false };
     this.exhausted = false;
     this.moveState = 'Standing';
     this.moving = false;
@@ -178,9 +171,6 @@ export class Player {
     input.on('Crouch', (phase) => {
       if (phase === 'Begin' && !this.isLocked()) this.crouchPresses++;
     });
-    input.on('Dive', (phase) => {
-      this.intent.dive = phase === 'Begin' && !this.isLocked();
-    });
     input.on('Flashlight', (phase) => {
       if (phase === 'Begin' && this.isAlive()) this.flashlight.toggle(engine.loop.realTime);
     });
@@ -225,9 +215,9 @@ export class Player {
     return best;
   }
 
-  /** Base locomotion mode: 'OnFoot' | 'Vent' | 'Swim'. */
+  /** Base locomotion mode: 'OnFoot' | 'Vent'. */
   setMode(mode) {
-    if (!['OnFoot', 'Vent', 'Swim'].includes(mode) || mode === this.mode) return;
+    if (!['OnFoot', 'Vent'].includes(mode) || mode === this.mode) return;
     this.mode = mode;
     this.intent.crouch = false;
     this.crouchPresses = 0;
@@ -240,7 +230,6 @@ export class Player {
     this.locks.set(reason, true);
     this.body.anchored = true;
     this.intent.sprint = false;
-    this.intent.dive = false;
   }
 
   unlock(reason = 'Anchor') {
@@ -268,8 +257,6 @@ export class Player {
     this.metersActive = !!active;
     if (!active) {
       this.meters.stamina.set(this.meters.stamina.max);
-      this.meters.oxygen.set(this.meters.oxygen.max);
-      this.meters.oxygen.rate = 0;
       this.exhausted = false;
       this.drainEndedAt = null;
     }
@@ -328,7 +315,7 @@ export class Player {
   }
 
   /**
-   * A camera override layer (Cutscene > Jumpscare > Spectating > Struggle > Trapped by default priority).
+   * A camera override layer (Cutscene > Jumpscare > Spectating > Trapped by default priority).
    * `fn()` returns the camera frame each frame: a Matrix4, 12 CFrame numbers, {position, quaternion} or
    * {position, lookAt}; it may carry `fov`. null removes (blends out) the layer.
    * @param {string} token
@@ -362,7 +349,7 @@ export class Player {
   }
 
   /**
-   * Replaces the walking physics while held (vent rails, swimming, parachute, drags). `fn(dt, player)` moves the
+   * Replaces the walking physics while held (vent rails, the parachute). `fn(dt, player)` moves the
    * body itself (player.body.move(delta) collides; body.position.copy() teleports). Highest priority wins. It runs
    * inside the 30 Hz tick, once per physics substep (dt = 1/60 s), never per rendered frame.
    */
@@ -381,22 +368,11 @@ export class Player {
     if (this.metersActive) this.meters.stamina.set(this.meters.stamina.max);
   }
 
-  setOxygenRate(rate) {
-    if (this.metersActive && Number.isFinite(rate)) this.meters.oxygen.rate = rate;
-  }
-
-  addOxygen(delta) {
-    if (!this.metersActive) return;
-    const before = this.meters.oxygen.value;
-    this.meters.oxygen.add(delta);
-    if (before > 0 && this.meters.oxygen.value <= 0) this.oxygenDepleted.fire();
-  }
-
   addBattery(delta) {
     this.meters.battery.add(delta);
   }
 
-  /** The footstep surface under the feet (pool water, the zone's surface, the floor material, else Concrete). */
+  /** The footstep surface under the feet (the zone's surface, the floor material, else Concrete). */
   surfaceAt(position) {
     const zone = this.world.zoneAt(position);
     if (zone && zone.surface) return zone.surface;
@@ -423,7 +399,6 @@ export class Player {
     const st = this.meters.stamina;
     const canSprint = this.intent.sprint && st.value > 0 && !this.exhausted;
     if (this.mode === 'Vent') return canSprint ? 'VentScurrying' : 'VentCrawling';
-    if (this.mode === 'Swim') return this.intent.dive ? 'Underwater' : canSprint ? 'Freestyle' : 'Treading';
     if (this.intent.crouch) return 'Crouching';
     // under a low ceiling (a crawlway) a crouched body cannot stand up: it stays crouched until there is room
     if (this.moveState === 'Crouching' && this.mode === 'OnFoot' && !this.body.headroom()) {
@@ -452,12 +427,6 @@ export class Player {
         const regenAt = this.drainEndedAt === null ? now : this.drainEndedAt + GameConfig.StaminaRegenDelay;
         if (now >= regenAt) st.value = Math.min(st.max, st.value + GameConfig.StaminaRegen * dt);
       }
-      const ox = this.meters.oxygen;
-      if (ox.rate !== 0) {
-        const before = ox.value;
-        ox.value = Math.min(ox.max, Math.max(0, ox.value + ox.rate * dt));
-        if (before > 0 && ox.value <= 0) this.oxygenDepleted.fire();
-      }
     }
     const next = this._derive();
     if (next !== this.moveState) {
@@ -484,7 +453,7 @@ export class Player {
 
   /**
    * The body's motion for one tick, in SUBSTEPS substeps: the strongest motion override, else the walking physics
-   * (the wish from the yaw and the move input at this tick; the latched or held jump), else Vent / Swim without a
+   * (the wish from the yaw and the move input at this tick; the latched or held jump), else the Vent mode without a
    * driver. Then the tick's speed, moving and landing, and the tick states the frame interpolates between.
    */
   _simulate(dt) {
@@ -498,17 +467,16 @@ export class Player {
     const cy = Math.cos(this.yaw);
     const speedCap = WalkSpeeds[state] ?? GameConfig.WalkSpeed;
     _wish.set((-sy * mv.y + cy * mv.x) * speedCap, 0, (-cy * mv.y - sy * mv.x) * speedCap);
-    if (this.mode === 'Swim') _wish.y = this.intent.dive ? -speedCap * 0.6 : 0;
     const jump = (this.jumpLatched || this.jumpHeld) && !locked && !NO_JUMP.has(state) && this.lifeState !== 'Downed';
     this.jumpLatched = false;
     const sub = dt / SUBSTEPS;
     for (let i = 0; i < SUBSTEPS; i++) {
-      // a driver may end itself mid-tick (a climb out of the water): the next substep walks
+      // a driver may end itself mid-tick: the next substep walks
       let driver = null;
       for (const d of this.motionOverrides.values()) if (!driver || d.priority > driver.priority) driver = d;
       if (driver) driver.fn(sub, this);
       else if (this.mode === 'OnFoot') body.step(sub, _wish, { jump: jump && body.grounded });
-      // Vent / Swim without a driver: move along the look (the game's vent rail and swim drivers replace this)
+      // Vent without a driver: move along the look (the game's vent rail driver replaces this)
       else body.step(sub, _wish, { accel: 10 });
     }
     const moved = _d.subVectors(body.position, this.tickPrevious);
@@ -710,7 +678,7 @@ export class Player {
     this.locks.clear();
     this.body.anchored = false;
     this.setMode('OnFoot');
-    this.intent = { crouch: false, sprint: false, dive: false };
+    this.intent = { crouch: false, sprint: false };
     this.crouchPresses = 0;
     this.jumpLatched = false;
     this.exhausted = false;

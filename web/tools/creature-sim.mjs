@@ -32,8 +32,6 @@
 //   soak          every level, a wandering, noisy player for --soak seconds each: never stuck past the stuck
 //                 window, no state held past its bound, no NaN, nothing throws.
 //   determinism   the patrol twice gives the same path.
-//   pool          Level 4 fairness: the grace; a freestyle swimmer outswims it; every lunge telegraphed; the retreat
-//                 after a grab; it never climbs out (in and out of the water only by fading, out of sight).
 // Exit code 1 on any failure.
 
 import fs from 'node:fs';
@@ -45,6 +43,7 @@ import { Entities } from '../src/engine/entities.js';
 import { createSharedUniforms } from '../src/engine/materials.js';
 import { NoiseBus } from '../src/engine/noise.js';
 import { World } from '../src/engine/world.js';
+import { WorldConfig } from '../src/engine/config.js';
 import { createCreature, PLAYER } from '../src/creature/index.js';
 import { CreatureConfig, ROOT_HEIGHT } from '../src/creature/config.js';
 import { FloorNav } from '../src/creature/nav.js';
@@ -330,7 +329,7 @@ function watch(s) {
   if (s.prev && svc.body.placements === s.prevPlacements && svc.state !== 'Scripted' && !svc.catching && t > s.prevAt) {
     const v = Math.hypot(pos.x - s.prev.x, pos.z - s.prev.z) / (t - s.prevAt);
     if (v > fairness.maxSpeed.v) {
-      fairness.maxSpeed = { v, state: svc.state, level: svc.creatureLevel, difficulty: svc.difficulty, medium: svc.mover.getMedium(),
+      fairness.maxSpeed = { v, state: svc.state, level: svc.creatureLevel, difficulty: svc.difficulty,
         legs: svc.mover.legs.map((l) => l.kind).join('+'), warp: svc.warp ? `${svc.warp.kind}:${svc.warp.phase}` : null,
         hidden: svc.body.hidden, at: +t.toFixed(2) };
     }
@@ -647,9 +646,11 @@ for (const difficulty of ['Standard', 'Nightmare']) {
   stage(s, stand.position.clone().add(stand.lookVector.clone().multiplyScalar(4)), stand.position);
   let entered = false;
   let states = new Set();
+  const floorY = svc.body.getPosition().y;
   advance(s, 25, () => {
     if (Math.round(s.engine.loop.time * 30) % 9 === 0) s.engine.noise.emit(node.position.clone(), 'VentScurry', { source: 'player', level: LEVEL, ventNodeId: node.id, medium: 'Vent' });
-    if (svc.mover.getMedium() !== 'Floor' && svc.mover.getMedium() !== 'Water') entered = true;
+    // a duct runs at the ceiling: the body leaving its floor's height would be the Creature climbing in
+    if (Math.abs(svc.body.getPosition().y - floorY) > 4) entered = true;
     states.add(svc.state);
     return false;
   });
@@ -823,11 +824,11 @@ function watchPoint(s, level, locker) {
   }
   return null;
 }
-// A locker along a wall with 20 studs of floor in front of it, Level 1's first, else the next floor's in the climb
-// (Level 1's tunnel lockers stand at the back of their niches, out of sight from along a run).
+// A locker along a wall with 20 studs of floor in front of it, Level 1's first, else another floor's (Level 1's tunnel
+// lockers stand at the back of their niches, out of sight from along a run).
 const HIDE = (() => {
   const probe = session();
-  const order = ['Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium', 'Level4_FloodedPool', 'Level0_Basement'];
+  const order = WorldConfig.LevelOrder.slice(1).concat(WorldConfig.LevelOrder[0]);
   for (const level of [LEVEL, ...order.filter((l) => l !== LEVEL)]) {
     for (const locker of lockersOf(level)) if (watchPoint(probe, level, locker)) return { level, locker };
   }
@@ -998,9 +999,9 @@ function slipAway(s, locker) {
   const share = total / (seeds * ids.length);
   const again = [...fakeoutSpots(4242, ids)].join() === [...fakeoutSpots(4242, ids)].join();
   const budget = new FakeoutBudget();
-  const first = budget.take('Level3_Gymnasium');
-  const second = budget.take('Level3_Gymnasium');
-  const other = budget.take('Level2_ScienceHall');
+  const first = budget.take('Level1_Hallways');
+  const second = budget.take('Level1_Hallways');
+  const other = budget.take('Level0_Basement');
   report(Math.abs(share - 1 / CreatureConfig.FakeoutOneIn) < 0.02 && again && first && !second && other,
     'fake-outs: about 1 in 12 hiding spots (seeded per run), at most one per floor per player',
     `share ${(share * 100).toFixed(1)} %, deterministic ${again}, budget ${first}/${second}/${other}`);
@@ -1025,13 +1026,13 @@ function slipAway(s, locker) {
 {
   let worst = 0;
   let worstAt = null;
-  const levels = ['Level0_Basement', 'Level1_Hallways', 'Level2_ScienceHall', 'Level3_Gymnasium', 'Level4_FloodedPool', 'Level5_Roof'];
+  const levels = WorldConfig.LevelOrder;
   const per = {};
   const over = [];
   for (const level of levels) {
     const s = session();
     const svc = s.creature.service;
-    s.creature.beginRun({ difficulty: level === 'Level3_Gymnasium' ? 'Nightmare' : 'Standard' });
+    s.creature.beginRun({ difficulty: level === 'Level2_Auditorium' ? 'Nightmare' : 'Standard' });
     s.creature.activateLevel(level);
     hideFar(s, level);
     s.player.moveState = 'Standing';
@@ -1068,7 +1069,7 @@ function slipAway(s, locker) {
     });
     const wall = (Date.now() - t0) / 1000;
     const visited = [...new Set(s.events.states.map((e) => e.next))];
-    per[level] = { maxStuck: +s.stuck.max.toFixed(2), unsticks: svc.unsticks || 0, state: svc.state, medium: svc.mover.getMedium(),
+    per[level] = { maxStuck: +s.stuck.max.toFixed(2), unsticks: svc.unsticks || 0, state: svc.state,
       teleports: svc.teleports, catches: s.events.caught.length, downs, visited: visited.join('/'), cpuSeconds: +wall.toFixed(1) };
     if (s.stuck.max > worst) {
       worst = s.stuck.max;
@@ -1136,210 +1137,6 @@ function slipAway(s, locker) {
   const again = scenarioPatrol();
   const same = again.pathLength === p1.pathLength && again.end.distanceTo(p1.end) < 1e-9;
   report(same, 'determinism: the same run gives the same path', `${again.pathLength} / ${p1.pathLength} samples`);
-}
-
-// 15. the pool (Level 4 fairness)
-{
-  const POOL = 'Level4_FloodedPool';
-  const W = CreatureConfig.Water;
-  const basin = meta.basins.find((b) => b.level === POOL);
-  const o = basin.origin;
-  const box = { minX: o[0] + basin.rect.x, maxX: o[0] + basin.rect.x + basin.rect.w, minZ: o[2] + basin.rect.z, maxZ: o[2] + basin.rect.z + basin.rect.d };
-  const surface = o[1] + basin.waterLevel;
-  const cx = (box.minX + box.maxX) / 2;
-  const swimAt = (x, z) => new THREE.Vector3(x, surface - 1, z);
-  /** A session on Level 4: the player on the natatorium deck (the grace starts), awake and past the grace. */
-  const poolSession = (skipGrace = true) => {
-    const s = session();
-    s.creature.beginRun({ difficulty: 'Standard' });
-    s.creature.activateLevel(POOL);
-    s.grabs = [];
-    s.telegraphs = [];
-    s.grabResult = false;
-    s.creature.registerPoolGrabber(() => {
-      s.grabs.push(s.engine.loop.time);
-      return s.grabResult;
-    });
-    s.creature.service.lungeTelegraph.connect((origin, seconds) => s.telegraphs.push({ at: s.engine.loop.time, origin: origin.clone(), seconds }));
-    hideFar(s, POOL);
-    s.player.moveState = 'Standing';
-    s.player.place(new THREE.Vector3(box.minX - 4, o[1], (box.minZ + box.maxZ) / 2));
-    if (skipGrace) advance(s, W.PoolGraceSeconds + 1);
-    return s;
-  };
-  /** The swimmer at `p` in `state`, its locomotion heard at 10 Hz. */
-  const swim = (s, p, state, speed) => {
-    s.player.mode = 'Swim';
-    s.player.moveState = state;
-    s.player.body.position.copy(p);
-    if (Math.round(s.engine.loop.time * 30) % 3 === 0) {
-      s.engine.noise.sampleLocomotion(p.clone().add(new THREE.Vector3(0, -2, 0)), state, speed, { level: POOL });
-    }
-  };
-  const putInWater = (s, p, toward, release = 'AquaticStalk') => {
-    const svc = s.creature.service;
-    svc.swimmerAt = s.engine.loop.time;
-    svc.swimmerPlayer = PLAYER;
-    const h = s.creature.acquireScripted('sim');
-    const at = new THREE.Vector3(p.x, surface - 2.5, p.z);
-    h.teleport(new THREE.Matrix4().lookAt(at, new THREE.Vector3(toward.x, at.y, toward.z), new THREE.Vector3(0, 1, 0)).setPosition(at));
-    h.setHidden(false);
-    h.release(release);
-  };
-  const lungeLeg = (svc) => !!(svc.mover.legs[0] && svc.mover.legs[0].kind === 'Swim' && svc.mover.legs[0].lunge);
-  const pool = {};
-
-  // the grace: a loud swimmer right over it in the first seconds after entering the natatorium is left alone
-  {
-    const s = poolSession(false);
-    advance(s, 5);
-    const svc = s.creature.service;
-    putInWater(s, new THREE.Vector3(cx, 0, box.minZ + 20), new THREE.Vector3(cx, 0, box.minZ + 30), 'Patrol');
-    svc.swimmerAt = -Infinity;
-    const enteredAt = svc.poolEnteredAt;
-    const until = enteredAt + W.PoolGraceSeconds - 0.5;
-    let stalked = false;
-    while (s.engine.loop.time < until) {
-      swim(s, swimAt(cx, box.minZ + 26), 'Freestyle', 9);
-      s.engine.loop.step();
-      watch(s);
-      if (svc.state === 'AquaticStalk' || svc.state === 'WallChase') stalked = true;
-    }
-    pool.grace = { enteredAt, telegraphs: s.telegraphs.length, grabs: s.grabs.length, stalked };
-    report(enteredAt !== null && s.telegraphs.length === 0 && s.grabs.length === 0 && !stalked,
-      `pool: the ${W.PoolGraceSeconds} s grace after entering the natatorium (a loud swimmer 6 studs off is left alone)`,
-      JSON.stringify(pool.grace));
-  }
-
-  // outswimming it: a freestyle swimmer heading away from a stalker 8 studs off
-  {
-    const s = poolSession();
-    const svc = s.creature.service;
-    putInWater(s, new THREE.Vector3(cx, 0, box.minZ + 12), new THREE.Vector3(cx, 0, box.maxZ));
-    let z = box.minZ + 20;
-    for (let i = 0; i < 3; i++) {
-      swim(s, swimAt(cx, z), 'Treading', 0);
-      s.engine.loop.step();
-    }
-    const start = svc.body.getPosition().distanceTo(swimAt(cx, z));
-    let maxSwim = 0;
-    let prev = svc.body.getPosition().clone();
-    let placements = svc.body.placements;
-    let minGap = Infinity;
-    for (let i = 0; i < 8 * 30 && z < box.maxZ - 4; i++) {
-      z += 9 * TICK;
-      swim(s, swimAt(cx, z), 'Freestyle', 9);
-      s.engine.loop.step();
-      watch(s);
-      const here = svc.body.getPosition();
-      if (svc.mover.getMedium() === 'Water' && !lungeLeg(svc) && placements === svc.body.placements) maxSwim = Math.max(maxSwim, here.distanceTo(prev) / TICK);
-      prev = here.clone();
-      placements = svc.body.placements;
-      minGap = Math.min(minGap, here.distanceTo(swimAt(cx, z)));
-    }
-    const end = svc.body.getPosition().distanceTo(swimAt(cx, z));
-    pool.outswim = { start: +start.toFixed(1), end: +end.toFixed(1), minGap: +minGap.toFixed(1), grabs: s.grabs.length,
-      telegraphs: s.telegraphs.length, maxSwim: +maxSwim.toFixed(2), state: svc.state };
-    report(s.grabs.length === 0 && end > start + 5 && minGap > 4.5, 'pool: a freestyle swimmer outswims it (no grab, the gap grows)', JSON.stringify(pool.outswim));
-    report(maxSwim <= CreatureConfig.Speeds.AquaticStalk + 0.05, `pool: it never swims faster than AquaticStalk (${CreatureConfig.Speeds.AquaticStalk}) outside a lunge`, `max ${maxSwim.toFixed(2)} studs/s`);
-  }
-
-  // every lunge is telegraphed; a grab sends it to the far end for GrabRetreatSeconds
-  {
-    const s = poolSession();
-    const svc = s.creature.service;
-    putInWater(s, new THREE.Vector3(cx, 0, box.minZ + 30), new THREE.Vector3(cx, 0, box.minZ + 40));
-    const spot = swimAt(cx, box.minZ + 36);
-    const lunges = [];
-    let was = false;
-    let grabsSeen = 0;
-    const stepTracked = (state, speed) => {
-      swim(s, spot, state, speed);
-      const before = svc.body.getPosition().clone();
-      s.engine.loop.step();
-      watch(s);
-      const now = lungeLeg(svc);
-      if ((now && !was) || (s.grabs.length > grabsSeen && !was)) lunges.push({ at: s.engine.loop.time, position: before });
-      grabsSeen = s.grabs.length;
-      was = now;
-    };
-    for (let i = 0; i < 8 * 30; i++) stepTracked('Freestyle', 9);
-    for (let i = 0; i < 12 * 30 && lunges.length < 3; i++) stepTracked('Treading', 1);
-    const growls = s.engine.audio.played.filter((p) => p.name === 'CreatureGrowl');
-    const firstOf = new Set();
-    const told = lunges.map((l) => {
-      const t = s.telegraphs.filter((x) => x.at <= l.at).pop();
-      const growl = growls.filter((g) => g.at <= l.at).pop();
-      const first = !!t && !firstOf.has(t);
-      if (t) firstOf.add(t);
-      return { lead: t ? +(l.at - t.at).toFixed(2) : null, first, fromOrigin: t ? +t.origin.distanceTo(l.position).toFixed(2) : null,
-        growlAtOrigin: !!growl && !!t && growl.position && growl.position.distanceTo(t.origin) < 0.01 };
-    });
-    const allTold = lunges.length > 0 && told.every((x) => x.lead !== null && x.lead >= W.TelegraphSeconds - 0.05 &&
-      x.lead <= W.TelegraphSeconds + W.LungeWindow + 0.1 && x.growlAtOrigin && (!x.first || x.fromOrigin < 1));
-    const grabAfter = s.grabs.length > 0 && s.telegraphs.length > 0 && s.grabs[0] - s.telegraphs[0].at >= W.TelegraphSeconds - 0.05;
-    pool.telegraph = { lunges: lunges.length, telegraphs: s.telegraphs.length, told, grabs: s.grabs.length };
-    report(allTold, `pool: every lunge is telegraphed ${W.TelegraphSeconds} s ahead (held still, the growl at its origin)`,
-      `${lunges.length} strikes after ${s.telegraphs.length} telegraphs: ${JSON.stringify(told.filter((x) => x.first))}`);
-    report(grabAfter, 'pool: the grab comes only after the telegraph', s.grabs.length ? `grab ${(s.grabs[0] - s.telegraphs[0].at).toFixed(2)} s after it` : 'no grab');
-    s.grabResult = true;
-    for (let i = 0; i < 12 * 30 && !svc.grabbed; i++) {
-      swim(s, spot, 'Treading', 1);
-      s.engine.loop.step();
-    }
-    const grabbed = !!svc.grabbed;
-    s.player.moveState = 'Grabbed';
-    advance(s, 2);
-    s.player.moveState = 'Treading';
-    advance(s, 1.5);
-    const releasedAt = s.engine.loop.time;
-    const t0 = s.telegraphs.length;
-    const g0 = s.grabs.length;
-    let near = Infinity;
-    let far = 0;
-    while (s.engine.loop.time < releasedAt + W.GrabRetreatSeconds - 2) {
-      swim(s, spot, 'Freestyle', 9);
-      s.engine.loop.step();
-      watch(s);
-      const d = svc.body.getPosition().distanceTo(spot);
-      if (s.engine.loop.time > releasedAt + 6) near = Math.min(near, d);
-      far = Math.max(far, d);
-    }
-    pool.retreat = { grabbed, telegraphs: s.telegraphs.length - t0, grabs: s.grabs.length - g0, nearestAfter6s: +near.toFixed(1), farthest: +far.toFixed(1), state: svc.state };
-    report(grabbed && s.telegraphs.length === t0 && s.grabs.length === g0 && near > 25,
-      `pool: after a grab it retreats to the far end and leaves the swimmer alone for ${W.GrabRetreatSeconds} s`, JSON.stringify(pool.retreat));
-  }
-
-  // it never climbs out onto the deck: in and out of the water only by fading, out of sight, well away from them
-  {
-    const s = poolSession();
-    const svc = s.creature.service;
-    putInWater(s, new THREE.Vector3(box.minX + 6, 0, box.minZ + 50), new THREE.Vector3(box.minX - 10, 0, box.minZ + 50), 'Patrol');
-    svc.swimmerAt = -Infinity;
-    s.player.mode = 'OnFoot';
-    s.player.moveState = 'Standing';
-    s.player.flashlight.on = true;
-    s.player.place(new THREE.Vector3(box.minX - 6, o[1], box.minZ + 50));
-    let medium = svc.mover.getMedium();
-    const changes = [];
-    for (let i = 0; i < 40 * 30; i++) {
-      const placements = svc.body.placements;
-      s.engine.loop.step();
-      watch(s);
-      const m = svc.mover.getMedium();
-      if (m !== medium) {
-        const p = svc.body.getPosition();
-        changes.push({ from: medium, to: m, warped: svc.body.placements !== placements || !!svc.warp || svc.body.hidden,
-          fromPlayer: +p.distanceTo(s.player.body.position).toFixed(1), seen: svc._visible(p) });
-        medium = m;
-      }
-    }
-    const out = changes.find((c) => c.from === 'Water' && c.to === 'Floor');
-    pool.sealed = { changes, state: svc.state, catches: s.events.caught.length };
-    report(!!out && changes.every((c) => c.warped) && out.fromPlayer >= W.ExitMin - 0.5 && !out.seen,
-      `pool: it never climbs out (it fades out under the water and in on land out of sight, ${W.ExitMin}+ studs away)`, JSON.stringify(pool.sealed));
-  }
-  summary.pool = pool;
 }
 
 // the global fairness checks (every scenario's every tick)

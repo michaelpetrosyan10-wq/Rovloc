@@ -1,7 +1,7 @@
 // run.js: a co-op run's squad rules (DownedReviveService, SpectatorService, CheckpointAirlockService's squad side,
 // the run outcome and MatchResetService), host-authoritative.
 //
-// Life. Each page's Life owns its own player (damage, traps, drowning, bleeding out are felt where the body is) and
+// Life. Each page's Life owns its own player (damage, traps, bleeding out are felt where the body is) and
 // reports every change ({t: 'life'}); the host keeps the squad's record and decides from it. A teammate going down or
 // dying is announced; a dying player's carried objective items are set down where they fell ({t: 'drop'}), as are a
 // leaver's.
@@ -38,10 +38,8 @@ const REVIVE_FRACTION = 0.5;
 const RESPAWN_HEALTH = GameConfig.MaxHealth * 0.5;
 const ROOT_TO_FEET = 3;
 const EYE = { Standing: 1.5, Sprinting: 1.4, Crouching: 0, VentCrawling: -0.6, VentScurrying: -0.6, DownedCrawling: -0.8,
-  Treading: 0.4, Freestyle: 0.2, Underwater: -0.6, Hiding: 1.3, Trapped: 1.1, Grabbed: -0.6 };
+  Hiding: 1.3, Trapped: 1.1 };
 const SPECTATE_SMOOTH = 12;
-/** Seconds a client's lander is held after touching down (the finale's lookback) before their hold ends. */
-const LANDING_HOLD = 8;
 
 export class RunNet {
   /** @param {import('./index.js').Coop} coop */
@@ -61,8 +59,7 @@ export class RunNet {
     this.lateJoin = false;
     /** host: the revive in flight ({victim, by}) until the victim reports getting up */
     this.pendingReviver = null;
-    this.landedAt = null;
-    this.landingReleased = false;
+    this.landed = false;
     this.handlers = {
       life: (from, msg) => this._onLife(from, msg),
       drop: (from, msg) => this._onDrop(msg),
@@ -480,7 +477,7 @@ export class RunNet {
     return anyEscaped ? 'Escape' : 'Wipe';
   }
 
-  /** Host / clients: this page's player escaped (Level 5's landing). */
+  /** Host / clients: this page's player escaped (the roof's landing). */
   localEscaped() {
     const coop = this.coop;
     if (!coop.me) return;
@@ -650,7 +647,7 @@ export class RunNet {
     const out = [];
     if (game.playing()) {
       out.push({ id: this.coop.localId, local: true, eye: game.eye(new THREE.Vector3()), root: env.rootPosition(new THREE.Vector3()),
-        zone: game.zoneId(), inVent: !!(game.vents && game.vents.inVent()) });
+        zone: game.zoneId(), inVent: !!(game.vents && game.vents.inVent()), life: game.life.state });
     }
     if (!this.coop.isHost()) return out;
     for (const m of this.coop.participants()) {
@@ -659,19 +656,9 @@ export class RunNet {
       const root = new THREE.Vector3(p.x, p.y, p.z);
       const zone = env.zoneAt(root);
       out.push({ id: m.id, local: false, eye: new THREE.Vector3(p.x, p.y + (EYE[p.moveState] ?? 1.5), p.z), root,
-        zone: zone ? zone.id : null, inVent: (p.flags & PoseFlags.Vent) !== 0 });
+        zone: zone ? zone.id : null, inVent: (p.flags & PoseFlags.Vent) !== 0, life: m.life });
     }
     return out;
-  }
-
-  /** Host: the root of a teammate in the water (Level 4 calls the Creature to the pool for them too), or null. */
-  remoteSwimmerRoot() {
-    if (!this.coop.isHost()) return null;
-    for (const m of this.coop.participants()) {
-      if (m.local || !m.playing() || !m.pose || !(m.pose.flags & PoseFlags.Swim)) continue;
-      return new THREE.Vector3(m.pose.x, m.pose.y, m.pose.z);
-    }
-    return null;
   }
 
   /** Could any playing participant see `point` (host; a client answers for its own player)? */
@@ -692,8 +679,7 @@ export class RunNet {
 
   beginRun() {
     this.beingRevivedBy = null;
-    this.landedAt = null;
-    this.landingReleased = false;
+    this.landed = false;
   }
 
   endRun() {
@@ -706,26 +692,21 @@ export class RunNet {
   }
 
   /**
-   * A client's own landing (the roof finale is the host's): the touchdown is this player's escape, and the landing's
-   * hold ends after the finale's beat (the host's Level 5 does both for the host's player).
+   * A client's own landing (the roof scene is the host's): the touchdown is this player's escape and the landing's hold
+   * ends at once (the host's level3.js does both for the host's player).
    */
-  _clientLanding(now) {
+  _clientLanding() {
     const game = this.game;
     const p = game.parachute;
-    if (!this.coop.isClient() || !game.run || !p) return;
-    if (p.state === 'Landed' && this.landedAt === null) {
-      this.landedAt = now;
-      game.match.markEscaped();
-    }
-    if (this.landedAt !== null && !this.landingReleased && now - this.landedAt >= LANDING_HOLD) {
-      this.landingReleased = true;
-      p.releaseHold();
-    }
+    if (!this.coop.isClient() || !game.run || !p || p.state !== 'Landed' || this.landed) return;
+    this.landed = true;
+    game.match.markEscaped();
+    p.releaseHold();
   }
 
-  tick(dt, now) {
+  tick() {
     if (!this.coop.active) return;
-    this._clientLanding(now);
+    this._clientLanding();
     this._syncRevivePrompts();
     const want = this._spectateWanted();
     if (want && !this.spectateActive) this._startSpectating();

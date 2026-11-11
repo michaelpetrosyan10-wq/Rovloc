@@ -7,10 +7,9 @@
 // frame and the probe light where they stand are written to a NodeTable texture, the same path the Creature's rig uses,
 // and the world material lights them (your torch included) and casts their shadow in it.
 // Motion, procedural from the MoveState and the measured speed: a walk / run cycle (legs and opposite arms swinging
-// with the stride, a bob), the crouch walk (hips low, knees bent), the duct crawl (body flat, limbs pawing), swimming
-// (treading upright with sculling arms; freestyle and underwater flat with strokes and a flutter kick), downed (prone,
-// dragging on the arms), dead (prone, still), trapped (one knee down), grabbed (thrashing), the parachute's freefall
-// and canopy (arms up). A flask they hold shows in their left fist, a parachute pack they wear on their back. Hidden in
+// with the stride, a bob), the crouch walk (hips low, knees bent), the duct crawl (body flat, limbs pawing), downed
+// (prone, dragging on the arms), dead (prone, still), trapped (one knee down), the parachute's freefall and canopy
+// (arms up). A flask they hold shows in their left fist, a parachute pack they wear on their back. Hidden in
 // a locker or left behind (spectating), the body is not drawn; neither is the teammate this page is spectating through
 // (the camera is in their eyes), whose torch still lights the way they look.
 // Torch. While theirs is on: a faint visible beam from the hand along their look (lowered while sprinting) and a dynamic
@@ -53,7 +52,6 @@ const SPLASH_COLOR = [1, 0.886, 0.745]; // 0-1 like every engine light colour (2
 const TAG_FAR = 70;
 const TAG_RAY = 0.25;
 const SAME_LEVEL_SLACK = 40;
-const SWIM_STATES = new Set(['Treading', 'Freestyle', 'Underwater', 'Grabbed']);
 const ANIM_SMOOTH = 10;
 
 /** Box geometry centred at (cx, cy, cz) in part space, coloured, tagged with a node slot. */
@@ -199,7 +197,7 @@ class Avatar {
     this.phase = 0;
     this.speed = 0;
     this.lastPos = null;
-    this.blend = { crouch: 0, prone: 0, swim: 0 };
+    this.blend = { crouch: 0, prone: 0 };
     this.rayClock = Math.random() * BEAM_RAY;
     this.tagClock = Math.random() * TAG_RAY;
     this.tagVisible = 1;
@@ -252,15 +250,13 @@ class Avatar {
     const dead = life === 'Dead';
     const downed = life === 'Downed' || state === 'DownedCrawling';
     const vent = (pose.flags & PoseFlags.Vent) !== 0 || state === 'VentCrawling' || state === 'VentScurrying';
-    const swim = (pose.flags & PoseFlags.Swim) !== 0 || SWIM_STATES.has(state);
-    const flatSwim = swim && (state === 'Freestyle' || state === 'Underwater' || state === 'Grabbed');
     const crouch = state === 'Crouching' || state === 'Trapped';
-    const prone = dead || downed || vent || flatSwim;
+    const prone = dead || downed || vent;
     const k = Math.min(1, dt * 8);
     this.blend.crouch += ((crouch ? 1 : 0) - this.blend.crouch) * k;
     this.blend.prone += ((prone ? 1 : 0) - this.blend.prone) * k;
     // gait phase from the distance covered
-    const stride = vent || downed ? 1.6 : swim ? 2.2 : crouch ? 2.2 : 3.4;
+    const stride = vent || downed ? 1.6 : crouch ? 2.2 : 3.4;
     this.phase += (this.speed * dt) / stride * Math.PI;
     if (dead) this.phase = 0;
     const moving = Math.min(1, this.speed / 6);
@@ -273,7 +269,7 @@ class Avatar {
     const proneAngle = -Math.PI / 2 * this.blend.prone;
     let drop = 0;
     if (crouch) drop = 0.9 * this.blend.crouch;
-    if (prone) drop = vent ? 0.9 : flatSwim ? 0 : 2.3;
+    if (prone) drop = vent ? 0.9 : 2.3;
     drop *= prone ? this.blend.prone : 1;
     body.multiply(_t.makeTranslation(0, -drop, 0));
     if (this.blend.prone > 0.01) {
@@ -326,30 +322,7 @@ class Avatar {
       legR = 0.6 + sway * 0.4 * moving;
       kneeL = 1.4;
       kneeR = 1.4;
-    } else if (swim) {
-      if (flatSwim) {
-        const stroke = this.phase * 0.8;
-        armL = -Math.PI + Math.sin(stroke) * 1.6;
-        armR = -Math.PI + Math.sin(stroke + Math.PI) * 1.6;
-        legL = Math.sin(this.phase * 3) * 0.35;
-        legR = -legL;
-        if (state === 'Grabbed') {
-          armL = -2.2 + Math.sin(t * 13) * 0.9;
-          armR = -2.2 + Math.sin(t * 11 + 1) * 0.9;
-          legL = Math.sin(t * 9) * 0.6;
-          legR = -legL;
-        }
-      } else {
-        spreadL = 0.9 + Math.sin(t * 3) * 0.35;
-        spreadR = -spreadL;
-        armL = -0.3;
-        armR = -0.3;
-        legL = Math.sin(t * 2.6) * 0.45;
-        legR = -legL;
-        kneeL = 0.5;
-        kneeR = 0.5;
-      }
-    } else if (state === 'Parachuting' || state === 'Freefall' || (pose.flags & PoseFlags.Pack && state === 'Falling')) {
+    } else if (state === 'Parachuting' || state === 'Freefall') {
       armL = -2.7;
       armR = -2.7;
       spreadL = 0.4;
@@ -400,7 +373,7 @@ class Avatar {
 
     this.avatars.env.probeAt(_v.set(pose.x, pose.y, pose.z), _probe);
     const dim = dead ? 0.45 : 1;
-    const flask = pose.held === 'Flask' || pose.held === 'AcidFlask';
+    const flask = pose.held === 'Flask';
     const chute = (pose.flags & PoseFlags.Pack) !== 0;
     for (let i = 0; i < PARTS; i++) {
       let mode = spectated ? 0 : 2;

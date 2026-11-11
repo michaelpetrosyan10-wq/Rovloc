@@ -1,5 +1,5 @@
-// flaskFx.js: what the chemical flasks look like away from the world props (ChemicalThrowController's cosmetics,
-// ChemicalFlaskBuilder.buildVisual and AcidFlaskBuilder.buildVisual): the flask carried in the hand and tumbling
+// flaskFx.js: what the chemical flasks look like away from the world props (ChemicalThrowController's cosmetics and
+// ChemicalFlaskBuilder.buildVisual): the flask carried in the hand and tumbling
 // through the air, the dotted aim arc with its impact ring, and a shatter's glass shards, liquid splash, puddle and
 // lingering cloud with its coloured glow. Plain three.js objects in the world scene (the held flask rides the
 // first-person hand); lit by the baked light probe where they are, except what glows (the Neon liquid, the arc, the
@@ -59,25 +59,6 @@ const TWINE_COLOR = rgb(96, 84, 60);
 const TAG_COLOR = rgb(148, 132, 86);
 const TAG_TEXT_COLOR = 'rgb(92,24,18)';
 const CRACK_COLOR = rgb(172, 180, 174);
-
-// AcidFlaskBuilder (the same flask space; its tag faces -Z)
-const ACID_FOOT_DIAMETER = 0.72;
-const ACID_FOOT_HEIGHT = 0.05;
-const ACID_TIERS = [
-  { y0: 0.04, y1: 0.22, d: 0.7 },
-  { y0: 0.22, y1: 0.4, d: 0.58 },
-  { y0: 0.4, y1: 0.56, d: 0.44 },
-  { y0: 0.56, y1: 0.7, d: 0.3 },
-];
-const ACID_NECK_TOP = 0.98;
-const ACID_NECK_DIAMETER = 0.19;
-const ACID_LIP_DIAMETER = 0.24;
-const ACID_TAG_SIZE = [0.26, 0.17, 0.012];
-const ACID_BUNG_COLOR = rgb(46, 44, 42);
-const ACID_TAG_COLOR = rgb(168, 150, 60);
-const ACID_TAG_TEXT_COLOR = 'rgb(92,22,16)';
-/** AcidFlaskBuilder.AcidColor (0..1 RGB): the acid's sickly yellow-green, its Neon and its arc. */
-export const ACID_COLOR = Object.freeze([196 / 255, 232 / 255, 58 / 255]);
 
 // shatter (ChemicalThrowController)
 const SHARD_COUNT = 10;
@@ -357,34 +338,8 @@ export class FlaskModel extends HeldFlask {
   }
 }
 
-/**
- * Floor 2's acid flask (AcidFlaskBuilder.buildVisual, part for part): a heavy glass foot, the cone's four stepped tiers
- * up to the neck with its rolled lip and rubber bung, the acid's three Neon tiers, the twine tie and the hazard tag
- * printed "ACID" on the cone's front. setLight(probe) shades the unlit parts.
- */
-export class AcidFlaskModel extends HeldFlask {
-  constructor() {
-    super('AcidFlask', new THREE.Color(...ACID_COLOR), ACID_BUNG_COLOR, ACID_TAG_COLOR,
-      { value: S('Prop.Acid.Label'), color: ACID_TAG_TEXT_COLOR }, ACID_TAG_SIZE[0] / ACID_TAG_SIZE[1]);
-    const last = ACID_TIERS[ACID_TIERS.length - 1];
-    const parts = [
-      [upright(ACID_FOOT_DIAMETER, 0, ACID_FOOT_HEIGHT, 20), this.thick],
-      ...ACID_TIERS.map((t) => [upright(t.d, t.y0, t.y1, 18), this.glass]),
-      [upright(ACID_NECK_DIAMETER, last.y1 - 0.02, ACID_NECK_TOP, 14), this.glass],
-      [upright(ACID_LIP_DIAMETER, ACID_NECK_TOP - 0.03, ACID_NECK_TOP + 0.01, 14), this.thick],
-      [upright(0.17, ACID_NECK_TOP - 0.06, ACID_NECK_TOP + 0.1, 12), this.rubber],
-      // the acid fills the bottom three tiers, each a little inside its glass
-      ...ACID_TIERS.slice(0, 3).map((t, i) => [upright(t.d - 0.06, t.y0 + 0.01, t.y1 - (i === 2 ? 0.06 : 0), 16), this.neon]),
-      [upright(ACID_NECK_DIAMETER + 0.014, 0.74, 0.77, 14), this.twine],
-    ];
-    const tagFrame = new THREE.Matrix4().makeTranslation(0, 0.3, -0.33).multiply(new THREE.Matrix4().makeRotationX(-34 * DEG));
-    parts.push([block(ACID_TAG_SIZE, tagFrame), this.tag], [frontLabel(ACID_TAG_SIZE, tagFrame), this.print]);
-    this._add(parts);
-  }
-}
-
 // ---------------------------------------------------------------------------------------------------------------
-// Billboard particles (the splash, the gas, the pool bubbles): camera-facing quads sized in studs
+// Billboard particles (the splash, the gas): camera-facing quads sized in studs
 // ---------------------------------------------------------------------------------------------------------------
 
 let softTexture = null;
@@ -495,13 +450,12 @@ export class FlaskEffects {
    * A shatter at `point` (surface `normal`): shards and a splash at once, a puddle on a floor, the cloud at `centre`
    * for `seconds` (smaller and slower inside a duct) with its coloured glow.
    */
-  shatter(point, normal, centre, color, seconds, inVent, kind) {
+  shatter(point, normal, centre, color, seconds, inVent) {
     const now = this.env.realNow();
     this.env.probeAt(point, this.probe);
     this._shards(point, normal, now);
     this._splash(point, normal, color, now);
-    if (kind !== 'Water' && normal.y >= FLOOR_NORMAL_Y && !inVent) this._puddle(point, normal, color, seconds, now);
-    if (kind === 'Water') this._ripple(point, color, now);
+    if (normal.y >= FLOOR_NORMAL_Y && !inVent) this._puddle(point, normal, color, seconds, now);
     this._cloud(centre, color, seconds, inVent, now);
   }
 
@@ -601,30 +555,6 @@ export class FlaskEffects {
         if (age >= life) return false;
         mesh.scale.setScalar(Math.max(0.01, smoothstep(0, PUDDLE_SPREAD, age)));
         material.opacity = 0.75 * fadeAlpha(age, life, 1);
-        return true;
-      },
-      dispose: () => {
-        env.removeFromScene(mesh);
-        mesh.geometry.dispose();
-        material.dispose();
-      },
-    });
-  }
-
-  _ripple(point, color, born) {
-    const env = this.env;
-    const material = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(0.6), transparent: true, opacity: 0.5,
-      depthWrite: false, side: THREE.DoubleSide });
-    const mesh = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 28).rotateX(-Math.PI / 2), material);
-    mesh.frustumCulled = false;
-    mesh.position.copy(point).add(_v.set(0, 0.03, 0));
-    env.addToScene(mesh);
-    this._add({
-      step: (dt, now) => {
-        const age = now - born;
-        if (age >= 1.4) return false;
-        mesh.scale.setScalar(0.3 + age * 2.4);
-        material.opacity = 0.5 * fadeAlpha(age, 1.4, 1);
         return true;
       },
       dispose: () => {

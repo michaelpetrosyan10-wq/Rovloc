@@ -20,7 +20,7 @@
 //     black the override is popped and the look turned toward the Creature. After a beat in black, input, HUD and
 //     panic are handed back and the black fades out.
 //   * Variants (the cue's kind): Hallway as above; Locker, closer and darker, the frame edged in the locker's black;
-//     Vent (legacy), dim and tight; Underwater, murky green-blue, the tear rolling slower and the static softer.
+//     Vent (legacy), dim and tight.
 // MotionScale scales the shake, the camera's travel and the tear's slip; FlashScale scales the flashes, the static and
 // the light's stutter. A catch called off early cuts to black at once and restores after a shorter beat.
 //
@@ -94,12 +94,11 @@ const MAX_LEAD = 1;
 const PHANTOM_WARMUP = 1.5; // seconds of game time before the reveal's phantom is built
 const MAX_HOLD = 6;
 
-/** Per catch kind: the hold distance, the tear's strength, the static's, the light's, and an overlay tint. */
+/** Per catch kind: the hold distance, the tear's strength, the static's, the light's and the edge vignette's. */
 export const Variants = Object.freeze({
-  Hallway: Object.freeze({ hold: HOLD_DISTANCE, split: 1, slip: 1, static: 1, light: 1, edge: 0.6, tint: null }),
-  Locker: Object.freeze({ hold: 1.22, split: 1.15, slip: 0.8, static: 1, light: 0.75, edge: 0.95, tint: null }),
-  Vent: Object.freeze({ hold: 1.25, split: 0.9, slip: 0.7, static: 0.9, light: 0.6, edge: 0.85, tint: null }),
-  Underwater: Object.freeze({ hold: 1.45, split: 0.8, slip: 0.45, static: 0.7, light: 0.7, edge: 0.7, tint: [18, 54, 58, 0.42] }),
+  Hallway: Object.freeze({ hold: HOLD_DISTANCE, split: 1, slip: 1, static: 1, light: 1, edge: 0.6 }),
+  Locker: Object.freeze({ hold: 1.22, split: 1.15, slip: 0.8, static: 1, light: 0.75, edge: 0.95 }),
+  Vent: Object.freeze({ hold: 1.25, split: 0.9, slip: 0.7, static: 0.9, light: 0.6, edge: 0.85 }),
 });
 
 export const RevealConfig = Object.freeze({
@@ -420,7 +419,7 @@ export class JumpscareView {
       s.fallbackFace = CFrame.lookAt(ahead, eye);
     }
     env.setCameraOverride(TOKEN, () => this._camera(s), { fov: FOV, blendIn: BLEND_IN, blendOut: 0 });
-    s.paint = this._buildPaint(s.variant);
+    s.paint = this._buildPaint();
     s.light = env.addLight({ position: eye.clone(), color: LIGHT_COLOR, brightness: 0, range: LIGHT_RANGE });
   }
 
@@ -511,7 +510,7 @@ export class JumpscareView {
     if (post.uTearTint) post.uTearTint.value.set(...RED_TINT, o ? clamp01((o.red || 0) * 1.5) : 0);
   }
 
-  _buildPaint(variant) {
+  _buildPaint() {
     const parent = this.env.overlayRoot();
     if (!parent || typeof document === 'undefined') return null;
     const layer = (style) => {
@@ -531,12 +530,9 @@ export class JumpscareView {
       layer(`right:auto;width:30%;background:linear-gradient(90deg, ${edge} 0%, ${fadeTo});`),
       layer(`left:auto;width:30%;background:linear-gradient(270deg, ${edge} 0%, ${fadeTo});`),
     ];
-    const tint = variant.tint ? layer(`background:rgb(${variant.tint[0]},${variant.tint[1]},${variant.tint[2]});`) : null;
     const paint = {
       root,
       edges,
-      tint,
-      tintAlpha: variant.tint ? variant.tint[3] : 0,
       flash: layer(`background:${COLD_WHITE};`),
       black: layer('background:#000;'),
       written: new Map(),
@@ -556,7 +552,6 @@ export class JumpscareView {
       el.style.opacity = String(v);
     };
     for (const e of paint.edges) set(e, o.vignette);
-    if (paint.tint) set(paint.tint, o.black > 0 ? 0 : paint.tintAlpha * smoothstep(0, 0.1, this.env.renderTime() - s.startAt));
     set(paint.flash, o.flash);
     set(paint.black, o.black);
   }

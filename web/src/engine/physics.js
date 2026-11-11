@@ -74,7 +74,7 @@ export class CharacterBody {
     return this.position.y - ROOT_ABOVE_FEET;
   }
 
-  /** Puts the body at `position`, at rest. A walker stands on the floor under it; a crawler or a swimmer stays there. */
+  /** Puts the body at `position`, at rest. A walker stands on the floor under it; a crawler stays there. */
   teleport(position) {
     this.position.copy(position);
     this.velocity.set(0, 0, 0);
@@ -125,7 +125,7 @@ export class CharacterBody {
   }
 
   /**
-   * Moves by `delta` with collide-and-slide (no gravity, no floor probe). Drivers (vent rails, swimming) use it.
+   * Moves by `delta` with collide-and-slide (no gravity, no floor probe). Drivers (vent rails, the parachute) use it.
    * Returns the distance actually travelled.
    * @param {THREE.Vector3} delta
    */
@@ -242,9 +242,8 @@ export class CharacterBody {
       const dy = _seg.start.y - before.y;
       const dz = _seg.start.z - before.z;
       if (dx * dx + dy * dy + dz * dz < 1e-10) return;
-      // a walker's capsule only blocks sideways and from above (the floor probe owns standing); a body a driver moves
-      // without gravity (swimming) has no floor probe, so floors push it up too: a swimmer who hit the water fast
-      // used to sink straight through the pool's floor slab into the gap above the gym
+      // a walker's capsule only blocks sideways and from above (the floor probe owns standing); a body moved without
+      // gravity has no floor probe, so floors push it up too (it never sinks through a slab)
       const lift = this.shape === 'Ball' || dy < 0 || !this.gravity;
       this.position.x += dx;
       this.position.z += dz;

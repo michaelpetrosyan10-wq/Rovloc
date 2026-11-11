@@ -2,14 +2,14 @@
 //
 // TutorialConfig.Hints, highest priority first: the stairwell airlock (near its vestibule, or its countdown), a downed
 // teammate (never solo), the first bear trap, flask, vent grate or locker within the hint's radius on the current
-// level, getting into the water, a low battery with the light on. Each shows once ever: its hidden setting
-// (Hint<Id>) is set the moment it shows and saved with the settings. After the airlock come the floor objective's
-// stations and locks (FloorObjectives.hintSpots: a Hint.Obj.<what> line the first time one is within HintRadius of the
-// eye with a clear line; once ever, saved under ObjectiveHintsSeen). The card: a taped strip below the crosshair with
-// the line and the device's input glyphs, HintSeconds long, HintGap quiet seconds between two; it ends when the floor
-// changes. Never at a bad moment: only Alive in a run with "First-time hints" on, the HUD visible, no onboarding
-// screen, outside the Cutscene / Menu / Struggle / Locker / Trapped / Parachute contexts, under no Cutscene /
-// Jumpscare / Drag lock, not while the Creature chases you, not while the panic is above HintPanicMax.
+// level, a low battery with the light on. Each shows once ever: its hidden setting (Hint<Id>) is set the moment it
+// shows and saved with the settings. After the airlock come the floor objective's stations and locks
+// (FloorObjectives.hintSpots: a Hint.Obj.<what> line the first time one is within HintRadius of the eye with a clear
+// line; once ever, saved under ObjectiveHintsSeen). The card: a taped strip below the crosshair with the line and the
+// device's input glyphs, HintSeconds long, HintGap quiet seconds between two; it ends when the floor changes. Never at
+// a bad moment: only Alive in a run with "First-time hints" on, the HUD visible, no onboarding screen, outside the
+// Cutscene / Menu / Locker / Trapped / Parachute contexts, under no Cutscene / Jumpscare lock, not while the Creature
+// chases you, not while the panic is above HintPanicMax.
 
 import * as THREE from 'three';
 import { TutorialConfig } from '../config.js';
@@ -24,10 +24,9 @@ const SCAN = 0.25;
 const FADE_IN = 3;
 const FADE_OUT = 2;
 const QUICK_FADE_OUT = 6;
-// a locker, a trap and a grab show their own lines; a first-time card about flasks or grates does not belong there
-const BLOCKED_CONTEXTS = new Set(['Cutscene', 'Menu', 'Struggle', 'Locker', 'Trapped', 'Parachute']);
-const BLOCKED_LOCKS = new Set(['Cutscene', 'Jumpscare', 'Drag']);
-const WATER_STATES = new Set(['Treading', 'Freestyle', 'Underwater']);
+// a locker and a trap show their own lines; a first-time card about flasks or grates does not belong there
+const BLOCKED_CONTEXTS = new Set(['Cutscene', 'Menu', 'Locker', 'Trapped', 'Parachute']);
+const BLOCKED_LOCKS = new Set(['Cutscene', 'Jumpscare']);
 const GRATE_SHUT = new Set(['Closed', 'Unscrewing', 'Locked']);
 const AIRLOCK_HINT_RADIUS = 22;
 const OBJECTIVE_HINTS = 'ObjectiveHintsSeen';
@@ -132,7 +131,6 @@ export class Hints {
         }
       }
     }
-    if (WATER_STATES.has(this.env.moveState())) this.due.add('Water');
     if (!seen.LowBattery) {
       const b = this.env.meters().battery;
       const f = b.max > 0 ? b.value / b.max : 0;

@@ -7,7 +7,7 @@
 //   GetUp             0.4 s  soft body and cloth rustle
 //   Jump              0.25 s short airy whoosh
 //   JumpLand          0.2 s  dull low thump
-//   Swim              0.8 s  wet sloshing stroke (seamless loop)
+//   Swim              0.8 s  wet sloshing stroke (seamless loop: rain body, chemical fizz, water in the pipes)
 //   Explosion         1.8 s  boom with a crackling tail
 //   WaterImpact       0.7 s  splash transient with droplets
 //   Oof               0.35 s short voiced grunt

@@ -184,7 +184,7 @@ const ARRAY_TYPES = {
  * @typedef {object} LightInfo
  * @property {string} id        fixture name (e.g. L1_Light_ClassroomGlow) or Moon_<window>
  * @property {string|null} kind LightKind (Fluorescent, Bulb, EmergencyRed, ExitSign, BoilerGlow, ClassroomGlow,
- *                              Floodlight, Moonlight, ...)
+ *                              Moonlight, ...)
  * @property {'point'|'spot'|'surface'} cls
  * @property {[number, number, number]} pos     emitter centre
  * @property {[number, number, number]|null} dir emitting direction (spot / surface)
@@ -205,12 +205,12 @@ const ARRAY_TYPES = {
  * @typedef {object} FlickerGroup
  * @property {number} id
  * @property {string|null} name   the Roblox FlickerGroup (flicker is a pure function of (seed, name, time)), or
- *                                "Scripted:<owner>" for lights a scene drives (Floodlights, ClassroomGlow)
+ *                                "Scripted:<owner>" for lights a scene drives (ClassroomGlow)
  * @property {'steady'|'flicker'|'scripted'} kind
  * @property {string|null} level  the LevelId of its fixtures
  * @property {string|null} family a tunnel floor's power family (its LevelId) for "Mains:" / "Circuit:" groups: the
  *                                bake pools the family's light per vertex and per probe, else null
- * @property {number} initial     level at the start of a run (0: the pool floodlights before the switch)
+ * @property {number} initial     level at the start of a run
  * @property {number[]} lights    indices into meta.lights
  */
 
@@ -222,7 +222,7 @@ const ARRAY_TYPES = {
  * @property {Float32Array} data linear RGB irradiance; probe (x, y, z) is at element ((y * nz + z) * nx + x) * 3
  *                         (without the scripted groups' light)
  * @property {{ group: number, data: Float32Array }[]} groups extra irradiance of each scripted flicker group that
- *                         reaches the level (the pool floodlights, the classroom glow): add level[group] x data
+ *                         reaches the level (the classroom glow): add level[group] x data
  */
 
 /**

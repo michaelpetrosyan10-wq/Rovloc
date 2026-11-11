@@ -1,7 +1,7 @@
 // kit.js: what every floor objective is built from: prompts made from an entity's exported ProximityPrompt specs, the
-// working hold (a hold prompt with a looping sound, the Creature-audible noise once a second, a progress the floor can
-// animate by and, optionally, progress kept when the hold is let go), small tweens on the game clock, and the pose
-// maths that seat one entity's attachment on another's (a fuse's Grip in its slot, the wheel's Hub on the stem).
+// working hold (a hold prompt with a looping sound, the Creature-audible noise once a second and a progress the floor
+// can animate by), small tweens on the game clock, and the pose
+// maths that seat one entity's attachment on another's (a fuse's Grip in its slot).
 
 import * as THREE from 'three';
 import { ObjectiveTuning } from './config.js';
@@ -46,20 +46,18 @@ export function entityPrompt(game, entityId, name, opts = {}) {
 
 /**
  * A working hold: a prompt whose hold plays `sound` (looped) at `at`, emits the WorkNoise there when it starts and once
- * a second while it runs (when `noise`), reports its progress (0..1) every tick, and with `keep` remembers how far it
- * got when let go (the prompt's hold is set to what is left; reset() starts it over).
+ * a second while it runs (when `noise`) and reports its progress (0..1) every tick; let go, it starts over.
  */
 export class WorkHold {
   /**
    * @param {import('../game.js').Game} game
-   * @param {{prompt: any, seconds: number, at: () => THREE.Vector3, sound?: string, noise?: boolean, keep?: boolean,
-   *   onProgress?: (p: number) => void, onBegin?: () => void, onEnd?: (done: boolean) => void, onDone: () => void}} opts
+   * @param {{prompt: any, seconds: number, at: () => THREE.Vector3, sound?: string, noise?: boolean,
+   *   onProgress?: (p: number) => void, onEnd?: (done: boolean) => void, onDone: () => void}} opts
    */
   constructor(game, opts) {
     this.game = game;
     this.opts = opts;
     this.seconds = opts.seconds;
-    this.done = 0;
     this.since = null;
     this.nextNoiseAt = Infinity;
     this.voice = null;
@@ -68,10 +66,10 @@ export class WorkHold {
     this.pendingEnd = null;
   }
 
-  /** Progress 0..1 at `now` (kept progress plus the running hold). */
+  /** Progress 0..1 at `now` (of the running hold). */
   progress(now) {
     const running = this.since !== null ? Math.max(0, now - this.since) : 0;
-    return Math.min(1, (this.done + running) / this.seconds);
+    return Math.min(1, running / this.seconds);
   }
 
   /** The prompt's onHoldBegan. */
@@ -82,7 +80,6 @@ export class WorkHold {
     this.since = now;
     this.nextNoiseAt = now;
     if (this.opts.sound) this.voice = g.playAt(this.opts.sound, this.opts.at(), { loop: true });
-    if (this.opts.onBegin) this.opts.onBegin();
   }
 
   /**
@@ -103,10 +100,6 @@ export class WorkHold {
     const ran = this.pendingEnd;
     this.pendingEnd = null;
     if (this.finished || ran === null || ran === undefined) return;
-    if (this.opts.keep) {
-      this.done = Math.min(this.seconds - 0.05, this.done + ran);
-      this.opts.prompt.setHoldSeconds(Math.max(0.05, this.seconds - this.done));
-    }
     if (this.opts.onEnd) this.opts.onEnd(false);
     if (this.opts.onProgress) this.opts.onProgress(this.progress(now));
   }
@@ -126,16 +119,14 @@ export class WorkHold {
     this.opts.onDone();
   }
 
-  /** Starts over (a re-mix, a new run). */
+  /** Starts over (a new run). */
   reset() {
     if (this.voice) this.voice.stop(0.1);
     this.voice = null;
-    this.done = 0;
     this.since = null;
     this.pendingEnd = null;
     this.finished = false;
     this.nextNoiseAt = Infinity;
-    this.opts.prompt.setHoldSeconds(this.seconds);
   }
 
   /** Whether the hold is running now. */
@@ -229,18 +220,6 @@ export function attachmentLocal(world, entityId, name, out = new THREE.Matrix4()
   return out.copy(world.restInverse(entityId)).multiply(cfMatrix(cf, _att));
 }
 
-/** A rotation of `angle` about the world `axis` through `point`, applied to `frame` (T(p) R T(-p) x frame). */
-export function rotateAbout(frame, point, axis, angle, out = new THREE.Matrix4()) {
-  _r.makeRotationAxis(_ax.copy(axis).normalize(), angle);
-  _t.makeTranslation(point.x, point.y, point.z);
-  _ti.makeTranslation(-point.x, -point.y, -point.z);
-  return out.copy(_t).multiply(_r).multiply(_ti).multiply(frame);
-}
-
 const _local = new THREE.Matrix4();
 const _inv = new THREE.Matrix4();
 const _att = new THREE.Matrix4();
-const _r = new THREE.Matrix4();
-const _t = new THREE.Matrix4();
-const _ti = new THREE.Matrix4();
-const _ax = new THREE.Vector3();

@@ -14,14 +14,14 @@
 // prepares the FFT kernels on the main thread (about 25 ms for a 3.5 s impulse on a desktop, several times that on a
 // Chromebook), so a reverb slot takes a prepared convolver from the pool and gives it back when its chain stops; one
 // the pool lacks is prepared in a task of its own (one per task, the sound's first moments dry), and a retuned decay
-// (the environment chain moving from a corridor to the gym) crossfades to the new convolver once it is in.
+// (the environment chain moving from a corridor to a hall) crossfades to the new convolver once it is in.
 // prewarmReverbs prepares the rooms' impulses in idle time. Offline contexts (the preset check) prepare at once.
 
 import { Random } from '../math.js';
 
 const dbToGain = (db) => (db <= -79.9 ? 0 : 10 ** (db / 20));
-// seconds: longer tails are cut, faded out over IMPULSE_FADE (Roblox reverbs go to 20 s; by 3.5 s even the gym's
-// 4.5 s RT60 is 47 dB down, while every extra second of impulse costs main-thread time when a convolver is prepared)
+// seconds: longer tails are cut, faded out over IMPULSE_FADE (Roblox reverbs go to 20 s; by 3.5 s even a 4.5 s RT60
+// is 47 dB down, while every extra second of impulse costs main-thread time when a convolver is prepared)
 const MAX_IMPULSE = 3.5;
 const IMPULSE_FADE = 0.4;
 

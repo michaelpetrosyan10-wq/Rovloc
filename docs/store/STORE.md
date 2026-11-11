@@ -44,9 +44,7 @@ That's about 800 characters, under Roblox's 1,000 limit.
 | `icon-b.png` (512×512) | The alternative icon: a side-lit three-quarter view with a small wordmark. Use it for an A/B test. |
 | `thumb-1-keyart.png` | **Thumbnail 1** (the first one people see): the corridor, the Creature and the ROVLOC logo. |
 | `thumb-2-hide.png` | Thumbnail 2: HIDE. The view from inside a locker. |
-| `thumb-3-pool.png` | Thumbnail 3: DON'T SPLASH. The flooded pool. |
-| `thumb-4-objective.png` | Thumbnail 4: 4-PLAYER CO-OP. The fume hood objective with the Creature in the doorway. |
-| `thumb-5-roof.png` | Thumbnail 5: ESCAPE. The roof finale. |
+| `thumb-4-objective.png` | Thumbnail 3: 4-PLAYER CO-OP. The basement's breaker panel objective with the Creature across the room. |
 | `logo.png` | A transparent ROVLOC wordmark for your group, Discord and videos. |
 | `logo-on-dark.png` (1920×1080) | A banner for a Roblox group or YouTube. |
 
@@ -56,7 +54,7 @@ Otherwise use icon-a for a week, then icon-b for a week, and compare click-throu
 ## 4. Settings checklist (Creator Hub → your experience)
 
 1. **Publish:** in Studio, File → Publish to Roblox (put it in a group if you make one, see section 6).
-2. **Basic info:** paste the name and description, then upload the icon and the 5 thumbnails in order.
+2. **Basic info:** paste the name and description, then upload the icon and the 3 thumbnails in order.
 3. **Genre:** pick the horror or survival category. Roblox's list changes, so choose the closest horror option shown.
 4. **Max players: 4.** The game is built for squads of 1–4.
 5. **Devices:** Computer, Phone, Tablet. The game has touch controls. Console: the game supports a controller, but
@@ -79,7 +77,7 @@ you can answer accurately:
 - **Violence:** a monster catches players. You see a jumpscare (it lunges at the camera, then a cut to black).
   - The first catch leaves you "downed", crawling, with a red bleeding-out screen effect.
   - A second catch kills you: you spectate. The body stays whole, with no dismemberment or gore.
-  - Players cannot hurt each other. Players can stun the monster with thrown chemical flasks and floodlights.
+  - Players cannot hurt each other. Players can stun the monster with thrown chemical flasks.
 - **Blood:** yes. Dried, dark red-brown blood pools under the dead bodies, and they can look clearly red in the
   flashlight. The "downed" screen has a red pulsing vignette, and the death screen reads "YOU DIDN'T MAKE IT" in red.
 - **Dead bodies:** yes, 20 across the school. They are blocky, decayed bodies in tattered school clothes, slumped or

@@ -12,14 +12,12 @@
 //   stun(seconds, from)                              alert(position, priority)
 //   acquireScripted(token) -> {moveTo, teleport, setPose, setHidden, face, release, setTarget, playAction} | null
 //   registerLockerInspector(fn)   fn(spotId) -> Promise<'Empty' | 'HiddenSafe' | 'Caught'> (lockers, barrels, cabinets)
-//   registerPoolGrabber(fn)       fn(PLAYER) -> boolean (a grab started)
-//   setSpeedScale(scale)          catchGrabbed(PLAYER) -> boolean
+//   setSpeedScale(scale)
 //   stateChanged (new, old) / caught (player, kind) / jumpscareFinished (player, kind, outcome): Signals (connect)
-//   lungeTelegraph (origin, seconds): a pool lunge is coming (the pool shows its bubbles and ripple ring there)
 //   activateLevel(levelId) / deactivate()            bindGame(hooks) (env.js GameHooks)
 //   playAction(name, startAt?) / stopAction(name?)   one-shot animation layers on the rig
 //   snapshot() / viewState() / setPaused(on) / devCommand("ai ..." | "hunt" | "ignoreme") / setClock(fn) / dispose()
-//   events {stateChanged(new, old), caught(kind), jumpscareFinished(kind, outcome), lungeTelegraph(origin, seconds),
+//   events {stateChanged(new, old), caught(kind), jumpscareFinished(kind, outcome),
 //     teleportWarning(spot, targetsMe, seconds), revealed(kind), stared(), gaveUp(position, wasMe), grunted(position)}
 //     (single-player shapes: the local player's own), getPosition(), getEye(), isHidden(), getPoseMode(),
 //     setDifficulty(name), setCatchHooks({canCatch(kind), outcome(kind) -> 'Down' | 'Execute', apply(outcome)}),
@@ -148,11 +146,10 @@ export function createCreature(engine, opts = {}) {
 
   // single-player shapes of the events (the game's adapter reads `events` first), for the local player
   const events = {
-    stateChanged: new Signal(), caught: new Signal(), jumpscareFinished: new Signal(), lungeTelegraph: new Signal(),
+    stateChanged: new Signal(), caught: new Signal(), jumpscareFinished: new Signal(),
     teleportWarning: new Signal(), revealed: new Signal(), stared: new Signal(), gaveUp: new Signal(), grunted: new Signal(),
   };
   service.stateChanged.connect((next, previous) => events.stateChanged.fire(next, previous));
-  service.lungeTelegraph.connect((origin, seconds) => events.lungeTelegraph.fire(origin, seconds));
   service.caught.connect((player, kind) => {
     if (player === PLAYER) events.caught.fire(kind);
   });
@@ -187,10 +184,8 @@ export function createCreature(engine, opts = {}) {
     acquireScripted: (token) => service.acquireScripted(token),
     setScriptedTarget: (token, target) => service.setScriptedTarget(token, target),
     registerLockerInspector: (fn) => service.registerLockerInspector(fn),
-    registerPoolGrabber: (fn) => service.registerPoolGrabber(fn),
     setSpeedScale: (scale) => service.setSpeedScale(scale),
     getSpeedScale: () => service.getSpeedScale(),
-    catchGrabbed: (player = PLAYER) => service.catchGrabbed(player),
     notePulled: (player = PLAYER) => service.notePulled(player),
     stateChanged: service.stateChanged,
     caught: service.caught,

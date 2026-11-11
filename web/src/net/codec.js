@@ -1,64 +1,60 @@
 // codec.js: the binary state packets and the relay's delta compression.
 //
-//   Pose (23 bytes): position x / y / z as signed 24-bit at 1/64 stud, yaw as u16 over a full turn, pitch as i16 at
-//   1/16000 rad, the MoveState and life state as enum indices, 16 flag bits (torch, crouch, duct, swim, hidden in a
-//   locker, trapped, grabbed, wearing a pack, torch lowered, in the airlock, carrying an objective item, being revived,
-//   being caught), the held item, oxygen / stamina / battery / health as 0..255 fractions and the level index.
+//   Pose (22 bytes): position x / y / z as signed 24-bit at 1/64 stud, yaw as u16 over a full turn, pitch as i16 at
+//   1/16000 rad, the MoveState and life state as enum indices, 16 flag bits (torch, crouch, duct, hidden in a locker,
+//   trapped, wearing a pack, torch lowered, in the airlock, carrying an objective item, being revived, being caught),
+//   the held item, stamina / battery / health as 0..255 fractions and the level index.
 //   Client -> host (StateHz): [kind 1][seq u16][pose].
 //   Host -> clients (StateHz): [kind 2][seq u16][count u8]{slot u8, pose}x count [creature block (16 bytes) or none].
-//   Creature block (17 bytes): flags (present, hidden, in a duct, awake), position (as above), yaw u16, MonsterState,
-//   PoseMode, level index, target slot, grabbed slot (255: nobody).
-// Four players and the Creature make a 117-byte world packet; one player's pose is 26 bytes (budget: 300 per player).
+//   Creature block (16 bytes): flags (present, hidden, in a duct, awake), position (as above), yaw u16, MonsterState,
+//   PoseMode, level index, target slot (255: nobody).
+// Four players and the Creature make a 112-byte world packet; one player's pose is 25 bytes (budget: 300 per player).
 //
 // Delta compression (the relay): XOR against the previous packet of the same stream, then runs of zero bytes and
 // literal bytes: [zeros u8][literals u8][literal bytes] repeated. A packet that barely moved shrinks to a few bytes.
 
+import { WorldConfig } from '../engine/config.js';
 import { Reader, Writer } from './bytes.js';
 
 export const MoveStates = Object.freeze(['Standing', 'Crouching', 'Sprinting', 'VentCrawling', 'VentScurrying',
-  'Treading', 'Freestyle', 'Underwater', 'Grabbed', 'Trapped', 'Hiding', 'Parachuting', 'DownedCrawling', 'Scripted',
-  'Falling', 'Freefall']);
+  'Trapped', 'Hiding', 'Parachuting', 'DownedCrawling', 'Scripted', 'Freefall']);
 export const LifeStates = Object.freeze(['Lobby', 'Alive', 'Downed', 'Dead', 'Spectating']);
 export const MonsterStateList = Object.freeze(['Dormant', 'Patrol', 'InvestigateNoise', 'WallChase', 'VentChase',
-  'Stunned', 'AquaticStalk', 'Scripted']);
-export const PoseModes = Object.freeze(['Biped', 'Hunched', 'Quadruped', 'Swim']);
-export const Levels = Object.freeze(['Lobby', 'Level0_Basement', 'Level1_Hallways', 'Level2_ScienceHall',
-  'Level3_Gymnasium', 'Level4_FloodedPool', 'Level5_Roof', 'Exterior']);
-export const HeldItems = Object.freeze(['None', 'Flask', 'AcidFlask', 'Pack', 'Item']);
+  'Stunned', 'Scripted']);
+export const PoseModes = Object.freeze(['Biped', 'Hunched', 'Quadruped']);
+export const Levels = Object.freeze(['Lobby', ...WorldConfig.LevelOrder, 'Exterior']);
+export const HeldItems = Object.freeze(['None', 'Flask', 'Pack', 'Item']);
 
 export const PoseFlags = Object.freeze({
   Torch: 1 << 0,
   Crouch: 1 << 1,
   Vent: 1 << 2,
-  Swim: 1 << 3,
-  Hidden: 1 << 4,
-  Trapped: 1 << 5,
-  Grabbed: 1 << 6,
-  Pack: 1 << 7,
-  Lowered: 1 << 8,
-  Airlock: 1 << 9,
-  Carrying: 1 << 10,
-  Reviving: 1 << 11,
-  Caught: 1 << 12,
-  Underwater: 1 << 13,
+  Hidden: 1 << 3,
+  Trapped: 1 << 4,
+  Pack: 1 << 5,
+  Lowered: 1 << 6,
+  Airlock: 1 << 7,
+  Carrying: 1 << 8,
+  Reviving: 1 << 9,
+  Caught: 1 << 10,
 });
 
 export const PacketKind = Object.freeze({ Pose: 1, World: 2 });
-export const POSE_BYTES = 23;
+export const POSE_BYTES = 22;
 const POS_SCALE = 64;
 const PITCH_SCALE = 16000;
 const TWO_PI = Math.PI * 2;
 
 /**
  * @typedef {{x: number, y: number, z: number, yaw: number, pitch: number, moveState: string, life: string,
- *   flags: number, held: string, oxygen: number, stamina: number, battery: number, health: number, level: string|null}} Pose
- * oxygen / stamina / battery / health are fractions 0..1.
+ *   flags: number, held: string, stamina: number, battery: number, health: number, level: string|null}} Pose
+ * stamina / battery / health are fractions 0..1.
  */
 
 /**
  * @typedef {{present: boolean, hidden: boolean, inVent: boolean, awake: boolean, x: number, y: number, z: number,
- *   yaw: number, state: string, pose: string, level: string|null, target: number, grabbed: number}} CreatureState
- * target / grabbed: the squad slot it hunts / holds under water (-1: nobody)
+ *   yaw: number, state: string, pose: string, level: string|null, target: number}} CreatureState
+ * target: the squad slot it hunts (-1: nobody)
  */
 
 function i24(w, v) {
@@ -95,7 +91,6 @@ export function writePose(w, p) {
   w.u8(index(LifeStates, p.life));
   w.u16(p.flags & 0xffff);
   w.u8(index(HeldItems, p.held));
-  w.u8(frac(p.oxygen));
   w.u8(frac(p.stamina));
   w.u8(frac(p.battery));
   w.u8(frac(p.health));
@@ -114,12 +109,11 @@ export function readPose(r) {
   const life = LifeStates[r.u8()] || 'Lobby';
   const flags = r.u16();
   const held = HeldItems[r.u8()] || 'None';
-  const oxygen = r.u8() / 255;
   const stamina = r.u8() / 255;
   const battery = r.u8() / 255;
   const health = r.u8() / 255;
   const lv = r.u8();
-  return { x, y, z, yaw, pitch, moveState, life, flags, held, oxygen, stamina, battery, health, level: lv === 255 ? null : Levels[lv] || null };
+  return { x, y, z, yaw, pitch, moveState, life, flags, held, stamina, battery, health, level: lv === 255 ? null : Levels[lv] || null };
 }
 
 /** Client -> host: one pose. */
@@ -161,7 +155,6 @@ export function encodeWorldPacket(seq, players, creature) {
     w.u8(index(PoseModes, creature.pose));
     w.u8(creature.level ? index(Levels, creature.level) : 255);
     w.u8(creature.target >= 0 ? creature.target : 255);
-    w.u8(creature.grabbed >= 0 ? creature.grabbed : 255);
   } else {
     w.u8(0);
   }
@@ -193,10 +186,8 @@ export function decodePacket(bytes) {
       const pose = PoseModes[r.u8()] || 'Biped';
       const lv = r.u8();
       const target = r.u8();
-      const grabbed = r.u8();
       creature = { present: true, hidden: !!(flags & 2), inVent: !!(flags & 4), awake: !!(flags & 8), x, y, z, yaw, state,
-        pose, level: lv === 255 ? null : Levels[lv] || null, target: target === 255 ? -1 : target,
-        grabbed: grabbed === 255 ? -1 : grabbed };
+        pose, level: lv === 255 ? null : Levels[lv] || null, target: target === 255 ? -1 : target };
     }
     return { kind, seq, players, creature };
   } catch {

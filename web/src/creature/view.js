@@ -532,7 +532,7 @@ export class CreatureView {
     const raw = estimateVelocity(displacement, dt);
     this.velocity.lerp(raw, damp(VELOCITY_DAMP, dt));
     this.speed = Math.hypot(this.velocity.x, this.velocity.z);
-    const grounded = QUADRUPED_STATES.has(state) || state === 'Swim' ? true : this.service.body.anchored || this.service.body.grounded;
+    const grounded = QUADRUPED_STATES.has(state) ? true : this.service.body.anchored || this.service.body.grounded;
     let yaw = null;
     let pitch = null;
     const eyeHeight = this._eyeHeight(contract.poseMode);

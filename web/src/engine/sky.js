@@ -4,7 +4,10 @@
 // horizon. Lightning lights the deck (FLASH_CLOUDS) with the flash envelope, as the Roblox flash recolours the clouds.
 
 import * as THREE from 'three';
+import { WorldConfig } from './config.js';
 
+/** The open roof: the top school level. */
+const ROOF = WorldConfig.LevelOrder[WorldConfig.LevelOrder.length - 1];
 const CLOUD = [38 / 255, 40 / 255, 46 / 255]; // LightingRig.Baseline.CloudColor (display)
 const FLASH_CLOUDS = [214 / 255, 220 / 255, 242 / 255];
 
@@ -72,7 +75,7 @@ export class Sky {
    * @param {{hazeColor: number[]}} film
    */
   update(camera, focus, film) {
-    const on = focus.has('Exterior') || focus.has('Level5_Roof');
+    const on = focus.has('Exterior') || focus.has(ROOF);
     this.mesh.visible = on;
     if (!on) return;
     this.mesh.position.copy(camera.position);

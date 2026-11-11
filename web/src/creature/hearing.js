@@ -4,7 +4,6 @@
 // A pulse is heard only on the listener's level and only with a radius above 0. Its reach is radius x
 // HearingMultiplier x the difficulty's hearingMultiplier x the pacing's HearingScale, shrunk per route:
 //   Air    straight line; each wall between (at most MaxOccludingWalls count) multiplies the reach by WallOcclusion.
-//   Water  straight line, no occlusion.
 //   Vent, listener in a vent: the rail distance through the ducts x VentPropagationMultiplier (the Air route when
 //          the ducts do not connect).
 //   Vent, listener outside: the Air route, or a leak out of an open grate near the listener, whichever is stronger.
@@ -142,7 +141,6 @@ function leakRoute(senses, event) {
 
 function bestRoute(senses, event) {
   const l = senses.listener;
-  if (event.medium === 'Water') return { distance: event.position.distanceTo(l.position), reach: senses.reach };
   if (event.medium === 'Vent') {
     if (l.inVent) return ductRoute(senses, event) || airRoute(senses, event.position);
     const direct = airRoute(senses, event.position);

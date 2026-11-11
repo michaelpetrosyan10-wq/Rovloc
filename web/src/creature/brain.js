@@ -2,28 +2,24 @@
 //
 //   * decide(summary): the transition table. Priorities, highest first: Scripted > Stunned > Dormant (its level is not
 //     awake yet) > hold still while a catch plays > hold while it fades out / in (a warp) > a stun just ended: Patrol
-//     (withdraw) > retreating in the water after a grab: AquaticStalk > a chase MaxChase seconds in, or one the
-//     pacing calls off (catch cooldown, Relax): it gives up and fades out (Patrol) > no hunting allowed: Patrol >
+//     (withdraw) > a chase MaxChase seconds in, or one the pacing calls off (catch cooldown, Relax): it gives up and fades out (Patrol) > no hunting allowed: Patrol >
 //       the Chase (WallChase): it saw its quarry hide:
 //       HidingResponse; still in sight (or stared at): on; line of sight lost for ChaseLost seconds, or the last seen
 //       point reached: Search >
 //     HidingResponse holds until its hider is out or taken (then WallChase on whoever it sees, else Search) > it saw
-//     someone hide: HidingResponse > a 1 s stare: WallChase > someone in sight: WallChase (AquaticStalk when it is in
-//     the water and they swim: a swimmer is only ever taken by the telegraphed lunge) > a swimmer on the pool level:
-//     AquaticStalk > AquaticStalk ends when the water is calm > a teleport runs to its end (warning, FadeIn, stare,
-//     stalk) > a noise at least as loud as the one being investigated (a High one breaks a Search): InvestigateNoise >
+//     someone hide: HidingResponse > a 1 s stare: WallChase > someone in sight: WallChase > a teleport runs to its end
+//     (warning, FadeIn, stare, stalk) > a noise at least as loud as the one being investigated (a High one breaks a Search): InvestigateNoise >
 //     an investigation or a search that is over: Patrol > a teleport that is due: Teleport > Patrol (the Stalk).
 //   * catchKind(check): whether a catch may happen now (reach, the same floor, a clear line eye to eye AND chest to
 //     chest: never through a wall).
 //   * levelInfo(levelId, meta): patrol loops (world.json `patrolLoops`, else the PatrolWaypoint anchors by loop /
 //     order or "<prefix>_WP_<loop>_<NN>", else loops derived from the level's rooms: today's basement has no
-//     waypoints), rooms and the open doorways between them, pool basins and the CreatureSpawn.
+//     waypoints), rooms and the open doorways between them and the CreatureSpawn.
 
 import * as THREE from 'three';
 import { CFrame } from './cframe.js';
 import { CreatureConfig, difficultySpec } from './config.js';
 import { levelObstacles } from './nav.js';
-import { makeBasin } from './water.js';
 
 const SENSES = CreatureConfig.Senses;
 const WAYPOINT_PATTERN = /_WP_(.+)_(\d+)$/;
@@ -61,9 +57,6 @@ export const CatchVertical = SENSES.CatchVertical;
  * @property {number} lostSeconds seconds since the chase last saw its quarry
  * @property {number} maxChase
  * @property {number} chaseLost
- * @property {boolean} swimmer
- * @property {boolean} [inWater] the Creature swims
- * @property {boolean} [retreating] it retreats in the water after a grab
  * @property {boolean} teleportDue
  * @property {boolean} stateDone
  *
@@ -74,8 +67,7 @@ export const CatchVertical = SENSES.CatchVertical;
  * @typedef {{id: string, kind: string, minX: number, maxX: number, minZ: number, maxZ: number, floorY: number,
  *   height: number, centre: THREE.Vector3}} Room
  * @typedef {{levelId: string, origin: THREE.Vector3, loops: Loop[], waypoints: Waypoint[], derived: boolean,
- *   rooms: Record<string, Room>, roomList: Room[], neighbours: Record<string, string[]>,
- *   basins: import('./water.js').Basin[], spawn: CFrame|null}} LevelInfo
+ *   rooms: Record<string, Room>, roomList: Room[], neighbours: Record<string, string[]>, spawn: CFrame|null}} LevelInfo
  *
  * @typedef {{position: THREE.Vector3, rank: number, priority: string, medium: string, kind: string,
  *   sourceUserId: number|null, zoneId: string|null, strength: number, at: number}} HeardNoise
@@ -98,7 +90,6 @@ export function decide(s) {
   if (s.catching) return go(state, 'catching');
   if (s.warping) return go(state, 'fading');
   if (state === 'Stunned') return go('Patrol', 'recovered', true);
-  if (s.retreating && s.inWater) return go('AquaticStalk', 'retreating');
   // a chase that runs out (MaxChase) or is called off (the pacing's breather) ends the same way: it fades away
   if (state === 'WallChase' && (s.chaseSeconds >= s.maxChase || !s.canHunt)) {
     return go('Patrol', s.canHunt ? 'gave up' : 'breather', true, true);
@@ -117,12 +108,7 @@ export function decide(s) {
   }
   if (s.hidingWatch) return go('HidingResponse', 'saw them hide');
   if (s.stared) return go('WallChase', 'stared at');
-  if (s.sees) {
-    if (s.swimmer && s.inWater) return go('AquaticStalk', 'swimmer in sight');
-    return go('WallChase', 'seen');
-  }
-  if (s.swimmer) return go('AquaticStalk', 'swimmer');
-  if (state === 'AquaticStalk') return go('Patrol', 'water calm');
+  if (s.sees) return go('WallChase', 'seen');
   if (state === 'Teleport' && !s.stateDone) return go('Teleport', 'teleporting');
   if (s.heard > 0 && !SEARCHES.has(state)) return go('InvestigateNoise', 'heard');
   if (state === 'InvestigateNoise') {
@@ -140,15 +126,12 @@ export function decide(s) {
 }
 
 /**
- * @param {{horizontal: number, vertical: number, reach: number, targetInVent: boolean, creatureInWater?: boolean,
- *   targetSwimming?: boolean, lineClear: boolean, bodyClear: boolean, playing: boolean, hiding: boolean,
- *   canHunt: boolean, busy: boolean, hidden: boolean, stunned: boolean, warping?: boolean}} check
+ * @param {{horizontal: number, vertical: number, reach: number, targetInVent: boolean, lineClear: boolean,
+ *   bodyClear: boolean, playing: boolean, hiding: boolean, canHunt: boolean, busy: boolean, hidden: boolean, stunned: boolean, warping?: boolean}} check
  * @returns {string|null} JumpscareKind
  */
 export function catchKind(check) {
   if (check.busy || !check.canHunt || check.hidden || check.stunned || check.warping) return null;
-  // in the water the pool's telegraphed grab is the only catch
-  if (check.creatureInWater || check.targetSwimming) return null;
   if (!check.playing || check.hiding || check.targetInVent) return null;
   // never through a wall: the eyes and the bodies both see each other
   if (!check.lineClear || !check.bodyClear) return null;
@@ -346,7 +329,6 @@ export function levelInfo(levelId, meta) {
   const rooms = {};
   /** @type {Room[]} */
   const roomList = [];
-  const roomRects = {};
   for (const room of meta.rooms || []) {
     if (room.level !== levelId) continue;
     const r = room.rect;
@@ -362,7 +344,6 @@ export function levelInfo(levelId, meta) {
       centre: new THREE.Vector3(r.x + r.w / 2, room.floorY, r.z + r.d / 2),
     };
     rooms[room.id] = entry;
-    roomRects[room.id] = { x: r.x - origin.x, z: r.z - origin.z, w: r.w, d: r.d };
     roomList.push(entry);
   }
   const exported = Array.isArray(meta.patrolLoops) ? exportedLoops(meta.patrolLoops, levelId) : [];
@@ -370,7 +351,7 @@ export function levelInfo(levelId, meta) {
   let derived = false;
   const reachable = mainRooms(meta, levelId);
   if (loops.length === 0) {
-    loops = derivedLoops(roomList.filter((r) => r.kind !== 'Pool' && reachable.has(r.id)), levelObstacles(meta, levelId));
+    loops = derivedLoops(roomList.filter((r) => reachable.has(r.id)), levelObstacles(meta, levelId));
     derived = loops.length > 0;
   }
   const waypoints = [];
@@ -386,15 +367,6 @@ export function levelInfo(levelId, meta) {
       if (!neighbours[x].includes(y)) neighbours[x].push(y);
     }
   }
-  const basins = [];
-  for (const basin of meta.basins || []) {
-    if (basin.level !== levelId) continue;
-    const room = roomRects[basin.room] || basin.rect;
-    const made = makeBasin(basin.id, origin, basin.rect, room, basin.waterLevel, basin.depth);
-    // Level 4 fairness: the Creature enters and leaves the water only by fading out and in, out of sight
-    made.fadeOnly = CreatureConfig.Water.FadeOnly;
-    basins.push(made);
-  }
   // its CreatureSpawn (one in a room it could never walk out of does not count: the first waypoint instead)
   let spawn = null;
   for (const anchor of anchors) {
@@ -403,7 +375,7 @@ export function levelInfo(levelId, meta) {
       break;
     }
   }
-  return { levelId, origin, loops, waypoints, derived, rooms, roomList, neighbours, basins, spawn };
+  return { levelId, origin, loops, waypoints, derived, rooms, roomList, neighbours, spawn };
 }
 
 /**

@@ -28,7 +28,9 @@ const RATTLE_RANGE = 22;
 const RATTLE_MIN = 4.5;
 const RATTLE_MAX = 8;
 const RATTLE_STATES = new Set(['Patrol', 'Teleport', 'Search', 'HidingResponse', 'InvestigateNoise']);
-const FINALE_PHASES = new Set(['Smash', 'Chase', 'FinaleWait', 'Finale', 'Done']);
+// the roof's phases in which the Creature never teleports (Level3_RoofController NO_TELEPORT): the door, the chase,
+// the ledge
+const ROOF_NO_TELEPORT = new Set(['Smash', 'Chase', 'Ledge']);
 const FLICKER_FALLBACK = 32; // no flickering light within FlickerRadius: the nearest within this
 const MAX_FLICKER = 6;
 
@@ -69,13 +71,10 @@ export class MonsterFx {
 
   // ---------------------------------------------------------------------------------------------------- the vetoes
 
-  /** No teleport during an objective's survive countdown, nor once the roof's finale chase has started. */
+  /** No teleport once the roof's door smash has started (the chase, the ledge). */
   teleportBlocked() {
     const g = this.game;
-    const floor = g.floors && g.level ? g.floors.floor(g.level) : null;
-    if (floor && floor.spec && Array.isArray(floor.spec.steps) && floor.spec.steps.some((s) => s.seconds && floor.timerRunning(s))) return true;
-    if (g.level === 'Level5_Roof' && g.level5 && FINALE_PHASES.has(g.level5.phase)) return true;
-    return false;
+    return g.level === 'Level3_Roof' && !!g.level3 && g.level3.active && ROOF_NO_TELEPORT.has(g.level3.phase);
   }
 
   // ---------------------------------------------------------------------------------------------------- the events
@@ -84,9 +83,7 @@ export class MonsterFx {
   warning(spot, seconds = T.WarningSeconds) {
     const env = this.env;
     const now = env.now();
-    const kept = this.game.lightsKeptLit;
-    const usable = (l) => !(this.groupNames.get(l.group) || '').startsWith('Scripted:') && !(kept && kept.has(l.id)) &&
-      Math.abs(l.position.y - spot.y) < 20;
+    const usable = (l) => !(this.groupNames.get(l.group) || '').startsWith('Scripted:') && Math.abs(l.position.y - spot.y) < 20;
     let near = this.lights.filter((l) => usable(l) && l.position.distanceTo(spot) <= T.FlickerRadius);
     if (!near.length) {
       near = this.lights.filter((l) => usable(l) && l.position.distanceTo(spot) <= FLICKER_FALLBACK)

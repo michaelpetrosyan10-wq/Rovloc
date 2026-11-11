@@ -1,14 +1,13 @@
-// carry.js: what the player carries for the floor objective (fuses, keys, reagents, the coach's key, the valve wheel,
-// the bolt cutters) and its HUD: one small chip per kind ("FUSE ×2"), bottom-left above the status bars on a keyboard
-// or gamepad, under them top-left on touch. The acid flask rides the hand like a chemical flask (flasks.js) and gets a
-// chip too while held. Carried items survive being downed and a grab; the run ending (death included) empties them.
-// Shown while Alive or Downed in a run with the HUD visible, outside the Cutscene / Menu / Struggle contexts and under
-// no Cutscene / Jumpscare lock; hidden inside a locker (the locker view owns the bottom of the screen).
+// carry.js: what the player carries for the floor objective (fuses, the master keys) and its HUD: one small chip per
+// kind ("FUSE ×2"), bottom-left above the status bars on a keyboard or gamepad, under them top-left on touch. Carried
+// items survive being downed; the run ending (death included) empties them. Shown while Alive or Downed in a run with
+// the HUD visible, outside the Cutscene / Menu contexts and under no Cutscene / Jumpscare lock; hidden inside a locker
+// (the locker view owns the bottom of the screen).
 
 import { S } from '../strings.js';
 import { Palette, el } from '../ui/style.js';
 
-const HIDDEN_CONTEXTS = new Set(['Cutscene', 'Menu', 'Struggle', 'Locker', 'Parachute']);
+const HIDDEN_CONTEXTS = new Set(['Cutscene', 'Menu', 'Locker', 'Parachute']);
 const HIDDEN_LOCKS = new Set(['Cutscene', 'Jumpscare']);
 const FADE = 5;
 
@@ -111,8 +110,6 @@ export class Carry {
       const label = S(`Carry.${kind}`);
       out.push(n > 1 ? S('Carry.Count', label, n) : label);
     }
-    const held = this.game.flasks && this.game.flasks.held;
-    if (held && held.objective) out.push(S('Carry.AcidFlask'));
     return out;
   }
 
