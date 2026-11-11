@@ -4,8 +4,8 @@
 -- behind them inside the root's half depth); a player's eye is their root + CameraConfig.EyeHeightAboveRoot[MoveState].
 -- Ranges: 70 with the torch on, 38 lit by the fixtures, 20 in the dark; crouched x0.75; x the difficulty. The cone is
 -- measured about the upright axis (floor-plane bearing and distance): 55 degrees (75 while they move) plus the 6-stud
--- (10 moving) peripheral sense, which a LookAway switches off. Never seen: not playing, Hiding, in a duct or a crawlway,
--- Underwater unless it swims; no sighting through a wall. Score and rank. The stare: 7 degrees of its head for the
+-- (10 moving) peripheral sense, which a LookAway switches off. Never seen: not playing, Hiding, in a duct or a
+-- crawlway; no sighting through a wall. Score and rank. The stare: 7 degrees of its head for the
 -- second, within 45 (it stands lit or their torch is on) or 18, with a clear line.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -267,16 +267,16 @@ return {
 		local ghost = observationOf(player, ahead(6), true)
 		ghost.playing = false
 		t.eq(Perception.judge(viewer, ghost), nil, "not playing")
-		t.eq(Perception.excluded(viewer, ghost), "NotPlaying", "reason")
+		t.eq(Perception.excluded(ghost), "NotPlaying", "reason")
 		local hiding = observationOf(player, ahead(2), true)
 		hiding.moveState = "Hiding"
 		t.eq(Perception.judge(viewer, hiding), nil, "a hiding spot hides you even at arm's length")
-		t.eq(Perception.excluded(viewer, hiding), "Hiding", "reason")
+		t.eq(Perception.excluded(hiding), "Hiding", "reason")
 		local crawling = observationOf(player, ahead(3), true)
 		crawling.inVent = true
 		crawling.moveState = "Crouching"
 		t.eq(Perception.judge(viewer, crawling), nil, "it never looks into a crawlway or a duct")
-		t.eq(Perception.excluded(viewer, crawling), "InVent", "reason")
+		t.eq(Perception.excluded(crawling), "InVent", "reason")
 		local downed = observationOf(player, ahead(10))
 		downed.downed = true
 		downed.moveState = "DownedCrawling"
@@ -351,21 +351,6 @@ return {
 		t.near(seen.distance, 30, EPS, "distance eye to eye")
 		t.eq(seen.player, p, "the player")
 		t.truthy(seen.lit, "the torch shows them")
-	end,
-
-	["judge: Underwater players only by a swimming Creature"] = function(t: Expect)
-		local player = newPlayer()
-		local diver = observationOf(player, ahead(10))
-		diver.moveState = "Underwater"
-		local walker = viewerAt(Vector3.zero)
-		t.eq(Perception.judge(walker, diver), nil, "on foot")
-		t.eq(Perception.excluded(walker, diver), "Underwater", "reason")
-		local swimmer = viewerAt(Vector3.zero)
-		swimmer.aquatic = true
-		t.truthy(Perception.judge(swimmer, diver), "swimming")
-		local treading = observationOf(player, ahead(10))
-		treading.moveState = "Treading"
-		t.truthy(Perception.judge(walker, treading), "a player at the surface is in plain view")
 	end,
 
 	["score + rank: close, lit, in-cone and the current target first; Downed after standing"] = function(t: Expect)

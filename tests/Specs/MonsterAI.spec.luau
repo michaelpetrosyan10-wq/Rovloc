@@ -1,11 +1,11 @@
 --!strict
 -- MonsterAIService, the pure rules (docs/MONSTER.md 6; web/src/creature/brain.js and states/*.js). The transition
 -- table (Brain.decide: priorities, the chase's 22 s give-up and its breather, line of sight lost for 4 s -> Search,
--- the saw-you-hide rule, the 1 s stare, noises, the teleport, the pool), the catch rules (reach, the same floor, eye to
--- eye AND chest to chest: never through a wall, never in the water or into a duct), speeds (nothing but a cutscene
--- outruns a sprinter), the teleport's weighing and sides, the search plan round a noise, the HidingResponse stand-off,
--- patrol loops from the real layouts (order, wrap-around, corners, which loop next), level knowledge (Level 1's rooms,
--- doors and spawn; Level 4's pool), the pool lunge and stuck detection.
+-- the saw-you-hide rule, the 1 s stare, noises, the teleport), the catch rules (reach, the same floor, eye to eye AND
+-- chest to chest: never through a wall, never into a duct), speeds (nothing but a cutscene outruns a sprinter), the
+-- teleport's weighing and sides, the search plan round a noise, the HidingResponse stand-off, patrol loops from the
+-- real layouts (order, wrap-around, corners, which loop next), level knowledge (Level 1's rooms, doors and spawn) and
+-- stuck detection.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -22,8 +22,6 @@ local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuild
 local Monster = ServerScriptService.Services.Monster.MonsterAIService
 local Brain = require(Monster.Brain)
 local CreatureBody = require(Monster.CreatureBody)
-local Locomotion = require(Monster.Locomotion)
-local AquaticStalk = require(Monster.States.AquaticStalk)
 local HidingResponse = require(Monster.States.HidingResponse)
 local InvestigateNoise = require(Monster.States.InvestigateNoise)
 local Patrol = require(Monster.States.Patrol)
@@ -39,9 +37,8 @@ type Summary = Brain.Summary
 local SENSES = CreatureConfig.Senses
 local EPS = 1e-4
 local STANDARD = DifficultyConfig.Standard
-local PATROL_LEVELS: { Enums.LevelId } =
-	{ "Level0_Basement", "Level1_Hallways", "Level2_ScienceHall", "Level3_Gymnasium" }
-local ROAMING: { Enums.MonsterState } = { "Patrol", "InvestigateNoise", "Search", "Teleport", "AquaticStalk" }
+local PATROL_LEVELS: { Enums.LevelId } = { "Level0_Basement", "Level1_Hallways", "Level2_Auditorium" }
+local ROAMING: { Enums.MonsterState } = { "Patrol", "InvestigateNoise", "Search", "Teleport" }
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -66,9 +63,6 @@ local function summary(state: Enums.MonsterState, edit: ((Summary) -> ())?): Sum
 		lostSeconds = 0,
 		maxChase = STANDARD.maxChaseSeconds,
 		chaseLost = STANDARD.chaseLostSeconds,
-		swimmer = false,
-		inWater = false,
-		retreating = false,
 		teleportDue = false,
 		stateDone = false,
 	}
@@ -108,8 +102,6 @@ local function catchCheck(edit: ((Brain.CatchCheck) -> ())?): Brain.CatchCheck
 		hidden = false,
 		stunned = false,
 		warping = false,
-		creatureInWater = false,
-		targetSwimming = false,
 	}
 	if edit then
 		edit(c)
@@ -353,9 +345,6 @@ end
 
 spec["decide: sight starts a chase from every roaming state; a stare starts one too"] = function(t: Expect)
 	for _, state: Enums.MonsterState in ROAMING do
-		if state == "AquaticStalk" then
-			continue
-		end
 		check(
 			t,
 			summary(state, function(s)
@@ -382,16 +371,6 @@ spec["decide: sight starts a chase from every roaming state; a stare starts one 
 			state .. ": saw someone hide"
 		)
 	end
-	check(
-		t,
-		summary("Patrol", function(s)
-			s.sees = true
-			s.swimmer = true
-			s.inWater = true
-		end),
-		"AquaticStalk",
-		"a swimmer in sight of a swimming Creature: only the telegraphed lunge"
-	)
 end
 
 spec["decide: HidingResponse holds until its hider is out, then chases on sight or searches"] = function(t: Expect)
@@ -486,7 +465,7 @@ spec["decide: noises, investigations and the search's break-off"] = function(t: 
 	)
 end
 
-spec["decide: a due teleport, run to its end; the pool"] = function(t: Expect)
+spec["decide: a due teleport, run to its end"] = function(t: Expect)
 	check(
 		t,
 		summary("Patrol", function(s)
@@ -521,25 +500,6 @@ spec["decide: a due teleport, run to its end; the pool"] = function(t: Expect)
 		"InvestigateNoise",
 		"a noise comes before a teleport"
 	)
-	check(
-		t,
-		summary("Patrol", function(s)
-			s.swimmer = true
-		end),
-		"AquaticStalk",
-		"a swimmer on the pool level"
-	)
-	check(t, summary("AquaticStalk", nil), "Patrol", "the water is calm")
-	check(
-		t,
-		summary("Patrol", function(s)
-			s.retreating = true
-			s.inWater = true
-			s.sees = true
-		end),
-		"AquaticStalk",
-		"after a grab it retreats in the water"
-	)
 end
 
 spec["catches: in reach, on the same floor, eye to eye and chest to chest: never through a wall"] = function(t: Expect)
@@ -573,9 +533,7 @@ spec["catches: in reach, on the same floor, eye to eye and chest to chest: never
 		nil,
 		"no catch through a wall (bodies: a low wall, a counter)"
 	)
-	for _, field in
-		{ "busy", "hidden", "stunned", "warping", "hiding", "targetInVent", "creatureInWater", "targetSwimming" }
-	do
+	for _, field in { "busy", "hidden", "stunned", "warping", "hiding", "targetInVent" } do
 		t.eq(
 			Brain.catchKind(catchCheck(function(c)
 				(c :: any)[field] = true
@@ -626,7 +584,6 @@ spec["speeds: the Stalk is slower than a walker, the Chase than a sprinter; only
 	t.eq(Brain.speedFor("Dormant", "Standard"), 0, "dormant stands")
 	t.truthy(Brain.speedFor("WallChase", "Nightmare") > Brain.speedFor("WallChase", "Standard"), "Nightmare is faster")
 	t.truthy(Brain.isChase("WallChase") and not Brain.isChase("Patrol") and not Brain.isChase("Search"), "the chase")
-	t.truthy(CreatureConfig.Speeds.AquaticStalk < GameConfig.FreestyleSpeed, "a freestyle swimmer outpaces it")
 end
 
 spec["teleport: weighing the target, picking by weight, and which side of them a spot lies"] = function(t: Expect)
@@ -831,34 +788,6 @@ spec["patrol: the next loop sweeps toward heard noises, keeps away in Relax, els
 	)
 end
 
-spec["pool: Level 4's basin, its water bounds, and it starts in the tunnels"] = function(t: Expect)
-	local layout = Builder.getLayout("Level4_FloodedPool")
-	assert(layout, "Level 4 layout")
-	local info = Brain.levelInfo(layout)
-	assert(info, "Level 4 info")
-	t.eq(#info.basins, 1, "one basin")
-	local basin = info.basins[1]
-	local origin = WorldConfig.levelOrigin("Level4_FloodedPool")
-	t.near(basin.deckY, origin.Y, EPS, "the deck is the floor")
-	t.truthy(basin.surfaceY < basin.deckY and basin.floorY < basin.surfaceY, "surface under the deck, floor under it")
-	t.truthy(basin.fadeOnly == true, "it enters and leaves the water only by a fade (Level 4 fairness)")
-	local spawn = info.spawn
-	assert(spawn, "Level 4 has a CreatureSpawn")
-	-- it hunts the plant tunnels on foot and takes to the water when a swimmer is about
-	t.falsy(Locomotion.inWater(basin, spawn.Position), "the Creature starts in the tunnels, on land")
-	local clamped = Locomotion.clampToWater(basin, Vector3.new(basin.minX - 50, basin.deckY + 20, basin.maxZ + 50))
-	t.truthy(Locomotion.inWater(basin, clamped), "clamped into the water")
-	t.near(clamped.Y, basin.surfaceY - Locomotion.SwimDepth, EPS, "at swim depth")
-	t.falsy(
-		Locomotion.inWater(basin, Vector3.new(basin.minX - 3, basin.deckY + 3, (basin.minZ + basin.maxZ) / 2)),
-		"the deck is dry"
-	)
-	t.eq(Locomotion.poseFor("Water"), "Swim", "it swims in the water")
-	t.eq(Locomotion.poseFor("Floor"), "Biped", "and walks on land")
-	local dry = Brain.levelInfo(Builder.getLayout("Level1_Hallways") :: LayoutSchema.LevelLayout)
-	t.eq(dry and #dry.basins, 0, "Level 1 has no pool")
-end
-
 spec["level knowledge: Level 1 rooms, open doorways, the spawn and roomAt"] = function(t: Expect)
 	local layout = Builder.getLayout("Level1_Hallways")
 	assert(layout, "Level 1 layout")
@@ -896,15 +825,6 @@ spec["level knowledge: Level 1 rooms, open doorways, the spawn and roomAt"] = fu
 	t.eq(Brain.levelInfo(Builder.getLayout("Lobby") :: LayoutSchema.LevelLayout), nil, "the lobby is not a level")
 	local basement = Brain.levelInfo(Builder.getLayout("Level0_Basement") :: LayoutSchema.LevelLayout)
 	t.truthy(basement and basement.spawn ~= nil, "the basement has a spawn too: it hunts from Level 0")
-end
-
-spec["pool: it lunges only at an armed swimmer in range, and only when a grab is possible"] = function(t: Expect)
-	t.truthy(AquaticStalk.shouldLunge(AquaticStalk.LungeRange, true, true), "in range, armed, hooked")
-	t.falsy(AquaticStalk.shouldLunge(AquaticStalk.LungeRange + 0.1, true, true), "out of range")
-	t.falsy(AquaticStalk.shouldLunge(2, false, true), "not splashing enough")
-	t.falsy(AquaticStalk.shouldLunge(2, true, false), "no grab hook: it never lunges")
-	t.truthy(AquaticStalk.GrabReach < AquaticStalk.LungeRange, "grabs within the lunge")
-	t.truthy(AquaticStalk.TelegraphSeconds > 0, "every lunge is telegraphed")
 end
 
 spec["stuck: no progress while trying to move for StuckSeconds, pauses never count"] = function(t: Expect)

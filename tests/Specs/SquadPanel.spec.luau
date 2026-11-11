@@ -92,7 +92,7 @@ return {
 
 	["it shows only in a run with company, with the HUD, outside menus and cutscenes"] = function(t: Expect)
 		t.truthy(SquadPanel.visible(true, 2, true, "OnFoot", false))
-		t.truthy(SquadPanel.visible(true, 4, true, "Struggle", false), "a grabbed player still sees the squad")
+		t.truthy(SquadPanel.visible(true, 4, true, "Locker", false), "a hidden player still sees the squad")
 		t.falsy(SquadPanel.visible(true, 1, true, "OnFoot", false), "hidden while solo")
 		t.falsy(SquadPanel.visible(true, 0, true, "OnFoot", false))
 		t.falsy(SquadPanel.visible(false, 3, true, "OnFoot", false), "not in the lobby")

@@ -8,7 +8,7 @@
 -- level when no room contains the root), and ZoneChanged fires on every change. The Creature's root is located the
 -- same way (GetCreatureZone / CreatureZoneChanged); its attributes belong to MonsterAIService.
 --
--- Trigger volumes. Parts tagged ScareTrigger, FloorDebris, CheckpointVolume, PoolWater or LevelExit are hashed the
+-- Trigger volumes. Parts tagged ScareTrigger, FloorDebris, CheckpointVolume or LevelExit are hashed the
 -- same way. A player is inside a volume while their root, or the point under their feet, is inside its box, so thin
 -- floor triggers (debris, glass) catch walkers as well as crouchers. VolumeEntered / VolumeExited fire on changes
 -- (a destroyed volume counts as exited).
@@ -16,7 +16,7 @@
 -- Pairing. Every VolumeEntered is matched by one VolumeExited, and a zone by ZoneChanged(player, nil), including for
 -- a player who leaves the server while inside: OnPlayerRemoving (and, as a backstop, the next tick for anyone no
 -- longer in Players) fires those exits before forgetting the player, without writing attributes on them. Consumers
--- that count occupants from the events (airlock stragglers, traps, pool grabs) never keep a phantom occupant.
+-- that count occupants from the events (airlock stragglers, traps) never keep a phantom occupant.
 --
 -- The test is pure math (`CFrame:PointToObjectSpace` against Size / 2), so it works for NoCollide parts that physical
 -- queries never see. The index rebuilds itself whenever tagged parts come or go.
@@ -47,7 +47,6 @@ local VOLUME_TAGS: { string } = {
 	Tags.ScareTrigger,
 	Tags.FloorDebris,
 	Tags.CheckpointVolume,
-	Tags.PoolWater,
 	Tags.LevelExit,
 }
 local INDEXED_TAGS: { string } = { Tags.Zone }

@@ -2,8 +2,8 @@
 -- MobileControls: the touch buttons, drawn from InputConfig and fed into InputController.Inject.
 --
 --   * One round button per InputConfig binding with a `touch` entry. A button shows only on a touch device, while
---     its action is live in the current input context (InputController.IsBound) and while it is relevant: the
---     syringe only with a charge left, throw only while holding a flask.
+--     its action is live in the current input context (InputController.IsBound) and while it is relevant: throw only
+--     while holding a flask.
 --   * Hold actions inject Begin on press and End when that finger lifts (tracked on the touch itself, so sliding
 --     off the button still releases). Tap, Toggle and Mash inject Begin per press. A Toggle button shows its latched
 --     state (crouch: latched with each press, confirmed by the server MoveState); the flashlight button shows
@@ -39,7 +39,6 @@ export type LayoutEntry = {
 export type Placement = { center: Vector2, diameter: number }
 
 export type Relevance = {
-	syringeCharges: number,
 	heldItem: string,
 }
 
@@ -92,9 +91,7 @@ local MobileControls = {}
 
 -- Whether a live action's button is worth showing right now.
 function MobileControls.relevant(action: string, state: Relevance): boolean
-	if action == "Syringe" then
-		return state.syringeCharges > 0
-	elseif action == "Throw" then
+	if action == "Throw" then
 		return state.heldItem ~= "" and state.heldItem ~= "None"
 	end
 	return true
@@ -368,7 +365,6 @@ function MobileControls.mount(ctx: Context): MobileControls
 		end
 		relayout(false)
 		local relevance: Relevance = {
-			syringeCharges = if player then Attributes.getNumber(player, P.SyringeCharges, 0) else 0,
 			heldItem = if player then Attributes.getString(player, P.HeldItem, "None") else "None",
 		}
 		local moveState = if player then Attributes.getString(player, P.MoveState, "Standing") else "Standing"

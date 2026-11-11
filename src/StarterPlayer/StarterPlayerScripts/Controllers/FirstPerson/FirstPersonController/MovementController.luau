@@ -2,18 +2,17 @@
 -- MovementController: the locally predicted MoveState, its intents to the server, and the local WalkSpeed.
 --
 -- Derivation (deriveState, mirrored exactly by the server's PlayerStateService):
---   1. A held override wins: Scripted > Grabbed > Trapped > Hiding > Parachuting > DownedCrawling.
+--   1. A held override wins: Scripted > Trapped > Hiding > Parachuting > DownedCrawling.
 --   2. Otherwise by locomotion mode, with canSprint = sprint and stamina > 0 and not exhausted:
 --        OnFoot  Crouching if crouch or lowCeiling (mustCrouch: in a Crawlway room, or less than
 --                StandHeadroom clear over the root); Sprinting if canSprint and moving; else Standing
 --        Vent    VentScurrying if canSprint; else VentCrawling
---        Swim    Underwater if dive; Freestyle if canSprint; else Treading
 --   "Moving" is a horizontal speed of at least MovingSpeed or a Humanoid.MoveDirection longer than MoveDirectionMin.
 --   Exhaustion latch (updateExhausted): set when stamina reaches 0 while sprint is held, cleared when sprint is
 --   released or stamina is back to full. So running dry stops the sprint until the key is let go (or the meter is
 --   full again) instead of stuttering on every sliver of regen. Both sides flip it on events they both see: intent
 --   changes and the replicated meter's crossings.
--- The client predicts from its own inputs (Sprint hold, Crouch toggle, Dive hold) and the stamina meter extrapolated
+-- The client predicts from its own inputs (Sprint hold, Crouch toggle) and the stamina meter extrapolated
 -- from the server's attributes. Overrides are the server's (the replicated MoveState) except DownedCrawling, which
 -- is predicted the moment LifeState reads Downed. The mode is the one the server's MoveState implies (or a hint
 -- from a later phase that knows first, e.g. the vent entry).
@@ -21,14 +20,14 @@
 -- Reconciliation: the prediction stands while it agrees with the replicated MoveState; once they disagree for longer
 -- than ReconcileWindow the server's state is used until they agree again.
 --
--- Intents: MoveIntent { crouch, sprint, dive, seq } (level-encoded; seq increases per message) on every input change
+-- Intents: MoveIntent { crouch, sprint, seq } (level-encoded; seq increases per message) on every input change
 -- (at most every MinSendInterval, a change inside that window goes out when it opens), at least every Keepalive
 -- while moving or while client and server disagree. Only sent while the server accepts it (InRun / Deploying,
 -- Alive / Downed); an intent that could not go out is sent as soon as it can.
 --
 -- Local effects: Humanoid.WalkSpeed = speedFor(state) every frame (so a stale server write never overrides the
 -- prediction for a frame), and Humanoid.JumpHeight is 0 while canJump says no (Downed, crawling, hiding, trapped,
--- grabbed, or a ControlLock held) and JumpHeight (CharacterService's 2.5) otherwise. While a ControlLock is held the
+-- or a ControlLock held) and JumpHeight (CharacterService's 2.5) otherwise. While a ControlLock is held the
 -- inputs are ignored (sprint reads released; the crouch toggle keeps its value).
 
 local CollectionService = game:GetService("CollectionService")
@@ -52,14 +51,13 @@ local P = Attributes.Player
 local M = Attributes.Match
 local W = Attributes.World
 
-export type Mode = "OnFoot" | "Vent" | "Swim"
+export type Mode = "OnFoot" | "Vent"
 
 export type DeriveInputs = {
 	mode: Mode,
 	override: Enums.MoveState?, -- the highest held override, if any
 	crouch: boolean,
 	sprint: boolean,
-	dive: boolean,
 	stamina: number,
 	moving: boolean,
 	exhausted: boolean, -- the exhaustion latch (updateExhausted)
@@ -70,13 +68,11 @@ export type StepContext = {
 	now: number, -- os.clock()
 	serverNow: number, -- workspace:GetServerTimeNow()
 	sprintHeld: boolean, -- InputController.IsHeld("Sprint") (self-heals a missed release)
-	diveHeld: boolean,
 }
 
 export type Movement = {
 	SetCharacter: (self: Movement, humanoid: Humanoid?, root: BasePart?) -> (),
 	SetSprint: (self: Movement, held: boolean) -> (),
-	SetDive: (self: Movement, held: boolean) -> (),
 	ToggleCrouch: (self: Movement) -> (),
 	SetModeHint: (self: Movement, mode: Mode?) -> (),
 	Step: (self: Movement, dt: number, context: StepContext) -> Enums.MoveState,
@@ -102,7 +98,6 @@ MovementController.CeilingProbeInterval = 0.1 -- the server samples motion (and 
 -- Highest priority first.
 MovementController.OverridePriority = table.freeze({
 	"Scripted",
-	"Grabbed",
 	"Trapped",
 	"Hiding",
 	"Parachuting",
@@ -121,12 +116,8 @@ local SPEEDS: { [string]: number } = {
 	VentCrawling = GameConfig.VentCrawlSpeed,
 	VentScurrying = GameConfig.VentScurrySpeed,
 	DownedCrawling = GameConfig.DownedMoveSpeed,
-	Treading = GameConfig.TreadSpeed,
-	Freestyle = GameConfig.FreestyleSpeed,
-	Underwater = GameConfig.UnderwaterSpeed,
 	Hiding = 0,
 	Trapped = 0,
-	Grabbed = 0,
 	Scripted = 0,
 	Parachuting = GameConfig.WalkSpeed,
 }
@@ -134,19 +125,15 @@ local SPEEDS: { [string]: number } = {
 local MODES: { [string]: Mode } = {
 	VentCrawling = "Vent",
 	VentScurrying = "Vent",
-	Treading = "Swim",
-	Freestyle = "Swim",
-	Underwater = "Swim",
 }
 
--- Postures that cannot jump: crawling, hidden, held by a trap or the Creature.
+-- Postures that cannot jump: crawling, hidden, held by a trap.
 local NO_JUMP: { [string]: boolean } = {
 	VentCrawling = true,
 	VentScurrying = true,
 	DownedCrawling = true,
 	Hiding = true,
 	Trapped = true,
-	Grabbed = true,
 }
 
 local SEND_PHASES: { Enums.MatchPhase } = { "InRun", "Deploying" }
@@ -184,11 +171,6 @@ function MovementController.deriveState(inputs: DeriveInputs): Enums.MoveState
 	local canSprint = inputs.sprint and inputs.stamina > 0 and not inputs.exhausted
 	if inputs.mode == "Vent" then
 		return if canSprint then "VentScurrying" else "VentCrawling"
-	elseif inputs.mode == "Swim" then
-		if inputs.dive then
-			return "Underwater"
-		end
-		return if canSprint then "Freestyle" else "Treading"
 	end
 	if inputs.crouch or inputs.lowCeiling == true then
 		return "Crouching"
@@ -274,7 +256,6 @@ function MovementController.new(player: Player): Movement
 	local root: BasePart? = nil
 	local crouch = false
 	local sprint = false
-	local dive = false
 	local modeHint: Mode? = nil
 	local lastMode: Mode = "OnFoot"
 	local state: Enums.MoveState = "Standing"
@@ -292,7 +273,6 @@ function MovementController.new(player: Player): Movement
 	local seq = 0
 	local sentCrouch: boolean? = nil
 	local sentSprint: boolean? = nil
-	local sentDive: boolean? = nil
 	local lastSentAt = -math.huge
 	local dirty = true
 
@@ -341,10 +321,10 @@ function MovementController.new(player: Player): Movement
 		return table.find(SEND_PHASES, phase :: any) ~= nil and table.find(SEND_LIFE_STATES, lifeState :: any) ~= nil
 	end
 
-	local function send(now: number, flagCrouch: boolean, flagSprint: boolean, flagDive: boolean)
+	local function send(now: number, flagCrouch: boolean, flagSprint: boolean)
 		seq = if seq >= MAX_SEQ then 1 else seq + 1
-		Net.Client.fire("MoveIntent", { crouch = flagCrouch, sprint = flagSprint, dive = flagDive, seq = seq })
-		sentCrouch, sentSprint, sentDive = flagCrouch, flagSprint, flagDive
+		Net.Client.fire("MoveIntent", { crouch = flagCrouch, sprint = flagSprint, seq = seq })
+		sentCrouch, sentSprint = flagCrouch, flagSprint
 		lastSentAt = now
 		dirty = false
 	end
@@ -369,12 +349,6 @@ function MovementController.new(player: Player): Movement
 				crouch = false
 			end
 		end,
-		SetDive = function(_self: Movement, held: boolean)
-			if held and locked then
-				return
-			end
-			dive = held
-		end,
 		ToggleCrouch = function(_self: Movement)
 			if locked then
 				return
@@ -393,9 +367,6 @@ function MovementController.new(player: Player): Movement
 			-- Held inputs self-heal against the input controller (a release lost to focus changes, a lock).
 			if not context.sprintHeld or locked then
 				sprint = false
-			end
-			if not context.diveHeld or locked then
-				dive = false
 			end
 
 			local mode: Mode = modeHint or MovementController.modeOf(server)
@@ -441,7 +412,6 @@ function MovementController.new(player: Player): Movement
 				override = override,
 				crouch = crouch,
 				sprint = sprint,
-				dive = dive,
 				stamina = stamina,
 				moving = moving,
 				exhausted = exhausted,
@@ -470,7 +440,7 @@ function MovementController.new(player: Player): Movement
 			end
 
 			-- Intents
-			if crouch ~= sentCrouch or sprint ~= sentSprint or dive ~= sentDive then
+			if crouch ~= sentCrouch or sprint ~= sentSprint then
 				dirty = true
 			end
 			local due = dirty
@@ -482,7 +452,7 @@ function MovementController.new(player: Player): Movement
 				if canSend() then
 					xpcall(send, function(err: any)
 						log.warnThrottled("send", 10, "MoveIntent failed: %s", tostring(err))
-					end, now, crouch, sprint, dive)
+					end, now, crouch, sprint)
 				else
 					dirty = true
 				end

@@ -1,8 +1,7 @@
 --!strict
 -- Stunned: blinded by a chemical cloud (MonsterAIService.Stun, GameConfig.StunSeconds). The Creature claws at its
 -- face and stumbles back away from the cloud at Stunned speed: on floors a short stagger straight back, 9 studs (veering
--- off at 35 or 70 degrees when a wall is right behind, flailing in place when boxed in), in the water a 12-stud
--- backward glide. No senses, no catches, nobody targeted.
+-- off at 35 or 70 degrees when a wall is right behind, flailing in place when boxed in). No senses, no catches, nobody targeted.
 -- When the stun ends the brain sends it off to withdraw (Patrol, out of sight).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

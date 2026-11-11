@@ -21,7 +21,7 @@ return {
 		for _, state in { "Patrol", "Teleport", "Search", "HidingResponse", "InvestigateNoise" } do
 			t.truthy(CreatureCuesController.stalking(state), state .. " rattles")
 		end
-		for _, state in { "WallChase", "Dormant", "Scripted", "Stunned", "AquaticStalk" } do
+		for _, state in { "WallChase", "Dormant", "Scripted", "Stunned" } do
 			t.falsy(CreatureCuesController.stalking(state), state .. " does not")
 		end
 		t.eq(CreatureCuesController.rattleGap(0), 4.5, "4.5 s at the least")

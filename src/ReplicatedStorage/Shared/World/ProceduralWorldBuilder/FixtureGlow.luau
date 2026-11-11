@@ -1,6 +1,6 @@
 --!strict
 -- FixtureGlow: the lit surfaces of a LevelLight fixture (fluorescent tubes, a bulb's filament, an emergency lamp's
--- lens, a floodlight's face, a firebox's embers, an exit sign's letters), shared by the builder that makes them
+-- lens, a firebox's embers, an exit sign's letters), shared by the builder that makes them
 -- (SchoolShellBuilder.buildLight) and the one run-time writer that drives them (LightingController).
 --
 -- A glow surface is a BasePart child of the fixture part whose name starts with "Glow". Lit, it is Neon in the
@@ -39,7 +39,6 @@ local WHITEN: { [string]: number } = {
 	Fluorescent = 0.5,
 	ClassroomGlow = 0.45,
 	Bulb = 0.3,
-	Floodlight = 0.4,
 	EmergencyRed = 0.05,
 	ExitSign = 0.15,
 	BoilerGlow = 0,
@@ -81,22 +80,20 @@ end
 
 -- Haze cones: the visible shaft a burning fixture throws through the level's haze (LightingController draws one under
 -- each of the nearest fixtures its render budget allows, in the fixture's lit colour). `width0` at the lamp, `width1`
--- where the cone meets the floor, at most `length` studs long (aimed down, or along a floodlight's face), `strength`
--- the cone's brightness at full level.
+-- where the cone meets the floor, at most `length` studs long (aimed straight down), `strength` the cone's
+-- brightness at full level.
 export type ConeShape = {
 	width0: number,
 	width1: number,
 	length: number,
 	strength: number,
-	aimed: boolean, -- along the fixture's front face (a floodlight) instead of straight down
 }
 
 local CONES: { [string]: ConeShape } = {
-	Fluorescent = table.freeze({ width0 = 3.2, width1 = 9.5, length = 13, strength = 1, aimed = false }),
-	ClassroomGlow = table.freeze({ width0 = 3, width1 = 9, length = 12, strength = 0.9, aimed = false }),
-	Bulb = table.freeze({ width0 = 0.7, width1 = 7, length = 11, strength = 1.15, aimed = false }),
-	Floodlight = table.freeze({ width0 = 1.8, width1 = 14, length = 26, strength = 1.3, aimed = true }),
-	EmergencyRed = table.freeze({ width0 = 0.9, width1 = 5, length = 7, strength = 0.7, aimed = false }),
+	Fluorescent = table.freeze({ width0 = 3.2, width1 = 9.5, length = 13, strength = 1 }),
+	ClassroomGlow = table.freeze({ width0 = 3, width1 = 9, length = 12, strength = 0.9 }),
+	Bulb = table.freeze({ width0 = 0.7, width1 = 7, length = 11, strength = 1.15 }),
+	EmergencyRed = table.freeze({ width0 = 0.9, width1 = 5, length = 7, strength = 0.7 }),
 }
 
 -- The haze cone of a fixture kind (nil: the kind throws none: exit signs, boiler embers).

@@ -179,8 +179,7 @@ return {
 		t.eq(stack:Top(), "Jumpscare")
 		t.truthy(CameraStack.Priority.Cutscene > CameraStack.Priority.Jumpscare)
 		t.truthy(CameraStack.Priority.Jumpscare > CameraStack.Priority.Spectating)
-		t.truthy(CameraStack.Priority.Spectating > CameraStack.Priority.Struggle)
-		t.truthy(CameraStack.Priority.Struggle > CameraStack.Priority.Trapped)
+		t.truthy(CameraStack.Priority.Spectating > CameraStack.Priority.Trapped)
 		for _, kind: Enums.CameraOverride in Enums.CameraOverride do
 			t.truthy(CameraStack.Priority[kind] ~= nil, kind .. " has a priority")
 		end
@@ -194,14 +193,11 @@ return {
 		end
 		t.eq(CameraStates.fromMoveState("Sprinting"), "Standing")
 		t.eq(CameraStates.fromMoveState("VentScurrying"), "VentCrawling")
-		t.eq(CameraStates.fromMoveState("Underwater"), "UnderwaterSwimming")
 		t.eq(CameraStates.fromMoveState("Hiding"), "LockerPeeking")
 		t.eq(CameraStates.offset("Standing"), Vector3.new(0, 0, 0))
 		t.eq(CameraStates.offset("Crouching"), Vector3.new(0, -1.5, 0))
 		t.eq(CameraStates.offset("VentCrawling"), Vector3.new(0, -2.1, -0.5))
 		t.eq(CameraStates.offset("DownedCrawling"), Vector3.new(0, -2.3, 0))
-		t.eq(CameraStates.offset("Underwater"), CameraConfig.StateOffsets.UnderwaterSwimming)
-		t.eq(CameraStates.offset("Treading"), CameraConfig.StateOffsets.SurfaceSwimming)
 		for _, cameraState: Enums.CameraState in CameraStates.List do
 			t.eq(typeof(CameraConfig.StateOffsets[cameraState]), "Vector3", cameraState .. " has an offset")
 			local min, max = CameraStates.pitchLimits(cameraState)
@@ -213,11 +209,6 @@ return {
 		local eye = CameraConfig.EyeHeightAboveRoot
 		t.near(CameraStates.offset("Sprinting").Y, eye.Sprinting - eye.Standing, 1e-6, "sprint eye")
 		t.near(CameraStates.offset("Trapped").Y, eye.Trapped - eye.Standing, 1e-6, "trapped eye")
-		t.near(
-			CameraStates.offset("Freestyle").Y,
-			CameraConfig.StateOffsets.SurfaceSwimming.Y + eye.Freestyle - eye.Treading,
-			1e-6
-		)
 		t.near(CameraStates.offset("VentScurrying").Y, -2.1, 1e-6, "same eye as the crawl")
 		t.eq(CameraStates.offset("Sprinting", "ParachuteLookback"), CameraConfig.StateOffsets.ParachuteLookback)
 		t.eq(CameraStates.offset("Standing", "LockerPeeking"), CameraConfig.StateOffsets.LockerPeeking)
@@ -235,9 +226,7 @@ return {
 		t.eq(CameraStates.bob("Crouching").amplitude, CameraConfig.Bob.CrouchMultiplier)
 		t.eq(CameraStates.bob("VentCrawling").amplitude, CameraConfig.Bob.VentMultiplier)
 		t.eq(CameraStates.bob("Sprinting").nominalSpeed, GameConfig.SprintSpeed)
-		for _, still: Enums.MoveState in
-			{ "Hiding", "Trapped", "Grabbed", "Parachuting", "Scripted" } :: { Enums.MoveState }
-		do
+		for _, still: Enums.MoveState in { "Hiding", "Trapped", "Parachuting", "Scripted" } :: { Enums.MoveState } do
 			t.eq(CameraStates.bob(still).amplitude, 0, still)
 		end
 		for _, state: Enums.MoveState in Enums.MoveState do
@@ -579,7 +568,6 @@ return {
 			mode: MovementController.Mode,
 			crouch: boolean,
 			sprint: boolean,
-			dive: boolean,
 			stamina: number,
 			moving: boolean,
 			expected: Enums.MoveState,
@@ -591,7 +579,6 @@ return {
 					override = nil,
 					crouch = crouch,
 					sprint = sprint,
-					dive = dive,
 					stamina = stamina,
 					moving = moving,
 					exhausted = exhausted == true,
@@ -600,30 +587,21 @@ return {
 			}
 		end
 		local rows: { Row } = {
-			row("OnFoot", false, false, false, 100, false, "Standing"),
-			row("OnFoot", false, false, false, 100, true, "Standing"),
-			row("OnFoot", false, true, false, 100, true, "Sprinting"),
-			row("OnFoot", false, true, false, 100, false, "Standing"),
-			row("OnFoot", false, true, false, 0, true, "Standing"),
-			row("OnFoot", true, false, false, 100, true, "Crouching"),
-			row("OnFoot", true, true, false, 100, true, "Crouching"),
-			row("OnFoot", false, false, true, 100, true, "Standing"),
-			row("Vent", false, false, false, 100, false, "VentCrawling"),
-			row("Vent", false, true, false, 100, false, "VentScurrying"),
-			row("Vent", false, true, false, 0, true, "VentCrawling"),
-			row("Vent", true, false, false, 100, true, "VentCrawling"),
-			row("Swim", false, false, false, 100, false, "Treading"),
-			row("Swim", false, true, false, 100, true, "Freestyle"),
-			row("Swim", false, true, false, 0, true, "Treading"),
-			row("Swim", false, true, true, 100, true, "Underwater"),
-			row("Swim", false, false, true, 0, false, "Underwater"),
-			row("Swim", true, false, false, 100, false, "Treading"),
+			row("OnFoot", false, false, 100, false, "Standing"),
+			row("OnFoot", false, false, 100, true, "Standing"),
+			row("OnFoot", false, true, 100, true, "Sprinting"),
+			row("OnFoot", false, true, 100, false, "Standing"),
+			row("OnFoot", false, true, 0, true, "Standing"),
+			row("OnFoot", true, false, 100, true, "Crouching"),
+			row("OnFoot", true, true, 100, true, "Crouching"),
+			row("Vent", false, false, 100, false, "VentCrawling"),
+			row("Vent", false, true, 100, false, "VentScurrying"),
+			row("Vent", false, true, 0, true, "VentCrawling"),
+			row("Vent", true, false, 100, true, "VentCrawling"),
 			-- The exhaustion latch blocks every sprint state even with stamina back above 0.
-			row("OnFoot", false, true, false, 40, true, "Standing", true),
-			row("OnFoot", true, true, false, 40, true, "Crouching", true),
-			row("Vent", false, true, false, 40, true, "VentCrawling", true),
-			row("Swim", false, true, false, 40, true, "Treading", true),
-			row("Swim", false, true, true, 40, true, "Underwater", true),
+			row("OnFoot", false, true, 40, true, "Standing", true),
+			row("OnFoot", true, true, 40, true, "Crouching", true),
+			row("Vent", false, true, 40, true, "VentCrawling", true),
 		}
 		for index, entry in rows do
 			t.eq(MovementController.deriveState(entry.inputs), entry.expected, "row " .. index)
@@ -637,7 +615,7 @@ return {
 
 	["movement: override priority, speeds, modes and the moving test"] = function(t: Expect)
 		t.eq(MovementController.topOverride({ "DownedCrawling", "Trapped" }), "Trapped")
-		t.eq(MovementController.topOverride({ "Hiding", "Scripted", "Grabbed" }), "Scripted")
+		t.eq(MovementController.topOverride({ "Hiding", "Scripted", "Trapped" }), "Scripted")
 		t.eq(MovementController.topOverride({ "Parachuting", "DownedCrawling" }), "Parachuting")
 		t.eq(MovementController.topOverride({}), nil)
 		t.eq(MovementController.OverridePriority[1], "Scripted")
@@ -649,17 +627,14 @@ return {
 		t.eq(MovementController.speedFor("Crouching"), GameConfig.CrouchSpeed)
 		t.eq(MovementController.speedFor("DownedCrawling"), GameConfig.DownedMoveSpeed)
 		t.eq(MovementController.speedFor("VentScurrying"), GameConfig.VentScurrySpeed)
-		t.eq(MovementController.speedFor("Underwater"), GameConfig.UnderwaterSpeed)
 		t.eq(MovementController.speedFor("Parachuting"), GameConfig.WalkSpeed)
-		for _, held: Enums.MoveState in { "Hiding", "Trapped", "Grabbed", "Scripted" } :: { Enums.MoveState } do
+		for _, held: Enums.MoveState in { "Hiding", "Trapped", "Scripted" } :: { Enums.MoveState } do
 			t.eq(MovementController.speedFor(held), 0, held)
 		end
 		for _, state: Enums.MoveState in Enums.MoveState do
 			t.truthy(MovementController.speedFor(state) >= 0, state)
 		end
 		t.eq(MovementController.modeOf("VentScurrying"), "Vent")
-		t.eq(MovementController.modeOf("Freestyle"), "Swim")
-		t.eq(MovementController.modeOf("Underwater"), "Swim")
 		t.eq(MovementController.modeOf("Crouching"), "OnFoot")
 		t.eq(MovementController.modeOf("DownedCrawling"), "OnFoot")
 		t.truthy(MovementController.isMoving(4, 0), "observed speed")
@@ -690,7 +665,6 @@ return {
 				override = nil,
 				crouch = false,
 				sprint = held,
-				dive = false,
 				stamina = stamina,
 				moving = true,
 				exhausted = exhausted,
@@ -712,13 +686,13 @@ return {
 		end
 	end,
 
-	["movement: no jumping while downed, crawling, hiding, trapped, grabbed or locked"] = function(t: Expect)
+	["movement: no jumping while downed, crawling, hiding, trapped or locked"] = function(t: Expect)
 		for _, state: Enums.MoveState in
-			{ "VentCrawling", "VentScurrying", "DownedCrawling", "Hiding", "Trapped", "Grabbed" } :: { Enums.MoveState }
+			{ "VentCrawling", "VentScurrying", "DownedCrawling", "Hiding", "Trapped" } :: { Enums.MoveState }
 		do
 			t.falsy(MovementController.canJump(state, "Alive", false), state)
 		end
-		for _, state: Enums.MoveState in { "Standing", "Sprinting", "Crouching", "Treading" } :: { Enums.MoveState } do
+		for _, state: Enums.MoveState in { "Standing", "Sprinting", "Crouching" } :: { Enums.MoveState } do
 			t.truthy(MovementController.canJump(state, "Alive", false), state)
 			t.truthy(MovementController.canJump(state, "Lobby", false), state .. " in the lobby")
 		end
@@ -886,7 +860,7 @@ return {
 		t.eq(placement.right, held)
 		t.eq(placement.left, nil, "left hand free")
 		t.truthy(HandRig.handsBusy("VentCrawling") and HandRig.handsBusy("DownedCrawling"))
-		t.truthy(HandRig.handsBusy("Freestyle"))
+		t.truthy(HandRig.handsBusy("Parachuting"))
 		t.falsy(HandRig.handsBusy("Sprinting") or HandRig.handsBusy("Crouching") or HandRig.handsBusy("Standing"))
 	end,
 

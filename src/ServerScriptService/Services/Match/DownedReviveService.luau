@@ -17,10 +17,10 @@
 --   * the anchor still belongs to a Downed participant ("NoVictim"), and the reviver is not the victim ("Self"),
 --   * the reviver is a run participant ("NotParticipant") and Alive ("LifeState"),
 --   * the reviver is free: no ControlLock at all ("Busy": hiding, trapped, in a cutscene, being caught),
---   * the victim is not being caught (a Jumpscare / Drag / Cutscene lock: "Caught"); a Downed victim still held by a
+--   * the victim is not being caught (a Jumpscare / Cutscene lock: "Caught"); a Downed victim still held by a
 --     bear trap can be revived (they stand up in the trap).
 -- At GameConfig.ServerTickHz (Poll) every channel on an anchor is checked again with the same rule and cancelled with
--- its reason the moment it fails (the victim caught or executed, the reviver grabbed or hiding); InteractionService
+-- its reason the moment it fails (the victim caught or executed, the reviver trapped or hiding); InteractionService
 -- already cancels on range and on the reviver's own life state. Poll also repairs anchors whose victim's character
 -- was replaced without a CharacterSpawned (none should be, but a missing anchor would strand a Downed player).
 -- Completing it: LifeStateService.Revive(victim, HEALTH_FRACTION), RunStats Revives + 1 for the reviver, Notify both
@@ -28,9 +28,7 @@
 --
 -- Around it. A teammate going down is announced to every other participant still playing (Notify
 -- Downed.TeammateDown); a Downed participant dying is announced the same way (Downed.TeammateLost). Coming back up
--- (a teammate's revive or the Adrenaline Syringe, both LifeStateService.Revived) plays a Gasp at the survivor. The
--- syringe self-revive itself stays LoadoutService's (UseSyringe) and LifeStateService's (SyringeUsed); the client
--- surfaces it (DownedController).
+-- (a teammate's revive, LifeStateService.Revived) plays a Gasp at the survivor.
 --
 -- Pure rules (tests/Specs/Revive.spec.luau): reviveEligible, cancelReason, clearReason. SetDependencies swaps every read and write
 -- that leaves this module (life states, locks, characters, channels, the revive itself, stats, notifies, audio), so
@@ -93,7 +91,7 @@ local PROMPT_DISTANCE = 6
 local HEALTH_FRACTION = 0.5
 local REVIVE_STAT: Enums.StatKey = "Revives"
 local GASP_PRESET = "Gasp"
-local CAUGHT_LOCKS: { [string]: boolean } = { Jumpscare = true, Drag = true, Cutscene = true }
+local CAUGHT_LOCKS: { [string]: boolean } = { Jumpscare = true, Cutscene = true }
 local LIVE_PHASES: { [string]: boolean } = { Deploying = true, InRun = true }
 local DOWN_KEY = "Downed.TeammateDown"
 local LOST_KEY = "Downed.TeammateLost"
@@ -354,7 +352,7 @@ function DownedReviveService.OnCharacterSpawned(player: Player)
 	end
 end
 
--- Someone came back up (LifeStateService.Revived: a teammate or the syringe): they gasp for air.
+-- Someone came back up (LifeStateService.Revived): they gasp for air.
 function DownedReviveService.OnRevived(player: Player)
 	local root = rootOf(deps.character(player))
 	if running and root then

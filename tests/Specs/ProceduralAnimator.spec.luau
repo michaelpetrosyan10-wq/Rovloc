@@ -491,9 +491,6 @@ return {
 			VentCrawling = 4.5,
 			VentScurrying = 9,
 			DownedCrawling = 2.5,
-			Freestyle = 9,
-			Underwater = 5,
-			Treading = 2,
 		}
 		for name in PlayerR15.Profile.states do
 			local rig = animated(name, speeds[name] or 0)

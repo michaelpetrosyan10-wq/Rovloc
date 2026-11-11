@@ -3,8 +3,8 @@
 --
 -- The only writer of every PlayerData field and of the Player attributes DataLoaded, Credits, Escapes, RunOutcome and
 -- Settings (the saved blob, written once per load), and of ReplicatedStorage DataMode. LobbyService, PerkShopService,
--- MatchResetService and TelemetryService require it; it requires none of them. Levels signal upward: Level 5's
--- `Escaped` is subscribed through `Levels.Level5` when that controller exists.
+-- MatchResetService and TelemetryService require it; it requires none of them. Levels signal upward: the roof's
+-- `Escaped` is subscribed through `Levels.Level3` (the roof controller) when it exists.
 --
 -- Data.
 --   * Backend (StoreBackend.choose, in Start): the DataStore on live servers; in Studio without API access and in the
@@ -32,12 +32,11 @@
 --     from the loadout (LoadoutService.SetLoadout; PerkShopService keeps loadouts stocked in the lobby, so this only
 --     bites after the `loadout` dev command). Then RunLifecycleService.BeginRun, and the squad goes into Level 0 the
 --     way the dev run sends it (DevToolsService.SpawnSquad: a PlayerSpawn slot each, once their client holds the world).
---   * Outcomes per participant: Pending -> Escaped (Level5.Escaped, or the `escape` dev command) / Disconnected (left)
+--   * Outcomes per participant: Pending -> Escaped (Level3.Escaped, or the `escape` dev command) / Disconnected (left)
 --     / Dead (anything else once the run resolves). RunOutcome mirrors them.
 --   * One RunOutcomeEvaluator, coalesced with task.defer, runs on every LifeState change, escape, leave and on
---     entering InRun: `verdict` -> Wipe when no participant is Alive and none is Downed with a syringe charge left
---     (and nobody escaped), Escape when the same holds with at least one escape, else Continue. An empty run is never
---     judged.
+--     entering InRun: `verdict` -> Wipe when no participant is Alive (and nobody escaped), Escape when the same holds
+--     with at least one escape, else Continue. An empty run is never judged.
 --   * Resolution: RunEnded, then each participant is settled once: CreditsPerLevelCleared x the floors they sealed
 --     (RunStats FloorsCleared, written by CheckpointAirlockService for the survivors of each airlock) + CreditsEscapeBonus
 --     when they escaped, Escapes + 1 and BestTime[difficulty] (their own escape time) when they escaped. One atomic
@@ -71,6 +70,7 @@ local SettingsSchema = require(ReplicatedStorage.Shared.Config.SettingsSchema)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local DevToolsService = require(ServerScriptService.Services.Core.DevToolsService)
 local RunLifecycleService = require(ServerScriptService.Services.Core.RunLifecycleService)
@@ -96,7 +96,6 @@ export type Standing = {
 	escaped: boolean,
 	disconnected: boolean,
 	lifeState: Enums.LifeState,
-	syringeCharges: number,
 }
 
 export type Reward = {
@@ -117,7 +116,6 @@ export type Dependencies = {
 	run: (() -> Types.RunContext?)?,
 	beginRun: ((participants: { Player }, difficulty: Enums.Difficulty) -> Types.RunContext)?,
 	lifeState: ((player: Player) -> Enums.LifeState)?,
-	syringeCharges: ((player: Player) -> number)?,
 	floorsCleared: ((player: Player) -> number)?,
 	stats: ((player: Player) -> { [string]: number })?,
 	addStat: ((player: Player, key: Enums.StatKey, amount: number) -> ())?,
@@ -216,9 +214,6 @@ local function verdictOf(standings: { Standing }): Verdict
 			escaped += 1
 		elseif not standing.disconnected then
 			if standing.lifeState == "Alive" then
-				return "Continue"
-			end
-			if standing.lifeState == "Downed" and standing.syringeCharges > 0 then
 				return "Continue"
 			end
 		end
@@ -335,11 +330,6 @@ local function lifeStateOf(player: Player): Enums.LifeState
 	return if fake then fake(player) else LifeStateService.GetState(player)
 end
 
-local function syringeChargesOf(player: Player): number
-	local fake = deps.syringeCharges
-	return if fake then fake(player) else LoadoutService.GetSyringeCharges(player)
-end
-
 local function floorsClearedBy(player: Player): number
 	local fake = deps.floorsCleared
 	return if fake then fake(player) else RunStatsService.Get(player, FLOORS_STAT)
@@ -409,7 +399,7 @@ local function spawnSquad(players: { Player })
 	if fake then
 		fake(players)
 	else
-		DevToolsService.SpawnSquad(players, Enums.LevelId[1])
+		DevToolsService.SpawnSquad(players, WorldConfig.LevelOrder[1])
 	end
 end
 
@@ -818,7 +808,6 @@ local function evaluate(state: RunState)
 			escaped = outcome == "Escaped",
 			disconnected = gone,
 			lifeState = if gone then "Lobby" else lifeStateOf(player),
-			syringeCharges = if gone then 0 else syringeChargesOf(player),
 		})
 	end
 	local verdict: Verdict = verdictOf(standings)
@@ -840,7 +829,7 @@ function MatchAndDataService.RequestEvaluation()
 	end)
 end
 
--- Counts `player` as escaped from the current run (Level5.Escaped and the `escape` dev command). False when they are
+-- Counts `player` as escaped from the current run (Level3.Escaped and the `escape` dev command). False when they are
 -- not a participant still in it, or the run is not InRun.
 function MatchAndDataService.MarkEscaped(player: Player): boolean
 	local state = runState
@@ -941,9 +930,9 @@ local function onFloorCleared(_level: Enums.LevelId, survivors: { Player })
 	end
 end
 
--- Level 5's escape signal, when that controller exists (agent F's Level5_RoofController).
+-- The roof's escape signal, when that controller exists (Level3_RoofController).
 local function escapeSource(): EscapeSource?
-	local candidate = (Levels :: any).Level5
+	local candidate = (Levels :: any).Level3
 	if type(candidate) ~= "table" then
 		return nil
 	end
@@ -1115,7 +1104,7 @@ function MatchAndDataService.Init()
 			MatchAndDataService.MarkEscaped(player)
 		end))
 	else
-		log.info("Levels.Level5 has no Escaped signal; escapes come from the `escape` dev command only")
+		log.info("Levels.Level3 has no Escaped signal; escapes come from the `escape` dev command only")
 	end
 	registerDevCommands()
 	game:BindToClose(onClose)

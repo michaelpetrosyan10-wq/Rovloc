@@ -1,8 +1,8 @@
 --!strict
 -- LifeStateService: the life-state transition table (lethal events, damage, revive health, what the Humanoid shows),
 -- recovery-handler decisions, dev-command targeting, and the live service on a fake clock: damage → Down → revive →
--- the second lethal hit executes, bleedout expiry, damage while downed, Execute idempotence, the self-revive syringe,
--- drowning, a death that bypassed the service, dev commands, and EndRun back to the lobby.
+-- the second lethal hit executes, bleedout expiry, damage while downed, Execute idempotence, a death that bypassed
+-- the service, dev commands, and EndRun back to the lobby.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -11,7 +11,6 @@ local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local LifeStateService = require(ServerScriptService.Services.Player.LifeStateService)
-local LoadoutService = require(ServerScriptService.Services.Player.LoadoutService)
 local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
 local RunStatsService = require(ServerScriptService.Services.Core.RunStatsService)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
@@ -328,20 +327,9 @@ return {
 		end)
 	end,
 
-	["service: syringe self-revive, drowning and a bypassing death"] = function(t: Expect)
+	["service: a bypassing death"] = function(t: Expect)
 		LifeStateService.Init()
 		inRun(function(player: Player, humanoid: Humanoid)
-			LifeStateService.Down(player, "Trap")
-			LoadoutService.SyringeUsed:Fire(player, "Stamina")
-			t.eq(LifeStateService.GetState(player), "Downed", "the stamina mode does not revive")
-			LoadoutService.SyringeUsed:Fire(player, "SelfRevive")
-			t.eq(LifeStateService.GetState(player), "Alive")
-			t.eq(humanoid.Health, MAX * 0.5)
-
-			PlayerStateService.OxygenDepleted:Fire(player)
-			t.eq(LifeStateService.GetState(player), "Dead", "drowning goes through Down (second time: execute)")
-
-			LifeStateService.SetAlive(player)
 			humanoid.Health = MAX
 			t.truthy(LifeStateService.HandleRecovery(player, player.Character, "Died"), "handled")
 			t.eq(LifeStateService.GetState(player), "Dead", "a death that bypassed the service eliminates")

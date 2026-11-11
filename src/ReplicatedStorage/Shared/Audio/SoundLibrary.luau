@@ -70,7 +70,7 @@ local samples: { [string]: Sample } = {
 		"Swim",
 		"action_swim.mp3",
 		0.8,
-		"wet sloshing stroke (wet noise): splashes, treading, rain body, chemical fizz, pool lapping",
+		"wet sloshing stroke (wet noise): splashes, rain body, chemical fizz, water in the pipes",
 		true -- Swimming loop (MP3: the decoder may pad a few ms at the seam; beds stagger two copies)
 	),
 	Explosion = sample(

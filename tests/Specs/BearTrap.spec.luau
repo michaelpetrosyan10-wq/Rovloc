@@ -63,12 +63,8 @@ local NOT_ON_FOOT: { Enums.MoveState } = {
 	"VentCrawling",
 	"VentScurrying",
 	"DownedCrawling",
-	"Treading",
-	"Freestyle",
-	"Underwater",
 	"Hiding",
 	"Trapped",
-	"Grabbed",
 	"Parachuting",
 	"Scripted",
 }

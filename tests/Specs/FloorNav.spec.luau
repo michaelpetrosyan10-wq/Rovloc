@@ -1,8 +1,8 @@
 --!strict
 -- FloorNav, the Creature's floor pathfinding on the zone graph (docs/MONSTER.md 5 and 10; web/src/creature/nav.js).
--- The geometry (shared walls, a segment through a footprint, the funnel, spacing, the deck strips round a pool, the
--- way round a footprint) and the real levels: every route stays on floor it may walk (never a crawlway, a duct or a
--- pool's water), crawl-only and low portals are shut to it, the patrol is reachable from where it spawns, it hunches
+-- The geometry (shared walls, a segment through a footprint, the funnel, spacing, the way round a footprint) and the
+-- real levels: every route stays on floor it may walk (never a crawlway or a duct), crawl-only and low portals are
+-- shut to it, the patrol is reachable from where it spawns, it hunches
 -- in the tunnels, and fixture doors follow their hook.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -32,20 +32,6 @@ local function navOf(levelId: Enums.LevelId): (FloorNav.Nav, LayoutSchema.LevelL
 	local layout = Builder.getLayout(levelId)
 	assert(layout, levelId .. " layout")
 	return FloorNav.new(layout, WorldConfig.levelOrigin(levelId), open), layout
-end
-
-local function room(id: string, minX: number, maxX: number, minZ: number, maxZ: number): FloorNav.NavRoom
-	return {
-		id = id,
-		key = id,
-		kind = "Classroom",
-		minX = minX,
-		maxX = maxX,
-		minZ = minZ,
-		maxZ = maxZ,
-		floorY = 0,
-		height = 12,
-	}
 end
 
 -- Whether the walk `from` -> each of `waypoints` ever crosses the inside of `r`.
@@ -103,32 +89,6 @@ spec["funnel: string-pulled through the openings, spaced without losing a turn"]
 	for i = 2, #spaced do
 		t.truthy((spaced[i] - spaced[i - 1]).Magnitude <= 4 + EPS, "no step longer than the spacing")
 	end
-end
-
-spec["pools: a basin leaves the deck round it as strips, narrow ones dropped"] = function(t: Expect)
-	local hall = room("Pool", 0, 40, 0, 30)
-	local parts = FloorNav.deckParts(hall, { { minX = 10, maxX = 30, minZ = 5, maxZ = 25 } })
-	t.eq(#parts, 4, "west, east, north and south")
-	local keys: { [string]: boolean } = {}
-	for _, part in parts do
-		keys[part.key] = true
-		t.eq(part.id, "Pool", "every strip keeps the room's id")
-		t.falsy(
-			FloorNav.crossesRect(
-				{ minX = 10, maxX = 30, minZ = 5, maxZ = 25 },
-				part.minX + 0.5,
-				part.minZ + 0.5,
-				part.maxX - 0.5,
-				part.maxZ - 0.5
-			),
-			part.key .. " is dry"
-		)
-	end
-	t.truthy(keys["Pool#W"] and keys["Pool#E"] and keys["Pool#N"] and keys["Pool#S"], "keyed by side")
-	local wall = FloorNav.deckParts(hall, { { minX = 1, maxX = 40, minZ = 0, maxZ = 30 } })
-	t.eq(#wall, 0, "wall to wall: a 1-stud ledge is no deck")
-	t.eq(#FloorNav.deckParts(hall, {}), 1, "no basin, the whole room")
-	t.eq(#FloorNav.deckParts(hall, { { minX = 50, maxX = 60, minZ = 0, maxZ = 5 } }), 1, "a basin elsewhere")
 end
 
 spec["obstacles: the shortest way round a footprint stays inside the room"] = function(t: Expect)
@@ -228,42 +188,6 @@ spec["tunnels: it hunches under the tunnels' ceilings, and the patrol is reachab
 	t.truthy(CreatureConfig.PathAgent.AgentHeight >= 9, "AgentHeight at least 9")
 end
 
-spec["pools: no route crosses Level 4's water, the decks join round it"] = function(t: Expect)
-	local nav, layout = navOf("Level4_FloodedPool")
-	local origin = WorldConfig.levelOrigin("Level4_FloodedPool")
-	local basins: { LayoutSchema.Basin } = layout.basins or {}
-	t.truthy(#basins > 0, "Level 4 has a basin")
-	local water: { FloorNav.Rect } = {}
-	for _, b in basins do
-		table.insert(water, {
-			minX = origin.X + b.rect.x,
-			maxX = origin.X + b.rect.x + b.rect.w,
-			minZ = origin.Z + b.rect.z,
-			maxZ = origin.Z + b.rect.z + b.rect.d,
-		})
-	end
-	local samples = nav:samplePoints(8)
-	local routes = 0
-	for i = 1, #samples, math.max(1, math.floor(#samples / 25)) do
-		for j = 1, #samples, math.max(1, math.floor(#samples / 9)) do
-			local route = nav:computePath(samples[i].position, samples[j].position)
-			if route then
-				routes += 1
-				for _, rect in water do
-					t.falsy(routeCrosses(rect, samples[i].position, route.waypoints), "a route across the water")
-				end
-			end
-		end
-	end
-	t.truthy(routes > 20, "routes were walked (" .. routes .. ")")
-	for _, sample in samples do
-		for _, rect in water do
-			local x, z = sample.position.X, sample.position.Z
-			t.falsy(x > rect.minX and x < rect.maxX and z > rect.minZ and z < rect.maxZ, "no sample in the water")
-		end
-	end
-end
-
 spec["doors: fixture doors follow the hook, the rest stand open; another part of the level is math.huge"] = function(
 	t: Expect
 )
@@ -298,7 +222,7 @@ spec["doors: fixture doors follow the hook, the rest stand open; another part of
 	)
 	-- on every level (some fall apart into parts joined only by ducts or locked airlocks; every one with its fixture
 	-- doors shut): reachable and pathLength agree, and a part it cannot walk to is math.huge
-	for _, levelId: Enums.LevelId in Enums.LevelId do
+	for _, levelId: Enums.LevelId in WorldConfig.LevelOrder do
 		local levelLayout = Builder.getLayout(levelId)
 		if not levelLayout then
 			continue

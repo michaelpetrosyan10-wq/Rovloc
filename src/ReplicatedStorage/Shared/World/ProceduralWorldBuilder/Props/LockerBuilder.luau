@@ -1,5 +1,5 @@
 --!strict
--- LockerBuilder: the hideable lockers of the Level 3 locker rooms and halls. Fixture kind "HideableLocker": one per
+-- LockerBuilder: the hideable lockers of the hallways. Fixture kind "HideableLocker": one per
 -- Locker anchor, rebuilt into Workspace.Runtime.<level>.HideableLockers at every run start, so every run begins with
 -- each door shut and each locker empty.
 --

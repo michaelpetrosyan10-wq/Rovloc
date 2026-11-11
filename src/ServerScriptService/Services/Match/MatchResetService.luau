@@ -2,8 +2,8 @@
 -- MatchResetService: Results -> Resetting -> Lobby, and Play Again (spec §1, "Full Match Reset").
 --
 --   * MatchAndDataService.RunResolved opens a Results session for the run's participants (and counts the escapes).
---   * Entering Results arms the auto-return: now + GameConfig.ResultsSeconds, plus ESCAPE_FINALE_SECONDS when anyone
---     escaped (their finale shot plays before the ESCAPED screen appears), written to ReplicatedStorage.ResultsEndsAt
+--   * Entering Results arms the auto-return: now + GameConfig.ResultsSeconds, plus ESCAPE_SHOT_SECONDS when anyone
+--     escaped (their landing shot plays before the ESCAPED screen appears), written to ReplicatedStorage.ResultsEndsAt
 --     (server time; EscapeSummaryController's countdown bar). This service is the only writer of ResultsEndsAt.
 --   * PlayAgain (Net admits it in Results only) marks the presser. Once every participant still in the server has
 --     pressed, or at the deadline, RunLifecycleService.EndRun runs: Resetting (every service's EndRun clears the run's
@@ -55,15 +55,15 @@ type Session = {
 	finishing: boolean,
 }
 
--- The finale shot after the last landing (ParachuteController's lookback, two lightning flashes, the fade to black)
+-- The escape shot after the last landing (ParachuteController's lookback, two lightning flashes, the fade to black)
 -- plays before the ESCAPED screen, so an escape gets this much longer on the Results clock.
-local ESCAPE_FINALE_SECONDS = 8
+local ESCAPE_SHOT_SECONDS = 8
 local POLL_SECONDS = 0.25
 
 local MatchResetService = {}
 
 MatchResetService.Name = "MatchResetService"
-MatchResetService.EscapeFinaleSeconds = ESCAPE_FINALE_SECONDS
+MatchResetService.EscapeShotSeconds = ESCAPE_SHOT_SECONDS
 
 local playAgainRequested: Signal.Signal<{ Player }> = Signal.new()
 
@@ -83,7 +83,7 @@ local pollAccumulated = 0
 
 -- How long Results lasts when `escapees` participants escaped.
 function MatchResetService.resultsSeconds(escapees: number): number
-	return GameConfig.ResultsSeconds + (if escapees > 0 then ESCAPE_FINALE_SECONDS else 0)
+	return GameConfig.ResultsSeconds + (if escapees > 0 then ESCAPE_SHOT_SECONDS else 0)
 end
 
 -- Whether every participant still here pressed Play Again (true when none is left).

@@ -6,8 +6,7 @@
 --   BeginRun      participants → Alive at MaxHealth with DownedCount 0. Everyone else stays Lobby.
 --   Damage        Alive: health drops (the Humanoid never shows less than 1 while not dead); lethal damage is a Down.
 --                 Downed: any damage executes. Other states ignore damage.
---   Down          the one lethal path (lethal damage, P7 drowning via PlayerStateService.OxygenDepleted, traps,
---                 jumpscares): the first time in a run → Downed (DownedCount + 1, Health 1, BleedoutEndsAt = now +
+--   Down          the one lethal path (lethal damage, traps, jumpscares): the first time in a run → Downed (DownedCount + 1, Health 1, BleedoutEndsAt = now +
 --                 BleedoutSeconds, a "LifeState" DownedCrawling override on PlayerStateService, a Gasp cue on the
 --                 victim, RunStats TimesDowned, bleedout scheduled); already downed once, or Downed now → Execute.
 --   Revive        Downed → Alive at healthFraction × MaxHealth (default 0.5); the override and bleedout clear.
@@ -28,9 +27,6 @@
 --   "Died" / "OutOfBounds" / "Lost" while Dead / Spectating → handled (the corpse stays, nobody respawns);
 --   "OutOfBounds" / "Lost" while Alive / Downed → built-in respawn at the level entry (the life state is kept).
 -- Outside a live run, or for anyone who is not a participant, the built-in respawn always runs.
---
--- Syringe. LoadoutService.SyringeUsed with mode "SelfRevive" revives at half health (LoadoutService has already
--- checked the life state and spent the charge).
 --
 -- Dev commands (not read-only): hurt <amount> [player] · down [player] · revive [player] · kill [player] ·
 -- heal [player]. They target the caller unless a player is named (name or display name, any case, unique prefix).
@@ -59,7 +55,6 @@ local DevToolsService = require(ServerScriptService.Services.Core.DevToolsServic
 local RunLifecycleService = require(ServerScriptService.Services.Core.RunLifecycleService)
 local RunStatsService = require(ServerScriptService.Services.Core.RunStatsService)
 
-local LoadoutService = require(script.Parent.LoadoutService)
 local PlayerStateService = require(script.Parent.PlayerStateService)
 
 local log = Log.new("LifeState")
@@ -87,16 +82,13 @@ type Record = {
 
 local MAX_HEALTH = GameConfig.MaxHealth
 local DEFAULT_REVIVE_FRACTION = 0.5
-local SYRINGE_REVIVE_FRACTION = 0.5
 local DEV_REVIVE_FRACTION = 0.5
 local OVERRIDE_TOKEN = PlayerStateService.OverrideToken.LifeState
 local DOWNED_STATE: Enums.MoveState = "DownedCrawling"
 local GASP_PRESET = "Gasp"
 local CAUSE_FELL = "Fell"
 local CAUSE_BLEEDOUT = "Bleedout"
-local CAUSE_DROWNED = "Drowned"
 local CAUSE_DEV = "Dev"
-local CAUSE_SYRINGE = "Syringe"
 
 local LifeStateService = {}
 
@@ -104,9 +96,7 @@ LifeStateService.Name = "LifeStateService"
 LifeStateService.Causes = table.freeze({
 	Fell = CAUSE_FELL,
 	Bleedout = CAUSE_BLEEDOUT,
-	Drowned = CAUSE_DROWNED,
 	Dev = CAUSE_DEV,
-	Syringe = CAUSE_SYRINGE,
 })
 
 local stateChanged: Signal.Signal<Player, Enums.LifeState, Enums.LifeState> = Signal.new()
@@ -620,14 +610,6 @@ function LifeStateService.Init()
 	serviceTrove:Add(CharacterService.CharacterSpawned:Connect(onCharacterSpawned))
 	serviceTrove:Add(RunLifecycleService.PhaseChanged:Connect(function(phase: Enums.MatchPhase)
 		phaseLive = run ~= nil and (phase == "Deploying" or phase == "InRun")
-	end))
-	serviceTrove:Add(LoadoutService.SyringeUsed:Connect(function(player: Player, mode: Enums.SyringeMode)
-		if mode == "SelfRevive" then
-			LifeStateService.Revive(player, SYRINGE_REVIVE_FRACTION)
-		end
-	end))
-	serviceTrove:Add(PlayerStateService.OxygenDepleted:Connect(function(player: Player)
-		LifeStateService.Down(player, CAUSE_DROWNED)
 	end))
 	registerDevCommands()
 end

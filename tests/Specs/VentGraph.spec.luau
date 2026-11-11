@@ -27,8 +27,7 @@ type Layout = LayoutSchema.LevelLayout
 
 local W = Attributes.World
 
-local ALL_LEVELS: { Enums.LevelId } =
-	{ "Level0_Basement", "Level1_Hallways", "Level2_ScienceHall", "Level3_Gymnasium", "Level4_FloodedPool" }
+local ALL_LEVELS: { Enums.LevelId } = { "Level0_Basement", "Level1_Hallways", "Level2_Auditorium", "Level3_Roof" }
 -- The levels with ducts (a tunnel floor keeps a vent only where its script needs one: Level 1's gate bypass)
 local VENT_LEVELS: { Enums.LevelId } = {}
 local DRY_LEVELS: { Enums.LevelId } = {}
@@ -155,7 +154,7 @@ local function handRoot(
 		attachment:AddTag(Tags.VentNode)
 		attachment:SetAttribute(W.NodeId, spec.id)
 		attachment:SetAttribute(W.Links, spec.links)
-		attachment:SetAttribute(W.LevelId, spec.level or "Level2_ScienceHall")
+		attachment:SetAttribute(W.LevelId, spec.level or "Level2_Auditorium")
 		attachment.Parent = root
 	end
 	for _, spec in grates do
@@ -167,7 +166,7 @@ local function handRoot(
 		attachment:SetAttribute(W.FacingZoneId, "Lab")
 		attachment:SetAttribute(W.Lockable, true)
 		attachment:SetAttribute(W.CriticalPath, false)
-		attachment:SetAttribute(W.LevelId, "Level2_ScienceHall")
+		attachment:SetAttribute(W.LevelId, "Level2_Auditorium")
 		attachment.Parent = root
 	end
 	return level
@@ -454,12 +453,12 @@ return {
 			{ id = "A", at = Vector3.new(0, 2, 0), links = "B,Ghost" },
 			{ id = "B", at = Vector3.new(10, 2, 0), links = "" },
 			{ id = "C", at = Vector3.new(10, 2, 8), links = "B,C" },
-			{ id = "Far", at = Vector3.new(0, 2, 30), links = "A", level = "Level3_Gymnasium" },
+			{ id = "Far", at = Vector3.new(0, 2, 30), links = "A", level = "Level3_Roof" },
 		}, {
 			{ id = "GA", node = "A", at = CFrame.lookAt(Vector3.new(0, 2, 0), Vector3.new(-1, 2, 0)) },
 			{ id = "GLost", node = "Nowhere", at = CFrame.new(5, 2, 5) },
 		})
-		local graph = VentGraph.build(level, "Level2_ScienceHall")
+		local graph = VentGraph.build(level, "Level2_Auditorium")
 		assert(graph, "a graph")
 		t.eq(countKeys(graph.nodes), 3, "Far belongs to another level")
 		t.eq(table.concat(graph.nodes.A.links, ","), "B", "the link to a missing node is dropped")
@@ -476,8 +475,8 @@ return {
 		t.truthy(near(grate.mouth, root.CFrame * Vector3.new(-MOUTH_OUT, 2, 0)))
 		t.eq(graph.nodes.A.grateId, "GA")
 		t.eq(countKeys(graph.segments), 0, "no duct floors")
-		local fromRoot = VentGraph.build(root, "Level2_ScienceHall")
+		local fromRoot = VentGraph.build(root, "Level2_Auditorium")
 		t.truthy(fromRoot ~= nil and countKeys(fromRoot.nodes) == 3, "the VentNodeRoot itself works too")
-		t.eq(VentGraph.build(handRoot({}, {}), "Level2_ScienceHall"), nil, "a root without nodes")
+		t.eq(VentGraph.build(handRoot({}, {}), "Level2_Auditorium"), nil, "a root without nodes")
 	end,
 }

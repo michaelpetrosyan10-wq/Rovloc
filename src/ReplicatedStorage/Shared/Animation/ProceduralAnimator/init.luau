@@ -87,7 +87,6 @@ export type ProfileLook = {
 export type CycleSpec = {
 	-- Studs travelled per cycle at `speed` (studs/s). `map` lets the profile scale by the rig's own proportions.
 	length: (speed: number, map: JointMap) -> number,
-	rate: number?, -- cycles per second regardless of travel (strokes, treading)
 	turnStep: number?, -- studs of virtual travel per radian turned on the spot (stepping round)
 }
 
@@ -1004,14 +1003,13 @@ function ProceduralAnimator.new(rig: Model, profile: Profile, options: Options?)
 	end
 
 	local function advancePhase(dominant: StateRuntime, deltaYaw: number, dt: number)
-		local cycleWeight, lengthSum, rateSum, turnSum = 0, 0, 0, 0
+		local cycleWeight, lengthSum, turnSum = 0, 0, 0
 		for _, runtime in stateOrder do
 			local cycle = runtime.spec.cycle
 			local weight = runtime.weight.position
 			if cycle and weight > 0 then
 				cycleWeight += weight
 				lengthSum += weight * cycle.length(ctx.speed, map)
-				rateSum += weight * (cycle.rate or 0)
 				turnSum += weight * (cycle.turnStep or 0)
 			end
 		end
@@ -1028,7 +1026,7 @@ function ProceduralAnimator.new(rig: Model, profile: Profile, options: Options?)
 			travel += math.abs(deltaYaw) * (turnSum / cycleWeight) * (1 - ctx.moveAmount)
 		end
 		local from = phase
-		local to = phase + travel / cycleLength + (rateSum / cycleWeight) * dt
+		local to = phase + travel / cycleLength
 		local steps = dominant.spec.footsteps
 		if steps and ctx.airborne < 0.5 and (ctx.moveAmount > STEP_MOVE or ctx.turnAmount > STEP_TURN) then
 			for foot, mark in steps.plants do

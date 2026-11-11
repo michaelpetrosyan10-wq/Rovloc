@@ -11,17 +11,14 @@
 -- so a flask is never released inside or behind a wall. Speed: GameConfig.FlaskThrowSpeed, x VentTossMultiplier while
 -- crawling a duct (a short toss). Throws are refused in the states that hold the body or the hands (BlockedStates).
 -- Steps. advance walks the parabola from one flight time to another in segments of at most `maxStep` seconds, casting
--- each one (the server: its raycast plus the pool's surface planes; a client: a cosmetic raycast). The first segment
+-- each one (the server: its raycast; a client: a cosmetic raycast). The first segment
 -- that hits ends the flight there; reaching `maxSeconds` without a hit expires it. trace runs a whole flight (the aim
 -- arc) and resample spaces dots evenly along the traced path.
--- Water. surfaceCrossing is where a segment crosses the top face of a PoolWater box, by plain maths (the volumes are
--- NoCollide and never queried), so a flask landing in the pool shatters at its surface.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 
 -- A cast's first contact along a segment: `fraction` of the way from its start (0..1).
 export type Hit = {
@@ -52,7 +49,7 @@ local DEFAULT_STEP = 1 / 30 -- seconds per cast segment when the caller does not
 local MIN_STEP = 1 / 240
 local MAX_SEGMENTS = 4096 -- per advance: a guard against a zero step, never reached in play
 
-local BLOCKED: { Enums.MoveState } = { "Hiding", "Trapped", "Scripted", "Grabbed", "Parachuting" }
+local BLOCKED: { Enums.MoveState } = { "Hiding", "Trapped", "Scripted", "Parachuting" }
 local DUCT: { Enums.MoveState } = { "VentCrawling", "VentScurrying" }
 
 local Ballistics = {}
@@ -68,7 +65,7 @@ Ballistics.BlockedStates = table.freeze(table.clone(BLOCKED))
 -- Throws
 --------------------------------------------------------------------------------
 
--- Whether a player in `moveState` may throw (not hidden, trapped, scripted, grabbed or parachuting).
+-- Whether a player in `moveState` may throw (not hidden, trapped, scripted or parachuting).
 function Ballistics.mayThrowIn(moveState: Enums.MoveState): boolean
 	return table.find(BLOCKED, moveState) == nil
 end
@@ -238,31 +235,6 @@ function Ballistics.resample(points: { Vector3 }, count: number): { Vector3 }
 		table.insert(out, points[segment - 1]:Lerp(points[segment], math.clamp(alpha, 0, 1)))
 	end
 	return out
-end
-
---------------------------------------------------------------------------------
--- Water
---------------------------------------------------------------------------------
-
--- Where (0..1 along the segment) `from` -> `to` crosses the top face of the box `cframe` x `size` inside its
--- footprint, either way; nil when it does not.
-function Ballistics.surfaceCrossing(cframe: CFrame, size: Vector3, from: Vector3, to: Vector3): number?
-	if not (MathUtil.isFiniteVector(from) and MathUtil.isFiniteVector(to)) then
-		return nil
-	end
-	local a = cframe:PointToObjectSpace(from)
-	local b = cframe:PointToObjectSpace(to)
-	local top = size.Y * 0.5
-	local da, db = a.Y - top, b.Y - top
-	if da * db > 0 or math.abs(b.Y - a.Y) < 1e-9 then
-		return nil
-	end
-	local fraction = math.clamp(da / (a.Y - b.Y), 0, 1)
-	local point = a:Lerp(b, fraction)
-	if math.abs(point.X) > size.X * 0.5 or math.abs(point.Z) > size.Z * 0.5 then
-		return nil
-	end
-	return fraction
 end
 
 return table.freeze(Ballistics)

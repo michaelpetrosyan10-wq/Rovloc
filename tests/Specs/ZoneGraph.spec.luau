@@ -120,7 +120,7 @@ local function adjacencyLayout(): Layout
 			{ id = "R_North", kind = "Corridor", rect = R(8, 5, 10, 5) }, -- shares the chase's north wall
 			{ id = "C2", kind = "Chase", rect = R(10, 30, 5, 10) }, -- a second chase continuing south
 			{ id = "R_South", kind = "Storage", rect = R(10, 40, 5, 5) }, -- beyond C2's south wall
-			{ id = "R_Open", kind = "Gym", rect = R(45, 45, 20, 10) }, -- far away, no chase
+			{ id = "R_Open", kind = "Gallery", rect = R(45, 45, 20, 10) }, -- far away, no chase
 		},
 		doors = {},
 		anchors = {},
@@ -183,8 +183,8 @@ end
 
 return {
 	["ids follow the room:/vent:/duct: formats"] = function(t: Expect)
-		t.eq(ZoneGraph.roomNodeId("Level2_ScienceHall", "L2_Lab"), "room:Level2_ScienceHall:L2_Lab")
-		t.eq(ZoneGraph.ventNodeId("Level2_ScienceHall", "J01"), "vent:Level2_ScienceHall:J01")
+		t.eq(ZoneGraph.roomNodeId("Level2_Auditorium", "L2_Gallery"), "room:Level2_Auditorium:L2_Gallery")
+		t.eq(ZoneGraph.ventNodeId("Level2_Auditorium", "J01"), "vent:Level2_Auditorium:J01")
 		t.eq(ZoneGraph.segmentId("a", "b"), "a-b")
 		t.eq(ZoneGraph.ductPortalId("a", "b"), "duct:a-b")
 	end,
@@ -549,7 +549,7 @@ return {
 				t.truthy(edge and edge.kind == "Stair", "stair edge " .. spec.id)
 			end
 		end
-		local first, last = byId.Level0_Basement, byId.Level5_Roof
+		local first, last = byId.Level0_Basement, byId.Level3_Roof
 		if first and last then
 			local start = room(first.id, first.entry)
 			local goal = room(last.id, last.exit)

@@ -4,14 +4,13 @@
 --
 -- The place is built fresh with `rojo build` (default.project.json), then this script does what a real run does at
 -- the fixed seed RunSeed = 20251029 on Standard difficulty:
---   * WorldService.Start: ProceduralWorldBuilder.BuildAuthoritative() (lobby, the six levels with their statics,
---     stair towers, exterior) and the LightingRig baseline;
+--   * WorldService.Start: ProceduralWorldBuilder.BuildAuthoritative() (lobby, the four school levels of
+--     WorldConfig.LevelOrder with their statics, stair towers, exterior) and the LightingRig baseline;
 --   * WorldService.BeginRun: the director's plan (RunDirector.plan over ZoneGraph.build) -> BuildProp for every
---     planned prop and BuildFixtures for every level (grates in both looks, doors, gate, lockers, crate,
---     floodlight switch, the floor objectives' stations and locks) into Workspace.Runtime; plus a prop on every other
---     candidate anchor a run may pick (every floor objective's item candidates, every TrapCandidate, FlaskCandidate
---     and BatteryCandidate: attribute Planned = false) and the fume hood's acid flask, so the web picks per run by
---     showing the props on its picks;
+--     planned prop and BuildFixtures for every school level (grates in both looks, doors, gate, lockers, crate, the
+--     floor objectives' stations and locks) into Workspace.Runtime; plus a prop on every other candidate anchor a run
+--     may pick (every floor objective's item candidates, every TrapCandidate and BatteryCandidate: attribute
+--     Planned = false), so the web picks per run by showing the props on its picks;
 --   * the client's CosmeticWorldController: BuildCosmetic (skyline + anchor dressing);
 --   * the Creature rig (CreatureRigBuilder) at the origin, for the rig export;
 --   * the client LightingController's moonlight windows (Volumetrics.windowSpecs) for every layout.
@@ -87,7 +86,7 @@ for _, prop in plan.props do
 		built:SetAttribute("Planned", true)
 	end
 end
-for _, levelId in Enums.LevelId do
+for _, levelId in WorldConfig.LevelOrder do
 	Builder.BuildFixtures(levelId, Instances.runtimeLevel(levelId, true), plan)
 end
 
@@ -259,12 +258,10 @@ end
 --------------------------------------------------------------------------------
 
 -- Floor objectives. A run builds only its seed's picks; the web picks per run with the same rule, so every candidate
--- is exported: attribute Planned is true on this seed's picks and false on the rest (hide them), and the acid flask
--- the fume hood leaves once the mix is done stands at the hood's AcidFlaskSpot with Planned = false (show it then).
+-- is exported: attribute Planned is true on this seed's picks and false on the rest (hide them). A floor without an
+-- item (a plain crossing) has no candidates.
 local ObjectiveConfig = h.require("ReplicatedStorage.Shared.Config.ObjectiveConfig")
-local AcidFlaskBuilder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.AcidFlaskBuilder")
 local ObjectivePlaces = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces")
-local PropKit = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit")
 local objectiveData = {
 	floors = toJson(ObjectiveConfig.Floors),
 	hideReach = ObjectiveConfig.HideReach,
@@ -302,16 +299,15 @@ for _, spec in ObjectiveConfig.Floors do
 		picked[id] = slot
 	end
 	local candidates = {}
-	local index = 0
-	for _, anchor in layout.anchors do
-		if anchor.kind ~= spec.item.candidate then
+	local item = spec.item
+	for _, anchor in (if item then layout.anchors else {}) do
+		if anchor.kind ~= item.candidate then
 			continue
 		end
-		index += 1
-		local name = spec.item.prop .. "_" .. anchor.id
+		local name = item.prop .. "_" .. anchor.id
 		if not picked[anchor.id] then
 			-- exactly the prop a run that picks this anchor builds (RunDirector.objectiveProp, the plan's own): its
-			-- variant, look and slot (a reagent's kind, else none) are the anchor's
+			-- variant and look are the anchor's
 			Builder.BuildProp(RunDirector.objectiveProp(layout, spec, anchor), parent)
 		end
 		local model = parent:FindFirstChild(name)
@@ -322,12 +318,11 @@ for _, spec in ObjectiveConfig.Floors do
 		local hide = ObjectivePlaces.nearestHide(layout, place)
 		-- a guarded item: the careless walk in its guard lies on, where a careful player stands to take it and the walk
 		-- there round every trap spot
-		local approach = if spec.item.guarded then ObjectivePlaces.carelessWalk(layout, anchor) else nil
-		local stand = if spec.item.guarded then ObjectivePlaces.standingSpot(layout, anchor) else nil
+		local approach = if item.guarded then ObjectivePlaces.carelessWalk(layout, anchor) else nil
+		local stand = if item.guarded then ObjectivePlaces.standingSpot(layout, anchor) else nil
 		table.insert(candidates, {
 			anchorId = anchor.id,
 			room = anchor.room,
-			slot = RunDirector.candidateSlot(spec, index),
 			ref = anchor.ref,
 			pos = toJson(anchor.pos),
 			planned = picked[anchor.id] ~= nil,
@@ -377,19 +372,12 @@ for _, spec in ObjectiveConfig.Floors do
 		places = places,
 	}
 end
-for _, hood in (Instances.runtimeLevel("Level2_ScienceHall", true):FindFirstChild("FumeHoods") or roblox.Instance.new("Folder")):GetChildren() do
-	local spot = PropKit.findAttachment(hood, "AcidFlaskSpot")
-	if spot then
-		local flask = AcidFlaskBuilder.buildWorld(Instances.runtimeLevel("Level2_ScienceHall", true), PropKit.attachmentWorld(spot), hood.Name)
-		flask:SetAttribute("Planned", false)
-	end
-end
 
 --------------------------------------------------------------------------------
 -- Plan props: one on every candidate anchor a run may pick
 --------------------------------------------------------------------------------
 
--- A run picks which TrapCandidate / FlaskCandidate / BatteryCandidate anchors hold a prop, but a prop's look is its
+-- A run picks which TrapCandidate / BatteryCandidate anchors hold a prop, but a prop's look is its
 -- anchor's own (RunDirector.plannedProp: the variant and Builder.propRandom take no run seed), so the web keeps one
 -- entity per candidate anchor, exactly the prop a live run builds there, and shows a run's picks
 -- (worldData.plan replays RunDirector's draws). Attribute Planned: this seed's Standard picks.
@@ -410,13 +398,6 @@ do
 			most = 0,
 		},
 		{
-			kind = RunDirector.PropKinds.ChemicalFlask,
-			candidate = "FlaskCandidate",
-			levels = { RunDirector.ScienceLevel, RunDirector.PoolLevel },
-			skip = {},
-			most = 0,
-		},
-		{
 			kind = RunDirector.PropKinds.Battery,
 			candidate = "BatteryCandidate",
 			levels = WorldConfig.LevelOrder,
@@ -428,8 +409,7 @@ do
 		local spec = DifficultyConfig[name]
 		if spec then
 			sets[1].most = math.max(sets[1].most, spec.trapCount)
-			sets[2].most = math.max(sets[2].most, spec.flasksScienceHall, spec.flasksPool)
-			sets[3].most = math.max(sets[3].most, spec.batteriesPerLevel)
+			sets[2].most = math.max(sets[2].most, spec.batteriesPerLevel)
 		end
 	end
 	for _, set in sets do
@@ -472,7 +452,7 @@ end
 -- seed's route) and the leaf "Jam" (the collapse behind it). The web picks a route per run, so every Jam leaf is
 -- exported with its geometry shown; the web hides it on the run's used doors and shuts + locks the others.
 local DoorBuilder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.DoorBuilder")
-for _, levelId in Enums.LevelId do
+for _, levelId in WorldConfig.LevelOrder do
 	for _, child in Instances.runtimeLevel(levelId, true):GetDescendants() do
 		if child:IsA("Model") and child:GetAttribute("StairwellId") ~= nil then
 			DoorBuilder.showJam(child, true)
@@ -484,7 +464,7 @@ end
 -- "Rusted" of the grate, its panel and each screw) and this seed's plan shows one (setLocked). The web locks grates per
 -- run, so both looks are exported shown; the web shows the one each run's plan picks (src/game/mechanics/vents.js).
 local VentGrateBuilder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.VentGrateBuilder")
-for _, levelId in Enums.LevelId do
+for _, levelId in WorldConfig.LevelOrder do
 	for _, child in Instances.runtimeLevel(levelId, true):GetDescendants() do
 		if child:IsA("Model") and child:HasTag("VentGrate") then
 			assert(VentGrateBuilder.showLook(child, "Galvanized", true), child.Name .. ": no galvanized look")
@@ -622,10 +602,8 @@ local school = Workspace:FindFirstChild("School")
 local lobby = Workspace:FindFirstChild("Lobby")
 local runtime = Workspace:FindFirstChild("Runtime")
 
-local LEVEL_IDS = {}
-for _, id in Enums.LevelId do
-	table.insert(LEVEL_IDS, id)
-end
+local LEVEL_IDS = WorldConfig.LevelOrder
+local ROOF = LEVEL_IDS[#LEVEL_IDS]
 
 -- The level key a world position belongs to (cosmetic dressing and skyline are placed by position).
 local function levelForPosition(p): string
@@ -641,11 +619,11 @@ local function levelForPosition(p): string
 				inTower = true
 			end
 		end
-		if inTower and p.Y < WorldConfig.Levels.Level5_Roof.elevation then
+		if inTower and p.Y < WorldConfig.Levels[ROOF].elevation then
 			return "Stairwells"
 		end
-		if p.Y > WorldConfig.Levels.Level5_Roof.elevation - 2 and p.X > -40 and p.X < size.X + 40 and p.Z > -40 and p.Z < size.Y + 40 then
-			return "Level5_Roof"
+		if p.Y > WorldConfig.Levels[ROOF].elevation - 2 and p.X > -40 and p.X < size.X + 40 and p.Z > -40 and p.Z < size.Y + 40 then
+			return ROOF
 		end
 		return "Exterior"
 	end
@@ -1380,7 +1358,7 @@ end
 
 --------------------------------------------------------------------------------
 -- RunDirector's plans for a spread of seeds: web/tools/data-test.mjs replays each with the web's port (worldData.plan
--- and routes, on Rng) and requires the same picks, slots and prop variants, so a seed plays the same run on the web as
+-- and routes, on Rng) and requires the same picks and prop variants, so a seed plays the same run on the web as
 -- on a live server.
 --------------------------------------------------------------------------------
 
@@ -1400,7 +1378,6 @@ for _, seed in PLAN_SEEDS do
 				anchorId = prop.anchorId,
 				levelId = prop.levelId,
 				variant = prop.variant,
-				slot = prop.slot,
 			})
 		end
 		local locked = {}
@@ -1454,7 +1431,7 @@ local out = {
 		maxBrightness = toJson(LightingMood.MaxBrightness),
 		fixtureCones = (function()
 			local cones = {}
-			for _, kind in { "Fluorescent", "ClassroomGlow", "Bulb", "Floodlight", "EmergencyRed", "ExitSign", "BoilerGlow" } do
+			for _, kind in { "Fluorescent", "ClassroomGlow", "Bulb", "EmergencyRed", "ExitSign", "BoilerGlow" } do
 				local shape = FixtureGlow.cone(kind)
 				if shape then
 					cones[kind] = toJson(shape)

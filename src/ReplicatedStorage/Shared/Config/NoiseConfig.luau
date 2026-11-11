@@ -20,7 +20,6 @@ NoiseConfig.Kinds = table.freeze({
 	CrouchWalk = { radius = 5, priority = "Low", medium = "Air", interval = 0.6 },
 	SlowVentCrawl = { radius = 8, priority = "Low", medium = "Vent", interval = 0.7 },
 	GrateUnscrew = { radius = 10, priority = "Low", medium = "Air", interval = 0.9 },
-	Treading = { radius = 12, priority = "Low", medium = "Water", interval = 0.8 },
 	Walk = { radius = 22, priority = "Normal", medium = "Air", interval = 0.45 },
 	Gasp = { radius = 40, priority = "High", medium = "Air", interval = 0 },
 	FlaskShatter = { radius = 50, priority = "High", medium = "Air", interval = 0 },
@@ -30,8 +29,6 @@ NoiseConfig.Kinds = table.freeze({
 	-- climbing into a hiding spot (a locker, a barrel, a cabinet): quietly, or hurried (sprinting a moment before)
 	HideEnter = { radius = 8, priority = "Low", medium = "Air", interval = 0 },
 	HideEnterHurried = { radius = 14, priority = "Normal", medium = "Air", interval = 0 },
-	Freestyle = { radius = 75, priority = "High", medium = "Water", interval = 0.35 },
-	Splash = { radius = 75, priority = "High", medium = "Water", interval = 0 },
 	VentScurry = { radius = 90, priority = "High", medium = "Vent", interval = 0.3 },
 	GrateKick = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
 	FloorDebris = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
@@ -42,12 +39,10 @@ NoiseConfig.Kinds = table.freeze({
 	Scripted = { radius = 0, priority = "Low", medium = "Air", interval = 0 },
 	-- co-op text chat (the website's; Roblox chat is never heard)
 	ChatMessage = { radius = 25, priority = "Normal", medium = "Air", interval = 0 },
-	-- Floor objectives (ObjectiveConfig): a working hold (keys in a lock, the mix, the valve, the cutters) at its start
-	-- and once a second while it runs; a loud single action (the main breaker, an exit unlocking, the crate chain
-	-- snapping); the gym generator starting.
+	-- Floor objectives (ObjectiveConfig): a working hold (keys in a lock) at its start and once a second while it runs;
+	-- a loud single action (the main breaker, an exit unlocking).
 	ObjectiveWork = { radius = 34, priority = "Normal", medium = "Air", interval = 0 },
 	ObjectiveClunk = { radius = 110, priority = "High", medium = "Air", interval = 0 },
-	GeneratorStart = { radius = 170, priority = "Critical", medium = "Air", interval = 0 },
 } :: { [string]: NoiseSpec })
 
 -- Observed horizontal speed (studs/s) above which a moving character is at least this loud,
@@ -62,23 +57,6 @@ NoiseConfig.VentSpeedTiers = table.freeze({
 	{ minSpeed = 6.5, kind = "VentScurry" },
 	{ minSpeed = 0.75, kind = "SlowVentCrawl" },
 } :: { { minSpeed: number, kind: Enums.NoiseKind } })
-
-NoiseConfig.WaterSpeedTiers = table.freeze({
-	{ minSpeed = 6.5, kind = "Freestyle" },
-	{ minSpeed = 0.75, kind = "Treading" },
-} :: { { minSpeed: number, kind: Enums.NoiseKind } })
-
--- Splash meter: water noise accumulates per player and decays; crossing the threshold invites a grab. After a
--- crossing the meter re-arms only once it has decayed below `rearmBelow` (hysteresis), so the sawtooth between the
--- strokes of one continuous swim never reads as a second crossing; a real calm spell is needed.
-NoiseConfig.SplashMeter = table.freeze({
-	perFreestylePulse = 1,
-	perSplash = 2.5,
-	perTreadingPulse = 0.1,
-	decayPerSecond = 0.35,
-	grabThreshold = 6,
-	rearmBelow = 4,
-})
 
 -- A landing heard as JumpLand: airborne at least this long, on foot.
 NoiseConfig.JumpLandAirborne = 0.32

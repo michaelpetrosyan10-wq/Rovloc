@@ -61,10 +61,6 @@ local Geometry = {}
 
 Geometry.EPS = EPS
 
--- Thickness of a pool basin's tiled side walls (the coping ring inside the basin rect). Shared by the shell
--- builder (which builds them) and the vent builder (whose flooded grate ends reach through them).
-Geometry.BasinWall = 1
-
 --------------------------------------------------------------------------------
 -- Build-wide part counter + cooperative yielding
 --------------------------------------------------------------------------------

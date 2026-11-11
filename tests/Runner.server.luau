@@ -10,7 +10,7 @@ if not specs then
 	return
 end
 
-local report = SpecRunner.run(specs, require)
+local report = SpecRunner.run(specs, require, require(script.Parent.PortPending))
 for _, line in report.lines do
 	if string.sub(line, 1, 4) == "FAIL" then
 		warn("[Specs] " .. line)
@@ -21,3 +21,4 @@ end
 local container = script.Parent :: Instance
 container:SetAttribute("SpecsPassed", report.passed)
 container:SetAttribute("SpecsFailed", report.failed)
+container:SetAttribute("SpecsParked", report.parked)

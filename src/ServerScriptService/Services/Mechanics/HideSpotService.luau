@@ -8,8 +8,7 @@
 -- rebuilds the run's fixtures in its own BeginRun before this one). They share one convention: the ExitAnchor,
 -- HideAnchor and PeekAnchor attachments and a Hide prompt (a 0.25 s hold); the leaf (a locker's door, a barrel's lid, a
 -- cabinet's door) swings by LockerMotion. A spot is Free, Entering, Hidden (one occupant), Exiting or Smashed (its leaf
--- torn off by the Creature: never usable again this run). The Hide prompt serves every unsmashed spot, except one Floor
--- 3's key search holds ajar (SetSearchOpen).
+-- torn off by the Creature: never usable again this run). The Hide prompt serves every unsmashed spot.
 --
 -- Getting in (canHide: the run is live, Alive with a living body, no control lock, on foot (Standing / Sprinting /
 -- Crouching), not hiding already, the spot Free, and the Creature not chasing this player; refusals that matter are
@@ -76,7 +75,6 @@ local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local DoorMotion = require(ReplicatedStorage.Shared.Sequence.DoorMotion)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
-local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local Instances = require(ReplicatedStorage.Shared.Instances)
 local LockerMotion = require(ReplicatedStorage.Shared.Sequence.LockerMotion)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
@@ -135,7 +133,7 @@ local OCCUPIED_HINT = "Hud.LockerOccupied"
 local SEEN_HINT = "Hud.LockerSeen"
 local BLOCKED_HINT = "Hud.LockerBlocked"
 local WARN_HINT = "Hud.HideWarn"
-local DEFAULT_LEVEL: Enums.LevelId = "Level3_Gymnasium"
+local DEFAULT_LEVEL: Enums.LevelId = "Level1_Hallways"
 
 local HIDE_ANCHOR = "HideAnchor"
 local PEEK_ANCHOR = "PeekAnchor"
@@ -143,7 +141,6 @@ local EXIT_ANCHOR = "ExitAnchor"
 local PROMPT_HOST = "HidePrompt"
 
 local LEAD = GameConfig.OneShotLead
-local SEARCH_OPEN = ObjectiveConfig.Tuning.SearchOpen
 local SLIT_OUT = 0.45 -- studs from the peeking eye out through the door to the slits' outer face
 local EXIT_SIDE = 1.6 -- a blocked exit spot tries this far to either side
 local EXIT_FURTHER = 1.2 -- ... then this much further out
@@ -276,7 +273,6 @@ export type Locker = {
 	exitSpot: CFrame?, -- where the occupant leaving is put (root CFrame)
 	check: Check?,
 	stay: Stay?,
-	searchOpen: boolean?, -- Floor 3's key search holds the door ajar (no hiding while it stands open)
 }
 
 local HideSpotService = {}
@@ -1337,7 +1333,7 @@ HideSpotService.HideHandler = {
 	kind = HIDE_KIND,
 	filter = function(host: Instance, _prompt: ProximityPrompt): boolean
 		local locker = lockerOf(host)
-		return locker ~= nil and locker.state ~= "Smashed" and locker.searchOpen ~= true
+		return locker ~= nil and locker.state ~= "Smashed"
 	end,
 	canUse = function(player: Player, _prompt: ProximityPrompt, host: Instance): (boolean, string?)
 		local locker = lockerOf(host)
@@ -1726,30 +1722,6 @@ function HideSpotService.GetCheck(player: Player): (number?, number?, number?)
 		return nil, nil, nil
 	end
 	return check.startedAt, check.windowStart, check.windowEnd
-end
-
--- Floor 3's key search: swings a Free locker's door ajar (`open`: ObjectiveConfig.Tuning.SearchOpen of fully open, the
--- LockerDoor creak) or shut again; its Hide prompt waits while it stands open. False when the spot is not Free or
--- already so.
-function HideSpotService.SetSearchOpen(model: Model, open: boolean): boolean
-	local locker = lockers[model]
-	if not locker or locker.state ~= "Free" or (locker.searchOpen == true) == open then
-		return false
-	end
-	local now = serverNow()
-	local motion = locker.motion
-	local from = if motion then (DoorMotion.valueAt(motion, now)) elseif locker.searchOpen then SEARCH_OPEN else 0
-	locker.searchOpen = open
-	local seconds = if open then LockerMotion.OpenSeconds else LockerMotion.CloseSeconds
-	startDoor(locker, "Swing", from, if open then SEARCH_OPEN else 0, seconds, now + LEAD, "Shut", nil)
-	refreshPrompt(locker)
-	return true
-end
-
--- Whether Floor 3's key search holds the locker ajar.
-function HideSpotService.IsSearchOpen(model: Model): boolean
-	local locker = lockers[model]
-	return locker ~= nil and locker.searchOpen == true
 end
 
 function HideSpotService.GetLockers(): { Model }

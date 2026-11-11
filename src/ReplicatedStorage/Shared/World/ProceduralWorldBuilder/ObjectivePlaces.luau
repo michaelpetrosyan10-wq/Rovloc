@@ -6,15 +6,12 @@
 --                               Locker      a hideable locker (every floor)
 --                               Barrel      a steel drum to climb into (tunnel floors)
 --                               Cabinet     a tall slatted steel cabinet (tunnel floors)
---                               Vent        the mouth of a grate the director never locks and no hatch shuts
+--                               Vent        the mouth of a grate the director never locks
 --                               DarkCorner  a room corner or a pillar no burning light reaches (an old basement
 --                                           without tunnels, where nothing hunted; never on a tunnel floor)
---                               DryFooting  out of the water (the pool, where the Creature cannot leave the water)
---                               Cover       a plant block to crouch behind, at least CoverHeight tall (the roof)
 --   nearestHide(layout, place) the closest hide spot the place can use, with its distance (straight line; lockers and
 --                              vents only count in the place's own room or a room joined to it by a doorway; on a
---                              tunnel floor every locker, barrel and cabinet counts, by the walk to it, TunnelRules,
---                              and a place under a pool's water counts its swim to dry footing too)
+--                              tunnel floor every locker, barrel and cabinet counts, by the walk to it, TunnelRules)
 --   arrivalPoint(layout, room) where the squad arrives in a room: the centroid of its PlayerSpawn anchors
 --   entryPoint(layout)         the arrival point of the layout's entry room
 --   entries(layout)            every way a run may enter the floor: the entry room and every entry vestibule candidate
@@ -22,8 +19,8 @@
 --   walkDistance(layout, fromRoom, from, toRoom, to)
 --                              studs walked between two floor points: straight lines across rooms (rooms are convex
 --                              rects) from door to door, and crawled through the vents a squad can always use, in the
---                              worst case a run produces (every Gate shut, every lockable grate locked, the grates a
---                              HatchValve shuts closed). math.huge when there is no way.
+--                              worst case a run produces (every Gate shut, every lockable grate locked). math.huge
+--                              when there is no way.
 --   entryDistance(layout, place) walkDistance to the place from the nearest of the entries (whichever stairwell a
 --                              run arrives by, it is never close)
 --   quarter(pos)               which quarter of the footprint a point lies in (1 NW, 2 NE, 3 SW, 4 SE; split at its
@@ -44,14 +41,13 @@ local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local BearTrapBuilder = require(script.Parent.Props.BearTrapBuilder)
 local DoorBuilder = require(script.Parent.Props.DoorBuilder)
 local HideBuilder = require(script.Parent.Props.HideBuilder)
-local PoolWaterBuilder = require(script.Parent.Props.PoolWaterBuilder)
 local PropKit = require(script.Parent.Props.PropKit)
 local TunnelRules = require(script.Parent.TunnelRules)
 
 type Layout = LayoutSchema.LevelLayout
 type Anchor = LayoutSchema.Anchor
 
-export type HideKind = "Locker" | "Barrel" | "Cabinet" | "Vent" | "DarkCorner" | "DryFooting" | "Cover"
+export type HideKind = "Locker" | "Barrel" | "Cabinet" | "Vent" | "DarkCorner"
 
 export type Place = { id: string, kind: Enums.AnchorKind, room: string, pos: Vector3 }
 
@@ -59,26 +55,20 @@ export type Hide = { kind: HideKind, id: string, room: string, pos: Vector3, dis
 
 local ObjectivePlaces = {}
 
-ObjectivePlaces.CoverHeight = 3.5
 ObjectivePlaces.CornerInset = 1.5
-ObjectivePlaces.ClimbBand = table.freeze({ min = 0.1, max = 2.3 }) -- SwimController's climb-out band over the water
 
 local STATION_KINDS: { [string]: boolean } = {
 	BreakerPanel = true,
-	FumeHood = true,
-	Generator = true,
-	StoreLock = true,
-	HatchValve = true,
-	CrateChain = true,
 	ExitLock = true,
 }
 
 -- Every objective spot of `layout` in layout order: the floor's item candidates, its stations and its locks.
 function ObjectivePlaces.places(layout: Layout): { Place }
 	local spec = ObjectiveConfig.forLevel(layout.id)
+	local item = if spec then spec.item else nil
 	local out: { Place } = {}
 	for _, anchor in layout.anchors do
-		if (spec and anchor.kind == spec.item.candidate) or STATION_KINDS[anchor.kind] then
+		if (item and anchor.kind == item.candidate) or STATION_KINDS[anchor.kind] then
 			table.insert(out, { id = anchor.id, kind = anchor.kind, room = anchor.room, pos = anchor.pos })
 		end
 	end
@@ -153,31 +143,6 @@ local function darkCorners(layout: Layout): { Hide }
 	return out
 end
 
--- Grates a HatchValve shuts (not a way out until the objective opens it).
-local function hatched(layout: Layout): { [string]: boolean }
-	local out: { [string]: boolean } = {}
-	local vents = layout.vents
-	if not vents then
-		return out
-	end
-	local nodes: { [string]: LayoutSchema.VentNodeSpec } = {}
-	for _, node in vents.nodes do
-		nodes[node.id] = node
-	end
-	for _, anchor in layout.anchors do
-		if anchor.kind ~= "HatchValve" then
-			continue
-		end
-		for _, grate in vents.grates do
-			local node = nodes[grate.node]
-			if node and math.abs(node.x - anchor.pos.X) < 2.5 and math.abs(node.z - anchor.pos.Z) < 1.5 then
-				out[grate.id] = true
-			end
-		end
-	end
-	return out
-end
-
 -- Every hide spot of `layout` (distance 0; nearestHide fills it in).
 function ObjectivePlaces.hideSpots(layout: Layout): { Hide }
 	local out: { Hide } = {}
@@ -193,10 +158,9 @@ function ObjectivePlaces.hideSpots(layout: Layout): { Hide }
 		for _, node in vents.nodes do
 			nodes[node.id] = node
 		end
-		local shut = hatched(layout)
 		for _, grate in vents.grates do
 			local node = nodes[grate.node]
-			if node and not grate.lockable and not shut[grate.id] then
+			if node and not grate.lockable then
 				table.insert(out, {
 					kind = "Vent",
 					id = grate.id,
@@ -211,30 +175,8 @@ function ObjectivePlaces.hideSpots(layout: Layout): { Hide }
 		for _, corner in darkCorners(layout) do
 			table.insert(out, corner)
 		end
-	elseif layout.id == "Level5_Roof" then
-		for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
-			if platform.top >= ObjectivePlaces.CoverHeight then
-				local r = platform.rect
-				table.insert(out, {
-					kind = "Cover",
-					id = platform.id,
-					room = platform.room,
-					pos = Vector3.new(r.x + r.w / 2, 0, r.z + r.d / 2),
-					distance = 0,
-				})
-			end
-		end
 	end
 	return out
-end
-
-local function platformById(layout: Layout, id: string): LayoutSchema.Platform?
-	for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
-		if platform.id == id then
-			return platform
-		end
-	end
-	return nil
 end
 
 type TunnelHides = { graph: TunnelRules.WalkGraph, dist: { number }, hides: { Hide } }
@@ -271,26 +213,7 @@ end
 -- The closest hide spot `place` can use on `layout`, or nil when the floor has none in reach of it.
 function ObjectivePlaces.nearestHide(layout: Layout, place: Place): Hide?
 	if layout.tunnels then
-		local best = nearestTunnelHide(layout, place)
-		-- under a pool's water the Creature cannot follow out of it: dry footing is the hiding spot there
-		if TunnelRules.underWater(layout :: any, place.room, place.pos) then
-			for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-				if basin.room == place.room then
-					local groups = PoolWaterBuilder.dryGroups(
-						layout,
-						basin,
-						ObjectivePlaces.ClimbBand.min,
-						ObjectivePlaces.ClimbBand.max
-					)
-					local swim = PoolWaterBuilder.swimToDry(groups, place.pos.X, place.pos.Z)
-					if best == nil or swim < (best :: Hide).distance then
-						best =
-							{ kind = "DryFooting", id = basin.id, room = basin.room, pos = place.pos, distance = swim }
-					end
-				end
-			end
-		end
-		return best
+		return nearestTunnelHide(layout, place)
 	end
 	local best: Hide? = nil
 	local function consider(hide: Hide, distance: number)
@@ -302,25 +225,12 @@ function ObjectivePlaces.nearestHide(layout: Layout, place: Place): Hide?
 	local flat = Vector3.new(place.pos.X, 0, place.pos.Z)
 	for _, hide in ObjectivePlaces.hideSpots(layout) do
 		local d = (Vector3.new(hide.pos.X, 0, hide.pos.Z) - flat).Magnitude
-		if hide.kind == "Cover" then
-			local platform = platformById(layout, hide.id)
-			if platform then
-				consider(hide, PoolWaterBuilder.pointGap(platform.rect, flat.X, flat.Z))
-			end
-		elseif hide.kind == "DarkCorner" then
+		if hide.kind == "DarkCorner" then
 			if hide.room == place.room then
 				consider(hide, d)
 			end
 		elseif near[hide.room] then
 			consider(hide, d)
-		end
-	end
-	for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-		local groups =
-			PoolWaterBuilder.dryGroups(layout, basin, ObjectivePlaces.ClimbBand.min, ObjectivePlaces.ClimbBand.max)
-		local swim = PoolWaterBuilder.swimToDry(groups, flat.X, flat.Z)
-		if basin.room == place.room then
-			consider({ kind = "DryFooting", id = basin.id, room = basin.room, pos = place.pos, distance = 0 }, swim)
 		end
 	end
 	return best
@@ -378,7 +288,7 @@ end
 
 -- The floor plan as portals: every passable door's centre on its wall and every vent node, joined across each room
 -- (straight lines, every pair of the room's portals) and along the ducts. Worst case: Gate doors shut, lockable
--- grates locked, hatch-shut grates closed.
+-- grates locked.
 local function walkGraph(layout: Layout): WalkGraph
 	local cached = walkCache[layout]
 	if cached then
@@ -425,9 +335,8 @@ local function walkGraph(layout: Layout): WalkGraph
 				link("vent:" .. edge.a, "vent:" .. edge.b)
 			end
 		end
-		local shut = hatched(layout)
 		for _, grate in vents.grates do
-			if not grate.lockable and not shut[grate.id] and nodes["vent:" .. grate.node] then
+			if not grate.lockable and nodes["vent:" .. grate.node] then
 				member(grate.room, "vent:" .. grate.node)
 			end
 		end

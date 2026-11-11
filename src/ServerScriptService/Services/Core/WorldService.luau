@@ -16,7 +16,7 @@
 --
 -- Runs. BeginRun builds every prop in NoiseAndDirectorService's plan into Workspace.Runtime.<level> through
 -- ProceduralWorldBuilder.BuildProp, rebuilds every level's fixtures (vent grates with the plan's locks, fire doors,
--- the hallway gate, lockers, the parachute crate, the floodlight switch) there through BuildFixtures, and, when a
+-- the hallway gate, lockers, the parachute crate) there through BuildFixtures, and, when a
 -- "Creature" rig builder is registered, builds the Creature at the
 -- CreatureSpawn anchor of LevelDirector's current level (or the next level that has one), tags it `Creature` and
 -- gives the server network ownership. ServerMain orders NoiseAndDirectorService (plans) and LevelDirector (enters
@@ -38,6 +38,7 @@ local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local LevelDirector = require(ServerScriptService.Services.Core.LevelDirector)
 local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
@@ -225,7 +226,7 @@ end
 local function spawnFixtures(ctx: Types.RunContext)
 	local plan = NoiseAndDirectorService.GetPlan()
 	local total = 0
-	for _, levelId: Enums.LevelId in Enums.LevelId do
+	for _, levelId: Enums.LevelId in WorldConfig.LevelOrder do
 		local parent = Instances.runtimeLevel(levelId, true)
 		if parent then
 			total += Builder.BuildFixtures(levelId, parent, plan)
@@ -236,9 +237,9 @@ end
 
 -- The first CreatureSpawn anchor at or after `levelId` in run order.
 local function creatureSpawn(levelId: Enums.LevelId): (CFrame?, Enums.LevelId?)
-	local start = Enums.levelIndex(levelId) or 1
-	for i = start, #Enums.LevelId do
-		local candidate: Enums.LevelId = Enums.LevelId[i]
+	local start = table.find(WorldConfig.LevelOrder, levelId) or 1
+	for i = start, #WorldConfig.LevelOrder do
+		local candidate: Enums.LevelId = WorldConfig.LevelOrder[i]
 		local layout = Builder.getLayout(candidate)
 		if not layout then
 			continue
@@ -284,7 +285,7 @@ local function spawnCreature()
 		return
 	end
 	-- It hunts from the basement on (docs/MONSTER.md): placed on the level the run starts on.
-	local current: Enums.LevelId = LevelDirector.GetCurrentLevel() or Enums.LevelId[1]
+	local current: Enums.LevelId = LevelDirector.GetCurrentLevel() or WorldConfig.LevelOrder[1]
 	local cframe, levelId = creatureSpawn(current)
 	if not cframe or not levelId then
 		log.warn("no CreatureSpawn anchor on or after the current level; the Creature was not placed")

@@ -1,7 +1,7 @@
 --!strict
 -- CameraStack: priority camera overrides blended over the first-person base view.
 --
--- Priority (low to high): base < Trapped < Struggle < Spectating < Jumpscare < Cutscene. Each pushed override
+-- Priority (low to high): base < Trapped < Spectating < Jumpscare < Cutscene. Each pushed override
 -- supplies a CFrame function (called once per frame while it has any weight), an optional FOV and blend-in /
 -- blend-out times. Its weight ramps 0 -> 1 linearly over blendIn while pushed and back to 0 over blendOut after
 -- PopOverride (a zero time switches instantly); the layer leaves the stack once it has fully blended out.
@@ -59,10 +59,9 @@ CameraStack.DefaultBlendOut = 0.5
 
 CameraStack.Priority = table.freeze({
 	Trapped = 1,
-	Struggle = 2,
-	Spectating = 3,
-	Jumpscare = 4,
-	Cutscene = 5,
+	Spectating = 2,
+	Jumpscare = 3,
+	Cutscene = 4,
 } :: { [string]: number })
 
 -- Weight after `dt` seconds of blending toward 1 (active) or 0 (popped).

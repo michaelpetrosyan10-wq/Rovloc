@@ -24,7 +24,7 @@ local SpecRunner = require(script.Parent.Parent.SpecRunner)
 type Expect = SpecRunner.Expect
 type Listener = Hearing.Listener
 
-local LEVEL: Enums.LevelId = "Level2_ScienceHall"
+local LEVEL: Enums.LevelId = "Level2_Auditorium"
 local DIFFICULTIES: { Enums.Difficulty } = { "Standard", "Nightmare" }
 local EPS = 1e-6
 local VPM = NoiseConfig.VentPropagationMultiplier
@@ -169,7 +169,7 @@ return {
 	["perceive: same level only, and never a zero-radius pulse"] = function(t: Expect)
 		local listener = listenerAt(Vector3.new(0, 0, 5))
 		listener.occluders = noWallsAsked(t)
-		local elsewhere = pulse("GrateKick", Vector3.zero, { levelId = "Level3_Gymnasium" })
+		local elsewhere = pulse("GrateKick", Vector3.zero, { levelId = "Level1_Hallways" })
 		t.eq(Hearing.perceive(elsewhere, listener), nil, "another level")
 		local lobby = pulse("GrateKick", Vector3.zero)
 		lobby.levelId = nil
@@ -238,15 +238,6 @@ return {
 			t.eq(Hearing.perceive(pulse("Sprint", source), far), nil, count .. " walls: just outside")
 		end
 		t.truthy(WO < 1, "walls muffle")
-	end,
-
-	["Water: straight line, walls never counted"] = function(t: Expect)
-		local radius = NoiseConfig.Kinds.Freestyle.radius
-		local listener = listenerAt(Vector3.new(radius - 0.5, -3, 0))
-		listener.occluders = noWallsAsked(t)
-		local heard = Hearing.perceive(pulse("Freestyle", Vector3.new(0, -3, 0)), listener)
-		assert(heard, "heard across the pool")
-		t.near(heard.strength, 0.5 / radius, 1e-4, "strength by straight distance")
 	end,
 
 	["Vent, listener in a duct: rail distance x VentPropagationMultiplier, no walls"] = function(t: Expect)

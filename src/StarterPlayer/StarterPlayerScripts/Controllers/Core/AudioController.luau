@@ -9,11 +9,11 @@
 --     server's active loops re-sent with their original startAt). Every cue has an id; AudioStop { id, fade } fades
 --     that voice out, or cancels it if it is still waiting to start.
 --   * Acoustics: 5 Hz client point-in-box against the Zone parts finds the listener's room; its AcousticPreset
---     drives AudioBuses.setEnvironment. A move state overrides it (in a duct -> Vent, submerged -> Underwater) and
+--     drives AudioBuses.setEnvironment. A move state overrides it (in a duct -> Vent) and
 --     SetEnvironmentOverride (later phases: vent transitions, cutscenes) overrides both. No zone = Outdoor.
 --   * Ambience bed: the level's layout.ambience drone (the room the listener stands in decides; otherwise
 --     CurrentLevel during a run; the Lobby bed between runs), crossfaded on change, with the bed's stingers
---     (SynthPresets.Beds) scattered around the listener at seeded random intervals. Submerged -> UnderwaterBed.
+--     (SynthPresets.Beds) scattered around the listener at seeded random intervals.
 --   * Emitters: AmbientEmitter (attr Preset) and DripPipe parts near the listener get looping voices; only the
 --     nearest MAX_EMITTER_VOICES within each preset's rollOff play at once.
 --   * Volumes: AudioBuses applies the SettingsSchema defaults; the P3 SettingsController calls AudioBuses.setVolume.
@@ -56,13 +56,11 @@ local EMITTER_FADE_OUT = 0.6
 local ENV_FADE = 0.8
 local ENV_FADE_FAST = 0.25
 local BED_FADE = 3
-local BED_FADE_FAST = 0.6
 local STINGER_HEIGHT = 4
 local LOOP_CUE_FADE = 0.4
 local STOP_FADE = 0.4
 local MAX_STOP_FADE = 10
 local LATE_SNAP = 0.25
-local UNDERWATER_BED = "UnderwaterBed"
 local DRIP_PRESET = "Drip"
 local LOBBY_LAYOUT = "Lobby"
 local RUN_PHASES: { Enums.MatchPhase } = { "Deploying", "InRun", "RunEnded" }
@@ -219,8 +217,6 @@ local function movePreset(): Enums.AcousticPreset?
 	local moveState = localMoveState()
 	if moveState == "VentCrawling" or moveState == "VentScurrying" then
 		return "Vent"
-	elseif moveState == "Underwater" then
-		return "Underwater"
 	end
 	return nil
 end
@@ -267,9 +263,6 @@ local function layoutAmbience(layoutId: string): string?
 end
 
 local function desiredBed(): string?
-	if localMoveState() == "Underwater" then
-		return UNDERWATER_BED
-	end
 	local zone = currentZone
 	if zone then
 		local level = zoneLevel[zone] or ""
@@ -309,8 +302,7 @@ local function refreshBed()
 	if target == bedName and (target == nil or (voice ~= nil and voice:IsPlaying())) then
 		return
 	end
-	local fast = target == UNDERWATER_BED or bedName == UNDERWATER_BED
-	local fade = if fast then BED_FADE_FAST else BED_FADE
+	local fade = BED_FADE
 	if voice then
 		voice:Stop(fade)
 		bedVoice = nil

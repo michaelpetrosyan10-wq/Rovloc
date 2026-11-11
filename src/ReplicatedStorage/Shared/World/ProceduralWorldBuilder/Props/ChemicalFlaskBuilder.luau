@@ -1,6 +1,6 @@
 --!strict
--- ChemicalFlaskBuilder: the volatile chemical flasks of the Science Hall's lab worktops and the Pool's starting blocks
--- and decks (plan prop kind "ChemicalFlask"; ctx.prop.cframe is the resting point: worktop top, block top or deck).
+-- ChemicalFlaskBuilder: the volatile chemical flasks (plan prop kind "ChemicalFlask"; ctx.prop.cframe is the resting
+-- point: a worktop, a shelf or the floor).
 --
 -- A flat-bottomed boiling flask, in flask space (origin on the resting point, Y up, the tag facing +Z): a glass bulb
 -- on a small foot ("Base"), a neck with a rolled lip and a two-step rubber stopper, the glowing liquid (three Neon

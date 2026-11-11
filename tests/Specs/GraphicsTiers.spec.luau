@@ -31,7 +31,7 @@ local SettingsMenu = require(Controllers.HUD.SettingsMenu)
 type Expect = SpecRunner.Expect
 type TierName = GraphicsConfig.TierName
 
-local LEVEL: Enums.LayoutId = "Level4_FloodedPool"
+local LEVEL: Enums.LayoutId = "Level1_Hallways"
 local WORLD_RATE = 3 -- the sample world emitter's built rate
 local OWNED_RATE = 5
 

@@ -1,13 +1,12 @@
 --!strict
--- Level 5 (Phase 8): the roof controller. Its rules on the real layout: the housing, the door and the spot behind it,
--- who is still inside, when the squad is out (and clear of the door), when the door goes, the chasing Creature's pace,
--- when the finale starts, where the Creature stands on the ledge and whom it stares at; the roof scenes as data. Then
--- the live controller on a fake clock with an injected squad, Creature, door, jumps and senders: the Creature held
--- hidden from the start, the door opening for the first arrival, the door sequence (slam, stage, reveal, smash, the
--- chase, RUN), a straggler inside (no slam, no reveal in sight), the final sprint (pace and adrenaline), the finale for
--- a squad and for a solo player (the ledge, the stare, two flashes, the reveal and the vanish, the scripted landing,
--- every jumper escaping once), a downed teammate who does not hold it and is hunted after, a straggler who holds it
--- until FinaleWait, a Creature that cannot be taken (the storm alone), a late lander's own fade, and deactivation.
+-- Level 3: the roof controller. Its rules on the real layout: the housing, the door and the spot behind it, who is
+-- still inside, when the squad is out (and clear of the door), when the door goes, when the Creature steps onto the
+-- ledge, where it stands there and whom it stares at; the door scene as data. Then the live controller on a fake
+-- clock with an injected squad, Creature, door, jumps and senders: the Creature held hidden from the start, the door
+-- opening for the first arrival, the door sequence (slam, stage, reveal, smash, the chase, RUN), a straggler inside
+-- (no slam, no reveal in sight), the ledge staging for a squad and for a solo jumper (every jumper escaping once, at
+-- the landing, their hold ended there), a downed teammate who does not hold it, a straggler on the roof who does, a
+-- Creature that is busy (asked for again), the dev staging, and deactivation.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -24,7 +23,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Levels = require(ServerScriptService.Services.Levels)
-local Level5 = require(ServerScriptService.Services.Levels.Level5_RoofController)
+local Roof = require(ServerScriptService.Services.Levels.Level3_RoofController)
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
@@ -46,24 +45,18 @@ type World = {
 	acquirable: boolean,
 	acquires: number,
 	stares: { Player | boolean },
-	alerts: { { position: Vector3, priority: Enums.NoisePriority } },
 	creature: Vector3?,
-	target: Player?,
-	scales: { number },
 	door: Model,
 	doorState: Enums.DoorState,
 	doorCalls: { { state: Enums.DoorState, seconds: number?, at: number } },
 	shots: { Shot },
-	forced: { Player },
 	released: { Player },
-	stamina: { [Player]: number },
-	refills: { Player },
 	notices: { { player: Player, key: string } },
 	escaped: { Player },
 	escapedAt: { number },
 }
 
-local L5: Enums.LevelId = "Level5_Roof"
+local ROOF: Enums.LevelId = "Level3_Roof"
 local DECK = ParachuteMotion.DeckY
 local STAND = 3
 local GAP = ParachuteMotion.Gap
@@ -71,20 +64,20 @@ local GAP_Z = (GAP.minZ + GAP.maxZ) / 2
 
 -- The middle stair housing and its roof door, from the layout and WorldConfig: the doorway on the housing's wall
 -- shared with the roof (deck height), `OUT` the way out through it, the tower that comes up into the housing.
-local ROOF_LAYOUT = Builder.getLayout(L5) :: LayoutSchema.LevelLayout
+local ROOF_LAYOUT = Builder.getLayout(ROOF) :: LayoutSchema.LevelLayout
 local ROOF_ROOMS = LayoutSchema.indexRooms(ROOF_LAYOUT)
-local HOUSING = ROOF_ROOMS.L5_RoofAccess.rect
+local HOUSING = ROOF_ROOMS.L3_RoofAccess.rect
 local DOORWAY, OUT = (function(): (Vector3, Vector3)
-	local edge = LayoutSchema.sharedEdge(HOUSING, ROOF_ROOMS.L5_Roof_East.rect) :: LayoutSchema.SharedEdge
+	local edge = LayoutSchema.sharedEdge(HOUSING, ROOF_ROOMS.L3_Roof_East.rect) :: LayoutSchema.SharedEdge
 	for _, door in ROOF_LAYOUT.doors do
 		if door.scriptedId == "RoofStairDoor" then
-			local at = WorldConfig.levelOrigin(L5)
+			local at = WorldConfig.levelOrigin(ROOF)
 				+ (
 					if edge.axis == "X"
 						then Vector3.new(edge.coord, 0, door.at)
 						else Vector3.new(door.at, 0, edge.coord)
 				)
-			local centre = WorldConfig.levelOrigin(L5)
+			local centre = WorldConfig.levelOrigin(ROOF)
 				+ Vector3.new(HOUSING.x + HOUSING.w / 2, 0, HOUSING.z + HOUSING.d / 2)
 			local away = at - centre
 			local out = if edge.axis == "X"
@@ -96,8 +89,8 @@ local DOORWAY, OUT = (function(): (Vector3, Vector3)
 	error("the roof has no RoofStairDoor")
 end)()
 local EAST_TOWER = WorldConfig.Towers.East
-local IN_HOUSING = WorldConfig.levelOrigin(L5)
-	+ Vector3.new(HOUSING.x + HOUSING.w / 2, STAND, DOORWAY.Z - WorldConfig.levelOrigin(L5).Z + 6)
+local IN_HOUSING = WorldConfig.levelOrigin(ROOF)
+	+ Vector3.new(HOUSING.x + HOUSING.w / 2, STAND, DOORWAY.Z - WorldConfig.levelOrigin(ROOF).Z + 6)
 local IN_TOWER = WorldConfig.SchoolOrigin
 	+ Vector3.new((EAST_TOWER.minX + EAST_TOWER.maxX) / 2, DECK - 12, EAST_TOWER.openingZ)
 local OUT_FAR = DOORWAY + OUT * 36 + Vector3.new(0, STAND, 0)
@@ -105,7 +98,6 @@ local OUT_NEAR_DOOR = DOORWAY + OUT * 5 + Vector3.new(0, STAND, 0)
 local LEFT_FROM = Vector3.new(-3, DECK + 1, GAP_Z)
 local LEAD = GameConfig.OneShotLead
 local DOOR = Scenes.RoofDoor
-local FINALE = Scenes.Finale
 local ROOT_HEIGHT = CreatureConfig.Rig.HipHeight + CreatureConfig.Rig.RootSize.Y / 2
 
 local nextUserId = 9500
@@ -139,10 +131,10 @@ local function jump(state: Enums.ParachuteState, at: number, fields: { [string]:
 	return (entry :: any) :: Jump
 end
 
-local function geometry(): Level5.Geometry
-	local layout = Builder.getLayout(L5)
-	assert(layout, "Level 5 layout")
-	return Level5.geometry(layout)
+local function geometry(): Roof.Geometry
+	local layout = Builder.getLayout(ROOF)
+	assert(layout, "the roof layout")
+	return Roof.geometry(layout)
 end
 
 local function fakeHandle(world: World): Handle
@@ -199,7 +191,7 @@ end
 local function onRoof(names: { string }, body: (world: World, players: { Player }) -> ())
 	local players: { Player } = {}
 	local door = Instance.new("Model")
-	door.Name = "Door_L5_Door_RoofStair"
+	door.Name = "Door_L3_Door_RoofStair"
 	local world: World = {
 		now = 2000,
 		players = players,
@@ -211,18 +203,12 @@ local function onRoof(names: { string }, body: (world: World, players: { Player 
 		acquirable = true,
 		acquires = 0,
 		stares = {},
-		alerts = {},
 		creature = DOORWAY - OUT * 7 + Vector3.new(0, ROOT_HEIGHT, -10),
-		target = nil,
-		scales = {},
 		door = door,
 		doorState = "Closed",
 		doorCalls = {},
 		shots = {},
-		forced = {},
 		released = {},
-		stamina = {},
-		refills = {},
 		notices = {},
 		escaped = {},
 		escapedAt = {},
@@ -232,10 +218,9 @@ local function onRoof(names: { string }, body: (world: World, players: { Player 
 		table.insert(players, player)
 		world.roots[player] = IN_HOUSING
 		world.life[player] = "Alive"
-		world.stamina[player] = 100
 	end
 	local handle = fakeHandle(world)
-	Level5.SetDependencies({
+	Roof.SetDependencies({
 		now = function(): number
 			return world.now
 		end,
@@ -270,17 +255,8 @@ local function onRoof(names: { string }, body: (world: World, players: { Player 
 			table.insert(world.stares, if player then player else false)
 			return true
 		end,
-		alert = function(position: Vector3, priority: Enums.NoisePriority)
-			table.insert(world.alerts, { position = position, priority = priority })
-		end,
 		creatureRoot = function(): Vector3?
 			return world.creature
-		end,
-		creatureTarget = function(): Player?
-			return world.target
-		end,
-		setSpeedScale = function(scale: number)
-			table.insert(world.scales, scale)
 		end,
 		door = function(): Model?
 			return world.door
@@ -304,46 +280,30 @@ local function onRoof(names: { string }, body: (world: World, players: { Player 
 		jump = function(player: Player): Jump?
 			return world.jumps[player]
 		end,
-		forceLand = function(player: Player): boolean
-			table.insert(world.forced, player)
-			local current = world.jumps[player]
-			world.jumps[player] = jump("Landed", world.now, {
-				deployedAt = if current then current.deployedAt else nil,
-				landedAt = world.now,
-			})
-			return true
-		end,
 		releaseHold = function(player: Player): boolean
 			table.insert(world.released, player)
 			return true
-		end,
-		stamina = function(player: Player): number
-			return world.stamina[player] or 100
-		end,
-		refillStamina = function(player: Player)
-			table.insert(world.refills, player)
-			world.stamina[player] = 100
 		end,
 		notify = function(player: Player, key: string)
 			table.insert(world.notices, { player = player, key = key })
 		end,
 	})
-	local connection = Level5.Escaped:Connect(function(player: Player)
+	local connection = Roof.Escaped:Connect(function(player: Player)
 		table.insert(world.escaped, player)
 		table.insert(world.escapedAt, world.now)
 	end)
 	local run: Types.RunContext =
 		{ runId = "roof-spec", seed = 55, difficulty = "Standard", participants = players, startedAt = 0 }
-	Level5.BeginRun(run)
-	Level5.Activate({ levelId = L5, run = run, root = Instance.new("Model"), runtime = Instance.new("Folder") })
+	Roof.BeginRun(run)
+	Roof.Activate({ levelId = ROOF, run = run, root = Instance.new("Model"), runtime = Instance.new("Folder") })
 	local failure: string? = nil
 	xpcall(body, function(err: any)
 		failure = tostring(err) .. "\n" .. debug.traceback()
 	end, world, players)
 	connection:Disconnect()
-	Level5.Deactivate()
-	Level5.EndRun()
-	Level5.SetDependencies(nil)
+	Roof.Deactivate()
+	Roof.EndRun()
+	Roof.SetDependencies(nil)
 	if failure ~= nil then
 		error(failure, 0)
 	end
@@ -354,7 +314,7 @@ local function step(world: World, seconds: number, dt: number?)
 	local target = world.now + seconds
 	while world.now < target - 1e-9 do
 		world.now = math.min(target, world.now + size)
-		Level5.Step(world.now)
+		Roof.Step(world.now)
 	end
 end
 
@@ -365,13 +325,13 @@ local function smashAndRelease(t: Expect, world: World)
 	end
 	-- it waits behind the door for its grace (ObjectiveConfig.graceFor) once someone is out
 	local waited = 0
-	while Level5.GetPhase() == "Arrival" and waited < Level5.SmashTimeout + 1 do
+	while Roof.GetPhase() == "Arrival" and waited < Roof.SmashTimeout + 1 do
 		step(world, 0.1)
 		waited += 0.1
 	end
-	t.eq(Level5.GetPhase(), "Smash", "the door sequence starts")
+	t.eq(Roof.GetPhase(), "Smash", "the door sequence starts")
 	step(world, DOOR.Release + LEAD + 0.2)
-	t.eq(Level5.GetPhase(), "Chase", "the chase is on")
+	t.eq(Roof.GetPhase(), "Chase", "the chase is on")
 end
 
 -- `player` jumps (at the gap) and opens the canopy now.
@@ -388,43 +348,44 @@ local function land(world: World, player: Player)
 	world.roots[player] = Vector3.new(-70, ParachuteMotion.GroundY + STAND, GAP_Z)
 	local current = world.jumps[player]
 	world.jumps[player] = jump("Landed", world.now, {
+		leftAt = if current then current.leftAt else world.now,
 		deployedAt = if current then current.deployedAt else world.now,
 		landedAt = world.now,
 	})
 end
 
 return {
-	["Level5: the roof's geometry from the layout"] = function(t: Expect)
+	["Roof: the geometry from the layout"] = function(t: Expect)
 		local g = geometry()
 		t.eq(g.doorway, DOORWAY, "the door in the housing's west wall")
 		t.eq(DOORWAY.X, HOUSING.x, "(on the roof side of the housing)")
 		t.eq(g.out, Vector3.new(-1, 0, 0), "out onto the roof")
 		t.eq(g.behind.Position, DOORWAY - OUT * 3 + Vector3.new(0, ROOT_HEIGHT, 0), "right behind the door")
 		t.truthy(g.behind.LookVector:Dot(g.out) > 0.99, "facing it")
-		t.truthy(Level5.inside(IN_HOUSING, g), "the housing")
-		t.truthy(Level5.inside(IN_TOWER, g), "the stair tower under it")
-		t.falsy(Level5.inside(OUT_FAR, g), "out on the roof")
-		t.falsy(Level5.inside(OUT_NEAR_DOOR, g), "just through the door")
+		t.truthy(Roof.inside(IN_HOUSING, g), "the housing")
+		t.truthy(Roof.inside(IN_TOWER, g), "the stair tower under it")
+		t.falsy(Roof.inside(OUT_FAR, g), "out on the roof")
+		t.falsy(Roof.inside(OUT_NEAR_DOOR, g), "just through the door")
 		t.truthy(g.cue.X < g.doorway.X and g.cue.Y > DECK, "the door's sounds come from the roof side")
 	end,
 
-	["Level5: when the squad is out and when the door goes"] = function(t: Expect)
+	["Roof: when the squad is out and when the door goes"] = function(t: Expect)
 		local g = geometry()
-		local allOut, anyOut = Level5.squadOut({ { position = OUT_FAR }, { position = IN_HOUSING } }, g)
+		local allOut, anyOut = Roof.squadOut({ { position = OUT_FAR }, { position = IN_HOUSING } }, g)
 		t.falsy(allOut, "someone is still inside")
 		t.truthy(anyOut)
-		allOut, anyOut = Level5.squadOut({ { position = OUT_FAR }, { position = OUT_NEAR_DOOR } }, g)
+		allOut, anyOut = Roof.squadOut({ { position = OUT_FAR }, { position = OUT_NEAR_DOOR } }, g)
 		t.falsy(allOut, "someone is in the doorway")
-		allOut = Level5.squadOut({ { position = OUT_FAR }, { position = IN_TOWER } }, g)
+		allOut = Roof.squadOut({ { position = OUT_FAR }, { position = IN_TOWER } }, g)
 		t.falsy(allOut, "someone is still climbing the stairs")
-		allOut, anyOut = Level5.squadOut({ { position = IN_TOWER } }, g)
+		allOut, anyOut = Roof.squadOut({ { position = IN_TOWER } }, g)
 		t.falsy(allOut or anyOut, "nobody has come out yet")
-		allOut = Level5.squadOut({ { position = OUT_FAR }, { position = OUT_FAR + Vector3.new(0, 0, 9) } }, g)
+		allOut = Roof.squadOut({ { position = OUT_FAR }, { position = OUT_FAR + Vector3.new(0, 0, 9) } }, g)
 		t.truthy(allOut, "everyone out and clear")
-		t.falsy((Level5.squadOut({}, g)), "nobody at all")
-		local grace = Level5.SmashTimeout
+		t.falsy((Roof.squadOut({}, g)), "nobody at all")
+		local grace = Roof.SmashTimeout
 		local function due(smashNow: boolean, firstOutAt: number?, now: number, g2: number?): boolean
-			return Level5.smashDue({
+			return Roof.smashDue({
 				smashNow = smashNow,
 				firstOutAt = firstOutAt,
 				grace = g2 or grace,
@@ -433,107 +394,77 @@ return {
 			})
 		end
 		t.falsy(due(false, nil, 10), "nobody out yet")
-		t.truthy(due(true, nil, 1), "the chain cut (or a loud noise) brings it forward")
+		t.truthy(due(true, nil, 1), "a loud noise brings it forward")
 		t.falsy(due(false, 5, 5 + grace - 0.1), "it waits out its grace behind the door")
 		t.truthy(due(false, 5, 5 + grace), "the grace is over")
 		t.truthy(due(false, 5, 5 + 12, 12), "Nightmare's grace is shorter")
-		t.truthy(due(false, nil, Level5.ArrivalTimeout), "the arrival timeout")
+		t.truthy(due(false, nil, Roof.ArrivalTimeout), "the arrival timeout")
 	end,
 
-	["Level5: the chase's pace"] = function(t: Expect)
-		t.eq(Level5.chaseScale(nil, "Standard"), 1, "no target: as configured")
-		local near = Level5.chaseScale(4, "Standard")
-		local far = Level5.chaseScale(80, "Standard")
-		t.truthy(near * CreatureConfig.Speeds.WallChase < GameConfig.SprintSpeed, "never outruns a sprinter")
-		t.truthy(near * CreatureConfig.Speeds.WallChase > GameConfig.WalkSpeed, "runs down anyone who stops")
-		t.truthy(far * CreatureConfig.Speeds.WallChase > GameConfig.SprintSpeed, "closes a big gap")
-		local mid = Level5.chaseScale(27, "Standard")
-		t.truthy(mid > near and mid < far, "in between")
-		local nightmare = Level5.chaseScale(4, "Nightmare") * CreatureConfig.Speeds.WallChase * 1.2
-		t.truthy(nightmare > GameConfig.SprintSpeed - 0.5, "Nightmare keeps pace with a sprinter")
-	end,
-
-	["Level5: when the finale starts"] = function(t: Expect)
-		local base: Level5.FinaleInput =
-			{ jumpers = 1, falling = 0, roofAlive = 0, lastDeployAt = 10, firstLandedAt = nil, now = 10 }
-		local function ready(fields: { [string]: any }): boolean
-			local input = table.clone(base) :: any
-			for key, value in fields do
-				input[key] = value
-			end
-			return Level5.finaleReady(input :: Level5.FinaleInput)
+	["Roof: when the Creature steps onto the ledge"] = function(t: Expect)
+		local function ready(jumped: number, roofAlive: number, lastLeftAt: number?, now: number): boolean
+			return Roof.ledgeReady({ jumped = jumped, roofAlive = roofAlive, lastLeftAt = lastLeftAt, now = now })
 		end
-		t.falsy(ready({ jumpers = 0 }), "nobody jumped")
-		t.falsy(ready({}), "the canopy just opened")
-		t.truthy(ready({ now = 10 + FINALE.Settle }), "settled under the canopy")
-		t.falsy(ready({ now = 30, roofAlive = 1 }), "someone is still up there")
-		t.falsy(ready({ now = 30, falling = 1 }), "someone is still falling")
-		t.truthy(ready({ now = 30, lastDeployAt = nil }), "everyone is down")
-		t.truthy(ready({ now = 50, roofAlive = 1, firstLandedAt = 50 - Level5.FinaleWait }), "they waited long enough")
-		t.falsy(ready({ jumpers = 0, falling = 0, firstLandedAt = 0, now = 100 }), "nothing to show")
+		t.falsy(ready(0, 0, nil, 100), "nobody jumped")
+		t.falsy(ready(1, 1, 10, 100), "someone Alive is still up there")
+		t.falsy(ready(1, 0, 10, 10 + Roof.LedgeDelay - 0.1), "a moment after the last jump")
+		t.truthy(ready(1, 0, 10, 10 + Roof.LedgeDelay), "then it steps onto the ledge")
+		t.truthy(ready(2, 0, nil, 0), "no jump time known: at once")
 	end,
 
-	["Level5: the Creature's place on the ledge and its stare"] = function(t: Expect)
-		local pose = Level5.revealPose({ LEFT_FROM, LEFT_FROM + Vector3.new(0, -20, 2) })
-		t.near(pose.Position.X, Level5.LedgeInset, 1e-3, "on the edge, just in from it")
+	["Roof: the Creature's place on the ledge and its stare"] = function(t: Expect)
+		local pose = Roof.revealPose({ LEFT_FROM, LEFT_FROM + Vector3.new(0, -20, 2) })
+		t.near(pose.Position.X, Roof.LedgeInset, 1e-3, "on the edge, just in from it")
 		t.near(pose.Position.Y, DECK + ROOT_HEIGHT, 1e-3)
 		t.near(pose.Position.Z, GAP_Z + 1, 1e-3, "where they went over")
 		t.truthy(pose.LookVector:Dot(Vector3.new(-1, 0, 0)) > 0.99, "facing out over them")
-		local default = Level5.revealPose({})
+		local default = Roof.revealPose({})
 		t.truthy(
 			default.Position.X > 0 and default.Position.Z >= GAP.minZ and default.Position.Z <= GAP.maxZ,
 			"the gap"
 		)
-		local who = Level5.stareTarget({
+		local who = Roof.stareTarget({
 			{ who = "far", position = Vector3.new(-90, 20, GAP_Z) },
 			{ who = "near", position = Vector3.new(-20, 60, GAP_Z) },
 		}, pose.Position)
 		t.eq(who, "near", "the one right under it")
-		t.eq(Level5.stareTarget({}, pose.Position), nil)
+		t.eq(Roof.stareTarget({}, pose.Position), nil)
 	end,
 
-	["Level5: the roof scenes are valid and ordered"] = function(t: Expect)
-		local specs = Scenes.timelines()
-		for _, id in { DOOR.Id, FINALE.Id, FINALE.SkyId, FINALE.TouchdownId } do
-			local spec = specs[id]
-			t.truthy(spec ~= nil, id .. " is registered")
-			if spec then
-				local errors = Timeline.validate(spec)
-				t.eq(#errors, 0, id .. ": " .. table.concat(errors, "; "))
-			end
+	["Roof: the door scene is valid and ordered"] = function(t: Expect)
+		local spec = Scenes.timelines()[DOOR.Id]
+		t.truthy(spec ~= nil, DOOR.Id .. " is registered")
+		if spec then
+			local errors = Timeline.validate(spec)
+			t.eq(#errors, 0, DOOR.Id .. ": " .. table.concat(errors, "; "))
 		end
 		t.truthy(DOOR.Slam < DOOR.Stage and DOOR.Stage < DOOR.Pounds[1], "shut, then staged, then the blows")
 		t.truthy(DOOR.Pounds[3] < DOOR.Reveal and DOOR.Reveal < DOOR.Smash and DOOR.Smash < DOOR.Release)
-		t.truthy(FINALE.Flash1 < FINALE.Reveal and FINALE.Reveal < FINALE.Flash2, "revealed by the first flash")
-		t.truthy(FINALE.Vanish < FINALE.Hide and FINALE.Hide < FINALE.Flash2 + 0.42, "gone before the second strike")
-		t.truthy(FINALE.FadeEnd < FINALE.Land and FINALE.Land <= FINALE.Duration, "landed in the dark")
-		t.truthy(FINALE.TouchdownFadeEnd < FINALE.TouchdownRelease, "a late lander is let go after their fade")
-		t.truthy(FINALE.TouchdownRelease <= FINALE.TouchdownDuration)
 	end,
 
-	["Level5: the Creature is held hidden and the door opens for the first arrival"] = function(t: Expect)
+	["Roof: the Creature is held hidden and the door opens for the first arrival"] = function(t: Expect)
 		onRoof({ "First" }, function(world: World, _players: { Player })
-			t.truthy(Level5.IsHolding(), "taken at activation")
+			t.truthy(Roof.IsHolding(), "taken at activation")
 			t.eq(callsNamed(world, "SetHidden")[1].value, true, "hidden in the housing")
-			step(world, Level5.OpenDelay - 0.2)
+			step(world, Roof.OpenDelay - 0.2)
 			t.eq(#world.doorCalls, 0, "the wind has not caught it yet")
 			step(world, 0.4)
 			t.eq(world.doorCalls[1].state, "Open", "the door swings open")
-			t.eq(Level5.GetPhase(), "Arrival")
+			t.eq(Roof.GetPhase(), "Arrival")
 		end)
 	end,
 
-	["Level5: the door is smashed behind the squad"] = function(t: Expect)
+	["Roof: the door is smashed behind the squad"] = function(t: Expect)
 		onRoof({ "One", "Two" }, function(world: World, players: { Player })
-			step(world, Level5.OpenDelay + 0.2)
+			step(world, Roof.OpenDelay + 0.2)
 			world.roots[players[1]] = OUT_FAR
 			step(world, 1)
-			t.eq(Level5.GetPhase(), "Arrival", "one still inside")
+			t.eq(Roof.GetPhase(), "Arrival", "one still inside")
 			world.roots[players[2]] = OUT_FAR + Vector3.new(0, 0, 6)
 			step(world, 0.1)
-			t.eq(Level5.GetPhase(), "Arrival", "it waits behind the door for its grace")
-			step(world, Level5.SmashTimeout - 0.5)
-			t.eq(Level5.GetPhase(), "Smash", "the grace is over")
+			t.eq(Roof.GetPhase(), "Arrival", "it waits behind the door for its grace")
+			step(world, Roof.SmashTimeout - 0.5)
+			t.eq(Roof.GetPhase(), "Smash", "the grace is over")
 			local shot = shotsOf(world, "Timeline", DOOR.Id)[1]
 			t.truthy(shot ~= nil, "the door scene plays")
 			t.truthy(typeof(shot.args.door) == "Vector3", "from the door")
@@ -552,24 +483,24 @@ return {
 			step(world, start + DOOR.Release + 0.05 - world.now)
 			-- nobody can be seen from behind the doorway: it is left to its senses (it is never told where they are)
 			t.eq(callsNamed(world, "Release")[1].value, "Patrol", "let go to find them")
-			t.eq(Level5.GetPhase(), "Chase")
+			t.eq(Roof.GetPhase(), "Chase")
 			t.eq(#world.notices, 2, "everyone is told to run")
-			t.eq(world.notices[1].key, Level5.RunKey)
-			local smash = Level5.GetSmash()
+			t.eq(world.notices[1].key, Roof.RunKey)
+			local smash = Roof.GetSmash()
 			t.truthy(smash ~= nil and smash.slammed and smash.revealed and smash.released)
-			t.falsy(Level5.IsHolding())
+			t.falsy(Roof.IsHolding())
 		end)
 	end,
 
-	["Level5: a straggler inside is never shut in or shown the Creature"] = function(t: Expect)
+	["Roof: a straggler inside is never shut in or shown the Creature"] = function(t: Expect)
 		onRoof({ "Out", "Lingers" }, function(world: World, players: { Player })
-			step(world, Level5.OpenDelay + 0.2)
+			step(world, Roof.OpenDelay + 0.2)
 			world.roots[players[1]] = OUT_FAR
 			world.clear = true -- the straggler can see the spot behind the open door
-			step(world, Level5.SmashTimeout - 0.3)
-			t.eq(Level5.GetPhase(), "Arrival")
+			step(world, Roof.SmashTimeout - 0.3)
+			t.eq(Roof.GetPhase(), "Arrival")
 			step(world, 0.5)
-			t.eq(Level5.GetPhase(), "Smash", "the timer runs out")
+			t.eq(Roof.GetPhase(), "Smash", "the timer runs out")
 			for _, call in world.doorCalls do
 				t.truthy(call.state ~= "Closed", "never slammed on someone inside")
 			end
@@ -578,127 +509,75 @@ return {
 				t.eq(call.value, true, "never shown in sight")
 			end
 			t.eq(callsNamed(world, "Release")[1].value, "WallChase", "it comes up the stairs after them")
-			local smash = Level5.GetSmash()
+			local smash = Roof.GetSmash()
 			t.truthy(smash ~= nil and not smash.slammed and not smash.revealed)
 		end)
 	end,
 
-	["Level5: the final sprint"] = function(t: Expect)
-		onRoof({ "Runner", "Jumped" }, function(world: World, players: { Player })
-			local runner, jumped = players[1], players[2]
-			smashAndRelease(t, world)
-			world.target = runner
-			world.creature = OUT_FAR + Vector3.new(60, 0, 0)
-			world.stamina[runner] = 40
-			openCanopy(world, jumped)
-			world.stamina[jumped] = 10
-			step(world, 0.2)
-			t.eq(world.scales[#world.scales], Level5.chaseScale(60, "Standard"), "closing a big gap")
-			t.eq(world.refills[1], runner, "adrenaline")
-			t.eq(#world.refills, 1, "not for someone already in the air")
-			world.creature = OUT_FAR + Vector3.new(5, 0, 0)
-			step(world, 0.2)
-			t.eq(world.scales[#world.scales], Level5.chaseScale(5, "Standard"), "right behind: just under a sprint")
-			world.stamina[runner] = 80
-			local before = #world.refills
-			step(world, 0.2)
-			t.eq(#world.refills, before, "no top-up while they have wind")
-		end)
-	end,
-
-	["Level5: the finale for the squad"] = function(t: Expect)
+	["Roof: the squad jumps, each escapes at the landing, then the Creature takes the ledge"] = function(t: Expect)
 		onRoof({ "Ana", "Ben" }, function(world: World, players: { Player })
 			local ana, ben = players[1], players[2]
 			smashAndRelease(t, world)
-			world.target = ben
-			world.creature = OUT_FAR + Vector3.new(45, 0, 0)
 			openCanopy(world, ana)
-			step(world, 2)
-			t.truthy(world.scales[#world.scales] ~= 1, "the chase pace is in force")
-			t.eq(Level5.GetPhase(), "Chase", "Ben is still on the roof")
+			step(world, Roof.LedgeDelay + 1)
+			t.eq(Roof.GetPhase(), "Chase", "Ben is still on the roof")
 			land(world, ana)
 			local touchdown = world.now
-			openCanopy(world, ben)
 			step(world, 0.1)
 			t.eq(world.escaped[1], ana, "Ana escapes at her landing")
 			t.truthy(world.escapedAt[1] - touchdown <= 0.11, "timed at the touchdown (her escape time)")
-			t.eq(#world.released, 0, "but she is held for the finale")
-			step(world, FINALE.Settle - 0.4)
-			t.eq(Level5.GetPhase(), "Chase", "Ben's canopy just opened")
+			t.eq(world.released[1], ana, "and her hold ends there")
+			openCanopy(world, ben)
+			step(world, Roof.LedgeDelay - 0.3)
+			t.eq(Roof.GetPhase(), "Chase", "a moment after the last jump")
 			step(world, 0.5)
-			t.eq(Level5.GetPhase(), "Finale")
-			t.eq(world.scales[#world.scales], 1, "the pace is restored")
-			local shot = shotsOf(world, "Timeline", FINALE.Id)[1]
-			t.truthy(shot ~= nil, "the finale plays with the Creature")
-			local start = shot.startAt
-			t.truthy(typeof(shot.args.head) == "Vector3" and typeof(shot.args.ledge) == "Vector3")
-			local flashes = shotsOf(world, "Lightning")
-			t.eq(#flashes, 2, "two flashes")
-			t.near(flashes[1].startAt, start + FINALE.Flash1, 1e-6)
-			t.near(flashes[2].startAt, start + FINALE.Flash2, 1e-6)
+			t.eq(Roof.GetPhase(), "Ledge", "then it takes the ledge")
+			t.truthy(Roof.GetLedgeAt() ~= nil)
+			t.truthy(Roof.IsHolding(), "held there")
 			local teleports = callsNamed(world, "Teleport")
 			local ledge = (teleports[#teleports].value :: CFrame).Position
-			t.near(ledge.X, Level5.LedgeInset, 1e-3, "on the ledge they jumped from")
-			t.eq(world.stares[#world.stares], ben, "staring at the one right under it")
-			local hiddenBefore = #callsNamed(world, "SetHidden")
-			step(world, start + FINALE.Reveal - FINALE.RevealLead + 0.05 - world.now)
+			t.near(ledge.X, Roof.LedgeInset, 1e-3, "on the ledge they jumped from")
 			local hidden = callsNamed(world, "SetHidden")
-			t.eq(hidden[#hidden].value, false, "revealed by the first flash")
-			t.truthy(#hidden > hiddenBefore)
-			step(world, start + FINALE.Hide - FINALE.HideLead + 0.05 - world.now)
-			hidden = callsNamed(world, "SetHidden")
-			t.eq(hidden[#hidden].value, true, "gone at the second")
-			t.eq(world.stares[#world.stares], false, "the stare is released")
-			t.eq(#world.escaped, 1, "Ben is still in the air")
-			t.eq(#world.released, 0, "nobody is let go before the fade")
-			step(world, start + FINALE.Land + 0.05 - world.now)
-			t.eq(world.forced[1], ben, "Ben is landed in the dark")
-			t.eq(#world.escaped, 2, "and escapes there")
-			t.truthy(Level5.HasEscaped(ana) and Level5.HasEscaped(ben))
-			t.eq(#world.released, 2, "both holds end with the fade: the summary may show")
-			t.eq(Level5.GetPhase(), "Done")
-			t.truthy(Level5.IsHolding(), "nobody left up there: it stays held")
+			t.eq(hidden[#hidden].value, false, "shown up there")
+			t.eq(world.stares[#world.stares], ben, "staring at the one right under it")
+			land(world, ben)
+			step(world, 0.2)
+			t.eq(world.escaped[2], ben)
+			t.eq(world.released[2], ben)
+			t.truthy(Roof.HasEscaped(ana) and Roof.HasEscaped(ben))
 			step(world, 5)
 			t.eq(#world.escaped, 2, "once each")
+			t.eq(#world.released, 2)
 		end)
 	end,
 
-	["Level5: a solo player"] = function(t: Expect)
+	["Roof: a solo jumper"] = function(t: Expect)
 		onRoof({ "Solo" }, function(world: World, players: { Player })
 			local solo = players[1]
 			smashAndRelease(t, world)
 			world.jumps[solo] = jump("Freefall", world.now)
-			step(world, 2)
-			t.eq(Level5.GetPhase(), "Chase", "still falling")
+			world.roots[solo] = Vector3.new(-6, DECK - 10, GAP_Z)
+			step(world, Roof.LedgeDelay + 0.2)
+			t.eq(Roof.GetPhase(), "Ledge", "a falling jumper is off the roof")
 			openCanopy(world, solo)
-			step(world, FINALE.Settle + 0.2)
-			t.eq(Level5.GetPhase(), "Finale")
-			step(world, FINALE.Land + LEAD + Level5.FinalePre + 0.2)
+			step(world, 2)
+			land(world, solo)
+			step(world, 0.2)
 			t.eq(#world.escaped, 1)
 			t.eq(world.escaped[1], solo)
 		end)
 	end,
 
-	["Level5: a downed teammate does not hold the finale, and is hunted after it"] = function(t: Expect)
+	["Roof: a downed teammate does not hold the ledge; an Alive one on the roof does"] = function(t: Expect)
 		onRoof({ "Gone", "Down" }, function(world: World, players: { Player })
 			local gone, down = players[1], players[2]
 			smashAndRelease(t, world)
 			world.life[down] = "Downed"
 			world.roots[down] = OUT_FAR
 			openCanopy(world, gone)
-			step(world, FINALE.Settle + 0.2)
-			t.eq(Level5.GetPhase(), "Finale", "the downed player does not hold it")
-			step(world, FINALE.Land + LEAD + Level5.FinalePre + 0.2)
-			t.eq(world.escaped[1], gone)
-			t.eq(#world.escaped, 1)
-			local releases = callsNamed(world, "Release")
-			t.eq(releases[#releases].value, "Patrol", "let go again")
-			t.eq(world.alerts[1].position, OUT_FAR, "drawn to whoever is left")
-			t.eq(world.alerts[1].priority, "High")
+			step(world, Roof.LedgeDelay + 0.2)
+			t.eq(Roof.GetPhase(), "Ledge", "the downed player does not hold it")
 		end)
-	end,
-
-	["Level5: a straggler holds the finale until the wait runs out"] = function(t: Expect)
 		onRoof({ "Early", "Late" }, function(world: World, players: { Player })
 			local early, late = players[1], players[2]
 			smashAndRelease(t, world)
@@ -706,75 +585,56 @@ return {
 			step(world, 1)
 			land(world, early)
 			world.roots[late] = OUT_FAR
-			step(world, Level5.FinaleWait - 0.5)
-			t.eq(Level5.GetPhase(), "Chase", "waiting for the straggler")
-			step(world, 0.7)
-			t.eq(Level5.GetPhase(), "Finale", "not forever")
+			step(world, 60)
+			t.eq(Roof.GetPhase(), "Chase", "the Creature keeps hunting whoever is still up there")
+			t.eq(#world.escaped, 1, "the one who jumped got away")
 		end)
 	end,
 
-	["Level5: a Creature that cannot be taken leaves the storm alone"] = function(t: Expect)
+	["Roof: a busy Creature is asked for again"] = function(t: Expect)
 		onRoof({ "Lone" }, function(world: World, players: { Player })
 			local lone = players[1]
 			smashAndRelease(t, world)
 			world.acquirable = false
 			openCanopy(world, lone)
-			step(world, FINALE.Settle + 0.2)
-			t.eq(Level5.GetPhase(), "FinaleWait", "waiting for it")
-			step(world, Level5.AcquireWait + 0.2)
-			t.eq(Level5.GetPhase(), "Finale")
-			t.eq(#shotsOf(world, "Timeline", FINALE.Id), 0)
-			t.eq(#shotsOf(world, "Timeline", FINALE.SkyId), 1, "the storm alone")
-			t.eq(#shotsOf(world, "Lightning"), 2)
-			step(world, FINALE.Land + LEAD + Level5.FinalePre + 0.2)
-			t.eq(world.escaped[1], lone, "they still get away")
-		end)
-	end,
-
-	["Level5: a late lander gets their own fade"] = function(t: Expect)
-		onRoof({ "Quick", "Slow" }, function(world: World, players: { Player })
-			local quick, slow = players[1], players[2]
-			smashAndRelease(t, world)
-			openCanopy(world, quick)
-			world.roots[slow] = OUT_FAR
-			step(world, 1)
-			land(world, quick)
-			step(world, Level5.FinaleWait + 0.2)
-			t.eq(Level5.GetPhase(), "Finale")
-			step(world, FINALE.Land + LEAD + Level5.FinalePre + 0.2)
-			t.eq(#world.escaped, 1, "the first one is out")
-			openCanopy(world, slow)
-			step(world, 4)
-			t.eq(#world.escaped, 1, "still in the air")
-			land(world, slow)
+			local asked = world.acquires
+			step(world, Roof.LedgeDelay + 1)
+			t.eq(Roof.GetPhase(), "Chase", "not on the ledge while it is busy")
+			t.truthy(world.acquires > asked + 1, "asked for at the tick rate")
+			world.acquirable = true
 			step(world, 0.2)
-			t.eq(world.escaped[2], slow, "they get away at the landing")
-			local touchdown = shotsOf(world, "Timeline", FINALE.TouchdownId)[1]
-			t.truthy(touchdown ~= nil and touchdown.args.subject == slow.UserId, "their own fade")
-			t.eq(world.released[#world.released], quick, "only Quick has been let go so far")
-			step(world, FINALE.TouchdownRelease + LEAD)
-			t.eq(world.released[#world.released], slow, "let go after their fade")
-			t.eq(#shotsOf(world, "Timeline", FINALE.TouchdownId), 1, "one fade each")
+			t.eq(Roof.GetPhase(), "Ledge", "taken once it is free")
 		end)
 	end,
 
-	["Level5: leaving the roof lets the Creature go and restores its pace"] = function(t: Expect)
+	["Roof: the dev staging needs a jumper"] = function(t: Expect)
+		onRoof({ "Dev" }, function(world: World, players: { Player })
+			t.falsy(Roof.StageLedge(), "nobody off the roof yet")
+			smashAndRelease(t, world)
+			openCanopy(world, players[1])
+			t.truthy(Roof.StageLedge(), "staged at once")
+			t.eq(Roof.GetPhase(), "Ledge")
+			t.falsy(Roof.StageLedge(), "once")
+		end)
+	end,
+
+	["Roof: leaving the roof lets the Creature go"] = function(t: Expect)
 		onRoof({ "Dev" }, function(world: World, players: { Player })
 			smashAndRelease(t, world)
-			world.target = players[1]
-			world.creature = OUT_FAR + Vector3.new(50, 0, 0)
-			step(world, 0.2)
-			t.truthy(world.scales[#world.scales] ~= 1, "the chase pace is in force")
-			Level5.Deactivate()
-			t.eq(world.scales[#world.scales], 1, "the pace is restored")
-			t.eq(Level5.GetPhase(), "Idle")
-			t.eq(#Level5.Pending(), 0, "nothing left scheduled")
+			openCanopy(world, players[1])
+			step(world, Roof.LedgeDelay + 0.2)
+			t.truthy(Roof.IsHolding())
+			Roof.Deactivate()
+			local releases = callsNamed(world, "Release")
+			t.eq(releases[#releases].value, "Dormant", "parked")
+			t.eq(Roof.GetPhase(), "Idle")
+			t.eq(#Roof.Pending(), 0, "nothing left scheduled")
 		end)
 	end,
 
-	["Level5: registered with the Levels service"] = function(t: Expect)
-		t.eq(Levels.Level5, Level5)
-		t.eq(Level5.Controller.LevelId, L5)
-		t.truthy(Level5.Escaped ~= nil and type(Level5.Escaped.Connect) == "function", "Escaped is a signal")
+	["Roof: registered with the Levels service"] = function(t: Expect)
+		t.eq(Levels.Level3, Roof)
+		t.eq(Roof.Controller.LevelId, ROOF)
+		t.truthy(Roof.Escaped ~= nil and type(Roof.Escaped.Connect) == "function", "Escaped is a signal")
 	end,
 }

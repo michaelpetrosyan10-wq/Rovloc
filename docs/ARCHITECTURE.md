@@ -117,7 +117,9 @@ The API surface is checked against the Roblox API dump. Scripts never touch depr
 Future lighting. `docs/PLACE_SETUP.md` lists the settings Rojo can't write. At boot `ServerMain` checks the ones scripts
 can read and sets `BootError` if any is wrong.
 
-**Why no streaming.** Measured in Lune on the 400 × 288 tunnel floors (Nov 2026):
+**Why no streaming.** Measured in Lune on the 400 × 288 tunnel floors (Nov 2026), on the six-floor school before
+the cuts; the four-level school (`WorldConfig.LevelOrder`) builds 27,980 authoritative parts, so every figure below is
+an upper bound until it is measured again:
 
 | What a client holds | Parts |
 | --- | --- |
@@ -165,7 +167,7 @@ The engine's frustum culling and the stacked slabs keep the other floors out of 
 ```text
 game
 ├── Workspace
-│   ├── Lobby · School (Level0_Basement … Level5_Roof, Stairwells)   built by WorldService at boot
+│   ├── Lobby · School (Level0_Basement … Level3_Roof, Stairwells)   built by WorldService at boot
 │   ├── Runtime            each run's fixtures, traps, flasks and batteries (wiped on reset)
 │   ├── Cosmetic           client-local: skyline, dressing, effects (CosmeticWorldController and the effect owners)
 │   └── Creature           [tag Creature] rig, CreatureHitbox
@@ -205,15 +207,17 @@ script, no passive regen).
 - **Monster:** `MonsterAIService` (the Tall Man, `docs/MONSTER.md`; the website's `web/src/creature` is the reference).
   A 10 Hz brain (`Brain.decide`) drives the states: Dormant, Patrol (the stalk), InvestigateNoise, Search,
   WallChase (the chase, giving up after 22 s), HidingResponse (the saw-you-hide rule: LookAway escapes, a ReachIn at
-  30 s), Teleport (out of sight, 12-24 studs of walking from its target, after a 1.6 s warning), Stunned,
-  AquaticStalk and Scripted. Its inputs are `Perception` (lit from the server's fixtures: `LightField`) and `Hearing`.
-  It walks the level's zone graph (`FloorNav`: never a crawlway, a duct or a pool's water) with `Locomotion`, warps
-  (FadeOut / FadeIn) for teleports, give-ups and the pool, publishes the view contract (Action, ActionAt, Fade) and
+  30 s), Teleport (out of sight, 12-24 studs of walking from its target, after a 1.6 s warning), Stunned and
+  Scripted. Its inputs are `Perception` (lit from the server's fixtures: `LightField`) and `Hearing`. It walks the
+  level's zone graph (`FloorNav`: never a crawlway or a duct) with `Locomotion`, warps (FadeOut / FadeIn) for
+  teleports and give-ups, publishes the view contract (Action, ActionAt, Fade) and
   catches with `JumpscareHandler`. It hunts from the basement on.
-- **Mechanics:** `DoorService`, `BearTrapService`, `ChemicalProjectileService`, `HideSpotService` (lockers, barrels and cabinets),
-  `FloodedPoolService` and `ParachuteService`.
+- **Mechanics:** `DoorService`, `BearTrapService`, `ChemicalProjectileService`, `HideSpotService` (lockers, barrels and cabinets)
+  and `ParachuteService`.
 - **Levels:** `ObjectiveService` (the floor objectives, from `ObjectiveConfig`) and the per-floor controllers,
-  `Level0_BasementController` … `Level5_RoofController`.
+  `Level0_BasementController`, `Level1_HallwaysController` and `Level3_RoofController` (the Auditorium storey is an
+  interim plain crossing with no controller). The run's stages are `StageConfig` (nine, in order, keyed by id; the
+  school's four levels are `WorldConfig.LevelOrder`), and no table is indexed by a level's number.
 - **Match:**
   - `MatchAndDataService`: saved data, Deploy, the outcome evaluator and rewards;
   - `LobbyService`, `PerkShopService` and `CheckpointAirlockService`;
@@ -245,8 +249,7 @@ It announces each run with `OnRunStarted` / `OnRunEnded`. The controllers:
 - **HUD:** the HUD on `UIKit` (procedural UI, no images): status bars, prompts, captions, the objective tracker, the
   squad panel, first-time hints, touch controls and the `SettingsMenu`.
 - **Gameplay:** vents, jumpscares, the Creature's cues (`CreatureCuesController`: reveal scares, stings, the chase
-  music, the rattle, the torch stutter), bear traps, doors, flasks, level scenes, hiding spots, swimming and the
-  struggle.
+  music, the rattle, the torch stutter), bear traps, doors, flasks, level scenes and hiding spots.
 - **Match:** the lobby, onboarding, airlocks, downed, spectating, the parachute and the escape summary.
 
 ### 3.5 Networking, physics and contracts
@@ -507,7 +510,7 @@ The web's export and a live Roblox build are the same world, part for part, for 
   `web/src/game/util.js`, `Math.imul` and `>>> 0` for `bit32`), so a run seed picks the same objective spots, guard
   traps, bear traps, flasks, batteries, locked grates and exits on both platforms; the data test replays the export's
   RunDirector plans for a spread of seeds pick for pick. The export builds a prop on every candidate anchor, exactly
-  as a run plans it there (`RunDirector.plannedProp` / `objectiveProp`: the anchor's variant, a reagent's kind), and a
+  as a run plans it there (`RunDirector.plannedProp` / `objectiveProp`: the anchor's variant), and a
   run shows the ones on its picks.
 - **No hash order.** Every loop whose order reaches a draw, a name or a tie walks sorted keys (the walk graphs, the
   exterior's tower holes, TunnelPlanner's crawl weights), sorts break every tie, and float comparisons in sorts use

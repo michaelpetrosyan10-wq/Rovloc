@@ -3,7 +3,7 @@
 
 local Tags = table.freeze({
 	-- Vents
-	VentShaft = "VentShaft", -- duct segment part (attrs: SegmentId, LevelId, AdjacentZones, Submerged)
+	VentShaft = "VentShaft", -- duct segment part (attrs: SegmentId, LevelId, AdjacentZones)
 	VentGrate = "VentGrate", -- grate model (attrs: GrateId, GrateState, Lockable, CriticalPath, NodeId)
 	VentNode = "VentNode", -- Attachment at every duct junction and opening (attrs: NodeId, Links, LevelId, GrateId?)
 
@@ -14,7 +14,6 @@ local Tags = table.freeze({
 	Hideable = "Hideable", -- every hiding spot (lockers, barrels, cabinets); its HideKind attribute says which
 	ParachutePack = "ParachutePack",
 	BatteryPickup = "BatteryPickup",
-	FloodlightSwitch = "FloodlightSwitch",
 	ObjectiveItem = "ObjectiveItem", -- a floor objective's carryable item (attrs: Floor, Step, ObjectiveId, AnchorId)
 	ObjectiveStation = "ObjectiveStation", -- where a floor objective's step is worked (attrs: Floor, Step, ObjectiveId)
 	ExitLock = "ExitLock", -- the lock on a floor's exit (attrs: Floor, Step, ObjectiveId, LockVariant, Locked)
@@ -29,7 +28,6 @@ local Tags = table.freeze({
 	CheckpointVolume = "CheckpointVolume",
 	ScareTrigger = "ScareTrigger",
 	FloorDebris = "FloorDebris",
-	PoolWater = "PoolWater",
 	LevelExit = "LevelExit",
 
 	-- Navigation & spawning

@@ -8,8 +8,6 @@ export type DifficultySpec = {
 	sightRangeMultiplier: number,
 	trapCount: number, -- bear traps placed in the basement
 	batteriesPerLevel: number,
-	flasksScienceHall: number,
-	flasksPool: number,
 	lockedGrateFraction: number, -- share of Lockable grates the RunDirector locks
 	catchCooldownSeconds: number, -- after a catch the Creature retreats this long
 	maxChaseSeconds: number, -- a chase gives up (FadeOut) after this, whatever happens
@@ -27,8 +25,6 @@ local DifficultyConfig = table.freeze({
 		sightRangeMultiplier = 1,
 		trapCount = 10,
 		batteriesPerLevel = 2, -- harder Standard: one fewer per floor
-		flasksScienceHall = 6,
-		flasksPool = 2,
 		lockedGrateFraction = 0.25,
 		catchCooldownSeconds = 14.4, -- harder Standard: -20 %
 		maxChaseSeconds = 22,
@@ -44,8 +40,6 @@ local DifficultyConfig = table.freeze({
 		sightRangeMultiplier = 1.15,
 		trapCount = 16,
 		batteriesPerLevel = 1,
-		flasksScienceHall = 4,
-		flasksPool = 1,
 		lockedGrateFraction = 0.45,
 		catchCooldownSeconds = 8.8, -- 11 s, -20 % with Standard
 		maxChaseSeconds = 28,

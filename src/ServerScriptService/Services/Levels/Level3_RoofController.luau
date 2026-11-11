@@ -1,66 +1,46 @@
 --!strict
--- Level5_RoofController: the roof and the ending (spec, Level 5). The packs, the jump and the canopy are
--- ParachuteService's; this controller runs the level around them and owns the finale.
+-- Level3_RoofController: the roof (spec, Level 3). The packs, the jump and the canopy are ParachuteService's; this
+-- controller runs the level around them.
 --
 -- Arrival. On activation the Creature is taken (MonsterAIService.AcquireScripted(TOKEN); a Creature that is busy is
 -- asked for again at the tick rate, and only taken while nobody can see it) and kept hidden in the stair housing
 -- (MonsterAIService brought it to the level's CreatureSpawn there). The run arrives in one of three stair housings
--- (the route's Stairwell_4_5 candidate, LevelDirector.entryFor: L5_RoofAccess, L5_RoofAccessNorth or
--- L5_RoofAccessSouth, each with its own roof door, RoofStairDoor / RoofStairDoorNorth / RoofStairDoorSouth); the
--- finale plays at that one (geometry). Its roof door (DoorService; it starts Closed)
--- swings open OPEN_DELAY after the first playing participant reaches the housing at the top of the stairs.
+-- (the route's Stairwell_2_3 candidate, LevelDirector.entryFor: L3_RoofAccess, L3_RoofAccessNorth or
+-- L3_RoofAccessSouth, each with its own roof door, RoofStairDoor / RoofStairDoorNorth / RoofStairDoorSouth); the door
+-- smash plays at that one (geometry). Its roof door (DoorService; it starts Closed) swings open OPEN_DELAY after the
+-- first playing participant reaches the housing at the top of the stairs.
 --
 -- The door smash (Scenes.RoofDoor, from startAt S). The Creature waits behind the door for its grace
 -- (ObjectiveConfig.graceFor: 20 s Standard, 12 s Nightmare) once the first playing participant has stepped out of the
--- housing, ended early by a High / Critical noise of a participant's on the roof after that, or at once by the crate's
--- chain being cut (ObjectiveService.Unlocked: CrateCut); or ARRIVAL_TIMEOUT after activation whoever is where
--- (smashDue): OneShot Timeline "L5_DoorSmash".
+-- housing, ended early by a High / Critical noise of a participant's on the roof after that; or ARRIVAL_TIMEOUT after
+-- activation whoever is where (smashDue): OneShot Timeline "L3_DoorSmash".
 -- The wind slams the door shut so it lands at Slam (skipped while anyone is still inside or in the doorway: they are
 -- never shut in with it), the hidden Creature is moved in right behind the door, facing it (Stage), three blows from
 -- the far side, it is shown behind the closed door at Reveal (only while nobody can see that spot, so a straggler inside
 -- never watches it pop in), DoorService Smashed so the leaf flies at Smash (the DoorSmash action with it), its cry, and
 -- at Release it is let go: into WallChase when someone can be seen from behind the doorway, else into Patrol (its senses
--- find them; it is never told where they are), and everyone on the roof is told to run (Hud.RoofRun) once the crate is
--- open.
+-- find them; it is never told where they are), and everyone on the roof is told to run (Hud.RoofRun).
 --
--- The final sprint, from the release until the finale: the Creature's pace follows its gap to its target (chaseScale
--- through MonsterAIService.SetSpeedScale: it runs down a straggler and closes on anyone who stops, but it never quite
--- outruns a sprinter on Standard), and every Alive player still on the roof sprints on adrenaline (their stamina is
--- topped up whenever it falls under STAMINA_FLOOR).
+-- The ledge staging. Once someone has jumped and no Alive participant is left on the roof to jump (a Downed one does
+-- not hold it), LEDGE_DELAY after the last one left, the Creature is taken back (a busy one is asked for again at the
+-- tick rate), put on the ledge the squad jumped from (revealPose: on the edge, facing out over them), shown, and turned
+-- to stare at the jumper nearest under it (stareTarget, MonsterAIService.SetScriptedTarget): the look-back camera of
+-- everyone under a canopy finds it there. It stays there, held, until the run ends.
 --
--- The finale (Scenes.Finale, from startAt F). It starts (finaleReady) once someone has jumped, no Alive participant is
--- left on the roof to jump (a Downed one does not hold it), nobody is still in freefall and the last canopy has been
--- open Finale.Settle; or FINALE_WAIT after the first landing, whoever is still up there. The Creature is taken back
--- (up to ACQUIRE_WAIT while a catch finishes; without it only the storm plays, "L5_FinaleSky"), hidden, put on the
--- ledge the squad jumped from (revealPose: on the edge, facing out over them) and turned to stare at the jumper nearest
--- under it (stareTarget, MonsterAIService.SetScriptedTarget). OneShot Lightning at Flash1 and Flash2. It is shown in the
--- dark gap just before the first flash's main strike (Reveal: motionless, staring down) and hidden just before the
--- second's (Vanish: it glitches in the first strike; the main one lights an empty ledge). The clients fade to black. At
--- Land every jumper still under a canopy that opened before the fade is landed in the dark (ParachuteService.ForceLand)
--- and every lander's hold ends (ParachuteService.ReleaseHold: the view is theirs again, so the ESCAPED summary takes
--- over). The finale keeps playing if the run has already resolved (the last lander escaped): Results waits for it.
--- Anyone still on the roof after it is hunted again (Release Patrol + a High Alert at the nearest of them); with nobody
--- left the Creature stays held, hidden, until the run ends.
+-- Escapes. A jumper escapes the moment they are down below (or set down by ParachuteService.ForceLand): Escaped fires
+-- once, at the landing, so MatchAndDataService's escape time (their BestTime) is the touchdown, and their hold ends at
+-- once (ParachuteService.ReleaseHold). Nobody jumps without a pack: ParachuteService buckles a spare one onto anyone
+-- who leaves the roof without one. Anyone who stays on the roof keeps playing: the Creature hunts them until they jump,
+-- bleed out or are caught.
 --
--- Escapes. A jumper escapes the moment they are down below under a canopy (or landed by the finale in the dark): Escaped
--- fires once, at the landing, so MatchAndDataService's escape time (their BestTime) is the touchdown. ParachuteService
--- holds the body (the "Parachute" control lock) until the finale has played for them, which holds the summary too.
--- A jumper who lands after the finale (they jumped late) gets their own fade ("L5_Touchdown", args.subject) and their
--- hold ends Finale.TouchdownRelease later.
+-- Deactivate and EndRun cancel everything scheduled and let a held Creature go (Dormant).
 --
--- No pack, no escape. The crate holds GameConfig.ParachutePackCount packs, one for every member of a full squad
--- (MaxSquad), and a pack goes back into it when its wearer dies or leaves before jumping, so every living participant
--- can always get one. A participant who jumps without one dies in the fall (warned at the gap); one who stays on the roof
--- keeps playing: they hold the finale while Alive (up to FINALE_WAIT after the first landing), and after it the Creature
--- hunts them until they jump with a pack, bleed out or are caught.
+-- Signals: Escaped(player): a jumper got away (the contract MatchAndDataService subscribes to through Levels.Level3).
+-- Dev command: roof [smash|ledge] (the door now, or the ledge staging once someone has jumped; no argument reports the
+-- phase).
 --
--- Deactivate and EndRun cancel everything scheduled, let a held Creature go (Dormant) and restore its pace.
---
--- Signals: Escaped(player): a jumper got away (the contract MatchAndDataService subscribes to through Levels.Level5).
--- Dev command: roof [smash|finale] (the door now, or the finale with whoever has jumped; no argument reports the phase).
---
--- Pure rules (tests/Specs/Roof.spec.luau): geometry, inside, squadOut, smashDue, chaseScale, finaleReady, revealPose,
--- stareTarget. SetDependencies swaps every service the controller touches, so specs run the level on a fake clock.
+-- Pure rules (tests/Specs/Roof.spec.luau): geometry, inside, squadOut, smashDue, ledgeReady, revealPose, stareTarget.
+-- SetDependencies swaps every service the controller touches, so specs run the level on a fake clock.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -68,12 +48,12 @@ local Workspace = game:GetService("Workspace")
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
-local DifficultyConfig = require(ReplicatedStorage.Shared.Config.DifficultyConfig)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local ParachuteMotion = require(ReplicatedStorage.Shared.Sequence.ParachuteMotion)
 local Scenes = require(ReplicatedStorage.Shared.Sequence.Scenes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
@@ -82,18 +62,15 @@ local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local DevToolsService = require(ServerScriptService.Services.Core.DevToolsService)
 local LifeStateService = require(ServerScriptService.Services.Player.LifeStateService)
-local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
 local LevelDirector = require(ServerScriptService.Services.Core.LevelDirector)
 local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
 local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
-local ObjectiveService = require(script.Parent.ObjectiveService)
-local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 
 local LevelKit = require(script.Parent.LevelKit)
 
-local log = Log.new("Level5")
+local log = Log.new("Level3")
 
 type Handle = MonsterAIService.ScriptedHandle
 type Schedule = LevelKit.Schedule
@@ -101,11 +78,11 @@ type Jump = ParachuteService.Jump
 
 export type Rect = ParachuteMotion.Rect
 
-export type Phase = "Idle" | "Arrival" | "Smash" | "Chase" | "FinaleWait" | "Finale" | "Done"
+export type Phase = "Idle" | "Arrival" | "Smash" | "Chase" | "Ledge"
 
 export type Geometry = {
 	origin: Vector3,
-	housing: Rect, -- the stair housing (L5_RoofAccess), world X / Z
+	housing: Rect, -- the stair housing (L3_RoofAccess), world X / Z
 	tower: Rect, -- the stair tower that comes up into it
 	doorway: Vector3, -- the RoofStairDoor's centre on the housing wall, deck height
 	out: Vector3, -- unit, from the housing out through the door onto the roof
@@ -116,19 +93,17 @@ export type Geometry = {
 export type Sample = { position: Vector3 }
 
 export type SmashInput = {
-	smashNow: boolean, -- a loud noise after the first one stepped out, or the crate's chain cut
+	smashNow: boolean, -- a loud noise after the first one stepped out
 	firstOutAt: number?, -- when the first participant stepped out of the housing
 	grace: number, -- ObjectiveConfig.graceFor(difficulty)
 	activatedAt: number,
 	now: number,
 }
 
-export type FinaleInput = {
-	jumpers: number, -- under a canopy or down below
-	falling: number, -- off the edge with a pack, cord not pulled yet
+export type LedgeInput = {
+	jumped: number, -- off the roof: in freefall, under a canopy or down below
 	roofAlive: number, -- Alive participants who have not jumped
-	lastDeployAt: number?, -- when the most recent canopy opened
-	firstLandedAt: number?,
+	lastLeftAt: number?, -- when the most recent jumper left the roof
 	now: number,
 }
 
@@ -141,30 +116,23 @@ export type Dependencies = {
 	lifeState: (player: Player) -> Enums.LifeState,
 	acquire: (token: string) -> Handle?,
 	stare: (token: string, player: Player?) -> boolean,
-	alert: (position: Vector3, priority: Enums.NoisePriority) -> (),
 	creatureRoot: () -> Vector3?,
-	creatureTarget: () -> Player?,
-	setSpeedScale: (scale: number) -> (),
 	door: () -> Model?,
 	doorState: (door: Model) -> Enums.DoorState,
 	setDoor: (door: Model, state: Enums.DoorState, seconds: number?) -> boolean,
 	oneShot: (kind: Enums.OneShotKind, startAt: number, args: { [string]: Types.OneShotArg }, subject: Instance?) -> (),
 	jump: (player: Player) -> Jump?,
-	forceLand: (player: Player) -> boolean,
 	releaseHold: (player: Player) -> boolean,
-	stamina: (player: Player) -> number,
-	refillStamina: (player: Player) -> (),
 	notify: (player: Player, key: string) -> (),
 }
 
 type SmashRun = { startAt: number, slammed: boolean, revealed: boolean, released: boolean }
-type FinaleRun = { startAt: number, creature: boolean, done: boolean }
 
-local LEVEL: Enums.LevelId = "Level5_Roof"
-local TOKEN = "L5_RoofFinale"
+local LEVEL: Enums.LevelId = "Level3_Roof"
+local TOKEN = "L3_Roof"
 local DOOR_ID = "RoofStairDoor"
-local HOUSING_ROOM = "L5_RoofAccess"
-local ROOF_SIDE_ROOM = "L5_Roof_East"
+local HOUSING_ROOM = "L3_RoofAccess"
+local ROOF_SIDE_ROOM = "L3_Roof_East"
 local TICK = 1 / GameConfig.ServerTickHz
 local LEAD = GameConfig.OneShotLead
 local OPEN_DELAY = 1.2 -- the wind takes the door this long after the first arrival in the housing
@@ -172,57 +140,38 @@ local OPEN_SECONDS = 1.4
 local DOOR_CLEAR = 9 -- studs from the doorway everyone must be before it slams
 local ARRIVAL_TIMEOUT = 75
 local BEHIND_DOOR = 3 -- studs behind the door the Creature stands for the blows
-local STAMINA_FLOOR = 55
-local FINALE_WAIT = 40
-local ACQUIRE_WAIT = 1.5
-local FINALE_PRE = 0.3 -- the ledge staging replicates before the finale's clock starts
+local LEDGE_DELAY = 2 -- the Creature steps onto the ledge this long after the last jump
 local LEDGE_INSET = 1.2 -- the Creature stands this far in from the edge
-local NEAR_GAP = 14 -- chaseScale: right behind its target
-local FAR_GAP = 40 -- and well behind it
-local SCALE_STEP = 0.02
 local ROOT_HEIGHT = CreatureConfig.Rig.HipHeight + CreatureConfig.Rig.RootSize.Y / 2
 local EYE_HEIGHT = CreatureConfig.EyeHeightAboveRoot.Biped
 local CHEST_HEIGHT = 1.2
 local BIPED: Enums.PoseMode = "Biped"
 local CHASE_STATE: Enums.MonsterState = "WallChase"
 local PATROL_STATE: Enums.MonsterState = "Patrol"
-local HUNT_STATE: Enums.MonsterState = "Patrol"
 local PARKED_STATE: Enums.MonsterState = "Dormant"
-local HUNT_PRIORITY: Enums.NoisePriority = "High"
 local TIMELINE_KIND: Enums.OneShotKind = "Timeline"
-local LIGHTNING_KIND: Enums.OneShotKind = "Lightning"
 local RUN_KEY = "Hud.RoofRun"
 local DOOR = Scenes.RoofDoor
-local FINALE = Scenes.Finale
 local ROOF_ARGS = Scenes.RoofArgs
 local ON_ROOF: { [string]: boolean } = { None = true, Packed = true }
 
--- The pace a chasing Creature keeps right behind / well behind its target, as a share of a sprinting player's speed.
-local PACE: { [string]: { near: number, far: number } } = {
-	Standard = { near = 0.96, far = 1.3 },
-	Nightmare = { near = 1.02, far = 1.45 },
-}
+local Level3 = {}
 
-local Level5 = {}
-
-Level5.LevelId = LEVEL
-Level5.Token = TOKEN
-Level5.OpenDelay = OPEN_DELAY
-Level5.DoorClear = DOOR_CLEAR
-Level5.SmashTimeout = ObjectiveConfig.graceFor("Standard") -- the wait behind the door on Standard
-Level5.ArrivalTimeout = ARRIVAL_TIMEOUT
-Level5.StaminaFloor = STAMINA_FLOOR
-Level5.FinaleWait = FINALE_WAIT
-Level5.AcquireWait = ACQUIRE_WAIT
-Level5.FinalePre = FINALE_PRE
-Level5.LedgeInset = LEDGE_INSET
-Level5.RunKey = RUN_KEY
+Level3.LevelId = LEVEL
+Level3.Token = TOKEN
+Level3.OpenDelay = OPEN_DELAY
+Level3.DoorClear = DOOR_CLEAR
+Level3.SmashTimeout = ObjectiveConfig.graceFor("Standard") -- the wait behind the door on Standard
+Level3.ArrivalTimeout = ARRIVAL_TIMEOUT
+Level3.LedgeDelay = LEDGE_DELAY
+Level3.LedgeInset = LEDGE_INSET
+Level3.RunKey = RUN_KEY
 
 local escapedSignal: Signal.Signal<Player> = Signal.new()
 
--- (player) once per run when a jumper got away: the moment they are down below under a canopy (or landed by the
--- finale's scripted landing in the dark). MatchAndDataService takes that moment as their escape time.
-Level5.Escaped = escapedSignal
+-- (player) once per run when a jumper got away: the moment they are down below. MatchAndDataService takes that moment
+-- as their escape time.
+Level3.Escaped = escapedSignal
 
 --------------------------------------------------------------------------------
 -- Pure rules
@@ -236,8 +185,8 @@ local function inRect(rect: Rect, position: Vector3): boolean
 	return position.X >= rect.minX and position.X <= rect.maxX and position.Z >= rect.minZ and position.Z <= rect.maxZ
 end
 
--- The roof door of the housing `arrival` (a Stairwell_4_5 candidate; nil: the middle one) leads up to.
-function Level5.roofDoor(layout: LayoutSchema.LevelLayout, arrival: WorldConfig.StairwellSpec?): LayoutSchema.Door?
+-- The roof door of the housing `arrival` (a Stairwell_2_3 candidate; nil: the middle one) leads up to.
+function Level3.roofDoor(layout: LayoutSchema.LevelLayout, arrival: WorldConfig.StairwellSpec?): LayoutSchema.Door?
 	local housingId = if arrival then arrival.toRoom else HOUSING_ROOM
 	for _, candidate in layout.doors do
 		if candidate.kind == "RoofDoor" and table.find(candidate.rooms, housingId) and candidate.scriptedId then
@@ -248,22 +197,22 @@ function Level5.roofDoor(layout: LayoutSchema.LevelLayout, arrival: WorldConfig.
 end
 
 -- The ScriptedId of the roof door the run arrives behind (DoorService.Get on the roof).
-function Level5.doorId(layout: LayoutSchema.LevelLayout?, arrival: WorldConfig.StairwellSpec?): string
-	local door = if layout then Level5.roofDoor(layout, arrival) else nil
+function Level3.doorId(layout: LayoutSchema.LevelLayout?, arrival: WorldConfig.StairwellSpec?): string
+	local door = if layout then Level3.roofDoor(layout, arrival) else nil
 	return if door and door.scriptedId then door.scriptedId else DOOR_ID
 end
 
 -- Everything the level needs from the roof's blueprint (world positions), for a squad arriving by `arrival` (a
--- Stairwell_4_5 candidate; nil: the middle one).
-function Level5.geometry(layout: LayoutSchema.LevelLayout, arrival: WorldConfig.StairwellSpec?): Geometry
+-- Stairwell_2_3 candidate; nil: the middle one).
+function Level3.geometry(layout: LayoutSchema.LevelLayout, arrival: WorldConfig.StairwellSpec?): Geometry
 	local origin = WorldConfig.levelOrigin(layout.id)
 	local rooms = LayoutSchema.indexRooms(layout)
 	local housingId = if arrival then arrival.toRoom else HOUSING_ROOM
 	local housing = rooms[housingId]
 	local roofSide = rooms[ROOF_SIDE_ROOM]
-	assert(housing and roofSide, "Level 5 has no " .. housingId .. " / " .. ROOF_SIDE_ROOM)
-	local door = Level5.roofDoor(layout, arrival)
-	assert(door, "Level 5 has no roof door on " .. housingId)
+	assert(housing and roofSide, "the roof has no " .. housingId .. " / " .. ROOF_SIDE_ROOM)
+	local door = Level3.roofDoor(layout, arrival)
+	assert(door, "the roof has no roof door on " .. housingId)
 	local edge = LayoutSchema.sharedEdge(housing.rect, roofSide.rect)
 	assert(edge, housingId .. " and " .. ROOF_SIDE_ROOM .. " share no wall")
 	local at = door.at
@@ -296,16 +245,16 @@ function Level5.geometry(layout: LayoutSchema.LevelLayout, arrival: WorldConfig.
 end
 
 -- Whether a root at `position` is still in the stair housing or the stair tower below it.
-function Level5.inside(position: Vector3, g: Geometry): boolean
+function Level3.inside(position: Vector3, g: Geometry): boolean
 	return inRect(g.housing, position) or inRect(g.tower, position)
 end
 
 -- Whether everyone is out on the roof and clear of the door (the door may slam), and whether anyone is out at all.
-function Level5.squadOut(samples: { Sample }, g: Geometry): (boolean, boolean)
+function Level3.squadOut(samples: { Sample }, g: Geometry): (boolean, boolean)
 	local anyOut = false
 	local allOut = #samples > 0
 	for _, sample in samples do
-		local inside = Level5.inside(sample.position, g)
+		local inside = Level3.inside(sample.position, g)
 		if not inside then
 			anyOut = true
 		end
@@ -317,7 +266,7 @@ function Level5.squadOut(samples: { Sample }, g: Geometry): (boolean, boolean)
 end
 
 -- Whether the door sequence starts now (see the header).
-function Level5.smashDue(input: SmashInput): boolean
+function Level3.smashDue(input: SmashInput): boolean
 	if input.smashNow then
 		return true
 	end
@@ -328,39 +277,18 @@ function Level5.smashDue(input: SmashInput): boolean
 	return input.now >= input.activatedAt + ARRIVAL_TIMEOUT
 end
 
--- The chasing Creature's speed scale for a gap of `gap` studs to its target (nil: no target, as configured): from the
--- difficulty's near pace (right behind) to its far pace (well behind), relative to its WallChase speed.
-function Level5.chaseScale(gap: number?, difficulty: Enums.Difficulty): number
-	if gap == nil then
-		return 1
-	end
-	local pace = PACE[difficulty] or PACE.Standard
-	local spec = DifficultyConfig[difficulty] or DifficultyConfig.Standard
-	local base = CreatureConfig.Speeds.WallChase * spec.creatureSpeedMultiplier
-	local share = MathUtil.lerp(pace.near, pace.far, MathUtil.clamp01((gap - NEAR_GAP) / (FAR_GAP - NEAR_GAP)))
-	local scale = share * GameConfig.SprintSpeed / base
-	return math.clamp(MathUtil.round(scale, SCALE_STEP), 0.5, 2)
-end
-
--- Whether the finale starts now (see the header).
-function Level5.finaleReady(input: FinaleInput): boolean
-	if input.jumpers + input.falling == 0 then
+-- Whether the Creature steps onto the ledge now (see the header).
+function Level3.ledgeReady(input: LedgeInput): boolean
+	if input.jumped == 0 or input.roofAlive > 0 then
 		return false
 	end
-	local firstLanded = input.firstLandedAt
-	if firstLanded ~= nil and input.now >= firstLanded + FINALE_WAIT then
-		return true
-	end
-	if input.jumpers == 0 or input.roofAlive > 0 or input.falling > 0 then
-		return false
-	end
-	local lastDeploy = input.lastDeployAt
-	return lastDeploy == nil or input.now >= lastDeploy + FINALE.Settle
+	local lastLeft = input.lastLeftAt
+	return lastLeft == nil or input.now >= lastLeft + LEDGE_DELAY
 end
 
--- Where the Creature stands for the reveal: on the ledge nearest where the squad left the roof (the average of
--- `leftFrom`; the jump gap when nobody did), LedgeInset in from the edge, facing out over them.
-function Level5.revealPose(leftFrom: { Vector3 }): CFrame
+-- Where the Creature stands on the ledge: nearest where the squad left the roof (the average of `leftFrom`; the jump
+-- gap when nobody did), LedgeInset in from the edge, facing out over them.
+function Level3.revealPose(leftFrom: { Vector3 }): CFrame
 	local sum = Vector3.zero
 	for _, point in leftFrom do
 		sum += point
@@ -376,7 +304,7 @@ function Level5.revealPose(leftFrom: { Vector3 }): CFrame
 end
 
 -- The jumper whose root is nearest the ledge horizontally (the one right under the Creature's stare), or nil.
-function Level5.stareTarget<T>(jumpers: { { who: T, position: Vector3 } }, ledge: Vector3): T?
+function Level3.stareTarget<T>(jumpers: { { who: T, position: Vector3 } }, ledge: Vector3): T?
 	local best: T? = nil
 	local bestDistance = math.huge
 	for _, entry in jumpers do
@@ -404,25 +332,19 @@ local function realDependencies(): Dependencies
 		lifeState = LifeStateService.GetState,
 		acquire = MonsterAIService.AcquireScripted,
 		stare = MonsterAIService.SetScriptedTarget,
-		alert = MonsterAIService.Alert,
 		creatureRoot = function(): Vector3?
 			local model = MonsterAIService.GetCreature()
 			local root = if model then model:FindFirstChild("HumanoidRootPart") else nil
 			return if root and root:IsA("BasePart") then root.CFrame.Position else nil
 		end,
-		creatureTarget = MonsterAIService.GetTarget,
-		setSpeedScale = MonsterAIService.SetSpeedScale,
 		door = function(): Model?
-			return DoorService.Get(LEVEL, Level5.doorId(Builder.getLayout(LEVEL), LevelDirector.entryFor(LEVEL)))
+			return DoorService.Get(LEVEL, Level3.doorId(Builder.getLayout(LEVEL), LevelDirector.entryFor(LEVEL)))
 		end,
 		doorState = DoorService.GetState,
 		setDoor = DoorService.SetState,
 		oneShot = LevelKit.oneShot,
 		jump = ParachuteService.GetJump,
-		forceLand = ParachuteService.ForceLand,
 		releaseHold = ParachuteService.ReleaseHold,
-		stamina = PlayerStateService.GetStamina,
-		refillStamina = PlayerStateService.RefillStamina,
 		notify = LevelKit.notify,
 	}
 end
@@ -442,13 +364,9 @@ local firstOutAt: number? = nil
 local smashNow = false
 local doorOpened = false
 local smashRun: SmashRun? = nil
-local finaleRun: FinaleRun? = nil
-local acquireUntil = 0
+local ledgeAt: number? = nil -- when the Creature was staged on the ledge
 local nextTickAt = -math.huge
-local scaleSet = 1
 local escaped: { [Player]: boolean } = {}
-local landedAt: { [Player]: number } = {}
-local touchdowns: { [Player]: boolean } = {}
 
 local function geo(): Geometry?
 	local arrival = LevelDirector.entryFor(LEVEL)
@@ -462,7 +380,7 @@ local function geo(): Geometry?
 		log.error("no %s layout; the roof cannot run", LEVEL)
 		return nil
 	end
-	local built = Level5.geometry(layout, arrival)
+	local built = Level3.geometry(layout, arrival)
 	geometry = built
 	geometryRoom = room
 	return built
@@ -482,14 +400,6 @@ local function seen(root: Vector3, players: { Player }): boolean
 	local list = eyes(players)
 	return LevelKit.seenBy(list, root + Vector3.new(0, EYE_HEIGHT, 0), deps.lineClear)
 		or LevelKit.seenBy(list, root + Vector3.new(0, CHEST_HEIGHT, 0), deps.lineClear)
-end
-
-local function setScale(scale: number)
-	if math.abs(scale - scaleSet) < 1e-6 then
-		return
-	end
-	scaleSet = scale
-	deps.setSpeedScale(scale)
 end
 
 local function escape(player: Player)
@@ -554,7 +464,7 @@ local function startSmash(now: number, g: Geometry)
 	local blocked = false
 	for _, sample in samplesOf(players) do
 		if
-			Level5.inside(sample.position, g)
+			Level3.inside(sample.position, g)
 			or MathUtil.horizontalDistance(sample.position, g.doorway) < DOOR_CLEAR
 		then
 			blocked = true
@@ -595,11 +505,9 @@ local function startSmash(now: number, g: Geometry)
 		-- it runs down someone it can see from the doorway; anyone out of sight is left to its senses
 		local squad = deps.players()
 		letGo(if seen(g.behind.Position, squad) then CHASE_STATE else PATROL_STATE)
-		if ParachuteService.IsCrateOpen() then
-			for _, player in squad do
-				if ON_ROOF[jumpState(player)] then
-					deps.notify(player, RUN_KEY)
-				end
+		for _, player in squad do
+			if ON_ROOF[jumpState(player)] then
+				deps.notify(player, RUN_KEY)
 			end
 		end
 		log.info("the Creature is through the roof door")
@@ -626,12 +534,12 @@ local function stepArrival(now: number, g: Geometry, players: { Player })
 			deps.setDoor(door, "Open", OPEN_SECONDS)
 		end
 	end
-	local _, anyOut = Level5.squadOut(samples, g)
+	local _, anyOut = Level3.squadOut(samples, g)
 	if anyOut and firstOutAt == nil then
 		firstOutAt = now
 	end
 	if
-		Level5.smashDue({
+		Level3.smashDue({
 			smashNow = smashNow,
 			firstOutAt = firstOutAt,
 			grace = ObjectiveConfig.graceFor(difficulty),
@@ -644,226 +552,73 @@ local function stepArrival(now: number, g: Geometry, players: { Player })
 end
 
 --------------------------------------------------------------------------------
--- The final sprint
+-- The ledge staging
 --------------------------------------------------------------------------------
 
-local function stepChase(players: { Player })
-	local target = deps.creatureTarget()
-	local creature = deps.creatureRoot()
-	local targetRoot = if target then deps.rootOf(target) else nil
-	local gap = if creature and targetRoot then MathUtil.horizontalDistance(creature, targetRoot) else nil
-	setScale(Level5.chaseScale(gap, difficulty))
-	for _, player in players do
-		if ON_ROOF[jumpState(player)] and deps.lifeState(player) == "Alive" then
-			if deps.stamina(player) < STAMINA_FLOOR then
-				deps.refillStamina(player)
-			end
-		end
+-- Puts the Creature on the ledge over the jumpers, shown, staring at the nearest. False while it cannot be taken.
+local function stageLedge(now: number): boolean
+	local h = handle or deps.acquire(TOKEN)
+	if not h then
+		return false
 	end
-end
-
---------------------------------------------------------------------------------
--- The finale
---------------------------------------------------------------------------------
-
-local function land(run: FinaleRun)
-	local players = deps.players()
-	for _, player in players do
-		local jump = deps.jump(player)
-		local opened = if jump then jump.deployedAt else nil
-		if
-			jump
-			and (jump.state == "Canopy" or jump.state == "Freefall")
-			and opened ~= nil
-			and opened <= run.startAt + FINALE.FadeStart
-		then
-			deps.forceLand(player)
-		end
-	end
-	local stragglers: { Player } = {}
-	for _, player in players do
-		local state = jumpState(player)
-		if state == "Landed" then
-			if landedAt[player] == nil then
-				landedAt[player] = deps.now()
-			end
-			escape(player)
-			deps.releaseHold(player)
-		elseif ON_ROOF[state] then
-			table.insert(stragglers, player)
-		end
-	end
-	run.done = true
-	phase = "Done"
-	if #stragglers == 0 or handle == nil then
-		return
-	end
-	local creature = deps.creatureRoot()
-	local nearest: Vector3? = nil
-	local nearestDistance = math.huge
-	for _, player in stragglers do
-		local root = deps.rootOf(player)
-		if root then
-			local distance = if creature then (root - creature).Magnitude else 0
-			if distance < nearestDistance then
-				nearest, nearestDistance = root, distance
-			end
-		end
-	end
-	letGo(HUNT_STATE)
-	if nearest then
-		deps.alert(nearest, HUNT_PRIORITY)
-	end
-	log.info("%d left on the roof: the Creature hunts them", #stragglers)
-end
-
-local function beginFinale(now: number, withCreature: boolean)
-	phase = "Finale"
-	local startAt = now + LEAD + FINALE_PRE
-	local run: FinaleRun = { startAt = startAt, creature = withCreature, done = false }
-	finaleRun = run
+	handle = h
+	-- a door sequence still running is called off: nobody is left up there to chase
+	schedule:Clear()
+	phase = "Ledge"
+	ledgeAt = now
 	local leftFrom: { Vector3 } = {}
 	local below: { { who: Player, position: Vector3 } } = {}
 	for _, player in deps.players() do
 		local jump = deps.jump(player)
-		if
-			jump
-			and jump.leftFrom
-			and (jump.state == "Canopy" or jump.state == "Landed" or jump.state == "Freefall")
-		then
-			table.insert(leftFrom, jump.leftFrom :: Vector3)
+		local from = if jump then jump.leftFrom else nil
+		if jump and from and not ON_ROOF[jump.state] then
+			table.insert(leftFrom, from)
 			local root = deps.rootOf(player)
 			if root then
 				table.insert(below, { who = player, position = root })
 			end
 		end
 	end
-	local pose = Level5.revealPose(leftFrom)
-	local head = pose.Position + Vector3.new(0, EYE_HEIGHT, 0)
-	local h = if withCreature then handle else nil
-	if h then
-		h:SetHidden(true)
-		h:SetPose(BIPED)
-		h:Teleport(pose)
-		h:Face(pose.Position + pose.LookVector * 6)
-		local target = Level5.stareTarget(below, pose.Position)
-		if target then
-			deps.stare(TOKEN, target)
-		end
+	local pose = Level3.revealPose(leftFrom)
+	h:SetPose(BIPED)
+	h:Teleport(pose)
+	h:Face(pose.Position + pose.LookVector * 6)
+	h:SetHidden(false)
+	local target = Level3.stareTarget(below, pose.Position)
+	if target then
+		deps.stare(TOKEN, target)
 	end
-	local args: { [string]: Types.OneShotArg } = {
-		id = if h then FINALE.Id else FINALE.SkyId,
-		[ROOF_ARGS.Head] = head,
-		[ROOF_ARGS.Ledge] = pose.Position,
-	}
-	deps.oneShot(TIMELINE_KIND, startAt, args, nil)
-	local flash: { [string]: Types.OneShotArg } = { intensity = FINALE.FlashIntensity, stages = 2 }
-	deps.oneShot(LIGHTNING_KIND, startAt + FINALE.Flash1, flash, nil)
-	deps.oneShot(LIGHTNING_KIND, startAt + FINALE.Flash2, table.clone(flash), nil)
-	if h then
-		schedule:At(startAt + FINALE.Reveal - FINALE.RevealLead, "reveal", function()
-			local current = handle
-			if current then
-				current:SetHidden(false)
-			end
-		end)
-		schedule:At(startAt + FINALE.Hide - FINALE.HideLead, "vanish", function()
-			local current = handle
-			if current then
-				current:SetHidden(true)
-				deps.stare(TOKEN, nil)
-			end
-		end)
-	end
-	schedule:At(startAt + FINALE.Land, "land", function()
-		land(run)
-	end)
-	log.info("the finale starts%s", if h then "" else " (the Creature could not be taken: the storm alone)")
+	log.info("the Creature stands on the ledge")
+	return true
 end
 
-local function startFinale(now: number)
-	-- a door sequence still running is called off: nobody is left up there to chase, the Creature goes to the ledge
-	schedule:Clear()
-	setScale(1)
-	if handle == nil then
-		handle = deps.acquire(TOKEN)
-	end
-	if handle == nil then
-		phase = "FinaleWait"
-		acquireUntil = now + ACQUIRE_WAIT
-		return
-	end
-	beginFinale(now, true)
-end
-
-local function stepFinaleWait(now: number)
-	if handle == nil then
-		handle = deps.acquire(TOKEN)
-	end
-	if handle ~= nil then
-		beginFinale(now, true)
-	elseif now >= acquireUntil then
-		beginFinale(now, false)
-	end
-end
-
-local function checkFinale(now: number, players: { Player })
-	local jumpers, falling, roofAlive = 0, 0, 0
-	local lastDeploy: number? = nil
+local function checkLedge(now: number, players: { Player })
+	local jumped, roofAlive = 0, 0
+	local lastLeft: number? = nil
 	for _, player in players do
 		local jump = deps.jump(player)
 		local state = if jump then jump.state else "None"
-		if state == "Canopy" or state == "Landed" then
-			jumpers += 1
-			local opened = if jump then jump.deployedAt else nil
-			if state == "Canopy" and opened ~= nil and (lastDeploy == nil or opened > lastDeploy) then
-				lastDeploy = opened
+		if not ON_ROOF[state] then
+			jumped += 1
+			local left = if jump then jump.leftAt else nil
+			if left ~= nil and (lastLeft == nil or left > lastLeft) then
+				lastLeft = left
 			end
-		elseif state == "Freefall" then
-			falling += 1
-		elseif ON_ROOF[state] and deps.lifeState(player) == "Alive" then
+		elseif deps.lifeState(player) == "Alive" then
 			roofAlive += 1
 		end
 	end
-	local firstLanded: number? = nil
-	for _, at in landedAt do
-		if firstLanded == nil or at < firstLanded then
-			firstLanded = at
-		end
-	end
-	if
-		Level5.finaleReady({
-			jumpers = jumpers,
-			falling = falling,
-			roofAlive = roofAlive,
-			lastDeployAt = lastDeploy,
-			firstLandedAt = firstLanded,
-			now = now,
-		})
-	then
-		startFinale(now)
+	if Level3.ledgeReady({ jumped = jumped, roofAlive = roofAlive, lastLeftAt = lastLeft, now = now }) then
+		stageLedge(now)
 	end
 end
 
--- Landings: each jumper escapes the moment they are first seen down below; after the finale, a late lander gets their
--- own fade and their hold ends after it.
-local function noteLandings(now: number, players: { Player })
+-- Landings: each jumper escapes the moment they are first seen down below, and their hold ends.
+local function noteLandings(players: { Player })
 	for _, player in players do
-		if jumpState(player) ~= "Landed" or landedAt[player] ~= nil then
-			continue
-		end
-		landedAt[player] = now
-		escape(player)
-		local run = finaleRun
-		if run and run.done and not touchdowns[player] then
-			touchdowns[player] = true
-			local startAt = now + LEAD
-			local args: { [string]: Types.OneShotArg } =
-				{ id = FINALE.TouchdownId, [ROOF_ARGS.Subject] = player.UserId }
-			deps.oneShot(TIMELINE_KIND, startAt, args, nil)
-			schedule:At(startAt + FINALE.TouchdownRelease, "touchdown", function()
-				deps.releaseHold(player)
-			end)
+		if jumpState(player) == "Landed" and not escaped[player] then
+			escape(player)
+			deps.releaseHold(player)
 		end
 	end
 end
@@ -874,7 +629,7 @@ end
 
 -- One step at `now` (the Levels service runs it every Heartbeat; specs call it with a fake clock): scheduled beats on
 -- time, the level's checks at the server tick rate.
-function Level5.Step(now: number?)
+function Level3.Step(now: number?)
 	local t = now or deps.now()
 	schedule:Run(t)
 	if not active or t < nextTickAt then
@@ -886,40 +641,35 @@ function Level5.Step(now: number?)
 		return
 	end
 	local players = deps.players()
-	noteLandings(t, players)
+	noteLandings(players)
 	if phase == "Arrival" then
 		ensureHeld(players)
 		stepArrival(t, g, players)
-	elseif phase == "Chase" then
-		stepChase(players)
-	elseif phase == "FinaleWait" then
-		stepFinaleWait(t)
-		return
 	end
 	if phase == "Arrival" or phase == "Smash" or phase == "Chase" then
-		checkFinale(t, players)
+		checkLedge(t, players)
 	end
 end
 
-function Level5.GetPhase(): Phase
+function Level3.GetPhase(): Phase
 	return phase
 end
 
-function Level5.IsHolding(): boolean
+function Level3.IsHolding(): boolean
 	return handle ~= nil
 end
 
-function Level5.HasEscaped(player: Player): boolean
+function Level3.HasEscaped(player: Player): boolean
 	return escaped[player] == true
 end
 
-function Level5.GetGeometry(): Geometry?
+function Level3.GetGeometry(): Geometry?
 	return geo()
 end
 
 -- The door sequence of this run so far (nil before it started): whether the wind slammed the door, the Creature was
 -- shown behind it and let go.
-function Level5.GetSmash(): { startAt: number, slammed: boolean, revealed: boolean, released: boolean }?
+function Level3.GetSmash(): { startAt: number, slammed: boolean, revealed: boolean, released: boolean }?
 	local run = smashRun
 	if not run then
 		return nil
@@ -927,33 +677,18 @@ function Level5.GetSmash(): { startAt: number, slammed: boolean, revealed: boole
 	return { startAt = run.startAt, slammed = run.slammed, revealed = run.revealed, released = run.released }
 end
 
--- When the finale started (its startAt) and whether the Creature was in it; nil before it.
-function Level5.GetFinale(): { startAt: number, creature: boolean, done: boolean }?
-	local run = finaleRun
-	if not run then
-		return nil
-	end
-	return { startAt = run.startAt, creature = run.creature, done = run.done }
+-- When the Creature was staged on the ledge; nil before it.
+function Level3.GetLedgeAt(): number?
+	return ledgeAt
 end
 
 -- Names of the beats still to come.
-function Level5.Pending(): { string }
+function Level3.Pending(): { string }
 	return schedule:Pending()
 end
 
--- The crate's chain was cut (the roof objective): the door smash starts at once while the Creature still waits behind
--- the door. False otherwise.
-function Level5.CrateCut(): boolean
-	local g = geo()
-	if not (active and phase == "Arrival" and g) then
-		return false
-	end
-	startSmash(deps.now(), g)
-	return true
-end
-
 -- A participant's High / Critical noise on the roof once someone has stepped out ends the wait behind the door.
-function Level5.HeardNoise(event: Types.NoiseEvent)
+function Level3.HeardNoise(event: Types.NoiseEvent)
 	if not (active and phase == "Arrival" and firstOutAt ~= nil) or event.sourceUserId == nil then
 		return
 	end
@@ -963,7 +698,7 @@ function Level5.HeardNoise(event: Types.NoiseEvent)
 end
 
 -- Starts the door sequence now (dev). False unless the squad is still arriving.
-function Level5.Smash(): boolean
+function Level3.Smash(): boolean
 	local g = geo()
 	if not (active and phase == "Arrival" and g) then
 		return false
@@ -972,26 +707,22 @@ function Level5.Smash(): boolean
 	return true
 end
 
--- Starts the finale now (dev). False unless the level is live, someone has jumped and it has not played.
-function Level5.PlayFinale(): boolean
+-- Stages the Creature on the ledge now (dev). False unless the level is live, someone has jumped, it is not on the
+-- ledge yet and it can be taken.
+function Level3.StageLedge(): boolean
 	if not (active and (phase == "Arrival" or phase == "Smash" or phase == "Chase")) then
 		return false
 	end
 	local anyone = false
 	for _, player in deps.players() do
-		local state = jumpState(player)
-		if state == "Canopy" or state == "Landed" or state == "Freefall" then
+		if not ON_ROOF[jumpState(player)] then
 			anyone = true
 		end
 	end
-	if not anyone then
-		return false
-	end
-	startFinale(deps.now())
-	return true
+	return anyone and stageLedge(deps.now())
 end
 
-function Level5.SetDependencies(fake: Dependencies?)
+function Level3.SetDependencies(fake: Dependencies?)
 	deps = fake or realDependencies()
 end
 
@@ -1002,13 +733,12 @@ end
 local function cancel(parkState: Enums.MonsterState?)
 	schedule:Clear()
 	letGo(parkState)
-	setScale(1)
 	smashRun = nil
 end
 
 -- LevelDirector: the squad is on the roof. The Creature is taken now, before the brain's own activation handling (which
 -- brings it to the level's spawn in the housing, hidden), so it never starts a patrol here.
-function Level5.Activate(_ctx: Types.LevelContext)
+function Level3.Activate(_ctx: Types.LevelContext)
 	active = true
 	phase = "Arrival"
 	nextTickAt = -math.huge
@@ -1018,7 +748,7 @@ function Level5.Activate(_ctx: Types.LevelContext)
 	smashNow = false
 	doorOpened = false
 	smashRun = nil
-	finaleRun = nil
+	ledgeAt = nil
 	if handle == nil then
 		local h = deps.acquire(TOKEN)
 		if h then
@@ -1029,7 +759,7 @@ function Level5.Activate(_ctx: Types.LevelContext)
 end
 
 -- LevelDirector: the squad left the roof (a dev skip) or the run ended.
-function Level5.Deactivate()
+function Level3.Deactivate()
 	active = false
 	phase = "Idle"
 	cancel(PARKED_STATE)
@@ -1037,41 +767,36 @@ end
 
 local controller: Types.LevelController = {
 	LevelId = LEVEL,
-	Activate = Level5.Activate,
-	Deactivate = Level5.Deactivate,
+	Activate = Level3.Activate,
+	Deactivate = Level3.Deactivate,
 }
-Level5.Controller = controller
+Level3.Controller = controller
 
 local function roofCommand(_player: Player, args: { string }): string?
 	local action = string.lower(args[1] or "")
 	if action == "smash" then
-		return if Level5.Smash() then "the roof door sequence is playing" else "only while the squad is arriving"
-	elseif action == "finale" then
-		return if Level5.PlayFinale()
-			then "the finale is playing"
-			else "the finale needs someone off the roof with a pack (chute give, then jump) and must not have played"
+		return if Level3.Smash() then "the roof door sequence is playing" else "only while the squad is arriving"
+	elseif action == "ledge" then
+		return if Level3.StageLedge()
+			then "the Creature is on the ledge"
+			else "the ledge needs someone off the roof (chute give, then jump) and a free Creature, once"
 	end
 	return string.format(
-		"roof: %s%s. usage: roof smash | finale",
+		"roof: %s%s. usage: roof smash | ledge",
 		phase,
 		if handle then ", holding the Creature" else ""
 	)
 end
 
--- The roof's phases in which the Creature never teleports (docs/MONSTER.md 7.2): the door, the chase, the finale.
-local NO_TELEPORT: { [string]: boolean } = { Smash = true, Chase = true, FinaleWait = true, Finale = true, Done = true }
+-- The roof's phases in which the Creature never teleports (docs/MONSTER.md 7.2): the door, the chase, the ledge.
+local NO_TELEPORT: { [string]: boolean } = { Smash = true, Chase = true, Ledge = true }
 
-function Level5.Init()
-	DevToolsService.Register("roof", "roof [smash|finale]: the roof door sequence or the finale now", roofCommand)
+function Level3.Init()
+	DevToolsService.Register("roof", "roof [smash|ledge]: the roof door sequence or the ledge staging now", roofCommand)
 	MonsterAIService.RegisterTeleportBlock(function(): boolean
 		return active and NO_TELEPORT[phase] == true
 	end)
-	NoiseAndDirectorService.NoiseEmitted:Connect(Level5.HeardNoise)
-	ObjectiveService.Unlocked:Connect(function(levelId: Enums.LevelId, _actor: Player?)
-		if levelId == LEVEL then
-			Level5.CrateCut()
-		end
-	end)
+	NoiseAndDirectorService.NoiseEmitted:Connect(Level3.HeardNoise)
 end
 
 local function resetState()
@@ -1082,24 +807,20 @@ local function resetState()
 	smashNow = false
 	doorOpened = false
 	smashRun = nil
-	finaleRun = nil
-	acquireUntil = 0
+	ledgeAt = nil
 	nextTickAt = -math.huge
 	table.clear(escaped)
-	table.clear(landedAt)
-	table.clear(touchdowns)
 end
 
-function Level5.BeginRun(ctx: Types.RunContext)
+function Level3.BeginRun(ctx: Types.RunContext)
 	cancel(nil)
 	resetState()
 	difficulty = ctx.difficulty
-	scaleSet = 1
 end
 
-function Level5.EndRun()
+function Level3.EndRun()
 	cancel(PARKED_STATE)
 	resetState()
 end
 
-return table.freeze(Level5)
+return table.freeze(Level3)

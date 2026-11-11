@@ -14,17 +14,13 @@
 --                   doors are counting down, get in (or hold it, from inside the vestibule);
 --       Floor 1     after the HallwayGate slams: find a vent around it (the CriticalPath bypass grate), crawl through,
 --                   then the stairwell again once past the gate;
---       Floor 4     cross the pool to the roof stairs;
 --       the roof    out of the stair housing, find a way off (the parachute crate), "get to the parachutes!" once the
 --                   door is smashed, then the gap with a pack on, the cord in freefall, and "you made it" on landing.
---   * The floor objective (ObjectiveService, ObjectiveState: ObjectiveLevel / ObjectiveSteps / ObjectiveUnlocked /
---     ObjectiveTimerEndsAt / ObjectiveTargets, my Carrying, my HeldItem): until the floor's exit unlocks the goal line is
---     the objective's title, each step a row with its count ("Fuses 1/3", "Survive while the door motor winds: 45s"),
---     done steps ticked and the current one marked, then the carried items ("Carrying: Fuse ×2"); a step changing or a
---     running countdown brings the sheet back. Once the exit unlocks the goal is the stairwell again (steps ticked).
---     The direction nudge then points at the ROOM of the nearest undone step's target (its centre, or its doorway nearest
---     me, labelled with the room's name), never at the item, first NudgeDelay after arriving on the floor and then every
---     NudgeCooldown (ObjectiveConfig.Tuning). The floor card adds "OBJECTIVE: <title>".
+--   * The floor objective (ObjectiveService, ObjectiveState: ObjectiveLevel / ObjectiveSteps / ObjectiveUnlocked, my
+--     Carrying): until the floor's exit unlocks the goal line is the objective's title, each step a row with its count
+--     ("Fuses 1/3"), done steps ticked and the current one marked, then the carried items ("Carrying: Fuse ×2"); a step
+--     changing brings the sheet back. The objective gives no direction. Once the exit unlocks the goal is the
+--     stairwell again (steps ticked). The floor card adds "OBJECTIVE: <title>".
 --   * A floating marker (BillboardGui on a client-side Attachment, through walls) hangs over the lobby's current step
 --     (the bus's rear door, then the nearest free ready pad) until it is done.
 --   * Directions: the Objective action shows a chevron around the crosshair pointing at the goal with its distance
@@ -64,7 +60,6 @@ local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local TutorialConfig = require(ReplicatedStorage.Shared.Config.TutorialConfig)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
-local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local ObjectiveState = require(ReplicatedStorage.Shared.Util.ObjectiveState)
 
@@ -86,7 +81,7 @@ local W = Attributes.World
 local Palette = UIKit.Palette
 local Timing = TutorialConfig.Timing
 
-export type TargetKind = "Exit" | "BypassVent" | "RoofDoor" | "Crate" | "Gap" | "Bus" | "Pad" | "Floor"
+export type TargetKind = "Exit" | "BypassVent" | "RoofDoor" | "Crate" | "Gap" | "Bus" | "Pad"
 export type AirlockState = "None" | "Waiting" | "Sealing"
 
 export type Objective = { text: string, tip: string?, target: TargetKind? }
@@ -163,9 +158,8 @@ local VENT_STATES: { [string]: boolean } = { VentCrawling = true, VentScurrying 
 local GATE_ID = "HallwayGate"
 local ROOF_DOOR_ID = "RoofStairDoor"
 local GATE_LEVEL = "Level1_Hallways"
-local ROOF_LEVEL = "Level5_Roof"
-local POOL_LEVEL = "Level4_FloodedPool"
-local ROOF_HOUSING = "L5_RoofAccess"
+local ROOF_LEVEL = "Level3_Roof"
+local ROOF_HOUSING = "L3_RoofAccess"
 local BEYOND_MARGIN = 3
 local ROWS = 6 -- the lobby's optional lines, or a floor objective's steps and its carried line
 
@@ -201,9 +195,6 @@ local scan = {
 	title = nil :: string?, -- the floor objective's title (or nil: the objective's own line)
 	steps = nil :: { ObjectiveState.StepLine }?,
 	carry = nil :: string?,
-	label = nil :: string?, -- the nudge's room name
-	floor = false, -- the nudge follows the floor objective's timing
-	activatedAt = nil :: number?,
 }
 
 --------------------------------------------------------------------------------
@@ -246,9 +237,6 @@ function ObjectiveTracker.levelObjective(input: LevelInput): Objective?
 			return { text = "Objective.GateVent", tip = nil, target = nil }
 		end
 		return { text = "Objective.Gate", tip = tip, target = "BypassVent" }
-	end
-	if level == POOL_LEVEL then
-		return { text = "Objective.PoolStairs", tip = tip, target = "Exit" }
 	end
 	local tower = input.exitTower or floor.stairwell or "East"
 	return { text = "Objective.Stairwell." .. tower, tip = tip, target = "Exit" }
@@ -293,20 +281,6 @@ function ObjectiveTracker.direction(now: number, lastAt: number, cooldown: numbe
 		return true, 0
 	end
 	return false, remaining
-end
-
--- The Tab nudge's cooldown and the seconds until it is first available: an objective floor waits NudgeDelay after
--- arriving (`activatedAt`, server time) and then cools down NudgeCooldown; anywhere else the tutorial's cooldown.
-function ObjectiveTracker.nudgeTiming(
-	objectiveFloor: boolean,
-	activatedAt: number?,
-	serverNow: number
-): (number, number)
-	if not objectiveFloor then
-		return Timing.DirectionCooldown, 0
-	end
-	local readyAt = if activatedAt then activatedAt + ObjectiveConfig.Tuning.NudgeDelay else serverNow
-	return ObjectiveConfig.Tuning.NudgeCooldown, math.max(0, readyAt - serverNow)
 end
 
 -- The bearing of `target` from the camera, radians: 0 straight ahead, positive to the right, +-pi behind.
@@ -514,7 +488,8 @@ local function scanLevel(player: Player, level: string, root: BasePart?)
 	local gate = if level == GATE_LEVEL then scriptedDoor(level, GATE_ID) else nil
 	local gatePoint = if gate then positionOf(gate) else nil
 	local gateState = if gate then gate:GetAttribute(W.DoorState) else nil
-	local arrival = if level == ROOF_LEVEL then AirlockController.exitStairwell(POOL_LEVEL) else nil
+	local below = WorldConfig.previousLevel(level)
+	local arrival = if level == ROOF_LEVEL and below then AirlockController.exitStairwell(below) else nil
 	local roofDoorId = ROOF_DOOR_ID .. (if arrival and arrival.slot ~= "Middle" then arrival.slot else "")
 	local roofDoor = if level == ROOF_LEVEL then scriptedDoor(level, roofDoorId) else nil
 	local exit = AirlockController.exitStairwell(level)
@@ -541,10 +516,6 @@ local function scanLevel(player: Player, level: string, root: BasePart?)
 	scan.title = nil
 	scan.steps = nil
 	scan.carry = nil
-	scan.label = nil
-	scan.floor = false
-	scan.activatedAt = nil
-	local floorNudge: ObjectiveState.Nudge? = nil
 	local spec = ObjectiveConfig.forLevel(level)
 	if
 		spec
@@ -554,31 +525,18 @@ local function scanLevel(player: Player, level: string, root: BasePart?)
 		and ReplicatedStorage:GetAttribute(M.ObjectiveLevel) == level
 	then
 		local progress = ObjectiveState.decodeSteps(ReplicatedStorage:GetAttribute(M.ObjectiveSteps))
-		local endsAt = ReplicatedStorage:GetAttribute(M.ObjectiveTimerEndsAt)
-		local left = if type(endsAt) == "number" then endsAt - Workspace:GetServerTimeNow() else nil
-		scan.steps = ObjectiveState.stepLines(spec, progress, left)
+		scan.steps = ObjectiveState.stepLines(spec, progress)
 		local unlocked = ReplicatedStorage:GetAttribute(M.ObjectiveUnlocked) == true
 		if not unlocked then
 			scan.title = Strings.get(spec.title)
-			scan.carry = ObjectiveState.carryLine(
-				ObjectiveState.decodeCarry(player:GetAttribute(P.Carrying)),
-				player:GetAttribute(P.HeldItem) == "AcidFlask"
-			)
-			local activated = ReplicatedStorage:GetAttribute(M.ObjectiveActivatedAt)
-			scan.activatedAt = if type(activated) == "number" then activated else nil
-			scan.floor = true
+			scan.carry = ObjectiveState.carryLine(ObjectiveState.decodeCarry(player:GetAttribute(P.Carrying)))
 			if objective.text == "Objective.Gate" or objective.text == "Objective.GateVent" then
 				-- the gate's bypass vent is the way to the objective: say so under the title
 				local viaVent: Objective = { text = objective.text, tip = objective.text, target = objective.target }
 				objective = viaVent
 			else
-				local floorGoal: Objective = { text = objective.text, tip = objective.tip, target = "Floor" }
+				local floorGoal: Objective = { text = objective.text, tip = objective.tip, target = nil }
 				objective = floorGoal
-				local layout = Builder.getLayout(level)
-				local targets = ObjectiveState.decodeTargets(ReplicatedStorage:GetAttribute(M.ObjectiveTargets))
-				if layout and root then
-					floorNudge = ObjectiveState.nudge(layout, targets, root.Position)
-				end
 			end
 		end
 	end
@@ -587,13 +545,7 @@ local function scanLevel(player: Player, level: string, root: BasePart?)
 	scan.inLobby = false
 	local target: Vector3? = nil
 	local kind = if objective then objective.target else nil
-	if kind == "Floor" then
-		local nudge = floorNudge
-		if nudge then
-			target = nudge.point
-			scan.label = nudge.label
-		end
-	elseif root and kind == "Exit" then
+	if root and kind == "Exit" then
 		target = exitPoint
 	elseif root and kind == "BypassVent" then
 		local grates = positions(CollectionService:GetTagged(Tags.VentGrate), function(grate: Instance): boolean
@@ -650,8 +602,6 @@ local function rescan()
 	scan.title = nil
 	scan.steps = nil
 	scan.carry = nil
-	scan.label = nil
-	scan.floor = false
 end
 
 --------------------------------------------------------------------------------
@@ -934,9 +884,8 @@ local function onObjective(phase: string)
 		return
 	end
 	activeAt = clock
-	local cooldown, wait = ObjectiveTracker.nudgeTiming(scan.floor, scan.activatedAt, Workspace:GetServerTimeNow())
-	local ready = ObjectiveTracker.direction(clock, directionAt, cooldown)
-	if ready and wait <= 0 and scan.target then
+	local ready = ObjectiveTracker.direction(clock, directionAt, Timing.DirectionCooldown)
+	if ready and scan.target then
 		directionAt = clock
 		xpcall(function()
 			AudioController.PlayLocal("UiClick")
@@ -1040,14 +989,11 @@ local function step(dt: number)
 	end
 	local steps = if lobby then nil else scan.steps
 	local title = if lobby then nil else scan.title
-	-- a new goal, or a step changing (a count, a tick), brings the tracker back; so does a running countdown
+	-- a new goal, or a step changing (a count, a tick), brings the tracker back
 	local shown = (title or text or "") .. "#"
 	local stepList: { ObjectiveState.StepLine } = steps or {}
 	for _, stepLine in stepList do
-		shown ..= (if stepLine.done then "1" else "0") .. (if stepLine.timed then "" else stepLine.text) .. "|"
-		if stepLine.timed and stepLine.active then
-			activeAt = clock
-		end
+		shown ..= (if stepLine.done then "1" else "0") .. stepLine.text .. "|"
 	end
 	if shown ~= lastText then
 		lastText = shown
@@ -1095,11 +1041,7 @@ local function step(dt: number)
 		)
 	end
 
-	local cooldown, wait = ObjectiveTracker.nudgeTiming(scan.floor, scan.activatedAt, Workspace:GetServerTimeNow())
-	local readyNow, remaining = ObjectiveTracker.direction(clock, directionAt, cooldown)
-	if wait > 0 then
-		readyNow, remaining = false, math.max(remaining, wait)
-	end
+	local readyNow, remaining = ObjectiveTracker.direction(clock, directionAt, Timing.DirectionCooldown)
 	current.keyCap:SetGlyph(InputGlyphs.forAction("Objective", device))
 	current.keyLabel.Text = if readyNow
 		then Strings.get("Objective.Direction")
@@ -1136,9 +1078,7 @@ local function step(dt: number)
 		current.pointerArrow.Position = UDim2.new(0.5, x, 0.5, y)
 		current.pointerArrow.Rotation = math.deg(angle)
 		current.pointerLabel.Position = UDim2.new(0.5, x * 0.62, 0.5, y * 0.62)
-		local far = Strings.get("Objective.Distance", ObjectiveTracker.meters(distance))
-		local room = scan.label
-		current.pointerLabel.Text = if room then Strings.get("Obj.Nudge", room, far) else far
+		current.pointerLabel.Text = Strings.get("Objective.Distance", ObjectiveTracker.meters(distance))
 		local fade = 1 - pointerAlpha
 		for _, arm in current.pointerArrow:GetChildren() do
 			if arm:IsA("Frame") then
@@ -1162,7 +1102,7 @@ local function step(dt: number)
 		local bob = math.sin(clock * 2.2) * 0.35
 		current.markerAnchor.WorldPosition = target + Vector3.new(0, MARKER_LIFT + bob, 0)
 		local kind: TargetKind? = if lobby then lobby.target elseif objective then objective.target else nil
-		current.markerLabel.Text = scan.label or markerText(kind)
+		current.markerLabel.Text = markerText(kind)
 		current.markerDistance.Text = Strings.get("Objective.Distance", ObjectiveTracker.meters(distance))
 		local pulse = 0.5 + 0.5 * math.sin(clock * 3)
 		current.markerLabel.TextTransparency = UIKit.fade(0, markerAlpha)

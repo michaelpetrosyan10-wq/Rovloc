@@ -45,7 +45,7 @@ return {
 	end,
 
 	["burning fixtures throw haze cones that follow their glow"] = function(t: Expect)
-		for _, kind in { "Fluorescent", "Bulb", "Floodlight", "EmergencyRed", "ClassroomGlow" } do
+		for _, kind in { "Fluorescent", "Bulb", "EmergencyRed", "ClassroomGlow" } do
 			local shape = FixtureGlow.cone(kind)
 			assert(shape, kind .. " throws a cone")
 			t.truthy(shape.width1 > shape.width0 and shape.length > 0, kind .. " widens toward the floor")

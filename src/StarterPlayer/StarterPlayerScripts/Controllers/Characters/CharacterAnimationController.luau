@@ -11,8 +11,7 @@
 --     AssemblyLinearVelocity, grounded from Humanoid.FloorMaterial (a short ray for other players, whose Humanoids
 --     this client does not simulate) and the look: SetLocalLook every frame from the camera for the local player,
 --     LookBroadcast samples (int16, dequantized, smoothed) for the others.
---   * Footsteps: each plant the animator reports is resolved to a SurfaceKind (PoolWater volume -> Water; the floor
---     part's Surface attribute; its material through the Palette; the room's Zone Surface; Concrete), played with
+--   * Footsteps: each plant the animator reports is resolved to a SurfaceKind (the floor part's Surface attribute; its material through the Palette; the room's Zone Surface; Concrete), played with
 --     SynthPresets.footstep(surface, sprint) through AudioController.PlayLocal (3D at the foot for others; 2D and
 --     quieter for the local player, whose ears are above the feet) and fired on Footstep.
 --   * Hands: SetHandTarget / SetHandGrip drive the local rig's arm IK (HandRig's flashlight, pry and grip poses);
@@ -58,15 +57,14 @@ local LOOK_DAMP = 14
 local GROUND_RAY_MARGIN = 0.8 -- remote grounded test: floor within the rig's hip height plus this
 local SURFACE_RAY_UP = 1.2
 local SURFACE_RAY_DOWN = 3
-local WATER_PROBE_LIFT = 0.3
 local DEAD: string = PlayerR15.DeadState
 local DOWNED: Enums.MoveState = "DownedCrawling"
 local STANDING: Enums.MoveState = "Standing"
 
 -- States only the server decides (the override stack): they beat the local prediction immediately.
-local SERVER_STATES: { Enums.MoveState } = { "Scripted", "Grabbed", "Trapped", "Hiding", "Parachuting", DOWNED }
+local SERVER_STATES: { Enums.MoveState } = { "Scripted", "Trapped", "Hiding", "Parachuting", DOWNED }
 -- Server states that also beat being Downed (a downed player can still be grabbed, scripted or held).
-local OVER_DOWNED: { Enums.MoveState } = { "Scripted", "Grabbed", "Trapped", "Hiding" }
+local OVER_DOWNED: { Enums.MoveState } = { "Scripted", "Trapped", "Hiding" }
 
 type Entry = {
 	player: Player,
@@ -98,7 +96,6 @@ local waiting: { [Player]: Trove.Trove } = {}
 local playerTroves: { [Player]: Trove.Trove } = {}
 local remoteLooks: { [number]: LookSample } = {}
 local zones: { BasePart } = {}
-local waters: { BasePart } = {}
 local lastZone: { [Player]: BasePart } = {}
 
 local predictedState: Enums.MoveState? = nil
@@ -179,17 +176,13 @@ function CharacterAnimationController.materialSurface(material: Enum.Material): 
 	return materialSurfaces[material]
 end
 
--- The footstep surface for a step: standing in water, the floor part's Surface attribute, its material, the room's
--- Surface, else Concrete.
+-- The footstep surface for a step: the floor part's Surface attribute, its material, the room's Surface, else
+-- Concrete.
 function CharacterAnimationController.surfaceFor(
-	inWater: boolean,
 	partSurface: unknown,
 	material: Enum.Material?,
 	zoneSurface: unknown
 ): Enums.SurfaceKind
-	if inWater then
-		return "Water"
-	end
 	if Enums.has(Enums.SurfaceKind, partSurface) then
 		return (partSurface :: any) :: Enums.SurfaceKind
 	end
@@ -267,15 +260,6 @@ local function watchParts(tag: string, list: { BasePart })
 	end
 end
 
-local function inWater(point: Vector3): boolean
-	for _, volume in waters do
-		if volume.Parent ~= nil and SpatialQuery.pointInPart(volume, point) then
-			return true
-		end
-	end
-	return false
-end
-
 local function zoneSurface(player: Player, point: Vector3): unknown
 	local last = lastZone[player]
 	if last and last.Parent ~= nil and SpatialQuery.pointInPart(last, point) then
@@ -302,11 +286,10 @@ local function surfaceAt(entry: Entry, position: Vector3): Enums.SurfaceKind
 		partSurface = hit.Instance:GetAttribute(W.Surface)
 		material = hit.Material
 	end
-	local wet = inWater(position + Vector3.new(0, WATER_PROBE_LIFT, 0))
 	local zone = if partSurface == nil and (material == nil or materialSurfaces[material] == nil)
 		then zoneSurface(entry.player, position)
 		else nil
-	return CharacterAnimationController.surfaceFor(wet, partSurface, material, zone)
+	return CharacterAnimationController.surfaceFor(partSurface, material, zone)
 end
 
 --------------------------------------------------------------------------------
@@ -621,7 +604,6 @@ end
 
 function CharacterAnimationController.Init()
 	watchParts(Tags.Zone, zones)
-	watchParts(Tags.PoolWater, waters)
 end
 
 function CharacterAnimationController.Start()

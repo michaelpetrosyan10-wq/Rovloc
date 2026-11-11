@@ -38,7 +38,6 @@ local SPEEDS: { [string]: number } = {
 	VentCrawl = CreatureConfig.Speeds.VentChase,
 	VentRetreat = CreatureConfig.Speeds.Stunned,
 	Stunned = CreatureConfig.Speeds.Stunned,
-	Swim = CreatureConfig.Speeds.AquaticStalk,
 	Scripted = CreatureConfig.Speeds.Scripted,
 }
 
@@ -210,7 +209,7 @@ local function cycleSeconds(rig: Rig, speed: number, state: string): number
 	if not cycle then
 		return 2
 	end
-	local perSecond = speed / cycle.length(speed, rig.animator.Map) + (cycle.rate or 0)
+	local perSecond = speed / cycle.length(speed, rig.animator.Map)
 	return if perSecond > 0 then math.min(3, 1 / perSecond) else 2
 end
 
@@ -236,10 +235,6 @@ return {
 			{ monster = "WallChase", pose = "Biped", vent = true, expected = "VentCrawl" },
 			{ monster = "Stunned", pose = "Biped", vent = false, expected = "Stunned" },
 			{ monster = "Stunned", pose = "Quadruped", vent = true, expected = "VentRetreat" },
-			{ monster = "Stunned", pose = "Swim", vent = false, expected = "Stunned" },
-			{ monster = "AquaticStalk", pose = "Swim", vent = false, expected = "Swim" },
-			{ monster = "Patrol", pose = "Swim", vent = false, expected = "Swim" },
-			{ monster = "AquaticStalk", pose = "Biped", vent = false, expected = "Patrol" },
 			{ monster = "Scripted", pose = "Biped", vent = false, expected = "Scripted" },
 			{ monster = "Scripted", pose = "Quadruped", vent = true, expected = "VentCrawl" },
 			{ monster = nil, pose = nil, vent = nil, expected = "Dormant" },
@@ -296,7 +291,7 @@ return {
 	["state changes cross-fade with finite transforms"] = function(t: Expect)
 		local rig = animated("Dormant", 0, false, 0)
 		local sequence: { string } =
-			{ "Patrol", "Chase", "VentCrawl", "VentRetreat", "Chase", "Swim", "Stunned", "Investigate", "Scripted" }
+			{ "Patrol", "Chase", "VentCrawl", "VentRetreat", "Chase", "Stunned", "Investigate", "Scripted" }
 		run(rig, 0.5)
 		for _, state in sequence do
 			rig.animator:SetInputs({
@@ -642,7 +637,7 @@ return {
 	end,
 
 	["every action plays on two legs and four with finite transforms; unknown ones are refused"] = function(t: Expect)
-		for _, base in { "Patrol", "VentCrawl", "Swim" } do
+		for _, base in { "Patrol", "VentCrawl" } do
 			for _, action in Creature.Actions do
 				local rig = animated(base, 4, false, 0.4)
 				run(rig, 0.5)

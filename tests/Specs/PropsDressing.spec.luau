@@ -1,14 +1,12 @@
 --!strict
--- Set dressing and pool dressing contracts, checked on the real layouts: every LabCounter, SmashedLocker, DripPipe
--- anchor and every FloorDebris / ScareStep trigger is dressed within its part budget; flasks rest on the epoxy
--- worktops and the pool's starting-block tops stay clear for theirs; Drip parts carry the DripPipe tag at dripPoint(); debris lies inside its trigger and never collides;
--- nothing intrudes on a doorway, a grate front, a stair landing or a spawn point; the pool dressing never makes a
--- route across the water that skips the swim; client dressing is non-colliding, unqueried and the world's own (the
--- same on every client and run).
+-- Set dressing contracts, checked on the real layouts: every SmashedLocker and DripPipe anchor and every FloorDebris /
+-- ScareStep trigger is dressed within its part budget; Drip parts carry the DripPipe tag at dripPoint(); debris lies
+-- inside its trigger and never collides; nothing intrudes on a doorway, a grate front, a stair landing or a spawn
+-- point; client dressing is non-colliding, unqueried and the world's own (the same on every client and run).
 -- Signs and posters are lit, non-colliding prints on their walls above the chair rail, clear of every opening, with
 -- every word from Strings; the plant rooms' pipework runs above the door heads and clear of every light fixture and drip pipe.
--- Classrooms face a chalkboard with rows of desks that leave aisles (every classroom smaller than a hall seats pupils
--- but the few FURNISHED_CLASSROOMS names), furniture stays within its budgets, decay (fallen tiles under their holes,
+-- Classrooms face a chalkboard with rows of desks that leave aisles (every classroom smaller than a hall seats pupils),
+-- furniture stays within its budgets, decay (fallen tiles under their holes,
 -- puddles, plaster damage, paper) never collides, lies only in rooms a player walks into and shows in full in every
 -- room whose ruin calls for it (each ruined drop ceiling's holes, each plastered room's patches, each room kind's
 -- paper; at least DECAY_MIN of each in all), and no sign lands on a board or a hole.
@@ -27,8 +25,6 @@ local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local DecayBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.DecayBuilder)
 local Finishes = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Finishes)
 local FurnitureBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.FurnitureBuilder)
-local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
-local PoolWaterBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PoolWaterBuilder)
 local SchoolShellBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.SchoolShellBuilder)
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
 local SetDressingBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.SetDressingBuilder)
@@ -42,24 +38,16 @@ local W = Attributes.World
 local BUDGET = SetDressingBuilder.Budget
 -- The least decay the floors show in all (re-set for the tunnel floors' few school rooms, with a margin): holes in the
 -- ruined drop ceilings, patches of plaster off the walls, loose sheets of paper, puddle parts in the rooms players walk.
-local DECAY_MIN = table.freeze({ holes = 12, sites = 6, papers = 18, puddles = 500 })
+local DECAY_MIN = table.freeze({ holes = 4, sites = 4, papers = 8, puddles = 300 })
 -- A drop ceiling at least this ruined (Finishes.ruin) has lost tiles: one more for every tenth of ruin past it, and
 -- the holes it shows (SchoolShellBuilder.ceilingFalls, a tile under each) are two once five tiles are gone, else one.
 local DECAY_HOLE_RUIN = 0.3
 -- A classroom this big (floor area, square studs) is a hall: long tables, not rows of desks.
 local HALL_AREA = 1400
--- Classrooms smaller than a hall that their layout furnishes itself, with no room left for rows of pupils' desks: the
--- platform that does it, and what it is. Every other classroom seats pupils.
-local FURNISHED_CLASSROOMS: { [string]: { platform: string, why: string } } = {
-	L3_TeamRoom = { platform = "L3_Table_Team", why = "the team table" },
-}
-
 local STATIC_PREFIXES: { string } = {
-	"LabCounter_",
 	"SmashedLocker_",
 	"DripPipe_",
 	"FloorDebris_",
-	"PoolDressing_",
 	"Signs_",
 	"Pipes_",
 	"Furniture_",
@@ -316,96 +304,8 @@ local COSMETIC_KINDS: { [string]: { prefix: string, budget: number } } = {
 }
 
 return {
-	["lab counters: one per anchor, within budget, passthrough bodies"] = function(t: Expect)
-		local layout = layoutOf("Level2_ScienceHall")
-		local folder = props(layout.id)
-		local counters = anchorsOf(layout, "LabCounter")
-		t.truthy(
-			#counters >= 8,
-			string.format("Level2 lab counters (%d: the labs' islands, the prep bench)", #counters)
-		)
-		for _, anchor in counters do
-			local counter = model(folder, "LabCounter_" .. anchor.id)
-			t.eq(counter:GetAttribute(W.AnchorId), anchor.id)
-			t.eq(counter:GetAttribute(W.LevelId), layout.id)
-			local list = parts(counter)
-			t.truthy(#list >= 18 and #list <= BUDGET.LabCounter, string.format("%s has %d parts", anchor.id, #list))
-			local tops = 0
-			for _, part in list do
-				t.truthy(part.Anchored, part.Name .. " anchored")
-				t.truthy(isPassthrough(part) or isDetail(part), part:GetFullName() .. " is passthrough or detail")
-				if string.sub(part.Name, 1, 4) == "Top_" then
-					tops += 1
-					t.truthy(isPassthrough(part), "worktop collides for players")
-				end
-			end
-			t.eq(tops, 4, anchor.id .. " worktop pieces round the sink")
-		end
-	end,
-
-	["lab counters: every flask candidate rests on its counter's worktop"] = function(t: Expect)
-		local layout = layoutOf("Level2_ScienceHall")
-		local folder = props(layout.id)
-		local origin = WorldConfig.levelOrigin(layout.id)
-		local flasks = anchorsOf(layout, "FlaskCandidate")
-		t.truthy(#flasks >= 10, string.format("Level2 flask candidates (%d)", #flasks))
-		local benched: { [string]: boolean } = {}
-		for _, counterAnchor in anchorsOf(layout, "LabCounter") do
-			benched[counterAnchor.room] = true
-		end
-		for _, flask in flasks do
-			local point = origin + flask.pos
-			if not benched[flask.room] then
-				-- a tunnel cache: the flask stands on its niche's shelf
-				local shelved = false
-				for _, p in (layout.platforms or {}) :: { LayoutSchema.Platform } do
-					if
-						p.room == flask.room
-						and LayoutSchema.rectContains(p.rect, flask.pos.X, flask.pos.Z)
-						and math.abs(p.top - flask.pos.Y) < 1e-3
-					then
-						shelved = true
-					end
-				end
-				t.truthy(shelved, flask.id .. " stands on its cache's shelf")
-				continue
-			end
-			local rests = 0
-			for _, counterAnchor in anchorsOf(layout, "LabCounter") do
-				if counterAnchor.room ~= flask.room then
-					continue
-				end
-				local counter = model(folder, "LabCounter_" .. counterAnchor.id)
-				for _, part in parts(counter) do
-					local lo, hi = aabb(part)
-					local under = point.X > lo.X + 0.05
-						and point.X < hi.X - 0.05
-						and point.Z > lo.Z + 0.05
-						and point.Z < hi.Z - 0.05
-					if string.sub(part.Name, 1, 4) == "Top_" and under then
-						t.near(hi.Y, point.Y, 0.05, flask.id .. " on the worktop")
-						rests += 1
-					end
-					-- Nothing of the counter stands in the space the flask occupies
-					local clear = Vector3.new(0.5, 0, 0.5)
-					if
-						overlaps(
-							lo,
-							hi,
-							point - clear + Vector3.new(0, 0.03, 0),
-							point + clear + Vector3.new(0, 1.4, 0)
-						)
-					then
-						t.fail(string.format("%s crowds %s", part:GetFullName(), flask.id))
-					end
-				end
-			end
-			t.eq(rests, 1, flask.id .. " rests on exactly one worktop piece")
-		end
-	end,
-
 	["smashed lockers: a bank of 3-5 lockers backed onto the wall at every anchor"] = function(t: Expect)
-		for _, id in { "Level1_Hallways", "Level3_Gymnasium" } do
+		for _, id in { "Level1_Hallways" } do
 			local layout = layoutOf(id)
 			local origin = WorldConfig.levelOrigin(id)
 			local rooms = LayoutSchema.indexRooms(layout)
@@ -468,7 +368,7 @@ return {
 	end,
 
 	["drip pipes: a tagged Drip at dripPoint under every pipe run"] = function(t: Expect)
-		for _, id: Enums.LevelId in Enums.LevelId do
+		for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 			local layout = layoutOf(id)
 			local rooms = LayoutSchema.indexRooms(layout)
 			local origin = WorldConfig.levelOrigin(id)
@@ -511,7 +411,7 @@ return {
 			end
 		end
 		local tagged = 0
-		for _, id: Enums.LevelId in Enums.LevelId do
+		for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 			for _, d in world()[id]:GetDescendants() do
 				if d:HasTag(Tags.DripPipe) then
 					tagged += 1
@@ -519,7 +419,7 @@ return {
 			end
 		end
 		local anchors = 0
-		for _, id: Enums.LevelId in Enums.LevelId do
+		for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 			anchors += #PropKit.anchorsOf(layoutOf(id), "DripPipe")
 		end
 		t.eq(tagged, anchors, "every DripPipe anchor has one tagged Drip")
@@ -527,7 +427,7 @@ return {
 
 	["floor debris: inside every FloorDebris and ScareStep trigger, flat, never colliding"] = function(t: Expect)
 		local triggers = 0
-		for _, id: Enums.LevelId in Enums.LevelId do
+		for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 			local layout = layoutOf(id)
 			local origin = WorldConfig.levelOrigin(id)
 			local folder = props(id)
@@ -575,170 +475,6 @@ return {
 			local layout = layoutOf(id)
 			assertClear(t, layout, dressingParts(id))
 		end
-	end,
-
-	["pool dressing: within budget, the water left to the shell, lips on the walkway, nothing that shortens a swim"] = function(
-		t: Expect
-	)
-		local layout = layoutOf("Level4_FloodedPool")
-		local origin = WorldConfig.levelOrigin(layout.id)
-		local basins = layout.basins or {}
-		t.eq(#basins, 1)
-		local basin = basins[1]
-		local pool = model(props(layout.id), "PoolDressing_" .. basin.id)
-		local list = parts(pool)
-		t.truthy(#list >= 120 and #list <= PoolWaterBuilder.Budget, string.format("pool dressing has %d parts", #list))
-		-- The shell's surface and volume are not duplicated
-		for _, part in list do
-			t.falsy(part:HasTag(Tags.PoolWater), part.Name .. " is not a water volume")
-			t.falsy(string.find(part.Name, "Surface", 1, true) ~= nil, part.Name .. " is not a water surface")
-		end
-		local pools = 0
-		for _, d in world()[layout.id]:GetDescendants() do
-			if d:HasTag(Tags.PoolWater) then
-				pools += 1
-			end
-		end
-		local expectedVolumes = #basins
-		for _, trigger in layout.triggers do
-			if trigger.kind == "PoolWater" then
-				expectedVolumes += 1
-			end
-		end
-		t.eq(pools, expectedVolumes, "PoolWater volumes are the shell's alone")
-		-- No-bypass: every colliding piece over open water is deep enough (or too steep) to stand on; the lips stand on
-		-- their walkway fragment and stay low on it
-		local interior = Geometry.insetRect(basin.rect, Geometry.BasinWall)
-		local limit = origin.Y + basin.waterLevel - PoolWaterBuilder.NoBypassDepth
-		local classified = PoolWaterBuilder.classify(layout, basin)
-		local colliding = 0
-		local lips = 0
-		for _, part in list do
-			if not part.CanCollide then
-				continue
-			end
-			colliding += 1
-			local lo, hi = aabb(part)
-			local box = {
-				x0 = lo.X - origin.X,
-				x1 = hi.X - origin.X,
-				z0 = lo.Z - origin.Z,
-				z1 = hi.Z - origin.Z,
-				y0 = lo.Y - origin.Y,
-				y1 = hi.Y - origin.Y,
-			}
-			if PoolWaterBuilder.onFragment(classified, box) then
-				lips += 1
-				t.truthy(string.sub(part.Name, 1, 3) == "Lip", part.Name .. " is a lip on its walkway")
-				t.truthy(box.y1 <= 0.5 + PoolWaterBuilder.LipHeight + 1e-3, part.Name .. " stays a low kerb")
-				t.truthy(isPassthrough(part), part.Name .. " lets the Creature through")
-				continue
-			end
-			local over = math.min(hi.X, origin.X + interior.x + interior.w) - math.max(lo.X, origin.X + interior.x)
-					> 1e-3
-				and math.min(hi.Z, origin.Z + interior.z + interior.d) - math.max(lo.Z, origin.Z + interior.z)
-					> 1e-3
-			if over then
-				local tilt = math.deg(math.acos(math.clamp(part.CFrame.UpVector.Y, -1, 1)))
-				t.truthy(
-					hi.Y <= limit + 1e-3 or tilt > PoolWaterBuilder.TiltLimit,
-					string.format(
-						"%s tops out at %.2f over the water (limit %.2f, tilt %.1f)",
-						part.Name,
-						hi.Y,
-						limit,
-						tilt
-					)
-				)
-				t.truthy(hi.Y <= limit + 1e-3, part.Name .. " stays under the no-bypass line")
-				t.truthy(isPassthrough(part), part.Name .. " lets the Creature through")
-			end
-		end
-		t.truthy(colliding > lips, "some wreckage under the water still collides")
-		t.truthy(lips >= #classified.fragments, "every walkway fragment has its lip")
-		-- Between every pair of walkway fragments the water stays open: nothing solid above the line in a gap
-		local edges = PoolWaterBuilder.breakEdges(classified)
-		local swims = 0
-		for _, edge in edges do
-			if edge.gap > PoolWaterBuilder.StepOver then
-				swims += 1
-			end
-		end
-		t.truthy(#edges >= 8, "the walkway breaks at its cracks and its fallen span")
-		t.truthy(swims >= 2, "the fallen span leaves open water on both sides")
-		for _, edge in edges do
-			local r = edge.fragment.rect
-			local gapLo: Vector3
-			local gapHi: Vector3
-			local d = edge.direction
-			if d.X > 0.5 then
-				gapLo, gapHi = Vector3.new(r.x + r.w, limit, r.z), Vector3.new(r.x + r.w + edge.gap, 50, r.z + r.d)
-			elseif d.X < -0.5 then
-				gapLo, gapHi = Vector3.new(r.x - edge.gap, limit, r.z), Vector3.new(r.x, 50, r.z + r.d)
-			elseif d.Z > 0.5 then
-				gapLo, gapHi = Vector3.new(r.x, limit, r.z + r.d), Vector3.new(r.x + r.w, 50, r.z + r.d + edge.gap)
-			else
-				gapLo, gapHi = Vector3.new(r.x, limit, r.z - edge.gap), Vector3.new(r.x + r.w, 50, r.z)
-			end
-			gapLo = Vector3.new(origin.X + gapLo.X, gapLo.Y, origin.Z + gapLo.Z)
-			gapHi = Vector3.new(origin.X + gapHi.X, gapHi.Y, origin.Z + gapHi.Z)
-			for _, part in list do
-				if part.CanCollide then
-					local lo, hi = aabb(part)
-					t.falsy(overlaps(lo, hi, gapLo, gapHi), part.Name .. " bridges the gap off " .. edge.fragment.id)
-				end
-			end
-		end
-		-- The broken walkway has its chunks, the lanes their ropes, the deep end its drain
-		local names: { [string]: number } = {}
-		for _, part in list do
-			local key = string.match(part.Name, "^%a+") or part.Name
-			names[key] = (names[key] or 0) + 1
-		end
-		t.truthy((names.ChunkUnder or 0) + (names.Chunk or 0) >= swims, "a chunk hangs off every break over the water")
-		t.truthy((names.Rebar or 0) >= swims * 2 + (#edges - swims), "rebar at every break and crack")
-		t.truthy((names.Rope or 0) >= 4 and (names.Float or 0) >= 4, "lane ropes with floats")
-		t.truthy((names.Rail or 0) >= 4 and (names.Rung or 0) >= 3, "pool ladders")
-		t.truthy((names.BoardStub or 0) == 1 and (names.BoardAdrift or 0) == 1, "the snapped diving board")
-		t.truthy((names.Seat or 0) == 1 and (names.Backrest or 0) == 1, "the toppled lifeguard chair")
-		t.truthy((names.DrainFrame or 0) == 1, "the deep-end drain")
-		t.truthy((names.Kickboard or 0) >= 2 and (names.Scum or 0) >= 3, "debris on the water")
-		t.truthy((names.GrabBar or 0) == #classified.blocks, "every starting block dressed")
-	end,
-
-	["pool dressing: the starting blocks keep their tops clear for the flasks standing on them"] = function(t: Expect)
-		local layout = layoutOf("Level4_FloodedPool")
-		local origin = WorldConfig.levelOrigin(layout.id)
-		local basin = (layout.basins or {})[1]
-		assert(basin, "the pool basin")
-		local classified = PoolWaterBuilder.classify(layout, basin)
-		t.eq(#classified.blocks, 6, "six starting blocks")
-		local list = parts(model(props(layout.id), "PoolDressing_" .. basin.id))
-		local onBlocks = 0
-		for _, flask in anchorsOf(layout, "FlaskCandidate") do
-			local block: PoolWaterBuilder.Fragment? = nil
-			for _, candidate in classified.blocks do
-				if LayoutSchema.rectContains(candidate.rect, flask.pos.X, flask.pos.Z) then
-					block = candidate
-				end
-			end
-			if not block then
-				continue
-			end
-			onBlocks += 1
-			t.near(flask.pos.Y, block.top, 0.05, flask.id .. " stands on its starting block's top")
-			local point = origin + flask.pos
-			local clear = Vector3.new(0.5, 0, 0.5)
-			for _, part in list do
-				local lo, hi = aabb(part)
-				if
-					overlaps(lo, hi, point - clear + Vector3.new(0, 0.03, 0), point + clear + Vector3.new(0, 1.4, 0))
-				then
-					t.fail(string.format("%s crowds %s", part:GetFullName(), flask.id))
-				end
-			end
-		end
-		t.eq(onBlocks, 3, "flask candidates on starting blocks")
 	end,
 
 	["cosmetic dressing: every anchor dressed within budget, never colliding or queried"] = function(t: Expect)
@@ -846,10 +582,6 @@ return {
 				"NoRunning",
 				"Exit",
 				"Stairs",
-				"Science",
-				"Gym",
-				"Lockers",
-				"Pool",
 				"Office",
 				"Boiler",
 				"Missing",
@@ -869,7 +601,7 @@ return {
 			local origin = WorldConfig.levelOrigin(id)
 			local signs = props(id):FindFirstChild("Signs_" .. id)
 			if not signs then
-				t.truthy(id == "Level5_Roof", id .. " has signs")
+				t.truthy(id == "Level3_Roof", id .. " has signs")
 				continue
 			end
 			local count = 0
@@ -896,11 +628,7 @@ return {
 								if number then
 									plates += 1
 									local n = tonumber(number) :: number
-									t.truthy(
-										label.Text == Strings.get("Prop.Sign.Room", n)
-											or label.Text == Strings.get("Prop.Sign.Lab", n),
-										part.Name .. " names its room"
-									)
+									t.eq(label.Text, Strings.get("Prop.Sign.Room", n), part.Name .. " names its room")
 								else
 									t.truthy(
 										allowed[label.Text],
@@ -947,7 +675,7 @@ return {
 						room
 						and other
 						and other.kind == "Corridor"
-						and (room.kind == "Classroom" or room.kind == "Lab")
+						and room.kind == "Classroom"
 						and string.match(room.id, "_(%d+)$")
 					then
 						owed[room.id] = true
@@ -968,7 +696,7 @@ return {
 	["service pipes: plant rooms only, above the door heads, clear of every light fixture and drip pipe"] = function(
 		t: Expect
 	)
-		for _, id in { "Level0_Basement", "Level4_FloodedPool" } do
+		for _, id in { "Level0_Basement" } do
 			local origin = WorldConfig.levelOrigin(id)
 			local pipes = props(id):FindFirstChild("Pipes_" .. id)
 			assert(pipes, id .. " has pipework")
@@ -1036,38 +764,21 @@ return {
 	)
 		local budget = FurnitureBuilder.Budget
 		local boards = 0
-		-- the rooms that face a board (classrooms and labs) and the classrooms that seat pupils in rows: every one
-		-- smaller than a hall but those FURNISHED_CLASSROOMS names, each still holding the platform that furnishes it
+		-- the rooms that face a board and the classrooms that seat pupils in rows: every one smaller than a hall
 		local boarded = 0
 		local seated: { [string]: boolean } = {}
-		local furnished: { [string]: boolean } = {}
 		local desksIn: { [string]: number } = {}
 		for _, id: Enums.LayoutId in Enums.LayoutId do
 			local layout = layoutOf(id)
 			for _, room in layout.rooms do
-				if room.kind == "Classroom" or room.kind == "Lab" then
+				if room.kind == "Classroom" then
 					boarded += 1
 				end
 				if room.kind ~= "Classroom" or room.rect.w * room.rect.d >= HALL_AREA then
 					continue
 				end
-				local own = FURNISHED_CLASSROOMS[room.id]
-				if own then
-					local standing = false
-					for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
-						if platform.id == own.platform and platform.room == room.id then
-							standing = true
-						end
-					end
-					t.truthy(standing, string.format("%s keeps %s (%s)", room.id, own.platform, own.why))
-					furnished[room.id] = true
-				else
-					seated[room.id] = true
-				end
+				seated[room.id] = true
 			end
-		end
-		for roomId, own in FURNISHED_CLASSROOMS do
-			t.truthy(furnished[roomId], string.format("%s, furnished with %s, is a classroom", roomId, own.why))
 		end
 		for _, id: Enums.LayoutId in Enums.LayoutId do
 			local layout = layoutOf(id)
@@ -1117,7 +828,6 @@ return {
 				local cap = if room.kind == "Classroom"
 					then math.max(budget.Classroom, budget.Hall)
 					elseif room.kind == "Office" then budget.Office
-					elseif room.kind == "Lab" then budget.Lab
 					elseif room.kind == "Corridor" then budget.Corridor
 					else 0
 				t.truthy(used <= cap, string.format("%s has %d furniture parts (cap %d)", room.id, used, cap))

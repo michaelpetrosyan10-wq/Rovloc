@@ -45,10 +45,6 @@ local GameConfig = table.freeze({
 	BreathHoldMaxSeconds = 7,
 	BreathRecoverPerSecond = 0.6,
 
-	-- Pool
-	StrugglePressesToEscape = 14, -- Floor 4 fairness (was 22): a grab is escapable
-	StruggleMaxPressesPerSecond = 12,
-
 	-- Roof
 	ParachutePackCount = 4,
 	ParachuteDescentSpeed = 9,
@@ -57,14 +53,8 @@ local GameConfig = table.freeze({
 	StaminaMax = 100,
 	StaminaSprintDrain = 7, -- a full sprint lasts about 14 s (the Creature chases at 16.5, you sprint at 19)
 	StaminaScurryDrain = 22,
-	StaminaFreestyleDrain = 20,
-	StaminaTreadDrain = 2,
 	StaminaRegen = 14,
 	StaminaRegenDelay = 1.2,
-	OxygenMax = 100,
-	OxygenDrain = 7, -- about 14 s underwater
-	OxygenDrainGrabbed = 5, -- slower than a dive while held (was 9): time to struggle free
-	OxygenRegen = 30,
 	BatteryMax = 100,
 	BatteryDrain = 0.6325, -- +15 % (harder Standard; every difficulty): about 2.6 minutes of light per full cell
 	BatteryPickupCharge = 45,
@@ -78,9 +68,6 @@ local GameConfig = table.freeze({
 	StandHeadroom = 2.9,
 	VentCrawlSpeed = 4.5,
 	VentScurrySpeed = 9,
-	TreadSpeed = 4,
-	FreestyleSpeed = 9,
-	UnderwaterSpeed = 5,
 
 	-- Network timing
 	OneShotLead = 0.2,

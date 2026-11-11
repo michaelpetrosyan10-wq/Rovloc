@@ -391,12 +391,12 @@ return {
 			local _, reason = ok({ reviverState = state })
 			t.eq(reason, "LifeState", "a " .. state .. " reviver")
 		end
-		local busyLocks: { Enums.ControlLock } = { "Trap", "Locker", "Jumpscare", "Cutscene", "Drag", "Airlock" }
+		local busyLocks: { Enums.ControlLock } = { "Trap", "Locker", "Jumpscare", "Cutscene", "Airlock" }
 		for _, lock: Enums.ControlLock in busyLocks do
 			local _, reason = ok({ reviverLock = lock })
 			t.eq(reason, "Busy", "a reviver held by " .. lock)
 		end
-		local caughtLocks: { Enums.ControlLock } = { "Jumpscare", "Drag", "Cutscene" }
+		local caughtLocks: { Enums.ControlLock } = { "Jumpscare", "Cutscene" }
 		for _, lock: Enums.ControlLock in caughtLocks do
 			local _, reason = ok({ victimLock = lock })
 			t.eq(reason, "Caught", "a victim held by " .. lock)
@@ -410,7 +410,7 @@ return {
 				reviverState = "Alive",
 				reviverLock = "None",
 				victimState = "Downed",
-				victimLock = "Drag",
+				victimLock = "Jumpscare",
 			}),
 			"Caught",
 			"a running hold stops for the same reasons"
@@ -621,9 +621,9 @@ return {
 			world.locks[victim] = nil
 
 			world.actor[anchor] = reviver
-			world.locks[reviver] = "Drag"
+			world.locks[reviver] = "Trap"
 			DownedReviveService.Poll()
-			t.eq(lastCancel(world), "Busy", "the reviver grabbed")
+			t.eq(lastCancel(world), "Busy", "the reviver trapped")
 			world.locks[reviver] = nil
 
 			world.actor[anchor] = reviver
@@ -684,7 +684,7 @@ return {
 		end)
 	end,
 
-	["DownedController: panic, grade, heart rate, status, syringe and marker rules"] = function(t: Expect)
+	["DownedController: panic, grade, heart rate, status and marker rules"] = function(t: Expect)
 		t.near(DownedController.panicFloor(1), 0.3, 1e-9, "just down: a raised floor")
 		t.near(DownedController.panicFloor(0), 0.95, 1e-9, "bled out: almost full panic")
 		t.truthy(DownedController.panicFloor(0.3) > DownedController.panicFloor(0.7), "rises as time runs out")
@@ -705,12 +705,6 @@ return {
 		for _, used: string in { "Downed.BeingRevived", "Downed.TeammateCanRevive", "Downed.NoTeammates" } do
 			t.truthy(Strings.has(used), used)
 		end
-
-		t.eq(DownedController.syringeMode("Downed", 1), "SelfRevive")
-		t.eq(DownedController.syringeMode("Alive", 1), "Stamina")
-		t.eq(DownedController.syringeMode("Downed", 0), nil, "no charge, nothing to send")
-		t.eq(DownedController.syringeMode("Dead", 1), nil)
-		t.eq(DownedController.syringeMode("Lobby", 1), nil)
 
 		local near, range = DownedController.MarkerNear, DownedController.MarkerRange
 		t.eq(DownedController.markerAlpha(range + 1, near, range), 0, "out of range")

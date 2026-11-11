@@ -62,11 +62,11 @@ type Run = {
 }
 
 local W = Attributes.World
-local LEVELS: { Enums.LayoutId } = { "Level0_Basement", "Level1_Hallways", "Level2_ScienceHall", "Level5_Roof" }
+local LEVELS: { Enums.LayoutId } = { "Level0_Basement", "Level1_Hallways", "Level2_Auditorium", "Level3_Roof" }
 local L0: Enums.LevelId = "Level0_Basement"
 local L1: Enums.LevelId = "Level1_Hallways"
-local L2: Enums.LevelId = "Level2_ScienceHall"
-local L5: Enums.LevelId = "Level5_Roof"
+local L2: Enums.LevelId = "Level2_Auditorium"
+local LR: Enums.LevelId = "Level3_Roof"
 local SEED = 7171
 local LEAD = GameConfig.OneShotLead
 local STRAGGLER = GameConfig.StragglerSeconds
@@ -376,8 +376,8 @@ return {
 		end
 		t.eq(CheckpointAirlockService.exitRoom(L0), "L0_AirlockEast")
 		t.eq(CheckpointAirlockService.exitRoom(L1), "L1_AirlockWest")
-		t.eq(CheckpointAirlockService.exitRoom(L5), nil, "the roof has no exit airlock")
-		for _, level: Enums.LevelId in Enums.LevelId do
+		t.eq(CheckpointAirlockService.exitRoom(LR), nil, "the roof has no exit airlock")
+		for _, level: Enums.LevelId in WorldConfig.LevelOrder do
 			local layout = Builder.getLayout(level)
 			assert(layout, level)
 			local room = CheckpointAirlockService.exitRoom(level)
@@ -549,10 +549,7 @@ return {
 				t.eq(#run.spawned, 3, "A and B respawn")
 				t.eq(run.spawned[2].cframe, CharacterService.SpawnCFrame(L2, 1), "slot 1 on Level 2")
 				t.eq(run.spawned[3].cframe, CharacterService.SpawnCFrame(L2, 2), "slot 2 on Level 2")
-				t.eq(
-					table.concat(run.sealed, ","),
-					"Level0_Basement>Level1_Hallways,Level1_Hallways>Level2_ScienceHall"
-				)
+				t.eq(table.concat(run.sealed, ","), "Level0_Basement>Level1_Hallways,Level1_Hallways>Level2_Auditorium")
 			end)
 		end)
 	end,
@@ -622,7 +619,7 @@ return {
 				t.eq(LifeStateService.GetState(a), "Alive")
 				t.eq(table.concat(notified(sent, a), ","), "Airlock.LeftBehind,Checkpoint.Respawned")
 			end)
-			t.truthy(LevelDirector.EnterLevel(L5), "the roof")
+			t.truthy(LevelDirector.EnterLevel(LR), "the roof")
 			CheckpointAirlockService.Poll()
 			t.eq(CheckpointAirlockService.GetPhase(), "Idle")
 			t.falsy(CheckpointAirlockService.Seal(), "the roof has no exit airlock")

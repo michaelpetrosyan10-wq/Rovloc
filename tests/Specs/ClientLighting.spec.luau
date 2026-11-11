@@ -45,7 +45,7 @@ local function zone(parent: Instance, id: string, levelId: string, roomKind: str
 	return part
 end
 
-local GROUPS = { "L0_Boilers", "L1_NorthHall", "Stairwell_0_1", "L4_Floodlights", "LobbyBoiler" }
+local GROUPS = { "L0_Boilers", "L1_NorthHall", "Stairwell_0_1", "L2_HouseLights", "LobbyBoiler" }
 local T0 = 1_700_000_000 -- a realistic server time
 
 return {
@@ -201,7 +201,7 @@ return {
 	["camera positions map to the lobby, each school floor and the outdoors"] = function(t: Expect)
 		local midX = WorldConfig.FootprintSize.X / 2
 		local midZ = WorldConfig.FootprintSize.Y / 2
-		for _, levelId: Enums.LevelId in Enums.LevelId do
+		for _, levelId: Enums.LevelId in WorldConfig.LevelOrder do
 			local floor = WorldConfig.levelElevation(levelId)
 			t.eq(LightingController.layoutAt(Vector3.new(midX, floor + 4.5, midZ)), levelId, levelId .. " standing")
 			t.eq(LightingController.layoutAt(Vector3.new(midX, floor + 0.5, midZ)), levelId, levelId .. " downed")
@@ -221,7 +221,7 @@ return {
 		end
 		t.eq(LightingController.layoutAt(Vector3.new(midX, WorldConfig.GroundY + 4, -400)), nil, "street")
 		t.truthy(LightingController.isOutdoors(nil), "street is outdoors")
-		t.truthy(LightingController.isOutdoors("Level5_Roof"), "roof is outdoors")
+		t.truthy(LightingController.isOutdoors("Level3_Roof"), "roof is outdoors")
 		t.falsy(LightingController.isOutdoors("Lobby"), "lobby is indoors")
 		t.falsy(LightingController.isOutdoors("Level1_Hallways"), "hallways are indoors")
 	end,
@@ -232,13 +232,13 @@ return {
 		folder.Parent = Workspace
 		local ok, problem = pcall(function()
 			local origin = WorldConfig.SchoolOrigin
-			local roofY = origin.Y + WorldConfig.levelElevation("Level5_Roof")
-			local poolY = origin.Y + WorldConfig.levelElevation("Level4_FloodedPool")
-			-- The open roof, a stair house standing on it, and a pool hall drawn taller than its floor band.
+			local roofY = origin.Y + WorldConfig.levelElevation("Level3_Roof")
+			local hallY = origin.Y + WorldConfig.levelElevation("Level2_Auditorium")
+			-- The open roof, a stair house standing on it, and an auditorium hall drawn taller than its floor band.
 			zone(
 				folder,
 				"SpecRoof",
-				"Level5_Roof",
+				"Level3_Roof",
 				"Roof",
 				origin + Vector3.new(0, roofY - origin.Y, 0),
 				origin + Vector3.new(60, roofY - origin.Y + 40, 60)
@@ -246,22 +246,22 @@ return {
 			zone(
 				folder,
 				"SpecStairHouse",
-				"Level5_Roof",
+				"Level3_Roof",
 				"Corridor",
 				origin + Vector3.new(10, roofY - origin.Y, 10),
 				origin + Vector3.new(20, roofY - origin.Y + 12, 20)
 			)
 			zone(
 				folder,
-				"SpecPool",
-				"Level4_FloodedPool",
-				"Pool",
-				origin + Vector3.new(100, poolY - origin.Y - 8, 0),
+				"SpecHall",
+				"Level2_Auditorium",
+				"Gallery",
+				origin + Vector3.new(100, hallY - origin.Y, 0),
 				origin + Vector3.new(140, roofY - origin.Y + 6, 40)
 			)
 
 			local open = LightingController.placeAt(origin + Vector3.new(40, roofY - origin.Y + 4, 40))
-			t.eq(open.layoutId, "Level5_Roof", "open roof layout")
+			t.eq(open.layoutId, "Level3_Roof", "open roof layout")
 			t.eq(open.zoneId, "SpecRoof", "open roof zone")
 			t.truthy(open.outdoors, "the open roof sees the sky")
 
@@ -269,15 +269,15 @@ return {
 			t.eq(house.zoneId, "SpecStairHouse", "the smaller zone wins where volumes meet")
 			t.falsy(house.outdoors, "the stair house is indoors")
 
-			-- Above the roof's floor band but inside the pool hall's volume: the zone outranks the band.
+			-- Above the roof's floor band but inside the auditorium hall's volume: the zone outranks the band.
 			local tall = origin + Vector3.new(120, roofY - origin.Y + 2, 20)
-			t.eq(LightingController.layoutAt(tall), "Level4_FloodedPool", "pool hall above its band")
-			t.falsy(LightingController.placeAt(tall).outdoors, "pool hall is indoors")
+			t.eq(LightingController.layoutAt(tall), "Level2_Auditorium", "auditorium hall above its band")
+			t.falsy(LightingController.placeAt(tall).outdoors, "the auditorium hall is indoors")
 
 			-- No zone holds a point inside the school (a duct, a wall): bands decide and, with zones built, the roof
 			-- band is not outdoors.
 			local duct = LightingController.placeAt(origin + Vector3.new(200, roofY - origin.Y + 2, 150))
-			t.eq(duct.layoutId, "Level5_Roof", "band fallback")
+			t.eq(duct.layoutId, "Level3_Roof", "band fallback")
 			t.eq(duct.zoneId, nil, "no zone")
 			t.falsy(duct.outdoors, "a zoneless point inside the school is indoors once zones exist")
 		end)
@@ -303,8 +303,8 @@ return {
 
 	["each level's film eases in from the last one and settles on it"] = function(t: Expect)
 		local from = LightingMood.film("Lobby")
-		local to = LightingMood.film("Level4_FloodedPool")
-		t.truthy(LightingFilm.distance(from, to) > 0.05, "the lobby and the pool are graded apart")
+		local to = LightingMood.film("Level0_Basement")
+		t.truthy(LightingFilm.distance(from, to) > 0.05, "the lobby and the basement are graded apart")
 		t.eq(LightingFilm.distance(to, to), 0)
 		local step = LightingFilm.step(from, to, 1 / 60)
 		t.truthy(step.density > from.density and step.density < to.density, "a frame moves part of the way")
@@ -322,8 +322,8 @@ return {
 
 	["each level's Roblox render eases with the film and settles on it"] = function(t: Expect)
 		local from = LightingMood.render("Lobby")
-		local to = LightingMood.render("Level4_FloodedPool")
-		t.truthy(LightingFilm.renderDistance(from, to) > 0.05, "the lobby and the pool render apart")
+		local to = LightingMood.render("Level0_Basement")
+		t.truthy(LightingFilm.renderDistance(from, to) > 0.05, "the lobby and the basement render apart")
 		t.eq(LightingFilm.renderDistance(to, to), 0)
 		local step = LightingFilm.stepRender(from, to, 1 / 60)
 		t.truthy(step.exposure < from.exposure and step.exposure > to.exposure, "a frame moves part of the way")

@@ -1,5 +1,5 @@
 --!strict
--- EscapeSummaryController: the end-of-run screen (spec §1 "Play Again"; the Level 5 finale's ESCAPED summary).
+-- EscapeSummaryController: the end-of-run screen (spec §1 "Play Again"; the roof escape's ESCAPED summary).
 --
 -- RunSummary (MatchAndDataService sends it once per run to each participant) opens a full-screen summary:
 --   * Title treatment by outcome: ESCAPED (Results.Escaped) in bone white with a cold storm-light glow, landing with a
@@ -13,7 +13,7 @@
 --     keyboard; pressed, it reads Results.Waiting. Under it the auto-return countdown (Results.Returning) with a
 --     draining bar, from ReplicatedStorage.ResultsEndsAt (server time, MatchResetService).
 -- While it is up the cursor is free (CursorController), gameplay input is off (the "Menu" input context) and the HUD is
--- hidden. It waits while a finale shot or a jumpscare owns the view (the Cutscene input context, or a Cutscene /
+-- hidden. It waits while the escape shot or a jumpscare owns the view (the Cutscene input context, or a Cutscene /
 -- Jumpscare / Parachute control lock), at most HOLD_MAX_SECONDS after the summary arrived, then fades in from black.
 -- It closes when the match moves on to Resetting / Lobby or the run ends.
 --

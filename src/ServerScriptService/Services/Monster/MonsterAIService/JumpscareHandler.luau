@@ -11,7 +11,7 @@
 --   2. Face to face (facePair, pure). The victim's root turns in place to face the Creature (CharacterService.Teleport,
 --      so the move is announced); the Creature's root is anchored for the moment (kinematic) and set on the line
 --      between them at the kind's spacing (CreatureConfig.Jumpscare.Spacing: Hallway 4.2, Locker 4.4, far enough back
---      for the Tall Man's bow to bring its mask level with the victim's eye; Vent and Underwater lunge straight in),
+--      for the Tall Man's bow to bring its mask level with the victim's eye; Vent lunges straight in),
 --      facing the victim, at its own height. It only ever closes in, unless it stands closer than the kind's minimum
 --      (MinSpacing), where it is eased back out to it. The step is the brain's to bound (SetStager): only as far as its
 --      body clears the walls, so the root never ends in or behind one (the rig's bow steps back the rest, on screen).

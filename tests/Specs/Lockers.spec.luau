@@ -65,7 +65,7 @@ local W = Attributes.World
 local LEAD = GameConfig.OneShotLead
 local STEP = 0.02
 local ROOT_HEIGHT = 3
-local GYM: Enums.LevelId = "Level3_Gymnasium"
+local LEVEL: Enums.LevelId = "Level1_Hallways"
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -88,8 +88,8 @@ local function buildLocker(): Model
 	return LockerBuilder.buildLocker(folder, {
 		cframe = CFrame.new(40, 0, 40),
 		anchorId = "Spec_Locker_01",
-		levelId = GYM,
-		zoneId = "L3_LockerRoom_Boys",
+		levelId = LEVEL,
+		zoneId = "L1_Corridor_West",
 		number = 1,
 		wallGap = nil,
 		paint = Color3.fromRGB(58, 86, 84),
@@ -524,7 +524,7 @@ return {
 			{ overrides = { lockerState = "Smashed" }, reason = HideSpotService.OccupiedHint },
 			{ overrides = { controlLock = "Trap" }, reason = "Locked" },
 			{ overrides = { moveState = "VentCrawling" }, reason = "Posture" },
-			{ overrides = { moveState = "Treading" }, reason = "Posture" },
+			{ overrides = { moveState = "Parachuting" }, reason = "Posture" },
 			{ overrides = { chasedBy = true }, reason = HideSpotService.SeenHint },
 		}
 		for _, row in refusals do

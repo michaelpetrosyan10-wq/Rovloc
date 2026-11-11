@@ -379,7 +379,7 @@ return {
 		end
 
 		t.truthy(SpectatorController.showRespawn("Eliminated", "Level0_Basement"), "a stairwell ahead")
-		t.falsy(SpectatorController.showRespawn("Eliminated", "Level5_Roof"), "no airlock on the roof")
+		t.falsy(SpectatorController.showRespawn("Eliminated", "Level3_Roof"), "no airlock on the roof")
 		t.falsy(SpectatorController.showRespawn("LateJoin", "Level0_Basement"), "outsiders wait for the next run")
 		t.falsy(SpectatorController.showRespawn("Eliminated", nil))
 

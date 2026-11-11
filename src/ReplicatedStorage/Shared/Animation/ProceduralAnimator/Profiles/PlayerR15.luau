@@ -22,12 +22,11 @@
 -- are planted the same way as feet. The body sits behind the eye point CameraConfig puts at (0, -0.6, -0.5), so the
 -- first-person camera looks over the forearms down the duct.
 -- DownedCrawling: lying on the floor, chest propped on the elbows, pulling with alternating arms, legs dragging.
--- Swimming: Treading (upright, eggbeater legs, sculling arms), Freestyle (front crawl with body roll and flutter
--- kick), Underwater (breaststroke arms and frog kick, glide). Hiding: still, arms drawn in, slow breathing.
--- Trapped: right foot caught, kneeling on the left knee, hands tugging at the trap. Grabbed: flailing. Parachuting:
--- hanging in the harness with the hands up on the risers. Scripted: neutral standing. Dead: limp, face down.
+-- Hiding: still, arms drawn in, slow breathing. Trapped: right foot caught, kneeling on the left knee, hands tugging
+-- at the trap. Parachuting: hanging in the harness with the hands up on the risers. Scripted: neutral standing.
+-- Dead: limp, face down.
 -- Hand targets (HandRig's flashlight, pry, ripcord and slit-grip holds) take over the arms on foot, hiding, trapped
--- and parachuting; crawling, swimming strokes, flailing and the dead keep their own arms (half while treading).
+-- and parachuting; crawling and the dead keep their own arms.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -49,7 +48,6 @@ local footCycle = ProceduralAnimator.footCycle
 local ankleLift = ProceduralAnimator.ankleLift
 local lerp = MathUtil.lerp
 local remap = MathUtil.remapClamped
-local smoothstep = MathUtil.smoothstep
 local rad = math.rad
 local TAU = 2 * math.pi
 
@@ -805,99 +803,6 @@ local function dead(ctx: Ctx, pose: Pose)
 end
 
 --------------------------------------------------------------------------------
--- Water
---------------------------------------------------------------------------------
-
-local function treading(ctx: Ctx, pose: Pose)
-	local phase = ctx.phase
-	local bob = 0.07 * math.sin(2 * TAU * phase)
-	pose:set(ROOT, CFrame.new(0, -1.1 + bob, 0) * euler(rad(-8) + ctx.leanPitch * 0.5, 0, ctx.leanRoll * 0.5))
-	pose:set(WAIST, euler(rad(-6) + ctx.breath * rad(1.5), 0, 0))
-	for _, side in SIDES do
-		local s = SIGN[side]
-		local legAngle = TAU * (phase - PLANT[side])
-		-- Eggbeater: each leg circles out and round.
-		pose:set(
-			HIP[side],
-			euler(rad(42) + rad(18) * math.sin(legAngle), s * rad(8), s * (rad(16) + rad(8) * math.cos(legAngle)))
-		)
-		pose:set(KNEE[side], euler(-(rad(72) + rad(28) * math.cos(legAngle)), 0, 0))
-		pose:set(ANKLE[side], euler(rad(12) * math.sin(legAngle), 0, 0))
-		-- Sculling: forearms sweeping in and out at chest height.
-		local scull = math.sin(TAU * 2 * phase + (if s > 0 then 0 else math.pi))
-		pose:set(SHOULDER[side], euler(rad(30), s * rad(22) * scull, s * rad(48)))
-		pose:set(ELBOW[side], euler(rad(55) + rad(10) * scull, 0, 0))
-		pose:set(WRIST[side], euler(0, 0, -s * rad(20) * scull))
-	end
-end
-
-local function freestyle(ctx: Ctx, pose: Pose)
-	local phase = ctx.phase
-	local m = measure(ctx.map)
-	-- Body roll toward the pulling arm, twice a cycle.
-	local roll = rad(32) * math.sin(TAU * phase)
-	pose:set(ROOT, CFrame.Angles(0, 0, roll) * CFrame.Angles(-math.pi / 2 + rad(6), 0, 0))
-	pose:set(WAIST, euler(rad(6) + ctx.breath * rad(1), 0, 0))
-	pose:set(NECK, euler(rad(28), -roll * 0.6, 0))
-	local neck = pose:pivot(NECK)
-	shiftBody(pose, Vector3.new(0, -0.35 - neck.Y + m.spine * 0.15, -0.55 - neck.Z))
-	for _, side in SIDES do
-		local s = SIGN[side]
-		local u = (phase - PLANT[side]) % 1
-		-- Pull: reach -> under the body -> hip; recovery: elbow high over the water.
-		local angle: number
-		local elbow: number
-		local out: number
-		if u < 0.55 then
-			local v = u / 0.55
-			angle = math.pi * (1 - v)
-			elbow = rad(30) * math.sin(math.pi * v)
-			out = rad(6)
-		else
-			local v = (u - 0.55) / 0.45
-			angle = -math.pi * v
-			elbow = rad(105) * math.sin(math.pi * v)
-			out = rad(28) * math.sin(math.pi * v)
-		end
-		pose:set(SHOULDER[side], euler(angle, 0, s * out))
-		pose:set(ELBOW[side], euler(elbow, 0, 0))
-		pose:set(WRIST[side], euler(rad(-8), 0, 0))
-		-- Flutter kick, three beats per arm.
-		local kick = math.sin(TAU * 3 * phase + (if s > 0 then math.pi else 0))
-		pose:set(HIP[side], euler(rad(10) * kick, 0, s * rad(3)))
-		pose:set(KNEE[side], euler(-(rad(12) + rad(10) * math.max(0, kick)), 0, 0))
-		pose:set(ANKLE[side], euler(-rad(55), 0, 0))
-	end
-end
-
-local function underwater(ctx: Ctx, pose: Pose)
-	local phase = ctx.phase
-	local m = measure(ctx.map)
-	-- 0..0.35 draw (arms sweep in, legs draw up), 0.35..0.55 kick (legs whip together), 0.55..1 glide.
-	local draw = smoothstep(0, 0.35, phase) * (1 - smoothstep(0.35, 0.55, phase))
-	local sweep = math.sin(math.pi * math.clamp(phase / 0.4, 0, 1))
-	pose:set(ROOT, euler(-math.pi / 2 + rad(10) + rad(4) * draw, 0, 0))
-	pose:set(WAIST, euler(rad(8) * draw, 0, 0))
-	pose:set(NECK, euler(rad(24), 0, 0))
-	local neck = pose:pivot(NECK)
-	shiftBody(pose, Vector3.new(0, -0.95 - neck.Y + m.spine * 0.1, -0.5 - neck.Z))
-	for _, side in SIDES do
-		local s = SIGN[side]
-		-- Arms: streamlined overhead; the pull sweeps them out and down to the chest.
-		pose:set(
-			SHOULDER[side],
-			euler(math.pi * 0.94 - rad(70) * sweep, s * rad(8) * sweep, s * (rad(6) + rad(40) * sweep))
-		)
-		pose:set(ELBOW[side], euler(rad(80) * sweep * (1 - smoothstep(0.3, 0.45, phase)), 0, 0))
-		pose:set(WRIST[side], euler(0, 0, -s * rad(15) * sweep))
-		-- Frog kick: knees out and drawn up, then snapped back together.
-		pose:set(HIP[side], euler(rad(50) * draw, s * rad(10) * draw, s * (rad(4) + rad(32) * draw)))
-		pose:set(KNEE[side], euler(-(rad(8) + rad(105) * draw), 0, 0))
-		pose:set(ANKLE[side], euler(rad(20) * draw - rad(50) * (1 - draw), -s * rad(25) * draw, 0))
-	end
-end
-
---------------------------------------------------------------------------------
 -- Locked states
 --------------------------------------------------------------------------------
 
@@ -930,46 +835,6 @@ local function trapped(ctx: Ctx, pose: Pose)
 	pose:limb(ARM.Left, left, Vector3.new(-0.8, -0.3, 0.6), palmDown("Left", rad(-70)))
 	pose:plant("Right", true)
 	pose:plant("Left", true)
-end
-
--- Seized and dragged: arms and legs thrash, the body twists against the grip.
-local function grabbed(ctx: Ctx, pose: Pose)
-	local t = ctx.time
-	local seed = ctx.seed * 17
-	local function thrash(rate: number, offset: number): number
-		return noise(t * rate, seed + offset)
-	end
-	pose:set(
-		ROOT,
-		CFrame.new(0, -0.3, 0)
-			* euler(rad(18) + rad(8) * thrash(1.3, 1), rad(14) * thrash(1.1, 2), rad(10) * thrash(1.7, 3))
-	)
-	pose:set(WAIST, euler(rad(14) + rad(10) * thrash(2.1, 4), rad(18) * thrash(1.6, 5), rad(8) * thrash(2.4, 6)))
-	pose:set(NECK, euler(rad(10) + rad(20) * thrash(2.6, 7), rad(30) * thrash(2.2, 8), rad(12) * thrash(3, 9)))
-	for _, side in SIDES do
-		local s = SIGN[side]
-		local k = if s > 0 then 20 else 40
-		pose:set(
-			SHOULDER[side],
-			euler(
-				rad(70) + rad(80) * thrash(3.1, k),
-				s * rad(25) * thrash(2.7, k + 1),
-				s * (rad(50) + rad(35) * thrash(3.4, k + 2))
-			)
-		)
-		pose:set(ELBOW[side], euler(rad(50) + rad(40) * thrash(3.8, k + 3), 0, 0))
-		pose:set(WRIST[side], euler(rad(25) * thrash(4.2, k + 4), 0, rad(25) * thrash(4, k + 5)))
-		pose:set(
-			HIP[side],
-			euler(
-				rad(25) + rad(40) * thrash(3.3, k + 6),
-				s * rad(10) * thrash(2.5, k + 7),
-				s * (rad(12) + rad(12) * thrash(2.9, k + 8))
-			)
-		)
-		pose:set(KNEE[side], euler(-(rad(45) + rad(38) * thrash(3.6, k + 9)), 0, 0))
-		pose:set(ANKLE[side], euler(rad(25) * thrash(4.4, k + 10), 0, 0))
-	end
 end
 
 -- Hanging in the harness: legs dangling and swaying, hands up on the risers.
@@ -1060,45 +925,6 @@ local states: { [string]: StateSpec } = {
 		look = { waist = 0.4, head = 0.9 },
 		exertion = 0.7,
 	}),
-	Treading = state({
-		pose = treading,
-		cycle = {
-			length = function(_speed: number, _map: JointMap): number
-				return 7
-			end,
-			rate = 0.8,
-		},
-		blendSpeed = 5,
-		hands = 0.5,
-		look = { waist = 0.6, head = 1 },
-		exertion = 0.35,
-	}),
-	Freestyle = state({
-		pose = freestyle,
-		cycle = {
-			length = function(_speed: number, _map: JointMap): number
-				return 7
-			end,
-			rate = 0.25,
-		},
-		blendSpeed = 5,
-		hands = 0,
-		look = { waist = 0, head = 0.45 },
-		exertion = 1,
-	}),
-	Underwater = state({
-		pose = underwater,
-		cycle = {
-			length = function(_speed: number, _map: JointMap): number
-				return 9
-			end,
-			rate = 0.3,
-		},
-		blendSpeed = 4,
-		hands = 0,
-		look = { waist = 0, head = 0.5 },
-		exertion = 0.6,
-	}),
 	Hiding = state({
 		pose = hiding,
 		blendSpeed = 6,
@@ -1110,13 +936,6 @@ local states: { [string]: StateSpec } = {
 		blendSpeed = 9,
 		look = { waist = 0.3, head = 0.8 },
 		exertion = 0.8,
-	}),
-	Grabbed = state({
-		pose = grabbed,
-		blendSpeed = 10,
-		hands = 0,
-		look = { waist = 0, head = 0.35 },
-		exertion = 1,
 	}),
 	Parachuting = state({
 		pose = parachuting,

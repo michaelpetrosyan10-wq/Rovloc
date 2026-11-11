@@ -42,7 +42,6 @@ return {
 				dead = false,
 				expected = "DownedCrawling",
 			},
-			{ life = "Downed", server = "Grabbed", predicted = nil, dead = false, expected = "Grabbed" },
 			{ life = "Alive", server = "DownedCrawling", predicted = "Standing", dead = false, expected = "Standing" },
 			{ life = "Alive", server = "DownedCrawling", predicted = nil, dead = false, expected = "Standing" },
 			{ life = nil, server = "DownedCrawling", predicted = nil, dead = false, expected = "DownedCrawling" },
@@ -60,14 +59,13 @@ return {
 		t.truthy(PlayerR15.Profile.states[PlayerR15.DeadState] ~= nil, "the profile poses the dead")
 	end,
 
-	["surfaceFor: water, part attribute, Palette material, room, then concrete"] = function(t: Expect)
+	["surfaceFor: part attribute, Palette material, room, then concrete"] = function(t: Expect)
 		local surfaceFor = CharacterAnimationController.surfaceFor
-		t.eq(surfaceFor(true, "Wood", Enum.Material.Metal, "Carpet"), "Water", "standing in water wins")
-		t.eq(surfaceFor(false, "Wood", Enum.Material.Metal, "Carpet"), "Wood", "the floor part's Surface")
-		t.eq(surfaceFor(false, "Nonsense", Enum.Material.Metal, "Carpet"), "Metal", "invalid attribute ignored")
-		t.eq(surfaceFor(false, nil, Enum.Material.Neon, "Carpet"), "Glass", "Palette maps Neon (skyline windows)")
-		t.eq(surfaceFor(false, nil, Enum.Material.ForceField, "Carpet"), "Carpet", "unknown material: the room")
-		t.eq(surfaceFor(false, nil, nil, nil), "Concrete", "fallback")
+		t.eq(surfaceFor("Wood", Enum.Material.Metal, "Carpet"), "Wood", "the floor part's Surface")
+		t.eq(surfaceFor("Nonsense", Enum.Material.Metal, "Carpet"), "Metal", "invalid attribute ignored")
+		t.eq(surfaceFor(nil, Enum.Material.Neon, "Carpet"), "Glass", "Palette maps Neon (skyline windows)")
+		t.eq(surfaceFor(nil, Enum.Material.ForceField, "Carpet"), "Carpet", "unknown material: the room")
+		t.eq(surfaceFor(nil, nil, nil), "Concrete", "fallback")
 		local cases: { [Enum.Material]: Enums.SurfaceKind } = {
 			[Enum.Material.Concrete] = "Concrete",
 			[Enum.Material.CeramicTiles] = "Tile",
@@ -75,7 +73,6 @@ return {
 			[Enum.Material.CorrodedMetal] = "Metal",
 			[Enum.Material.Carpet] = "Carpet",
 			[Enum.Material.Glass] = "Glass",
-			[Enum.Material.Grass] = "Grass",
 			[Enum.Material.Water] = "Water",
 		}
 		for material, expected in cases do

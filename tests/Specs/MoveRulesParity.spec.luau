@@ -16,7 +16,7 @@ local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
 type Expect = SpecRunner.Expect
 
-local MODES: { PlayerStateService.Mode } = { "OnFoot", "Vent", "Swim" }
+local MODES: { PlayerStateService.Mode } = { "OnFoot", "Vent" }
 local OVERRIDES: { Enums.MoveState } = { "Hiding", "Trapped", "DownedCrawling", "Scripted" }
 local STAMINAS: { number } = { 0, 0.5, 50, GameConfig.StaminaMax }
 local BOOLS: { boolean } = { false, true }
@@ -29,52 +29,48 @@ return {
 				for _, stamina in STAMINAS do
 					for _, crouch in BOOLS do
 						for _, sprint in BOOLS do
-							for _, dive in BOOLS do
-								for _, exhausted in BOOLS do
-									for _, moving in BOOLS do
-										for _, lowCeiling in BOOLS do
-											local overrideState: Enums.MoveState? = if overrideIndex <= #OVERRIDES
-												then OVERRIDES[overrideIndex]
-												else nil
-											local server = PlayerStateService.deriveState({
-												mode = mode,
-												override = overrideState,
-												intent = { crouch = crouch, sprint = sprint, dive = dive },
-												stamina = stamina,
-												exhausted = exhausted,
-												moving = moving,
-												lowCeiling = lowCeiling,
-											})
-											local client = MovementController.deriveState({
-												mode = mode,
-												override = overrideState,
-												crouch = crouch,
-												sprint = sprint,
-												dive = dive,
-												stamina = stamina,
-												exhausted = exhausted,
-												moving = moving,
-												lowCeiling = lowCeiling,
-											} :: any)
-											checked += 1
-											if server ~= client then
-												t.eq(
-													client,
-													server,
-													string.format(
-														"%s override=%s stamina=%s crouch=%s sprint=%s dive=%s exhausted=%s moving=%s low=%s",
-														mode,
-														tostring(overrideState),
-														tostring(stamina),
-														tostring(crouch),
-														tostring(sprint),
-														tostring(dive),
-														tostring(exhausted),
-														tostring(moving),
-														tostring(lowCeiling)
-													)
+							for _, exhausted in BOOLS do
+								for _, moving in BOOLS do
+									for _, lowCeiling in BOOLS do
+										local overrideState: Enums.MoveState? = if overrideIndex <= #OVERRIDES
+											then OVERRIDES[overrideIndex]
+											else nil
+										local server = PlayerStateService.deriveState({
+											mode = mode,
+											override = overrideState,
+											intent = { crouch = crouch, sprint = sprint },
+											stamina = stamina,
+											exhausted = exhausted,
+											moving = moving,
+											lowCeiling = lowCeiling,
+										})
+										local client = MovementController.deriveState({
+											mode = mode,
+											override = overrideState,
+											crouch = crouch,
+											sprint = sprint,
+											stamina = stamina,
+											exhausted = exhausted,
+											moving = moving,
+											lowCeiling = lowCeiling,
+										} :: any)
+										checked += 1
+										if server ~= client then
+											t.eq(
+												client,
+												server,
+												string.format(
+													"%s override=%s stamina=%s crouch=%s sprint=%s exhausted=%s moving=%s low=%s",
+													mode,
+													tostring(overrideState),
+													tostring(stamina),
+													tostring(crouch),
+													tostring(sprint),
+													tostring(exhausted),
+													tostring(moving),
+													tostring(lowCeiling)
 												)
-											end
+											)
 										end
 									end
 								end
@@ -84,7 +80,7 @@ return {
 				end
 			end
 		end
-		t.truthy(checked == #MODES * (#OVERRIDES + 1) * #STAMINAS * 64, "every combination checked")
+		t.truthy(checked == #MODES * (#OVERRIDES + 1) * #STAMINAS * 32, "every combination checked")
 	end,
 
 	["both sides force a crouch under the same head room"] = function(t: Expect)

@@ -35,15 +35,15 @@
 --     server-time-synced schedule throws lightning with locally played thunder, because the roof has almost no
 --     fixtures. It stays quiet for a while after any scripted Lightning, and SetStormEnabled(false) hands the sky to a
 --     later phase entirely.
---   * SetOverride(lightId, brightness?) pins a fixture's brightness for Timeline tracks (P3) and the pool floodlight
---     switch (P7); an override forces the fixture into the active set and wins over flicker and burnt bulbs.
+--   * SetOverride(lightId, brightness?) pins a fixture's brightness for Timeline tracks (P3); an override forces the
+--     fixture into the active set and wins over flicker and burnt bulbs.
 --   * Glow. A fixture's glow surfaces (FixtureGlow: Neon tubes, filaments and lenses, an exit sign's self-lit letters)
 --     follow its light: every frame an active fixture's light is written, its glow is set to the same level (only when
 --     it changed), so a flickering tube stutters, a blackout leaves dead glass, a burst bulb surges and dies with its
 --     light. A fixture leaving the active set gets its steady look back (lit if it works, dead if not), so tubes out of
 --     the light budget still glow in the distance.
 --   * Area grade. A client-local ColorCorrectionEffect eases toward the tint of the level the camera is on
---     (LightingMood.grade: green-teal on the school floors, amber in the basement, cyan at the pool).
+--     (LightingMood.grade: green-teal on the school floors, amber in the basement).
 --   * Film (LightingController/Film). The server's Atmosphere, base grade, bloom, sun rays, the exposure and the
 --     ambient fills ease toward the level the camera is on: its film (LightingMood.film: haze, bloom, saturation) as
 --     Roblox renders it to match the browser build (LightingMood.render: exposure, contrast and brightness, fills,
@@ -506,7 +506,7 @@ local function schoolBounds(): Bounds
 	end
 	local margin = 6
 	local origin = WorldConfig.SchoolOrigin
-	local roof = WorldConfig.levelElevation(Enums.LevelId[#Enums.LevelId])
+	local roof = WorldConfig.levelElevation(WorldConfig.LevelOrder[#WorldConfig.LevelOrder])
 	local bounds: Bounds = {
 		min = origin + Vector3.new(minX - margin, -12, -margin),
 		max = origin + Vector3.new(maxX + margin, roof + 60, WorldConfig.FootprintSize.Y + margin),
@@ -535,9 +535,9 @@ local function bandLayout(point: Vector3): string?
 	if not inside(schoolBounds(), point) then
 		return nil
 	end
-	local found: string = Enums.LevelId[1]
+	local found: string = WorldConfig.LevelOrder[1]
 	local localY = point.Y - WorldConfig.SchoolOrigin.Y
-	for _, levelId: Enums.LevelId in Enums.LevelId do
+	for _, levelId: Enums.LevelId in WorldConfig.LevelOrder do
 		if localY >= WorldConfig.levelElevation(levelId) - WorldConfig.SlabThickness * 0.5 then
 			found = levelId
 		end
@@ -636,7 +636,7 @@ end
 
 -- The layout-only outdoors guess (the roof level, or outside every building). placeAt refines it per zone.
 function LightingController.isOutdoors(layoutId: string?): boolean
-	return layoutId == nil or layoutId == Enums.LevelId[#Enums.LevelId]
+	return layoutId == nil or layoutId == WorldConfig.LevelOrder[#WorldConfig.LevelOrder]
 end
 
 --------------------------------------------------------------------------------
@@ -1823,7 +1823,7 @@ function LightingController.SetOverride(lightId: string, brightness: number?)
 	dirty = true
 end
 
--- Lets a later phase own the sky (P8 finale): false stops the ambient roof storm.
+-- Lets a later phase own the sky (the jump's landing): false stops the ambient roof storm.
 function LightingController.SetStormEnabled(enabled: boolean)
 	stormEnabled = enabled
 end

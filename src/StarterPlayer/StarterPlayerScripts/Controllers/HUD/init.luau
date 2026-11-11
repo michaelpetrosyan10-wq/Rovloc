@@ -14,8 +14,7 @@
 --   * Data banner. ReplicatedStorage.DataMode "Ephemeral" / "Guest" shows Boot.DataEphemeral / Boot.DataGuest as a
 --     small line at the top (dimmer during a run).
 --   * Downed. While LifeState is Downed: a blood vignette beating faster as the bleedout runs out, Hud.Downed, the
---     time left (BleedoutEndsAt, server time) and the bleedout bar, and Hud.SelfRevive with the syringe glyph when a
---     charge is left. A later phase that draws the whole downed state itself claims it (ClaimDowned; P8's
+--     time left (BleedoutEndsAt, server time) and the bleedout bar. A later phase that draws the whole downed state itself claims it (ClaimDowned; P8's
 --     DownedController), and this block then stays hidden.
 --   * Owns StatusBars, PromptRenderer, MobileControls, Captions and SettingsMenu, drives all of them from one
 --     PreRender step, and fades the lot out and back in through SetVisible (cutscenes).
@@ -29,7 +28,6 @@ local Workspace = game:GetService("Workspace")
 
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
-local InputConfig = require(ReplicatedStorage.Shared.Config.InputConfig)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Strings = require(ReplicatedStorage.Shared.Strings)
@@ -145,9 +143,6 @@ type Screens = {
 	downedTitle: TextLabel,
 	downedTime: TextLabel,
 	downedSlot: Frame,
-	revive: Frame,
-	reviveKey: UIKit.KeyCap,
-	reviveLabel: TextLabel,
 }
 
 local screens: Screens? = nil
@@ -305,27 +300,6 @@ local function buildScreens(parent: Instance): Screens
 	downedSlot.LayoutOrder = 3
 	downedSlot.Size = UDim2.fromOffset(240, 30)
 
-	local revive = UIKit.frame(downed, "SelfRevive")
-	revive.LayoutOrder = 4
-	revive.Size = UDim2.new(1, 0, 0, 34)
-	UIKit.list(
-		revive,
-		Enum.FillDirection.Horizontal,
-		10,
-		Enum.HorizontalAlignment.Center,
-		Enum.VerticalAlignment.Center
-	)
-	local reviveKey = UIKit.keyCap(revive, "Key", 30)
-	reviveKey.root.LayoutOrder = 1
-	local reviveLabel = UIKit.label(revive, "Text", UIKit.Fonts.Body, UIKit.TextSize.Body, Palette.Bone)
-	reviveLabel.LayoutOrder = 2
-	reviveLabel.Text = Strings.get("Hud.SelfRevive")
-	reviveLabel.TextXAlignment = Enum.TextXAlignment.Left
-	reviveLabel.TextWrapped = false
-	reviveLabel.AutomaticSize = Enum.AutomaticSize.X
-	reviveLabel.Size = UDim2.fromScale(0, 1)
-	UIKit.textStroke(reviveLabel, 0.35)
-
 	overlay.Parent = parent
 	hud.Parent = parent
 	return {
@@ -345,9 +319,6 @@ local function buildScreens(parent: Instance): Screens
 		downedTitle = downedTitle,
 		downedTime = downedTime,
 		downedSlot = downedSlot,
-		revive = revive,
-		reviveKey = reviveKey,
-		reviveLabel = reviveLabel,
 	}
 end
 
@@ -473,29 +444,6 @@ local function updateBanner(built: Screens, dt: number)
 	UIKit.setTextTransparency(built.banner, UIKit.fade(0, bannerAlpha * hudAlpha))
 end
 
-local function syringeKey(): (UIKit.GlyphKind, Enum.KeyCode?)
-	local device = InputController.GetDevice()
-	local binding = InputConfig.Bindings.Syringe
-	if device == "Touch" or not binding then
-		return "Touch", nil
-	elseif device == "Gamepad" then
-		return "Gamepad", binding.gamepad[1]
-	end
-	local first = binding.keyboard[1]
-	if typeof(first) == "EnumItem" and first.EnumType == Enum.KeyCode then
-		return "Keyboard", first :: Enum.KeyCode
-	end
-	return "Keyboard", nil
-end
-
-local function refreshReviveGlyph()
-	local built = screens
-	if built then
-		local kind: UIKit.GlyphKind, keyCode: Enum.KeyCode? = syringeKey()
-		built.reviveKey:SetGlyph(kind, keyCode)
-	end
-end
-
 local function updateDowned(built: Screens, dt: number)
 	local player = localPlayer
 	local downedNow = player ~= nil
@@ -529,13 +477,6 @@ local function updateDowned(built: Screens, dt: number)
 	built.downedTime.TextColor3 =
 		Palette.Bone:Lerp(Palette.Ember, math.clamp((1 - fraction) * 1.2, 0, 1) * (0.6 + 0.4 * beat))
 	UIKit.setTextTransparency(built.downedTime, UIKit.fade(0, shown))
-
-	local canRevive = Attributes.getNumber(player, P.SyringeCharges, 0) > 0
-	built.revive.Visible = canRevive
-	if canRevive then
-		built.reviveKey:SetAlpha(shown)
-		UIKit.setTextTransparency(built.reviveLabel, UIKit.fade(0.05, shown))
-	end
 end
 
 --------------------------------------------------------------------------------
@@ -649,9 +590,7 @@ local function mount(gui: Instance)
 		if prompts then
 			prompts:RefreshGlyphs()
 		end
-		refreshReviveGlyph()
 	end))
-	refreshReviveGlyph()
 
 	mounted = true
 	for _, queued in pendingToasts do
@@ -716,7 +655,7 @@ function HUD.SetPromptKindHidden(kind: string, token: string, hidden: boolean)
 	end
 end
 
--- While any token claims it, the built-in downed block (vignette, message, timer, syringe line) stays hidden: the
+-- While any token claims it, the built-in downed block (vignette, message, timer) stays hidden: the
 -- claimant draws the downed state itself (P8 DownedController).
 function HUD.ClaimDowned(token: string, claimed: boolean)
 	if claimed then

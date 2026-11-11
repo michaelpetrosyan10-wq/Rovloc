@@ -37,10 +37,6 @@ local ANCHOR_KIND_FOR_PROP: { [string]: Enums.AnchorKind } = {
 	Battery = "BatteryCandidate",
 	Fuse = "FuseCandidate",
 	MasterKeys = "MasterKeyCandidate",
-	ReagentJar = "ReagentCandidate",
-	CoachKey = "CoachKeyCandidate",
-	ValveWheel = "ValveWheelCandidate",
-	BoltCutters = "BoltCutterCandidate",
 }
 
 --------------------------------------------------------------------------------
@@ -255,10 +251,8 @@ return {
 
 	["prop counts follow DifficultyConfig"] = function(t: Expect)
 		local basement = layoutById(RunDirector.TrapLevel)
-		local science = layoutById(RunDirector.ScienceLevel)
-		local pool = layoutById(RunDirector.PoolLevel)
-		t.truthy(basement and science and pool, "the basement, science hall and pool layouts load")
-		assert(basement and science and pool, "unreachable")
+		t.truthy(basement, "the basement layout loads")
+		assert(basement, "unreachable")
 		for _, difficulty: Enums.Difficulty in DIFFICULTIES do
 			local spec = specFor(difficulty)
 			t.truthy(
@@ -269,21 +263,7 @@ return {
 				local plan = planFor(seed, difficulty)
 				t.eq(plan.difficulty, difficulty, "plan difficulty")
 				t.eq(#RunDirector.propsOf(plan, "BearTrap"), spec.trapCount, difficulty .. " bear traps")
-				t.eq(
-					#RunDirector.propsOf(plan, "ChemicalFlask", science.id),
-					math.min(spec.flasksScienceHall, countAnchors(science, "FlaskCandidate", nil)),
-					difficulty .. " science hall flasks"
-				)
-				t.eq(
-					#RunDirector.propsOf(plan, "ChemicalFlask", pool.id),
-					math.min(spec.flasksPool, countAnchors(pool, "FlaskCandidate", nil)),
-					difficulty .. " pool flasks"
-				)
-				t.eq(
-					#RunDirector.propsOf(plan, "ChemicalFlask"),
-					spec.flasksScienceHall + spec.flasksPool,
-					"flasks only on L2 + L4"
-				)
+				t.eq(#RunDirector.propsOf(plan, "ChemicalFlask"), 0, "no flask spots on the school's four levels")
 				for _, layout in layouts() do
 					local expected = if layout.id == "Lobby"
 						then 0
@@ -427,7 +407,11 @@ return {
 				end
 			end
 		end
-		t.truthy(everLocked > 0, "the director locks grates at all")
+		t.eq(
+			everLocked > 0,
+			next(lockableById) ~= nil,
+			"the director locks grates whenever the school has lockable ones"
+		)
 	end,
 
 	["an unsolvable roll is re-rolled, and a hopeless level stays unlocked"] = function(t: Expect)

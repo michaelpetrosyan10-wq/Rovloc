@@ -2,6 +2,8 @@
 -- Dependency-free spec runner shared by the Studio runner (Runner.server.luau) and the Lune CLI
 -- (tools/lune/check.luau specs). A spec is a ModuleScript named "<Name>.spec" returning
 -- { [testName]: (t: Expect) -> () }. Tests run in name order; a throwing test fails without stopping the rest.
+-- `parked` (tests/PortPending.luau: "<Module>.spec / <test name>" -> reason) names tests that are skipped and counted
+-- as parked; an entry that names no test is a failure (a stale entry).
 
 export type Expect = {
 	eq: (actual: any, expected: any, message: string?) -> (),
@@ -15,6 +17,7 @@ export type Expect = {
 export type Report = {
 	passed: number,
 	failed: number,
+	parked: number,
 	lines: { string },
 }
 
@@ -76,8 +79,10 @@ local expect: Expect = {
 	end,
 }
 
-function SpecRunner.run(folder: Instance, requireFn: (ModuleScript) -> any): Report
-	local report: Report = { passed = 0, failed = 0, lines = {} }
+function SpecRunner.run(folder: Instance, requireFn: (ModuleScript) -> any, parked: { [string]: string }?): Report
+	local report: Report = { passed = 0, failed = 0, parked = 0, lines = {} }
+	local skip: { [string]: string } = parked or {}
+	local seen: { [string]: boolean } = {}
 	local modules: { ModuleScript } = {}
 	for _, child in folder:GetChildren() do
 		if child:IsA("ModuleScript") and string.sub(child.Name, -5) == ".spec" then
@@ -105,6 +110,14 @@ function SpecRunner.run(folder: Instance, requireFn: (ModuleScript) -> any): Rep
 			if type(test) ~= "function" then
 				continue
 			end
+			local key = module.Name .. " / " .. name
+			local reason = skip[key]
+			if reason ~= nil then
+				seen[key] = true
+				report.parked += 1
+				table.insert(report.lines, string.format("park %s: %s", key, reason))
+				continue
+			end
 			local ok, err = pcall(test, expect)
 			if ok then
 				report.passed += 1
@@ -115,7 +128,21 @@ function SpecRunner.run(folder: Instance, requireFn: (ModuleScript) -> any): Rep
 			end
 		end
 	end
-	table.insert(report.lines, string.format("%d passed, %d failed", report.passed, report.failed))
+	local stale: { string } = {}
+	for key in skip do
+		if not seen[key] then
+			table.insert(stale, key)
+		end
+	end
+	table.sort(stale)
+	for _, key in stale do
+		report.failed += 1
+		table.insert(report.lines, string.format("FAIL %s: parked in PortPending but no such test", key))
+	end
+	table.insert(
+		report.lines,
+		string.format("%d passed, %d failed, %d parked", report.passed, report.failed, report.parked)
+	)
 	return report
 end
 

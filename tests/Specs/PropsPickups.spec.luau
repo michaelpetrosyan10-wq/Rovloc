@@ -2,7 +2,7 @@
 -- Plan props: bear traps, chemical flasks and battery pickups, built through Builder.BuildProp exactly as WorldService
 -- does at Deploying (hand-made PlannedProps at rotated CFrames, and every candidate anchor of the real layouts).
 -- Contracts: model names, PrimaryPart, tags, attributes and disabled prompts (kind, hold, texts); part budgets;
--- nothing collides or is queried; the bottom rests exactly on the plan point (floor, worktop or block top); the trap
+-- nothing collides or is queried; the bottom rests exactly on the plan point; the trap
 -- is built armed and its jaw / spring / pan poses round-trip, with armed jaws flat and snapped jaws standing up
 -- interlocked; its TriggerVolume is a NoCollide volume holding LegPoint and a walker's feet point and root; the flask's
 -- visual copy is all-cosmetic with a Grip and is registered as a rig; a prop's look is its anchor's (the same on
@@ -23,7 +23,6 @@ local BearTrapBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBu
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local ChemicalFlaskBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.ChemicalFlaskBuilder)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
-local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local PickupBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PickupBuilder)
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
@@ -39,8 +38,7 @@ local REST_EPSILON = 1e-4
 local POSE_DRIFT = 2e-4 -- float32 rounding allowed after a handful of re-poses
 
 local BASEMENT: Enums.LayoutId = "Level0_Basement"
-local SCIENCE: Enums.LayoutId = "Level2_ScienceHall"
-local POOL: Enums.LayoutId = "Level4_FloodedPool"
+local HALLWAYS: Enums.LayoutId = "Level1_Hallways"
 
 -- Rotated, off-origin plan points (yaw only, as RunDirector's anchor CFrames are).
 local POINTS: { CFrame } = {
@@ -331,7 +329,7 @@ local function trapPlan(index: number, variant: number): Types.PlannedProp
 end
 
 local function flaskPlan(index: number, variant: number): Types.PlannedProp
-	return planned("ChemicalFlask", "SpecFlask_" .. index, SCIENCE, POINTS[index], variant)
+	return planned("ChemicalFlask", "SpecFlask_" .. index, HALLWAYS, POINTS[index], variant)
 end
 
 local function batteryPlan(index: number, variant: number): Types.PlannedProp
@@ -610,7 +608,7 @@ return {
 			for variant = 1, 24 do
 				local index = variant % #POINTS + 1
 				-- an anchor of its own per flask: its own rest pose
-				local plan = planned("ChemicalFlask", "SpecFlask_" .. variant, SCIENCE, POINTS[index], variant * 7919)
+				local plan = planned("ChemicalFlask", "SpecFlask_" .. variant, HALLWAYS, POINTS[index], variant * 7919)
 				local model = build(plan)
 				local count = #parts(model)
 				t.truthy(count <= FLASK_BUDGET, string.format("flask budget (%d parts)", count))
@@ -770,10 +768,8 @@ return {
 		quiet(function()
 			local cases: { { layout: Enums.LayoutId, anchor: Enums.AnchorKind, kind: string } } = {
 				{ layout = BASEMENT, anchor = "TrapCandidate", kind = "BearTrap" },
-				{ layout = SCIENCE, anchor = "FlaskCandidate", kind = "ChemicalFlask" },
-				{ layout = POOL, anchor = "FlaskCandidate", kind = "ChemicalFlask" },
 			}
-			for _, id: Enums.LevelId in Enums.LevelId do
+			for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 				table.insert(cases, { layout = id, anchor = "BatteryCandidate", kind = "Battery" })
 			end
 			local built = 0
@@ -793,63 +789,6 @@ return {
 			end
 			if Builder.getLayout(BASEMENT) then
 				t.truthy(built > 60, string.format("built every candidate (%d)", built))
-			end
-		end)
-	end,
-
-	["real layouts: Science Hall flasks stand inside their lab worktops or their cache shelves"] = function(t: Expect)
-		quiet(function()
-			local counters = anchorsOf(SCIENCE, "LabCounter")
-			local flasks = anchorsOf(SCIENCE, "FlaskCandidate")
-			local layout = Builder.getLayout(SCIENCE)
-			if #flasks == 0 or not layout then
-				return -- layout not present
-			end
-			local origin = WorldConfig.levelOrigin(SCIENCE)
-			for i, anchor in flasks do
-				local model = build(planned("ChemicalFlask", anchor.id, SCIENCE, anchor.cframe, i))
-				local list = parts(model)
-				-- the worktop it stands over: a lab counter's 10 x 3.5 top, else the shelf of its tunnel cache
-				local frame: CFrame? = nil
-				local halfX, halfZ = 5, 1.75
-				for _, counter in counters do
-					local offset = counter.cframe:PointToObjectSpace(anchor.cframe.Position)
-					if math.abs(offset.X) <= 5 and math.abs(offset.Z) <= 1.75 then
-						frame = counter.cframe
-					end
-				end
-				if not frame then
-					local p = anchor.cframe.Position - origin
-					for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
-						local r = platform.rect
-						if
-							p.X >= r.x
-							and p.X <= r.x + r.w
-							and p.Z >= r.z
-							and p.Z <= r.z + r.d
-							and math.abs(platform.top - p.Y) < 1e-3
-						then
-							frame = CFrame.new(origin + Vector3.new(r.x + r.w / 2, platform.top, r.z + r.d / 2))
-							halfX, halfZ = r.w / 2, r.d / 2
-						end
-					end
-				end
-				assert(frame, anchor.id .. " stands over a LabCounter or a cache shelf")
-				local worktop = frame
-				for _, part in list do
-					local half = part.Size / 2
-					for _, sx in { -1, 1 } do
-						for _, sz in { -1, 1 } do
-							local corner =
-								worktop:PointToObjectSpace(part.CFrame * Vector3.new(sx * half.X, 0, sz * half.Z))
-							t.truthy(
-								math.abs(corner.X) <= halfX + 1e-3 and math.abs(corner.Z) <= halfZ + 1e-3,
-								anchor.id .. " " .. part.Name .. " over its worktop"
-							)
-						end
-					end
-				end
-				discard(model)
 			end
 		end)
 	end,

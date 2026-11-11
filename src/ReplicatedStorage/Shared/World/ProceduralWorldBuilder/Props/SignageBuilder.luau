@@ -2,11 +2,9 @@
 -- SignageBuilder: the school's signs, posters and notes (static kind "Signage": once at boot, the same on every server,
 -- into <level>.Props as one Model "Signs_<layoutId>").
 --
---   * Room plates: an enamelled ROOM 108 / LAB 201 plate on the corridor wall beside the door of every numbered
---     classroom and lab.
---   * Wayfinding: STAIRS beside every airlock fire door (on the corridor side), a sign over the door of the rooms people
---     look for (MAIN OFFICE, BOILER ROOM - STAFF ONLY, GYMNASIUM, LOCKER ROOMS, POOL - NO DIVING) and SCIENCE WING
---     boards high on the science hall's corridors.
+--   * Room plates: an enamelled ROOM 108 plate on the corridor wall beside the door of every numbered classroom.
+--   * Wayfinding: STAIRS beside every airlock fire door (on the corridor side) and a sign over the door of the rooms
+--     people look for (MAIN OFFICE, BOILER ROOM - STAFF ONLY).
 --   * Paper and paint (seeded per level): NO RUNNING IN THE HALLS posters, ASSEMBLY CANCELLED notices, HAVE YOU SEEN
 --     THIS STUDENT? posters with a faded photo, CAUTION placards, QUARANTINE sheets taped beside storeroom doors, and
 --     HELP US / DON'T LET IT HEAR YOU scrawled on the walls in something dark that ran. Paper hangs crooked, torn and
@@ -176,33 +174,12 @@ local LEVEL_PAPERS: { [string]: { Request } } = {
 		{ design = "Missing", count = 3, where = "Hall" },
 		{ design = "Scrawl", count = 2, where = "Hall" },
 	},
-	Level2_ScienceHall = {
-		{ design = "Poster", count = 1, where = "Hall" },
-		{ design = "Missing", count = 2, where = "Hall" },
-		{ design = "Caution", count = 2, where = "Service" },
-		{ design = "Quarantine", count = 1, where = "Service" },
-		{ design = "Scrawl", count = 1, where = "Hall" },
-	},
-	Level3_Gymnasium = {
-		{ design = "Poster", count = 2, where = "Hall" },
-		{ design = "Missing", count = 2, where = "Hall" },
-		{ design = "Notice", count = 1, where = "Hall" },
-		{ design = "Scrawl", count = 1, where = "Hall" },
-	},
-	Level4_FloodedPool = {
-		{ design = "Caution", count = 2, where = "Wet" },
-		{ design = "Poster", count = 1, where = "Hall" },
-		{ design = "Missing", count = 1, where = "Hall" },
-		{ design = "Scrawl", count = 1, where = "Hall" },
-	},
 }
 
 -- WET FLOOR A-frames per level.
 local WET_FLOOR: { [string]: number } = {
 	Level0_Basement = 1,
 	Level1_Hallways = 1,
-	Level3_Gymnasium = 2,
-	Level4_FloodedPool = 3,
 }
 
 local function rgb(r: number, g: number, b: number): Color3
@@ -213,7 +190,6 @@ local INK = rgb(30, 26, 22)
 local CREAM = rgb(226, 214, 178)
 local SCHOOL_GREEN = rgb(30, 62, 46)
 local BOILER_RED = rgb(104, 28, 24)
-local POOL_BLUE = rgb(28, 60, 100)
 local STAIN = rgb(132, 104, 56)
 local STAIN_RING = rgb(96, 72, 40)
 local SCRAWL_INK = rgb(82, 16, 12)
@@ -727,9 +703,9 @@ local function roomsWhere(layout: Layout, where: Where): { Room }
 		if where == "Hall" then
 			ok = kind == "Corridor" or ((kind == "Storage" or kind == "Boiler") and area >= 2000)
 		elseif where == "Service" then
-			ok = kind == "Boiler" or kind == "Storage" or kind == "Lab"
+			ok = kind == "Boiler" or kind == "Storage"
 		else
-			ok = kind == "Restroom" or kind == "LockerRoom" or kind == "Pool" or kind == "Corridor"
+			ok = kind == "Restroom" or kind == "Corridor"
 		end
 		if ok then
 			table.insert(out, room)
@@ -749,12 +725,6 @@ local function wayfinding(room: Room): (string?, Color3)
 	local kind = room.kind
 	if kind == "Boiler" then
 		return "Prop.Sign.Boiler", BOILER_RED
-	elseif kind == "Gym" and room.rect.w * room.rect.d >= 4000 then
-		return "Prop.Sign.Gym", SCHOOL_GREEN
-	elseif kind == "LockerRoom" then
-		return "Prop.Sign.Lockers", SCHOOL_GREEN
-	elseif kind == "Pool" then
-		return "Prop.Sign.Pool", POOL_BLUE
 	elseif kind == "Office" and string.find(room.id, "MainOffice", 1, true) then
 		return "Prop.Sign.Office", SCHOOL_GREEN
 	end
@@ -781,7 +751,7 @@ local function planRoomPlates(state: State, random: Rng)
 			if not (room and other) or done[room.id] or other.kind ~= "Corridor" then
 				continue
 			end
-			if room.kind ~= "Classroom" and room.kind ~= "Lab" then
+			if room.kind ~= "Classroom" then
 				continue
 			end
 			local number = roomNumber(room)
@@ -789,7 +759,7 @@ local function planRoomPlates(state: State, random: Rng)
 				continue
 			end
 			local style = STYLES.RoomPlate
-			local text = Strings.get(if room.kind == "Lab" then "Prop.Sign.Lab" else "Prop.Sign.Room", number)
+			local text = Strings.get("Prop.Sign.Room", number)
 			local piece = besideDoor(state, other, door, style, style.y, random, "Plate_" .. room.id)
 			if piece then
 				done[room.id] = true
@@ -867,27 +837,9 @@ local function planWayfinding(state: State, random: Rng)
 			end
 		end
 	end
-	-- The science wing names itself along its corridors.
-	if state.layout.id == "Level2_ScienceHall" then
-		local style = STYLES.Wayfinding
-		local placed = 0
-		for _, room in shuffled(roomsWhere(state.layout, "Hall"), random) do
-			if placed >= 2 then
-				break
-			end
-			local piece = anywhere(state, room, style, random, "Way_Science" .. placed, { color = SCHOOL_GREEN }, 0.0)
-			if piece then
-				placed += 1
-				local text = Strings.get("Prop.Sign.Science")
-				addPiece(state, piece, function(part: BasePart)
-					paintPlate(part, style, text, CREAM)
-				end)
-			end
-		end
-	end
 end
 
--- A QUARANTINE sheet taped beside the door of a storeroom or lab, on the outside.
+-- A QUARANTINE sheet taped beside the door of a storeroom, on the outside.
 local function planQuarantine(state: State, random: Rng, index: number): boolean
 	local rooms = state.info.rooms
 	local style = STYLES.Quarantine
@@ -900,10 +852,10 @@ local function planQuarantine(state: State, random: Rng, index: number): boolean
 			if not (inside and outside) then
 				continue
 			end
-			if not (inside.kind == "Storage" or inside.kind == "Lab") or outside.kind == "Chase" then
+			if inside.kind ~= "Storage" or outside.kind == "Chase" then
 				continue
 			end
-			if outside.kind == "Storage" or outside.kind == "Lab" then
+			if outside.kind == "Storage" then
 				continue
 			end
 			local piece = besideDoor(

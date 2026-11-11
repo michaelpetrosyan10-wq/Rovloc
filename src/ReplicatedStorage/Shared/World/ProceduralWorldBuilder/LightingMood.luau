@@ -10,11 +10,10 @@
 --   * every working fixture is brightened and given a longer reach (`brightness`, `range`), capped per kind;
 --   * rooms the level's story keeps dark (`keepDark`: the Floor 1 corridor outside the glowing classroom) keep
 --     their layout marks untouched;
---   * kinds with a scripted owner keep their marks too: the pool floodlights stay off until the emergency switch, and
---     the classroom glow is the Floor 1 scare's own light;
+--   * kinds with a scripted owner keep their marks too: the classroom glow is the Floor 1 scare's own light;
 --   * emergency reds and exit signs always burn: they are the player's wayfinding;
 --   * every wing has its own colour (`cast`): the tubes of the classroom floors burn a sickly green-teal, the
---     basement's tubes and bulbs a sodium amber, the pool's a cold cyan. The layout's light colour is pulled toward the
+--     basement's tubes and bulbs a sodium amber. The layout's light colour is pulled toward the
 --     cast (scripted and wayfinding lights keep theirs), and `grade` is the gentle tint the client's colour grade
 --     blends toward while the camera is on that level (LightingController).
 -- Pools, not floods: working fixtures burn hard (strong keys under each fixture) over a tighter reach, so the floor
@@ -150,12 +149,10 @@ local MAX_BRIGHTNESS: { [string]: number } = {
 	ExitSign = 1,
 	BoilerGlow = 2.6,
 	ClassroomGlow = 1.3,
-	Floodlight = 4,
 }
 
 -- Kinds whose marks belong to a scripted owner (never revived or rescaled).
 local SCRIPTED: { [string]: boolean } = {
-	Floodlight = true, -- the pool's emergency switch (P7)
 	ClassroomGlow = true, -- the Floor 1 scare (P6)
 }
 
@@ -204,7 +201,8 @@ local LEVELS: { [string]: LevelMood } = {
 		bulbCast = rgb(240, 212, 150),
 		grade = rgb(236, 255, 244),
 	},
-	Level2_ScienceHall = {
+	-- The Auditorium storey (an interim tunnel floor) keeps the science storey's mood until its own look.
+	Level2_Auditorium = {
 		revive = 0,
 		flicker = 0,
 		brightness = 2.75,
@@ -213,25 +211,7 @@ local LEVELS: { [string]: LevelMood } = {
 		bulbCast = rgb(236, 214, 160),
 		grade = rgb(232, 252, 252),
 	},
-	Level3_Gymnasium = {
-		revive = 0.4,
-		flicker = 0.35,
-		brightness = 2.75,
-		range = 1.3,
-		cast = rgb(196, 232, 176),
-		bulbCast = rgb(240, 208, 146),
-		grade = rgb(244, 255, 236),
-	},
-	Level4_FloodedPool = {
-		revive = 0.35,
-		flicker = 0.45,
-		brightness = 2.65,
-		range = 1.25,
-		cast = rgb(146, 212, 242),
-		bulbCast = rgb(214, 220, 214),
-		grade = rgb(226, 244, 255),
-	},
-	Level5_Roof = {
+	Level3_Roof = {
 		revive = 0.5,
 		flicker = 0.5,
 		brightness = 2.2,
@@ -320,7 +300,7 @@ local FILM_PATCHES: { [string]: FilmPatch } = {
 		decay = rgb(20, 28, 26),
 	},
 	-- Clinical teal, a little clearer, colder.
-	Level2_ScienceHall = {
+	Level2_Auditorium = {
 		exposure = 0.1,
 		bloomIntensity = 0.9,
 		bloomThreshold = 1.1,
@@ -331,43 +311,8 @@ local FILM_PATCHES: { [string]: FilmPatch } = {
 		shafts = 0.95,
 		dust = 0.9,
 	},
-	-- A big volume: more air between the walls, so more haze and the window rays carry further.
-	Level3_Gymnasium = {
-		bloomIntensity = 0.9,
-		bloomSize = 38,
-		bloomThreshold = 1.1,
-		density = 0.38,
-		haze = 2.1,
-		hazeColor = rgb(46, 52, 42),
-		decay = rgb(24, 28, 20),
-		dofFocus = 44,
-		dofRadius = 52,
-		shafts = 1.15,
-		dust = 1.2,
-		moon = 1.15,
-	},
-	-- Cold cyan steam over black water: the densest haze, the wettest bloom, little dust in the damp.
-	Level4_FloodedPool = {
-		exposure = 0.12,
-		contrast = 0.22,
-		saturation = -0.16,
-		bloomIntensity = 1,
-		bloomSize = 40,
-		bloomThreshold = 1,
-		density = 0.46,
-		offset = 0.02,
-		haze = 2.6,
-		glare = 0.3,
-		hazeColor = rgb(40, 54, 62),
-		decay = rgb(18, 30, 38),
-		dofFar = 0.16,
-		vignette = 0.34,
-		shafts = 1.2,
-		dust = 0.6,
-		moon = 1.1,
-	},
 	-- Storm night in the open: rain haze, a far horizon, no dust in the wind.
-	Level5_Roof = {
+	Level3_Roof = {
 		exposure = 0.2,
 		contrast = 0.16,
 		bloomIntensity = 0.75,
@@ -422,7 +367,7 @@ for layoutId, patch in FILM_PATCHES do
 	FILMS[layoutId] = patched(patch)
 end
 -- Outside every building (the street, the sky, the parachute drop) the camera sees the roof's storm.
-local OUTDOOR_FILM: Film = FILMS.Level5_Roof
+local OUTDOOR_FILM: Film = FILMS.Level3_Roof
 
 -- The web's exposure on top of the rig and film (web/src/engine/lighting.js ExposureTrim): +0.25 EV everywhere and
 -- +0.8 EV more in the lobby. Its torch is not trimmed (it keeps the brightness it was tuned with).
@@ -470,12 +415,9 @@ local RENDER_PATCHES: { [string]: RenderPatch } = {
 	-- Low bulbs and boilers close to the floor: the falloffs differ least, so the smallest gain.
 	Level0_Basement = { exposure = 0.6, haze = 0.96, fixtureGain = 1.25, fixtureRange = 1.1 },
 	Level1_Hallways = { exposure = 0.63, fixtureGain = 1.65 },
-	Level2_ScienceHall = { exposure = 0.65, haze = 0.68, fixtureGain = 1.65 },
-	-- The gym's high ceiling: longer throws, so more of the gain goes into reach.
-	Level3_Gymnasium = { exposure = 0.63, haze = 0.84, fixtureGain = 1.5, fixtureRange = 1.1 },
-	Level4_FloodedPool = { exposure = 0.67, contrast = 0.155, brightness = 0.074, haze = 1.04, fixtureGain = 1.65 },
+	Level2_Auditorium = { exposure = 0.65, haze = 0.68, fixtureGain = 1.65 },
 	-- Open sky: the outdoor fill does the work; the few lamps need the most gain over their short reach.
-	Level5_Roof = {
+	Level3_Roof = {
 		exposure = 0.75,
 		contrast = 0.115,
 		brightness = 0.058,
@@ -505,7 +447,7 @@ local RENDERS: { [string]: Render } = {}
 for layoutId, patch in RENDER_PATCHES do
 	RENDERS[layoutId] = patchedRender(patch)
 end
-local OUTDOOR_RENDER: Render = RENDERS.Level5_Roof
+local OUTDOOR_RENDER: Render = RENDERS.Level3_Roof
 
 -- The Brightness setting (SettingsSchema, -2..+2 steps around the render): per step, this much exposure (EV) and this
 -- share of the ambient fill, so a dark monitor can lift the shadows without flattening the pools.

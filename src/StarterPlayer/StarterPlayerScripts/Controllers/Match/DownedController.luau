@@ -3,23 +3,18 @@
 --
 -- The victim (LifeState Downed while the run is live: Deploying / InRun; from RunEnded on the summary owns the screen
 -- and a body still Downed no longer bleeds). This controller draws the whole downed state (it claims the HUD's own downed block,
--- HUD.ClaimDowned) and pushes the "Downed" input context (the torch, the syringe and the menu stay live; sprinting,
+-- HUD.ClaimDowned) and pushes the "Downed" input context (the torch and the menu stay live; sprinting,
 -- crouching and prompts do not):
 --   * the bleedout: a ring emptying with the time left inside it, extrapolated every frame from BleedoutEndsAt
 --     (server time) over GameConfig.BleedoutSeconds, with "BLEEDING OUT" and "YOU'RE DOWN" around it;
 --   * the way back: "A teammate can revive you" (Alive teammates left), "No one is left to revive you", or "<name>
 --     is reviving you..." with the revive's progress, read from the ChannelActor / ChannelStartedAt /
 --     ChannelDuration attributes DownedReviveService's anchor carries (the Revive prompt's host on my character);
---   * the syringe: while SyringeCharges > 0 a button (device glyph: G / D-pad down / a tap mark; tapping or clicking
---     it works too) that sends UseSyringe { SelfRevive }; the Syringe action does the same from any device;
 --   * the body: a blood vignette at the screen edges throbbing with a heartbeat that quickens as the time runs out
 --     (its throb scaled by the FlashScale setting), the colour draining out of the world (a ColorCorrectionEffect of
 --     its own under the camera: saturation, contrast, brightness, a cold red tint) and the panic floor raised
 --     (FirstPersonController.SetPanicFloor), which brings in PanicVFX's heartbeat and breathing loops.
 -- Coming back up fades it all out; dying fades it out too (SpectatorController takes over).
---
--- The Syringe action outside the downed state: while Alive it sends UseSyringe { Stamina } (the perk's other use,
--- spec §1); the server checks the charge and the life state either way.
 --
 -- Teammates. Every other Downed player gets a subtle marker seen through walls within MARKER_RANGE studs: a thin
 -- ring of their bleedout around a small cross, "DOWN" (or "REVIVING" while someone holds their prompt) and their
@@ -29,8 +24,7 @@
 -- Prompts. A Revive prompt shows to Alive players only: while I am anything else this client hides every Revive
 -- prompt (HUD.SetPromptKindHidden).
 --
--- Pure (tests/Specs/Revive.spec.luau): panicFloor, grade, heartRate, statusLine, syringeMode, markerAlpha,
--- reviveProgress.
+-- Pure (tests/Specs/Revive.spec.luau): panicFloor, grade, heartRate, statusLine, markerAlpha, reviveProgress.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -40,17 +34,13 @@ local Workspace = game:GetService("Workspace")
 local Attributes = require(ReplicatedStorage.Shared.Attributes)
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
-local InputConfig = require(ReplicatedStorage.Shared.Config.InputConfig)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
-local Net = require(ReplicatedStorage.Shared.Net)
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
-local Types = require(ReplicatedStorage.Shared.Types)
 
 local Controllers = script.Parent.Parent
-local AudioController = require(Controllers.Core.AudioController)
 local InputController = require(Controllers.Core.InputController)
 local SettingsController = require(Controllers.Core.SettingsController)
 local FirstPersonController = require(Controllers.FirstPerson.FirstPersonController)
@@ -75,8 +65,6 @@ local RING_SIZE = 96
 local RING_THICKNESS = 4
 local PANEL_WIDTH = 420
 local PANEL_Y = 0.66 -- of the safe area: under the crosshair line, above the touch buttons
-local BUTTON_HEIGHT = 46
-local SYRINGE_COOLDOWN = 1
 local MARKER_RANGE = 120
 local MARKER_NEAR = 9
 local MARKER_SIZE = Vector2.new(120, 70)
@@ -89,9 +77,6 @@ local SATURATION_FLOOR = -0.85
 local CONTRAST_PEAK = 0.18
 local BRIGHTNESS_FLOOR = -0.12
 local COLD_RED = Color3.fromRGB(255, 214, 214)
-
--- Device glyph for the syringe.
-type Glyph = { kind: UIKit.GlyphKind, key: Enum.KeyCode? }
 
 type View = {
 	gui: ScreenGui,
@@ -106,9 +91,6 @@ type View = {
 	status: TextLabel,
 	progressSlot: Frame,
 	progress: UIKit.MeterBar,
-	syringe: TextButton,
-	syringeKey: UIKit.KeyCap,
-	syringeLabel: TextLabel,
 	vignette: UIKit.Vignette,
 	dim: Frame,
 }
@@ -135,7 +117,6 @@ local view: View? = nil
 local alpha = 0
 local clock = 0
 local downed = false
-local lastSyringeAt = -math.huge
 local grade: ColorCorrectionEffect? = nil
 local markers: { [Player]: Marker } = {}
 local promptsHidden = false
@@ -173,19 +154,6 @@ function DownedController.statusLine(reviverName: string?, aliveTeammates: numbe
 		return "Downed.TeammateCanRevive", {}
 	end
 	return "Downed.NoTeammates", {}
-end
-
--- The syringe use the Syringe action asks for (nil: nothing to ask).
-function DownedController.syringeMode(lifeState: string, charges: number): Enums.SyringeMode?
-	if charges <= 0 then
-		return nil
-	end
-	if lifeState == "Downed" then
-		return "SelfRevive"
-	elseif lifeState == "Alive" then
-		return "Stamina"
-	end
-	return nil
 end
 
 -- A teammate marker's opacity `distance` studs from the camera: out past `range`, faded close in (the prompt takes
@@ -255,45 +223,6 @@ local function aliveTeammates(): number
 		end
 	end
 	return count
-end
-
-local function syringeGlyph(): Glyph
-	local device = InputController.GetDevice()
-	local binding = InputConfig.Bindings.Syringe
-	if device == "Touch" or not binding then
-		return { kind = "Touch", key = nil }
-	elseif device == "Gamepad" then
-		return { kind = "Gamepad", key = binding.gamepad[1] }
-	end
-	local first = binding.keyboard[1]
-	if typeof(first) == "EnumItem" and first.EnumType == Enum.KeyCode then
-		return { kind = "Keyboard", key = first :: Enum.KeyCode }
-	end
-	return { kind = "Keyboard", key = nil }
-end
-
---------------------------------------------------------------------------------
--- Syringe
---------------------------------------------------------------------------------
-
-local function useSyringe()
-	local player = localPlayer
-	if not player then
-		return
-	end
-	local wanted: Enums.SyringeMode? =
-		DownedController.syringeMode(lifeStateOf(player), Attributes.getNumber(player, P.SyringeCharges, 0))
-	local now = os.clock()
-	if not wanted or now - lastSyringeAt < SYRINGE_COOLDOWN then
-		return
-	end
-	lastSyringeAt = now
-	local mode: Enums.SyringeMode = wanted
-	local payload: Types.UseSyringePayload = { mode = mode }
-	xpcall(Net.Client.fire, function(err: any)
-		log.warnThrottled("syringe", 10, "UseSyringe failed: %s", tostring(err))
-	end, "UseSyringe", payload)
-	AudioController.PlayLocal("UiConfirm")
 end
 
 --------------------------------------------------------------------------------
@@ -366,38 +295,6 @@ local function build(parent: Instance): View
 	progressSlot.Size = UDim2.fromOffset(220, 4)
 	local progress = UIKit.meterBar(progressSlot, "Progress", Palette.Moss, 4)
 
-	local syringe = Instance.new("TextButton")
-	syringe.Name = "Syringe"
-	syringe.LayoutOrder = 7
-	syringe.AutoButtonColor = false
-	syringe.BackgroundColor3 = Palette.Ink
-	syringe.BackgroundTransparency = 0.45
-	syringe.BorderSizePixel = 0
-	syringe.Selectable = false
-	syringe.Text = ""
-	syringe.AutomaticSize = Enum.AutomaticSize.X
-	syringe.Size = UDim2.fromOffset(0, BUTTON_HEIGHT)
-	syringe.Parent = panel
-	UIKit.corner(syringe, UDim.new(0, 6))
-	UIKit.stroke(syringe, Palette.Amber, 1, 0.45)
-	UIKit.padding(syringe, 14, 0)
-	UIKit.list(
-		syringe,
-		Enum.FillDirection.Horizontal,
-		10,
-		Enum.HorizontalAlignment.Center,
-		Enum.VerticalAlignment.Center
-	)
-	local syringeKey = UIKit.keyCap(syringe, "Key", 30)
-	syringeKey.root.LayoutOrder = 1
-	local syringeLabel = UIKit.label(syringe, "Text", UIKit.Fonts.Body, UIKit.TextSize.Body, Palette.Bone)
-	syringeLabel.LayoutOrder = 2
-	syringeLabel.Text = Strings.get("Hud.SelfRevive")
-	syringeLabel.TextWrapped = false
-	syringeLabel.AutomaticSize = Enum.AutomaticSize.X
-	syringeLabel.Size = UDim2.fromScale(0, 1)
-	syringeLabel.TextXAlignment = Enum.TextXAlignment.Left
-
 	overlay.Parent = parent
 	gui.Parent = parent
 	return {
@@ -413,20 +310,9 @@ local function build(parent: Instance): View
 		status = status,
 		progressSlot = progressSlot,
 		progress = progress,
-		syringe = syringe,
-		syringeKey = syringeKey,
-		syringeLabel = syringeLabel,
 		vignette = vignette,
 		dim = dim,
 	}
-end
-
-local function refreshGlyph()
-	local current = view
-	if current then
-		local glyph = syringeGlyph()
-		current.syringeKey:SetGlyph(glyph.kind, glyph.key)
-	end
 end
 
 --------------------------------------------------------------------------------
@@ -673,9 +559,6 @@ local function step(dt: number)
 	current.status.TextColor3 = if reviver then Palette.Moss else Palette.Bone
 	current.progressSlot.Visible = reviver ~= nil
 	current.progress:SetFraction(progress)
-
-	local canInject = DownedController.syringeMode(state, Attributes.getNumber(player, P.SyringeCharges, 0)) ~= nil
-	current.syringe.Visible = canInject and isDowned
 end
 
 --------------------------------------------------------------------------------
@@ -714,25 +597,12 @@ function DownedController.Start()
 	end
 	local gui = player:WaitForChild("PlayerGui")
 	xpcall(function()
-		local built = build(gui)
-		view = built
-		serviceTrove:Connect(built.syringe.Activated, useSyringe)
+		view = build(gui)
 	end, function(err: any)
 		log.error("downed HUD failed to build: %s\n%s", tostring(err), debug.traceback())
 	end)
-	refreshGlyph()
-	serviceTrove:Add(InputController.DeviceChanged:Connect(refreshGlyph))
-	serviceTrove:Add(InputController.Action("Syringe"):Connect(function(phase: InputController.Phase)
-		if phase == "Begin" then
-			useSyringe()
-		end
-	end))
 	serviceTrove:Connect(Players.PlayerRemoving, dropMarker)
 	serviceTrove:Connect(RunService.PreRender, step)
-end
-
-function DownedController.OnRunStarted(_info: Types.RunInfo)
-	lastSyringeAt = -math.huge
 end
 
 function DownedController.OnRunEnded()

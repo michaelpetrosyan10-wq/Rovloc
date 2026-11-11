@@ -38,9 +38,6 @@ local VERIFIED_FILES = {
 local DRONES = {
 	"DroneBasement",
 	"DroneHallways",
-	"DroneScience",
-	"DroneGym",
-	"DronePool",
 	"DroneRoof",
 	"DroneLobby",
 }
@@ -347,7 +344,7 @@ return {
 				t.truthy(region.max - region.min <= SynthPresets.MaxToneRegion, where .. " loops a long region")
 			end
 		end)
-		t.truthy(beds > 30, "the beds were checked")
+		t.truthy(beds >= 30, string.format("the beds were checked (%d)", beds))
 		for _, key in { "Falling", "Swim", "FootstepsPlastic" } do
 			t.truthy(SoundLibrary.isSeamless(key), key .. " is an engine loop")
 		end
@@ -369,7 +366,7 @@ return {
 				end
 			end
 		end
-		t.truthy(rumble >= 5, "the explosion survives as a far rumble stinger")
+		t.truthy(rumble >= 3, "the explosion survives as a far rumble stinger")
 		t.falsy(SynthPresets.isLooped("FarRumble"), "and only as a one-shot")
 	end,
 

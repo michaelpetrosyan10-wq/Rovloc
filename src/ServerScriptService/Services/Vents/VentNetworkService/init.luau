@@ -30,13 +30,12 @@
 --
 -- Crawling (no remote: the owning client drives its root along the rail; the server only moves it in and out). At
 -- GameConfig.ServerTickHz, while the run is live:
---   Entry: a participant whose CrawlRules.canEnter holds (Alive, on foot and Crouching, or swimming at a pool grate's
---     mouth in the water; no control lock) with their root in an open grate's mouth box (inMouthBox, or
---     inSwimMouthBox at the water surface for swimmers), looking into the wall (CrawlRules), is put in the duct:
+--   Entry: a participant whose CrawlRules.canEnter holds (Alive, on foot and Crouching, no control lock) with their
+--     root in an open grate's mouth box (inMouthBox), looking into the wall (CrawlRules), is put in the duct:
 --     CollisionService mode "Vent" (the VentCollider ball becomes their only collider), PlayerStateService mode "Vent" (MoveState
 --     VentCrawling / VentScurrying), then CharacterService.Teleport to the grate's EntryAnchor with the root on the
 --     duct centreline. Entered(player, grateId) fires; RunStats VentsCrawled counts each grate once per player per
---     run. A teleport that fails undoes the modes (a swimmer stays in Swim).
+--     run. A teleport that fails undoes the modes.
 --   Exit: a crawler (Alive or Downed) whose root crossed the room face of an open grate's mouth stub stands up at
 --     its ExitAnchor (or 0.75 studs to either side), the first spot whose standing box GetPartBoundsInBox finds clear
 --     in the Players group (the player and the grate itself excluded: a kicked panel lies there to be stood on):
@@ -184,7 +183,6 @@ VentNetworkService.EntryCooldown = ENTRY_COOLDOWN
 local entered: Signal.Signal<Player, string> = Signal.new()
 local exited: Signal.Signal<Player, string> = Signal.new()
 local grateChanged: Signal.Signal<string, Enums.GrateState, Player?> = Signal.new()
-local blockedGrates: { [string]: boolean } = {}
 local released: Signal.Signal<Player, string> = Signal.new()
 
 -- (player, grateId) after a player crawled in through that grate.
@@ -605,7 +603,7 @@ end
 
 local function serves(host: Instance, _prompt: ProximityPrompt): boolean
 	local grate = gratesByModel[host]
-	return grate ~= nil and not blockedGrates[grate.id] and GrateRules.servesPrompts(grate.state)
+	return grate ~= nil and GrateRules.servesPrompts(grate.state)
 end
 
 -- Unscrew on a grate's PromptPoint: an Alive player, from the room or from the duct, while it is Closed.
@@ -878,25 +876,6 @@ function VentNetworkService.IsGrateOpen(grateId: string): boolean
 	return GrateRules.isOpen(VentNetworkService.GetGrateState(grateId))
 end
 
--- Blocks a grate for the squad (Floor 4's shut maintenance hatch covers its grate, ObjectiveService): no prompts, no
--- crawling in or out through it, whatever its state, until unblocked (or the run ends). The Creature's own vent route
--- is not the squad's: it ignores this.
-function VentNetworkService.SetBlocked(grateId: string, blocked: boolean)
-	if blocked then
-		blockedGrates[grateId] = true
-	else
-		blockedGrates[grateId] = nil
-	end
-	local grate = grates[grateId]
-	if grate then
-		refreshPrompts(grate)
-	end
-end
-
-function VentNetworkService.IsBlocked(grateId: string): boolean
-	return blockedGrates[grateId] == true
-end
-
 -- Sets a grate's state with its poses (see the header); Unscrewing cannot be forced.
 function VentNetworkService.ForceGrate(grateId: string, state: Enums.GrateState)
 	local grate = grates[grateId]
@@ -981,14 +960,12 @@ end
 local function pollEntry(player: Player)
 	local root, humanoid = livingBody(player)
 	local mode = PlayerStateService.GetMode(player)
-	local swimming = mode == "Swim"
 	local allowed = CrawlRules.canEnter({
 		live = live,
 		participant = participants[player] == true,
 		lifeState = LifeStateService.GetState(player),
 		inVent = occupants[player] ~= nil,
 		onFoot = mode == "OnFoot",
-		swimming = swimming,
 		moveState = PlayerStateService.GetMoveState(player),
 		controlLock = CharacterService.GetLock(player),
 		hasBody = root ~= nil,
@@ -1002,10 +979,7 @@ local function pollEntry(player: Player)
 	for _, grate in grates do
 		local exitAnchor = grate.exitAnchor
 		local levelId = grate.levelId
-		if
-			not (GrateRules.isOpen(grate.state) and exitAnchor and levelId and grate.model.Parent)
-			or blockedGrates[grate.id]
-		then
+		if not (GrateRules.isOpen(grate.state) and exitAnchor and levelId and grate.model.Parent) then
 			continue
 		end
 		if MathUtil.horizontalDistance(grate.centre, position) > ENTRY_CULL then
@@ -1016,9 +990,7 @@ local function pollEntry(player: Player)
 		if not (graph and info) then
 			continue
 		end
-		local inMouth = if swimming
-			then CrawlRules.inSwimMouthBox(info.wall, position, exitAnchor.Position.Y)
-			else CrawlRules.inMouthBox(info.wall, position, exitAnchor.Position.Y, rootHeight)
+		local inMouth = CrawlRules.inMouthBox(info.wall, position, exitAnchor.Position.Y, rootHeight)
 		if inMouth and CrawlRules.facesWall(info.wall, yaw, pitch) then
 			enter(player, grate, info, graph)
 			return
@@ -1043,12 +1015,7 @@ local function pollOccupant(player: Player, occupant: Occupant)
 	end
 	local position = root.CFrame.Position
 	for _, grate in grates do
-		if
-			grate.levelId ~= occupant.levelId
-			or not GrateRules.isOpen(grate.state)
-			or grate.model.Parent == nil
-			or blockedGrates[grate.id]
-		then
+		if grate.levelId ~= occupant.levelId or not GrateRules.isOpen(grate.state) or grate.model.Parent == nil then
 			continue
 		end
 		local info = occupant.graph.grates[grate.id]
@@ -1172,7 +1139,7 @@ local function ventsCommand(_player: Player, args: { string }): string?
 		return string.format("unknown level %q", args[1])
 	end
 	local lines: { string } = {}
-	for _, levelId: Enums.LevelId in Enums.LevelId do
+	for _, levelId: Enums.LevelId in WorldConfig.LevelOrder do
 		if only and only ~= levelId then
 			continue
 		end
@@ -1330,7 +1297,6 @@ function VentNetworkService.EndRun()
 	table.clear(participants)
 	table.clear(crawled)
 	table.clear(cooldownUntil)
-	table.clear(blockedGrates)
 end
 
 function VentNetworkService.OnPlayerRemoving(player: Player)

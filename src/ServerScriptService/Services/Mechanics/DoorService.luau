@@ -66,6 +66,7 @@ local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local DoorBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.DoorBuilder)
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
@@ -1016,7 +1017,7 @@ local function doorCommand(player: Player, args: { string }): string?
 		found = DoorService.Get(level, id)
 	end
 	if not found then
-		for _, levelId: Enums.LevelId in Enums.LevelId do
+		for _, levelId: Enums.LevelId in WorldConfig.LevelOrder do
 			found = DoorService.Get(levelId, id)
 			if found then
 				break

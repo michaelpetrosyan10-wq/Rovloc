@@ -10,8 +10,6 @@
 --     whether anything was broadcast).
 --   * Each pulse lands in a ring buffer (RecentNoises), fires NoiseEmitted, and is drawn as a ring for every player
 --     with the DevTools attribute (DevOverlay remote).
---   * Water noise feeds the source player's splash meter (NoiseConfig.SplashMeter), which decays over time and fires
---     SplashThresholdCrossed once each time it climbs past the grab threshold.
 -- Locomotion. Start() runs LocomotionNoiseSampler at GameConfig.ServerTickHz over every character during a run:
 --   server-observed root speed and the server-confirmed MoveState decide each footstep pulse. Server moves are
 --   announced with ExpectTeleport(player) (CharacterService.Spawn / Teleport do it for every caller); any other
@@ -75,11 +73,9 @@ NoiseAndDirectorService.Name = "NoiseAndDirectorService"
 NoiseAndDirectorService.RingCapacity = RING_CAPACITY
 
 local noiseEmitted: Signal.Signal<Types.NoiseEvent> = Signal.new()
-local splashThresholdCrossed: Signal.Signal<Player> = Signal.new()
 local suspiciousMovement: Signal.Signal<Player, SuspiciousStep> = Signal.new()
 
 NoiseAndDirectorService.NoiseEmitted = noiseEmitted
-NoiseAndDirectorService.SplashThresholdCrossed = splashThresholdCrossed
 -- A character covered more than the sampler's TeleportStep in one sample with no server teleport armed. The step
 -- was already heard as movement; P3 MovementAuthority turns these into strikes / rubber-banding.
 NoiseAndDirectorService.SuspiciousMovement = suspiciousMovement
@@ -94,9 +90,8 @@ local ring: { Types.NoiseEvent } = {}
 local ringNext = 1
 local ringCount = 0
 
--- Last broadcast pulse per player per kind (pacing), and splash meters per player.
+-- Last broadcast pulse per player per kind (pacing).
 local lastPulses: { [Player]: { [string]: Types.NoiseEvent } } = {}
-local splashMeters: { [Player]: LocomotionNoiseSampler.SplashMeter } = {}
 
 -- FloorDebris crunches (created below, once emit exists).
 local debris: DebrisNoise.Debris
@@ -196,35 +191,18 @@ local function clearNoiseState()
 	ringNext = 1
 	ringCount = 0
 	table.clear(lastPulses)
-	table.clear(splashMeters)
 	LocomotionNoiseSampler.reset()
 	debris.reset()
 end
 
 local function forgetPlayer(player: Player)
 	lastPulses[player] = nil
-	splashMeters[player] = nil
 	LocomotionNoiseSampler.forget(player)
 	debris.forget(player)
 end
 
 local function isTracked(player: Player): boolean
 	return player.Parent == Players
-end
-
-local function feedSplashMeter(player: Player, kind: Enums.NoiseKind, now: number)
-	local gain = LocomotionNoiseSampler.splashGain(kind)
-	if gain <= 0 or not isTracked(player) then
-		return
-	end
-	local meter = splashMeters[player]
-	if not meter then
-		meter = LocomotionNoiseSampler.newSplashMeter(now)
-		splashMeters[player] = meter
-	end
-	if LocomotionNoiseSampler.addSplash(meter, gain, now) then
-		splashThresholdCrossed:Fire(player)
-	end
 end
 
 local function showDevRing(event: Types.NoiseEvent, source: Player?)
@@ -308,7 +286,6 @@ local function emit(position: Vector3, kind: Enums.NoiseKind, options: EmitOptio
 			lastPulses[source] = perKind
 		end
 		perKind[kind] = event
-		feedSplashMeter(source, kind, now)
 	end
 	noiseEmitted:Fire(event)
 	showDevRing(event, source)
@@ -343,15 +320,6 @@ function NoiseAndDirectorService.RecentNoises(sinceServerTime: number): { Types.
 		end
 	end
 	return out
-end
-
--- `player`'s splash meter now (decayed), 0 when they have not splashed.
-function NoiseAndDirectorService.GetSplashMeter(player: Player): number
-	local meter = splashMeters[player]
-	if not meter then
-		return 0
-	end
-	return LocomotionNoiseSampler.splashValue(meter, Workspace:GetServerTimeNow())
 end
 
 -- Announces a server move of `player`'s character: a long step in the next second is not heard (and not reported

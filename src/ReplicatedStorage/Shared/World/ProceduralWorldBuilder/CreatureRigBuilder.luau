@@ -48,8 +48,8 @@
 -- setHitbox() resizes it per PoseMode. This rig is the one place allowed to write CollisionGroup directly.
 --
 -- Hitbox layouts (root-relative): Biped and Hunched stand on the floor (box bottom at the floor, pushed forward over
--- the jutting head; Hunched shorter and further forward over the bent body); Quadruped and Swim carry the body level
--- with the root, so their low, long boxes are centred on it and run forward along the facing.
+-- the jutting head; Hunched shorter and further forward over the bent body); Quadruped carries the body level
+-- with the root, so its low, long box is centred on it and runs forward along the facing.
 --
 -- Metrics. CreatureRigBuilder.Metrics holds what the web's behaviour reads from the export (meta.creature.metrics):
 -- the standing and hunched heights, the eye heights per PoseMode, the catch reach, the root height and the hitbox per
@@ -299,7 +299,6 @@ local HITBOX_LAYOUTS: { [string]: HitboxLayout } = {
 	Biped = { floor = true, forward = 0.35 },
 	Hunched = { floor = true, forward = 1.3 },
 	Quadruped = { floor = false, forward = 0.9 },
-	Swim = { floor = false, forward = 0.5 },
 }
 
 local FINGERS: { FingerSpec } = {

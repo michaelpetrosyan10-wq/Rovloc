@@ -169,18 +169,6 @@ local CONTROLLER_ORDER: { Loader } = {
 		end,
 	},
 	{
-		name = "SwimController",
-		load = function(): any
-			return require(Gameplay.SwimController)
-		end,
-	},
-	{
-		name = "StruggleController",
-		load = function(): any
-			return require(Gameplay.StruggleController)
-		end,
-	},
-	{
 		name = "AirlockController",
 		load = function(): any
 			return require(Match.AirlockController)

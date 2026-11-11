@@ -1,9 +1,10 @@
 # Rovloc — Maps
 
-How a floor's map is made: the tunnel planner, its rules, and how to author a floor with it. Level 0 (the basement)
-is the worked example; Level 1 (the hallways) and Level 2 (the science wing) are built the same way around their
-scripted rooms. The legacy floors (Levels 3–5) are still hand-laid `LayoutSchema` blueprints and keep their old rules
-until they are rebuilt on this foundation.
+How a floor's map is made: the tunnel planner, its rules, and how to author a floor with it. The school is four
+levels (`WorldConfig.LevelOrder`, docs/design/game-spec-v2.md 4.2): Level 0 (the basement) is the worked example;
+Level 1 (the hallways) is built the same way around its scripted rooms; Level 2 (the Auditorium storey) is for now an
+interim tunnel floor, a short plain crossing, until its theatre is built; Level 3 (the roof) is a hand-laid
+`LayoutSchema` blueprint. No table is indexed by a level's number: per-level data is keyed by the level's id.
 
 | File (`src/ReplicatedStorage/Shared/World/ProceduralWorldBuilder/`) | What it is |
 | --- | --- |
@@ -11,17 +12,17 @@ until they are rebuilt on this foundation.
 | `TunnelRules.luau` | The measures and rules every tunnel floor must pass (`LayoutSchema.validate` runs them), the walk graph, teleport points. |
 | `Layouts/Level0_Basement.luau` | The basement: its keep-rooms, the planner spec, keep-room furniture, lights and anchors. |
 | `Layouts/Level1_Hallways.luau` | The street-level hallways: the checkerboard hall with Classroom 108's scare, the HallwayGate and its vent bypass, the janitor's closet, the main office. |
-| `Layouts/Level2_ScienceHall.luau` | The science wing: Chem Prep 205 (the fume hood), Chem Lab 203 and Bio Lab 209 as bridges, the chem and specimen stores. |
+| `Layouts/Level2_Auditorium.luau` | The Auditorium storey (28 high), interim: three west entry and three east exit vestibules joined by a short ladder of service corridors, with its own thresholds. |
 | `Props/TunnelDressingBuilder.luau` | The tunnels' dressing: pipes, trays, steam vents, markers, grime, landmarks, floor clutter (all decor, `Detail` 1..3). |
 | `Props/HideBuilder.luau` | Barrels and cabinets (hiding spots beside the lockers). |
 | `tests/Specs/TunnelPlanner.spec.luau` | The planner's specs: the rules on every tunnel floor, determinism, crawlways, plates, teleport points, hides. |
 
 ## 1. The footprint and the towers
 
-Every floor is **400 × 288 studs** (`WorldConfig.FootprintSize`; the legacy floors keep `LegacyFootprint` 240 × 160).
+Every floor is **400 × 288 studs** (`WorldConfig.FootprintSize`).
 Three stair towers stand against the east wall and three against the west (`WorldConfig.Towers`); their openings on
 each floor are near **z 28, 144 and 260** (north, middle, south). The climb zigzags: Level 0 leaves east, Level 1
-arrives east and leaves west, Level 2 arrives west and leaves east, and so on. A floor's exit candidates are three
+arrives east and leaves west, Level 2 arrives west and leaves east into the roof's three east stair housings. A floor's exit candidates are three
 vestibules (`Airlock` rooms) on its exit side; the run's route picks one and jams the others. Its entry vestibules
 stand on the other side, under the previous floor's exits.
 
@@ -77,26 +78,25 @@ regions, runs, galleries, niches, items, hides (greedy cover), Solid fill, doors
 
 `LayoutSchema.validate` runs them on every tunnel floor; `TunnelPlanner.spec` asserts them.
 
-| Rule | Default | Level 0 | Level 1 | Level 2 | Level 3 | Level 4 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Connected on foot without any crawlway (every keep-room and vestibule) | — | yes | yes (the gate's vent counts) | yes | yes | yes |
-| Every junction on a loop of at most `maxLoop` studs | 200 | longest 122 | longest 152 | longest 196 | longest 148 | longest 140 |
-| Crossing: the walk from the entry to the farthest exit | 1100–1500 | 1650–1980 (1901) | 1650–1980 (1685) | 1650–1980 (1842) | 1650–1980 (1675) | 1400–1980 (1493) |
-| With the crawlways (crouched, 5.5 studs/s) the crossing still takes `crawlCrossingSeconds` | 40 s | 55.4 s | 69.0 s | 65.8 s | 70.8 s | 60.9 s |
-| Crawlways (count, length, mouth height) | 3–6, ≤ 20, 4.3 | 3–12: 11 | 3–18: 18 | 3–16: 14 | 3–18: 17 | 3–16: 15 |
-| A crawlway mouth within `crawlReach` of every tunnel point | 60 | 58.2 | 56.4 | 58.2 | 58.2 | 58.9 |
-| A hiding spot within `hideReach` of every tunnel point | 30 | 26.9 | 29.4 | 26.2 | 29.6 | 27.0 |
-| A hiding spot within `objectiveHideReach` of every objective place | 25 | yes | yes | yes | yes | yes |
-| Dead ends: count, length | ≤ 8, ≤ 25 | 3 (≤ 22) | 1 (≤ 20) | 6 (≤ 24) | 7 (≤ 24) | 4 (≤ 24) |
-| Regions: named, distinct | 4–6 | 5 | 5 | 5 | 5 | 5 |
-| Galleries 14–16 high; junction plates J-NN | — | yes | yes | yes | yes | yes |
-| Seed (`Layouts/<floor>.luau`) | — | 20261103 | 20261104 | 20261105 | 20261134 | 20261130 |
+| Rule | Default | Level 0 | Level 1 | Level 2 (interim: its thresholds) |
+| --- | --- | --- | --- | --- |
+| Connected on foot without any crawlway (every keep-room and vestibule) | — | yes | yes (the gate's vent counts) | yes |
+| Every junction on a loop of at most `maxLoop` studs | 200 | longest 122 | longest 152 | ≤ 420 |
+| Crossing: the walk from the entry to the farthest exit | 1100–1500 | 1650–1980 (1901) | 1650–1980 (1685) | 400–800 |
+| With the crawlways (crouched, 5.5 studs/s) the crossing still takes `crawlCrossingSeconds` | 40 s | 55.4 s | 69.0 s | 30 s |
+| Crawlways (count, length, mouth height) | 3–6, ≤ 20, 4.3 | 3–12: 11 | 3–18: 18 | 3–6, ≤ 20 |
+| A crawlway mouth within `crawlReach` of every tunnel point | 60 | 58.2 | 56.4 | ≤ 160 |
+| A hiding spot within `hideReach` of every tunnel point | 30 | 26.9 | 29.4 | ≤ 40 |
+| A hiding spot within `objectiveHideReach` of every objective place | 25 | yes | yes | yes |
+| Dead ends: count, length | ≤ 8, ≤ 25 | 3 (≤ 22) | 1 (≤ 20) | ≤ 4, ≤ 25 |
+| Regions: named, distinct | 4–6 | 5 | 5 | 4 |
+| Galleries 14–16 high; junction plates J-NN | — | yes | yes | yes |
+| Seed (`Layouts/<floor>.luau`) | — | 20261103 | 20261104 | 20261110 |
 
-Walking is 11 studs/s: Level 0 crosses in about 2.9 minutes, Level 1 in about 2.6, Level 2 in about 2.8, Level 3 in
-about 2.5, Level 4 in about 2.3.
+Walking is 11 studs/s: Level 0 crosses in about 2.9 minutes, Level 1 in about 2.6, the interim Level 2 in about one.
 
 **Vents.** The walk graph (`TunnelRules.walkGraph`) walks the vents a squad can always use, whatever its `crawl`
-flag: the grates that never lock and that no HatchValve keeps shut (timed, at `TunnelRules.VentSpeed`, 4.5 studs/s).
+flag: the grates that never lock (timed, at `TunnelRules.VentSpeed`, 4.5 studs/s).
 A floor's script may make such a vent the only way on: Level 1's gate shuts the hallway, and its bypass vent (two
 grates, never locked, `criticalPath`) carries the crossing past it.
 
@@ -202,12 +202,12 @@ niches hold lockers), Offices & Records, Library Stacks, Collapsed Main Hall, Ki
 janitor's closet and the main office. The master keys: 14 candidates, all west of the gate: ten on hooks in tunnel
 niches (`items.wall`, `items.areas`), two in the janitor's closet, two in the main office.
 
-**Level 2 (the science wing).** Entered from the west vestibules, left by the east ones (Chain ExitLocks). Chem Lab
-203 and Bio Lab 209 straddle two of the barriers, so the walk crosses each lab; Chem Prep 205 opens off Bio Lab 209
-(the FumeHood and its AcidFlaskSpot), the chem store off the north fume ducts, the specimen store off the cold-storage
-lane. Regions: Prep Corridors, Cold Storage, Fume Ducts, Utility Corridors, Chem Stores. Reagents: 15 candidates,
-five of each kind (they cycle through the kinds in layout order): five on tunnel niche shelves, six on the labs'
-islands, two on each store's shelving. Stun flasks: 16 FlaskCandidates, ten on the lab benches and six in tunnel
-caches (niche shelves).
+**Level 2 (the Auditorium storey, interim).** Entered from the west vestibules (the hallways' exits), left by the east
+ones; nothing is locked (ObjectiveConfig: ReachExit). A lane up each side past the vestibules and corridors across
+between them, with crawlways on short grid edges by the stair lanes, four regions (West Stairs, North and South
+Corridors, East Stairs) and six Creature starts. The theatre that will fill this storey (spec 4.4) replaces it.
+
+**Level 3 (the roof).** The old roof without its maze objective: the three east stair housings (their RoofDoor smash
+scene), the parachute crate, the ledge staging and the jump; the glide comes down over the street.
 
 Both keep every scripted id the two runtimes use (anchors, triggers, doors, lights, grates; web/DATA.md lists them).

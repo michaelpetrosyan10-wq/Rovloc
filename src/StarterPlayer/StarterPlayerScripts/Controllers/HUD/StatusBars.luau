@@ -1,12 +1,11 @@
 --!strict
 -- StatusBars: the player's meters as thin, quiet bars that only speak up when they matter.
 --
---   * Battery, stamina and oxygen are extrapolated every frame from their meter attributes (value at `at`, changing
+--   * Battery and stamina are extrapolated every frame from their meter attributes (value at `at`, changing
 --     at `rate`, clamped to [0, max]), so they move smoothly between the server's rare writes.
---   * A bar is fully shown while it is changing (draining, recharging) or relevant (oxygen underwater, battery while
---     the flashlight is on); a partly spent bar that has gone quiet settles to a dim resting alpha; a full, idle bar
+--   * A bar is fully shown while it is changing (draining, recharging) or relevant (battery while the flashlight is
+--     on); a partly spent bar that has gone quiet settles to a dim resting alpha; a full, idle bar
 --     fades away and its row collapses. Under 20 % a bar warms toward ember and pulses, faster under 10 %.
---   * Syringe charges show as small pips while any are left.
 --   * While Downed, a bleedout bar drains in the downed overlay (from BleedoutEndsAt, server time).
 --   * Placement follows the device: bottom-left with a keyboard or gamepad, top-left under the menu button on touch
 --     (the left thumb owns the bottom-left there).
@@ -69,8 +68,6 @@ local BAR_WIDTH = 168
 local BAR_HEIGHT = 4
 local MARGIN = 22
 local TOUCH_TOP = 104 -- clears the touch menu button
-local PIP_SIZE = Vector2.new(6, 14)
-local MAX_PIPS = 4
 
 local METERS: { MeterSpec } = {
 	{
@@ -92,16 +89,6 @@ local METERS: { MeterSpec } = {
 		max = P.StaminaMax,
 		default = GameConfig.StaminaMax,
 		color = Palette.Moss,
-	},
-	{
-		id = "Oxygen",
-		label = "Hud.Oxygen",
-		value = P.Oxygen,
-		rate = P.OxygenRate,
-		at = P.OxygenAt,
-		max = P.OxygenMax,
-		default = GameConfig.OxygenMax,
-		color = Palette.Cyan,
 	},
 }
 
@@ -152,13 +139,8 @@ function StatusBars.bleedoutFraction(endsAt: number, now: number, total: number)
 end
 
 -- Whether a meter is "relevant" even when steady (shown regardless of being full).
-function StatusBars.relevant(id: string, moveState: string, flashlightOn: boolean): boolean
-	if id == "Oxygen" then
-		return moveState == "Underwater"
-	elseif id == "Battery" then
-		return flashlightOn
-	end
-	return false
+function StatusBars.relevant(id: string, flashlightOn: boolean): boolean
+	return id == "Battery" and flashlightOn
 end
 
 --------------------------------------------------------------------------------
@@ -210,31 +192,6 @@ function StatusBars.mount(ctx: Context): StatusBars
 		table.insert(rows, buildRow(cluster, spec, index))
 	end
 
-	-- Syringe pips
-	local syringe = UIKit.frame(cluster, "Syringe")
-	syringe.LayoutOrder = #METERS + 1
-	syringe.Size = UDim2.fromOffset(BAR_WIDTH, 0)
-	syringe.ClipsDescendants = true
-	local syringeLabel = UIKit.label(syringe, "Label", UIKit.Fonts.Strong, UIKit.TextSize.Caps, Palette.Ash)
-	syringeLabel.Text = Strings.get("Input.Syringe")
-	syringeLabel.TextXAlignment = Enum.TextXAlignment.Left
-	syringeLabel.TextYAlignment = Enum.TextYAlignment.Center
-	syringeLabel.TextWrapped = false
-	syringeLabel.Size = UDim2.new(0, 70, 0, ROW_HEIGHT)
-	UIKit.textStroke(syringeLabel, 0.6)
-	local pips: { Frame } = {}
-	for index = 1, MAX_PIPS do
-		local pip = UIKit.fill(syringe, "Pip" .. index, Palette.Bone, 0)
-		pip.AnchorPoint = Vector2.new(0, 0.5)
-		pip.Size = UDim2.fromOffset(PIP_SIZE.X, PIP_SIZE.Y)
-		pip.Position = UDim2.new(0, 72 + (index - 1) * (PIP_SIZE.X + 5), 0, ROW_HEIGHT / 2)
-		UIKit.corner(pip, UDim.new(0, 2))
-		pips[index] = pip
-	end
-	local syringeAlpha = 0
-	local lastCharges = -1
-	local chargesChangedAt = -math.huge
-
 	-- Bleedout bar (lives in the downed overlay)
 	local bleed = UIKit.frame(ctx.downed, "Bleedout")
 	bleed.Size = UDim2.new(1, 0, 0, 30)
@@ -257,7 +214,6 @@ function StatusBars.mount(ctx: Context): StatusBars
 		end
 		local now = Workspace:GetServerTimeNow()
 		local lifeState = Attributes.getString(player, P.LifeState, "Lobby")
-		local moveState = Attributes.getString(player, P.MoveState, "Standing")
 		local flashlightOn = Attributes.getBool(player, P.FlashlightOn, false)
 		local watching = lifeState == "Dead" or lifeState == "Spectating"
 
@@ -283,7 +239,7 @@ function StatusBars.mount(ctx: Context): StatusBars
 			if changing then
 				row.lastActive = clock
 			end
-			local relevant = StatusBars.relevant(spec.id, moveState, flashlightOn)
+			local relevant = StatusBars.relevant(spec.id, flashlightOn)
 			local target = if watching
 				then 0
 				else StatusBars.targetAlpha(fraction, changing, relevant, clock - row.lastActive)
@@ -303,31 +259,6 @@ function StatusBars.mount(ctx: Context): StatusBars
 			row.bar:SetAlpha(shown * (1 - 0.35 * pulse))
 			UIKit.setTextTransparency(row.label, UIKit.fade(0.1, shown))
 			row.label.TextColor3 = if fraction < LOW then Palette.Ash:Lerp(Palette.Ember, warmth) else Palette.Ash
-		end
-
-		-- Syringe
-		local charges = math.max(0, math.floor(Attributes.getNumber(player, P.SyringeCharges, 0)))
-		if charges ~= lastCharges then
-			if lastCharges >= 0 then
-				chargesChangedAt = clock
-			end
-			lastCharges = charges
-		end
-		local syringeTarget = 0
-		if charges > 0 and not watching and lifeState ~= "Lobby" then
-			syringeTarget = if lifeState == "Downed" or clock - chargesChangedAt < LINGER then 1 else REST_ALPHA
-		end
-		syringeAlpha = approach(syringeAlpha, syringeTarget, dt)
-		local syringeHeight = math.floor(ROW_HEIGHT * MathUtil.smoothstep(0, 1, math.min(syringeAlpha * 3, 1)) + 0.5)
-		if syringe.Size.Y.Offset ~= syringeHeight then
-			syringe.Size = UDim2.fromOffset(BAR_WIDTH, syringeHeight)
-		end
-		syringe.Visible = syringeHeight > 0
-		local syringeShown = syringeAlpha * hudAlpha
-		UIKit.setTextTransparency(syringeLabel, UIKit.fade(0.1, syringeShown))
-		for index, pip in pips do
-			pip.Visible = index <= charges
-			UIKit.setTransparency(pip, UIKit.fade(0.05, syringeShown))
 		end
 
 		-- Bleedout

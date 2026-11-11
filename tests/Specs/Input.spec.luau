@@ -41,7 +41,7 @@ return {
 		t.eq(InputController.resolveContext({ "OnFoot", "Menu" }), "Menu")
 		t.eq(InputController.resolveContext({ "Menu", "OnFoot" }), "Menu", "order of pushes does not matter")
 		t.eq(InputController.resolveContext({ "Vent", "Downed" }), "Downed")
-		t.eq(InputController.resolveContext({ "Swim", "Struggle", "Locker" }), "Struggle")
+		t.eq(InputController.resolveContext({ "Vent", "Trapped", "Locker" }), "Locker")
 		t.eq(InputController.resolveContext({ "Spectator" }), "Spectator", "Spectator stands alone without OnFoot")
 		t.eq(InputController.resolveContext({ "Spectator", "OnFoot" }), "OnFoot")
 		t.eq(InputController.resolveContext({ "Cutscene", "Menu", "Vent" }), "Menu")
@@ -93,7 +93,7 @@ return {
 
 	["the Menu action is live wherever a player can open settings, and in the menu itself"] = function(t: Expect)
 		for _, context: Enums.InputContext in
-			{ "Menu", "OnFoot", "Vent", "Swim", "Downed", "Spectator" } :: { Enums.InputContext }
+			{ "Menu", "OnFoot", "Vent", "Downed", "Spectator" } :: { Enums.InputContext }
 		do
 			t.truthy(InputController.isLive("Menu", context), "Menu in " .. context)
 		end
@@ -103,7 +103,7 @@ return {
 	end,
 
 	["bindings that claim jump or sprint keys sink them; the rest pass through"] = function(t: Expect)
-		for _, action: Enums.InputAction in { "HoldBreath", "Struggle", "Ripcord", "Sprint" } :: { Enums.InputAction } do
+		for _, action: Enums.InputAction in { "HoldBreath", "Ripcord", "Sprint" } :: { Enums.InputAction } do
 			t.truthy(InputController.sinks(InputConfig.Bindings[action]), action .. " sinks")
 		end
 		for _, action: Enums.InputAction in
@@ -117,7 +117,7 @@ return {
 		local objective = InputConfig.Bindings.Objective
 		t.truthy(objective and table.find(objective.keyboard, Enum.KeyCode.Tab) ~= nil, "Tab is bound to Objective")
 		t.truthy(objective and table.find(objective.gamepad, Enum.KeyCode.DPadRight) ~= nil, "so is d-pad right")
-		t.truthy(objective and #objective.contexts >= 3, "on foot, in vents and swimming")
+		t.truthy(objective and #objective.contexts >= 2, "on foot and in vents")
 		local live: { Enums.InputContext } = if objective then objective.contexts else {}
 		for _, context: Enums.InputContext in live do
 			t.truthy(InputController.isLive("Objective", context), "live " .. context)
@@ -157,18 +157,18 @@ return {
 		t.eq(InputController.GetContext(), "Vent")
 		InputController.PushContext("Menu", "spec.menu")
 		t.eq(InputController.GetContext(), "Menu")
-		InputController.PushContext("Swim", "spec.vent") -- re-pushing a token replaces its context
+		InputController.PushContext("Locker", "spec.vent") -- re-pushing a token replaces its context
 		t.eq(InputController.GetContext(), "Menu")
 		InputController.PopContext("spec.menu")
-		t.eq(InputController.GetContext(), "Swim")
+		t.eq(InputController.GetContext(), "Locker")
 		InputController.PopContext("spec.unknown")
-		t.eq(InputController.GetContext(), "Swim", "popping an unknown token changes nothing")
+		t.eq(InputController.GetContext(), "Locker", "popping an unknown token changes nothing")
 		InputController.PopContext("spec.vent")
 		t.eq(InputController.GetContext(), "OnFoot")
 		connection:Disconnect()
-		t.eq(table.concat(seen, ","), "Vent,Menu,Swim,OnFoot")
+		t.eq(table.concat(seen, ","), "Vent,Menu,Locker,OnFoot")
 		t.truthy(InputController.IsBound("Crouch"), "Crouch is live on foot")
-		t.falsy(InputController.IsBound("Dive"), "Dive is not live on foot")
+		t.falsy(InputController.IsBound("Ripcord"), "Ripcord is not live on foot")
 	end,
 
 	["injected holds begin once and end on release; taps begin per press"] = function(t: Expect)
@@ -190,11 +190,11 @@ return {
 		t.eq(table.concat(taps, ","), "Begin,Begin", "taps fire Begin per press and never End")
 		t.falsy(InputController.IsHeld("Flashlight"))
 
-		local dive = record("Dive", function()
-			InputController.Inject("Dive", "Begin")
+		local cord = record("Ripcord", function()
+			InputController.Inject("Ripcord", "Begin")
 		end)
-		t.eq(#dive, 0, "an action that is not live ignores injected presses")
-		t.falsy(InputController.IsHeld("Dive"))
+		t.eq(#cord, 0, "an action that is not live ignores injected presses")
+		t.falsy(InputController.IsHeld("Ripcord"))
 	end,
 
 	["a context change releases holds that stop being live"] = function(t: Expect)

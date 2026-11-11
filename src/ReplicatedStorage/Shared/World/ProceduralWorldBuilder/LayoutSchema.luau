@@ -73,7 +73,6 @@ export type VentNodeSpec = {
 export type VentEdgeSpec = {
 	a: string,
 	b: string,
-	submerged: boolean?,
 }
 
 export type GrateSpec = {
@@ -109,14 +108,6 @@ export type Trigger = {
 	rect: Rect,
 	height: number,
 	y: number?, -- bottom above the floor, default 0
-}
-
-export type Basin = {
-	id: string,
-	room: string, -- a Pool room
-	rect: Rect,
-	depth: number, -- basin floor below the deck
-	waterLevel: number, -- water surface relative to the deck (negative = below)
 }
 
 export type Platform = {
@@ -157,7 +148,6 @@ export type LevelLayout = {
 	vents: VentNetwork?,
 	anchors: { Anchor },
 	triggers: { Trigger },
-	basins: { Basin }?,
 	platforms: { Platform }?,
 	pillars: { Pillar }?,
 	windows: { Window }?,
@@ -319,7 +309,7 @@ end
 -- Validation. Returns a list of human-readable problems; an empty list means the layout is buildable:
 --   * ids are unique; rooms tile the footprint without overlapping (school levels);
 --   * doors join two non-chase rooms across a shared wall they fit; grates sit on a wall a chase shares with a
---     real room, inside that shared stretch, under a lintel, and above the floor (below it only over a pool basin);
+--     real room, inside that shared stretch, under a lintel, and above the floor;
 --   * openings on one wall line (doors, grates, windows, the stair-tower opening) keep a pier between them;
 --   * ducts are level, axis-aligned, listed once, stay inside chases, and never cross or touch without a shared node;
 --   * anchors and triggers stay inside their room's volume, lights inside their room; an anchor's ref names another
@@ -369,18 +359,6 @@ local function sideLine(r: Rect, side: Side): ("X" | "Z", number)
 		return "Z", r.z
 	end
 	return "Z", r.z + r.d
-end
-
--- Unit step from a room side into the room.
-local function inwardOf(side: Side): (number, number)
-	if side == "N" then
-		return 0, 1
-	elseif side == "S" then
-		return 0, -1
-	elseif side == "W" then
-		return 1, 0
-	end
-	return -1, 0
 end
 
 local function boxesOverlap(a: DuctBox, b: DuctBox): boolean
@@ -558,15 +536,10 @@ local function ductBoxes(vents: VentNetwork, nodes: { [string]: VentNodeSpec }):
 	return out
 end
 
--- The lowest walkable or swimmable level under the level-local area `area` of `room`: a pool basin's floor where
--- the area overlaps the basin, the bore floor of a duct sunk below a chase's floor, otherwise the floor (0).
-local function floorUnder(layout: LevelLayout, room: Room, area: Rect, ducts: { DuctBox }): number
+-- The lowest walkable level under the level-local area `area` of `room`: the bore floor of a duct sunk below a
+-- chase's floor, otherwise the floor (0).
+local function floorUnder(room: Room, area: Rect, ducts: { DuctBox }): number
 	local floor = 0
-	for _, basin in (layout.basins or {}) :: { Basin } do
-		if basin.room == room.id and LayoutSchema.rectOverlapArea(basin.rect, area) > 0 then
-			floor = math.min(floor, -basin.depth)
-		end
-	end
 	if room.kind == "Chase" then
 		for _, duct in ducts do
 			local footprint = LayoutSchema.rect(duct.x0, duct.z0, duct.x1 - duct.x0, duct.z1 - duct.z0)
@@ -865,29 +838,14 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 						chase.id
 					)
 				end
-				-- on the room side the opening must not dip into the floor: a grate may sink below the floor only
-				-- where its whole width opens over a pool basin
-				local dx, dz = inwardOf(side :: Side)
-				local probe = WorldConfig.WallThickness / 2 + PIER
-				local px, pz = node.x + dx * probe, node.z + dz * probe
-				local strip = if edge.axis == "X"
-					then LayoutSchema.rect(px - EPS, u0, 2 * EPS, u1 - u0)
-					else LayoutSchema.rect(u0, pz - EPS, u1 - u0, 2 * EPS)
-				local floor = 0
-				for _, basin in (layout.basins or {}) :: { Basin } do
-					if basin.room == room.id and LayoutSchema.rectInside(strip, basin.rect) then
-						floor = math.min(floor, -basin.depth)
-					end
-				end
-				if y - HALF_BORE < floor - EPS then
+				-- on the room side the opening must not dip into the floor
+				if y - HALF_BORE < -EPS then
 					pushf(
 						errors,
-						"grate %s opening bottom %.2f sinks below the floor of %s (%.1f)%s",
+						"grate %s opening bottom %.2f sinks below the floor of %s",
 						grate.id,
 						y - HALF_BORE,
-						room.id,
-						floor,
-						if floor == 0 then "; only a grate wholly over a pool basin may sit that low" else ""
+						room.id
 					)
 				end
 				table.insert(openings, {
@@ -906,9 +864,8 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		end
 	end
 
-	-- Anchors, triggers, basins, platforms, pillars, windows. Anchors and triggers stay inside their room's volume:
-	-- from the floor under them (a basin's floor over a pool, a sunken duct's bore floor in a chase) up to its
-	-- ceiling height.
+	-- Anchors, triggers, platforms, pillars, windows. Anchors and triggers stay inside their room's volume: from the
+	-- floor under them (a sunken duct's bore floor in a chase) up to its ceiling height.
 	for _, anchor in layout.anchors do
 		claimId(anchor.id, "anchor")
 		local room = rooms[anchor.room]
@@ -920,7 +877,7 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 		if not LayoutSchema.rectContains(room.rect, x, z) then
 			pushf(errors, "anchor %s lies outside room %s", anchor.id, anchor.room)
 		end
-		local floor = floorUnder(layout, room, LayoutSchema.rect(x - EPS, z - EPS, 2 * EPS, 2 * EPS), ducts)
+		local floor = floorUnder(room, LayoutSchema.rect(x - EPS, z - EPS, 2 * EPS, 2 * EPS), ducts)
 		local top = LayoutSchema.roomHeight(layout, room)
 		if y < floor - EPS or y > top + EPS then
 			pushf(
@@ -951,7 +908,7 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 			pushf(errors, "trigger %s leaves room %s", trigger.id, trigger.room)
 		end
 		local bottom = trigger.y or 0
-		local floor = floorUnder(layout, room, trigger.rect, ducts)
+		local floor = floorUnder(room, trigger.rect, ducts)
 		local top = LayoutSchema.roomHeight(layout, room)
 		if trigger.height <= 0 then
 			pushf(errors, "trigger %s has no height", trigger.id)
@@ -966,18 +923,6 @@ function LayoutSchema.validate(layout: LevelLayout): { string }
 				floor,
 				top
 			)
-		end
-	end
-	for _, basin in (layout.basins or {}) :: { Basin } do
-		claimId(basin.id, "basin")
-		local room = rooms[basin.room]
-		if not room or room.kind ~= "Pool" then
-			pushf(errors, "basin %s must sit in a Pool room", basin.id)
-		elseif not LayoutSchema.rectInside(basin.rect, room.rect) then
-			pushf(errors, "basin %s leaves room %s", basin.id, basin.room)
-		end
-		if basin.waterLevel > 0 or basin.waterLevel < -basin.depth then
-			pushf(errors, "basin %s water level must lie between its floor and the deck", basin.id)
 		end
 	end
 	for _, platform in (layout.platforms or {}) :: { Platform } do

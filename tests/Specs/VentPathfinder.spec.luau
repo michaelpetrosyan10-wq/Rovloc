@@ -10,6 +10,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
+local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local VentGraph = require(ReplicatedStorage.Shared.Vents.VentGraph)
 local VentPathfinder = require(ReplicatedStorage.Shared.Vents.VentPathfinder)
 
@@ -21,7 +22,7 @@ type Graph = VentGraph.Graph
 
 -- The levels with ducts (a tunnel floor keeps a vent only where its script needs one: Level 1's gate bypass)
 local VENT_LEVELS: { Enums.LevelId } = {}
-for _, id in { "Level1_Hallways", "Level2_ScienceHall", "Level3_Gymnasium", "Level4_FloodedPool" } :: { Enums.LevelId } do
+for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 	local layout = Builder.getLayout(id)
 	if layout and layout.vents and #layout.vents.grates > 0 then
 		table.insert(VENT_LEVELS, id)

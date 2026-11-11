@@ -3,10 +3,10 @@
 --
 -- One Model "Grate_<grateId>" per layout grate, rebuilt into Workspace.Runtime.<level> at every run and placed from the
 -- `Grate_<id>` attachment VentShaftBuilder leaves on the wall's centre plane (LookVector into the room). Everything is
--- mounted on the room-side face of the wall (for a grate low over a pool basin, the inner face of the basin's coping):
+-- mounted on the room-side face of the wall:
 --   * a galvanized flange frame around the 3.5 x 3.5 opening. Each side runs as far past the opening as the wall that
 --     is really there allows (perpendicular walls, door casings, neighbouring openings, the floor, the ceiling). Its
---     sill is the PrimaryPart "Base". Over a pool the frame is a box collar reaching back to the wall above the deck;
+--     sill is the PrimaryPart "Base";
 --   * leaf "Panel": a border overlapping the frame and five tilted louvres that exactly fill the opening. The border and
 --     the louvres collide in the Default group, so a vent crawler's VentCollider ball and players outside are stopped,
 --     while the gaps between the louvres let light and sight through. The panel hangs on one vertical edge (the side
@@ -24,8 +24,8 @@
 -- NodeId, FacingZoneId, LevelId (copied from the attachment). Two disabled prompts on Base.PromptPoint, just in front
 -- of the panel: Unscrew (hold GameConfig.UnscrewSeconds, E / ButtonX) and Kick (instant, R / ButtonY); the model is
 -- tagged Interactable. On a locked grate both prompts read "Rusted shut".
--- Anchors on Base: ExitAnchor (where a crawler leaving the duct is placed: 2.5 studs into the room at floor level, or at
--- the water surface over a pool, LookVector away from the wall) and EntryAnchor (1.5 studs behind the opening at bore
+-- Anchors on Base: ExitAnchor (where a crawler leaving the duct is placed: 2.5 studs into the room at floor level,
+-- LookVector away from the wall) and EntryAnchor (1.5 studs behind the opening at bore
 -- centre, LookVector into the duct).
 --
 -- Poses (pure; PropKit leaves, so they behave the same in Roblox and in the Lune harness; a leaf carries both its
@@ -34,14 +34,14 @@
 -- to rest).
 --   setPanel(model, openness)  0 shut .. 1 swung 110 degrees out into the room about its hinge;
 --   setScrews(model, progress) the screws back out along the panel normal, spinning, and drop out at the end (1 = out,
---                              lying on the floor, or sunk to the basin floor over a pool);
+--                              lying on the floor);
 --   setKicked(model, t)        the panel tears off its hinges (the screws ripping out with it) and lands, warped and
---                              askew, on the floor in front of the opening (sunk to the basin floor over a pool).
+--                              askew, on the floor in front of the opening.
 -- Builders leave the initial state: panel shut, screws in. At most 22 parts per look (MaxParts; a grate carries two).
 --
 -- VentGrateBuilder also exposes the pure layout planning other builders keep clear of: plan(layout), footprints(layout)
 -- (what each grate's frame, swing, throw and exit need in front of the wall) and obstacles(layout) (floor-standing
--- props, triggers, platforms, pillars and basins as level-local boxes), with the 2D overlap test they share.
+-- props, triggers, platforms and pillars as level-local boxes), with the 2D overlap test they share.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -79,9 +79,6 @@ export type GratePlan = {
 	room: Room,
 	frame: CFrame, -- level-local: opening centre on the wall's centre plane, LookVector into the room
 	face: number, -- distance from the centre plane to the room-side face the grate is mounted on
-	floor: number, -- level-local Y a crawler leaving the grate stands on (the floor, or the water surface)
-	rest: number, -- level-local Y loose pieces settle on (the floor, or the basin floor over a pool)
-	overBasin: boolean,
 	reach: Reach, -- frame flange past the opening edges
 	border: Reach, -- panel border past the opening edges (never more than the frame)
 	hinge: number, -- -1: the panel hangs on its left edge, +1: on its right edge
@@ -98,7 +95,7 @@ export type Footprint = {
 	hv: number,
 	y0: number,
 	y1: number,
-	kind: string, -- what it is ("Grate", "Anchor", "LockerFront", "Trigger", "Platform", "Pillar", "Basin")
+	kind: string, -- what it is ("Grate", "Anchor", "LockerFront", "Trigger", "Platform", "Pillar")
 }
 
 local W = Attributes.World
@@ -175,8 +172,6 @@ local ANCHOR_KEEPOUT: { [string]: Vector2 } = {
 	CreatureScarePose = Vector2.new(4, 4),
 	Locker = Vector2.new(3, 2.6),
 	ParachuteCrate = Vector2.new(6, 5),
-	FloodlightSwitch = Vector2.new(2.4, 1.6),
-	LabCounter = Vector2.new(10.6, 4.1),
 	Corpse = Vector2.new(6, 6),
 	SmashedLocker = Vector2.new(3.6, 3.2),
 	Clutter = Vector2.new(3, 3),
@@ -185,12 +180,7 @@ local ANCHOR_KEEPOUT: { [string]: Vector2 } = {
 	-- Floor objectives (wall-mounted stations: centred on their wall-face anchor, so half the depth reaches out)
 	FuseCandidate = Vector2.new(1.6, 1.6),
 	MasterKeyCandidate = Vector2.new(1.2, 1.2),
-	ReagentCandidate = Vector2.new(1, 1),
-	ValveWheelCandidate = Vector2.new(2, 2),
-	BoltCutterCandidate = Vector2.new(1.8, 1.8),
 	BreakerPanel = Vector2.new(4.2, 7.2),
-	FumeHood = Vector2.new(6.2, 9),
-	Generator = Vector2.new(4.4, 6.6),
 }
 local ANCHOR_BAND = 4 -- an anchor's box spans this far above and below its point
 -- Floor in front of an anchored prop that stays its own, as width along the anchor's RightVector x depth beyond its
@@ -393,7 +383,7 @@ function VentGrateBuilder.insideRoom(layout: Layout, room: Room, f: Footprint, m
 end
 
 -- Floor-standing things in `layout` that moving prop pieces keep clear of: the boxes of the props other builders put on
--- anchors (with the floor some of them need in front), FloorDebris piles, platforms, pillars and pool basins.
+-- anchors (with the floor some of them need in front), FloorDebris piles, platforms and pillars.
 function VentGrateBuilder.obstacles(layout: Layout): { Footprint }
 	local out: { Footprint } = {}
 	for _, anchor in layout.anchors do
@@ -447,9 +437,6 @@ function VentGrateBuilder.obstacles(layout: Layout): { Footprint }
 		local half = pillar.size / 2 + 0.3 -- the pillar's base trim
 		table.insert(out, footprint(pillar.x, pillar.z, 1, 0, half, half, 0, 100, "Pillar"))
 	end
-	for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-		table.insert(out, rectFootprint(basin.rect, -basin.depth, 0.5, "Basin"))
-	end
 	return out
 end
 
@@ -484,37 +471,6 @@ end
 --------------------------------------------------------------------------------
 -- Planning
 --------------------------------------------------------------------------------
-
--- The basin of `room` a grate on `node` opens over (VentShaftBuilder's probe), and the distance from the node to the
--- inner face of its coping.
-local function basinUnder(
-	layout: Layout,
-	room: Room,
-	node: LayoutSchema.VentNodeSpec,
-	inward: Vector3
-): (LayoutSchema.Basin?, number)
-	local probe = WALL_HALF + Geometry.BasinWall / 2
-	local x, z = node.x + inward.X * probe, node.z + inward.Z * probe
-	for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-		local r = basin.rect
-		if basin.room ~= room.id or not LayoutSchema.rectContains(r, x, z) then
-			continue
-		end
-		local wall = Geometry.BasinWall
-		local edge: number
-		if inward.X > 0.5 then
-			edge = r.x + wall - node.x
-		elseif inward.X < -0.5 then
-			edge = node.x - (r.x + r.w - wall)
-		elseif inward.Z > 0.5 then
-			edge = r.z + wall - node.z
-		else
-			edge = node.z - (r.z + r.d - wall)
-		end
-		return basin, math.max(edge, WALL_HALF)
-	end
-	return nil, WALL_HALF
-end
 
 type Interval = { lo: number, hi: number, shared: boolean }
 
@@ -639,7 +595,7 @@ end
 -- Where the kicked panel's centre lands (level-local) for hinge side `hinge`: fallen forward onto its face in front of
 -- the opening (its top edge away from the wall), shifted toward the hinge side, yawed and warped, its nearest corner
 -- KICK_OUT in front of the wall face and its lowest point (the hinge knuckle and screw heads on its front face
--- included) on `plan.rest`.
+-- included) on the floor.
 local function landing(plan: GratePlan, hinge: number): (CFrame, Vector3)
 	local b = plan.border
 	local size = Vector3.new(2 * HALF_BORE + b.left + b.right, 2 * HALF_BORE + b.up + b.down, PANEL_DEPTH)
@@ -678,7 +634,7 @@ local function landing(plan: GratePlan, hinge: number): (CFrame, Vector3)
 		near = math.min(near, p:Dot(frame.LookVector))
 	end
 	local spot = frame * Vector3.new(hinge * KICK_SHIFT, 0, -(plan.face + KICK_OUT - near))
-	return CFrame.new(spot.X, plan.rest - low + 0.005, spot.Z) * orient, size
+	return CFrame.new(spot.X, -low + 0.005, spot.Z) * orient, size
 end
 
 -- Pure planning for every grate of `layout`: frame, mounting face, flange and border reach per side, the floor in
@@ -715,7 +671,6 @@ local function computePlans(layout: Layout): { GratePlan }
 		local y = LayoutSchema.ventNodeY(node)
 		local position = Vector3.new(node.x, y, node.z)
 		local frame = CFrame.lookAt(position, position + inward)
-		local basin, face = basinUnder(layout, room, node, inward)
 
 		-- lateral clearance, mapped onto the grate frame's left / right
 		local alongX = side == "N" or side == "S"
@@ -727,7 +682,6 @@ local function computePlans(layout: Layout): { GratePlan }
 		local left = if rightIsUp then below else above
 		local right = if rightIsUp then above else below
 		local ceiling = LayoutSchema.roomHeight(layout, room) - CEILING_PANEL
-		local floorUnder = if basin then -basin.depth else 0
 		local function reachFor(clearance: number, where: string): number
 			local available = clearance - EDGE_GAP
 			if available < MIN_REACH then
@@ -745,7 +699,7 @@ local function computePlans(layout: Layout): { GratePlan }
 			left = left,
 			right = right,
 			up = ceiling - (y + HALF_BORE),
-			down = (y - HALF_BORE) - floorUnder,
+			down = y - HALF_BORE,
 		}
 		local reach: Reach = {
 			left = reachFor(clear.left, "left"),
@@ -764,10 +718,7 @@ local function computePlans(layout: Layout): { GratePlan }
 			grate = grate,
 			room = room,
 			frame = frame,
-			face = face,
-			floor = if basin then basin.waterLevel else 0,
-			rest = floorUnder,
-			overBasin = basin ~= nil,
+			face = WALL_HALF,
 			reach = reach,
 			border = border,
 			hinge = -1,
@@ -791,10 +742,7 @@ local function computePlans(layout: Layout): { GratePlan }
 					end
 				end
 				for _, obstacle in obstacles do
-					if
-						not (plan.overBasin and obstacle.kind == "Basin")
-						and VentGrateBuilder.overlaps(piece, obstacle, 0.01)
-					then
+					if VentGrateBuilder.overlaps(piece, obstacle, 0.01) then
 						clashes += 1
 					end
 				end
@@ -1092,9 +1040,8 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 	local shade = random:NextNumber(-0.06, 0.04)
 	local galvanized, rusted = lookStyle("Galvanized", shade), lookStyle("Rusted", shade)
 
-	-- Frame. Over a pool the members reach back to the wall face, closing the slot above the coping. The sill first:
-	-- the galvanized one is the PrimaryPart "Base"
-	local a0 = if plan.overBasin then WALL_HALF else face
+	-- Frame. The sill first: the galvanized one is the PrimaryPart "Base"
+	local a0 = face
 	local a1 = face + FRAME_DEPTH
 	local uL, uR = -(HALF_BORE + r.left), HALF_BORE + r.right
 	local function buildFrame(holder: Instance, style: LookStyle): Part
@@ -1204,8 +1151,8 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 			local screw = PropKit.leaf(model, screwName, rest)
 			buildScrew(screw, su, sv, galvanized)
 			table.insert(screws, { leaf = screw, rest = rest, u = su, v = sv })
-			-- where it comes to rest once out: on the floor below its corner (sunk to the basin floor over a pool)
-			local restY = plan.rest + SCREW_DIAMETER / 2 + 0.005
+			-- where it comes to rest once out: on the floor below its corner
+			local restY = SCREW_DIAMETER / 2 + 0.005
 			local spot = frame
 				* Vector3.new(
 					su * 0.7 + landU + random:NextNumber(-0.25, 0.25),
@@ -1283,7 +1230,7 @@ local function buildGrate(plan: GratePlan, source: Attachment, parent: Instance,
 	-- Interaction point and the crawler's way in and out
 	local promptPoint = attach(base, "PromptPoint", frame * CFrame.new(0, 0, -(front + PROMPT_OUT)))
 	local exitPosition = frame * Vector3.new(0, 0, -(face + EXIT_OUT))
-	exitPosition = Vector3.new(exitPosition.X, origin.Y + plan.floor, exitPosition.Z)
+	exitPosition = Vector3.new(exitPosition.X, origin.Y, exitPosition.Z)
 	attach(base, "ExitAnchor", CFrame.lookAt(exitPosition, exitPosition + frame.LookVector))
 	local entryPosition = frame * Vector3.new(0, 0, -(face - ENTRY_IN))
 	attach(base, "EntryAnchor", CFrame.lookAt(entryPosition, entryPosition - frame.LookVector))

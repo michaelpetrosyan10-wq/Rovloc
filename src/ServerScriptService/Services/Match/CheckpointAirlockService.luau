@@ -6,8 +6,8 @@
 -- One airlock at a time: the current level's (LevelDirector) exit vestibule, the lower-level room of the stairwell
 -- the run's route leaves it by (LevelDirector.exitFor: its fromRoom), with that vestibule's Checkpoint trigger (a
 -- CheckpointVolume part, ZoneId = the vestibule) and the fire door(s) between the vestibule and the level (DoorService
--- airlocks on that level whose FromLevel is the level and StairwellId the route's). The last level (the roof) has no exit airlock: the service stays Idle there (P8's
--- finale). Any level change it did not make itself (a dev level skip) resets it to Idle for the new level.
+-- airlocks on that level whose FromLevel is the level and StairwellId the route's). The last level (the roof) has no exit airlock: the service stays Idle there (the
+-- jump). Any level change it did not make itself (a dev level skip) resets it to Idle for the new level.
 --
 -- Nothing runs while the floor's objective keeps its exit locked (ObjectiveService.ExitOpen): no countdown, no seal.
 -- At GameConfig.ServerTickHz every run participant counts as inside while their root, or the point under their feet,

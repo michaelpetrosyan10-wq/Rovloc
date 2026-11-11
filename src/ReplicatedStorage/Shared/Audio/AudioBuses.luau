@@ -3,7 +3,7 @@
 --
 --   SoundService
 --   └── Master (SoundGroup, safety compressor)
---       ├── Ambience   beds and stingers (only an EQ: muffled underwater / in ducts)
+--       ├── Ambience   beds and stingers (only an EQ: muffled in ducts)
 --       ├── Room       the environment chain (EQ, Chorus, Reverb, Echo), shared by the three buses below
 --       │   ├── World      props, doors, traps, weather on location
 --       │   ├── Monster    the Creature
@@ -16,11 +16,11 @@
 -- copy per bus. Every preset sets every property, with "off" written as neutral values (0 dB EQ, Chorus Mix 0,
 -- WetLevel -80), so switching rooms is a smooth interpolation of numbers, never a swap of instances. Effects that sit
 -- fully neutral after a fade are disabled to save DSP. Ambience and Body only follow the environment through an EQ
--- (muffled underwater and in ducts), so a heartbeat never smears into a basement-long tail.
+-- (muffled in ducts), so a heartbeat never smears into a basement-long tail.
 --
 -- Final group volume = user volume (SettingsSchema, set by SettingsController via setVolume; Body follows the
 -- Player volume unless set on its own) x duck gain (presets dip other buses: a screech pulls the ambience down);
--- the environment gain (underwater is quieter) sits on Room.
+-- the environment gain sits on Room.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -41,7 +41,7 @@ export type EnvironmentSpec = {
 	effects: { SynthPresets.Effect }, -- exactly one per CHAIN slot, in CHAIN order
 	ambience: SynthPresets.Effect, -- Equalizer on the Ambience group
 	body: SynthPresets.Effect, -- Equalizer on the Body group
-	gain: number, -- multiplier on the Room group (underwater is quieter)
+	gain: number, -- multiplier on the Room group
 }
 
 export type Tree = {
@@ -128,7 +128,7 @@ local ENVIRONMENTS: { [Enums.AcousticPreset]: EnvironmentSpec } = {
 	Room = ROOM,
 	-- Long corridors: a longer tail and a faint flutter between the parallel walls.
 	Corridor = environment(eq(0, 0, -1), NO_CHORUS, reverb(1.8, -11, 0, 0.9, 0.7), echo(0.09, 0.2, -20, 0), FLAT, 1),
-	-- Gym and pool hall: a huge tail and a late slap off the far wall.
+	-- Big halls (the tunnel floors' galleries): a huge tail and a late slap off the far wall.
 	Hall = environment(eq(1, 0, -2), NO_CHORUS, reverb(4.5, -7, 0, 1, 0.9), echo(0.28, 0.25, -16, 0), FLAT, 1),
 	-- Inside a duct: boxy, metallic, a tight comb echo ringing in the bore. Your own body sounds boxed in too.
 	Vent = environment(
@@ -139,17 +139,6 @@ local ENVIRONMENTS: { [Enums.AcousticPreset]: EnvironmentSpec } = {
 		eq(-4, -2, -10),
 		1,
 		eq(1, -1, -4)
-	),
-	-- Submerged: heavy low-pass muffle with a slow pressure wobble; the world goes quiet. The heartbeat stays (it is
-	-- heard through the body), only dulled.
-	Underwater = environment(
-		eq(4, -26, -60),
-		chorus(0.6, 0.35, 0.5),
-		reverb(2.5, -4, -6, 1, 1),
-		echo(NO_ECHO_DELAY, 0, -80, 0),
-		eq(2, -24, -60),
-		0.75,
-		eq(4, -10, -30)
 	),
 	-- Roof and street: nearly dry, a light slap back off the surrounding buildings.
 	Outdoor = environment(FLAT, NO_CHORUS, reverb(0.4, -30, 0, 0.3, 0.3), echo(0.45, 0.18, -22, 0), FLAT, 1),

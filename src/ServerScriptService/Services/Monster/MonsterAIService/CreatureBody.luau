@@ -6,11 +6,10 @@
 --     server (SetNetworkOwner(nil)) and, in Studio, audits on the next frame that nobody else owns it. It runs after
 --     every anchor change and every placement.
 --   * Pose: SetPose(poseMode) resizes and re-lays the CreatureHitbox (CreatureRigBuilder.setHitbox) for the pose:
---     tall for Biped, shorter for Hunched, a low long box centred on the rail for Quadruped, on the water line for
---     Swim.
+--     tall for Biped, shorter for Hunched, a low long box centred on the rail for Quadruped.
 --   * Hidden: a hidden Creature's hitbox stops answering queries (flasks fly through, nothing hits it); clients hide
 --     the rig from the Hidden attribute.
---   * Kinematic modes (the vent rail, swimming, scripted holds, dormancy) anchor the root and place it by CFrame; the
+--   * Kinematic modes (the vent rail, scripted holds, dormancy) anchor the root and place it by CFrame; the
 --     floor mode leaves it unanchored and lets the Humanoid walk it (WalkSpeed per state, AutoRotate).
 --   * Facing on the floor: an AlignOrientation on the root (OneAttachment, off by default) turns it to a direction
 --     with AutoRotate off; releasing the face hands rotation back to the Humanoid. Anchored, the root is turned

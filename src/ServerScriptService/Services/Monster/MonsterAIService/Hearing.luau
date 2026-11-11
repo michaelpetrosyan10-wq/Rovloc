@@ -7,7 +7,6 @@
 -- listener.scale (PacingDirector's HearingScale, 1 when absent), shrunk per route:
 --   * Air: straight line; each wall between source and listener (listener.occluders, at most MaxOccludingWalls of
 --     them count) multiplies the reach by NoiseConfig.WallOcclusion.
---   * Water: straight line, no occlusion (sound carries through the pool).
 --   * Vent, listener in a vent: the distance is the rail distance through the ducts: from the pulse to its
 --     ventNodeId, the VentPathfinder route to the listener's ventNode, then to the listener (two points on one duct
 --     use their straight distance), x NoiseConfig.VentPropagationMultiplier (bends and joints cost extra, read as a
@@ -250,11 +249,7 @@ end
 
 local function bestRoute(senses: Senses, event: Types.NoiseEvent): Route
 	local listener = senses.listener
-	local medium = event.medium
-	if medium == "Water" then
-		return { distance = (event.position - listener.position).Magnitude, reach = senses.reach }
-	end
-	if medium == "Vent" then
+	if event.medium == "Vent" then
 		if listener.inVent then
 			return ductRoute(senses, event) or airRoute(senses, event.position)
 		end
@@ -272,7 +267,7 @@ local function bestRoute(senses: Senses, event: Types.NoiseEvent): Route
 	return airRoute(senses, event.position)
 end
 
--- The default wall counter, built on its first use (Water pulses and pulses out of reach never cast a ray).
+-- The default wall counter, built on its first use (pulses out of reach never cast a ray).
 local function lazyOccluders(): (from: Vector3, to: Vector3) -> number
 	local built: { (from: Vector3, to: Vector3) -> number } = {}
 	return function(from: Vector3, to: Vector3): number

@@ -51,11 +51,6 @@ local STEP = 0.5 -- studs between the samples of a sight line
 local DOOR_MARGIN = 0.4 -- a sight line must pass this far inside a doorway's jambs
 local STATIONS: { [string]: boolean } = {
 	BreakerPanel = true,
-	FumeHood = true,
-	Generator = true,
-	StoreLock = true,
-	HatchValve = true,
-	CrateChain = true,
 }
 
 -- Whether the spawn rule places the Creature on `levelId`.

@@ -1,11 +1,11 @@
 --!strict
 -- Chemical flasks. Ballistics (the shared flight): the parabola, the release point and its pull-back, stepped casts
--- (hits, segment length, expiry), the traced arc and its beads, the pool's surface crossings. ChemicalProjectileService's
+-- (hits, segment length, expiry), the traced arc and its beads. ChemicalProjectileService's
 -- rules: the look tolerance, who may throw and pick up, which states a stun interrupts, the cloud's reach (radius and
 -- a clear line), the duct bore and its grate openings, VentGraph hops, the Creature's vent node, variants by colour,
 -- and every stun verdict. Live runs on a fake clock with injected casts, lines of sight, Creature, vent graph, brain and
 -- ProjectileEvent sender: a world flask picked up (one at a time), thrown (look, cooldown, blocked states, the vent
--- toss), flown and shattered on the floor, in the pool (the real cast's water planes) and inside a duct; the cloud
+-- toss), flown and shattered on the floor and inside a duct; the cloud
 -- stuns once, through a clear line only, a Creature walking into it later, never one already stunned, in the ducts by
 -- hops; an expired flight; Downed keeps the flask, death and the end of the run empty the hand. ChemicalThrowController's
 -- maths: the hand frames, the wind-up and swing, reconciliation, refusal, posing and wind-up rules, hints, the snap,
@@ -58,13 +58,13 @@ type Payload = Types.ProjectileEventPayload
 local P = Attributes.Player
 local W = Attributes.World
 local C = Attributes.Creature
-local SCIENCE: Enums.LevelId = "Level2_ScienceHall"
+local FLASK_LEVEL: Enums.LevelId = "Level1_Hallways"
 local HIP_HEIGHT = 2
 local ROOT_SIZE = Vector3.new(2, 2, 1)
 local HALF_BORE = WorldConfig.VentBore / 2
 local EPS = 1e-5 -- Vector3 and CFrame are single precision
 
-local BLOCKED: { Enums.MoveState } = { "Hiding", "Trapped", "Scripted", "Grabbed", "Parachuting" }
+local BLOCKED: { Enums.MoveState } = { "Hiding", "Trapped", "Scripted", "Parachuting" }
 local FREE: { Enums.MoveState } = {
 	"Standing",
 	"Sprinting",
@@ -72,9 +72,6 @@ local FREE: { Enums.MoveState } = {
 	"VentCrawling",
 	"VentScurrying",
 	"DownedCrawling",
-	"Treading",
-	"Freestyle",
-	"Underwater",
 }
 local NOT_ALIVE: { Enums.LifeState } = { "Lobby", "Downed", "Dead", "Spectating" }
 
@@ -106,7 +103,7 @@ end
 
 -- A floor at `height` that only stops what comes down onto it.
 local function floorCast(height: number): Caster
-	return function(from: Vector3, to: Vector3, _exclude: { Instance }, _water: boolean): Hit?
+	return function(from: Vector3, to: Vector3, _exclude: { Instance }): Hit?
 		if from.Y < height or to.Y > height or math.abs(from.Y - to.Y) < 1e-12 then
 			return nil
 		end
@@ -121,7 +118,7 @@ local function floorCast(height: number): Caster
 	end
 end
 
-local function noCast(_from: Vector3, _to: Vector3, _exclude: { Instance }, _water: boolean): Hit?
+local function noCast(_from: Vector3, _to: Vector3, _exclude: { Instance }): Hit?
 	return nil
 end
 
@@ -129,7 +126,7 @@ end
 -- linked to nothing; a grate on A whose wall faces -X (its room lies west of x = -2).
 local function ductGraph(): Graph
 	local graph: Graph = {
-		levelId = SCIENCE,
+		levelId = FLASK_LEVEL,
 		nodes = {},
 		grates = {},
 		grateAtNode = {},
@@ -202,7 +199,7 @@ local function fakePlayer(at: CFrame): (Player, BasePart, Humanoid)
 	return player, root, humanoid
 end
 
--- A stand-in Creature: a root and a biped CreatureHitbox (3 x 8 x 2) standing at `at`, on the Science Hall.
+-- A stand-in Creature: a root and a biped CreatureHitbox (3 x 8 x 2) standing at `at`.
 local function fakeCreature(at: Vector3): (Model, BasePart)
 	local model = Instance.new("Model")
 	model.Name = "SpecCreature"
@@ -216,7 +213,7 @@ local function fakeCreature(at: Vector3): (Model, BasePart)
 	hitbox.Size = Vector3.new(3, 8, 2)
 	hitbox.CFrame = CFrame.new(at + Vector3.new(0, 4, 0))
 	hitbox.Parent = model
-	model:SetAttribute(C.LevelId, SCIENCE)
+	model:SetAttribute(C.LevelId, FLASK_LEVEL)
 	return model, hitbox
 end
 
@@ -259,9 +256,9 @@ local function inRun(players: { Player }, body: (world: World) -> ())
 		now = function(): number
 			return world.clock
 		end,
-		cast = function(from: Vector3, to: Vector3, exclude: { Instance }, water: boolean): Hit?
+		cast = function(from: Vector3, to: Vector3, exclude: { Instance }): Hit?
 			local current = world.cast
-			return if current then current(from, to, exclude, water) else nil
+			return if current then current(from, to, exclude) else nil
 		end,
 		lineClear = function(_creature: Model?): ChemicalProjectileService.LineClear
 			return function(_from: Vector3, _to: Vector3): boolean
@@ -301,7 +298,7 @@ local function inRun(players: { Player }, body: (world: World) -> ())
 	LifeStateService.BeginRun(ctx)
 	ChemicalProjectileService.BeginRun(ctx)
 	for _, player in players do
-		player:SetAttribute(P.LevelId, SCIENCE)
+		player:SetAttribute(P.LevelId, FLASK_LEVEL)
 	end
 	local failure: string? = nil
 	xpcall(body, function(err: any)
@@ -367,7 +364,7 @@ end
 local function cloudView(overrides: { [string]: any }?): CloudView
 	local cloud: CloudView = {
 		centre = Vector3.new(0, 0.6, 0),
-		levelId = SCIENCE,
+		levelId = FLASK_LEVEL,
 		ventNode = nil,
 		expiresAt = 107,
 		spent = false,
@@ -382,7 +379,7 @@ end
 
 local function creatureView(overrides: { [string]: any }?): CreatureView
 	local view: CreatureView = {
-		levelId = SCIENCE,
+		levelId = FLASK_LEVEL,
 		state = "Patrol",
 		hidden = false,
 		inVent = false,
@@ -490,7 +487,7 @@ return {
 		local function cast(from: Vector3, to: Vector3): Hit?
 			casts += 1
 			longest = math.max(longest, (to - from).Magnitude)
-			return floor(from, to, {}, true)
+			return floor(from, to, {})
 		end
 		local result = Ballistics.advance(origin, velocity, g, 0, 10, 3, 1 / 60, cast)
 		local expected = math.sqrt(2 * 5 / g)
@@ -536,7 +533,7 @@ return {
 			3,
 			1 / 24,
 			function(from: Vector3, to: Vector3): Hit?
-				return floor(from, to, {}, true)
+				return floor(from, to, {})
 			end
 		)
 		t.truthy(hit ~= nil, "a lob comes down on the floor")
@@ -561,31 +558,6 @@ return {
 		end)
 		t.truthy(#unbroken >= 6, "every step leaves a point")
 		t.truthy(near(unbroken[#unbroken], Vector3.new(0, -3, 0), EPS), "an expired trace stops at the limit")
-	end,
-
-	["ballistics: the pool's surface stops a flask at the top face of its volume"] = function(t: Expect)
-		local box = CFrame.new(10, -2, 0)
-		local size = Vector3.new(20, 4, 10) -- top at y = 0, x 0..20, z -5..5
-		local down = Ballistics.surfaceCrossing(box, size, Vector3.new(5, 1, 0), Vector3.new(7, -1, 0))
-		t.near(down or -1, 0.5, 1e-9, "half way down the segment")
-		local up = Ballistics.surfaceCrossing(box, size, Vector3.new(5, -1, 0), Vector3.new(5, 3, 0))
-		t.near(up or -1, 0.25, 1e-9, "from below too")
-		t.eq(Ballistics.surfaceCrossing(box, size, Vector3.new(-5, 1, 0), Vector3.new(-3, -1, 0)), nil, "off the pool")
-		t.eq(Ballistics.surfaceCrossing(box, size, Vector3.new(5, 1, 0), Vector3.new(6, 0.5, 0)), nil, "above it")
-		t.eq(Ballistics.surfaceCrossing(box, size, Vector3.new(5, 1, 6), Vector3.new(5, -1, 6)), nil, "past its side")
-		local tilted = CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(45), 0)
-		local square = Vector3.new(4, 2, 4)
-		t.truthy(Ballistics.surfaceCrossing(tilted, square, Vector3.new(0, 2, 2.5), Vector3.new(0, 0, 2.5)) ~= nil)
-		t.eq(
-			Ballistics.surfaceCrossing(tilted, square, Vector3.new(2.5, 2, 2.5), Vector3.new(2.5, 0, 2.5)),
-			nil,
-			"a rotated footprint"
-		)
-		t.eq(
-			Ballistics.surfaceCrossing(box, size, Vector3.new(math.sqrt(-1), 1, 0), Vector3.new(5, -1, 0)),
-			nil,
-			"non-finite"
-		)
 	end,
 
 	["rules: throws leave within the look tolerance, Alive, free, unlocked, after the cooldown"] = function(t: Expect)
@@ -614,7 +586,7 @@ return {
 			local check = baseThrow({ moveState = state })
 			t.eq(verdict(ChemicalProjectileService.throwEligible(check)), "MoveState", state)
 		end
-		for _, state: Enums.MoveState in { "VentCrawling", "Treading", "Sprinting" } :: { Enums.MoveState } do
+		for _, state: Enums.MoveState in { "VentCrawling", "Crouching", "Sprinting" } :: { Enums.MoveState } do
 			t.eq(verdict(ChemicalProjectileService.throwEligible(baseThrow({ moveState = state }))), "ok", state)
 		end
 		local cooldown = GameConfig.FlaskThrowCooldown
@@ -701,14 +673,14 @@ return {
 		t.eq(check(cloudView({ spent = true }), creatureView(), nil, clearLine), "Spent", "once per cloud")
 		t.eq(check(cloudView({ expiresAt = 99 }), creatureView(), nil, clearLine), "Expired")
 		t.eq(check(cloudView(), nil, nil, clearLine), "NoCreature")
-		t.eq(check(cloudView(), creatureView({ levelId = "Level3_Gymnasium" }), nil, clearLine), "Level")
+		t.eq(check(cloudView(), creatureView({ levelId = "Level0_Basement" }), nil, clearLine), "Level")
 		t.eq(check(cloudView(), creatureView({ hidden = true }), nil, clearLine), "Hidden")
 		for _, state: Enums.MonsterState in { "Stunned", "Scripted", "Dormant" } :: { Enums.MonsterState } do
 			t.falsy(ChemicalProjectileService.stunnableState(state), state)
 			t.eq(check(cloudView(), creatureView({ state = state }), nil, clearLine), "State", state)
 		end
 		for _, state: Enums.MonsterState in
-			{ "Patrol", "InvestigateNoise", "WallChase", "Search", "Teleport", "AquaticStalk" } :: { Enums.MonsterState }
+			{ "Patrol", "InvestigateNoise", "WallChase", "Search", "Teleport" } :: { Enums.MonsterState }
 		do
 			t.truthy(ChemicalProjectileService.stunnableState(state), state)
 		end
@@ -812,18 +784,26 @@ return {
 
 				-- SpawnFlask builds a tracked, served world flask on the level (kept, not destroyed, then taken out of
 				-- the world: InteractionService still files its host, and Lune cannot read destroyed instances).
-				local spawned = ChemicalProjectileService.SpawnFlask(SCIENCE, CFrame.new(0, 0, -3), 1)
+				local spawned = ChemicalProjectileService.SpawnFlask(FLASK_LEVEL, CFrame.new(0, 0, -3), 1)
 				assert(spawned, "SpawnFlask builds a world flask during a run")
 				t.truthy(spawned:IsDescendantOf(Workspace), "in the level's runtime folder")
 				t.truthy(spawned:HasTag(Tags.ChemicalItem) and spawned:HasTag(Tags.Interactable))
 				local spawnedPrompt = PropKit.findPrompt(spawned, "Pickup")
 				assert(spawnedPrompt, "flasks carry a Pickup prompt")
 				t.truthy(InteractionService.matches(handler, spawned, spawnedPrompt), "a tracked flask is served")
-				t.eq(ChemicalProjectileService.CountAvailable(SCIENCE), 1)
-				t.eq(ChemicalProjectileService.CountAvailable("Level4_FloodedPool"), 0, "per level")
-				t.eq(ChemicalProjectileService.SpawnFlask(SCIENCE, CFrame.new(math.huge, 0, 0), 1), nil, "non-finite")
+				t.eq(ChemicalProjectileService.CountAvailable(FLASK_LEVEL), 1)
+				t.eq(ChemicalProjectileService.CountAvailable("Level0_Basement"), 0, "per level")
+				t.eq(
+					ChemicalProjectileService.SpawnFlask(FLASK_LEVEL, CFrame.new(math.huge, 0, 0), 1),
+					nil,
+					"non-finite"
+				)
 				spawned.Parent = nil
-				t.eq(ChemicalProjectileService.CountAvailable(SCIENCE), 0, "a flask out of the world is not available")
+				t.eq(
+					ChemicalProjectileService.CountAvailable(FLASK_LEVEL),
+					0,
+					"a flask out of the world is not available"
+				)
 
 				-- Plan-built flasks (here outside the DataModel, so the prompt service never files them).
 				local folder = Instance.new("Folder")
@@ -831,7 +811,7 @@ return {
 					local plan: Types.PlannedProp = {
 						kind = ChemicalFlaskBuilder.Kind,
 						anchorId = "SpecFlask" .. index,
-						levelId = SCIENCE,
+						levelId = FLASK_LEVEL,
 						cframe = CFrame.new(index * 2, 0, -3),
 						variant = variant,
 					}
@@ -844,7 +824,7 @@ return {
 				end
 				local first, prompt = planFlask(1, 1)
 				local second, secondPrompt = planFlask(2, 5)
-				t.eq(ChemicalProjectileService.CountAvailable(SCIENCE), 2)
+				t.eq(ChemicalProjectileService.CountAvailable(FLASK_LEVEL), 2)
 				local stray = Instance.new("Model")
 				stray:AddTag(Tags.Interactable)
 				stray:AddTag(Tags.ChemicalItem)
@@ -868,7 +848,7 @@ return {
 				end)
 				-- (Lune refuses every access to a destroyed instance; the engine reads Parent nil.)
 				t.truthy(not readable or first.Parent == nil, "the prop leaves the world")
-				t.eq(ChemicalProjectileService.CountAvailable(SCIENCE), 1)
+				t.eq(ChemicalProjectileService.CountAvailable(FLASK_LEVEL), 1)
 				t.truthy(ChemicalProjectileService.GetHeld(player) ~= nil)
 				t.eq(verdict(canUse(player, secondPrompt, second)), ChemicalProjectileService.HandsFullHint)
 				local before = player:GetAttribute(P.HeldItemVariant)
@@ -889,13 +869,13 @@ return {
 				t.truthy(ChemicalProjectileService.Track(copy))
 				local copyPrompt = PropKit.findPrompt(copy, "Pickup") :: ProximityPrompt
 				t.falsy(InteractionService.matches(handler, copy, copyPrompt), "taken: not served")
-				t.eq(ChemicalProjectileService.CountAvailable(SCIENCE), 2, "the second and the third")
+				t.eq(ChemicalProjectileService.CountAvailable(FLASK_LEVEL), 2, "the second and the third")
 				folder:Destroy()
 			end)
 			t.eq(player:GetAttribute(P.HeldItem), "None", "the end of the run empties the hand")
 			t.eq(player:GetAttribute(P.HeldItemVariant), nil)
 			t.falsy(ChemicalProjectileService.Give(player, 1), "no flasks outside a run")
-			t.eq(ChemicalProjectileService.SpawnFlask(SCIENCE, CFrame.new(), 0), nil)
+			t.eq(ChemicalProjectileService.SpawnFlask(FLASK_LEVEL, CFrame.new(), 0), nil)
 		end)
 	end,
 
@@ -1004,7 +984,7 @@ return {
 				lookAt(player, 0, 0)
 				local forward = serverLook(player)
 				t.truthy(ChemicalProjectileService.Give(player, 4))
-				for _, state: Enums.MoveState in { "Hiding", "Trapped", "Grabbed" } :: { Enums.MoveState } do
+				for _, state: Enums.MoveState in { "Hiding", "Trapped", "Scripted" } :: { Enums.MoveState } do
 					PlayerStateService.PushOverride(player, "ChemicalSpec", state)
 					t.eq(verdict(ChemicalProjectileService.RequestThrow(player, forward)), "MoveState", state)
 				end
@@ -1066,47 +1046,6 @@ return {
 				t.eq(#world.shatters, shatters, "no shatter, no cloud")
 				t.eq(#ChemicalProjectileService.GetFlights(), 0)
 			end)
-		end)
-	end,
-
-	["live: the real cast stops a flask on the pool's surface"] = function(t: Expect)
-		quiet(function()
-			local pool = Instance.new("Part")
-			pool.Name = "SpecPool"
-			pool.Size = Vector3.new(60, 6, 60)
-			pool.CFrame = CFrame.new(0, -3, -30) -- surface at y = 0
-			pool:AddTag(Tags.PoolWater)
-			pool.Parent = Workspace
-			local player = fakePlayer(CFrame.new(0, 3, 0))
-			inRun({ player }, function(world: World)
-				world.cast = nil
-				ChemicalProjectileService.SetDependencies({
-					now = function(): number
-						return world.clock
-					end,
-					lineClear = function(_creature: Model?): ChemicalProjectileService.LineClear
-						return clearLine
-					end,
-					creature = function(): Model?
-						return nil
-					end,
-					graph = function(_levelId: string): Graph?
-						return nil
-					end,
-					publish = function(payload: Payload)
-						table.insert(world.events, payload)
-					end,
-				})
-				lookAt(player, 0, 0)
-				t.truthy(ChemicalProjectileService.Give(player, 1))
-				t.eq(verdict(ChemicalProjectileService.RequestThrow(player, serverLook(player))), "ok")
-				ChemicalProjectileService.StepFlights(world.clock + 2)
-				local resolve = last(world) :: Payload
-				t.eq(resolve.hitKind, "Water", "the surface plane, by maths")
-				t.near((resolve.hitPosition :: Vector3).Y, 0, 1e-6)
-				t.truthy(near(resolve.hitNormal :: Vector3, Vector3.yAxis, EPS), "facing up at a flask from above")
-			end)
-			pool:Destroy()
 		end)
 	end,
 

@@ -1,6 +1,6 @@
 --!strict
--- ObjectiveKit: the vocabulary the floor-objective builders share (ObjectiveItemBuilder, AcidFlaskBuilder,
--- BreakerPanelBuilder, FumeHoodBuilder, GeneratorBuilder, HatchValveBuilder, LockBuilder).
+-- ObjectiveKit: the vocabulary the floor-objective builders share (ObjectiveItemBuilder, BreakerPanelBuilder,
+-- LockBuilder).
 --
 --   mark(model, tag, spec, step, objectiveId, extra)  the objective's tag (ObjectiveItem | ObjectiveStation | ExitLock)
 --                                                       and attributes Floor, Step, ObjectiveId, LevelId (+ extra)
@@ -8,7 +8,6 @@
 --                                                       the floor's ObjectiveConfig hold for `kind`, carrying Step (+ Slot)
 --   text(part, ...)                                     printed text on a part face (SurfaceGui), baked to decals on the web
 --   settle(model, floor)                                lifts every part so the model's lowest point rests on `floor`
---   chain(parent, name, points, ...)                    chain links along a polyline, alternating 90 degrees
 --   padlock(parent, name, frame, scale, ...)            a padlock hanging from its shackle at `frame` (shackle top centre)
 --
 -- Every helper is pure geometry on the parts it makes (no engine pivots), so it behaves the same in Roblox and in the
@@ -153,56 +152,6 @@ function ObjectiveKit.settle(model: Model, floor: CFrame)
 	for _, part in parts do
 		part.CFrame += lift
 	end
-end
-
--- Chain links along the polyline `points` (world), each `length` long, `width` across and `wire` thick, alternating
--- a quarter turn about the run so the chain reads as interlocked links. Returns the links made (at most `cap`).
-function ObjectiveKit.chain(
-	parent: Instance,
-	name: string,
-	points: { Vector3 },
-	length: number,
-	width: number,
-	wire: number,
-	options: PartOptions,
-	cap: number,
-	roll: number?
-): { Part }
-	local links: { Part } = {}
-	local pitch = length * 0.78 -- links overlap where they interlock
-	local index = 0
-	for i = 1, #points - 1 do
-		local a, b = points[i], points[i + 1]
-		local run = b - a
-		local span = run.Magnitude
-		if span < 1e-3 then
-			continue
-		end
-		local axis = run / span
-		local count = math.max(1, math.floor(span / pitch + 0.5))
-		local step = span / count
-		local helper = if math.abs(axis.Y) > 0.9 then Vector3.xAxis else Vector3.yAxis
-		for k = 1, count do
-			if #links >= cap then
-				return links
-			end
-			index += 1
-			local centre = a + axis * (step * (k - 0.5))
-			local frame = CFrame.lookAt(centre, centre + axis, helper)
-				* CFrame.Angles(0, 0, (roll or 0) + (if index % 2 == 0 then math.pi / 2 else 0))
-			local link = Geometry.part(
-				parent,
-				string.format("%s%d", name, index),
-				frame,
-				Vector3.new(width, wire, length),
-				nil,
-				options
-			)
-			PropKit.detail(link)
-			table.insert(links, link)
-		end
-	end
-	return links
 end
 
 -- A padlock hanging from `frame` (the top centre of its shackle; -Z out of its face, +Y up), `scale` times a 0.5-stud

@@ -3,7 +3,7 @@
 -- (shell, vents, the static open doors) and their fixtures with BuildFixtures under a hand-made plan that locks every
 -- other lockable grate (every other grate when none locks: Level 1's bypass, so the locked look is still shown); every
 -- other school level with ordinary doors is built with them, so the door statistics have a sample to work on now that
--- the tunnel floors keep few doors; the Level 5 roof door is built from its level's anchors alone through DoorBuilder's
+-- the tunnel floors keep few doors; the roof door is built from its level's anchors alone through DoorBuilder's
 -- own registration. Checked: one grate per layout grate with the attachment's state, disabled Unscrew / Kick prompts,
 -- both looks on every grate (the same boxes galvanized and rusted shut, the plan's lock showing one: setLocked), the
 -- shut panel covering the 3.5 bore on the room-side face in either look (colliding, with sight gaps), the crawler's
@@ -47,7 +47,7 @@ type World = {
 local W = Attributes.World
 local Names = Instances.Names
 
-local LEVELS: { Enums.LayoutId } = { "Level1_Hallways", "Level2_ScienceHall" }
+local LEVELS: { Enums.LayoutId } = { "Level1_Hallways", "Level2_Auditorium" }
 local SEED = 4242
 local HALF_BORE = WorldConfig.VentBore / 2
 local WALL_HALF = WorldConfig.WallThickness / 2
@@ -815,11 +815,17 @@ return {
 				end
 			end
 		end
-		t.truthy(table.find(sample, "Level1_Hallways") and table.find(sample, "Level2_ScienceHall"), "both floors")
+		t.truthy(table.find(sample, "Level1_Hallways"), "the hallways keep their ordinary doors")
 		t.eq(total, expected, "every ordinary door on the floors that keep them")
-		t.truthy(total >= 10, string.format("%d ordinary doors to check", total))
-		t.truthy(distinct >= 10, string.format("seeded variety of angles (%d of %d)", distinct, total))
-		t.truthy(crooked >= 1 and crooked <= total / 4, string.format("a few hang crooked (%d of %d)", crooked, total))
+		t.truthy(total >= 6, string.format("%d ordinary doors to check", total))
+		t.truthy(
+			distinct >= math.min(10, math.ceil(total * 0.8)),
+			string.format("seeded variety of angles (%d of %d)", distinct, total)
+		)
+		t.truthy(
+			crooked >= 1 and crooked <= math.max(2, total / 4),
+			string.format("a few hang crooked (%d of %d)", crooked, total)
+		)
 		for _, id in sample do
 			t.truthy((crookedOn[id] or 0) >= 1, id .. ": one of its ordinary doors hangs crooked")
 		end
@@ -840,7 +846,7 @@ return {
 					end
 				end
 			end
-			if id ~= "Level5_Roof" then
+			if id ~= "Level3_Roof" then
 				t.truthy(airlocks >= 3, string.format("%s: its stair vestibules' fire doors (%d)", id, airlocks))
 			end
 		end
@@ -1166,7 +1172,7 @@ return {
 	end,
 
 	["doors: the roof stair door builds from its anchors alone"] = function(t: Expect)
-		local layout = layoutOf("Level5_Roof")
+		local layout = layoutOf("Level3_Roof")
 		local origin = WorldConfig.levelOrigin(layout.id)
 		local root = SchoolShellBuilder.createRoot(layout)
 		SchoolShellBuilder.buildAnchors(layout, SchoolShellBuilder.folders(root), origin)

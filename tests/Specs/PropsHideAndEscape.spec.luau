@@ -1,12 +1,11 @@
 --!strict
--- Hide-and-escape props on the real layouts: Level 3's hideable lockers, Level 4's emergency floodlight switch and
--- Level 5's parachute crate, built through ProceduralWorldBuilder.BuildAuthoritative + BuildFixtures, plus the two
+-- Hide-and-escape props on the real layouts: the hallways' hideable lockers and the roof's parachute crate, built
+-- through ProceduralWorldBuilder.BuildAuthoritative + BuildFixtures, plus the two
 -- parachute rigs through BuildRig. Contracts: one locker per Locker anchor; a player (2 x 5.2 x 1) stands inside
 -- without touching any locker part; the peeking eye looks out between two slats (and the slats beside it block the
 -- view); the exit anchor is in front of the door and inside the room; lockers stand flush against their wall without
 -- touching it, each other or the shell; door, rip and lever poses round-trip; prompts are disabled with the right
--- kinds and holds; tags, attributes, collision presets and part budgets hold; the switch hangs on its wall with its
--- conduit up to the ceiling and drives the level's floodlight flicker group; ParachutePackCount packs rest in the
+-- kinds and holds; tags, attributes, collision presets and part budgets hold; ParachutePackCount packs rest in the
 -- crate; the rigs carry their attachments; and builds are deterministic per seed.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -21,13 +20,10 @@ local Tags = require(ReplicatedStorage.Shared.Tags)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
-local FloodlightSwitchBuilder =
-	require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.FloodlightSwitchBuilder)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local LockerBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.LockerBuilder)
 local ParachuteBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.ParachuteBuilder)
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
-local SchoolShellBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.SchoolShellBuilder)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
 type Expect = SpecRunner.Expect
@@ -45,10 +41,9 @@ type World = {
 
 local W = Attributes.World
 
-local GYM: Enums.LayoutId = "Level3_Gymnasium"
-local POOL: Enums.LayoutId = "Level4_FloodedPool"
-local ROOF: Enums.LayoutId = "Level5_Roof"
-local LEVELS: { Enums.LayoutId } = { GYM, POOL, ROOF }
+local HALLWAYS: Enums.LayoutId = "Level1_Hallways"
+local ROOF: Enums.LayoutId = "Level3_Roof"
+local LEVELS: { Enums.LayoutId } = { HALLWAYS, ROOF }
 local TOUCH = 2e-3 -- faces closer than this count as touching, not overlapping
 local PLAYER_SIZE = Vector3.new(2, 5.2, 1)
 -- CFrames are single precision, and the Lune harness stores part rotations with a few millionths of error on every
@@ -72,7 +67,7 @@ local FORBIDDEN_CLASSES: { string } = {
 --------------------------------------------------------------------------------
 
 -- The folders these builders own under a runtime level folder.
-local OWN_FOLDERS: { string } = { LockerBuilder.Folder, FloodlightSwitchBuilder.Folder, ParachuteBuilder.Folder }
+local OWN_FOLDERS: { string } = { LockerBuilder.Folder, ParachuteBuilder.Folder }
 
 local function ownFolders(level: Instance): { Instance }
 	local out: { Instance } = {}
@@ -163,13 +158,7 @@ local function attachmentOf(root: Instance, name: string): Attachment
 end
 
 local function lockers(): { Model }
-	return modelsIn(child(world().runtime[GYM], LockerBuilder.Folder))
-end
-
-local function switchModel(): Model
-	local list = modelsIn(child(world().runtime[POOL], FloodlightSwitchBuilder.Folder))
-	assert(#list == 1, "one floodlight switch")
-	return list[1]
+	return modelsIn(child(world().runtime[HALLWAYS], LockerBuilder.Folder))
 end
 
 local function crateModel(): Model
@@ -186,15 +175,6 @@ local function packsOf(crate: Model): { Model }
 		end
 	end
 	return out
-end
-
-local function anchorById(layout: Layout, id: string): LayoutSchema.Anchor
-	for _, anchor in layout.anchors do
-		if anchor.id == id then
-			return anchor
-		end
-	end
-	error("no anchor " .. id)
 end
 
 local function layoutOf(id: string): Layout
@@ -503,16 +483,9 @@ end
 
 return {
 	["every Locker anchor gets one hideable locker with its tags, attributes and number"] = function(t: Expect)
-		local layout = layoutOf(GYM)
+		local layout = layoutOf(HALLWAYS)
 		local anchors = PropKit.anchorsOf(layout, "Locker")
-		-- the locker rooms' banks (every one may hold the coach's key), the store and the gym's wall by it (the 45 s
-		-- the motor winds), one by each stair vestibule's fire door
-		local keyLockers = #PropKit.anchorsOf(layout, "CoachKeyCandidate")
-		t.truthy(keyLockers >= 12, string.format("Level 3 has %d coach-key lockers", keyLockers))
-		t.truthy(
-			#anchors >= keyLockers + 10,
-			string.format("Level 3 has %d Locker anchors (%d in the locker rooms)", #anchors, keyLockers)
-		)
+		t.truthy(#anchors >= 4, string.format("the hallways have %d Locker anchors", #anchors))
 		local list = lockers()
 		t.eq(#list, #anchors, "one locker per anchor")
 		local byId: { [string]: Model } = {}
@@ -525,7 +498,7 @@ return {
 			t.truthy(model:HasTag(Tags.HideableLocker), anchor.id .. " HideableLocker tag")
 			t.truthy(model:HasTag(Tags.Interactable), anchor.id .. " Interactable tag")
 			t.eq(model:GetAttribute(W.AnchorId), anchor.id, anchor.id .. " AnchorId")
-			t.eq(model:GetAttribute(W.LevelId), GYM, anchor.id .. " LevelId")
+			t.eq(model:GetAttribute(W.LevelId), HALLWAYS, anchor.id .. " LevelId")
 			t.eq(model:GetAttribute(W.ZoneId), anchor.room, anchor.id .. " ZoneId")
 			t.eq(model:GetAttribute(W.DoorOpen), false, anchor.id .. " DoorOpen")
 			t.eq(model:GetAttribute(W.OccupantUserId), nil, anchor.id .. " OccupantUserId unset")
@@ -533,7 +506,7 @@ return {
 			local base = model.PrimaryPart
 			assert(base and base.Name == "Base", anchor.id .. " PrimaryPart is the Base")
 			-- The door faces the anchor's LookVector.
-			local pivot = PropKit.anchorCFrame(GYM, anchor)
+			local pivot = PropKit.anchorCFrame(HALLWAYS, anchor)
 			t.truthy((model.WorldPivot.Position - pivot.Position).Magnitude < 1e-4, anchor.id .. " pivot")
 			for _, name in { "HideAnchor", "PeekAnchor", "ExitAnchor" } do
 				local look = PropKit.attachmentWorld(attachmentOf(model, name)).LookVector
@@ -613,9 +586,9 @@ return {
 	end,
 
 	["the exit anchor stands in front of the door, inside the room"] = function(t: Expect)
-		local layout = layoutOf(GYM)
+		local layout = layoutOf(HALLWAYS)
 		local rooms = LayoutSchema.indexRooms(layout)
-		local origin = WorldConfig.levelOrigin(GYM)
+		local origin = WorldConfig.levelOrigin(HALLWAYS)
 		for _, model in lockers() do
 			local exit = PropKit.attachmentWorld(attachmentOf(model, "ExitAnchor"))
 			local frame = model.WorldPivot
@@ -643,7 +616,7 @@ return {
 	end,
 
 	["lockers stand flush against their wall without touching it, their neighbours or the shell"] = function(t: Expect)
-		local layout = layoutOf(GYM)
+		local layout = layoutOf(HALLWAYS)
 		local rooms = LayoutSchema.indexRooms(layout)
 		local list = lockers()
 		for _, model in list do
@@ -653,7 +626,7 @@ return {
 			assert(room, model.Name .. " room")
 			-- The wall behind: the room edge the back faces, half a wall thickness in.
 			local back = -frame.LookVector
-			local local3 = frame.Position - WorldConfig.levelOrigin(GYM)
+			local local3 = frame.Position - WorldConfig.levelOrigin(HALLWAYS)
 			local edge: number
 			if math.abs(back.X) > 0.5 then
 				edge = if back.X < 0 then room.rect.x else room.rect.x + room.rect.w
@@ -665,7 +638,7 @@ return {
 			local wallFace = edge - WorldConfig.WallThickness / 2
 			local _, hi = boundsIn(frame, partsOf(model))
 			t.truthy(hi.Z < wallFace and hi.Z > wallFace - 0.06, model.Name .. " back flush against the wall")
-			local part, shell = shellOverlap(GYM, partsOf(model))
+			local part, shell = shellOverlap(HALLWAYS, partsOf(model))
 			t.eq(
 				part,
 				nil,
@@ -733,9 +706,16 @@ return {
 		t: Expect
 	)
 		local list = lockers()
-		local rooms = LayoutSchema.indexRooms(layoutOf(GYM))
-		local origin = WorldConfig.levelOrigin(GYM)
+		local rooms = LayoutSchema.indexRooms(layoutOf(HALLWAYS))
+		local origin = WorldConfig.levelOrigin(HALLWAYS)
+		-- the hallways' rooms keep their lockers against a wall with the floor in front; the tunnels' alcove lockers
+		-- are not held to this landing
+		local checked = 0
 		for _, model in list do
+			if rooms[model:GetAttribute(W.ZoneId) :: string].kind == "Tunnel" then
+				continue
+			end
+			checked += 1
 			local door = child(model, LockerBuilder.DoorLeaf)
 			local before = snapshot(door)
 			local frame = model.WorldPivot
@@ -782,7 +762,7 @@ return {
 					model.Name .. " torn door stays in " .. roomId
 				)
 			end
-			local cut, shell = shellOverlap(GYM, doorParts)
+			local cut, shell = shellOverlap(HALLWAYS, doorParts)
 			t.eq(
 				cut,
 				nil,
@@ -803,6 +783,7 @@ return {
 			t.truthy(LockerBuilder.setRipped(model, 0), model.Name .. " un-ripped")
 			expectRestored(t, before, model.Name .. " ripped door")
 		end
+		t.truthy(checked >= 3, string.format("%d room lockers ripped", checked))
 	end,
 
 	["locker prompts, collision presets and part budgets"] = function(t: Expect)
@@ -834,142 +815,6 @@ return {
 				else
 					t.truthy(isDetail(part), model.Name .. " " .. part.Name .. " is a detail")
 				end
-			end
-		end
-	end,
-
-	["the floodlight switch hangs on its wall with its prompt, attributes and flicker group"] = function(t: Expect)
-		local layout = layoutOf(POOL)
-		local anchors = PropKit.anchorsOf(layout, "FloodlightSwitch")
-		t.eq(#anchors, 1, "one FloodlightSwitch anchor")
-		local anchor = anchors[1]
-		local model = switchModel()
-		t.eq(model.Name, anchor.id)
-		t.truthy(model:HasTag(Tags.FloodlightSwitch), "FloodlightSwitch tag")
-		t.truthy(model:HasTag(Tags.Interactable), "Interactable tag")
-		t.eq(model:GetAttribute(W.On), false, "On starts false")
-		t.eq(model:GetAttribute(W.AnchorId), anchor.id, "AnchorId")
-		t.eq(model:GetAttribute(W.LevelId), POOL, "LevelId")
-		t.eq(model:GetAttribute(W.ZoneId), anchor.room, "ZoneId")
-		expectPrompt(t, model, "Floodlight", 1.0, "Prompt.Floodlight", "Prompt.FloodlightSwitch", "switch")
-		t.eq(textOf(model, "Label"), Strings.get("Prop.Floodlight.Label"), "label")
-		t.eq(textOf(model, "Warning"), Strings.get("Prop.Floodlight.Warning"), "warning")
-
-		-- It drives the flicker group of the pool's Floodlight fixtures.
-		local level = world().levels[POOL]
-		local groups: { [string]: number } = {}
-		for _, d in child(level, "Lights"):GetDescendants() do
-			if d:HasTag(Tags.LevelLight) and d:GetAttribute(W.LightKind) == "Floodlight" then
-				local group = d:GetAttribute(W.FlickerGroup)
-				t.truthy(type(group) == "string", "floodlight fixture has a FlickerGroup")
-				groups[group :: string] = (groups[group :: string] or 0) + 1
-			end
-		end
-		local group = model:GetAttribute(W.FlickerGroup)
-		t.truthy(type(group) == "string" and (groups[group :: string] or 0) >= 9, "switch drives the floodlight group")
-
-		-- The mounting plate sits on the wall face behind the anchor; the box stands out from it.
-		local rooms = LayoutSchema.indexRooms(layout)
-		local room = rooms[anchor.room]
-		local pivot = PropKit.anchorCFrame(POOL, anchor)
-		local wallX = WorldConfig.levelOrigin(POOL).X + room.rect.x + WorldConfig.WallThickness / 2
-		t.truthy(math.abs(pivot.LookVector.X - 1) < 1e-6, "the switch faces east, off the west wall")
-		local lo, hi = boundsIn(CFrame.new(), partsOf(model))
-		t.truthy(lo.X >= wallX and lo.X < wallX + 0.02, "plate flush on the wall face")
-		t.truthy(hi.X > pivot.Position.X, "lever reaches out past the anchor")
-		local part, shell = shellOverlap(POOL, partsOf(model))
-		t.eq(
-			part,
-			nil,
-			string.format("%s cuts into %s", if part then part.Name else "", if shell then shell:GetFullName() else "")
-		)
-	end,
-
-	["the floodlight lever throws up to ON and back; the indicator turns green and back"] = function(t: Expect)
-		local model = switchModel()
-		local lever = child(model, FloodlightSwitchBuilder.LeverLeaf)
-		local before = snapshot(lever)
-		local frame = model.WorldPivot
-		local pivot = PropKit.leafRest(model, FloodlightSwitchBuilder.LeverLeaf)
-		assert(pivot, "lever rest")
-		local grip = partNamed(model, "LeverGrip")
-		t.truthy(
-			frame:PointToObjectSpace(grip.CFrame.Position).Y < frame:PointToObjectSpace(pivot.Position).Y,
-			"OFF is down"
-		)
-		t.truthy(FloodlightSwitchBuilder.setLever(model, 1), "setLever")
-		local transform = PropKit.leafTransform(model, FloodlightSwitchBuilder.LeverLeaf)
-		assert(transform, "lever transform")
-		local expected = CFrame.Angles(FloodlightSwitchBuilder.LeverThrow, 0, 0)
-		t.near(transform.LookVector:Dot(expected.LookVector), 1, TURN_EPSILON, "lever throw angle")
-		t.near(transform.UpVector:Dot(expected.UpVector), 1, TURN_EPSILON, "lever turns about its pivot's X axis")
-		t.truthy(transform.Position.Magnitude < POSE_EPSILON, "lever turns about its pivot")
-		t.truthy(
-			frame:PointToObjectSpace(grip.CFrame.Position).Y > frame:PointToObjectSpace(pivot.Position).Y,
-			"ON is up"
-		)
-		for _, part in partsOf(lever) do
-			for _, other in partsOf(model) do
-				if not other:IsDescendantOf(lever) and other.Name ~= "PivotBoss" then
-					t.falsy(overlaps(boxOf(part), boxOf(other)), "thrown lever clips " .. other.Name)
-				end
-			end
-		end
-		t.truthy(FloodlightSwitchBuilder.setLever(model, 0), "setLever back")
-		expectRestored(t, before, "lever")
-
-		local red, green = partNamed(model, "LampRed"), partNamed(model, "LampGreen")
-		local glow = partNamed(model, "IndicatorBezel"):FindFirstChildOfClass("PointLight")
-		assert(glow, "indicator glow")
-		t.eq(red.Material, Enum.Material.Neon, "red lamp lit while off")
-		t.truthy(green.Material ~= Enum.Material.Neon, "green lamp dark while off")
-		t.eq(glow.Color, FloodlightSwitchBuilder.LampLit.red, "glow red while off")
-		t.truthy(FloodlightSwitchBuilder.setIndicator(model, true), "setIndicator on")
-		t.eq(green.Material, Enum.Material.Neon, "green lamp lit when on")
-		t.truthy(red.Material ~= Enum.Material.Neon, "red lamp dark when on")
-		t.eq(green.Color, FloodlightSwitchBuilder.LampLit.green, "green lamp colour")
-		t.eq(glow.Color, FloodlightSwitchBuilder.LampLit.green, "glow green when on")
-		t.truthy(FloodlightSwitchBuilder.setIndicator(model, false), "setIndicator off")
-		t.eq(red.Color, FloodlightSwitchBuilder.LampLit.red, "red lamp colour")
-		t.eq(red.Material, Enum.Material.Neon, "red lamp lit again")
-		local stray = Instance.new("Model")
-		t.eq(FloodlightSwitchBuilder.setLever(stray, 1), false, "setLever on a non-switch")
-		t.eq(FloodlightSwitchBuilder.setIndicator(stray, true), false, "setIndicator on a non-switch")
-	end,
-
-	["the switch conduit climbs to the ceiling; one tiny unshadowed light; budget and presets"] = function(t: Expect)
-		local layout = layoutOf(POOL)
-		local model = switchModel()
-		local anchor = anchorById(layout, model.Name)
-		local room = LayoutSchema.indexRooms(layout)[anchor.room]
-		local ceiling = WorldConfig.levelOrigin(POOL).Y + SchoolShellBuilder.ceilingBottom(layout, room)
-		local _, boxTop = extentIn(CFrame.new(), partNamed(model, "PullBox"))
-		t.truthy(boxTop.Y <= ceiling and boxTop.Y > ceiling - 0.05, "pull box tucked under the ceiling")
-		local conduitLo, conduitHi = extentIn(CFrame.new(), partNamed(model, "Conduit"))
-		local _, capTop = extentIn(CFrame.new(), partNamed(model, "DripCap"))
-		t.truthy(conduitLo.Y < capTop.Y + 0.5 and conduitHi.Y > ceiling - 1, "conduit runs from the cabinet up")
-
-		local lights: { Light } = {}
-		for _, d in model:GetDescendants() do
-			if d:IsA("Light") then
-				table.insert(lights, d)
-			end
-		end
-		t.eq(#lights, 1, "exactly one light")
-		local glow = lights[1]
-		t.truthy(glow:IsA("PointLight") and (glow :: PointLight).Range <= 4, "a tiny PointLight")
-		t.eq(glow.Shadows, false, "no shadows")
-
-		local parts = partsOf(model)
-		t.truthy(#parts <= FloodlightSwitchBuilder.PartBudget, string.format("switch: %d parts", #parts))
-		local structural: { [string]: boolean } =
-			{ Base = true, Body = true, DoorPanel = true, DripCap = true, Sill = true }
-		for _, part in parts do
-			t.truthy(part.Anchored and not part.CanTouch, part.Name .. " anchored, no touch")
-			if structural[part.Name] then
-				t.truthy(isPassthrough(part), part.Name .. " is MonsterPassthrough")
-			else
-				t.truthy(isDetail(part), part.Name .. " is a detail")
 			end
 		end
 	end,
@@ -1145,10 +990,10 @@ return {
 		for _, id in LEVELS do
 			t.eq(ownSignature(again[id]), ownSignature(first[id]), id .. " every run builds the same fixtures")
 		end
-		-- each locker draws its own look from its level's stream: the gym's lockers are not all alike
+		-- each locker draws its own look from its level's stream: the hallway lockers are not all alike
 		local looks: { [string]: boolean } = {}
 		local distinct = 0
-		for _, model in modelsIn(child(first[GYM], LockerBuilder.Folder)) do
+		for _, model in modelsIn(child(first[HALLWAYS], LockerBuilder.Folder)) do
 			local colours: { string } = {}
 			for _, part in partsOf(model) do
 				table.insert(
@@ -1163,20 +1008,20 @@ return {
 				distinct += 1
 			end
 		end
-		t.truthy(distinct >= 2, string.format("the gym's lockers vary (%d looks)", distinct))
+		t.truthy(distinct >= 2, string.format("the hallway lockers vary (%d looks)", distinct))
 		-- Building into the same runtime folder again replaces the previous run's fixtures.
 		local previous = Geometry.getYieldEvery()
 		Geometry.setYieldEvery(0)
-		local count = Builder.BuildFixtures(GYM, again[GYM], nil)
+		local count = Builder.BuildFixtures(HALLWAYS, again[HALLWAYS], nil)
 		Geometry.setYieldEvery(previous)
 		t.truthy(count >= 40, "fixture count reported")
 		t.eq(
-			#modelsIn(child(again[GYM], LockerBuilder.Folder)),
-			#PropKit.anchorsOf(layoutOf(GYM), "Locker"),
+			#modelsIn(child(again[HALLWAYS], LockerBuilder.Folder)),
+			#PropKit.anchorsOf(layoutOf(HALLWAYS), "Locker"),
 			"rebuild replaces, never duplicates"
 		)
 		local folders = 0
-		for _, c in again[GYM]:GetChildren() do
+		for _, c in again[HALLWAYS]:GetChildren() do
 			if c.Name == LockerBuilder.Folder then
 				folders += 1
 			end
@@ -1184,9 +1029,8 @@ return {
 		t.eq(folders, 1, "one locker folder after a rebuild")
 		-- Levels without the anchors build none of these kinds.
 		for _, id in LEVELS do
-			for _, folderName in { LockerBuilder.Folder, FloodlightSwitchBuilder.Folder, ParachuteBuilder.Folder } do
-				local expected = ((id == GYM or id == POOL) and folderName == LockerBuilder.Folder)
-					or (id == POOL and folderName == FloodlightSwitchBuilder.Folder)
+			for _, folderName in { LockerBuilder.Folder, ParachuteBuilder.Folder } do
+				local expected = (id == HALLWAYS and folderName == LockerBuilder.Folder)
 					or (id == ROOF and folderName == ParachuteBuilder.Folder)
 				t.eq(first[id]:FindFirstChild(folderName) ~= nil, expected, id .. " " .. folderName)
 			end
@@ -1198,14 +1042,14 @@ return {
 		end
 	end,
 
-	["props are pure procedural parts with no lights beyond the switch glow"] = function(t: Expect)
+	["props are pure procedural parts with no lights"] = function(t: Expect)
 		local roots: { Instance } = {}
 		for _, id in LEVELS do
 			for _, folder in ownFolders(world().runtime[id]) do
 				table.insert(roots, folder)
 			end
 		end
-		t.eq(#roots, 4, "a locker folder on the gym and the pool floor, a switch and a crate folder")
+		t.eq(#roots, 2, "a locker folder on the hallways and a crate folder on the roof")
 		local host = Instance.new("Folder")
 		local backpack = Builder.BuildRig(ParachuteBuilder.BackpackRig, host, CFrame.new())
 		local canopy = Builder.BuildRig(ParachuteBuilder.CanopyRig, host, CFrame.new())
@@ -1226,7 +1070,7 @@ return {
 				end
 			end
 		end
-		t.eq(lights, 1, "the switch's glow is the only light")
+		t.eq(lights, 0, "no lights")
 		host:Destroy()
 	end,
 }

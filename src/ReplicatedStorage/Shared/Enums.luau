@@ -10,12 +10,8 @@ export type MoveState =
 	| "VentCrawling"
 	| "VentScurrying"
 	| "DownedCrawling"
-	| "Treading"
-	| "Freestyle"
-	| "Underwater"
 	| "Hiding"
 	| "Trapped"
-	| "Grabbed"
 	| "Parachuting"
 	| "Scripted"
 
@@ -25,15 +21,13 @@ export type CameraState =
 	| "VentCrawling"
 	| "DownedCrawling"
 	| "LockerPeeking"
-	| "SurfaceSwimming"
-	| "UnderwaterSwimming"
 	| "ParachuteLookback"
 
-export type CameraOverride = "Cutscene" | "Jumpscare" | "Spectating" | "Struggle" | "Trapped"
+export type CameraOverride = "Cutscene" | "Jumpscare" | "Spectating" | "Trapped"
 
 export type LifeState = "Lobby" | "Alive" | "Downed" | "Dead" | "Spectating"
 
-export type ControlLock = "None" | "Trap" | "Locker" | "Jumpscare" | "Cutscene" | "Drag" | "Parachute" | "Airlock"
+export type ControlLock = "None" | "Trap" | "Locker" | "Jumpscare" | "Cutscene" | "Parachute" | "Airlock"
 
 export type LockMode = "Anchor" | "ServerOwned"
 
@@ -52,7 +46,6 @@ export type MonsterState =
 	| "HidingResponse"
 	| "Teleport"
 	| "Stunned"
-	| "AquaticStalk"
 	| "Scripted"
 
 -- The view contract's one-shot actions (docs/MONSTER.md section 12): the Creature's Action attribute.
@@ -61,7 +54,7 @@ export type CreatureAction = "Stare" | "ReachIn" | "LookAway" | "FadeOut" | "Fad
 -- A hiding spot's kind (tag Hideable, attribute HideKind).
 export type HideKind = "Locker" | "Barrel" | "Cabinet"
 
-export type PoseMode = "Biped" | "Hunched" | "Quadruped" | "Swim"
+export type PoseMode = "Biped" | "Hunched" | "Quadruped"
 
 export type MatchPhase =
 	"Booting"
@@ -73,15 +66,26 @@ export type MatchPhase =
 	| "Results"
 	| "Resetting"
 
+-- The six playable levels (docs/design/game-spec-v2.md 0.1, 4.2): the four school levels, which the world builder
+-- builds (WorldConfig.LevelOrder), then the two city levels, declared ahead of their builders. Every table keyed by a
+-- stage is keyed by these ids (or a SetId), never by a level's number.
 export type LevelId =
 	"Level0_Basement"
 	| "Level1_Hallways"
-	| "Level2_ScienceHall"
-	| "Level3_Gymnasium"
-	| "Level4_FloodedPool"
-	| "Level5_Roof"
+	| "Level2_Auditorium"
+	| "Level3_Roof"
+	| "City1_Rooftops"
+	| "City2_Airport"
 
-export type LayoutId = LevelId | "Lobby"
+-- The three sets: stages that are scenes rather than levels (StageConfig.Order).
+export type SetId = "BackLot" | "Runway" | "Bahamas"
+
+-- A stage of the run (StageConfig): a level or a set.
+export type StageId = LevelId | SetId
+
+-- A blueprint id: the lobby or a level. Enums.LayoutId lists the ones the world builder has a layout for (the lobby
+-- and the school levels); the city levels have none yet.
+export type LayoutId = "Lobby" | LevelId
 
 export type LevelPhase = "Inactive" | "Ready" | "Active" | "Cleared"
 
@@ -91,8 +95,6 @@ export type NoiseKind =
 	| "GrateUnscrew"
 	| "Walk"
 	| "Sprint"
-	| "Treading"
-	| "Freestyle"
 	| "VentScurry"
 	| "GrateKick"
 	| "FloorDebris"
@@ -100,13 +102,11 @@ export type NoiseKind =
 	| "Gasp"
 	| "FlaskShatter"
 	| "DoorSlam"
-	| "Splash"
 	| "FallingObject"
 	| "Scripted"
-	-- floor objectives: a working hold once a second, a loud single action, the gym generator starting
+	-- floor objectives: a working hold once a second, a loud single action
 	| "ObjectiveWork"
 	| "ObjectiveClunk"
-	| "GeneratorStart"
 	-- the Tall Man's ears (docs/MONSTER.md 3.1): a landing after a fall, getting into a hiding spot (quietly, or
 	-- straight off a sprint), co-op text chat
 	| "JumpLand"
@@ -114,7 +114,7 @@ export type NoiseKind =
 	| "HideEnterHurried"
 	| "ChatMessage"
 
-export type NoiseMedium = "Air" | "Vent" | "Water"
+export type NoiseMedium = "Air" | "Vent"
 
 export type NoisePriority = "Low" | "Normal" | "High" | "Critical"
 
@@ -131,13 +131,12 @@ export type OneShotKind =
 	| "LockerRip"
 	| "CreatureVanish"
 	| "CreatureReveal"
-	| "LungeTelegraph"
 	-- a teleport's warning (args: spot, target, seconds): the lights near the spot stutter, a hiss rises there
 	| "TeleportWarning"
 
-export type JumpscareKind = "Hallway" | "Vent" | "Locker" | "Underwater"
+export type JumpscareKind = "Hallway" | "Vent" | "Locker"
 
-export type ItemId = "None" | "ChemicalFlask" | "AcidFlask"
+export type ItemId = "None" | "ChemicalFlask"
 
 export type GrateState = "Closed" | "Unscrewing" | "Open" | "Kicked" | "Locked"
 
@@ -154,20 +153,12 @@ export type PromptKind =
 	| "Pickup"
 	| "Hide"
 	| "ParachuteGrab"
-	| "Floodlight"
 	| "Terminal"
 	-- floor objectives (ObjectiveConfig)
 	| "FitFuse"
 	| "Breaker"
 	| "Unlock"
-	| "Mix"
-	| "Pour"
-	| "Generator"
-	| "FitValve"
-	| "TurnValve"
-	| "CutChain"
 	| "Locked"
-	| "Search"
 	-- a teammate drags a hider out of their hiding spot (THRESHOLD's throw)
 	| "PullOut"
 
@@ -186,8 +177,6 @@ export type StatKey =
 
 export type PerkId = "RustyScrewdriver" | "LithiumCell" | "AdrenalineSyringe"
 
-export type SyringeMode = "Stamina" | "SelfRevive"
-
 export type Difficulty = "Standard" | "Nightmare"
 
 export type RunOutcome = "Pending" | "Escaped" | "Dead" | "Disconnected"
@@ -201,10 +190,6 @@ export type LobbyActionKind = "Ready" | "Unready" | "VoteDifficulty" | "EquipPer
 export type RoomKind =
 	"Corridor"
 	| "Classroom"
-	| "Lab"
-	| "LockerRoom"
-	| "Gym"
-	| "Pool"
 	| "Boiler"
 	| "Storage"
 	| "Office"
@@ -233,8 +218,6 @@ export type AnchorKind =
 	| "Barrel" -- a steel drum to climb into (tunnel hiding spot)
 	| "Cabinet" -- a tall slatted steel cabinet (tunnel hiding spot)
 	| "ParachuteCrate"
-	| "FloodlightSwitch"
-	| "LabCounter"
 	| "Corpse"
 	| "SmashedLocker"
 	| "DripPipe"
@@ -244,36 +227,19 @@ export type AnchorKind =
 	-- floor objectives: item candidate spots (RunDirector picks the ones a run uses) ...
 	| "FuseCandidate"
 	| "MasterKeyCandidate"
-	| "ReagentCandidate"
-	| "CoachKeyCandidate"
-	| "ValveWheelCandidate"
-	| "BoltCutterCandidate"
 	-- ... and the stations and locks
 	| "BreakerPanel"
-	| "FumeHood"
-	| "Generator"
-	| "StoreLock"
-	| "HatchValve"
-	| "CrateChain"
 	| "ExitLock"
 
-export type TriggerKind = "ScareStep" | "FloorDebris" | "Checkpoint" | "PoolWater" | "LevelExit"
+export type TriggerKind = "ScareStep" | "FloorDebris" | "Checkpoint" | "LevelExit"
 
-export type LightKind =
-	"Fluorescent"
-	| "Bulb"
-	| "EmergencyRed"
-	| "ClassroomGlow"
-	| "Floodlight"
-	| "ExitSign"
-	| "BoilerGlow"
+export type LightKind = "Fluorescent" | "Bulb" | "EmergencyRed" | "ClassroomGlow" | "ExitSign" | "BoilerGlow"
 
 export type AcousticPreset =
 	"Room"
 	| "Corridor"
 	| "Hall"
 	| "Vent"
-	| "Underwater"
 	| "Outdoor"
 	| "Stairwell"
 	| "Basement"
@@ -295,24 +261,19 @@ export type InputAction =
 	| "Kick"
 	| "Throw"
 	| "HoldBreath"
-	| "Struggle"
-	| "Syringe"
 	| "Ripcord"
 	| "SpectatePrev"
 	| "SpectateNext"
-	| "Dive"
 	| "Menu"
 	| "Objective"
 
 export type InputContext =
 	"Menu"
 	| "Cutscene"
-	| "Struggle"
 	| "Locker"
 	| "Trapped"
 	| "Downed"
 	| "Vent"
-	| "Swim"
 	| "Parachute"
 	| "OnFoot"
 	| "Spectator"
@@ -327,12 +288,12 @@ export type RemoteDirection = "ToServer" | "ToClient"
 
 export type ProjectilePhase = "Spawn" | "Resolve"
 
-export type ProjectileHitKind = "World" | "Creature" | "Water" | "Expired"
+export type ProjectileHitKind = "World" | "Creature" | "Expired"
 
 -- Scare: a moment for one player alone (args.scare: ScareKind): a teleport's reveal, a fake-out, the stare's sting,
 -- the chase starting or giving up on them, the torch stuttering in a teleport's warning, a hiding spot's warning knock
 -- or its shove out.
-export type CueKind = "BreathCheck" | "Struggle" | "JumpscareVictim" | "TrapLeg" | "Toast" | "Terminal" | "Scare"
+export type CueKind = "BreathCheck" | "JumpscareVictim" | "TrapLeg" | "Toast" | "Terminal" | "Scare"
 
 export type ScareKind =
 	"Reveal"
@@ -347,8 +308,8 @@ export type ScareKind =
 
 -- The roof jump (Player.Parachute, ParachuteService): None (no pack), Packed (a pack on the back, still on the roof),
 -- Freefall (off the edge with a pack, cord not pulled), Canopy (descending under the canopy), Landed (down below,
--- held for the finale), Falling (off the edge without a pack: a fatal fall).
-export type ParachuteState = "None" | "Packed" | "Freefall" | "Canopy" | "Landed" | "Falling"
+-- held until the jumper's escape is counted).
+export type ParachuteState = "None" | "Packed" | "Freefall" | "Canopy" | "Landed"
 
 local Enums = {}
 
@@ -359,12 +320,8 @@ Enums.MoveState = table.freeze({
 	"VentCrawling",
 	"VentScurrying",
 	"DownedCrawling",
-	"Treading",
-	"Freestyle",
-	"Underwater",
 	"Hiding",
 	"Trapped",
-	"Grabbed",
 	"Parachuting",
 	"Scripted",
 } :: { MoveState })
@@ -375,13 +332,10 @@ Enums.CameraState = table.freeze({
 	"VentCrawling",
 	"DownedCrawling",
 	"LockerPeeking",
-	"SurfaceSwimming",
-	"UnderwaterSwimming",
 	"ParachuteLookback",
 } :: { CameraState })
 
-Enums.CameraOverride =
-	table.freeze({ "Cutscene", "Jumpscare", "Spectating", "Struggle", "Trapped" } :: { CameraOverride })
+Enums.CameraOverride = table.freeze({ "Cutscene", "Jumpscare", "Spectating", "Trapped" } :: { CameraOverride })
 
 Enums.LifeState = table.freeze({ "Lobby", "Alive", "Downed", "Dead", "Spectating" } :: { LifeState })
 
@@ -391,7 +345,6 @@ Enums.ControlLock = table.freeze({
 	"Locker",
 	"Jumpscare",
 	"Cutscene",
-	"Drag",
 	"Parachute",
 	"Airlock",
 } :: { ControlLock })
@@ -409,7 +362,6 @@ Enums.MonsterState = table.freeze({
 	"HidingResponse",
 	"Teleport",
 	"Stunned",
-	"AquaticStalk",
 	"Scripted",
 } :: { MonsterState })
 
@@ -418,7 +370,7 @@ Enums.CreatureAction =
 
 Enums.HideKind = table.freeze({ "Locker", "Barrel", "Cabinet" } :: { HideKind })
 
-Enums.PoseMode = table.freeze({ "Biped", "Hunched", "Quadruped", "Swim" } :: { PoseMode })
+Enums.PoseMode = table.freeze({ "Biped", "Hunched", "Quadruped" } :: { PoseMode })
 
 Enums.MatchPhase = table.freeze({
 	"Booting",
@@ -431,24 +383,24 @@ Enums.MatchPhase = table.freeze({
 	"Resetting",
 } :: { MatchPhase })
 
--- Run order: index i is the level the squad clears i-th.
+-- Run order: index i is the level the squad plays i-th.
 Enums.LevelId = table.freeze({
 	"Level0_Basement",
 	"Level1_Hallways",
-	"Level2_ScienceHall",
-	"Level3_Gymnasium",
-	"Level4_FloodedPool",
-	"Level5_Roof",
+	"Level2_Auditorium",
+	"Level3_Roof",
+	"City1_Rooftops",
+	"City2_Airport",
 } :: { LevelId })
+
+Enums.SetId = table.freeze({ "BackLot", "Runway", "Bahamas" } :: { SetId })
 
 Enums.LayoutId = table.freeze({
 	"Lobby",
 	"Level0_Basement",
 	"Level1_Hallways",
-	"Level2_ScienceHall",
-	"Level3_Gymnasium",
-	"Level4_FloodedPool",
-	"Level5_Roof",
+	"Level2_Auditorium",
+	"Level3_Roof",
 } :: { LayoutId })
 
 Enums.LevelPhase = table.freeze({ "Inactive", "Ready", "Active", "Cleared" } :: { LevelPhase })
@@ -459,8 +411,6 @@ Enums.NoiseKind = table.freeze({
 	"GrateUnscrew",
 	"Walk",
 	"Sprint",
-	"Treading",
-	"Freestyle",
 	"VentScurry",
 	"GrateKick",
 	"FloorDebris",
@@ -468,19 +418,17 @@ Enums.NoiseKind = table.freeze({
 	"Gasp",
 	"FlaskShatter",
 	"DoorSlam",
-	"Splash",
 	"FallingObject",
 	"Scripted",
 	"ObjectiveWork",
 	"ObjectiveClunk",
-	"GeneratorStart",
 	"JumpLand",
 	"HideEnter",
 	"HideEnterHurried",
 	"ChatMessage",
 } :: { NoiseKind })
 
-Enums.NoiseMedium = table.freeze({ "Air", "Vent", "Water" } :: { NoiseMedium })
+Enums.NoiseMedium = table.freeze({ "Air", "Vent" } :: { NoiseMedium })
 
 Enums.NoisePriority = table.freeze({ "Low", "Normal", "High", "Critical" } :: { NoisePriority })
 
@@ -497,13 +445,12 @@ Enums.OneShotKind = table.freeze({
 	"LockerRip",
 	"CreatureVanish",
 	"CreatureReveal",
-	"LungeTelegraph",
 	"TeleportWarning",
 } :: { OneShotKind })
 
-Enums.JumpscareKind = table.freeze({ "Hallway", "Vent", "Locker", "Underwater" } :: { JumpscareKind })
+Enums.JumpscareKind = table.freeze({ "Hallway", "Vent", "Locker" } :: { JumpscareKind })
 
-Enums.ItemId = table.freeze({ "None", "ChemicalFlask", "AcidFlask" } :: { ItemId })
+Enums.ItemId = table.freeze({ "None", "ChemicalFlask" } :: { ItemId })
 
 Enums.GrateState = table.freeze({ "Closed", "Unscrewing", "Open", "Kicked", "Locked" } :: { GrateState })
 
@@ -520,19 +467,11 @@ Enums.PromptKind = table.freeze({
 	"Pickup",
 	"Hide",
 	"ParachuteGrab",
-	"Floodlight",
 	"Terminal",
 	"FitFuse",
 	"Breaker",
 	"Unlock",
-	"Mix",
-	"Pour",
-	"Generator",
-	"FitValve",
-	"TurnValve",
-	"CutChain",
 	"Locked",
-	"Search",
 	"PullOut",
 } :: { PromptKind })
 
@@ -551,8 +490,6 @@ Enums.StatKey = table.freeze({
 } :: { StatKey })
 
 Enums.PerkId = table.freeze({ "RustyScrewdriver", "LithiumCell", "AdrenalineSyringe" } :: { PerkId })
-
-Enums.SyringeMode = table.freeze({ "Stamina", "SelfRevive" } :: { SyringeMode })
 
 Enums.Difficulty = table.freeze({ "Standard", "Nightmare" } :: { Difficulty })
 
@@ -573,10 +510,6 @@ Enums.LobbyActionKind = table.freeze({
 Enums.RoomKind = table.freeze({
 	"Corridor",
 	"Classroom",
-	"Lab",
-	"LockerRoom",
-	"Gym",
-	"Pool",
 	"Boiler",
 	"Storage",
 	"Office",
@@ -604,8 +537,6 @@ Enums.AnchorKind = table.freeze({
 	"Barrel",
 	"Cabinet",
 	"ParachuteCrate",
-	"FloodlightSwitch",
-	"LabCounter",
 	"Corpse",
 	"SmashedLocker",
 	"DripPipe",
@@ -614,28 +545,17 @@ Enums.AnchorKind = table.freeze({
 	"Terminal",
 	"FuseCandidate",
 	"MasterKeyCandidate",
-	"ReagentCandidate",
-	"CoachKeyCandidate",
-	"ValveWheelCandidate",
-	"BoltCutterCandidate",
 	"BreakerPanel",
-	"FumeHood",
-	"Generator",
-	"StoreLock",
-	"HatchValve",
-	"CrateChain",
 	"ExitLock",
 } :: { AnchorKind })
 
-Enums.TriggerKind =
-	table.freeze({ "ScareStep", "FloorDebris", "Checkpoint", "PoolWater", "LevelExit" } :: { TriggerKind })
+Enums.TriggerKind = table.freeze({ "ScareStep", "FloorDebris", "Checkpoint", "LevelExit" } :: { TriggerKind })
 
 Enums.LightKind = table.freeze({
 	"Fluorescent",
 	"Bulb",
 	"EmergencyRed",
 	"ClassroomGlow",
-	"Floodlight",
 	"ExitSign",
 	"BoilerGlow",
 } :: { LightKind })
@@ -645,7 +565,6 @@ Enums.AcousticPreset = table.freeze({
 	"Corridor",
 	"Hall",
 	"Vent",
-	"Underwater",
 	"Outdoor",
 	"Stairwell",
 	"Basement",
@@ -677,12 +596,9 @@ Enums.InputAction = table.freeze({
 	"Kick",
 	"Throw",
 	"HoldBreath",
-	"Struggle",
-	"Syringe",
 	"Ripcord",
 	"SpectatePrev",
 	"SpectateNext",
-	"Dive",
 	"Menu",
 	"Objective",
 } :: { InputAction })
@@ -691,12 +607,10 @@ Enums.InputAction = table.freeze({
 Enums.InputContext = table.freeze({
 	"Menu",
 	"Cutscene",
-	"Struggle",
 	"Locker",
 	"Trapped",
 	"Downed",
 	"Vent",
-	"Swim",
 	"Parachute",
 	"OnFoot",
 	"Spectator",
@@ -712,11 +626,10 @@ Enums.RemoteDirection = table.freeze({ "ToServer", "ToClient" } :: { RemoteDirec
 
 Enums.ProjectilePhase = table.freeze({ "Spawn", "Resolve" } :: { ProjectilePhase })
 
-Enums.ProjectileHitKind = table.freeze({ "World", "Creature", "Water", "Expired" } :: { ProjectileHitKind })
+Enums.ProjectileHitKind = table.freeze({ "World", "Creature", "Expired" } :: { ProjectileHitKind })
 
 Enums.CueKind = table.freeze({
 	"BreathCheck",
-	"Struggle",
 	"JumpscareVictim",
 	"TrapLeg",
 	"Toast",
@@ -736,8 +649,7 @@ Enums.ScareKind = table.freeze({
 	"HideKick",
 } :: { ScareKind })
 
-Enums.ParachuteState =
-	table.freeze({ "None", "Packed", "Freefall", "Canopy", "Landed", "Falling" } :: { ParachuteState })
+Enums.ParachuteState = table.freeze({ "None", "Packed", "Freefall", "Canopy", "Landed" } :: { ParachuteState })
 
 -- Runtime membership test used by validators and attribute readers.
 function Enums.has<T>(list: { T }, value: unknown): boolean
@@ -745,11 +657,6 @@ function Enums.has<T>(list: { T }, value: unknown): boolean
 		return false
 	end
 	return table.find(list, value :: any) ~= nil
-end
-
--- Position of a level in run order (1-based), or nil for unknown ids.
-function Enums.levelIndex(levelId: string): number?
-	return table.find(Enums.LevelId, levelId :: any)
 end
 
 return table.freeze(Enums)

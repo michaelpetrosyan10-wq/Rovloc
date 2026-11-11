@@ -102,7 +102,6 @@ local NOISE_KINDS: { Enums.NoiseKind } = {
 	"GrateKick",
 	"FloorDebris",
 	"TrapSnap",
-	"Splash",
 	"Gasp",
 }
 

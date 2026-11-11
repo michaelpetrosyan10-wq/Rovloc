@@ -3,8 +3,8 @@
 -- (per floor, the escape bonus, Escapes, BestTime per difficulty, LastRunId idempotence, the cap), the deploy squad,
 -- Deploy (perk stock consumed, unstocked perks dropped from the loadout, refusals, Level 0 spawn slots), a wipe
 -- (coalesced evaluation, RunEnded -> rewards -> RunSummary -> RunResolved -> Results), an escape waiting for the rest of
--- the squad, a downed player with a syringe keeping the run alive, a leaver settled as they go, DevRun and guest runs
--- paying nothing; MatchResetService (the Results clock with the escape finale, everyone pressing Play Again, a leaver,
+-- the squad, a leaver settled as they go, DevRun and guest runs paying nothing; MatchResetService (the Results clock
+-- with the escape shot, everyone pressing Play Again, a leaver,
 -- spectators' presses, PlayAgainRequested back in the Lobby); TelemetryService's events (funnel order, deaths, floors
 -- reached, the economy from commits).
 
@@ -36,7 +36,6 @@ type World = {
 	phases: { Enums.MatchPhase },
 	run: Types.RunContext?,
 	life: { [Player]: Enums.LifeState },
-	syringe: { [Player]: number },
 	floors: { [Player]: number },
 	stats: { [Player]: { [string]: number } },
 	gone: { [Player]: boolean },
@@ -85,7 +84,6 @@ local function newWorld(): World
 	world.phases = {}
 	world.run = nil
 	world.life = {}
-	world.syringe = {}
 	world.floors = {}
 	world.stats = {}
 	world.gone = {}
@@ -142,9 +140,6 @@ local function newWorld(): World
 		end,
 		lifeState = function(player: Player): Enums.LifeState
 			return world.life[player] or "Lobby"
-		end,
-		syringeCharges = function(player: Player): number
-			return world.syringe[player] or 0
 		end,
 		floorsCleared = function(player: Player): number
 			return world.floors[player] or 0
@@ -226,8 +221,8 @@ local function credits(player: Player): number
 	return if data then data.SurvivalCredits else -1
 end
 
-local function standing(lifeState: Enums.LifeState, syringe: number?): MatchAndDataService.Standing
-	return { escaped = false, disconnected = false, lifeState = lifeState, syringeCharges = syringe or 0 }
+local function standing(lifeState: Enums.LifeState): MatchAndDataService.Standing
+	return { escaped = false, disconnected = false, lifeState = lifeState }
 end
 
 --------------------------------------------------------------------------------
@@ -241,13 +236,10 @@ spec["verdict: who keeps a run going"] = function(t: Expect)
 	t.eq(verdict({}), "Continue", "an empty run is never judged")
 	t.eq(verdict({ standing("Alive"), standing("Dead") }), "Continue")
 	t.eq(verdict({ standing("Dead"), standing("Spectating") }), "Wipe")
-	t.eq(verdict({ standing("Downed", 0), standing("Dead") }), "Wipe", "a downed player nobody can revive")
-	t.eq(verdict({ standing("Downed", 1), standing("Dead") }), "Continue", "a syringe can still save the run")
-	t.eq(verdict({ standing("Downed", 0), standing("Alive") }), "Continue", "a teammate can revive")
-	local escaped: MatchAndDataService.Standing =
-		{ escaped = true, disconnected = false, lifeState = "Alive", syringeCharges = 0 }
-	local gone: MatchAndDataService.Standing =
-		{ escaped = false, disconnected = true, lifeState = "Lobby", syringeCharges = 0 }
+	t.eq(verdict({ standing("Downed"), standing("Dead") }), "Wipe", "a downed player nobody can revive")
+	t.eq(verdict({ standing("Downed"), standing("Alive") }), "Continue", "a teammate can revive")
+	local escaped: MatchAndDataService.Standing = { escaped = true, disconnected = false, lifeState = "Alive" }
+	local gone: MatchAndDataService.Standing = { escaped = false, disconnected = true, lifeState = "Lobby" }
 	t.eq(verdict({ escaped, standing("Alive") }), "Continue", "the squad waits for the last runner")
 	t.eq(verdict({ escaped, standing("Dead") }), "Escape")
 	t.eq(verdict({ escaped, gone }), "Escape")
@@ -462,22 +454,6 @@ spec["Escape: waits for the squad, pays the bonus and the best time"] = function
 	finish(world, { runner, straggler })
 end
 
-spec["A downed player with a syringe keeps the run alive"] = function(t: Expect)
-	local world = newWorld()
-	local solo = join(world)
-	MatchAndDataService.Deploy({ solo }, "Standard")
-	world.life[solo] = "Downed"
-	world.syringe[solo] = 1
-	MatchAndDataService.RequestEvaluation()
-	flush(world)
-	t.eq(#world.phases, 0)
-	world.syringe[solo] = 0
-	MatchAndDataService.RequestEvaluation()
-	flush(world)
-	t.eq(world.phases[1], "RunEnded")
-	finish(world, { solo })
-end
-
 spec["A leaver is settled as they go and stops holding the run"] = function(t: Expect)
 	local world = newWorld()
 	local leaver = join(world)
@@ -595,7 +571,7 @@ end
 
 spec["MatchReset: the Results clock and the escape finale"] = function(t: Expect)
 	t.eq(MatchResetService.resultsSeconds(0), GameConfig.ResultsSeconds)
-	t.eq(MatchResetService.resultsSeconds(2), GameConfig.ResultsSeconds + MatchResetService.EscapeFinaleSeconds)
+	t.eq(MatchResetService.resultsSeconds(2), GameConfig.ResultsSeconds + MatchResetService.EscapeShotSeconds)
 	local world = resetWorld()
 	local connection = MatchResetService.PlayAgainRequested:Connect(function(players: { Player })
 		table.insert(world.ready, players)
@@ -617,7 +593,7 @@ spec["MatchReset: the Results clock and the escape finale"] = function(t: Expect
 	t.eq(world.endRuns, 1, "once")
 
 	enterResults(world, { [a] = "Escaped", [b] = "Dead" })
-	t.eq(world.endsAt, world.now + GameConfig.ResultsSeconds + MatchResetService.EscapeFinaleSeconds)
+	t.eq(world.endsAt, world.now + GameConfig.ResultsSeconds + MatchResetService.EscapeShotSeconds)
 	connection:Disconnect()
 	MatchResetService.SetDependencies(nil)
 end
@@ -669,10 +645,11 @@ spec["Telemetry: builders"] = function(t: Expect)
 	local number, name = TelemetryService.levelStep("Level0_Basement")
 	t.eq(number, 3)
 	t.eq(name, "Floor_Level0_Basement")
-	local roof = TelemetryService.levelStep("Level5_Roof")
-	t.eq(roof, 8)
+	local roof = TelemetryService.levelStep("Level3_Roof")
+	t.eq(roof, 6, "the roof is floor 3")
+	t.eq(TelemetryService.levelStep("City2_Airport"), 8, "the airport is floor 5")
 	t.eq(TelemetryService.Steps.Escape, 9)
-	local death = TelemetryService.deathEvent(player, "Bleedout", "Level2_ScienceHall", "Nightmare")
+	local death = TelemetryService.deathEvent(player, "Bleedout", "Level2_Auditorium", "Nightmare")
 	t.eq(death.name, "Death")
 	t.eq(death.value, 2)
 	t.eq(death.fields.CustomField01, "Bleedout")

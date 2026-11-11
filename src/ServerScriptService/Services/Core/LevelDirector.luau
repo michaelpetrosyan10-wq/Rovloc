@@ -58,14 +58,9 @@ local active = false -- current level's controllers have been activated
 -- Pure helpers (specs: tests/Specs/CoreServices.spec.luau)
 --------------------------------------------------------------------------------
 
--- The level after `levelId` in run order, or nil after the last level (or for an unknown id).
+-- The school level after `levelId` in run order, or nil after the roof (or for an unknown id).
 local function nextLevel(levelId: Enums.LevelId): Enums.LevelId?
-	local index = Enums.levelIndex(levelId)
-	if not index then
-		return nil
-	end
-	local following: Enums.LevelId? = Enums.LevelId[index + 1]
-	return following
+	return WorldConfig.nextLevel(levelId)
 end
 LevelDirector.nextLevel = nextLevel
 
@@ -276,7 +271,7 @@ end
 function LevelDirector.BeginRun(ctx: Types.RunContext)
 	leaveCurrent()
 	run = ctx
-	LevelDirector.EnterLevel(Enums.LevelId[1])
+	LevelDirector.EnterLevel(WorldConfig.LevelOrder[1])
 end
 
 function LevelDirector.EndRun()

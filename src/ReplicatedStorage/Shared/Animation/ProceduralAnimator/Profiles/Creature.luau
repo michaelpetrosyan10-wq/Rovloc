@@ -32,8 +32,6 @@
 --                the floor to claw at the face.
 --   Stunned      blinded: both hands raking at the face, the head shaking, the torso wrenching, staggering steps on
 --                buckling knees.
---   Swim         AquaticStalk: level in the water, an eel's wave running head to toe (chest, pelvis and the legs
---                together as a tail), the arms trailing along the flanks, the hair streaming back.
 --   Scripted     neutral: upright and still, staring at its target; scripted beats drive it with actions. A scripted
 --                hold in PoseMode Hunched poses Dormant instead (the corner crouch a cutscene stages it in).
 --
@@ -97,7 +95,6 @@ export type StateName =
 	| "VentCrawl"
 	| "VentRetreat"
 	| "Stunned"
-	| "Swim"
 	| "Scripted"
 
 export type ActionName =
@@ -127,7 +124,6 @@ local function names(suffix: string): { [string]: string }
 end
 
 local HIP = names("Hip")
-local KNEE = names("Knee")
 local ANKLE = names("Ankle")
 local SHOULDER = names("Shoulder")
 local ELBOW = names("Elbow")
@@ -172,7 +168,6 @@ local STATE_NAMES: { StateName } = {
 	"VentCrawl",
 	"VentRetreat",
 	"Stunned",
-	"Swim",
 	"Scripted",
 }
 
@@ -1827,46 +1822,6 @@ local function ventRetreat(ctx: Ctx, pose: Pose)
 end
 
 --------------------------------------------------------------------------------
--- States: water
---------------------------------------------------------------------------------
-
-local SWIM_HAIR: HairStyle = { gravity = 0.2, stream = 0.85, sway = 0.12, bore = false }
-local SWIM_FLOOR = -1e6
-
-local function swim(ctx: Ctx, pose: Pose)
-	local m = measure(ctx.map)
-	local phase = ctx.phase
-	local amplitude = rad(13) * math.max(ctx.moveAmount, 0.35)
-	-- An eel's wave: each segment's heading lags the one ahead of it.
-	local function heading(lag: number, gain: number): number
-		return amplitude * gain * math.sin(TAU * (phase - lag))
-	end
-	local head, chest, pelvis, thighs, shins =
-		heading(0, 0.35), heading(0.12, 0.8), heading(0.24, 1), heading(0.36, 1.5), heading(0.48, 2.2)
-	pose:set(ROOT, prone(-math.pi / 2 + rad(4), pelvis, ctx.leanRoll * 0.5))
-	pose:set(WAIST, euler(rad(14) + ctx.breath * rad(1), 0, -(chest - pelvis)))
-	local neckNow = pose:pivot(NECK)
-	shiftBody(pose, Vector3.new(0, -0.15 - neckNow.Y, -1.9 - neckNow.Z))
-	local gaze = runtimeOf(ctx.map).gaze
-	headTo(pose, lookRotation(gaze.yaw * 0.6 + head, rad(-30) + gaze.pitch * 0.5, gaze.roll * 0.5), true)
-	for _, side in SIDES do
-		local s = SIGN[side]
-		-- Arms trailing back along the flanks, rippling with the wave.
-		local ripple = math.sin(TAU * (phase - 0.3))
-		pose:set(SHOULDER[side], euler(rad(-18) + rad(6) * ripple * s, 0, s * (rad(10) + rad(5) * ripple)))
-		pose:set(ELBOW[side], euler(rad(-4) + rad(8) * math.max(0, ripple * s), 0, 0))
-		pose:set(WRIST[side], euler(rad(-10), 0, -s * rad(10) * ripple))
-		-- Legs together as a tail.
-		pose:set(HIP[side], euler(rad(2), 0, -(thighs - pelvis) + s * rad(2)))
-		pose:set(KNEE[side], euler(-rad(6), 0, -(shins - thighs)))
-		pose:set(ANKLE[side], euler(-rad(55), 0, 0))
-	end
-	setJaw(pose, rad(6) + rad(4) * math.sin(TAU * phase))
-	applyActions(ctx, pose, m)
-	hair(ctx, pose, m, SWIM_HAIR, SWIM_FLOOR)
-end
-
---------------------------------------------------------------------------------
 -- Actions
 --------------------------------------------------------------------------------
 
@@ -2183,9 +2138,8 @@ local function lunge(ctx: Ctx, pose: Pose, m: Measure, elapsed: number, run: Act
 		* stepped(ctx.time, 24, run.seed)
 		* (1 + 1.5 * smoothstep(0.85, 1.0, elapsed) * (1 - smoothstep(1.25, 1.45, elapsed)))
 	local bore = QUADRUPED[ctx.state] == true
-	local swimming = ctx.state == "Swim"
 	local target = targetPoint(ctx, m, 4.2)
-	if not bore and not swimming then
+	if not bore then
 		-- solved on each state's base pose before the bow (the animator blends states, each posing the actions on its
 		-- own base), again every LOOM_RESOLVE seconds (the base pose may change under it)
 		local looms = run.looms
@@ -2537,19 +2491,6 @@ local states: { [string]: StateSpec } = {
 		hands = 0,
 		exertion = 1,
 	}),
-	Swim = state({
-		pose = posed(swim),
-		cycle = {
-			length = function(_speed: number, _map: JointMap): number
-				return 9
-			end,
-			rate = 0.35,
-		},
-		blendSpeed = 4,
-		look = OWN_LOOK,
-		hands = 0,
-		exertion = 0.3,
-	}),
 	Scripted = state({
 		pose = posed(scripted),
 		cycle = cycleFor(NEUTRAL, 1.3),
@@ -2629,18 +2570,10 @@ function Creature.resolveState(monsterState: unknown, poseMode: unknown, inVent:
 	if poseMode == "Quadruped" or inVent == true then
 		return if monsterState == "Stunned" then "VentRetreat" else "VentCrawl"
 	end
-	if poseMode == "Swim" then
-		return if monsterState == "Stunned" then "Stunned" else "Swim"
-	end
 	if poseMode == "Stunned" then
 		return "Stunned"
 	end
-	if
-		monsterState == "Patrol"
-		or monsterState == "AquaticStalk"
-		or monsterState == "Teleport"
-		or monsterState == "HidingResponse"
-	then
+	if monsterState == "Patrol" or monsterState == "Teleport" or monsterState == "HidingResponse" then
 		return "Patrol"
 	elseif monsterState == "InvestigateNoise" or monsterState == "Search" then
 		return "Investigate"

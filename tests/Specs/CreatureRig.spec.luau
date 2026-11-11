@@ -555,7 +555,7 @@ return {
 		local restC0 = joint.C0
 		local tops: { [string]: number } = {}
 		local modes = sortedPoseModes()
-		t.eq(#modes, 4, "Biped, Hunched, Quadruped and Swim")
+		t.eq(#modes, 3, "Biped, Hunched and Quadruped")
 		for _, mode in modes do
 			local size = CreatureConfig.Hitbox[mode]
 			CreatureRigBuilder.setHitbox(built.model, mode)

@@ -1,21 +1,15 @@
 --!strict
--- Level 5 · Roof. The squad comes up one of the three east stair towers (Stairwell_4_5 and its corner candidates)
--- into its stair housing on the east edge (L5_RoofAccessNorth / L5_RoofAccess / L5_RoofAccessSouth, against the towers'
--- openings at z 28 / 144 / 260) and must cross the rain-slicked roof to the parachute crate by the west edge, then jump
--- through the gap in the west parapet (L5_JumpGap, the exit room, holding the LevelExit volume).
+-- Level 3 · Roof. The squad comes up one of the three east stair towers (Stairwell_2_3 and its corner candidates)
+-- into its stair housing on the east edge (L3_RoofAccessNorth / L3_RoofAccess / L3_RoofAccessSouth, against the towers'
+-- openings at z 28 / 144 / 260) and crosses the rain-slicked roof to the parachute crate by the west edge, then jumps
+-- through the gap in the west parapet (L3_JumpGap, the exit room, holding the LevelExit volume).
 --
--- The roof is open (no ceiling, a parapet all round but the gap) and its plant makes a maze of it: ductwork, louvred
--- screen walls and plant blocks wall it into nine cells (three columns: the Plant Deck x 244..360, the Middle Roof
--- x 124..244, the West Roof x 0..124; three rows: z 0..96, 96..192, 192..288) with a 16-stud opening only where the
--- way goes on, so the run from the housings to the gap winds through most of the roof (about 850 studs, 75 s at
--- walking pace): from the housings' lane (L5_Roof_East, x 360..386) into the north or the south plant cell, through
--- the central plant cell, west into the middle column's centre, south, west into the south-west cell, north through the
--- west cell to the apron in front of the gap (L5_Roof_GapApron) with the crate at its west end. Two more openings (the
--- north and the south cells of the middle and plant columns) make loops to circle the Creature round. Inside the cells
--- HVAC units, a cooling tower, a water tank, a plant room, the boiler flue and skylight curbs are solid blocks to weave
--- between and crouch behind (Cover: ObjectivePlaces). The cells are the roof's zones: the world builder never walls one
--- Roof zone off from another, so the Doorways between them are open portals (the maze's openings) and the plant stands
--- along the closed stretches of their edges.
+-- The roof is open (no ceiling, a parapet all round but the gap). Its zones are nine open cells (three columns: the
+-- Plant Deck x 244..360, the Middle Roof x 124..244, the West Roof x 0..124; three rows: z 0..96, 96..192, 192..288),
+-- the housings' lane (L3_Roof_East, x 360..386) and the apron in front of the gap (L3_Roof_GapApron) with the crate at
+-- its west end; every cell opens on its neighbours along the whole of their shared edge (the world builder never walls
+-- one Roof zone off from another). HVAC units, a cooling tower, a water tank, a plant room, the boiler flue and skylight
+-- curbs stand in the cells as solid blocks to weave between.
 --
 -- Lights: almost none; the storm's lightning lights the run. A red beacon blinks on the radio mast.
 -- Anchor heights: props on the roof deck (y = 0), PlayerSpawn at root height plus clearance (3.5), Creature
@@ -52,22 +46,19 @@ type LightDefaults = { brightness: number, range: number, color: Color3 }
 
 type DoorOptions = { id: string?, width: number?, height: number?, scriptedId: string? }
 
-local PREFIX = "L5"
+local PREFIX = "L3"
 local HEIGHT = 12 -- zone height over the open roof and the stair housings' ceiling (WorldConfig keeps 0: no slab above)
 local PARAPET = WorldConfig.ParapetHeight
 local SIZE = WorldConfig.FootprintSize
-local EDGE = WorldConfig.ExteriorWallThickness / 2 + 0.25 -- plant keeps this far in from the parapet's line
-local DUCT = 5.5 -- ductwork and screen walls: higher than anyone climbs (a jump plus a step)
-local WALL_T = 3 -- their thickness
+local DUCT = 5.5 -- ductwork: higher than anyone climbs (a jump plus a step)
 
-local FACE_N, FACE_W, FACE_S, FACE_E = 0, 90, 180, -90
+local FACE_W, FACE_S = 90, 180
 
 local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Fluorescent = { brightness = 0.55, range = 18, color = Color3.fromRGB(214, 232, 236) },
 	Bulb = { brightness = 0.45, range = 14, color = Color3.fromRGB(255, 196, 140) },
 	EmergencyRed = { brightness = 0.45, range = 16, color = Color3.fromRGB(255, 34, 18) },
 	ClassroomGlow = { brightness = 1.1, range = 34, color = Color3.fromRGB(198, 220, 255) },
-	Floodlight = { brightness = 2, range = 60, color = Color3.fromRGB(236, 240, 255) },
 	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(70, 255, 120) },
 	BoilerGlow = { brightness = 0.9, range = 16, color = Color3.fromRGB(255, 118, 40) },
 }
@@ -247,115 +238,81 @@ end
 
 local GAP_Z0, GAP_Z1 = 84, 96 -- the jump gap: clear of the west stair towers (Z 12..44 and 128..160)
 
-room("L5_Roof_NorthWest", "Roof", 0, 0, 124, GAP_Z0, ROOF, OPEN_ROOF)
-room("L5_JumpGap", "Roof", 0, GAP_Z0, 4, GAP_Z1 - GAP_Z0, ROOF, { wallHeight = 0, noCeiling = true })
-room("L5_Roof_GapApron", "Roof", 4, GAP_Z0, 120, GAP_Z1 - GAP_Z0, ROOF, OPEN_ROOF)
-room("L5_Roof_West", "Roof", 0, 96, 124, 96, ROOF, OPEN_ROOF)
-room("L5_Roof_SouthWest", "Roof", 0, 192, 124, 96, ROOF, OPEN_ROOF)
-room("L5_Roof_North", "Roof", 124, 0, 120, 96, ROOF, OPEN_ROOF)
-room("L5_Roof_Centre", "Roof", 124, 96, 120, 96, ROOF, OPEN_ROOF)
-room("L5_Roof_South", "Roof", 124, 192, 120, 96, ROOF, OPEN_ROOF)
-room("L5_Roof_NorthPlant", "Roof", 244, 0, 116, 96, ROOF, OPEN_ROOF)
-room("L5_Roof_Plant", "Roof", 244, 96, 116, 96, ROOF, OPEN_ROOF)
-room("L5_Roof_SouthPlant", "Roof", 244, 192, 116, 96, ROOF, OPEN_ROOF)
-room("L5_Roof_East", "Roof", 360, 0, 26, SIZE.Y, ROOF, OPEN_ROOF)
-room("L5_Roof_NECorner", "Roof", 386, 0, 14, 16, ROOF, OPEN_ROOF)
-room("L5_RoofAccessNorth", "Stairwell", 386, 16, 14, 24, HOUSING)
-room("L5_Roof_EastCornerN", "Roof", 386, 40, 14, 92, ROOF, OPEN_ROOF)
-room("L5_RoofAccess", "Stairwell", 386, 132, 14, 24, HOUSING)
-room("L5_Roof_EastCornerS", "Roof", 386, 156, 14, 92, ROOF, OPEN_ROOF)
-room("L5_RoofAccessSouth", "Stairwell", 386, 248, 14, 24, HOUSING)
-room("L5_Roof_SECorner", "Roof", 386, 272, 14, 16, ROOF, OPEN_ROOF)
+room("L3_Roof_NorthWest", "Roof", 0, 0, 124, GAP_Z0, ROOF, OPEN_ROOF)
+room("L3_JumpGap", "Roof", 0, GAP_Z0, 4, GAP_Z1 - GAP_Z0, ROOF, { wallHeight = 0, noCeiling = true })
+room("L3_Roof_GapApron", "Roof", 4, GAP_Z0, 120, GAP_Z1 - GAP_Z0, ROOF, OPEN_ROOF)
+room("L3_Roof_West", "Roof", 0, 96, 124, 96, ROOF, OPEN_ROOF)
+room("L3_Roof_SouthWest", "Roof", 0, 192, 124, 96, ROOF, OPEN_ROOF)
+room("L3_Roof_North", "Roof", 124, 0, 120, 96, ROOF, OPEN_ROOF)
+room("L3_Roof_Centre", "Roof", 124, 96, 120, 96, ROOF, OPEN_ROOF)
+room("L3_Roof_South", "Roof", 124, 192, 120, 96, ROOF, OPEN_ROOF)
+room("L3_Roof_NorthPlant", "Roof", 244, 0, 116, 96, ROOF, OPEN_ROOF)
+room("L3_Roof_Plant", "Roof", 244, 96, 116, 96, ROOF, OPEN_ROOF)
+room("L3_Roof_SouthPlant", "Roof", 244, 192, 116, 96, ROOF, OPEN_ROOF)
+room("L3_Roof_East", "Roof", 360, 0, 26, SIZE.Y, ROOF, OPEN_ROOF)
+room("L3_Roof_NECorner", "Roof", 386, 0, 14, 16, ROOF, OPEN_ROOF)
+room("L3_RoofAccessNorth", "Stairwell", 386, 16, 14, 24, HOUSING)
+room("L3_Roof_EastCornerN", "Roof", 386, 40, 14, 92, ROOF, OPEN_ROOF)
+room("L3_RoofAccess", "Stairwell", 386, 132, 14, 24, HOUSING)
+room("L3_Roof_EastCornerS", "Roof", 386, 156, 14, 92, ROOF, OPEN_ROOF)
+room("L3_RoofAccessSouth", "Stairwell", 386, 248, 14, 24, HOUSING)
+room("L3_Roof_SECorner", "Roof", 386, 272, 14, 16, ROOF, OPEN_ROOF)
 
 --------------------------------------------------------------------------------
--- Doors: the scripted roof stair doors; everything else is an open portal between roof zones (the maze's openings)
+-- Doors: the scripted roof stair doors; everything else is an open portal between roof zones
 --------------------------------------------------------------------------------
 
-door("RoofDoor", "L5_RoofAccess", "L5_Roof_East", 144, { id = "L5_Door_RoofStair", scriptedId = "RoofStairDoor" })
+door("RoofDoor", "L3_RoofAccess", "L3_Roof_East", 144, { id = "L3_Door_RoofStair", scriptedId = "RoofStairDoor" })
 door(
 	"RoofDoor",
-	"L5_RoofAccessNorth",
-	"L5_Roof_East",
+	"L3_RoofAccessNorth",
+	"L3_Roof_East",
 	28,
-	{ id = "L5_Door_RoofStairNorth", scriptedId = "RoofStairDoorNorth" }
+	{ id = "L3_Door_RoofStairNorth", scriptedId = "RoofStairDoorNorth" }
 )
 door(
 	"RoofDoor",
-	"L5_RoofAccessSouth",
-	"L5_Roof_East",
+	"L3_RoofAccessSouth",
+	"L3_Roof_East",
 	260,
-	{ id = "L5_Door_RoofStairSouth", scriptedId = "RoofStairDoorSouth" }
+	{ id = "L3_Door_RoofStairSouth", scriptedId = "RoofStairDoorSouth" }
 )
 -- the housings' lane and the corners beside the housings
-for _, corner in { "L5_Roof_NECorner", "L5_Roof_EastCornerN", "L5_Roof_EastCornerS", "L5_Roof_SECorner" } do
-	door("Doorway", "L5_Roof_East", corner)
+for _, corner in { "L3_Roof_NECorner", "L3_Roof_EastCornerN", "L3_Roof_EastCornerS", "L3_Roof_SECorner" } do
+	door("Doorway", "L3_Roof_East", corner)
 end
 -- the jump: the apron opens on the gap; the gap's ends meet the edge of the north-west cell
-door("Doorway", "L5_Roof_GapApron", "L5_JumpGap", (GAP_Z0 + GAP_Z1) / 2, { id = "L5_Door_JumpGap", width = 10 })
-door("Doorway", "L5_Roof_NorthWest", "L5_JumpGap", 2, { width = 3 })
-door("Doorway", "L5_Roof_NorthWest", "L5_Roof_GapApron")
--- the maze's openings (16 studs each), in the order the way runs, then the two loops
-local OPENING = 16
-for _, o in
+door("Doorway", "L3_Roof_GapApron", "L3_JumpGap", (GAP_Z0 + GAP_Z1) / 2, { id = "L3_Door_JumpGap", width = 10 })
+door("Doorway", "L3_Roof_NorthWest", "L3_JumpGap", 2, { width = 3 })
+door("Doorway", "L3_Roof_NorthWest", "L3_Roof_GapApron")
+-- every cell opens on each neighbour along their whole shared edge
+for _, pair in
 	{
-		{ "L5_Roof_East", "L5_Roof_NorthPlant", 48 },
-		{ "L5_Roof_East", "L5_Roof_SouthPlant", 240 },
-		{ "L5_Roof_NorthPlant", "L5_Roof_Plant", 308 },
-		{ "L5_Roof_Plant", "L5_Roof_SouthPlant", 338 },
-		{ "L5_Roof_Plant", "L5_Roof_Centre", 144 },
-		{ "L5_Roof_Centre", "L5_Roof_North", 158 },
-		{ "L5_Roof_Centre", "L5_Roof_South", 218 },
-		{ "L5_Roof_South", "L5_Roof_SouthWest", 258 },
-		{ "L5_Roof_SouthWest", "L5_Roof_West", 48 },
-		{ "L5_Roof_West", "L5_Roof_GapApron", 98 },
-		{ "L5_Roof_North", "L5_Roof_NorthPlant", 28 },
-		{ "L5_Roof_South", "L5_Roof_SouthPlant", 268 },
-	} :: { { any } }
+		{ "L3_Roof_East", "L3_Roof_NorthPlant" },
+		{ "L3_Roof_East", "L3_Roof_Plant" },
+		{ "L3_Roof_East", "L3_Roof_SouthPlant" },
+		{ "L3_Roof_NorthPlant", "L3_Roof_Plant" },
+		{ "L3_Roof_Plant", "L3_Roof_SouthPlant" },
+		{ "L3_Roof_North", "L3_Roof_NorthPlant" },
+		{ "L3_Roof_Centre", "L3_Roof_Plant" },
+		{ "L3_Roof_South", "L3_Roof_SouthPlant" },
+		{ "L3_Roof_North", "L3_Roof_Centre" },
+		{ "L3_Roof_Centre", "L3_Roof_South" },
+		{ "L3_Roof_NorthWest", "L3_Roof_North" },
+		{ "L3_Roof_GapApron", "L3_Roof_North" },
+		{ "L3_Roof_West", "L3_Roof_Centre" },
+		{ "L3_Roof_SouthWest", "L3_Roof_South" },
+		{ "L3_Roof_GapApron", "L3_Roof_West" },
+		{ "L3_Roof_West", "L3_Roof_SouthWest" },
+	} :: { { string } }
 do
-	door("Doorway", o[1], o[2], o[3], { width = OPENING })
+	door("Doorway", pair[1], pair[2])
 end
 
 --------------------------------------------------------------------------------
--- Rooftop plant (solid blocks standing on the roof deck): first the walls of the maze along the cells' closed edges
--- (ductwork on its stands, louvred screens round the plant), then the units inside the cells
+-- Rooftop plant: solid blocks standing on the roof deck, inside the cells
 --------------------------------------------------------------------------------
 
-local HALF = OPENING / 2
--- the housings' lane's west side (inside the plant cells): open only into the north and the south plant cells
-plant("Ductwork_East", 360 - WALL_T, EDGE, 360, 48 - HALF, DUCT, "MetalGalvanized")
-plant("Ductwork_East", 360 - WALL_T, 48 + HALF, 360, 96, DUCT, "MetalGalvanized")
-plant("Screen_East", 360 - WALL_T, 96, 360, 192, DUCT, "MetalRust")
-plant("Ductwork_East", 360 - WALL_T, 192, 360, 240 - HALF, DUCT, "MetalGalvanized")
-plant("Ductwork_East", 360 - WALL_T, 240 + HALF, 360, SIZE.Y - EDGE, DUCT, "MetalGalvanized")
--- the plant column's west side (inside the plant cells)
-plant("Screen_Plant", 244, EDGE, 244 + WALL_T, 28 - HALF, DUCT, "MetalRust")
-plant("Screen_Plant", 244, 28 + HALF, 244 + WALL_T, 96, DUCT, "MetalRust")
-plant("Ductwork_Plant", 244, 96, 244 + WALL_T, 144 - HALF, DUCT, "MetalGalvanized")
-plant("Ductwork_Plant", 244, 144 + HALF, 244 + WALL_T, 192, DUCT, "MetalGalvanized")
-plant("Screen_Plant", 244, 192, 244 + WALL_T, 268 - HALF, DUCT, "MetalRust")
-plant("Screen_Plant", 244, 268 + HALF, 244 + WALL_T, SIZE.Y - EDGE, DUCT, "MetalRust")
--- the plant column's rows (inside the central and the south plant cells)
-plant("Ductwork_PlantN", 244 + WALL_T, 96, 308 - HALF, 96 + WALL_T, DUCT, "MetalGalvanized")
-plant("Ductwork_PlantN", 308 + HALF, 96, 360 - WALL_T, 96 + WALL_T, DUCT, "MetalGalvanized")
-plant("Ductwork_PlantS", 244 + WALL_T, 192, 338 - HALF, 192 + WALL_T, DUCT, "MetalGalvanized")
-plant("Ductwork_PlantS", 338 + HALF, 192, 360 - WALL_T, 192 + WALL_T, DUCT, "MetalGalvanized")
--- the middle column's west side (inside the middle cells): open only into the south-west cell
-plant("Ductwork_Middle", 124, EDGE, 124 + WALL_T, 96, DUCT, "MetalGalvanized")
-plant("Screen_Middle", 124, 96, 124 + WALL_T, 192, DUCT, "MetalRust")
-plant("Ductwork_Middle", 124, 192, 124 + WALL_T, 258 - HALF, DUCT, "MetalGalvanized")
-plant("Ductwork_Middle", 124, 258 + HALF, 124 + WALL_T, SIZE.Y - EDGE, DUCT, "MetalGalvanized")
--- the middle column's rows (inside the centre and the south cells)
-plant("Screen_MiddleN", 124 + WALL_T, 96, 158 - HALF, 96 + WALL_T, DUCT, "MetalRust")
-plant("Screen_MiddleN", 158 + HALF, 96, 244, 96 + WALL_T, DUCT, "MetalRust")
-plant("Screen_MiddleS", 124 + WALL_T, 192, 218 - HALF, 192 + WALL_T, DUCT, "MetalRust")
-plant("Screen_MiddleS", 218 + HALF, 192, 244, 192 + WALL_T, DUCT, "MetalRust")
--- the west column's rows (inside the west and the south-west cells)
-plant("Ductwork_WestN", EDGE, 96, 98 - HALF, 96 + WALL_T, DUCT, "MetalGalvanized")
-plant("Ductwork_WestN", 98 + HALF, 96, 124, 96 + WALL_T, DUCT, "MetalGalvanized")
-plant("Ductwork_WestS", EDGE, 192, 48 - HALF, 192 + WALL_T, DUCT, "MetalGalvanized")
-plant("Ductwork_WestS", 48 + HALF, 192, 124, 192 + WALL_T, DUCT, "MetalGalvanized")
-
--- Units inside the cells
 plant("HVAC_1", 272, 28, 300, 50, 7, "MetalGalvanized") -- north plant cell
 plant("CoolingTower", 318, 60, 334, 76, 12, "MetalRust")
 plant("HVAC_2", 276, 122, 296, 136, 7, "MetalGalvanized") -- central plant cell
@@ -374,28 +331,25 @@ plant("Ductwork_SW", 30, 212, 33, 262, DUCT, "MetalGalvanized")
 plant("HVAC_7", 40, 160, 56, 172, 6, "MetalGalvanized") -- west cell
 plant("Ductwork_W", 70, 124, 110, 127, DUCT, "MetalGalvanized")
 plant("HVAC_8", 60, 30, 78, 44, 6, "MetalGalvanized") -- north-west cell
--- A maintenance box by the jump: cover to crouch behind while the crate's chain is cut, a bolt-cutter candidate on its
--- lid
-plant("MaintBox", 18, 70, 24, 73, 3.6, "MetalGalvanized")
 
 --------------------------------------------------------------------------------
 -- Lights
 --------------------------------------------------------------------------------
 
-for _, spot in { { "L5_RoofAccessNorth", 28 }, { "L5_RoofAccess", 144 }, { "L5_RoofAccessSouth", 260 } } :: { { any } } do
+for _, spot in { { "L3_RoofAccessNorth", 28 }, { "L3_RoofAccess", 144 }, { "L3_RoofAccessSouth", 260 } } :: { { any } } do
 	local z: number = spot[2]
 	light(spot[1], "Bulb", 393, HEIGHT - 0.4, z, { broken = true })
 	-- the red lamp fast to the ceiling (buildLight lifts none: a fixture set low hangs in the air)
-	light(spot[1], "EmergencyRed", 392, HEIGHT - 0.4, z - 8, { flicker = "L5_StairLamp", brightness = 0.3 })
-	light("L5_Roof_East", "Bulb", 385.5, 10.8, z, { broken = true }) -- above the roof door's swing
+	light(spot[1], "EmergencyRed", 392, HEIGHT - 0.4, z - 8, { flicker = "L3_StairLamp", brightness = 0.3 })
+	light("L3_Roof_East", "Bulb", 385.5, 10.8, z, { broken = true }) -- above the roof door's swing
 end
-light("L5_Roof_Plant", "EmergencyRed", 320, HEIGHT - 1, 152, { flicker = "L5_Beacon", brightness = 0.5, range = 20 })
+light("L3_Roof_Plant", "EmergencyRed", 320, HEIGHT - 1, 152, { flicker = "L3_Beacon", brightness = 0.5, range = 20 })
 
 --------------------------------------------------------------------------------
 -- Anchors
 --------------------------------------------------------------------------------
 
--- Arrival from Stairwell_4_5 and its corner candidates (each housing's south half), and the Creature behind each roof
+-- Arrival from Stairwell_2_3 and its corner candidates (each housing's south half), and the Creature behind each roof
 -- door (its north half): it comes up the stairs behind the squad, and the roof controller holds it until it smashes
 -- the door
 for _, spot in { { "", 144 }, { "North", 28 }, { "South", 260 } } :: { { any } } do
@@ -405,27 +359,9 @@ for _, spot in { { "", 144 }, { "North", 28 }, { "South", 260 } } :: { { any } }
 		3.5,
 		{ { 391, z + 4, FACE_W }, { 395, z + 4, FACE_W }, { 391, z + 9, FACE_W }, { 395, z + 9, FACE_W } }
 	)
-	anchor("CreatureSpawn", 393, 5, z - 7, FACE_S, "L5_CreatureSpawn" .. spot[1])
+	anchor("CreatureSpawn", 393, 5, z - 7, FACE_S, "L3_CreatureSpawn" .. spot[1])
 end
-anchor("ParachuteCrate", 14, 0, (GAP_Z0 + GAP_Z1) / 2, FACE_W, "L5_ParachuteCrate")
-
--- Floor objective (CutCrate): the bolt cutters at one of ten spots all over the roof (leaning against the HVAC units,
--- the water tank, the plant room, the cooling tower, the boiler flue or the tool locker: the anchor is the deck point
--- at the face, facing away from it; or lying on the maintenance box's lid), each right beside cover; the chain through
--- the crate's packs (the anchor is the crate's own).
-scatter("BoltCutterCandidate", 0, {
-	{ 286, 51.4, FACE_S }, -- against HVAC_1's south face
-	{ 316.6, 68, FACE_W }, -- against the cooling tower's west face
-	{ 274.6, 129, FACE_W }, -- against HVAC_2's west face
-	{ 320.6, 255, FACE_W }, -- against the tool locker's west face
-	{ 185.4, 36, FACE_E }, -- against the water tank's east face
-	{ 181, 122.6, FACE_N }, -- against the plant room's north face
-	{ 160, 218.6, FACE_N }, -- against HVAC_5's north face
-	{ 81.4, 237, FACE_E }, -- against HVAC_6's east face
-	{ 48, 158.6, FACE_N }, -- against HVAC_7's north face
-})
-anchor("BoltCutterCandidate", 21, 3.6, 71.5, FACE_N) -- on the maintenance box
-anchor("CrateChain", 14, 0, (GAP_Z0 + GAP_Z1) / 2, FACE_W, "L5_CrateChain")
+anchor("ParachuteCrate", 14, 0, (GAP_Z0 + GAP_Z1) / 2, FACE_W, "L3_ParachuteCrate")
 
 scatter("BatteryCandidate", 0, {
 	{ 393, 120 },
@@ -450,8 +386,7 @@ scatter("Clutter", 0, {
 	{ 90, 60, 15 },
 })
 
--- Patrol loops through the maze, each over two neighbouring cells (each hop within a cell or through one of its
--- openings)
+-- Patrol loops, each over two neighbouring cells (each hop within a cell or across one of its edges)
 patrol("E", { { 373, 20 }, { 373, 100 }, { 373, 200 }, { 373, 268 } })
 patrol("PN", { { 330, 20 }, { 290, 70 }, { 308, 86 }, { 308, 110 }, { 330, 120 } })
 patrol("PS", { { 264, 150 }, { 338, 180 }, { 338, 206 }, { 300, 270 }, { 264, 210 } })
@@ -465,18 +400,18 @@ patrol("NW", { { 100, 60 }, { 40, 40 }, { 60, 88 } })
 -- Triggers
 --------------------------------------------------------------------------------
 
-trigger("L5_Trigger_LevelExit", "LevelExit", 0, GAP_Z0, 4, GAP_Z1 - GAP_Z0, 10)
-trigger("L5_Trigger_SkylightGlass", "FloorDebris", 302, 177, 8, 6, 4)
+trigger("L3_Trigger_LevelExit", "LevelExit", 0, GAP_Z0, 4, GAP_Z1 - GAP_Z0, 10)
+trigger("L3_Trigger_SkylightGlass", "FloorDebris", 302, 177, 8, 6, 4)
 
 --------------------------------------------------------------------------------
 
 local layout: LayoutSchema.LevelLayout = {
-	id = "Level5_Roof",
+	id = "Level3_Roof",
 	height = HEIGHT,
 	acoustic = "Outdoor",
 	ambience = "DroneRoof",
-	entry = "L5_RoofAccess",
-	exit = "L5_JumpGap",
+	entry = "L3_RoofAccess",
+	exit = "L3_JumpGap",
 	rooms = rooms,
 	doors = doors,
 	anchors = anchors,

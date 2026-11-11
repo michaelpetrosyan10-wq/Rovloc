@@ -6,7 +6,7 @@
 --     and then a warning chalked over them), the teacher's desk before it and rows of pupils' desks and chairs facing
 --     it, left the way the school was left: some straight, some shoved aside, some tipped over, some gone.
 --   * Halls (libraries, the music room, the cafeteria, lecture halls): long tables with chairs, the same way.
---   * Labs: a chalkboard. Offices: a desk, its chair and a steel filing cabinet against a wall.
+--   * Offices: a desk, its chair and a steel filing cabinet against a wall.
 --   * Corridors: a cork noticeboard with papers pinned to it.
 -- Desk tops, table tops and chair seats are "Solid" (players bump into them, the Creature walks through); legs, frames
 -- and boards are "Detail". Every group is planned before anything is built and only built where SetDressingBuilder.Kit
@@ -58,7 +58,7 @@ type State = {
 local FurnitureBuilder = {}
 
 -- Part caps per room (the spec holds every room to these).
-FurnitureBuilder.Budget = table.freeze({ Classroom = 58, Hall = 64, Office = 12, Lab = 3, Corridor = 2 })
+FurnitureBuilder.Budget = table.freeze({ Classroom = 58, Hall = 64, Office = 12, Corridor = 2 })
 
 local HALL_AREA = 1400 -- classrooms this big are halls: tables, not rows of desks
 local AISLE = 3.4 -- between desk columns
@@ -126,8 +126,6 @@ local function budgetOf(room: Room): number
 	local budget = FurnitureBuilder.Budget
 	if room.kind == "Classroom" then
 		return if room.rect.w * room.rect.d >= HALL_AREA then budget.Hall else budget.Classroom
-	elseif room.kind == "Lab" then
-		return budget.Lab
 	elseif room.kind == "Office" then
 		return budget.Office
 	elseif room.kind == "Corridor" then
@@ -699,7 +697,7 @@ function FurnitureBuilder.plan(layout: Layout): Plan
 		plan = { pieces = {}, painters = {}, mounts = {}, footprints = {} },
 		used = {},
 	}
-	if layout.id ~= "Lobby" and layout.id ~= "Level5_Roof" then
+	if layout.id ~= "Lobby" and layout.id ~= "Level3_Roof" then
 		for _, room in layout.rooms do
 			local random = Rng.seeded(1, layout.id .. ":furniture:" .. room.id)
 			if room.kind == "Classroom" then
@@ -711,8 +709,6 @@ function FurnitureBuilder.plan(layout: Layout): Plan
 						planRows(state, room, front, random)
 					end
 				end
-			elseif room.kind == "Lab" then
-				planBoard(state, room, random)
 			elseif room.kind == "Office" then
 				planOffice(state, room, random)
 			elseif room.kind == "Corridor" then

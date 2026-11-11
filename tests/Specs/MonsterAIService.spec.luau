@@ -302,7 +302,6 @@ spec["attributes: placed Dormant at its level's CreatureSpawn with every attribu
 		t.eq(attr(model, C.InVent), false, "never in a duct")
 		t.eq(attr(model, C.Action), "", "no action")
 		t.eq(attr(model, C.Hidden), false, "Hidden")
-		t.eq(attr(model, C.GrabbedUserId), 0, "no grab")
 		t.eq(attr(model, C.LevelId), LEVEL, "LevelId")
 		t.truthy(near(world.root.CFrame.Position, spawnCFrame().Position), "at the CreatureSpawn")
 		t.truthy(world.root.Anchored, "held still while dormant")
@@ -399,7 +398,7 @@ spec["scripted: exclusive handle, poses, hiding, teleport; release reveals it un
 		run(world, 0.2)
 		t.eq(attr(model, C.Hidden), false, "reappears once nobody can see it")
 		t.truthy(world.hitbox.CanQuery, "queryable again")
-		handle:SetPose("Swim")
+		handle:SetPose("Quadruped")
 		t.eq(attr(model, C.PoseMode), "Biped", "a released handle does nothing")
 		local again = MonsterAIService.AcquireScripted("Other")
 		t.truthy(again ~= nil, "free to acquire again")
@@ -484,7 +483,6 @@ spec["dev commands: ai shows and forces states, pause holds it, ignoreme hides y
 		t.truthy(string.find(ai("HidingResponse"), "not in a hiding spot", 1, true) ~= nil, "it needs a hider")
 		ai("Search")
 		t.eq(attr(model, C.MonsterState), "Search", "ai Search searches where you stand")
-		t.truthy(string.find(ai("AquaticStalk"), "no pool", 1, true) ~= nil, "no pool on Level 1")
 		ai("pause")
 		t.truthy(MonsterAIService.IsPaused(), "paused")
 		local since = attr(model, C.StateSince)
@@ -509,7 +507,7 @@ spec["dev commands: ai shows and forces states, pause holds it, ignoreme hides y
 	end)
 end
 
-spec["locomotion: walks fail after two routes are refused; the water is entered only by a warp"] = function(t: Expect)
+spec["locomotion: walks fail after two routes are refused"] = function(t: Expect)
 	local folder = Instance.new("Folder")
 	local model = quietBuild(folder, CFrame.new(0, 0, 0))
 	local body = CreatureBody.attach(model)
@@ -522,19 +520,7 @@ spec["locomotion: walks fail after two routes are refused; the water is entered 
 	engine.clear = function(_from: Vector3, _to: Vector3, _ignore: { Instance }): boolean
 		return false
 	end
-	local warps: { string } = {}
-	local warpRunning = false
-	local hooks: Locomotion.Hooks = {
-		warp = function(_goal: Vector3, medium: Locomotion.Medium): boolean
-			table.insert(warps, medium)
-			warpRunning = true
-			return true
-		end,
-		warping = function(): boolean
-			return warpRunning
-		end,
-	}
-	local mover = Locomotion.new(body, engine, hooks, function(): number
+	local mover = Locomotion.new(body, engine, function(): number
 		return now
 	end)
 	mover:GoTo(Vector3.new(100, 0, 0), nil)
@@ -544,27 +530,8 @@ spec["locomotion: walks fail after two routes are refused; the water is entered 
 		mover:Step(0.1)
 	end
 	t.eq(mover:Status(), "Failed", "no route: failed")
-	mover:Reset("Floor")
+	mover:Reset()
 	t.eq(mover:Status(), "Idle", "reset")
-	local basin: Locomotion.Basin = {
-		id = "Spec",
-		minX = 20,
-		maxX = 40,
-		minZ = -10,
-		maxZ = 10,
-		surfaceY = -1,
-		floorY = -6,
-		deckY = 0,
-		fadeOnly = true,
-	}
-	mover:SetLevel({ basin })
-	mover:GoTo(Vector3.new(30, -3, 0), nil)
-	now += 0.1
-	mover:Step(0.1)
-	t.eq(#warps, 1, "a goal in the water starts a warp, never a walk down the deck")
-	t.eq(warps[1], "Water", "into the water")
-	t.truthy(mover:Busy(), "the warp leg cannot be interrupted")
-	warpRunning = false
 	mover:Destroy()
 	model:Destroy()
 end
@@ -574,7 +541,7 @@ spec["spawns: on Level 2 it starts at the spawn rule's pick, waits its grace, an
 )
 	local player = fakePlayer(CFrame.new(0, -600, 0), false)
 	inRun({ player }, false, function(world: World, runContext: Types.RunContext)
-		local level: Enums.LevelId = "Level2_ScienceHall"
+		local level: Enums.LevelId = "Level2_Auditorium"
 		local layout = Builder.getLayout(level)
 		assert(layout, "Level 2 layout")
 		local entry = LevelDirector.entryFor(level)
@@ -603,7 +570,7 @@ end
 
 spec["spawns: without a noise the grace runs its full length"] = function(t: Expect)
 	inRun({}, false, function(world: World, runContext: Types.RunContext)
-		local level: Enums.LevelId = "Level3_Gymnasium"
+		local level: Enums.LevelId = "Level0_Basement"
 		local levelCtx: Types.LevelContext =
 			{ levelId = level, run = runContext, root = Instance.new("Model"), runtime = Instance.new("Folder") }
 		LevelDirector.LevelActivated:Fire(level, levelCtx)
@@ -853,7 +820,7 @@ spec["fairness: a teleport lands 12..24 studs of walking away, never within 12 s
 	end)
 end
 
-spec["fairness: no teleport while the game blocks it (a survive countdown, the finale)"] = function(t: Expect)
+spec["fairness: no teleport while the game blocks it (the roof's door, chase and ledge)"] = function(t: Expect)
 	local player = fakePlayer(CFrame.new(0, -600, 0), false)
 	inRun({ player }, true, function(world: World, runContext: Types.RunContext)
 		wallsBeyond(40)

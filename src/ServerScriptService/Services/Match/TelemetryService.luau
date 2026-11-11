@@ -6,9 +6,9 @@
 -- order: 1 Lobby (data ready in the lobby, or back in it after a run) -> 2 Deploy (a run started with them) ->
 -- 3..8 Floor_<LevelId> (each level activated while they were still in the run; Level 0 at the deploy) -> 9 Escape.
 -- Custom events:
---   Death         (value: level index 0-5) when a player is executed; CustomField01 = the cause (Bleedout, Fell,
---                 Drowned, a jumpscare, ...), CustomField02 = the level, CustomField03 = the difficulty
---   FloorReached  (value: the highest level index the participant reached) for each participant when the run
+--   Death         (value: the floor, 0-5) when a player is executed; CustomField01 = the cause (Bleedout, Fell,
+--                 a jumpscare, ...), CustomField02 = the level, CustomField03 = the difficulty
+--   FloorReached  (value: the highest floor the participant reached) for each participant when the run
 --                 resolves; CustomField01 = the outcome, CustomField02 = the difficulty
 -- Economy (currency "SurvivalCredits", from MatchAndDataService.Committed): a credit gain is a Source (Gameplay; the
 -- item sku is the Update's reason, e.g. RunReward), a loss a Sink (Shop; e.g. the perk shop's purchase), each with
@@ -25,6 +25,7 @@ local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
+local StageConfig = require(ReplicatedStorage.Shared.Config.StageConfig)
 local Log = require(ReplicatedStorage.Shared.Util.Log)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -109,8 +110,7 @@ local initialized = false
 
 -- The funnel step of reaching `levelId` and its name.
 function TelemetryService.levelStep(levelId: Enums.LevelId): (number, string)
-	local index = Enums.levelIndex(levelId) or 1
-	return FIRST_FLOOR_STEP + index - 1, "Floor_" .. levelId
+	return FIRST_FLOOR_STEP + (StageConfig.floorOf(levelId) or 0), "Floor_" .. levelId
 end
 
 function TelemetryService.deathEvent(
@@ -119,12 +119,12 @@ function TelemetryService.deathEvent(
 	levelId: Enums.LevelId?,
 	difficulty: Enums.Difficulty?
 ): CustomEvent
-	local index = if levelId then Enums.levelIndex(levelId) else nil
+	local floor = if levelId then StageConfig.floorOf(levelId) else nil
 	return {
 		kind = "Custom",
 		player = player,
 		name = "Death",
-		value = if index then index - 1 else -1,
+		value = floor or -1,
 		fields = {
 			[FIELD_1] = cause,
 			[FIELD_2] = levelId or "None",
@@ -135,7 +135,7 @@ end
 
 function TelemetryService.floorReachedEvent(
 	player: Player,
-	levelIndex: number,
+	floor: number,
 	outcome: Enums.RunOutcome,
 	difficulty: Enums.Difficulty
 ): CustomEvent
@@ -143,7 +143,7 @@ function TelemetryService.floorReachedEvent(
 		kind = "Custom",
 		player = player,
 		name = "FloorReached",
-		value = levelIndex,
+		value = floor,
 		fields = { [FIELD_1] = outcome, [FIELD_2] = difficulty },
 	}
 end
@@ -286,7 +286,7 @@ function TelemetryService.OnLevelActivated(levelId: Enums.LevelId)
 		return
 	end
 	local number, name = TelemetryService.levelStep(levelId)
-	local index = (Enums.levelIndex(levelId) or 1) - 1
+	local index = StageConfig.floorOf(levelId) or 0
 	for _, player in ctx.participants do
 		if not inRun(ctx, player) then
 			continue

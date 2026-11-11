@@ -1,7 +1,7 @@
 --!strict
 -- Builds one layout's shell (school levels and the lobby share this path): room floors (the structural slab),
 -- ceilings, split-slab walls with every opening cut (doors, grates, stair-tower openings, windows), door trims,
--- boarded planks, pillars, platforms, pool basins, the interior finishes (Finishes: glossy, checkered and vinyl
+-- boarded planks, pillars, platforms, the interior finishes (Finishes: glossy, checkered and vinyl
 -- floors, drop ceilings, wainscots kept clear of every opening, hazard plates at the fire doors and the gate), then
 -- the invisible gameplay layer: Zone volumes, trigger volumes, light fixtures (with their FixtureGlow surfaces),
 -- anchor attachments, door anchors and patrol waypoints. Also builds the street-level exterior around the school.
@@ -9,8 +9,8 @@
 -- every door casing carries a stepped head cap (Geometry.doorTrims).
 --
 -- Vertical layout of a level (level-local Y): every room floor occupies [-SlabThickness, 0], so the floors of a
--- level are the structural slab under it (rooms tile the footprint, so the slab has no holes except basins and
--- room for ducts that sit low in a chase). Under the outer half of every footprint wall the slab continues as a
+-- level are the structural slab under it (rooms tile the footprint, so the slab has no holes except room for ducts
+-- that sit low in a chase). Under the outer half of every footprint wall the slab continues as a
 -- slab-edge strip of one material, the band seen on the facade between storeys. Walls stand on the slab from 0
 -- to their height; footprint walls continue up to the next level's floor so the facade is continuous, and the
 -- facade skin owns the whole square at every building corner. Ceilings are thin panels hanging just under each
@@ -87,7 +87,6 @@ export type LightSpec = {
 	zoneId: string,
 	ceilingY: number?, -- world Y of the ceiling underside; fixtures never poke through it
 	facing: Vector3?, -- world point wall-mounted fixtures face (room centre)
-	aimAt: Vector3?, -- world point floodlights aim at
 	along: Vector3?, -- horizontal axis a ceiling strip fixture runs along (the room's long axis; default X)
 	hang: boolean?, -- false: a broken fixture never sags out of its mounts (a pipe runs under it); default true
 	cage: boolean?, -- a wire guard round a bulb (the tunnels' caged bulbs)
@@ -138,22 +137,12 @@ local EPS = 1e-3
 local CEILING = 0.4 -- ceiling panel thickness (hangs below the room height)
 local PLANK = 0.22
 local ROOF_ZONE_MIN = 24 -- open-sky zones extend this high so jumps and platforms stay inside them
-local BASIN_WALL = Geometry.BasinWall
 local SLAB_EDGE_KEY = "ConcreteDark" -- slab edges nobody sees from the street (below grade, the lobby)
 local FACADE_SLAB_EDGE_KEY = "SlabEdge" -- the concrete band between storeys on the brick facade
-local WATER_SURFACE = 0.2 -- thickness of a murky water surface part
-
--- Murky water surfaces (basins and layout PoolWater volumes): visible, never collided, queried or shadowed.
-local WATER_OPTIONS: Geometry.PartOptions =
-	{ transparency = 0.25, canCollide = false, canQuery = false, castShadow = false, reflectance = 0.08 }
 
 local DEFAULT_FLOOR: { [string]: string } = {
 	Corridor = "Linoleum",
 	Classroom = "Linoleum",
-	Lab = "Lab",
-	LockerRoom = "TileWhite",
-	Gym = "WoodGym",
-	Pool = "PoolTile",
 	Boiler = "ConcreteStained",
 	Storage = "Concrete",
 	Office = "Carpet",
@@ -172,10 +161,6 @@ local DEFAULT_FLOOR: { [string]: string } = {
 local DEFAULT_WALL: { [string]: string } = {
 	Corridor = "PlasterGreen",
 	Classroom = "PlasterSchool",
-	Lab = "TileWhite",
-	LockerRoom = "TileGreen",
-	Gym = "Brick",
-	Pool = "PoolTile",
 	Boiler = "ConcreteDark",
 	Storage = "Concrete",
 	Office = "WoodPanel",
@@ -194,10 +179,6 @@ local DEFAULT_WALL: { [string]: string } = {
 local DEFAULT_CEILING: { [string]: string } = {
 	Corridor = "PlasterSchool",
 	Classroom = "PlasterSchool",
-	Lab = "PlasterSchool",
-	LockerRoom = "Concrete",
-	Gym = "MetalGalvanized",
-	Pool = "ConcreteStained",
 	Boiler = "ConcreteDark",
 	Office = "PlasterSchool",
 	Restroom = "PlasterSchool",
@@ -210,7 +191,6 @@ local TRIGGER_TAGS: { [string]: string } = {
 	ScareStep = Tags.ScareTrigger,
 	FloorDebris = Tags.FloorDebris,
 	Checkpoint = Tags.CheckpointVolume,
-	PoolWater = Tags.PoolWater,
 	LevelExit = Tags.LevelExit,
 }
 
@@ -219,7 +199,6 @@ local LIGHT_COLORS: { [string]: Color3 } = {
 	Bulb = Color3.fromRGB(255, 196, 140),
 	EmergencyRed = Color3.fromRGB(255, 34, 22),
 	ClassroomGlow = Color3.fromRGB(196, 214, 236),
-	Floodlight = Color3.fromRGB(255, 240, 214),
 	ExitSign = Color3.fromRGB(60, 255, 110),
 	BoilerGlow = Color3.fromRGB(255, 118, 34),
 }
@@ -240,7 +219,6 @@ SchoolShellBuilder.Exterior = table.freeze({
 	groundThickness = 2,
 	sidewalkWidth = 12,
 	sidewalkHeight = 0.35,
-	landing = table.freeze({ x = -190, z = 74, w = 150, d = 140 }),
 	boundaryHeight = 40, -- invisible walls around the ground slab's edge
 	boundaryThickness = 2,
 })
@@ -394,13 +372,12 @@ function SchoolShellBuilder.levelOptions(layoutId: string): LevelOptions
 		return { isSchool = false, hasLevelAbove = false }
 	end
 	local elevation = WorldConfig.levelElevation(layoutId)
-	local index = Enums.levelIndex(layoutId)
-	local nextId = if index then Enums.LevelId[index + 1] else nil
+	local nextId = WorldConfig.nextLevel(layoutId)
 	local facadeTop = if nextId then WorldConfig.levelElevation(nextId) - elevation - WorldConfig.SlabThickness else nil
 	local aboveGrade = elevation >= WorldConfig.GroundY - EPS
 	return {
 		isSchool = true,
-		bottom = index == 1,
+		bottom = WorldConfig.previousLevel(layoutId) == nil,
 		hasLevelAbove = nextId ~= nil,
 		facadeTop = facadeTop,
 		facadeKey = if aboveGrade then "Brick" else nil,
@@ -443,7 +420,7 @@ local function newLight(
 	end
 	light.Name = name
 	light.Color = spec.color or LIGHT_COLORS[spec.kind] or Color3.new(1, 1, 1)
-	-- Shadowed by default (broken fixtures too: an override such as the pool floodlight switch can revive them).
+	-- Shadowed by default (broken fixtures too: a scripted override can revive them).
 	-- Unshadowed lights are not blocked by parts, so they would light the rooms behind every wall in range.
 	light.Shadows = spec.shadows ~= false
 	light.Enabled = not spec.broken
@@ -538,11 +515,7 @@ function SchoolShellBuilder.fixtureBox(
 		return Vector3.new(at.X - r, at.Y - r, at.Z - r), Vector3.new(at.X + r, top, at.Z + r)
 	end
 	local half: Vector3
-	if kind == "Floodlight" then
-		local at = under(0.8)
-		half = Vector3.one * 1.6
-		return at - half, at + half
-	elseif kind == "ExitSign" then
+	if kind == "ExitSign" then
 		half = Vector3.new(1.15, 0.4, 1.15)
 		local at = under(0.4)
 		return at - half, at + half
@@ -740,16 +713,6 @@ function SchoolShellBuilder.buildLight(parent: Instance, spec: LightSpec): BaseP
 			end
 		end
 		primary = newLight("PointLight", spec, "Light", spec.range)
-	elseif kind == "Floodlight" then
-		local at = underCeiling(0.8)
-		local aim = spec.aimAt or (at - Vector3.new(0, 10, 0))
-		local cframe = if (aim - at).Magnitude > 0.1 then CFrame.lookAt(at, aim) else CFrame.new(at)
-		fixture = Geometry.part(parent, spec.id, cframe, Vector3.new(2.2, 1.4, 1.2), "TrimMetal", fixtureOptions)
-		lens(fixture, Vector2.new(1.9, 1.1))
-		local spot = newLight("SpotLight", spec, "Light", spec.range) :: SpotLight
-		spot.Face = Enum.NormalId.Front
-		spot.Angle = 70
-		primary = spot
 	elseif kind == "ExitSign" then
 		local at = underCeiling(0.4)
 		fixture =
@@ -1412,57 +1375,7 @@ end
 
 type Box3 = { x0: number, x1: number, y0: number, y1: number, z0: number, z1: number }
 
--- One tiled side wall of a pool basin, in wall-local terms (see Geometry's header).
-type BasinSide = { axis: Axis, coord: number, u0: number, u1: number }
-
 type BoundaryWall = { name: string, x0: number, z0: number, x1: number, z1: number }
-
--- Level-local box of every grate's bore from its wall line into its room, through the room-side half of the wall
--- and one basin coping beyond it: a grate opening over a pool cuts through the coping too.
-local function grateTunnels(layout: Layout, rooms: { [string]: Room }): { Box3 }
-	local out: { Box3 } = {}
-	local vents = layout.vents
-	if not vents then
-		return out
-	end
-	local nodes: { [string]: LayoutSchema.VentNodeSpec } = {}
-	for _, node in vents.nodes do
-		nodes[node.id] = node
-	end
-	local halfBore = WorldConfig.VentBore / 2
-	local reach = WorldConfig.WallThickness / 2 + BASIN_WALL
-	for _, grate in vents.grates do
-		local node, room = nodes[grate.node], rooms[grate.room]
-		if not node or not room then
-			continue
-		end
-		local side = LayoutSchema.sideOfPoint(room.rect, node.x, node.z)
-		if not side then
-			continue
-		end
-		local y = LayoutSchema.ventNodeY(node)
-		local box: Box3 = {
-			x0 = node.x - halfBore,
-			x1 = node.x + halfBore,
-			y0 = y - halfBore,
-			y1 = y + halfBore,
-			z0 = node.z - halfBore,
-			z1 = node.z + halfBore,
-		}
-		-- the room lies on the inward side of the wall the grate is cut through
-		if side == "N" then
-			box.z0, box.z1 = node.z, node.z + reach
-		elseif side == "S" then
-			box.z0, box.z1 = node.z - reach, node.z
-		elseif side == "W" then
-			box.x0, box.x1 = node.x, node.x + reach
-		else
-			box.x0, box.x1 = node.x - reach, node.x
-		end
-		table.insert(out, box)
-	end
-	return out
-end
 
 -- Every opening the shell cuts into `layout`'s walls (pure; the sign and pipe planners keep clear of them).
 function SchoolShellBuilder.openings(layout: Layout): { PlacedOpening }
@@ -1488,7 +1401,7 @@ local DOOR_FRAME_PAD: { [string]: number } = {
 local OPENING_PAD: { [string]: number } = { Grate = 0.5, Window = 0.5, Tower = 0.2 }
 
 -- Props that stand against a wall (half their width along it): the wainscot leaves their wall bare.
-local WALL_PROPS: { [string]: number } = { Locker = 1.65, FloodlightSwitch = 1.3, Terminal = 2.4 }
+local WALL_PROPS: { [string]: number } = { Locker = 1.65, Terminal = 2.4 }
 local WALL_PROP_REACH = 3.5
 
 -- Along-wall cuts per wall line: every opening that reaches below the chair rail, padded by what frames it.
@@ -1718,17 +1631,10 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 	local slab = WorldConfig.SlabThickness
 	local levelId: string = layout.id
 
-	-- Basins per room (deck holes, zone depth)
-	local basinsByRoom: { [string]: { LayoutSchema.Basin } } = {}
-	for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-		basinsByRoom[basin.room] = basinsByRoom[basin.room] or {}
-		table.insert(basinsByRoom[basin.room], basin)
-	end
-
 	-- Floors (= the structural slab), ceilings, roof caps. Each room's floor covers its own rect. Where a side is
 	-- exterior the slab continues under the outer half of the footprint wall as a separate slab-edge strip, so the
 	-- band on the facade between storeys is one material all round (never the room's carpet, tile or gravel).
-	-- Chase floors leave room for any duct that sits low in its chase (down through the slab to a waterline).
+	-- Chase floors leave room for any duct that sits low in its chase (down through the slab).
 	local exteriorSides = SchoolShellBuilder.exteriorSides(layout)
 	local slabEdgeKey = options.slabEdgeKey or SLAB_EDGE_KEY
 	local ductHoles: { Rect } = {}
@@ -1742,9 +1648,6 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 	end
 	for _, room in layout.rooms do
 		local holes: { Rect } = {}
-		for _, basin in (basinsByRoom[room.id] or {}) :: { LayoutSchema.Basin } do
-			table.insert(holes, basin.rect)
-		end
 		if room.kind == "Chase" then
 			for _, hole in ductHoles do
 				table.insert(holes, hole)
@@ -1923,13 +1826,7 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		)
 	end
 
-	-- Platforms, clipped to the room's wall faces so a platform laid against a wall never sinks into it. One whose
-	-- top is at or below the deck only shows over open water, so it is clipped to the basin interiors as well: it
-	-- never shares the deck's or the coping's top face (z-fighting) or buries itself in them.
-	local basinInteriors: { Rect } = {}
-	for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-		table.insert(basinInteriors, Geometry.insetRect(basin.rect, BASIN_WALL))
-	end
+	-- Platforms, clipped to the room's wall faces so a platform laid against a wall never sinks into it.
 	for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
 		local room = rooms[platform.room]
 		local clipped = if room
@@ -1938,119 +1835,13 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		if not clipped then
 			continue
 		end
-		local pieces: { Rect } = { clipped }
-		if platform.top <= EPS then
-			local wet: { Rect } = {}
-			for _, interior in basinInteriors do
-				local cut = Geometry.rectIntersection(clipped, interior)
-				if cut then
-					table.insert(wet, cut)
-				end
-			end
-			if #wet > 0 then
-				pieces = wet
-			end
-		end
-		for i, r in pieces do
-			Geometry.box(
-				shell,
-				if i == 1 then "Platform_" .. platform.id else string.format("Platform_%s_%d", platform.id, i),
-				origin + Vector3.new(r.x, platform.top - platform.thickness, r.z),
-				origin + Vector3.new(r.x + r.w, platform.top, r.z + r.d),
-				platform.material or "ConcreteStained"
-			)
-		end
-	end
-
-	-- Pool basins: shell down to `depth` (its coping cut wherever a grate opens over the pool), a murky surface,
-	-- and a PoolWater volume
-	local tunnels = grateTunnels(layout, rooms)
-	for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-		local r = basin.rect
-		local depth = basin.depth
-		local wall = BASIN_WALL
-		local halfWall = wall / 2
 		Geometry.box(
 			shell,
-			basin.id .. "_Floor",
-			origin + Vector3.new(r.x, -depth - 1, r.z),
-			origin + Vector3.new(r.x + r.w, -depth, r.z + r.d),
-			"PoolTile"
+			"Platform_" .. platform.id,
+			origin + Vector3.new(clipped.x, platform.top - platform.thickness, clipped.z),
+			origin + Vector3.new(clipped.x + clipped.w, platform.top, clipped.z + clipped.d),
+			platform.material or "ConcreteStained"
 		)
-		local sides: { BasinSide } = {
-			{ axis = "Z", coord = r.z + halfWall, u0 = r.x, u1 = r.x + r.w },
-			{ axis = "Z", coord = r.z + r.d - halfWall, u0 = r.x, u1 = r.x + r.w },
-			{ axis = "X", coord = r.x + halfWall, u0 = r.z + wall, u1 = r.z + r.d - wall },
-			{ axis = "X", coord = r.x + r.w - halfWall, u0 = r.z + wall, u1 = r.z + r.d - wall },
-		}
-		for i, side in sides do
-			local alongX = side.axis == "Z"
-			local sx0 = if alongX then side.u0 else side.coord - halfWall
-			local sx1 = if alongX then side.u1 else side.coord + halfWall
-			local sz0 = if alongX then side.coord - halfWall else side.u0
-			local sz1 = if alongX then side.coord + halfWall else side.u1
-			local openings: { Geometry.Opening } = {}
-			for _, tunnel in tunnels do
-				local through = math.min(tunnel.x1, sx1) - math.max(tunnel.x0, sx0) > EPS
-					and math.min(tunnel.z1, sz1) - math.max(tunnel.z0, sz0) > EPS
-					and math.min(tunnel.y1, 0) - math.max(tunnel.y0, -depth) > EPS
-				if through then
-					table.insert(openings, {
-						u0 = if alongX then tunnel.x0 else tunnel.z0,
-						u1 = if alongX then tunnel.x1 else tunnel.z1,
-						y0 = tunnel.y0,
-						y1 = tunnel.y1,
-					})
-				end
-			end
-			for k, piece in Geometry.splitWall(side.u0, side.u1, -depth, 0, openings) do
-				Geometry.wallBox(
-					shell,
-					if k == 1
-						then string.format("%s_Wall%d", basin.id, i)
-						else string.format("%s_Wall%d_%d", basin.id, i, k),
-					origin,
-					side.axis,
-					side.coord,
-					piece.u0,
-					piece.u1,
-					piece.y0,
-					piece.y1,
-					-halfWall,
-					halfWall,
-					"PoolTile"
-				)
-			end
-		end
-		local inner = Geometry.insetRect(r, wall)
-		local surface = Geometry.box(
-			shell,
-			basin.id .. "_Surface",
-			origin + Vector3.new(inner.x, basin.waterLevel - WATER_SURFACE, inner.z),
-			origin + Vector3.new(inner.x + inner.w, basin.waterLevel, inner.z + inner.d),
-			"Water",
-			WATER_OPTIONS
-		)
-		if surface then
-			Geometry.makeFixture(surface)
-		end
-		local volume = Geometry.box(
-			folders.Triggers,
-			basin.id,
-			origin + Vector3.new(r.x, -depth, r.z),
-			origin + Vector3.new(r.x + r.w, basin.waterLevel, r.z + r.d),
-			"Water"
-		)
-		if volume then
-			Geometry.makeVolume(volume)
-			volume:AddTag(Tags.PoolWater)
-			setAttributes(volume, {
-				[W.TriggerId] = basin.id,
-				[W.TriggerKind] = "PoolWater",
-				[W.LevelId] = levelId,
-				[W.ZoneId] = basin.room,
-			})
-		end
 	end
 
 	-- Zones (never in solid ground)
@@ -2059,10 +1850,6 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 			continue
 		end
 		local r = room.rect
-		local bottom = 0
-		for _, basin in (basinsByRoom[room.id] or {}) :: { LayoutSchema.Basin } do
-			bottom = math.min(bottom, -basin.depth)
-		end
 		local top = LayoutSchema.roomHeight(layout, room)
 		if room.noCeiling then
 			top = math.max(top, ROOF_ZONE_MIN)
@@ -2070,7 +1857,7 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		local zone = Geometry.box(
 			folders.Zones,
 			room.id,
-			origin + Vector3.new(r.x, bottom, r.z),
+			origin + Vector3.new(r.x, 0, r.z),
 			origin + Vector3.new(r.x + r.w, top, r.z + r.d),
 			"Concrete"
 		)
@@ -2087,41 +1874,10 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 		end
 	end
 
-	-- Triggers. A PoolWater volume the layout places itself also gets a murky surface at its top, over the part of
-	-- it that is open water: not over a basin (which draws its own surface) and not in a chase (water standing in a
-	-- duct, which VentShaftBuilder floods inside the bore).
-	local notOpenWater: { Rect } = {}
-	for _, room in layout.rooms do
-		if room.kind == "Chase" then
-			table.insert(notOpenWater, room.rect)
-		end
-	end
-	for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-		table.insert(notOpenWater, basin.rect)
-	end
+	-- Triggers
 	for _, trigger in layout.triggers do
 		local r = trigger.rect
 		local y = trigger.y or 0
-		if trigger.kind == "PoolWater" and trigger.height > EPS then
-			local room = rooms[trigger.room]
-			local area = if room then Geometry.rectIntersection(r, innerRect(room, exteriorSides)) else r
-			if area then
-				local top = y + trigger.height
-				for i, piece in Geometry.subtractRects(area, notOpenWater) do
-					local surface = Geometry.box(
-						shell,
-						if i == 1 then trigger.id .. "_Surface" else string.format("%s_Surface%d", trigger.id, i),
-						origin + Vector3.new(piece.x, top - math.min(WATER_SURFACE, trigger.height), piece.z),
-						origin + Vector3.new(piece.x + piece.w, top, piece.z + piece.d),
-						"Water",
-						WATER_OPTIONS
-					)
-					if surface then
-						Geometry.makeFixture(surface)
-					end
-				end
-			end
-		end
 		local part = Geometry.box(
 			folders.Triggers,
 			trigger.id,
@@ -2176,7 +1932,6 @@ function SchoolShellBuilder.buildLevel(layout: Layout, root: Model, options: Lev
 				zoneId = room.id,
 				ceilingY = if hasCeiling(room) then ceilingY else nil,
 				facing = origin + Vector3.new(cx, light.pos.Y, cz),
-				aimAt = origin + Vector3.new(cx, 0, cz),
 			})
 		end
 	end
@@ -2269,7 +2024,7 @@ function SchoolShellBuilder.buildAnchors(layout: Layout, folders: Folders, origi
 end
 
 --------------------------------------------------------------------------------
--- Exterior: street-level ground around the school, sidewalks, the parachute landing field
+-- Exterior: street-level ground around the school, sidewalks
 --------------------------------------------------------------------------------
 
 -- `street` is the part of the footprint the street-level storey covers (default: all of it): a legacy storey still
@@ -2318,39 +2073,10 @@ function SchoolShellBuilder.buildExterior(parent: Instance, street: Vector2?): n
 		)
 	end
 
-	-- Parachute landing field west of the school: a churned dead-grass lot ringed by broken kerbs.
-	local field = ext.landing
-	Geometry.box(
-		parent,
-		"LandingField",
-		Vector3.new(field.x, groundY, field.z),
-		Vector3.new(field.x + field.w, groundY + 0.2, field.z + field.d),
-		"DeadGrass"
-	)
-	local kerbs: { { number } } = {
-		{ field.x, field.z - 1, field.x + field.w * 0.45, field.z },
-		{ field.x + field.w * 0.6, field.z - 1, field.x + field.w, field.z },
-		{ field.x, field.z + field.d, field.x + field.w * 0.3, field.z + field.d + 1 },
-		{ field.x + field.w * 0.5, field.z + field.d, field.x + field.w, field.z + field.d + 1 },
-		{ field.x - 1, field.z, field.x, field.z + field.d * 0.7 },
-	}
-	for i, kerb in kerbs do
-		Geometry.box(
-			parent,
-			string.format("Kerb_%d", i),
-			Vector3.new(kerb[1], groundY, kerb[2]),
-			Vector3.new(kerb[3], groundY + 0.8, kerb[4]),
-			"Concrete"
-		)
-	end
-
 	-- Deterministic street debris and dead lamp posts (no lights: the storm is the only light outside).
 	local random = Rng.seeded(1, "Exterior")
 	local function clearOfSchool(x: number, z: number, pad: number): boolean
 		if x > -walk - pad and x < size.X + walk + pad and z > -walk - pad and z < size.Y + walk + pad then
-			return false
-		end
-		if x > field.x - pad and x < field.x + field.w + pad and z > field.z - pad and z < field.z + field.d + pad then
 			return false
 		end
 		return true

@@ -5,10 +5,12 @@
 -- Six stair towers stand outside the footprint, three against each side wall (X -28..0 west, 400..428 east), each
 -- 32 deep along Z: North at Z 12..44 (opening z 28), Middle (West / East) at Z 128..160 (opening z 144) and South at
 -- Z 244..276 (opening z 260). A tower's opening (Towers[id].openingZ) meets one airlock vestibule on every floor it
--- serves. A floor is entered from one side and left by the other, so the squad crosses every floor:
---   L0 (spawn W) -> East -> L1 -> West -> L2 -> East -> L3 -> West -> L4 -> East -> L5 roof (run W, jump).
--- Every floor pair (1..5) has three candidate stairwells, one per tower of its side (slots North, Middle, South):
+-- serves. A floor is entered from one side and left by the other, so the squad crosses every floor (the school is
+-- the four levels of LevelOrder, docs/design/game-spec-v2.md 4.2):
+--   L0 Basement (spawn W) -> East -> L1 Hallways -> West -> L2 Auditorium -> East -> L3 roof (run W, jump).
+-- Every floor pair has three candidate stairwells, one per tower of its side (slots North, Middle, South):
 -- RunDirector.pickRoute picks one per pair for a run (plan.route); the other two are jammed shut for that run.
+-- Every per-level table here is keyed by the level's id, never by its number.
 --
 -- Legacy floors: a layout marked `legacy` still has the old 240 x 160 plan (LegacyFootprint) until it is rebuilt on
 -- TunnelPlanner; its vestibules no longer meet the moved towers (see LayoutSchema.validate and docs/MAPS.md).
@@ -32,7 +34,7 @@ export type TowerSpec = {
 
 export type StairwellSpec = {
 	id: string,
-	pair: number, -- 1..5: the floor pair (from = LevelOrder[pair])
+	pair: number, -- 1..3: the floor pair (from = LevelOrder[pair])
 	slot: RouteSlot,
 	from: Enums.LevelId,
 	to: Enums.LevelId,
@@ -43,7 +45,9 @@ export type StairwellSpec = {
 
 export type LevelSpec = {
 	elevation: number, -- world Y of the floor surface
-	height: number, -- default ceiling height above the floor
+	height: number, -- default ceiling height above the floor (0: open to the sky)
+	prefix: string, -- the level's id prefix (rooms, anchors, doors, lights: "L0_...")
+	exitSide: TowerSide?, -- the side wall its stairs up stand against (nil on the top level)
 }
 
 local WorldConfig = {}
@@ -57,13 +61,16 @@ WorldConfig.WallThickness = 1 -- never thinner: thin walls leak light and sound
 WorldConfig.ExteriorWallThickness = 1.5
 WorldConfig.GroundY = 18 -- street level = Level 1 floor; the basement is below grade
 
+local function levelSpec(spec: LevelSpec): LevelSpec
+	return table.freeze(spec)
+end
+
+-- The school levels (spec 4.2). The roof is open: no ceiling, no slab above it.
 WorldConfig.Levels = table.freeze({
-	Level0_Basement = { elevation = 0, height = 16 },
-	Level1_Hallways = { elevation = 18, height = 14 },
-	Level2_ScienceHall = { elevation = 34, height = 14 },
-	Level3_Gymnasium = { elevation = 50, height = 30 },
-	Level4_FloodedPool = { elevation = 82, height = 28 },
-	Level5_Roof = { elevation = 112, height = 0 },
+	Level0_Basement = levelSpec({ elevation = 0, height = 16, prefix = "L0", exitSide = "East" }),
+	Level1_Hallways = levelSpec({ elevation = 18, height = 14, prefix = "L1", exitSide = "West" }),
+	Level2_Auditorium = levelSpec({ elevation = 34, height = 28, prefix = "L2", exitSide = "East" }),
+	Level3_Roof = levelSpec({ elevation = 64, height = 0, prefix = "L3" }),
 } :: { [string]: LevelSpec })
 
 WorldConfig.LobbyOrigin = Vector3.new(-800, 0, 0)
@@ -88,30 +95,51 @@ WorldConfig.Towers = table.freeze({
 -- The middle towers' opening; every tower has its own centre (Towers[id].openingZ), the width and height are shared.
 WorldConfig.TowerOpening = table.freeze({ centerZ = 144, width = 6, height = 10 })
 
--- The school levels in climbing order: floor pair i leaves LevelOrder[i] for LevelOrder[i + 1].
+-- The school levels in climbing order, the levels the world builder builds: floor pair i leaves LevelOrder[i] for
+-- LevelOrder[i + 1]. The city levels (Enums.LevelId) follow them in the run but are no part of the school.
 WorldConfig.LevelOrder = table.freeze({
 	"Level0_Basement",
 	"Level1_Hallways",
-	"Level2_ScienceHall",
-	"Level3_Gymnasium",
-	"Level4_FloodedPool",
-	"Level5_Roof",
+	"Level2_Auditorium",
+	"Level3_Roof",
 } :: { Enums.LevelId })
 
-local PAIR_SIDES: { TowerSide } = { "East", "West", "East", "West", "East" }
-local LEVEL_PREFIX = { "L0", "L1", "L2", "L3", "L4", "L5" }
 local SLOT_ORDER: { RouteSlot } = { "North", "Middle", "South" }
 
 -- The route slots in candidate order.
 WorldConfig.RouteSlots = table.freeze(table.clone(SLOT_ORDER))
 
--- The vestibule of slot `slot` on the `side` wall of level `index` (1 = the basement); the roof has stair housings.
-local function vestibule(index: number, side: TowerSide, slot: RouteSlot): string
+-- Whether `levelId` is one of the school levels the world builder builds.
+function WorldConfig.isSchoolLevel(levelId: string?): boolean
+	return levelId ~= nil and WorldConfig.Levels[levelId] ~= nil
+end
+
+-- The school level after `levelId` in climbing order (nil on the top level and for any other id).
+function WorldConfig.nextLevel(levelId: string): Enums.LevelId?
+	local at = table.find(WorldConfig.LevelOrder, levelId :: any)
+	return if at then WorldConfig.LevelOrder[at + 1] else nil
+end
+
+-- The school level before `levelId` in climbing order (nil on the basement and for any other id).
+function WorldConfig.previousLevel(levelId: string): Enums.LevelId?
+	local at = table.find(WorldConfig.LevelOrder, levelId :: any)
+	return if at and at > 1 then WorldConfig.LevelOrder[at - 1] else nil
+end
+
+-- The id prefix of a school level ("L0".."L3"; nil for any other id).
+function WorldConfig.levelPrefix(levelId: string): string?
+	local spec = WorldConfig.Levels[levelId]
+	return if spec then spec.prefix else nil
+end
+
+-- The vestibule of slot `slot` on the `side` wall of `levelId`; the open roof has stair housings.
+local function vestibule(levelId: string, side: TowerSide, slot: RouteSlot): string
 	local suffix = if slot == "Middle" then "" else slot
-	if index == #LEVEL_PREFIX then
-		return "L5_RoofAccess" .. suffix
+	local spec = WorldConfig.Levels[levelId]
+	if spec.height == 0 then
+		return spec.prefix .. "_RoofAccess" .. suffix
 	end
-	return LEVEL_PREFIX[index] .. "_Airlock" .. suffix .. side
+	return spec.prefix .. "_Airlock" .. suffix .. side
 end
 
 -- Every candidate stairwell: the five middle ones first (their ids are the original single route), then the corner
@@ -126,16 +154,19 @@ local function towerOf(side: TowerSide, slot: RouteSlot): TowerId
 end
 
 local function stairwell(pair: number, slot: RouteSlot): StairwellSpec
-	local side: TowerSide = PAIR_SIDES[pair] :: any -- (an array read widens the singleton type)
+	-- (an array read widens the singleton types)
+	local from: Enums.LevelId, to: Enums.LevelId =
+		WorldConfig.LevelOrder[pair] :: any, WorldConfig.LevelOrder[pair + 1] :: any
+	local side: TowerSide = if WorldConfig.Levels[from].exitSide == "West" then "West" else "East"
 	local spec: StairwellSpec = {
 		id = string.format("Stairwell_%d_%d%s", pair - 1, pair, if slot == "Middle" then "" else "_" .. slot),
 		pair = pair,
 		slot = slot,
-		from = WorldConfig.LevelOrder[pair],
-		to = WorldConfig.LevelOrder[pair + 1],
+		from = from,
+		to = to,
 		tower = towerOf(side, slot),
-		fromRoom = vestibule(pair, side, slot),
-		toRoom = vestibule(pair + 1, side, slot),
+		fromRoom = vestibule(from, side, slot),
+		toRoom = vestibule(to, side, slot),
 	}
 	return table.freeze(spec)
 end
@@ -143,7 +174,7 @@ end
 local stairwells: { StairwellSpec } = {}
 local BUILD_ORDER: { RouteSlot } = { "Middle", "North", "South" }
 for _, slot in BUILD_ORDER do
-	for pair = 1, #PAIR_SIDES do
+	for pair = 1, #WorldConfig.LevelOrder - 1 do
 		table.insert(stairwells, stairwell(pair, slot :: any))
 	end
 end
@@ -162,10 +193,7 @@ WorldConfig.VentCenterHeight = 2 -- duct centre above the floor ("low wall vents
 WorldConfig.ChaseWidth = 5 -- service chase between rooms that hides the ducts "inside the walls"
 WorldConfig.VentColliderDiameter = 2.6
 
--- Water (part volumes, never Terrain water: custom swim physics, no engine Swimming state)
-WorldConfig.WaterSurfaceOffset = -1 -- pool water surface relative to the pool deck floor
-
--- Roof finale
+-- The roof
 WorldConfig.ParapetHeight = 3.5
 WorldConfig.ParachuteLandingY = WorldConfig.GroundY
 
@@ -236,12 +264,8 @@ end
 
 -- The stairwell a route enters `to` by (the previous floor's exit); nil for the basement and the lobby.
 function WorldConfig.routeEntry(route: { [string]: string }?, to: string): StairwellSpec?
-	for i, levelId in WorldConfig.LevelOrder do
-		if levelId == to and i > 1 then
-			return WorldConfig.routeExit(route, WorldConfig.LevelOrder[i - 1])
-		end
-	end
-	return nil
+	local from = WorldConfig.previousLevel(to)
+	return if from then WorldConfig.routeExit(route, from) else nil
 end
 
 -- The side wall tower `tower` stands against.

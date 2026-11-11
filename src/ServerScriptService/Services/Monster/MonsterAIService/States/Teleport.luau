@@ -12,7 +12,7 @@
 --   * Then it stalks the target at the Teleport pace for StalkSeconds; meanwhile sight alone does not start a chase,
 --     only a held stare or the target coming within StalkNear (the service's summary). Then it patrols.
 -- Never during a chase, a search, a hiding response or a scripted beat; never within AfterCatch of a catch or of someone
--- going down; never while the game blocks it (an objective's survive countdown, the roof's finale); the first on a floor
+-- going down; never while the game blocks it (the roof's door, chase and ledge); the first on a floor
 -- no sooner than its grace + FirstAfterGrace.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

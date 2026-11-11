@@ -47,11 +47,11 @@ type FakeClock = {
 }
 
 local W = Attributes.World
-local LEVELS: { Enums.LayoutId } = { "Level0_Basement", "Level1_Hallways", "Level2_ScienceHall", "Level5_Roof" }
+local LEVELS: { Enums.LayoutId } = { "Level0_Basement", "Level1_Hallways", "Level2_Auditorium", "Level3_Roof" }
 local L0: Enums.LevelId = "Level0_Basement"
 local L1: Enums.LevelId = "Level1_Hallways"
-local L2: Enums.LevelId = "Level2_ScienceHall"
-local L5: Enums.LevelId = "Level5_Roof"
+local L2: Enums.LevelId = "Level2_Auditorium"
+local LR: Enums.LevelId = "Level3_Roof"
 local SEED = 6161
 local LEAD = GameConfig.OneShotLead
 local EPS = 1e-3
@@ -533,7 +533,7 @@ return {
 			t.eq(gate:GetAttribute(W.DoorKind), "Gate")
 			local classroom = door(L1, "ClassroomDoor")
 			t.eq(classroom:GetAttribute(W.DoorKind), "Ajar")
-			local roof = door(L5, "RoofStairDoor")
+			local roof = door(LR, "RoofStairDoor")
 			t.eq(DoorService.Get(L1, "RoofStairDoor"), nil, "per level")
 			t.eq(DoorService.Get(L1, "NoSuchDoor"), nil, "unknown ids")
 
@@ -577,12 +577,8 @@ return {
 			t.eq(into, 6, "both sides of the three stairwells up from the basement")
 			t.eq(outOf, 6, "both sides of the three stairwells up to Level 2")
 			t.eq(#DoorService.Airlocks(L0), 6, "the basement: its exits and Level 1's entries")
-			t.eq(
-				#DoorService.Airlocks(L2),
-				9,
-				"Level 2: Level 1's exits, its entries and its exits (Level 3 is not built)"
-			)
-			t.eq(#DoorService.Airlocks(L5), 0, "the roof has no fire doors")
+			t.eq(#DoorService.Airlocks(L2), 9, "Level 2: Level 1's exits, its entries and its exits up to the roof")
+			t.eq(#DoorService.Airlocks(LR), 3, "the roof has no fire doors of its own: Level 2's exits lead up to it")
 		end)
 	end,
 
@@ -692,7 +688,7 @@ return {
 				end
 				t.eq(slams, 1, "one DoorSlam noise when it lands")
 
-				local roof = door(L5, "RoofStairDoor")
+				local roof = door(LR, "RoofStairDoor")
 				t.truthy(DoorService.SetState(roof, "Smashed"), "smashed")
 				local smashShots = sentOf(sent, "OneShot")
 				t.eq((smashShots[#smashShots] :: Types.OneShotEvent).kind, "DoorSmash")

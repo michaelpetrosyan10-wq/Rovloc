@@ -19,29 +19,12 @@
 -- boiler surge that makes the nearby bulbs stutter, something dragging away across the ceiling, a child's whisper or
 -- giggle, an object clattering to the floor.
 --
--- Floor 3, the locker-room beats (positional, out of sight, from Level3_GymnasiumController): a showerhead dripping
--- onto tile, a locker door banging (or rattling) somewhere in the changing rooms, a basketball bouncing to rest far off
--- in the dark gym.
---
--- Floor 4, the emergency floodlights ("L4_Floodlights", seconds from the OneShot's startAt): the Level 4 controller
--- lights the nine fixtures for the run at startAt (their BaseBrightness), and every client strikes them up: one after
--- another (FloodlightStagger apart, in the order of the flood1..flood9 args) each lamp sputters, catches, sags while
--- the arc warms and settles at full brightness FloodlightStrike later; the last is up by FloodlightSeconds.
---
--- The roof (Level 5), seconds from each OneShot's startAt; the Level 5 controller times its authoritative beats from
--- the same numbers:
---   "L5_DoorSmash" (RoofDoor) once the squad is out on the roof: the wind slams the stairwell door shut behind them
+-- The roof (Level 3), seconds from the OneShot's startAt; the roof controller times its authoritative beats from the
+-- same numbers:
+--   "L3_DoorSmash" (RoofDoor) once the squad is out on the roof: the wind slams the stairwell door shut behind them
 --     (0.35), the hidden Creature is moved in behind it (0.8), three blows from the far side, each harder (1.9, 3.0,
 --     3.55; the cameras near the door shake, panic climbs), it is shown behind the closed door (4.1), the door is torn
 --     off (4.6: DoorService's smash and the DoorSmash action together), the cry (4.7) and the chase (5.1).
---   "L5_Finale" (Finale) once nobody is left on the roof to jump and every canopy is open: the lookback holds on the
---     ledge; the first flash (1.0) reveals the Creature motionless on the edge, staring down (shown in the dark gap
---     before the main strike, Reveal action at 1.42; every jumper's view tightens onto its face, panic, the sting,
---     thunder); the second flash (4.6): it glitches in the first strike (Vanish), is gone before the main one (hidden at
---     4.96) and the ledge stands empty; the view eases back; fade to black (6.6 to 8.0); at 8.2 anyone still under a
---     canopy is landed in the dark and every lander's hold ends (the ESCAPED summary follows). "L5_FinaleSky" is the
---     same storm without the Creature (it could not be taken); "L5_Touchdown" is one late jumper's own fade to black
---     after landing, when the finale has already played (their hold ends at TouchdownRelease).
 --
 -- Track kinds beyond SequenceController's built-ins ("sound", "light", "callback") and CreatureController's
 -- "creature" are LevelScenesController's (Tracks.* below) and ParachuteController's (RoofTracks.*). Pure camera maths
@@ -57,8 +40,6 @@ type Track = Timeline.Track
 type Key = Timeline.Key
 
 export type BeatKind = "PipeBang" | "BoilerSurge" | "CeilingDrag" | "ChildVoice" | "FallingObject"
-
-export type GymBeatKind = "ShowerDrip" | "LockerBang" | "BallBounce"
 
 export type ClassroomScare = {
 	Id: string,
@@ -97,36 +78,6 @@ export type RoofDoor = {
 	PanicRadius: number, -- listeners this close to the door take the panic floor
 }
 
-export type Finale = {
-	Id: string,
-	SkyId: string,
-	TouchdownId: string,
-	Flash1: number,
-	Reveal: number,
-	Thunder1: number,
-	Flash2: number,
-	Vanish: number,
-	Hide: number,
-	Thunder2: number,
-	FocusIn: number,
-	FocusHeld: number,
-	FocusOut: number,
-	FocusRest: number,
-	RestFocus: number, -- how far the view stays on the ledge after the vanish
-	FadeStart: number,
-	FadeEnd: number,
-	Land: number, -- the server lands everyone still in the air and lets every lander go (the view is theirs again)
-	Duration: number,
-	RevealLead: number, -- the server shows the Creature this long before Reveal (replication)
-	HideLead: number, -- and hides it this long before Hide
-	FlashIntensity: number,
-	Settle: number, -- seconds after the last canopy opened before the finale starts
-	TouchdownFadeStart: number,
-	TouchdownFadeEnd: number,
-	TouchdownRelease: number, -- the late lander's hold ends (after their fade)
-	TouchdownDuration: number,
-}
-
 local Scenes = {}
 
 -- Play args (OneShot args of the Timeline).
@@ -160,9 +111,6 @@ Scenes.Tracks = TRACKS
 -- The roof scenes' Play args (Vector3 unless noted).
 local ROOF_ARGS = table.freeze({
 	Door = "door", -- the stairwell doorway's centre on the roof side
-	Head = ARGS.Head, -- the Creature's eyes on the ledge
-	Ledge = "ledge", -- the ledge point it stands on
-	Subject = ARGS.Subject, -- "L5_Touchdown": the UserId of the jumper it is for (number)
 })
 Scenes.RoofArgs = ROOF_ARGS
 
@@ -170,9 +118,6 @@ Scenes.RoofArgs = ROOF_ARGS
 local ROOF_TRACKS = table.freeze({
 	Shake = "roofShake", -- events: a camera shake of `value` degrees for listeners within RoofDoor.ShakeRadius of args.door
 	Panic = "roofPanic", -- continuous: the panic floor of players still on the roof near args.door
-	Focus = "finaleFocus", -- continuous 0..1: how far a jumper's lookback has tightened onto args.head
-	FinalePanic = "finalePanic", -- continuous: the panic floor of everyone in the finale
-	Fade = "finaleFade", -- continuous 0..1: the finale's black (only args.subject's when it is set); held at the end
 })
 Scenes.RoofTracks = ROOF_TRACKS
 
@@ -180,7 +125,7 @@ local POUNDS: { number } = { 1.9, 3.0, 3.55 }
 table.freeze(POUNDS)
 
 local ROOF_DOOR: RoofDoor = table.freeze({
-	Id = "L5_DoorSmash",
+	Id = "L3_DoorSmash",
 	Slam = 0.35,
 	SlamSeconds = 0.35,
 	Stage = 0.8,
@@ -194,41 +139,6 @@ local ROOF_DOOR: RoofDoor = table.freeze({
 	PanicRadius = 90,
 })
 Scenes.RoofDoor = ROOF_DOOR
-
-local FLASH1 = 1.0
-local FLASH2 = 4.6
-local MAIN_STRIKE = 0.42 -- a two-stage flash's main strike (LightingController.lightningEnvelope)
-
-local FINALE: Finale = table.freeze({
-	Id = "L5_Finale",
-	SkyId = "L5_FinaleSky",
-	TouchdownId = "L5_Touchdown",
-	Flash1 = FLASH1,
-	Reveal = FLASH1 + MAIN_STRIKE,
-	Thunder1 = FLASH1 + 1,
-	Flash2 = FLASH2,
-	Vanish = FLASH2 + 0.06,
-	Hide = FLASH2 + 0.36,
-	Thunder2 = FLASH2 + 0.25,
-	FocusIn = FLASH1 + MAIN_STRIKE,
-	FocusHeld = FLASH1 + 1.3,
-	FocusOut = FLASH2 + 0.45,
-	FocusRest = FLASH2 + 1.6,
-	RestFocus = 0.35,
-	FadeStart = 6.6,
-	FadeEnd = 8,
-	Land = 8.2,
-	Duration = 8.4,
-	RevealLead = 0.25,
-	HideLead = 0.25,
-	FlashIntensity = 1,
-	Settle = 1.6,
-	TouchdownFadeStart = 1,
-	TouchdownFadeEnd = 2.4,
-	TouchdownRelease = 2.6,
-	TouchdownDuration = 2.7,
-})
-Scenes.Finale = FINALE
 
 local SNAP = 0.42
 local BURST = 2.05
@@ -282,43 +192,6 @@ Scenes.CeilingDragDistance = 16
 Scenes.CeilingDragSeconds = 3.6
 -- How many bulbs a boiler surge can stutter.
 Scenes.SurgeLights = 4
-
--- Every Floor 3 beat kind, in a fixed order (the director's seeded picks index into it).
-local GYM_BEAT_KINDS: { GymBeatKind } = { "ShowerDrip", "LockerBang", "BallBounce" }
-Scenes.GymBeatKinds = table.freeze(table.clone(GYM_BEAT_KINDS))
-
-function Scenes.gymBeatKinds(): { GymBeatKind }
-	return table.clone(GYM_BEAT_KINDS)
-end
-
--- Timeline id per Floor 3 beat (a locker bang is a slam or a rattle).
-Scenes.GymBeatIds = table.freeze({
-	ShowerDrip = { "L3_ShowerDrip" },
-	LockerBang = { "L3_LockerBang", "L3_LockerRattle" },
-	BallBounce = { "L3_BallBounce" },
-} :: { [string]: { string } })
-
--- The ball's bounces (seconds from the beat's start, volume): each one lower and sooner, coming to rest.
-Scenes.BallBounces = table.freeze({
-	{ t = 0, volume = 1.2 },
-	{ t = 0.62, volume = 1.05 },
-	{ t = 1.13, volume = 0.9 },
-	{ t = 1.54, volume = 0.76 },
-	{ t = 1.87, volume = 0.62 },
-	{ t = 2.13, volume = 0.5 },
-	{ t = 2.33, volume = 0.38 },
-	{ t = 2.48, volume = 0.28 },
-	{ t = 2.59, volume = 0.2 },
-} :: { { t: number, volume: number } })
-
--- The pool floodlights' strike-up (Floor 4).
-local FLOODLIGHT_ARGS: { string } =
-	{ "flood1", "flood2", "flood3", "flood4", "flood5", "flood6", "flood7", "flood8", "flood9" }
-Scenes.FloodlightsId = "L4_Floodlights"
-Scenes.FloodlightArgs = table.freeze(table.clone(FLOODLIGHT_ARGS))
-Scenes.FloodlightStagger = 0.11
-Scenes.FloodlightStrike = 1.7 -- one lamp, from dark to full
-Scenes.FloodlightSeconds = Scenes.FloodlightStrike + (#FLOODLIGHT_ARGS - 1) * Scenes.FloodlightStagger
 
 --------------------------------------------------------------------------------
 -- Pure camera maths (the subject's stumble and the drag onto the Creature's face)
@@ -446,39 +319,6 @@ local function surgeTrack(arg: string, offset: number): Track
 	}
 end
 
--- One pool floodlight striking up, `offset` seconds after the first: dark, two sputters, the arc catching and sagging,
--- then full.
-local function floodlightTrack(arg: string, offset: number): Track
-	local o = offset
-	local keys: { Key } = { key(0, 0) }
-	if o > 0 then
-		table.insert(keys, key(o, 0, "Step"))
-	end
-	for _, entry in
-		{
-			key(0.06 + o, 0.55, "Step"),
-			key(0.11 + o, 0.02, "Step"),
-			key(0.24 + o, 0.9, "Step"),
-			key(0.3 + o, 0.08, "Step"),
-			key(0.42 + o, 0.3, "OutQuad"),
-			key(0.9 + o, 0.62, "InOutSine"),
-			key(1.15 + o, 1.25, "OutQuad"),
-			key(Scenes.FloodlightStrike + o, 1, "InOutSine"),
-		} :: { Key }
-	do
-		table.insert(keys, entry)
-	end
-	return { kind = TRACKS.LightScale, arg = arg, keys = keys }
-end
-
-local function floodlights(): Spec
-	local tracks: { Track } = {}
-	for index, arg in FLOODLIGHT_ARGS do
-		table.insert(tracks, floodlightTrack(arg, (index - 1) * Scenes.FloodlightStagger))
-	end
-	return { duration = Scenes.FloodlightSeconds + 0.1, tracks = tracks }
-end
-
 local function beats(): { [string]: Spec }
 	return {
 		L0_PipeBang = { duration = 3, tracks = { sound(ARGS.At, "PipeBang", 0, 1.2) } },
@@ -507,59 +347,6 @@ local function beats(): { [string]: Spec }
 		L0_ChildLaugh = { duration = 2.6, tracks = { sound(ARGS.At, "ChildLaugh", 0, 1) } },
 		L0_FallingObject = { duration = 2, tracks = { sound(ARGS.At, "ObjectFall", Scenes.FallImpact, 1.2) } },
 	}
-end
-
--- A showerhead's sputter of drops, the gaps uneven.
-local SHOWER_DROPS: { { t: number, volume: number } } = {
-	{ t = 0, volume = 1 },
-	{ t = 0.58, volume = 0.75 },
-	{ t = 1.02, volume = 0.9 },
-	{ t = 1.66, volume = 0.65 },
-	{ t = 2.08, volume = 0.85 },
-	{ t = 2.86, volume = 0.6 },
-	{ t = 3.3, volume = 0.8 },
-	{ t = 4.15, volume = 0.55 },
-}
-
--- Something worrying at a locker door: short shakes of the latch.
-local RATTLES: { { t: number, volume: number } } = {
-	{ t = 0, volume = 0.9 },
-	{ t = 0.17, volume = 0.7 },
-	{ t = 0.31, volume = 0.85 },
-	{ t = 0.5, volume = 0.6 },
-	{ t = 1.35, volume = 0.75 },
-	{ t = 1.5, volume = 0.55 },
-}
-
--- One "sound" track per hit, so every hit keeps its own volume.
-local function hits(preset: string, list: { { t: number, volume: number } }): { Track }
-	local tracks: { Track } = {}
-	for _, hit in list do
-		table.insert(tracks, sound(ARGS.At, preset, hit.t, hit.volume))
-	end
-	return tracks
-end
-
-local function gymBeats(): { [string]: Spec }
-	local bounces = Scenes.BallBounces :: { { t: number, volume: number } }
-	return {
-		L3_ShowerDrip = { duration = 4.8, tracks = hits("ShowerDrip", SHOWER_DROPS) },
-		L3_LockerBang = {
-			duration = 2.4,
-			tracks = {
-				sound(ARGS.At, "LockerSlam", 0, 1.2),
-				sound(ARGS.At, "LockerSlam", 0.52, 0.55),
-				sound(ARGS.At, "LockerDoor", 0.86, 0.6),
-			},
-		},
-		L3_LockerRattle = { duration = 2.2, tracks = hits("LockerDoor", RATTLES) },
-		L3_BallBounce = { duration = 3.4, tracks = hits("BallBounce", bounces) },
-	}
-end
-
--- The timeline ids a Floor 3 beat of `kind` can play.
-function Scenes.gymBeatIds(kind: GymBeatKind): { string }
-	return Scenes.GymBeatIds[kind] or {}
 end
 
 -- The roof door: slammed by the wind, three blows from behind, torn off, the cry.
@@ -594,84 +381,12 @@ local function doorSmash(): Spec
 	return { duration = d.Duration, tracks = tracks }
 end
 
--- The finale's tracks every version shares: thunder after each flash, the fade to black (held once complete) and
--- the panic of the jumpers.
-local function finaleTracks(revealed: boolean): { Track }
-	local f = FINALE
-	return {
-		-- 2D (no position arg): the storm is all around the jumpers
-		{ kind = "sound", volume = 1.3, keys = { key(f.Thunder1, "Thunder") } },
-		{ kind = "sound", volume = 1.5, keys = { key(f.Thunder2, "Thunder") } },
-		{
-			kind = ROOF_TRACKS.Fade,
-			hold = true,
-			keys = { key(0, 0), key(f.FadeStart, 0), key(f.FadeEnd, 1, "InOutSine") },
-		},
-		{
-			kind = ROOF_TRACKS.FinalePanic,
-			keys = if revealed
-				then {
-					key(0, 0.3),
-					key(f.Reveal, 0.35),
-					key(f.Reveal + 0.3, 0.95, "OutQuad"),
-					key(f.Hide, 0.95),
-					key(f.FadeStart, 0.6, "InOutSine"),
-					key(f.Duration, 0.4),
-				}
-				else { key(0, 0.3), key(f.Flash2, 0.45, "InOutSine"), key(f.Duration, 0.3, "InOutSine") },
-		},
-	}
-end
-
-local function finale(): Spec
-	local f = FINALE
-	local tracks = finaleTracks(true)
-	table.insert(tracks, { kind = "creature", keys = { key(f.Reveal, "Reveal"), key(f.Vanish, "Vanish") } })
-	table.insert(tracks, { kind = "sound", keys = { key(f.Reveal, "FinaleSting") }, volume = 1.1 })
-	table.insert(tracks, {
-		kind = ROOF_TRACKS.Focus,
-		keys = {
-			key(0, 0),
-			key(f.FocusIn, 0),
-			key(f.FocusHeld, 1, "OutCubic"),
-			key(f.FocusOut, 1),
-			key(f.FocusRest, f.RestFocus, "InOutSine"),
-		},
-	})
-	return { duration = f.Duration, tracks = tracks }
-end
-
-local function finaleSky(): Spec
-	return { duration = FINALE.Duration, tracks = finaleTracks(false) }
-end
-
-local function touchdown(): Spec
-	local f = FINALE
-	return {
-		duration = f.TouchdownDuration,
-		tracks = {
-			{
-				kind = ROOF_TRACKS.Fade,
-				hold = true,
-				keys = { key(0, 0), key(f.TouchdownFadeStart, 0), key(f.TouchdownFadeEnd, 1, "InOutSine") },
-			},
-		},
-	}
-end
-
 -- Every scene timeline by id (fresh tables; callers register them).
 function Scenes.timelines(): { [string]: Spec }
 	local out = beats()
-	for id, spec in gymBeats() do
-		out[id] = spec
-	end
 	out[CLASSROOM.Id] = classroomScare()
 	out[CLASSROOM.SkippedId] = glassStep()
-	out[Scenes.FloodlightsId] = floodlights()
 	out[ROOF_DOOR.Id] = doorSmash()
-	out[FINALE.Id] = finale()
-	out[FINALE.SkyId] = finaleSky()
-	out[FINALE.TouchdownId] = touchdown()
 	return out
 end
 

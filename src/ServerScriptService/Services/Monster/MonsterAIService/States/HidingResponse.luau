@@ -108,9 +108,7 @@ function HidingResponse.enter(ctx: Context, _from: Enums.MonsterState)
 	ctx.mover:SetSpeed(speed)
 	ctx.body:SetWalkSpeed(speed)
 	ctx.mover:SetRepathInterval(CreatureConfig.Repath.ChaseInterval)
-	if ctx.mover:Medium() == "Floor" then
-		ctx.body:SetPose("Biped")
-	end
+	ctx.body:SetPose("Biped")
 	ctx.body:Face(nil)
 	ctx.mover:GoTo(run.stand, { arrive = ARRIVE })
 end

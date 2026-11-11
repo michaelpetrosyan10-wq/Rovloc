@@ -9,7 +9,7 @@
 -- doors, at least one on every school floor, seeded among those a crooked hang fits; the lobby's are hung true). Each
 -- one picks, from a seeded order, the first swing room / hinge jamb / angle that keeps the leaf inside that room and
 -- clear of every doorway's walking lane, the vent grates' swing and exit space, the props other builders stand on
--- layout anchors, debris piles, platforms, pillars, basins, the fixture doors' swing and the shell's own geometry; it
+-- layout anchors, debris piles, platforms, pillars, the fixture doors' swing and the shell's own geometry; it
 -- prefers to swing into the room rather than into a corridor. Colliding pieces are MonsterPassthrough (the Creature
 -- walks through, players bump them); no prompts, no state.
 --
@@ -32,7 +32,7 @@
 --     KEEP CLOSED" sign above on the vestibule side. Rest = shut in the AirlockDoorWidth opening; built open 90 degrees
 --     into the vestibule (into the corridor when the vestibule has no room for them). Both faces of the frame's jambs
 --     and head are painted in yellow-and-black hazard stripes (SurfaceArt).
---   * RoofDoor (the Level 5 RoofStairDoor, and the Level 3 EquipmentStoreDoor the floor objective locks): a dented
+--   * RoofDoor (the roof's RoofStairDoor and its corner housings' doors): a dented
 --     steel door, leaf "Leaf", in a steel frame, with a "ROOF ACCESS" sign on the stairwell side when one of its rooms
 --     is a stairwell. Rest = shut; built open (onto the roof).
 -- Every leaf is surface-mounted on its swing-side face in front of the casing, hung from hinge knuckles whose pin runs
@@ -447,7 +447,7 @@ type Clearance = {
 	layout: Layout,
 	lanes: { Footprint },
 	hard: { Footprint }, -- grates, fixture doors, leaves already placed
-	soft: { Footprint }, -- props on anchors, debris, platforms, pillars, basins, the lockers' fronts
+	soft: { Footprint }, -- props on anchors, debris, platforms, pillars, the lockers' fronts
 	parts: PartGrid?,
 }
 
@@ -880,8 +880,7 @@ local function planFixture(layout: Layout, clearance: Clearance, site: Site): Fi
 		if not leaves then
 			return nil
 		end
-		-- Only the roof stair door carries the ROOF ACCESS sign; another steel door (the Level 3 equipment store) has
-		-- none.
+		-- Only a door into a stair housing carries the ROOF ACCESS sign.
 		local stair = if site.rooms[1].kind == "Stairwell"
 			then -1
 			elseif site.rooms[2].kind == "Stairwell" then 1
@@ -1952,7 +1951,7 @@ local function buildStatics(ctx: PropKit.StaticContext): number
 			remaining += 1
 		end
 	end
-	local school = table.find(WorldConfig.LevelOrder, layout.id :: Enums.LevelId) ~= nil
+	local school = WorldConfig.isSchoolLevel(layout.id)
 	local crookedLeft = if school and remaining > 0 then math.max(1, math.floor(remaining * CROOKED_SHARE + 0.5)) else 0
 	for _, site in sites do
 		if site.door.kind ~= "Door" then

@@ -305,11 +305,7 @@ spec["floor goals: the stairwell each level leaves by"] = function(t: Expect)
 		t.truthy(goal ~= nil, stairwell.from)
 		if goal then
 			t.eq(goal.target, "Exit", stairwell.from .. " points at its exit")
-			if stairwell.from == "Level4_FloodedPool" then
-				t.eq(goal.text, "Objective.PoolStairs", "the pool's exit is the roof stairs")
-			else
-				t.eq(goal.text, "Objective.Stairwell." .. stairwell.tower, stairwell.from)
-			end
+			t.eq(goal.text, "Objective.Stairwell." .. stairwell.tower, stairwell.from)
 			t.truthy(Strings.has(goal.text), goal.text)
 			t.truthy(goal.tip and Strings.has(goal.tip), stairwell.from .. " tip")
 		end
@@ -333,14 +329,14 @@ spec["floor 1: the gate slam sends you to the vent, then on to the stairwell"] =
 	input.beyondGate = true
 	goal = ObjectiveTracker.levelObjective(input)
 	t.eq(goal and goal.text, "Objective.Stairwell.West", "past the gate")
-	local elsewhere = levelInput("Level2_ScienceHall")
+	local elsewhere = levelInput("Level2_Auditorium")
 	elsewhere.gateSlammed = true
 	goal = ObjectiveTracker.levelObjective(elsewhere)
 	t.eq(goal and goal.text, "Objective.Stairwell.East", "only floor 1 has the gate")
 end
 
 spec["the airlock countdown takes over: get in, or hold it from inside"] = function(t: Expect)
-	for _, level in { "Level0_Basement", "Level1_Hallways", "Level3_Gymnasium" } do
+	for _, level in { "Level0_Basement", "Level1_Hallways", "Level2_Auditorium" } do
 		local input = levelInput(level)
 		input.airlock = "Waiting"
 		local goal = ObjectiveTracker.levelObjective(input)
@@ -357,7 +353,7 @@ spec["the airlock countdown takes over: get in, or hold it from inside"] = funct
 end
 
 spec["the roof: out, a way off, the parachutes, the gap, the cord, out"] = function(t: Expect)
-	local input = levelInput("Level5_Roof")
+	local input = levelInput("Level3_Roof")
 	local goal = ObjectiveTracker.levelObjective(input)
 	t.eq(goal and goal.text, "Objective.Roof.Out")
 	t.eq(goal and goal.target, "RoofDoor")
@@ -401,8 +397,11 @@ spec["floor cards for every level, faded in, held and out"] = function(t: Expect
 		t.truthy(nameKey and Strings.has(nameKey), stairwell.to .. " name")
 	end
 	local titleKey = ObjectiveTracker.floorCard("Level0_Basement")
-	t.eq(titleKey, "Floor.Level0.Title")
-	t.eq(Strings.get("Floor.Level1.Title") .. " — " .. Strings.get("Floor.Level1.Name"), "FLOOR 1 — MAIN HALLWAYS")
+	t.eq(titleKey, "Floor.Level0_Basement.Title")
+	t.eq(
+		Strings.get("Floor.Level1_Hallways.Title") .. " — " .. Strings.get("Floor.Level1_Hallways.Name"),
+		"FLOOR 1 — MAIN HALLWAYS"
+	)
 	t.eq(ObjectiveTracker.floorCard("Lobby"), nil)
 	local timing = TutorialConfig.Timing
 	t.eq(ObjectiveTracker.floorCardAlpha(-1), 0)
@@ -475,7 +474,7 @@ spec["hints: every one has its line, glyphs, flag; radii for the things in the w
 		end
 		t.truthy(found, id)
 	end
-	for _, id in { "DownedTeammate", "Water", "LowBattery", "Airlock" } do
+	for _, id in { "DownedTeammate", "LowBattery", "Airlock" } do
 		t.truthy(ids[id], id)
 	end
 	local airlock = Strings.get("Hint.Airlock", GameConfig.StragglerSeconds)
@@ -501,12 +500,12 @@ spec["hints wait for a quiet moment"] = function(t: Expect)
 	without(function(s)
 		s.busy = true
 	end, "walkthrough up")
-	for _, context in { "Cutscene", "Menu", "Struggle" } do
+	for _, context in { "Cutscene", "Menu" } do
 		without(function(s)
 			s.context = context
 		end, context)
 	end
-	for _, lock in { "Cutscene", "Jumpscare", "Drag" } do
+	for _, lock in { "Cutscene", "Jumpscare" } do
 		without(function(s)
 			s.controlLock = lock
 		end, lock)
@@ -521,7 +520,6 @@ spec["hints wait for a quiet moment"] = function(t: Expect)
 	vent.context = "Vent"
 	t.truthy(FirstTimeHints.allowed(vent), "fine in a vent")
 	t.truthy(FirstTimeHints.chased("WallChase", 7, 7))
-	t.truthy(FirstTimeHints.chased("AquaticStalk", 7, 7))
 	t.falsy(FirstTimeHints.chased("WallChase", 8, 7), "chasing someone else")
 	t.falsy(FirstTimeHints.chased("Patrol", 7, 7))
 	t.falsy(FirstTimeHints.chased(nil, nil, 7))
@@ -649,15 +647,12 @@ end
 spec["every tracker and hint string exists"] = function(t: Expect)
 	local keys = {
 		"Objective.Header",
-		"Objective.Direction",
-		"Objective.DirectionWait",
 		"Objective.Distance",
 		"Objective.Marker.Bus",
 		"Objective.Marker.Pad",
 		"Objective.Marker.Goal",
 		"Objective.Gate",
 		"Objective.GateVent",
-		"Objective.PoolStairs",
 		"Objective.Airlock.Get",
 		"Objective.Airlock.Wait",
 		"Objective.Lobby.Waiting",

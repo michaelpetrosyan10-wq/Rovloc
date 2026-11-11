@@ -294,7 +294,7 @@ return {
 				occupiedByOther = true,
 				distance = 1,
 			}),
-			"not crawling or swimming"
+			"not crawling"
 		)
 		t.falsy(
 			HideSpotService.canPull({
@@ -611,7 +611,7 @@ return {
 					"the front is the ExitAnchor"
 				)
 			end
-			t.eq(#HideSpotService.SpotsOn("Level4_FloodedPool"), 0, "another level's spots are not")
+			t.eq(#HideSpotService.SpotsOn("Level3_Roof"), 0, "another level's spots are not")
 
 			for _, sniffing in { "Search", "HidingResponse", "InvestigateNoise" } do
 				world.state = "Patrol"

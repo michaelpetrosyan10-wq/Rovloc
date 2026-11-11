@@ -75,11 +75,9 @@ return {
 		t.eq(StatusBars.targetAlpha(0.6, false, false, 0.5), 1, "just went quiet: still shown")
 		local resting = StatusBars.targetAlpha(0.6, false, false, 30)
 		t.truthy(resting > 0 and resting < 1, "a quiet, spent bar rests dim")
-		t.truthy(StatusBars.relevant("Oxygen", "Underwater", false))
-		t.falsy(StatusBars.relevant("Oxygen", "Treading", false))
-		t.truthy(StatusBars.relevant("Battery", "Standing", true))
-		t.falsy(StatusBars.relevant("Battery", "Standing", false))
-		t.falsy(StatusBars.relevant("Stamina", "Sprinting", true))
+		t.truthy(StatusBars.relevant("Battery", true))
+		t.falsy(StatusBars.relevant("Battery", false))
+		t.falsy(StatusBars.relevant("Stamina", true))
 	end,
 
 	["low meters pulse, faster when critical; bleedout drains from BleedoutEndsAt"] = function(t: Expect)
@@ -385,7 +383,7 @@ return {
 		local placed = MobileControls.layout(onFoot, screen, jump, 1)
 		local lift = free.Crouch.center.Y - placed.Crouch.center.Y
 		t.truthy(lift > 0, "the cluster moved up")
-		for _, action in { "Crouch", "Sprint", "Flashlight", "Syringe", "Throw" } do
+		for _, action in { "Crouch", "Sprint", "Flashlight", "Throw" } do
 			t.truthy(circleClearsRect(placed[action], jump), action .. " clears the jump button")
 			t.near(free[action].center.X, placed[action].center.X, 1e-6, action .. " keeps its column")
 			t.near(free[action].center.Y - placed[action].center.Y, lift, 1e-6, action .. " moved with the cluster")
@@ -408,9 +406,8 @@ return {
 			max = Vector2.new(470, 330),
 		}
 		local placed = MobileControls.layout(touchEntries(), screen, jump, 1)
-		t.truthy(circleClearsRect(placed.Struggle, jump), "Struggle clears the rect")
 		t.truthy(circleClearsRect(placed.Ripcord, jump), "Ripcord clears the rect")
-		t.near(placed.Struggle.center.X, 400, 1e-6, "still centred")
+		t.near(placed.Ripcord.center.X, 400, 1e-6, "still centred")
 
 		t.truthy(MobileControls.reconcileLatch("Crouch", true, "Standing", 0.1), "a fresh press waits for the server")
 		t.falsy(MobileControls.reconcileLatch("Crouch", true, "Standing", 2), "the server wins after the wait")
@@ -421,11 +418,9 @@ return {
 		)
 		t.falsy(MobileControls.reconcileLatch("Crouch", false, "Crouching", 0.1), "a fresh release is not undone")
 		t.truthy(MobileControls.reconcileLatch("Sprint", true, "Standing", 5), "non-toggles keep their own state")
-		t.truthy(MobileControls.relevant("Syringe", { syringeCharges = 1, heldItem = "None" }))
-		t.falsy(MobileControls.relevant("Syringe", { syringeCharges = 0, heldItem = "None" }))
-		t.falsy(MobileControls.relevant("Throw", { syringeCharges = 0, heldItem = "None" }))
-		t.truthy(MobileControls.relevant("Throw", { syringeCharges = 0, heldItem = "ChemicalFlask" }))
-		t.truthy(MobileControls.relevant("Sprint", { syringeCharges = 0, heldItem = "None" }))
+		t.falsy(MobileControls.relevant("Throw", { heldItem = "None" }))
+		t.truthy(MobileControls.relevant("Throw", { heldItem = "ChemicalFlask" }))
+		t.truthy(MobileControls.relevant("Sprint", { heldItem = "None" }))
 	end,
 
 	["UIKit primitives build and their setters drive the instances"] = function(t: Expect)

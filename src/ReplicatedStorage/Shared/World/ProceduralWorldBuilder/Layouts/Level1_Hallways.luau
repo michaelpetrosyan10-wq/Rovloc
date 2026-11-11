@@ -97,7 +97,6 @@ local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Bulb = { brightness = 0.45, range = 14, color = Color3.fromRGB(255, 196, 140) },
 	EmergencyRed = { brightness = 0.45, range = 16, color = Color3.fromRGB(255, 34, 18) },
 	ClassroomGlow = { brightness = 1.1, range = 34, color = Color3.fromRGB(198, 220, 255) },
-	Floodlight = { brightness = 2, range = 60, color = Color3.fromRGB(236, 240, 255) },
 	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(70, 255, 120) },
 	BoilerGlow = { brightness = 0.9, range = 16, color = Color3.fromRGB(255, 118, 40) },
 }
@@ -735,7 +734,7 @@ chaseRun("L1_Chase_Gate", {
 -- Keep-room furniture: the office counter, the janitor's shelving
 --------------------------------------------------------------------------------
 
-platform("L1_Shelf_Janitor", "L1_JanitorCloset", 99, 284.6, 12, 2.4, 4.2, 4.2, "MetalRust")
+platform("L1_Shelf_Janitor", "L1_JanitorCloset", 99, 284.6, 8, 2.4, 4.2, 4.2, "MetalRust")
 platform("L1_Counter_Office", "L1_MainOffice", 140, 10, 14, 2.6, 3.4, 3.4, "WoodPanel")
 
 --------------------------------------------------------------------------------

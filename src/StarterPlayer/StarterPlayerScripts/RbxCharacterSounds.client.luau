@@ -7,7 +7,7 @@
 -- character's HumanoidRootPart (or, with the new audio API, AudioPlayers plus an "RbxCharacterSoundsEmitter") and
 -- plays them from Humanoid states. In this game that would mean looped plastic footsteps on every player (even while
 -- crouching or crawling a duct, since the Humanoid still reports Running), jump / land / fall-wind / swim sounds
--- audible ~150 studs away, bypassing the mixer (no ducking, no vent or underwater muffling, no volume settings),
+-- audible ~150 studs away, bypassing the mixer (no ducking, no vent muffling, no volume settings),
 -- giving teammates' positions away in a game built on noise and doubling the synthesized footsteps.
 --
 -- Because this script carries the name, the engine never inserts its own. This script then enforces the rule for

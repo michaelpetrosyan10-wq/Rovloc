@@ -1,12 +1,10 @@
 --!strict
 -- RunDirector: everything a run randomizes, as one pure function of (seed, difficulty, layouts, graph).
 --
---   Objectives     each floor's objective item (ObjectiveConfig): item.count of the layout's fair item.candidate
---                  anchors (objectiveCandidates: at least EntryClearance studs walked from the floor's entry, never in
---                  the room of a CreatureScarePose), with item.slots one candidate of each kind (the candidates cycle
---                  through the kinds in layout order), as props of kind item.prop (with kinds, each with its slot:
---                  the kind, a reagent's colour; without, none, so the prop is the same on every run that uses its
---                  anchor), listed in plan.objectives[levelId]
+--   Objectives     each floor's objective item (ObjectiveConfig; a floor without one has none): item.count of the
+--                  layout's fair item.candidate anchors (objectiveCandidates: at least EntryClearance studs walked from
+--                  the floor's entry, never in the room of a CreatureScarePose), as props of kind item.prop (the prop
+--                  is the same on every run that uses its anchor), listed in plan.objectives[levelId]
 --                  (RunDirector.objectiveOf). Several items lie in different rooms, at least PickSpacing studs apart,
 --                  and (three or more) in at least PickQuarters quarters of the floor: a seeded pass takes the first
 --                  shuffled candidate that keeps those rules, and a pass that falls short or bunches up is
@@ -16,7 +14,6 @@
 --                  TrapCandidate on the approach) of each of the first item.guarded fuses picked, so at least that
 --                  many fuses are guarded; then the rest. No two traps closer than MinTrapSpacing studs, and never
 --                  inside an airlock, a stairwell, the level's entry / exit room or a room holding PlayerSpawn anchors.
---   ChemicalFlask  flasksScienceHall Level2 FlaskCandidate anchors and flasksPool Level4 FlaskCandidate anchors.
 --   Battery        batteriesPerLevel BatteryCandidate anchors on every school level.
 --   lockedGrates   round(lockedGrateFraction x lockable) of each level's Lockable grates (never CriticalPath ones).
 --                  A roll stands only while ZoneGraph still proves the level solvable with those grates locked and
@@ -26,8 +23,8 @@
 --   Route          plan.route: the stairwell every floor is left by (pickRoute), one of its pair's three candidates
 --                  (WorldConfig.stairwellCandidates: North, Middle, South), uniform by the seed (stream
 --                  "Route|<from>"), drawn again while it is unfair for the entry the previous pick leads to: its exit
---                  vestibule under RouteFairShare of the longest candidate's walk from the entry, or (Levels 2 and 3)
---                  fewer than MinCreatureSpawns Creature starts CreatureBand studs from its entry vestibule, out of
+--                  vestibule under RouteFairShare of the longest candidate's walk from the entry, or (the
+--                  CreatureSpawnLevels) fewer than MinCreatureSpawns Creature starts CreatureBand studs from its entry vestibule, out of
 --                  sight and outside every objective room. The unused candidates are jammed shut for the run.
 --
 -- Pure: no instances, no clocks, no global random. Every decision draws from its own Rng.seeded(seed, <decision key>)
@@ -59,11 +56,8 @@ type Anchor = LayoutSchema.Anchor
 type GrateSpec = LayoutSchema.GrateSpec
 
 local TRAP_LEVEL: Enums.LevelId = "Level0_Basement"
-local SCIENCE_LEVEL: Enums.LevelId = "Level2_ScienceHall"
-local POOL_LEVEL: Enums.LevelId = "Level4_FloodedPool"
 
 local MIN_TRAP_SPACING = 6 -- studs, horizontal
-local FLASK_SPACING = 3 -- preferred, not required: flasks may share a long lab counter
 local BATTERY_SPACING = 10 -- preferred, not required: spreads batteries over a level
 local TRAP_ATTEMPTS = 16 -- fresh shuffles tried when the spacing rule leaves a trap short
 local MAX_REROLLS = 64
@@ -73,7 +67,7 @@ local ROUTE_ATTEMPTS = 8 -- draws from a floor's Route stream before falling bac
 local ROUTE_FAIR_SHARE = 0.6 -- an exit is at least this share of the longest exit candidate's walk from the entry
 local CREATURE_BAND = { 70, 140 } -- studs walked from the entry to a Creature start (the web's SpawnTuning)
 local MIN_CREATURE_SPAWNS = 2
-local CREATURE_SPAWN_LEVELS: { [string]: boolean } = { Level2_ScienceHall = true, Level3_Gymnasium = true }
+local CREATURE_SPAWN_LEVELS: { [string]: boolean } = { Level2_Auditorium = true }
 
 local RunDirector = {}
 
@@ -86,8 +80,6 @@ RunDirector.MinTrapSpacing = MIN_TRAP_SPACING
 RunDirector.MaxRerolls = MAX_REROLLS
 RunDirector.PickAttempts = PICK_ATTEMPTS
 RunDirector.TrapLevel = TRAP_LEVEL
-RunDirector.ScienceLevel = SCIENCE_LEVEL
-RunDirector.PoolLevel = POOL_LEVEL
 RunDirector.RouteAttempts = ROUTE_ATTEMPTS
 RunDirector.RouteFairShare = ROUTE_FAIR_SHARE
 RunDirector.CreatureBand = table.freeze(table.clone(CREATURE_BAND))
@@ -274,16 +266,14 @@ function RunDirector.variantOf(kind: string, layoutId: string, anchorId: string)
 	return Rng.seeded(1, "Variant|" .. kind .. "|" .. layoutId .. "|" .. anchorId):NextInteger(1, VARIANT_RANGE)
 end
 
--- The planned prop of `kind` on `anchor`, exactly as a run plans it (`slot`: a floor objective item's kind,
--- RunDirector.itemSlot).
-function RunDirector.plannedProp(kind: string, layout: Layout, anchor: Anchor, slot: number?): Types.PlannedProp
+-- The planned prop of `kind` on `anchor`, exactly as a run plans it.
+function RunDirector.plannedProp(kind: string, layout: Layout, anchor: Anchor): Types.PlannedProp
 	local prop: Types.PlannedProp = {
 		kind = kind,
 		anchorId = anchor.id,
 		levelId = layout.id,
 		cframe = Builder.anchorCFrame(layout.id, anchor),
 		variant = RunDirector.variantOf(kind, layout.id, anchor.id),
-		slot = slot,
 	}
 	table.freeze(prop)
 	return prop
@@ -318,34 +308,17 @@ local function anchorById(layout: Layout, id: string?): Anchor?
 	return nil
 end
 
--- The slot of the `index`-th candidate (layout order) of a floor whose candidates cycle through kinds (reagents), else
--- the index itself.
-function RunDirector.candidateSlot(spec: ObjectiveConfig.FloorSpec, index: number): number
-	local slots = spec.item.slots
-	return if slots then (index - 1) % slots + 1 else index
-end
-
--- The slot a run gives the item on the `index`-th candidate (layout order) when it picks that candidate: its kind on a
--- floor of kinds (a reagent's colour), else none. A pick's order is never part of the prop, so the prop a run builds
--- on an anchor is the same on every run (and the web's export, which builds one per candidate, matches it).
-function RunDirector.itemSlot(spec: ObjectiveConfig.FloorSpec, index: number): number?
-	return if spec.item.slots then RunDirector.candidateSlot(spec, index) else nil
+-- The item of a floor objective (an error for a floor without one: callers ask only for floors with an item).
+local function itemOf(spec: ObjectiveConfig.FloorSpec): ObjectiveConfig.ItemSpec
+	local item = spec.item
+	assert(item, string.format("RunDirector: %s has no item", spec.id))
+	return item
 end
 
 -- The planned prop of `spec`'s item on its candidate `anchor` of `layout`, exactly as every run that picks the anchor
--- plans it (and as the web's export builds it on every candidate): the anchor's own variant, and its slot from the
--- anchor's place among the floor's candidates in layout order (RunDirector.itemSlot), never from the pick's order.
+-- plans it (and as the web's export builds it on every candidate): the anchor's own variant.
 function RunDirector.objectiveProp(layout: Layout, spec: ObjectiveConfig.FloorSpec, anchor: Anchor): Types.PlannedProp
-	local slot: number? = nil
-	if spec.item.slots then
-		for index, candidate in anchorsOfKind(layout, spec.item.candidate, nil) do
-			if candidate.id == anchor.id then
-				slot = RunDirector.itemSlot(spec, index)
-				break
-			end
-		end
-	end
-	return RunDirector.plannedProp(spec.item.prop, layout, anchor, slot)
+	return RunDirector.plannedProp(itemOf(spec).prop, layout, anchor)
 end
 
 -- The item candidates of `layout` a run may use for `spec` (layout order): at least ObjectiveConfig.EntryClearance
@@ -353,12 +326,13 @@ end
 -- Cached per layout (the walk is the same every run).
 local candidateCache: { [Layout]: { [string]: { Anchor } } } = setmetatable({}, { __mode = "k" }) :: any
 function RunDirector.objectiveCandidates(layout: Layout, spec: ObjectiveConfig.FloorSpec): { Anchor }
+	local item = itemOf(spec)
 	local byKind = candidateCache[layout]
 	if not byKind then
 		byKind = {}
 		candidateCache[layout] = byKind
 	end
-	local cached = byKind[spec.item.candidate]
+	local cached = byKind[item.candidate]
 	if cached then
 		return cached
 	end
@@ -369,14 +343,14 @@ function RunDirector.objectiveCandidates(layout: Layout, spec: ObjectiveConfig.F
 		end
 	end
 	local out: { Anchor } = {}
-	for _, anchor in anchorsOfKind(layout, spec.item.candidate, scareRooms) do
+	for _, anchor in anchorsOfKind(layout, item.candidate, scareRooms) do
 		local place = { id = anchor.id, kind = anchor.kind, room = anchor.room, pos = anchor.pos }
 		if ObjectivePlaces.entryDistance(layout, place) >= ObjectiveConfig.EntryClearance then
 			table.insert(out, anchor)
 		end
 	end
 	table.freeze(out)
-	byKind[spec.item.candidate] = out
+	byKind[item.candidate] = out
 	return out
 end
 
@@ -417,48 +391,19 @@ function RunDirector.pickObjective(
 	layout: Layout,
 	spec: ObjectiveConfig.FloorSpec
 ): ({ Anchor }, { Anchor })
+	local item = itemOf(spec)
 	local candidates = RunDirector.objectiveCandidates(layout, spec)
 	local random = Rng.seeded(seed, "Objective|" .. layout.id)
-	local slots = spec.item.slots
-	local count = if slots then math.min(slots, spec.item.count) else math.min(spec.item.count, #candidates)
-	local groups: { { Anchor } } = {}
-	if slots then
-		-- one of each kind: the fair candidates of slot k (the slot cycles over every candidate in layout order)
-		local fair: { [Anchor]: boolean } = {}
-		for _, anchor in candidates do
-			fair[anchor] = true
-		end
-		for k = 1, count do
-			groups[k] = {}
-		end
-		for i, anchor in anchorsOfKind(layout, spec.item.candidate, nil) do
-			local group = groups[RunDirector.candidateSlot(spec, i)]
-			if group and fair[anchor] then
-				table.insert(group, anchor)
-			end
-		end
-	end
+	local count = math.min(item.count, #candidates)
 	local picks: { Anchor } = {}
 	for _ = 1, if count > 1 then PICK_ATTEMPTS else 1 do
 		local pass: { Anchor } = {}
-		if slots then
-			-- kind by kind, the first shuffled candidate that keeps apart from the kinds already taken
-			for k = 1, count do
-				for _, anchor in Rng.shuffle(table.clone(groups[k]), random) do
-					if keepsApart(anchor, pass) then
-						table.insert(pass, anchor)
-						break
-					end
-				end
+		for _, anchor in Rng.shuffle(table.clone(candidates), random) do
+			if #pass >= count then
+				break
 			end
-		else
-			for _, anchor in Rng.shuffle(table.clone(candidates), random) do
-				if #pass >= count then
-					break
-				end
-				if keepsApart(anchor, pass) then
-					table.insert(pass, anchor)
-				end
+			if keepsApart(anchor, pass) then
+				table.insert(pass, anchor)
 			end
 		end
 		if #pass > #picks or #picks == 0 then
@@ -470,7 +415,7 @@ function RunDirector.pickObjective(
 		end
 	end
 	local guards: { Anchor } = {}
-	local wanted = spec.item.guarded or 0
+	local wanted = item.guarded or 0
 	if wanted > 0 then
 		local excluded = RunDirector.trapExcludedRooms(layout)
 		for _, pick in picks do
@@ -505,16 +450,16 @@ export type RouteCheck = {
 
 local routeCache: { [Layout]: { [string]: { RouteCheck } } } = setmetatable({}, { __mode = "k" }) :: any
 
-local STATION_KINDS: { [string]: boolean } =
-	{ BreakerPanel = true, FumeHood = true, Generator = true, HatchValve = true, CrateChain = true }
+local STATION_KINDS: { [string]: boolean } = { BreakerPanel = true }
 
 -- Rooms of `layout` a Creature never starts in: those holding an objective station or any item candidate (whatever a
 -- run picks), so the rule holds for every seed.
 local function objectiveRooms(layout: Layout): { [string]: boolean }
 	local spec = ObjectiveConfig.forLevel(layout.id)
+	local item = if spec then spec.item else nil
 	local rooms: { [string]: boolean } = {}
 	for _, anchor in layout.anchors do
-		if STATION_KINDS[anchor.kind] or (spec and anchor.kind == spec.item.candidate) then
+		if STATION_KINDS[anchor.kind] or (item and anchor.kind == item.candidate) then
 			rooms[anchor.room] = true
 		end
 	end
@@ -735,17 +680,16 @@ function RunDirector.plan(
 	local guardsByLevel: { [string]: { Anchor } } = {}
 	for _, floor in ObjectiveConfig.Floors do
 		local layout = byId[floor.levelId]
-		if not layout then
+		local item = floor.item
+		if not layout or not item then
 			continue
 		end
 		local picks, guards = RunDirector.pickObjective(runSeed, layout, floor)
-		warnShort(floor.item.prop, layout, #picks, floor.item.count)
+		warnShort(item.prop, layout, #picks, item.count)
 		guardsByLevel[layout.id] = guards
 		local anchorIds: { string } = {}
 		for _, anchor in picks do
 			table.insert(anchorIds, anchor.id)
-			-- the anchor's own prop: with kinds its slot is the candidate's kind (the picks come one per kind in kind
-			-- order, so a full pick's place in the list is that kind too); without kinds, no slot
 			table.insert(objectiveProps, RunDirector.objectiveProp(layout, floor, anchor))
 		end
 		local guardIds: { string } = {}
@@ -754,7 +698,7 @@ function RunDirector.plan(
 		end
 		objectives[layout.id] = table.freeze({
 			levelId = layout.id,
-			prop = floor.item.prop,
+			prop = item.prop,
 			anchors = table.freeze(anchorIds),
 			guards = table.freeze(guardIds),
 		})
@@ -782,23 +726,6 @@ function RunDirector.plan(
 		end
 		warnShort("bear traps", basement, #chosen, spec.trapCount)
 		addProps(props, RunDirector.PropKinds.BearTrap, basement, chosen)
-	end
-
-	-- Chemical flasks
-	local flaskLevels: { { level: Enums.LevelId, count: number } } = {
-		{ level = SCIENCE_LEVEL, count = spec.flasksScienceHall },
-		{ level = POOL_LEVEL, count = spec.flasksPool },
-	}
-	for _, entry in flaskLevels do
-		local layout = byId[entry.level]
-		if not layout then
-			continue
-		end
-		local candidates = anchorsOfKind(layout, "FlaskCandidate", nil)
-		local random = Rng.seeded(runSeed, "Flasks|" .. layout.id)
-		local chosen = choosePreferSpaced(candidates, entry.count, random, FLASK_SPACING)
-		warnShort("chemical flasks", layout, #chosen, entry.count)
-		addProps(props, RunDirector.PropKinds.ChemicalFlask, layout, chosen)
 	end
 
 	-- Batteries

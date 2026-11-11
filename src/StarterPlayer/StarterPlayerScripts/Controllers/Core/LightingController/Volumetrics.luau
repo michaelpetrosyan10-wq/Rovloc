@@ -500,9 +500,6 @@ end
 local function coneGeometry(rig: ConeRig): (Vector3, Vector3)
 	local fixture = rig.fixture
 	local cframe = fixture.CFrame
-	if rig.shape.aimed then
-		return cframe.Position + cframe.LookVector * (fixture.Size.Z / 2 + 0.3), cframe.LookVector
-	end
 	return cframe.Position - Vector3.yAxis * (fixture.Size.Y / 2 + 0.15), -Vector3.yAxis
 end
 

@@ -17,17 +17,12 @@ Attributes.Player = table.freeze({
 	StaminaRate = "StaminaRate",
 	StaminaAt = "StaminaAt",
 	StaminaMax = "StaminaMax",
-	Oxygen = "Oxygen",
-	OxygenRate = "OxygenRate",
-	OxygenAt = "OxygenAt",
-	OxygenMax = "OxygenMax",
 	FlashlightOn = "FlashlightOn",
 	HeldItem = "HeldItem", -- Enums.ItemId (ChemicalProjectileService)
 	HeldItemVariant = "HeldItemVariant", -- the held flask's look (ChemicalFlaskBuilder variant); nil with no item
 	-- The floor objective's items this player carries (ObjectiveService is the only writer): "<Kind>:<n>" pairs joined
-	-- by ";" in the order first carried (Fuse, MasterKeys, Reagent, CoachKey, ValveWheel, BoltCutters); "" for none.
+	-- by ";" in the order first carried (Fuse, MasterKeys); "" for none.
 	Carrying = "Carrying",
-	SyringeCharges = "SyringeCharges",
 	Loadout = "Loadout", -- comma-separated PerkIds equipped for the next / current run
 	PerkStock = "PerkStock", -- PerkShopService: owned, unused perks ("PerkId:count,..."; PerkConfig.encodeStock)
 	DownedCount = "DownedCount",
@@ -61,7 +56,6 @@ Attributes.Creature = table.freeze({
 	InVent = "InVent",
 	VentSegmentId = "VentSegmentId",
 	Hidden = "Hidden",
-	GrabbedUserId = "GrabbedUserId",
 	LevelId = "LevelId",
 	-- the view contract (docs/MONSTER.md 12): the one-shot action ("" for none: Stare, ReachIn, LookAway, FadeOut,
 	-- FadeIn, Jumpscare), the server time it began, and how visible it is (0..1; written while a warp fades it)
@@ -99,10 +93,7 @@ Attributes.Match = table.freeze({
 	-- Floor objectives (ObjectiveService is the only writer; ObjectiveConfig; nil outside a run):
 	ObjectiveLevel = "ObjectiveLevel", -- the level whose objective the rest describe
 	ObjectiveSteps = "ObjectiveSteps", -- "<StepId>=<done>" pairs joined by ";" in the floor's step order
-	ObjectiveUnlocked = "ObjectiveUnlocked", -- the floor's exit (the crate on the roof) is open
-	ObjectiveTimerEndsAt = "ObjectiveTimerEndsAt", -- server time a timed step (the door motor) completes
-	ObjectiveActivatedAt = "ObjectiveActivatedAt", -- server time the squad arrived on the floor (the Tab nudge waits)
-	ObjectiveTargets = "ObjectiveTargets", -- where the next undone step is worked: "<room>|x|y|z" joined by ";"
+	ObjectiveUnlocked = "ObjectiveUnlocked", -- the floor's exit is open
 	-- The basement's mains while the power is out (Floor 0): the level whose Bulb / Fluorescent flicker groups burn at
 	-- ObjectiveConfig.Tuning.PowerOffFactor, and once the main breaker is thrown the server time their seeded switch-on
 	-- stutter (PowerOnSeconds) starts.
@@ -119,7 +110,6 @@ Attributes.World = table.freeze({
 	AcousticPreset = "AcousticPreset",
 	SegmentId = "SegmentId",
 	AdjacentZones = "AdjacentZones", -- comma-separated ZoneIds
-	Submerged = "Submerged",
 	NodeId = "NodeId",
 	Links = "Links", -- comma-separated NodeIds
 	GrateId = "GrateId",
@@ -130,8 +120,7 @@ Attributes.World = table.freeze({
 	DoorId = "DoorId",
 	DoorKind = "DoorKind",
 	DoorState = "DoorState",
-	ScriptedId = "ScriptedId", -- Door_<id> anchors: the ScriptedDoor id (HallwayGate, RoofStairDoor, ClassroomDoor,
-	-- EquipmentStoreDoor)
+	ScriptedId = "ScriptedId", -- Door_<id> anchors: the ScriptedDoor id (HallwayGate, RoofStairDoor, ClassroomDoor)
 	DoorWidth = "DoorWidth", -- Door_<id> anchors: clear opening width
 	DoorHeight = "DoorHeight", -- Door_<id> anchors: clear opening height
 	FromLevel = "FromLevel",
@@ -172,13 +161,12 @@ Attributes.World = table.freeze({
 	Surface = "Surface",
 	ExpectedParts = "ExpectedParts",
 	-- Floor objectives (ObjectiveConfig)
-	Floor = "Floor", -- 0 (basement) .. 5 (roof)
+	Floor = "Floor", -- the level's place in run order: 0 (basement) .. 5 (ObjectiveConfig's floor)
 	Step = "Step", -- the objective step a prop or prompt serves (ObjectiveConfig step id)
 	ObjectiveId = "ObjectiveId", -- what the prop is: Fuse, BreakerPanel, ExitLock, ...
-	Slot = "Slot", -- which of a step's items or sockets (reagent colour 1..3, fuse slot 1..3)
-	LockVariant = "LockVariant", -- Padlock | Chain | Keypad
+	Slot = "Slot", -- which of a step's items or sockets (fuse slot 1..3)
+	LockVariant = "LockVariant", -- Padlock | Keypad
 	Locked = "Locked", -- an objective lock still holds (builders leave true)
-	LockerId = "LockerId", -- the hideable locker (Locker anchor id) a coach's key hangs in
 	Candidate = "Candidate", -- an objective item's candidate anchor kind
 })
 

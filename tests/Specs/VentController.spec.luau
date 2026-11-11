@@ -168,16 +168,10 @@ local function realLayouts(): { Layout }
 end
 
 -- Whether a floor's script needs a duct (crawlways replaced the vents as the escape tool everywhere else): a gate's
--- bypass (Level 1: the HallwayGate seals the hallway, its vent carries the crossing past it) or a hatch valve's flooded
--- duct (Level 4).
+-- bypass (Level 1: the HallwayGate seals the hallway, its vent carries the crossing past it).
 local function needsDuct(layout: Layout): boolean
 	for _, door in layout.doors do
 		if door.kind == "Gate" then
-			return true
-		end
-	end
-	for _, anchor in layout.anchors do
-		if anchor.kind == "HatchValve" then
 			return true
 		end
 	end
@@ -600,11 +594,11 @@ return {
 		t.eq(decide(true, "VentCrawling", "Vent", true), "Hold", "a ControlLock / anchored root")
 		t.eq(decide(true, "VentCrawling", "Locked"), "Hold", "Locked collision")
 		t.eq(decide(true, "DownedCrawling", "Vent"), "Drive", "downed in a duct: drag along the rail")
-		t.eq(decide(true, "Grabbed", "Locked", true), "Hold")
+		t.eq(decide(true, "Trapped", "Locked", true), "Hold")
 		t.eq(decide(true, "DownedCrawling", "Normal"), "Release", "the server took us out")
 		t.eq(decide(true, "Standing", "Vent"), "Release", "the server's MoveState left the duct")
 		t.eq(decide(true, "Crouching", "Normal"), "Release")
-		t.eq(decide(true, "Treading", "Vent"), "Release")
+		t.eq(decide(true, "Sprinting", "Vent"), "Release")
 		t.eq(decide(true, "VentCrawling", "Vent", false, false), "Release", "death")
 
 		t.eq(VentController.colliderMode(CollisionGroups.VentCollider, CollisionGroups.NoCollide), "Vent")
@@ -629,7 +623,7 @@ return {
 		for _, state: Enums.MoveState in crawlStates do
 			t.eq(VentController.crawlSpeed(state), MovementController.speedFor(state), state)
 		end
-		local holdStates: { Enums.MoveState } = { "Grabbed", "Trapped", "Hiding", "Scripted" }
+		local holdStates: { Enums.MoveState } = { "Trapped", "Hiding", "Scripted" }
 		for _, state: Enums.MoveState in holdStates do
 			t.eq(VentController.crawlSpeed(state), 0, state)
 			t.eq(MovementController.speedFor(state), 0, state)

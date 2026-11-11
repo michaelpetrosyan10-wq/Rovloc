@@ -3,22 +3,21 @@
 -- web/src/creature/brain.js), shared by MonsterAIService and its state modules.
 --
 --   * decide(summary): the transition table (docs/MONSTER.md 6.1, first match wins): Scripted > Stunned > Dormant (its
---     level is not awake yet) > hold still while a catch, a grab or a ReachIn plays > hold while it fades out / in (a
---     warp) > a stun just ended: Patrol (withdrawing) > retreating in the water after a grab: AquaticStalk > a chase
+--     level is not awake yet) > hold still while a catch or a ReachIn plays > hold while it fades out / in (a warp) > a
+--     stun just ended: Patrol (withdrawing) > a chase
 --     MaxChase seconds in, or one the pacing calls off (catch cooldown, Relax): it gives up and fades out (Patrol) > no
 --     hunting allowed: Patrol (withdrawing from a HidingResponse) > the Chase (WallChase): it saw its quarry hide:
 --     HidingResponse; in sight (or stared at): on; line of sight lost for ChaseLost seconds, or the last seen point
 --     reached: Search > HidingResponse holds until its hider is out or taken (then WallChase on whoever it sees, else
---     Search) > it saw someone hide: HidingResponse > a 1 s stare: WallChase > someone in sight: WallChase (AquaticStalk
---     when it swims and they swim: a swimmer is only ever taken by the telegraphed lunge) > a swimmer on the pool level:
---     AquaticStalk > AquaticStalk ends when the water is calm > a teleport runs to its end (warning, FadeIn, stare,
+--     Search) > it saw someone hide: HidingResponse > a 1 s stare: WallChase > someone in sight: WallChase > a teleport
+--     runs to its end (warning, FadeIn, stare,
 --     stalk) > a noise outside InvestigateNoise and Search: InvestigateNoise > an investigation re-targets on a noise at
 --     least as loud, else ends (Patrol) > a Search breaks off for a High or Critical noise, else ends (Patrol) > a
 --     teleport that is due: Teleport > Patrol (the Stalk).
 --   * catchKind(check): whether a catch may happen now (reach, the same floor, a clear line eye to eye AND chest to
 --     chest: never through a wall). The Creature never enters a duct: there is no Vent catch.
 --   * levelInfo(layout): patrol loops (the layout's PatrolWaypoint anchors by "<prefix>_WP_<loop>_<NN>", else loops
---     derived from the level's rooms), rooms and the open doorways between them, pool basins and the CreatureSpawn (one
+--     derived from the level's rooms), rooms and the open doorways between them and the CreatureSpawn (one
 --     in a room outside the level's main walkable component does not count).
 -- The runtime Context type the states work through lives here too, so states never require MonsterAIService.
 
@@ -45,7 +44,7 @@ export type Summary = {
 	scripted: boolean, -- a cutscene holds the Creature
 	stunned: boolean, -- stun time left
 	awake: boolean, -- its level is active and the wake delay has run
-	catching: boolean, -- a catch, a grab or a ReachIn is playing
+	catching: boolean, -- a catch or a ReachIn is playing
 	warping: boolean, -- a FadeOut / FadeIn relocation runs
 	canHunt: boolean, -- pacing allows chases, investigations and catches
 	sees: boolean, -- somebody it may chase is in sight
@@ -57,9 +56,6 @@ export type Summary = {
 	lostSeconds: number, -- seconds since the chase last saw its quarry
 	maxChase: number,
 	chaseLost: number,
-	swimmer: boolean, -- pool level, a swimmer sensed recently
-	inWater: boolean?, -- the Creature swims
-	retreating: boolean?, -- it retreats to the far end of the water after a grab (Level 4 fairness)
 	teleportDue: boolean,
 	stateDone: boolean, -- the state finished its job
 }
@@ -80,8 +76,6 @@ export type CatchCheck = {
 	hidden: boolean, -- the Creature is hidden
 	stunned: boolean,
 	warping: boolean?,
-	creatureInWater: boolean?, -- in or from the water the pool's telegraphed grab is the only catch
-	targetSwimming: boolean?,
 }
 
 export type Waypoint = { id: string, loop: string, order: number, position: Vector3, zoneId: string }
@@ -109,7 +103,6 @@ export type LevelInfo = {
 	rooms: { [string]: Room },
 	roomList: { Room },
 	neighbours: { [string]: { string } }, -- rooms joined by an open doorway
-	basins: { Locomotion.Basin },
 	spawn: CFrame?, -- root CFrame at the CreatureSpawn anchor
 }
 
@@ -179,11 +172,7 @@ export type Context = {
 	repositionPoint: (minDistance: number, maxDistance: number) -> Vector3?,
 	playerPositions: () -> { Vector3 },
 	lockerInspector: () -> Types.LockerInspector?,
-	poolGrabber: () -> Types.PoolGrabber?,
-	grabArmed: (player: Player) -> boolean, -- their splashing crossed the grab threshold lately
-	setGrabbed: (player: Player?) -> (),
 	inVent: (player: Player) -> boolean,
-	swimming: (player: Player) -> boolean,
 	playing: (player: Player) -> boolean, -- hunted and playing
 	isHiding: (player: Player) -> boolean,
 	hideSpotOf: (player: Player) -> Instance?,
@@ -192,8 +181,6 @@ export type Context = {
 	hideSpotFront: (spot: Instance) -> CFrame?,
 	pulledOut: (player: Player) -> boolean, -- a teammate pulled them out of their hiding spot just now
 	bodyClear: (player: Player) -> boolean, -- chest to chest, never through a wall
-	telegraph: ((origin: Vector3, seconds: number) -> ())?, -- a lunge is coming from `origin` (Level 4 fairness)
-	poolRetreat: (() -> Vector3?)?, -- while it retreats after a grab: the far end of the water
 	rootOf: (player: Player) -> Vector3?,
 	floorPointNear: (position: Vector3) -> Vector3,
 	lineClear: (from: Vector3, to: Vector3) -> boolean, -- a sight line (Default group, characters excluded)
@@ -271,9 +258,6 @@ function Brain.decide(s: Summary): Decision
 	if state == "Stunned" then
 		return go("Patrol", "recovered", true)
 	end
-	if s.retreating and s.inWater then
-		return go("AquaticStalk", "retreating")
-	end
 	-- a chase that runs out (MaxChase) or is called off (the pacing's breather) ends the same way: it fades away
 	if state == "WallChase" and (s.chaseSeconds >= s.maxChase or not s.canHunt) then
 		return go("Patrol", if s.canHunt then "gave up" else "breather", true, true)
@@ -309,17 +293,7 @@ function Brain.decide(s: Summary): Decision
 		return go("WallChase", "stared at")
 	end
 	if s.sees then
-		if s.swimmer and s.inWater then
-			-- a swimmer is only ever taken by the telegraphed lunge
-			return go("AquaticStalk", "swimmer in sight")
-		end
 		return go("WallChase", "seen")
-	end
-	if s.swimmer then
-		return go("AquaticStalk", "swimmer")
-	end
-	if state == "AquaticStalk" then
-		return go("Patrol", "water calm")
 	end
 	if state == "Teleport" and not s.stateDone then
 		return go("Teleport", "teleporting")
@@ -358,9 +332,6 @@ end
 function Brain.catchKind(check: CatchCheck): Enums.JumpscareKind?
 	if check.busy or not check.canHunt or check.hidden or check.stunned or check.warping then
 		return nil
-	end
-	if check.creatureInWater or check.targetSwimming then
-		return nil -- in the water the pool's telegraphed grab is the only catch
 	end
 	if not check.playing or check.hiding or check.targetInVent then
 		return nil
@@ -590,7 +561,6 @@ function Brain.levelInfo(layout: LayoutSchema.LevelLayout): LevelInfo?
 	local origin = WorldConfig.levelOrigin(id)
 	local rooms: { [string]: Room } = {}
 	local roomList: { Room } = {}
-	local roomRects: { [string]: LayoutSchema.Rect } = {}
 	for _, room in layout.rooms do
 		if NO_ROOM[room.kind] then
 			continue
@@ -608,7 +578,6 @@ function Brain.levelInfo(layout: LayoutSchema.LevelLayout): LevelInfo?
 			centre = origin + Vector3.new(r.x + r.w / 2, 0, r.z + r.d / 2),
 		}
 		rooms[room.id] = entry
-		roomRects[room.id] = r
 		table.insert(roomList, entry)
 	end
 	local reachable = Brain.mainRooms(layout)
@@ -619,7 +588,7 @@ function Brain.levelInfo(layout: LayoutSchema.LevelLayout): LevelInfo?
 	if #loops == 0 then
 		local walkable: { Room } = {}
 		for _, room in roomList do
-			if room.kind ~= "Pool" and reachable[room.id] then
+			if reachable[room.id] then
 				table.insert(walkable, room)
 			end
 		end
@@ -652,14 +621,6 @@ function Brain.levelInfo(layout: LayoutSchema.LevelLayout): LevelInfo?
 			end
 		end
 	end
-	local basins: { Locomotion.Basin } = {}
-	for _, basin in layout.basins or {} :: { LayoutSchema.Basin } do
-		local room = roomRects[basin.room] or basin.rect
-		local made = Locomotion.makeBasin(basin.id, origin, basin.rect, room, basin.waterLevel, basin.depth)
-		-- Level 4 fairness: the Creature enters and leaves the water only by fading out and in, out of sight
-		made.fadeOnly = CreatureConfig.Water.FadeOnly
-		table.insert(basins, made)
-	end
 	-- its CreatureSpawn (one in a room it could never walk out of does not count: the first waypoint instead)
 	local spawn: CFrame? = nil
 	local anyReachable = next(reachable) ~= nil
@@ -678,7 +639,6 @@ function Brain.levelInfo(layout: LayoutSchema.LevelLayout): LevelInfo?
 		rooms = rooms,
 		roomList = roomList,
 		neighbours = neighbours,
-		basins = basins,
 		spawn = spawn,
 	}
 end

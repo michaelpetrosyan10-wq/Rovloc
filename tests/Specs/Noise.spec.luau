@@ -1,7 +1,7 @@
 --!strict
 -- Noise bus + locomotion sampler. Emit fills every pulse from NoiseConfig (radius, priority, medium per kind) and
 -- honours overrides; the ring buffer keeps the newest pulses in order; one player's continuous noise is paced by
--- its interval; the splash meter crosses once per climb (with hysteresis: one continuous swim never crosses twice).
+-- its interval.
 -- The sampler's tier logic is fed fake samples: the louder of the MoveState tier and the observed-speed tier wins,
 -- standing still is silent, only server-announced teleports are not footsteps (any other long step is heard at the
 -- speed it implies, stall-aware, and reported as suspicious), and pulses respect each kind's interval. Floor debris
@@ -24,7 +24,6 @@ local Tags = require(ReplicatedStorage.Shared.Tags)
 type Expect = SpecRunner.Expect
 
 local TICK = 1 / GameConfig.ServerTickHz
-local SPLASH = NoiseConfig.SplashMeter
 
 local function radiusOf(kind: Enums.NoiseKind?): number
 	if kind == nil then
@@ -86,13 +85,13 @@ return {
 		for _, kind: Enums.NoiseKind in Enums.NoiseKind do
 			local spec = NoiseConfig.Kinds[kind]
 			t.truthy(spec ~= nil, "NoiseConfig has " .. kind)
-			local event, emitted = NoiseAndDirectorService.TryEmit(position, kind, { levelId = "Level2_ScienceHall" })
+			local event, emitted = NoiseAndDirectorService.TryEmit(position, kind, { levelId = "Level2_Auditorium" })
 			t.truthy(emitted, kind .. " was broadcast")
 			t.eq(event.kind, kind)
 			t.eq(event.radius, spec.radius, kind .. " radius")
 			t.eq(event.priority, spec.priority, kind .. " priority")
 			t.eq(event.medium, spec.medium, kind .. " medium")
-			t.eq(event.levelId, "Level2_ScienceHall", kind .. " level")
+			t.eq(event.levelId, "Level2_Auditorium", kind .. " level")
 			t.eq(event.position, position, kind .. " position")
 			t.eq(event.sourceUserId, nil, kind .. " has no source")
 			t.truthy(type(event.serverTime) == "number" and event.serverTime == event.serverTime, "server time")
@@ -112,9 +111,9 @@ return {
 		local hop = Sampler.newTrack()
 		Sampler.landing(hop, true, 20, "Sprinting")
 		t.falsy(Sampler.landing(hop, false, 20.2, "Sprinting"), "a short hop (a step down) is quiet")
-		local swim = Sampler.newTrack()
-		Sampler.landing(swim, true, 30, "Treading")
-		t.falsy(Sampler.landing(swim, false, 31, "Treading"), "not in the water")
+		local duct = Sampler.newTrack()
+		Sampler.landing(duct, true, 30, "VentCrawling")
+		t.falsy(Sampler.landing(duct, false, 31, "VentCrawling"), "not in a duct")
 		local crouch = Sampler.newTrack()
 		Sampler.landing(crouch, true, 40, "Crouching")
 		t.truthy(Sampler.landing(crouch, false, 40.5, "Crouching"), "a crouched drop still lands")
@@ -126,7 +125,6 @@ return {
 			HideEnter = 8,
 			SlowVentCrawl = 8,
 			GrateUnscrew = 10,
-			Treading = 12,
 			HideEnterHurried = 14,
 			Walk = 22,
 			FallingObject = 24,
@@ -136,15 +134,12 @@ return {
 			Gasp = 40,
 			FlaskShatter = 50,
 			Sprint = 60,
-			Freestyle = 75,
-			Splash = 75,
 			DoorSlam = 90,
 			VentScurry = 90,
 			ObjectiveClunk = 110,
 			GrateKick = 130,
 			FloorDebris = 130,
 			TrapSnap = 130,
-			GeneratorStart = 170,
 		}
 		for kind, radius in expected do
 			local event = NoiseAndDirectorService.Emit(Vector3.zero, (kind :: any) :: Enums.NoiseKind)
@@ -159,7 +154,7 @@ return {
 
 	["Emit honours medium, vent node, level and radius overrides"] = function(t: Expect)
 		local event = NoiseAndDirectorService.Emit(Vector3.new(1, 2, 3), "Walk", {
-			levelId = "Level3_Gymnasium",
+			levelId = "Level1_Hallways",
 			medium = "Vent",
 			ventNodeId = "SpecNode",
 			radiusMultiplier = 0.5,
@@ -167,7 +162,7 @@ return {
 		t.eq(event.radius, NoiseConfig.Kinds.Walk.radius * 0.5)
 		t.eq(event.medium, "Vent")
 		t.eq(event.ventNodeId, "SpecNode")
-		t.eq(event.levelId, "Level3_Gymnasium")
+		t.eq(event.levelId, "Level1_Hallways")
 		t.eq(event.priority, NoiseConfig.Kinds.Walk.priority)
 
 		for _, bad in { -1, 0 / 0, math.huge } do
@@ -251,33 +246,6 @@ return {
 		NoiseAndDirectorService.OnPlayerRemoving(player)
 	end,
 
-	["the splash meter fires once per climb past the threshold"] = function(t: Expect)
-		local player = fakePlayer(424203)
-		local crossings = 0
-		local connection = NoiseAndDirectorService.SplashThresholdCrossed:Connect(function(who: Player)
-			if who == player then
-				crossings += 1
-			end
-		end)
-		local splashes = math.ceil(SPLASH.grabThreshold / SPLASH.perSplash)
-		for i = 1, splashes - 1 do
-			NoiseAndDirectorService.Emit(Vector3.zero, "Splash", { sourcePlayer = player })
-			t.eq(crossings, 0, "below the threshold after splash " .. i)
-		end
-		NoiseAndDirectorService.Emit(Vector3.zero, "Splash", { sourcePlayer = player })
-		t.eq(crossings, 1, "crossing fires")
-		for _ = 1, 4 do
-			NoiseAndDirectorService.Emit(Vector3.zero, "Splash", { sourcePlayer = player })
-		end
-		t.eq(crossings, 1, "staying above does not fire again")
-		t.truthy(NoiseAndDirectorService.GetSplashMeter(player) >= SPLASH.grabThreshold, "meter above threshold")
-		NoiseAndDirectorService.Emit(Vector3.zero, "Walk", { sourcePlayer = player })
-		t.eq(crossings, 1, "dry noise does not feed the meter")
-		connection:Disconnect()
-		NoiseAndDirectorService.OnPlayerRemoving(player)
-		t.eq(NoiseAndDirectorService.GetSplashMeter(player), 0, "forgotten on leave")
-	end,
-
 	--------------------------------------------------------------------------------
 	-- Sampler tiers (pure)
 	--------------------------------------------------------------------------------
@@ -287,18 +255,12 @@ return {
 		t.eq(Sampler.mediumFor("Crouching"), "Air")
 		t.eq(Sampler.mediumFor("VentCrawling"), "Vent")
 		t.eq(Sampler.mediumFor("VentScurrying"), "Vent")
-		t.eq(Sampler.mediumFor("Freestyle"), "Water")
-		t.eq(Sampler.mediumFor("Underwater"), "Water")
 		t.eq(Sampler.moveStateTier("Standing"), "Walk")
 		t.eq(Sampler.moveStateTier("Sprinting"), "Sprint")
 		t.eq(Sampler.moveStateTier("Crouching"), "CrouchWalk")
 		t.eq(Sampler.moveStateTier("VentCrawling"), "SlowVentCrawl")
 		t.eq(Sampler.moveStateTier("VentScurrying"), "VentScurry")
-		t.eq(Sampler.moveStateTier("Treading"), "Treading")
-		t.eq(Sampler.moveStateTier("Freestyle"), "Freestyle")
-		for _, silent: Enums.MoveState in
-			{ "Hiding", "Trapped", "Grabbed", "Parachuting", "Scripted" } :: { Enums.MoveState }
-		do
+		for _, silent: Enums.MoveState in { "Hiding", "Trapped", "Parachuting", "Scripted" } :: { Enums.MoveState } do
 			t.eq(Sampler.mediumFor(silent), nil, silent .. " has no medium")
 			t.eq(Sampler.moveStateTier(silent), nil, silent .. " has no tier")
 		end
@@ -312,8 +274,6 @@ return {
 		t.eq(Sampler.speedTier("Vent", 0.5), nil)
 		t.eq(Sampler.speedTier("Vent", GameConfig.VentCrawlSpeed), "SlowVentCrawl")
 		t.eq(Sampler.speedTier("Vent", GameConfig.VentScurrySpeed), "VentScurry")
-		t.eq(Sampler.speedTier("Water", GameConfig.TreadSpeed), "Treading")
-		t.eq(Sampler.speedTier("Water", GameConfig.FreestyleSpeed), "Freestyle")
 		t.eq(Sampler.speedTier("Air", 0 / 0), nil, "NaN speed")
 	end,
 
@@ -325,11 +285,9 @@ return {
 		t.eq(Sampler.classify("Crouching", GameConfig.CrouchSpeed), "CrouchWalk")
 		t.eq(Sampler.classify("VentCrawling", GameConfig.VentScurrySpeed), "VentScurry")
 		t.eq(Sampler.classify("VentCrawling", GameConfig.VentCrawlSpeed), "SlowVentCrawl")
-		t.eq(Sampler.classify("Treading", GameConfig.FreestyleSpeed), "Freestyle")
-		t.eq(Sampler.classify("Freestyle", 2), "Freestyle")
 		t.eq(Sampler.louder("Walk", "Sprint"), "Sprint")
 		t.eq(Sampler.louder("Sprint", "Walk"), "Sprint")
-		t.eq(Sampler.louder("Freestyle", "Splash"), "Freestyle", "a tie keeps the first")
+		t.eq(Sampler.louder("FloorDebris", "GrateKick"), "FloorDebris", "a tie keeps the first")
 		t.eq(Sampler.louder(nil, "Walk"), "Walk")
 		t.eq(Sampler.louder("Walk", nil), "Walk")
 
@@ -357,7 +315,6 @@ return {
 		t.eq(Sampler.classify("VentScurrying", 0.2), nil)
 		t.eq(Sampler.classify("Hiding", 30), nil)
 		t.eq(Sampler.classify("Trapped", 30), nil)
-		t.eq(Sampler.classify("Grabbed", 30), nil)
 		t.eq(Sampler.classify("Parachuting", 30), nil)
 	end,
 
@@ -449,10 +406,10 @@ return {
 		t.truthy(burst - held > Sampler.TeleportStep, "the burst is a long step")
 		t.eq(Sampler.classify("Standing", burstSpeed), "Walk", "a stalled walk is still a walk")
 
-		-- Server-held states (Hiding, Grabbed, ...) are carried by the server: never suspicious, never heard.
+		-- Server-held states (Hiding, Scripted, ...) are carried by the server: never suspicious, never heard.
 		local carried = Sampler.newTrack()
-		Sampler.sample(carried, Vector3.new(0, 3, 0), "Grabbed", 0)
-		local carriedKind, carriedReport = Sampler.sample(carried, Vector3.new(30, 3, 0), "Grabbed", TICK)
+		Sampler.sample(carried, Vector3.new(0, 3, 0), "Scripted", 0)
+		local carriedKind, carriedReport = Sampler.sample(carried, Vector3.new(30, 3, 0), "Scripted", TICK)
 		t.eq(carriedKind, nil)
 		t.eq(carriedReport, nil)
 	end,
@@ -511,103 +468,6 @@ return {
 	end,
 
 	--------------------------------------------------------------------------------
-	-- Splash meter maths (pure)
-	--------------------------------------------------------------------------------
-
-	["splash meter decays, crosses once and re-arms"] = function(t: Expect)
-		t.eq(Sampler.splashGain("Freestyle"), SPLASH.perFreestylePulse)
-		t.eq(Sampler.splashGain("Splash"), SPLASH.perSplash)
-		t.eq(Sampler.splashGain("Treading"), SPLASH.perTreadingPulse)
-		t.eq(Sampler.splashGain("Walk"), 0)
-
-		local meter = Sampler.newSplashMeter(0)
-		local crossings = 0
-		local now = 0
-		while Sampler.splashValue(meter, now) < SPLASH.grabThreshold and now < 60 do
-			if Sampler.addSplash(meter, SPLASH.perFreestylePulse, now) then
-				crossings += 1
-			end
-			now += NoiseConfig.Kinds.Freestyle.interval
-		end
-		t.eq(crossings, 1, "freestyle laps cross once")
-		t.truthy(now < 10, "a few seconds of freestyle reach the threshold")
-		for _ = 1, 20 do
-			if Sampler.addSplash(meter, SPLASH.perSplash, now) then
-				crossings += 1
-			end
-		end
-		t.eq(crossings, 1, "still one crossing while above")
-		t.near(
-			Sampler.splashValue(meter, now),
-			SPLASH.grabThreshold * Sampler.SplashCapFactor,
-			1e-6,
-			"capped above the threshold"
-		)
-
-		local value = Sampler.splashValue(meter, now)
-		t.near(Sampler.splashValue(meter, now + 2), value - SPLASH.decayPerSecond * 2, 1e-6, "linear decay")
-		local calm = now + value / SPLASH.decayPerSecond + 1
-		t.eq(Sampler.splashValue(meter, calm), 0, "decays to zero, never below")
-
-		local rearmed = false
-		local later = calm
-		for _ = 1, 20 do
-			if Sampler.addSplash(meter, SPLASH.perSplash, later) then
-				rearmed = true
-				break
-			end
-		end
-		t.truthy(rearmed, "after decaying below the threshold the meter fires again")
-
-		local treading = Sampler.newSplashMeter(0)
-		local fired = false
-		for i = 0, 200 do
-			if Sampler.addSplash(treading, SPLASH.perTreadingPulse, i * NoiseConfig.Kinds.Treading.interval) then
-				fired = true
-			end
-		end
-		t.falsy(fired, "quiet treading never invites a grab")
-	end,
-
-	["splash meter: one continuous swim crosses once (hysteresis)"] = function(t: Expect)
-		t.truthy(SPLASH.rearmBelow < SPLASH.grabThreshold, "re-arm level sits below the threshold")
-		-- Freestyle pulses at the 10 Hz sampler's real cadence (every 0.4 s), from every starting level.
-		local cadence = math.ceil(NoiseConfig.Kinds.Freestyle.interval / TICK - 1e-9) * TICK
-		for i = 0, 199 do
-			local meter = Sampler.newSplashMeter(0)
-			meter.value = i / 100
-			local crossings = 0
-			local now = 0
-			for _ = 1, 40 do
-				if Sampler.addSplash(meter, SPLASH.perFreestylePulse, now) then
-					crossings += 1
-				end
-				now += cadence
-			end
-			t.eq(crossings, 1, string.format("one swim from %.2f crosses once", i / 100))
-		end
-		-- Splash one-shots 1.5 s apart: one crossing, not one per dip below the threshold.
-		local splashes = Sampler.newSplashMeter(0)
-		local crossings = 0
-		for i = 0, 5 do
-			if Sampler.addSplash(splashes, SPLASH.perSplash, i * 1.5) then
-				crossings += 1
-			end
-		end
-		t.eq(crossings, 1, "spaced splashes cross once")
-		-- A real calm spell re-arms it.
-		local calmAt = 7.5 + (Sampler.splashValue(splashes, 7.5) - SPLASH.rearmBelow) / SPLASH.decayPerSecond + 0.5
-		local again = false
-		for i = 0, 10 do
-			if Sampler.addSplash(splashes, SPLASH.perSplash, calmAt + i * 0.1) then
-				again = true
-				break
-			end
-		end
-		t.truthy(again, "after decaying below rearmBelow it crosses again")
-	end,
-
-	--------------------------------------------------------------------------------
 	-- Floor debris (injected dependencies)
 	--------------------------------------------------------------------------------
 
@@ -638,7 +498,7 @@ return {
 		roots[alice] = Vector3.new(1, 2, 3)
 		roots[bob] = Vector3.new(4, 5, 6)
 		local glass = Instance.new("Part")
-		glass:SetAttribute("LevelId", "Level2_ScienceHall")
+		glass:SetAttribute("LevelId", "Level2_Auditorium")
 		local cans = Instance.new("Part")
 
 		t.truthy(debris.onVolumeEntered(alice, glass, Tags.FloorDebris), "first entry crunches")
@@ -647,7 +507,7 @@ return {
 		t.eq(NoiseConfig.Kinds.FloorDebris.radius, 130, "the spec's 130-stud debris noise")
 		t.eq(emitted[1].position, roots[alice], "where the player stands")
 		t.eq(emitted[1].options.sourcePlayer, alice)
-		t.eq(emitted[1].options.levelId, "Level2_ScienceHall", "the volume's level")
+		t.eq(emitted[1].options.levelId, "Level2_Auditorium", "the volume's level")
 		t.eq(cues[1], "GlassCrunch")
 
 		now += DebrisNoise.Cooldown / 2

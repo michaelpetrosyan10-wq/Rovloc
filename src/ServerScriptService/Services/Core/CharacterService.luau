@@ -110,9 +110,8 @@ local LOCK_PRIORITY: { [string]: number } = {
 	Parachute = 2,
 	Locker = 3,
 	Trap = 4,
-	Drag = 5,
-	Jumpscare = 6,
-	Cutscene = 7,
+	Jumpscare = 5,
+	Cutscene = 6,
 }
 
 export type AccessoryEntry = {

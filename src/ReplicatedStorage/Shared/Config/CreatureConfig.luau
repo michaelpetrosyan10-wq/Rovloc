@@ -24,7 +24,6 @@ CreatureConfig.Hitbox = table.freeze({
 	Biped = Vector3.new(2.6, 11, 2.7),
 	Hunched = Vector3.new(2.6, 9, 4.2),
 	Quadruped = Vector3.new(2.8, 2.8, 6),
-	Swim = Vector3.new(3, 3, 10),
 } :: { [string]: Vector3 })
 
 -- Eye position above the root centre, per PoseMode (Perception, the stare, the reveal, the catch's eye line and the
@@ -34,7 +33,6 @@ CreatureConfig.EyeHeightAboveRoot = table.freeze({
 	Biped = 5.64,
 	Hunched = 3.6,
 	Quadruped = 0.5,
-	Swim = 0.4,
 	Stunned = 4.6,
 } :: { [string]: number })
 
@@ -47,8 +45,6 @@ CreatureConfig.Speeds = table.freeze({
 	HidingResponse = 7,
 	Teleport = 7, -- the stalk toward its target after it forms
 	Stunned = 3, -- stumbling retreat
-	AquaticStalk = 6.5, -- Floor 4 fairness: slower than a freestyle swimmer (9), faster than one treading water (4)
-	AquaticLunge = 18,
 	Scripted = 16,
 	VentChase = 17, -- legacy: the old duct crawl's pace (the animator scales a duct scrape by it); never the brain's
 } :: { [string]: number })
@@ -161,31 +157,12 @@ CreatureConfig.Repath = table.freeze({
 CreatureConfig.Jumpscare = table.freeze({
 	LungeSeconds = 0.45,
 	HoldSeconds = 1.4,
-	FaceDistance = 1.6, -- a straight lunge's face distance (Vent, Underwater spacing)
+	FaceDistance = 1.6, -- a straight lunge's face distance (Vent spacing)
 	HoldDistance = 1.35, -- the victim's camera off the mask during the lock (docs/MONSTER-LOOK.md HOLD_DISTANCE)
 	-- root to root (docs/MONSTER.md 9): far enough back for the bow to bring the mask level with the victim's eye; it
 	-- eases back no nearer than the minimum, and only as far as its body clears the walls
-	Spacing = table.freeze({ Hallway = 4.2, Locker = 4.4, Vent = 2.8, Underwater = 2.6 } :: { [string]: number }),
-	MinSpacing = table.freeze({ Hallway = 3.4, Locker = 3.6, Vent = 2.3, Underwater = 2 } :: { [string]: number }),
-})
-
--- The pool (Floor 4 fairness): every lunge is telegraphed (rising bubbles, a ripple ring and a low growl at its origin)
--- for TelegraphSeconds with the Creature held still, then may run for LungeWindow before a new telegraph is needed;
--- LungeCooldown after a lunge that missed. Any swim but a lunge is capped at the AquaticStalk pace. In or from the
--- water the telegraphed grab is its only catch. It enters and leaves the water only by FadeOut / FadeIn out of sight
--- (FadeOnly), never climbing out at the deck and never through the vents, and comes back out on land at least ExitMin
--- from every player. PoolGraceSeconds after any player first enters a pool room it leaves the pool rooms alone; after
--- any grab it retreats to the far end of the water for GrabRetreatSeconds.
-CreatureConfig.Water = table.freeze({
-	LungeRange = 9,
-	TelegraphSeconds = 1.2,
-	LungeWindow = 2.5,
-	LungeCooldown = 2,
-	FadeOnly = true,
-	ExitMin = 30,
-	PoolGraceSeconds = 20,
-	GrabRetreatSeconds = 15,
-	MurkRange = 10, -- a swimmer under the surface sees it only this close
+	Spacing = table.freeze({ Hallway = 4.2, Locker = 4.4, Vent = 2.8 } :: { [string]: number }),
+	MinSpacing = table.freeze({ Hallway = 3.4, Locker = 3.6, Vent = 2.3 } :: { [string]: number }),
 })
 
 -- DOORS-Jack fake-outs: about one hiding spot in FakeoutOneIn holds one (seeded per run), at most one per floor per

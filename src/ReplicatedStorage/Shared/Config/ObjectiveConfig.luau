@@ -2,29 +2,26 @@
 -- ObjectiveConfig: every floor's objective as data, shared by the world (layout anchors, RunDirector's seeded picks,
 -- the prop builders' prompts) and the objective services of both versions.
 --
--- Core rule: a floor's exit (the airlock fire door between the floor and its exit vestibule; on the roof, the
--- parachute crate) stays locked until the floor's steps are done. Each floor has one carryable item, seeded per run
--- (RunSeed) among the layout's candidate anchors of `item.candidate`: RunDirector.plan puts `item.count` of them in
--- the plan as props of kind `item.prop` and lists them in plan.objectives[levelId]. Every step names the station or
--- lock it is worked at; every prompt the builders create takes its hold from `holds` (by PromptKind) and carries the
--- Step attribute of the step it serves.
+-- Core rule: a floor's exit (the airlock fire door between the floor and its exit vestibule) stays locked until the
+-- floor's lock step is done. A floor with an item has one carryable item, seeded per run (RunSeed) among the layout's
+-- candidate anchors of `item.candidate`: RunDirector.plan puts `item.count` of them in the plan as props of kind
+-- `item.prop` and lists them in plan.objectives[levelId]. Every step names the station or lock it is worked at; every
+-- prompt the builders create takes its hold from `holds` (by PromptKind) and carries the Step attribute of the step it
+-- serves. A floor without an item and without a lock step is a plain crossing: its exit is open from the start and its
+-- one step is done when the squad reaches the exit.
 --
---   Floor 0  RestorePower  3 fuses (13 candidates, each with a bear-trap spot on its approach; the first 2 picked are
---                          guarded) -> fit them in the breaker panel (2 s each) -> throw the main breaker (3 s). Exit
---                          lock: Keypad (no power).
---   Floor 1  MasterKeys    the janitor's master keys (10 spots, all past the gate) -> unlock the stairwell door (4 s).
---                          Padlock.
---   Floor 2  BurnChain     3 reagents, one of each kind (12 candidates, four per kind) -> mix them at the fume hood
---                          (5 s) -> an acid flask -> throw it at the chain (within 3 studs) or pour it at the door (2 s).
---                          Chain.
---   Floor 3  GymGenerator  the coach's key (in any of the 36 locker-room lockers) -> unlock the equipment store (2 s) ->
---                          start the generator (3 s) -> survive 45 s while the door motor winds. Keypad (motor).
---   Floor 4  ValveWheel    the valve wheel (8 spots on the deep pool floor) -> fit it on the hatch valve (3 s) -> turn
---                          it (4 s). Keypad (hatch interlock).
---   Floor 5  CutCrate      the bolt cutters (10 candidates) -> cut the chain on the parachute crate (4 s).
+-- Levels are keyed by id; `floor` is the dense 0..5 run order of the six levels (StageConfig's).
+--
+--   Level0_Basement    RestorePower  3 fuses (13 candidates, each with a bear-trap spot on its approach; the first 2
+--                                    picked are guarded) -> fit them in the breaker panel (2 s each) -> throw the main
+--                                    breaker (3 s). Exit lock: Keypad (no power).
+--   Level1_Hallways    MasterKeys    the janitor's master keys (all past the gate) -> unlock the stairwell door (4 s).
+--                                    Padlock.
+--   Level2_Auditorium  ReachExit     reach the east stairs (the interim floor: no item, no lock).
+--   The roof and the city levels have no objective here yet.
 --
 -- Fair spots (the specs and web/tools/data-test.mjs hold every candidate to them): on a real surface the squad can
--- reach (on foot, through the vents or by swimming); a hiding spot within HideReach; at least EntryClearance studs of
+-- reach (on foot or through the vents); a hiding spot within HideReach; at least EntryClearance studs of
 -- walking from the floor's entry (ObjectivePlaces.entryDistance), never in the Floor 1 scare classroom. A run's items
 -- (RunDirector.pickObjective) lie in different rooms, at least PickSpacing apart, and three of them in at least
 -- PickQuarters quarters of the floor.
@@ -33,15 +30,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
 
-export type LockVariant = "Padlock" | "Chain" | "Keypad"
+export type LockVariant = "Padlock" | "Keypad"
 
 export type ItemSpec = {
 	prop: string, -- plan prop kind (the Props builder registered for it)
 	candidate: Enums.AnchorKind, -- the layout anchors RunDirector picks the run's spots from
 	count: number, -- how many a run uses
 	guarded: number?, -- fuses: how many of the used ones get a bear trap on their approach (the anchor's ref)
-	slots: number?, -- reagents: the candidates in layout order cycle through this many kinds (slot 1, 2, 3, 1, ...)
-	-- and a run uses one of each kind
 	hold: number, -- Pickup prompt hold, seconds
 	object: string, -- Strings key of the Pickup prompt's object text
 }
@@ -50,19 +45,18 @@ export type StepSpec = {
 	id: string, -- the Step attribute of the props and prompts that serve it
 	count: number, -- how many times it is done ("Fuses 1/3")
 	label: string, -- Strings key of the tracker line
-	seconds: number?, -- a timed step (the door motor winding)
 }
 
 export type FloorSpec = {
-	floor: number, -- 0 (basement) .. 5 (roof)
+	floor: number, -- the level's place in run order, 0 (basement) .. 5 (StageConfig's floor)
 	levelId: Enums.LevelId,
 	id: string,
 	title: string, -- Strings key
-	item: ItemSpec,
+	item: ItemSpec?, -- nil: the floor has no item to find
 	steps: { StepSpec },
-	lockStep: string, -- the step whose completion unlocks the exit
-	lockVariant: LockVariant?, -- the ExitLock prop on the exit airlock door (nil on the roof: the crate chain)
-	lockReason: string, -- Strings key of the Locked prompt on the exit lock
+	lockStep: string?, -- the step whose completion unlocks the exit (nil: the exit is never locked)
+	lockVariant: LockVariant?, -- the ExitLock prop on the exit airlock doors (nil: no lock)
+	lockReason: string?, -- Strings key of the Locked prompt on the exit lock
 	holds: { [string]: number }, -- prompt holds by PromptKind, seconds
 }
 
@@ -115,92 +109,17 @@ local FLOORS: { FloorSpec } = {
 	},
 	{
 		floor = 2,
-		levelId = "Level2_ScienceHall",
-		id = "BurnChain",
-		title = "Objective.Floor.BurnChain",
-		item = {
-			prop = "ReagentJar",
-			candidate = "ReagentCandidate",
-			count = 3,
-			slots = 3,
-			hold = 0.6,
-			object = "Prompt.Reagent.1",
-		},
+		levelId = "Level2_Auditorium",
+		id = "ReachExit",
+		title = "Objective.Floor.ReachExit",
+		item = nil,
 		steps = {
-			{ id = "FindReagents", count = 3, label = "Objective.Step.FindReagents" },
-			{ id = "MixAcid", count = 1, label = "Objective.Step.MixAcid" },
-			{ id = "BurnChain", count = 1, label = "Objective.Step.BurnChain" },
+			{ id = "ReachExit", count = 1, label = "Objective.Step.Exit" },
 		},
-		lockStep = "BurnChain",
-		lockVariant = "Chain",
-		lockReason = "Prompt.Locked.Level2_ScienceHall",
-		holds = { Mix = 5, Pour = 2 },
-	},
-	{
-		floor = 3,
-		levelId = "Level3_Gymnasium",
-		id = "GymGenerator",
-		title = "Objective.Floor.GymGenerator",
-		item = {
-			prop = "CoachKey",
-			candidate = "CoachKeyCandidate",
-			count = 1,
-			hold = 0.6,
-			object = "Prompt.CoachKey",
-		},
-		steps = {
-			{ id = "FindCoachKey", count = 1, label = "Objective.Step.FindCoachKey" },
-			{ id = "UnlockStore", count = 1, label = "Objective.Step.UnlockStore" },
-			{ id = "StartGenerator", count = 1, label = "Objective.Step.StartGenerator" },
-			{ id = "WindMotor", count = 1, label = "Objective.Step.WindMotor", seconds = 45 },
-		},
-		lockStep = "WindMotor",
-		lockVariant = "Keypad",
-		lockReason = "Prompt.Locked.Level3_Gymnasium",
-		holds = { Unlock = 2, Generator = 3 },
-	},
-	{
-		floor = 4,
-		levelId = "Level4_FloodedPool",
-		id = "ValveWheel",
-		title = "Objective.Floor.ValveWheel",
-		item = {
-			prop = "ValveWheel",
-			candidate = "ValveWheelCandidate",
-			count = 1,
-			hold = 0.8,
-			object = "Prompt.ValveWheel",
-		},
-		steps = {
-			{ id = "FindWheel", count = 1, label = "Objective.Step.FindWheel" },
-			{ id = "FitWheel", count = 1, label = "Objective.Step.FitWheel" },
-			{ id = "TurnValve", count = 1, label = "Objective.Step.TurnValve" },
-		},
-		lockStep = "TurnValve",
-		lockVariant = "Keypad",
-		lockReason = "Prompt.Locked.Level4_FloodedPool",
-		holds = { FitValve = 3, TurnValve = 4 },
-	},
-	{
-		floor = 5,
-		levelId = "Level5_Roof",
-		id = "CutCrate",
-		title = "Objective.Floor.CutCrate",
-		item = {
-			prop = "BoltCutters",
-			candidate = "BoltCutterCandidate",
-			count = 1,
-			hold = 0.6,
-			object = "Prompt.BoltCutters",
-		},
-		steps = {
-			{ id = "FindCutters", count = 1, label = "Objective.Step.FindCutters" },
-			{ id = "CutChain", count = 1, label = "Objective.Step.CutChain" },
-		},
-		lockStep = "CutChain",
+		lockStep = nil,
 		lockVariant = nil,
-		lockReason = "Prompt.Locked.Level5_Roof",
-		holds = { CutChain = 4 },
+		lockReason = nil,
+		holds = {},
 	},
 }
 
@@ -215,12 +134,8 @@ end
 deepFreeze(FLOORS)
 ObjectiveConfig.Floors = FLOORS
 
--- The step a store door unlock serves on Floor 3, and the prompt text of its lock.
-ObjectiveConfig.StoreLockStep = "UnlockStore"
-ObjectiveConfig.StoreLockReason = "Prompt.Locked.Store"
-
--- How close a hiding spot (a hideable locker, an open vent grate, a dark corner, or on the roof a plant block to crouch
--- behind) stands to every objective step's spot. The specs hold every layout to it.
+-- How close a hiding spot (a hideable locker, a barrel or cabinet, an open vent grate, a dark corner) stands to every
+-- objective step's spot. The specs hold every layout to it.
 ObjectiveConfig.HideReach = 25
 
 -- How far (studs walked, ObjectivePlaces.entryDistance) every item candidate lies from the floor's entry, how far apart
@@ -231,35 +146,22 @@ ObjectiveConfig.PickQuarters = 2
 
 -- What the objective services tune beyond the floors above (seconds and studs; the web build mirrors every number).
 ObjectiveConfig.Tuning = table.freeze({
-	WorkNoisePeriod = 1, -- a working hold (unlock, mix, turn, cut) emits WorkNoise at its start and then this often
+	WorkNoisePeriod = 1, -- a working hold (an unlock) emits WorkNoise at its start and then this often
 	WorkNoise = "ObjectiveWork" :: Enums.NoiseKind,
-	LoudNoise = "ObjectiveClunk" :: Enums.NoiseKind, -- the breaker, each exit unlocking, the crate chain snapping
-	GeneratorNoise = "GeneratorStart" :: Enums.NoiseKind,
-	SearchHold = 1, -- Floor 3: a locker search (the Kick action, never Hide)
-	SearchEmptySeconds = 0.9, -- an empty locker stands ajar this long
-	SearchOpen = 0.42, -- a searched locker's door: this share of fully open
-	ChainHitRadius = 3, -- Floor 2: a thrown acid flask burns the chain when it breaks this close to ChainCentre
-	BurnSeconds = 1.3, -- the acid eats through the chain
+	LoudNoise = "ObjectiveClunk" :: Enums.NoiseKind, -- the breaker, each exit unlocking
 	LockOffSeconds = 0.9, -- a lock comes off over this
 	DoorDelay = 0.75, -- the exit door swings open this long after the unlock clunk
-	PowerOffFactor = 0.04, -- Floor 0: the basement's mains while the power is out
+	PowerOffFactor = 0.04, -- the basement's mains while the power is out
 	PowerOnSeconds = 2.6, -- their switch-on stutter
 	LeverCreep = 0.22, -- the share of the breaker lever's throw it creeps over the hold
-	SashSeconds = 0.8, -- Floor 2: the sash opens over this when the jars go in
-	WorkLampBrightness = 3, -- Floor 3: the generator's work lamp once it runs
-	HatchSeconds = 1.6, -- Floor 4: the hatch swings open over this
-	ValveTurns = 2.5, -- the wheel turns this many times over the hold
-	ChainDrop = 1.1, -- Floor 5: the cut chain drops this far
-	NudgeDelay = 20, -- the Tab nudge on an objective floor: first available this long after arriving ...
-	NudgeCooldown = 30, -- ... then this often
 	HintRadius = 12, -- a station or lock's first-time hint: this close to the eye, with a clear line
 	DropSpread = 1.2, -- studs between the items a carrier drops
 })
 
--- Where the Creature starts on Levels 0, 2 and 3, and its grace there (Level 1 keeps its scripted scare, Level 4 its
--- pool, Level 5 the roof door, whose wait uses Grace too). The basement has the Creature too (docs/MONSTER.md 5).
+-- Where the Creature starts on the basement and the Auditorium, and its grace there (the Hallways keep their scripted
+-- scare, the roof its door, whose wait uses Grace too). The basement has the Creature too (docs/MONSTER.md 5).
 ObjectiveConfig.Spawn = table.freeze({
-	Levels = table.freeze({ "Level0_Basement", "Level2_ScienceHall", "Level3_Gymnasium" } :: { string }),
+	Levels = table.freeze({ "Level0_Basement", "Level2_Auditorium" } :: { string }),
 	MinDistance = 70, -- studs walked from the entry (ObjectivePlaces.walkDistance)
 	MaxDistance = 140,
 	Grace = table.freeze({ Standard = 20, Nightmare = 12 } :: { [string]: number }),
@@ -280,10 +182,13 @@ local byLevel: { [string]: FloorSpec } = {}
 local byProp: { [string]: FloorSpec } = {}
 for _, spec in ObjectiveConfig.Floors do
 	byLevel[spec.levelId] = spec
-	byProp[spec.item.prop] = spec
+	local item = spec.item
+	if item then
+		byProp[item.prop] = spec
+	end
 end
 
--- The objective of a level (nil for the Lobby).
+-- The objective of a level (nil for the Lobby and for a level without one).
 function ObjectiveConfig.forLevel(levelId: string): FloorSpec?
 	return byLevel[levelId]
 end

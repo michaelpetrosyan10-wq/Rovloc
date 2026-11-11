@@ -52,7 +52,6 @@ local BearTrapService = require(ServerScriptService.Services.Mechanics.BearTrapS
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
 local ChemicalProjectileService = require(ServerScriptService.Services.Mechanics.ChemicalProjectileService)
 local HideSpotService = require(ServerScriptService.Services.Mechanics.HideSpotService)
-local FloodedPoolService = require(ServerScriptService.Services.Mechanics.FloodedPoolService)
 local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
 
 local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
@@ -155,8 +154,8 @@ end
 --   ZoneService              10 Hz zone / volume tracking (no run hooks).
 --   AudioService             Cue routing to clients.
 --   RunStatsService          BeginRun resets the counters; EndRun freezes them for the summary.
---   LoadoutService           Perks from Player.Loadout; BeginRun sets syringe charges before anything reads them.
---   PlayerStateService       MoveState / stamina / oxygen authority, MoveIntent + LookRelay.
+--   LoadoutService           Perks from Player.Loadout.
+--   PlayerStateService       MoveState / stamina authority, MoveIntent + LookRelay.
 --   LifeStateService         Health + LifeState; BeginRun makes participants Alive. Owns the recovery hook.
 --   MovementAuthority        10 Hz movement validation (registered validators first).
 --   InteractionService       Server-timed prompt channels for every registered PromptKind handler.
@@ -171,33 +170,27 @@ end
 --                            DoorService, left-behind spectators, LevelDirector.Advance, 50% respawns at the next floor.
 --   MonsterAIService         The Creature's brain: BeginRun takes over the Creature WorldService built above, reads
 --                            VentNetworkService's graphs and grates; EndRun (early, in reverse) lets it go.
---   ChemicalProjectileService Level 2 flasks: BeginRun tracks the flasks WorldService built above; pickups, throws,
+--   ChemicalProjectileService Chemical flasks: BeginRun tracks the flasks WorldService built above; pickups, throws,
 --                            stepped server flights, stun clouds (VentNetworkService's graphs, MonsterAIService.Stun).
 --   HideSpotService          Every hiding spot (lockers, barrels, cabinets): BeginRun tracks the spots WorldService
 --                            rebuilt above; Hide and Pull out prompts, Anchor-locked hiding, server-stepped leaves, the
 --                            hold-breath check (MonsterAIService's inspector and hide-spot hooks), the stay limit,
 --                            fake-outs, the LockerRip hand-over to JumpscareHandler; EndRun lets everyone out.
---   FloodedPoolService       Level 4 water: who swims (Swim mode), oxygen rates, the Swim validator, the Creature's
---                            grab (MonsterAIService's PoolGrabber), drag, struggle, flask / floodlight release, drowning.
 --   ParachuteService         The roof jump: the crate's packs (InteractionService), the leap off the edge, the cord /
 --                            auto-deploy, the canopy's LinearVelocity and its "Parachute" validator (MovementAuthority),
---                            landings held for the finale (CharacterService locks); Heartbeat-stepped.
+--                            landings held until the roof lets them go (CharacterService locks); Heartbeat-stepped.
 --   ObjectiveService         The floor objectives (ObjectiveConfig): BeginRun (after DoorService, the lockers, the
---                            flasks, the pool, the parachutes and the vents above) locks every floor's exit fire doors,
---                            resets the locks and stations WorldService rebuilt and keeps the run's picked items; its
---                            prompt handlers (InteractionService), the carry, the drop on death / leave, the acid
---                            (ChemicalProjectileService), the store door, the hatch's grate (VentNetworkService), the
---                            crate (ParachuteService); CheckpointAirlockService asks ExitOpen; Unlocked signals the roof.
---   Levels                   The Level 0-5 controllers (registered with LevelDirector in Init): basement beats,
---                            the Floor 1 classroom scare (MonsterAIService.AcquireScripted, DoorService's gate), Level 2
---                            flask restock (ChemicalProjectileService), the Level 3 gym (MonsterAIService.SetSpeedScale /
---                            Alert, HideSpotService's checks), the Level 4 pool (the Creature called to the water,
---                            the floodlight switch, FloodedPoolService.ReleaseGrab), the Level 5 roof (the door smash,
---                            the final sprint, the finale over ParachuteService; Levels.Level5.Escaped); EndRun (early,
---                            in reverse) lets the Creature go.
+--                            flasks, the parachutes and the vents above) locks every floor's exit fire doors, resets the
+--                            locks and stations WorldService rebuilt and keeps the run's picked items; its prompt
+--                            handlers (InteractionService), the carry, the drop on death / leave;
+--                            CheckpointAirlockService asks ExitOpen.
+--   Levels                   The level controllers (registered with LevelDirector in Init): basement beats, the Floor 1
+--                            classroom scare (MonsterAIService.AcquireScripted, DoorService's gate), the roof (the door
+--                            smash, the ledge staging over ParachuteService; Levels.Level3.Escaped); EndRun (early, in
+--                            reverse) lets the Creature go.
 --   MatchAndDataService      Saved progress (session-locked records, serialized saves, BindToClose) and the match
 --                            policy: Deploy (perk stock, BeginRun, Level 0 spawns), the RunOutcomeEvaluator over
---                            LifeStateService / Levels.Level5 escapes / leaves, rewards, RunSummary, RunResolved, Results.
+--                            LifeStateService / Levels.Level3 escapes / leaves, rewards, RunSummary, RunResolved, Results.
 --                            Init turns the Studio auto dev run off (DevToolsService.SetMatchPolicyPresent).
 --   MatchResetService        Results -> Resetting -> Lobby (timer or everyone pressed Play Again), PlayAgainRequested.
 --   TelemetryService         AnalyticsService funnel + custom + economy events (skipped in Studio).
@@ -257,8 +250,6 @@ local SERVICES: { Types.Service } = {
 	{
 		Name = LoadoutService.Name,
 		Init = LoadoutService.Init,
-		BeginRun = LoadoutService.BeginRun,
-		EndRun = LoadoutService.EndRun,
 		OnPlayerRemoving = LoadoutService.OnPlayerRemoving,
 	},
 	{
@@ -354,14 +345,6 @@ local SERVICES: { Types.Service } = {
 		BeginRun = HideSpotService.BeginRun,
 		EndRun = HideSpotService.EndRun,
 		OnPlayerRemoving = HideSpotService.OnPlayerRemoving,
-	},
-	{
-		Name = FloodedPoolService.Name,
-		Init = FloodedPoolService.Init,
-		Start = FloodedPoolService.Start,
-		BeginRun = FloodedPoolService.BeginRun,
-		EndRun = FloodedPoolService.EndRun,
-		OnPlayerRemoving = FloodedPoolService.OnPlayerRemoving,
 	},
 	{
 		Name = ParachuteService.Name,

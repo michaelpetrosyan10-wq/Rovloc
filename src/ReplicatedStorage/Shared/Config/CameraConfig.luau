@@ -10,8 +10,6 @@ CameraConfig.StateOffsets = table.freeze({
 	VentCrawling = Vector3.new(0, -2.1, -0.5),
 	DownedCrawling = Vector3.new(0, -2.3, 0),
 	LockerPeeking = Vector3.new(0, -0.15, 0),
-	SurfaceSwimming = Vector3.new(0, -1.1, 0),
-	UnderwaterSwimming = Vector3.new(0, -1.6, -0.3),
 	ParachuteLookback = Vector3.new(0, 0, 0),
 } :: { [string]: Vector3 })
 
@@ -24,12 +22,8 @@ CameraConfig.EyeHeightAboveRoot = table.freeze({
 	VentCrawling = -0.6,
 	VentScurrying = -0.6,
 	DownedCrawling = -0.8,
-	Treading = 0.4,
-	Freestyle = 0.2,
-	Underwater = -0.6,
 	Hiding = 1.3,
 	Trapped = 1.1,
-	Grabbed = -0.6,
 	Parachuting = 1.5,
 	Scripted = 1.5,
 } :: { [string]: number })

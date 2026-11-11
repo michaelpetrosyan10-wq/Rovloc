@@ -21,7 +21,7 @@
 --      of the look (never into it).
 --   6. FOV = the BaseFov setting + the sprint bonus + the panic bonus and heartbeat warp (both scaled by the
 --      MotionScale setting), eased at CameraConfig.FieldOfView.LerpSpeed.
---   7. CameraStack blends any pushed overrides (Cutscene > Jumpscare > Spectating > Struggle > Trapped) over that
+--   7. CameraStack blends any pushed overrides (Cutscene > Jumpscare > Spectating > Trapped) over that
 --      base view; the result goes to the camera.
 --   8. The root's yaw follows the look: Humanoid.AutoRotate is off and a client-made AlignOrientation (OneAttachment)
 --      on the own root targets the camera yaw; it lets go while a ControlLock is held (the server anchors the
@@ -34,7 +34,7 @@
 -- Respawns rebind everything and face the spawn's direction; a dead character's camera stays at its head; with no
 -- character the camera holds its last eye and can still look around. SetEnabled(false) hands the camera back to the
 -- engine (Custom, Classic, AutoRotate on, cursor unlocked, body fully visible) while movement prediction carries on.
--- Input: Sprint (hold), Crouch (toggle), Dive (hold) and Flashlight (tap) come from InputController; look input is
+-- Input: Sprint (hold), Crouch (toggle) and Flashlight (tap) come from InputController; look input is
 -- ignored while the Menu or Cutscene context is live, the cursor is free, or a Jumpscare / Cutscene lock is held.
 
 local Players = game:GetService("Players")
@@ -405,7 +405,6 @@ local function renderFrame(deltaTime: number)
 		now = now,
 		serverNow = serverNow,
 		sprintHeld = InputController.IsHeld("Sprint"),
-		diveHeld = InputController.IsHeld("Dive"),
 	})
 
 	-- 2. Camera state and pitch range
@@ -666,9 +665,6 @@ function FirstPersonController.Init()
 			move:ToggleCrouch()
 		end
 	end))
-	serviceTrove:Add(InputController.Action("Dive"):Connect(function(phase: InputController.Phase)
-		move:SetDive(phase == "Begin")
-	end))
 	serviceTrove:Add(InputController.Action("Flashlight"):Connect(function(phase: InputController.Phase)
 		if phase == "Begin" then
 			light:Toggle(os.clock())
@@ -875,7 +871,7 @@ function FirstPersonController.SuspendBodyYaw(token: string, suspended: boolean)
 	end
 end
 
--- The locomotion mode the client knows before the server's MoveState says so (vent entry, water); nil clears it.
+-- The locomotion mode the client knows before the server's MoveState says so (vent entry); nil clears it.
 function FirstPersonController.SetMoveModeHint(mode: MoveMode?)
 	local move = movement
 	if move then

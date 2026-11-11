@@ -19,10 +19,8 @@ local LAYOUT_IDS = {
 	"Lobby",
 	"Level0_Basement",
 	"Level1_Hallways",
-	"Level2_ScienceHall",
-	"Level3_Gymnasium",
-	"Level4_FloodedPool",
-	"Level5_Roof",
+	"Level2_Auditorium",
+	"Level3_Roof",
 }
 
 local command = process.args[1] or "all"
@@ -131,7 +129,12 @@ local function runSpecs(h)
 		return
 	end
 	local specsFolder = h.path("ServerScriptService.Tests.Specs")
-	local report = Runner.run(specsFolder, h.requireInstance)
+	local okParked, parked = pcall(h.require, "ServerScriptService.Tests.PortPending")
+	if not okParked then
+		fail("PortPending unavailable: %s", tostring(parked))
+		return
+	end
+	local report = Runner.run(specsFolder, h.requireInstance, parked)
 	for _, line in report.lines do
 		print("  " .. line)
 	end
@@ -155,7 +158,7 @@ local function runMatchLoop(h)
 	local MatchData = h.require("ServerScriptService.Services.Match.MatchAndDataService")
 	local MatchReset = h.require("ServerScriptService.Services.Match.MatchResetService")
 	local GameConfig = h.require("ReplicatedStorage.Shared.Config.GameConfig")
-	local Enums = h.require("ReplicatedStorage.Shared.Enums")
+	local WorldConfig = h.require("ReplicatedStorage.Shared.Config.WorldConfig")
 
 	local squad = roblox.Instance.new("Player")
 	squad.Name = "SquadProbe"
@@ -237,7 +240,7 @@ local function runMatchLoop(h)
 	if squad:GetAttribute("RunOutcome") ~= "Pending" or LifeState.GetState(squad) ~= "Alive" then
 		fail("the participant is not Alive / Pending after the deploy")
 	end
-	for index, levelId in Enums.LevelId do
+	for index, levelId in WorldConfig.LevelOrder do
 		if index > 1 and (not LevelDirector.EnterLevel(levelId) or RS:GetAttribute("CurrentLevel") ~= levelId) then
 			fail("the deployed run could not enter %s", levelId)
 		end
@@ -311,7 +314,7 @@ local function runMatchLoop(h)
 		fail("the second Play Again did not return to the lobby")
 		return
 	end
-	print(string.format("  ok   match loop: data, deploy, %d levels, wipe, escape, play again", #Enums.LevelId))
+	print(string.format("  ok   match loop: data, deploy, %d levels, wipe, escape, play again", #WorldConfig.LevelOrder))
 end
 
 -- Boots the real ServerMain (every service's Init / Start in ServerMain order), then drives the P1 server flow the
@@ -342,6 +345,7 @@ local function runLifecycle(h)
 	local DevTools = h.require(core .. "DevToolsService")
 	local Builder = h.require("ReplicatedStorage.Shared.World.ProceduralWorldBuilder")
 	local Enums = h.require("ReplicatedStorage.Shared.Enums")
+	local WorldConfig = h.require("ReplicatedStorage.Shared.Config.WorldConfig")
 
 	local deadline = os.clock() + 120
 	while not World.IsReady() and os.clock() < deadline do
@@ -459,7 +463,7 @@ local function runLifecycle(h)
 		if RS:GetAttribute("Difficulty") ~= difficulty or RS:GetAttribute("RunSeed") ~= 4242 then
 			fail("devrun %s did not publish its difficulty and seed", difficulty)
 		end
-		if RS:GetAttribute("CurrentLevel") ~= Enums.LevelId[1] or not LevelDirector.IsActive() then
+		if RS:GetAttribute("CurrentLevel") ~= WorldConfig.LevelOrder[1] or not LevelDirector.IsActive() then
 			fail("devrun %s: Level0 is not the active level", difficulty)
 		end
 		local plan = Noise.GetPlan()
@@ -473,10 +477,10 @@ local function runLifecycle(h)
 				end
 			end
 		end
-		for index, levelId in Enums.LevelId do
-			local k = dev("level", { tostring(index - 1) })
+		for index, levelId in WorldConfig.LevelOrder do
+			local k = dev("level", { levelId })
 			if k ~= "Dev.Ok" or RS:GetAttribute("CurrentLevel") ~= levelId or RS:GetAttribute("LevelPhase") ~= "Active" then
-				fail("level %d did not activate %s", index - 1, levelId)
+				fail("level %s did not activate", levelId)
 			end
 			local before = #h.fired
 			dev("plan")
@@ -492,11 +496,11 @@ local function runLifecycle(h)
 			end
 			-- MonsterAIService: on every level (the basement too) the Creature waits Dormant on the squad's level (ai
 			-- reports it); on Level 1 the classroom scare holds it Scripted until the glass is stepped on, and on the
-			-- roof the Level 5 controller holds it Scripted behind the stairwell door until the squad is out.
+			-- roof its controller holds it Scripted behind the stairwell door until the squad is out.
 			if index >= 1 then
 				local creature = CollectionService:GetTagged("Creature")[1]
 				local _, mind = dev("ai")
-				local scripted = levelId == "Level1_Hallways" or levelId == "Level5_Roof"
+				local scripted = levelId == "Level1_Hallways" or levelId == "Level3_Roof"
 				local expected = if scripted then "Scripted" else "Dormant"
 				if
 					not creature
@@ -540,10 +544,10 @@ local function runLifecycle(h)
 		print(string.format("  ok   %s run: %d props planned, every level entered, torn down", difficulty, if plan then #plan.props else 0))
 	end
 
-	-- `level N` from the lobby starts a dev run there; non-dev players are refused.
-	dev("level", { "5" })
-	if Lifecycle.GetPhase() ~= "InRun" or RS:GetAttribute("CurrentLevel") ~= "Level5_Roof" then
-		fail("level 5 from the lobby did not start a run on the roof")
+	-- `level <id>` from the lobby starts a dev run there; non-dev players are refused.
+	dev("level", { "Level3_Roof" })
+	if Lifecycle.GetPhase() ~= "InRun" or RS:GetAttribute("CurrentLevel") ~= "Level3_Roof" then
+		fail("level Level3_Roof from the lobby did not start a run on the roof")
 	end
 	dev("endrun")
 	player:SetAttribute("DevTools", false)

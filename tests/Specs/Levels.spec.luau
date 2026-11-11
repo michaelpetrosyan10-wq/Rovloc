@@ -1,8 +1,8 @@
 --!strict
 -- Levels. The shared scene data (every timeline valid, the classroom scare's beats in order and keyed where the
 -- server times them, the presets it names), the subject's camera maths (stumble, the drag onto the Creature), the
--- staged corner crouch pose, LevelKit's schedule and sight test, and the three level controllers on a fake clock with
--- every service injected:
+-- staged corner crouch pose, LevelKit's schedule and sight test, and the level controllers of the basement and the
+-- hallways on a fake clock with every service injected:
 --   Level 1  the blueprint geometry (the pose, the glass, the gate line, what lies past it, the hiding spots), the
 --            trigger table for every way in (glass, the classroom, near with a sightline, slipping past through a
 --            side room, past the gate or in its bypass vent; never from inside a duct), the whole scene on time
@@ -12,7 +12,6 @@
 --            fallback (crunch + gate only), a scene cut short by leaving the level, the bulbs restored at the end.
 --   Level 0  candidates, the seeded director (never the same beat twice, 25-50 s apart, deferred after a TrapSnap),
 --            placement in the band and out of sight, the surge's bulbs, the falling object's noise.
---   Level 2  the restock rules and spot choice (free, far, unseen), the 45 s spacing, the one-time hint.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -23,7 +22,6 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local NoiseConfig = require(ReplicatedStorage.Shared.Config.NoiseConfig)
 local Scenes = require(ReplicatedStorage.Shared.Sequence.Scenes)
-local Strings = require(ReplicatedStorage.Shared.Strings)
 local SynthPresets = require(ReplicatedStorage.Shared.Audio.SynthPresets)
 local Timeline = require(ReplicatedStorage.Shared.Sequence.Timeline)
 local Types = require(ReplicatedStorage.Shared.Types)
@@ -35,7 +33,6 @@ local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuild
 local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 local Level0 = require(ServerScriptService.Services.Levels.Level0_BasementController)
 local Level1 = require(ServerScriptService.Services.Levels.Level1_HallwaysController)
-local Level2 = require(ServerScriptService.Services.Levels.Level2_ScienceHallController)
 local LevelKit = require(ServerScriptService.Services.Levels.LevelKit)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
@@ -74,7 +71,6 @@ type L1World = {
 
 local L0: Enums.LevelId = "Level0_Basement"
 local L1: Enums.LevelId = "Level1_Hallways"
-local L2: Enums.LevelId = "Level2_ScienceHall"
 local SEED = 4242
 local LEAD = GameConfig.OneShotLead
 local STEP = 0.01
@@ -416,7 +412,6 @@ return {
 			t.falsy(SynthPresets.isLooped(name) and name ~= "CeilingDrag", name .. " is a one-shot")
 		end
 		t.truthy(SynthPresets.isLooped("CeilingDrag"), "the drag loops until its track stops it")
-		t.truthy(Strings.has(Level2.HintKey), "the flask hint has a string")
 		local fall = NoiseConfig.Kinds.FallingObject
 		t.eq(fall.priority, "Low", "a falling object is a Low noise")
 		t.truthy(fall.radius > 0, "that something can hear")
@@ -1072,127 +1067,6 @@ return {
 		end)
 		Level0.EndRun()
 		Level0.SetDependencies(nil)
-		if not ok then
-			error(err, 0)
-		end
-	end,
-
-	["Level 2: flasks are restocked out of sight, at most one per 45 s, and the hint shows once"] = function(t: Expect)
-		t.truthy(Level2.restockDue(100, -math.huge, 1), "below two: restock")
-		t.falsy(Level2.restockDue(100, -math.huge, 2), "two in play is enough")
-		t.falsy(Level2.restockDue(100, 70, 0), "not within 45 s of the last")
-		t.truthy(Level2.restockDue(115, 70, 0), "45 s later")
-
-		local random = MathUtil.seededRandom(SEED, "spec2")
-		local spots = { CFrame.new(0, 3, 0), CFrame.new(100, 3, 0), CFrame.new(200, 3, 0) }
-		local never = function(_p: Vector3): boolean
-			return false
-		end
-		local picked = Level2.pickSpot(spots, { Vector3.new(100, 3, 0) }, { Vector3.new(5, 3, 0) }, never, random)
-		assert(picked, "a spot")
-		t.truthy(picked.Position == Vector3.new(200, 3, 0), "free, and more than 30 studs from everyone")
-		t.eq(
-			Level2.pickSpot(spots, {}, {}, function(_p: Vector3): boolean
-				return true
-			end, random),
-			nil,
-			"never where anyone can see"
-		)
-		t.truthy(Level2.hintDue({ Vector3.new(0, 3, 0) }, { Vector3.new(6, 3, 6) }), "within 10 studs")
-		t.falsy(Level2.hintDue({ Vector3.new(0, 3, 0) }, { Vector3.new(20, 3, 0) }), "too far")
-
-		local layout = Builder.getLayout(L2)
-		assert(layout, "Level 2 layout")
-		local candidates: { Vector3 } = {}
-		for _, anchor in layout.anchors do
-			if anchor.kind == "FlaskCandidate" then
-				table.insert(candidates, Builder.anchorCFrame(L2, anchor).Position)
-			end
-		end
-		t.truthy(#candidates >= 4, "lab counter spots")
-		local now = 800
-		local available = 1
-		local flasks: { Vector3 } = {}
-		local spawned: { { cframe: CFrame, variant: number, at: number } } = {}
-		local notified: { { player: Player, key: string } } = {}
-		local player = newPlayer(9301, "Chemist")
-		local root = candidates[1] + Vector3.new(0, 0, 0.5)
-		local deps: Level2.Dependencies = {
-			now = function(): number
-				return now
-			end,
-			players = function(): { Player }
-				return { player }
-			end,
-			rootOf = function(_p: Player): Vector3?
-				return root
-			end,
-			eyeOf = function(_p: Player): Vector3?
-				return root + Vector3.new(0, 1.5, 0)
-			end,
-			lineClear = function(_a: Vector3, _b: Vector3): boolean
-				return false
-			end,
-			countAvailable = function(levelId: Enums.LevelId): number
-				t.eq(levelId, L2)
-				return available
-			end,
-			spawnFlask = function(levelId: Enums.LevelId, cframe: CFrame, variant: number): Model?
-				t.eq(levelId, L2)
-				table.insert(spawned, { cframe = cframe, variant = variant, at = now })
-				return Instance.new("Model")
-			end,
-			flasks = function(): { Vector3 }
-				return flasks
-			end,
-			notify = function(p: Player, key: string)
-				table.insert(notified, { player = p, key = key })
-			end,
-		}
-		Level2.SetDependencies(deps)
-		Level2.BeginRun(runContext(SEED))
-		Level2.Activate(levelContext(L2, SEED))
-		local ok, err = pcall(function()
-			Level2.Step(now)
-			t.eq(#spawned, 1, "one flask at once")
-			local first = spawned[1]
-			t.truthy((first.cframe.Position - root).Magnitude > Level2.MinDistance, "far from the player")
-			t.truthy(first.variant >= 1, "a look")
-			-- still short (it was picked up): nothing until 45 s have passed
-			for _ = 1, 40 do
-				now += 1
-				Level2.Step(now)
-			end
-			t.eq(#spawned, 1, "at most one per 45 s")
-			for _ = 1, 6 do
-				now += 1
-				Level2.Step(now)
-			end
-			t.eq(#spawned, 2, "the next after 45 s")
-			t.truthy(spawned[2].at - spawned[1].at >= Level2.Interval, "spaced")
-			available = 2
-			for _ = 1, 60 do
-				now += 1
-				Level2.Step(now)
-			end
-			t.eq(#spawned, 2, "two in play: no more")
-
-			t.eq(#notified, 0, "no hint yet")
-			flasks = { root + Vector3.new(4, 0, 4) }
-			now += 0.2
-			Level2.Step(now)
-			t.eq(#notified, 1, "the hint")
-			t.eq(notified[1].key, Level2.HintKey)
-			t.eq(notified[1].player, player)
-			for _ = 1, 20 do
-				now += 0.2
-				Level2.Step(now)
-			end
-			t.eq(#notified, 1, "once per run")
-			t.truthy(Level2.HasHinted())
-		end)
-		Level2.EndRun()
-		Level2.SetDependencies(nil)
 		if not ok then
 			error(err, 0)
 		end

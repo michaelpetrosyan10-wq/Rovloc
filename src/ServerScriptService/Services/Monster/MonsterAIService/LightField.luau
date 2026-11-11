@@ -6,8 +6,8 @@
 -- Fixtures: every LevelLight of the level (SchoolShellBuilder: LightKind, LevelId, BaseBrightness, FlickerGroup) with
 -- its light's Range and Color, at its part. Like the website's baked probe grid (the base grid only: web/tools/bake),
 -- the scripted groups a level switches as a whole are left out: a tunnel floor's power circuits ("Mains:" / "Circuit:"
--- groups, held down by the power switch), "Scripted:" groups, the classroom glow and the pool's floodlights (off until
--- their switch). A broken fixture (BaseBrightness 0) gives nothing.
+-- groups, held down by the power switch), "Scripted:" groups and the classroom glow. A broken fixture (BaseBrightness
+-- 0) gives nothing.
 --
 -- The light at a point (luminanceAt): the sum over the fixtures within their range of BaseBrightness x the falloff the
 -- bake and the web engine share (a range window (1 - (d/R)^2)^2 over a soft inverse square 1 / (1 + 0.004 d^2)) x the
@@ -60,11 +60,11 @@ function LightField.colorLuminance(color: Color3): number
 end
 
 -- Whether a fixture counts toward the base light (see the header).
-function LightField.include(levelId: string, kind: string?, group: string?, brightness: number): boolean
+function LightField.include(kind: string?, group: string?, brightness: number): boolean
 	if brightness <= 0 then
 		return false
 	end
-	if kind == "ClassroomGlow" or (kind == "Floodlight" and levelId == "Level4_FloodedPool") then
+	if kind == "ClassroomGlow" then
 		return false
 	end
 	if group then
@@ -123,7 +123,6 @@ function LightField.collect(levelId: string): { Fixture }
 		local brightness = if type(base) == "number" then base else 0
 		if
 			not LightField.include(
-				levelId,
 				if type(kind) == "string" then kind else nil,
 				if type(group) == "string" then group else nil,
 				brightness

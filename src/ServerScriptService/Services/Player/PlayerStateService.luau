@@ -1,14 +1,14 @@
 --!strict
--- PlayerStateService: the server's MoveState authority, the Stamina and Oxygen meters, and the LookRelay fan-out.
--- The only writer of Player.MoveState, the Stamina / Oxygen meter attributes and (server side) Humanoid.WalkSpeed.
+-- PlayerStateService: the server's MoveState authority, the Stamina meter, and the LookRelay fan-out.
+-- The only writer of Player.MoveState, the Stamina meter attributes and (server side) Humanoid.WalkSpeed.
 --
--- Intents. MoveIntent carries the full intended posture {crouch, sprint, dive, seq} (level-encoded); a message whose
+-- Intents. MoveIntent carries the full intended posture {crouch, sprint, seq} (level-encoded); a message whose
 -- seq is not newer than the last one accepted from that player is ignored. A fresh character starts from a neutral
 -- intent and accepts any seq again (clients may restart their counter per character).
 --
--- MoveState (deriveState, pure). A held override wins, highest first: Scripted > Grabbed > Trapped > Hiding >
--- Parachuting > DownedCrawling (PushOverride / PopOverride, keyed by token; LifeStateService holds "LifeState" →
--- DownedCrawling). Otherwise the base mode decides (SetMode; OnFoot by default, P4 vents, P7 swimming), where
+-- MoveState (deriveState, pure). A held override wins, highest first: Scripted > Trapped > Hiding > Parachuting >
+-- DownedCrawling (PushOverride / PopOverride, keyed by token; LifeStateService holds "LifeState" → DownedCrawling).
+-- Otherwise the base mode decides (SetMode; OnFoot by default, P4 vents), where
 -- "can sprint" = sprint ∧ stamina > 0 ∧ not exhausted:
 --   OnFoot  Crouching if crouch, or while the head room forbids standing (mustCrouch: in a Crawlway room, or anything
 --           solid within StandHeadroom over the root: a crawlway's 4.3-stud mouth); Sprinting if can sprint ∧ moving
@@ -16,36 +16,30 @@
 -- Crouching on foot pushes CollisionService's "Crouch" mode (only the parts under a crawlway's mouth collide), so a
 -- crouched player passes through a crawlway (docs/MAPS.md); the Creature never does.
 --   Vent    VentScurrying if can sprint, else VentCrawling.
---   Swim    Underwater if dive; Freestyle if can sprint; else Treading.
 -- Exhaustion (updateExhausted, pure) starts when stamina is empty while sprint is held and ends when sprint is released
 -- or stamina is full. Without it a player who keeps holding sprint at 0 would re-enter a zero-length sprint (and
 -- pulse Sprint-tier noise) every time regen begins; with it every transition of the rule happens at a moment the
 -- server already handles (an intent, a meter crossing), so a client that mirrors deriveState / updateExhausted from
 -- the replicated meter agrees with the server.
 -- MoveState is written only when it changes (MoveStateChanged fires then), together with Humanoid.WalkSpeed from
--- GameConfig (DownedCrawling = DownedMoveSpeed; Hiding / Trapped / Grabbed / Scripted = 0; Parachuting = WalkSpeed).
+-- GameConfig (DownedCrawling = DownedMoveSpeed; Hiding / Trapped / Scripted = 0; Parachuting = WalkSpeed).
 -- Re-derived on every intent, mode or override change, life-state change, meter crossing, character spawn, and when
 -- the 10 Hz motion sampler sees the moving flag flip.
 --
--- Stamina (Types.Meter, max GameConfig.StaminaMax). Sprinting / VentScurrying / Freestyle / Treading drain at their
--- GameConfig rate; StaminaRegenDelay seconds after draining stops (or after a spend through AddStamina) it regenerates
+-- Stamina (Types.Meter, max GameConfig.StaminaMax). Sprinting / VentScurrying drain at their GameConfig rate; StaminaRegenDelay seconds after draining stops (or after a spend through AddStamina) it regenerates
 -- at StaminaRegen until full. Each linear segment is written once (value, rate, at); the next crossing (empty, regen
 -- start, full) is scheduled from the extrapolation, so hitting 0 drops a sprint the moment it happens.
--- Oxygen (max GameConfig.OxygenMax) sits full at rate 0 until P7 drives it with SetOxygenRate / AddOxygen; reaching
--- 0 fires OxygenDepleted (LifeStateService turns that into a Down).
--- The meters only run for run participants who are Alive or Downed while the run is live (Deploying / InRun).
+-- The meter only runs for run participants who are Alive or Downed while the run is live (Deploying / InRun).
 -- Everyone else (lobby, late joiners, the dead) is held at the baseline: overrides still apply, else Standing, and
--- both meters full at rate 0.
+-- the meter full at rate 0.
 --
 -- Look. LookRelay {yaw, pitch} (int16-quantized radians) is stored per player (GetLook, LookChanged). At
 -- GameConfig.ServerTickHz the server broadcasts one batched LookBroadcast {samples = {{userId, yaw, pitch}}} (still
 -- quantized) to every client with only the samples that changed since the previous broadcast, plus a full keyframe
 -- every LookKeyframeSeconds so a dropped unreliable packet or a late joiner catches up.
 --
--- Syringe. LoadoutService.SyringeUsed with mode "Stamina" refills the stamina meter.
---
 -- Pure rules (tests/Specs/PlayerState.spec.luau): deriveState, updateExhausted, resolveOverride, walkSpeedFor,
--- drainFor, isMoving, meterAt, planStamina, oxygenEmptyAt, acceptSeq, collectLookSamples. SetClock swaps the time source (specs drive a
+-- drainFor, isMoving, meterAt, planStamina, acceptSeq, collectLookSamples. SetClock swaps the time source (specs drive a
 -- fake clock through the meter crossings).
 
 local Players = game:GetService("Players")
@@ -71,16 +65,14 @@ local CollisionService = require(ServerScriptService.Services.Core.CollisionServ
 local RunLifecycleService = require(ServerScriptService.Services.Core.RunLifecycleService)
 local ZoneService = require(ServerScriptService.Services.Core.ZoneService)
 
-local LoadoutService = require(script.Parent.LoadoutService)
-
 local log = Log.new("PlayerState")
 local CROUCH_TOKEN = "Crouch" -- the collision mode a crouched body holds (CollisionService)
 
 local P = Attributes.Player
 
-export type Mode = "OnFoot" | "Vent" | "Swim"
+export type Mode = "OnFoot" | "Vent"
 
-export type Intent = { crouch: boolean, sprint: boolean, dive: boolean }
+export type Intent = { crouch: boolean, sprint: boolean }
 
 export type DeriveInput = {
 	mode: Mode,
@@ -128,22 +120,16 @@ type Record = {
 	drainEndedAt: number?, -- when stamina last stopped draining (regen starts StaminaRegenDelay later)
 	staminaTimer: thread?,
 	staminaTimerAt: number?,
-	-- Oxygen segment as last written; the rate is whatever its owner (P7) set.
-	oxygenValue: number,
-	oxygenRate: number,
-	oxygenAt: number,
-	oxygenTimer: thread?,
 	look: QuantizedLook?,
 	samples: { MotionSample },
 	speed: number,
 	lowCeiling: boolean, -- mustCrouch held at the last motion sample
 }
 
-local MODES: { Mode } = { "OnFoot", "Vent", "Swim" }
+local MODES: { Mode } = { "OnFoot", "Vent" }
 
 -- Highest priority first.
-local OVERRIDE_PRIORITY: { Enums.MoveState } =
-	{ "Scripted", "Grabbed", "Trapped", "Hiding", "Parachuting", "DownedCrawling" }
+local OVERRIDE_PRIORITY: { Enums.MoveState } = { "Scripted", "Trapped", "Hiding", "Parachuting", "DownedCrawling" }
 
 local OVERRIDE_RANK: { [string]: number } = {}
 for index, state in OVERRIDE_PRIORITY do
@@ -157,12 +143,8 @@ local WALK_SPEED: { [string]: number } = {
 	VentCrawling = GameConfig.VentCrawlSpeed,
 	VentScurrying = GameConfig.VentScurrySpeed,
 	DownedCrawling = GameConfig.DownedMoveSpeed,
-	Treading = GameConfig.TreadSpeed,
-	Freestyle = GameConfig.FreestyleSpeed,
-	Underwater = GameConfig.UnderwaterSpeed,
 	Hiding = 0,
 	Trapped = 0,
-	Grabbed = 0,
 	Parachuting = GameConfig.WalkSpeed,
 	Scripted = 0,
 }
@@ -170,14 +152,11 @@ local WALK_SPEED: { [string]: number } = {
 local DRAIN: { [string]: number } = {
 	Sprinting = GameConfig.StaminaSprintDrain,
 	VentScurrying = GameConfig.StaminaScurryDrain,
-	Freestyle = GameConfig.StaminaFreestyleDrain,
-	Treading = GameConfig.StaminaTreadDrain,
 }
 
 local PLAYING: { [string]: boolean } = { Alive = true, Downed = true }
 
 local STAMINA_MAX = GameConfig.StaminaMax
-local OXYGEN_MAX = GameConfig.OxygenMax
 local MOVING_SPEED = 4 -- observed horizontal studs/s that count as moving
 local MOVING_DIRECTION = 0.1 -- Humanoid.MoveDirection magnitude that counts as moving
 local METER_EPSILON = 1e-3 -- meter values this close to an end snap onto it
@@ -185,7 +164,7 @@ local TIMER_EPSILON = 1e-6 -- a re-planned crossing this close to the scheduled 
 local SPEED_WINDOW = 3 -- motion samples averaged for the observed speed (about 0.2 s at 10 Hz)
 local SPEED_STALE_SECONDS = 1 -- a gap longer than this between samples restarts the window
 local LOOK_KEYFRAME_SECONDS = 2
-local NEUTRAL_INTENT: Intent = table.freeze({ crouch = false, sprint = false, dive = false })
+local NEUTRAL_INTENT: Intent = table.freeze({ crouch = false, sprint = false })
 local BASELINE_STATE: Enums.MoveState = "Standing"
 
 local PlayerStateService = {}
@@ -201,14 +180,11 @@ PlayerStateService.LookKeyframeSeconds = LOOK_KEYFRAME_SECONDS
 
 local moveStateChanged: Signal.Signal<Player, Enums.MoveState, Enums.MoveState> = Signal.new()
 local lookChanged: Signal.Signal<Player, number, number> = Signal.new()
-local oxygenDepleted: Signal.Signal<Player> = Signal.new()
 
 -- (player, new, old) after the server-confirmed MoveState changed.
 PlayerStateService.MoveStateChanged = moveStateChanged
 -- (player, yaw, pitch) in radians whenever a LookRelay changed the stored look.
 PlayerStateService.LookChanged = lookChanged
--- The player's oxygen meter just reached 0.
-PlayerStateService.OxygenDepleted = oxygenDepleted
 
 local realClock: Clock = {
 	now = function(): number
@@ -267,14 +243,6 @@ function PlayerStateService.deriveState(input: DeriveInput): Enums.MoveState
 	local state: Enums.MoveState
 	if input.mode == "Vent" then
 		state = if canSprint then "VentScurrying" else "VentCrawling"
-	elseif input.mode == "Swim" then
-		if intent.dive then
-			state = "Underwater"
-		elseif canSprint then
-			state = "Freestyle"
-		else
-			state = "Treading"
-		end
 	elseif intent.crouch or input.lowCeiling == true then
 		state = "Crouching"
 	elseif canSprint and input.moving then
@@ -346,7 +314,7 @@ function PlayerStateService.planStamina(
 ): MeterPlan
 	if drain > 0 then
 		if value <= METER_EPSILON then
-			-- Empty in a draining state with nothing below it (Treading): flat at 0.
+			-- Empty in a draining state: flat at 0.
 			return { rate = 0, nextAt = nil, event = nil }
 		end
 		return { rate = -drain, nextAt = now + value / drain, event = "Empty" }
@@ -360,14 +328,6 @@ function PlayerStateService.planStamina(
 		return { rate = 0, nextAt = regenAt, event = "Regen" }
 	end
 	return { rate = regen, nextAt = now + (max - value) / regen, event = "Full" }
-end
-
--- Server time an oxygen meter at `value` changing at `rate` reaches 0 (nil when it never does).
-function PlayerStateService.oxygenEmptyAt(value: number, rate: number, now: number): number?
-	if rate < 0 and value > METER_EPSILON then
-		return now + value / -rate
-	end
-	return nil
 end
 
 -- Whether a MoveIntent numbered `seq` is newer than the last accepted one.
@@ -429,15 +389,10 @@ local function writeBaselineMeters(record: Record, now: number)
 	record.staminaValue, record.staminaRate, record.staminaAt = STAMINA_MAX, 0, now
 	record.staminaDirty = false
 	record.drainEndedAt = nil
-	record.oxygenValue, record.oxygenRate, record.oxygenAt = OXYGEN_MAX, 0, now
 	cancelTimer(record.staminaTimer)
 	record.staminaTimer, record.staminaTimerAt = nil, nil
-	cancelTimer(record.oxygenTimer)
-	record.oxygenTimer = nil
 	Attributes.set(player, P.StaminaMax, STAMINA_MAX)
 	Attributes.writeMeter(player, P.Stamina, P.StaminaRate, P.StaminaAt, STAMINA_MAX, 0, now)
-	Attributes.set(player, P.OxygenMax, OXYGEN_MAX)
-	Attributes.writeMeter(player, P.Oxygen, P.OxygenRate, P.OxygenAt, OXYGEN_MAX, 0, now)
 end
 
 local function applyWalkSpeed(record: Record)
@@ -498,10 +453,6 @@ local function staminaNow(record: Record, now: number): number
 	return PlayerStateService.meterAt(record.staminaValue, record.staminaRate, record.staminaAt, STAMINA_MAX, now)
 end
 
-local function oxygenNow(record: Record, now: number): number
-	return PlayerStateService.meterAt(record.oxygenValue, record.oxygenRate, record.oxygenAt, OXYGEN_MAX, now)
-end
-
 local function planAndWriteStamina(record: Record, now: number)
 	local value = staminaNow(record, now)
 	local plan = PlayerStateService.planStamina(
@@ -517,32 +468,6 @@ local function planAndWriteStamina(record: Record, now: number)
 		Attributes.writeMeter(record.player, P.Stamina, P.StaminaRate, P.StaminaAt, value, plan.rate, now)
 	end
 	scheduleStamina(record, plan.nextAt)
-end
-
-local function scheduleOxygen(record: Record, now: number)
-	cancelTimer(record.oxygenTimer)
-	record.oxygenTimer = nil
-	local emptyAt = PlayerStateService.oxygenEmptyAt(oxygenNow(record, now), record.oxygenRate, now)
-	if emptyAt == nil then
-		return
-	end
-	record.oxygenTimer = clock.delay(math.max(0, emptyAt - now), function()
-		record.oxygenTimer = nil
-		if records[record.player] ~= record or not record.active then
-			return
-		end
-		if oxygenNow(record, clock.now()) <= 0 then
-			oxygenDepleted:Fire(record.player)
-		else
-			scheduleOxygen(record, clock.now())
-		end
-	end)
-end
-
-local function writeOxygen(record: Record, value: number, rate: number, now: number)
-	record.oxygenValue, record.oxygenRate, record.oxygenAt = value, rate, now
-	Attributes.writeMeter(record.player, P.Oxygen, P.OxygenRate, P.OxygenAt, value, rate, now)
-	scheduleOxygen(record, now)
 end
 
 refresh = function(record: Record)
@@ -598,10 +523,6 @@ local function newRecord(player: Player): Record
 		drainEndedAt = nil,
 		staminaTimer = nil,
 		staminaTimerAt = nil,
-		oxygenValue = OXYGEN_MAX,
-		oxygenRate = 0,
-		oxygenAt = now,
-		oxygenTimer = nil,
 		look = nil,
 		samples = {},
 		speed = 0,
@@ -629,7 +550,6 @@ local function forget(player: Player)
 	end
 	records[player] = nil
 	cancelTimer(record.staminaTimer)
-	cancelTimer(record.oxygenTimer)
 	local connection = record.lifeStateConnection
 	record.lifeStateConnection = nil
 	if connection then
@@ -668,7 +588,7 @@ function PlayerStateService.GetMoveState(player: Player): Enums.MoveState
 	return if record then record.state else BASELINE_STATE
 end
 
--- Sets the base locomotion mode (P4 vents, P7 swimming). Unknown modes are refused.
+-- Sets the base locomotion mode (P4 vents). Unknown modes are refused.
 function PlayerStateService.SetMode(player: Player, mode: Mode)
 	if not isMode(mode) then
 		log.warn("SetMode(%s): unknown mode %s", player.Name, tostring(mode))
@@ -731,10 +651,10 @@ function PlayerStateService.SubmitIntent(player: Player, payload: Types.MoveInte
 	end
 	record.lastSeq = payload.seq
 	local intent = record.intent
-	if intent.crouch == payload.crouch and intent.sprint == payload.sprint and intent.dive == payload.dive then
+	if intent.crouch == payload.crouch and intent.sprint == payload.sprint then
 		return true
 	end
-	record.intent = { crouch = payload.crouch, sprint = payload.sprint, dive = payload.dive }
+	record.intent = { crouch = payload.crouch, sprint = payload.sprint }
 	refresh(record)
 	return true
 end
@@ -772,55 +692,6 @@ function PlayerStateService.AddStamina(player: Player, delta: number)
 		record.drainEndedAt = now
 	end
 	refresh(record)
-end
-
--- Fills `player`'s stamina (the Adrenaline Syringe's stamina mode). Only while the meters run.
-function PlayerStateService.RefillStamina(player: Player)
-	local record = recordOf(player)
-	if not isActive(player) then
-		return
-	end
-	record.staminaValue = STAMINA_MAX
-	record.staminaAt = clock.now()
-	record.staminaDirty = true
-	refresh(record)
-end
-
-function PlayerStateService.GetOxygen(player: Player): number
-	local record = records[player]
-	return if record then oxygenNow(record, clock.now()) else OXYGEN_MAX
-end
-
--- Sets the oxygen meter's rate per second (negative drains, 0 holds). P7 drives drowning with it. Only while the
--- meters run.
-function PlayerStateService.SetOxygenRate(player: Player, rate: number)
-	if not MathUtil.isFinite(rate) then
-		return
-	end
-	local record = recordOf(player)
-	if not isActive(player) or record.oxygenRate == rate then
-		return
-	end
-	local now = clock.now()
-	writeOxygen(record, oxygenNow(record, now), rate, now)
-end
-
--- Adds `delta` to `player`'s oxygen (a breath at the surface, a struggle cost). Only while the meters run.
-function PlayerStateService.AddOxygen(player: Player, delta: number)
-	if not MathUtil.isFinite(delta) or delta == 0 then
-		return
-	end
-	local record = recordOf(player)
-	if not isActive(player) then
-		return
-	end
-	local now = clock.now()
-	local before = oxygenNow(record, now)
-	local after = math.clamp(before + delta, 0, OXYGEN_MAX)
-	writeOxygen(record, after, record.oxygenRate, now)
-	if before > 0 and after <= 0 then
-		oxygenDepleted:Fire(player)
-	end
 end
 
 -- Stores a LookRelay sample (int16-quantized yaw / pitch, the remote's encoding).
@@ -987,11 +858,6 @@ function PlayerStateService.Init()
 		if live ~= runLive then
 			runLive = live
 			refreshAll()
-		end
-	end))
-	serviceTrove:Add(LoadoutService.SyringeUsed:Connect(function(player: Player, mode: Enums.SyringeMode)
-		if mode == "Stamina" then
-			PlayerStateService.RefillStamina(player)
 		end
 	end))
 	Net.Server.on("MoveIntent", function(player: Player, payload: any)

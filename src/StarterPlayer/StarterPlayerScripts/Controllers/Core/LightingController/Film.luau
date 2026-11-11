@@ -3,7 +3,7 @@
 --
 -- The server builds one rig for the whole game (LightingRig: Atmosphere, BaseColorCorrection, Bloom, SunRays) and
 -- Lighting's baseline properties. On each client this eases every graded value toward the level the camera is on:
--- the film (LightingMood.film: the basement's thick amber haze and heavy bloom, the pool's cold steam, the roof's
+-- the film (LightingMood.film: the basement's thick amber haze and heavy bloom, the roof's
 -- storm) as Roblox renders it to match the browser build (LightingMood.render: the exposure, the contrast and
 -- brightness that reproduce the web's dark-frame curve, a white base tint, the ambient and outdoor fills, the haze).
 -- The player's Brightness setting (SetBrightness, -2..+2) offsets the exposure and scales both fills on top.

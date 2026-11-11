@@ -15,7 +15,6 @@
 --     waypoint out of every player's sight 35..140 studs from them, then patrols. (A chase that gives up fades out
 --     instead: the service's warp, before Patrol starts.)
 --   * Three failed legs pick a new loop.
--- In the water (Level 4) the first goal on land is reached by a warp: the Mover fades it out and in on land.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -332,9 +331,7 @@ function Patrol.enter(ctx: Context, _from: Enums.MonsterState)
 	run.looks = {}
 	run.withdrawTo = nil
 	ctx.mover:SetRepathInterval(CreatureConfig.Repath.PatrolInterval)
-	if ctx.mover:Medium() == "Floor" then
-		ctx.body:SetPose("Biped")
-	end
+	ctx.body:SetPose("Biped")
 	if ctx.reposition then
 		ctx.reposition = false
 		local point = ctx.repositionPoint(WITHDRAW_MIN, WITHDRAW_MAX)

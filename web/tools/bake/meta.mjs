@@ -14,9 +14,9 @@ const obj = (v) => (v && !Array.isArray(v) && typeof v === 'object' ? v : {});
 function entityType(e) {
   const tags = arr(e.tags);
   const a = obj(e.attributes);
-  // floor objectives: items and stations by their ObjectiveId (Fuse, BreakerPanel, CrateChain, ...); door locks
+  // floor objectives: items and stations by their ObjectiveId (Fuse, BreakerPanel, MasterKeys, ...); door locks
   if (tags.includes('ObjectiveItem') || tags.includes('ObjectiveStation')) return a.ObjectiveId || 'Objective';
-  if (tags.includes('ExitLock')) return a.ObjectiveId === 'CrateChain' ? 'CrateChain' : 'ExitLock';
+  if (tags.includes('ExitLock')) return 'ExitLock';
   if (tags.includes('BearTrap')) return 'BearTrap';
   if (tags.includes('BatteryPickup')) return 'Battery';
   if (tags.includes('ChemicalItem')) return 'ChemicalFlask';
@@ -24,10 +24,8 @@ function entityType(e) {
   if (tags.includes('HideableLocker')) return 'Locker';
   // the tunnels' other hiding spots (HideBuilder): tag Hideable, attribute HideKind Barrel / Cabinet
   if (tags.includes('Hideable') && (a.HideKind === 'Barrel' || a.HideKind === 'Cabinet')) return a.HideKind;
-  if (tags.includes('FloodlightSwitch')) return 'FloodlightSwitch';
   if (tags.includes('AirlockDoor')) return 'AirlockDoor';
   if (tags.includes('ScriptedDoor')) {
-    if (a.ScriptedId === 'EquipmentStoreDoor') return 'StoreDoor';
     if (a.DoorKind === 'Gate') return 'HallwayGate';
     if (a.DoorKind === 'RoofDoor') return 'RoofStairDoor';
     if (a.DoorKind === 'Ajar') return 'ClassroomDoor';
@@ -42,9 +40,9 @@ function entityType(e) {
 function entityId(e) {
   const a = obj(e.attributes);
   const tags = arr(e.tags);
-  // floor objectives: their anchor (a lock also names its door in DoorId; the acid flask borrows the hood's anchor)
+  // floor objectives: their anchor (a lock also names its door in DoorId)
   if (tags.includes('ObjectiveItem') || tags.includes('ObjectiveStation') || tags.includes('ExitLock')) {
-    return a.ObjectiveId === 'AcidFlask' ? e.name : a.AnchorId || e.name;
+    return a.AnchorId || e.name;
   }
   return a.DoorId || a.GrateId || a.AnchorId || e.name;
 }
@@ -290,12 +288,6 @@ export function buildMeta(raw, r) {
     }
   }
 
-  const pools = triggers
-    .filter((t) => t.kind === 'PoolWater')
-    .map((t) => ({ id: t.id, level: t.level, room: t.room, surfaceY: r3(t.cframe[1] + t.size[1] / 2), rect: { x: r3(t.cframe[0] - t.size[0] / 2), z: r3(t.cframe[2] - t.size[2] / 2), w: t.size[0], d: t.size[2] }, depth: t.size[1], cframe: t.cframe, size: t.size }));
-  const basins = [];
-  for (const id of raw.layoutIds) for (const b of arr(raw.layouts[id].basins)) basins.push({ level: id, ...b, origin: raw.levels[id].origin });
-
   // creature: bones (Motor6D tree) + joints
   const creature = raw.creature
     ? {
@@ -363,8 +355,6 @@ export function buildMeta(raw, r) {
     triggers,
     zones,
     rooms,
-    pools,
-    basins,
     zoneGraph: raw.zoneGraph,
     vents: { graphs: raw.ventGraphs, nodes: ventNodes, grates: grateMouths },
     stairwells: raw.worldConfig.Stairwells,

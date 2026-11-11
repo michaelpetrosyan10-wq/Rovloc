@@ -2,20 +2,20 @@
 -- Finishes: what the shell's rooms are finished in, over the bare slabs, walls and ceilings SchoolShellBuilder cuts.
 --
 --   * Floors. Glossy where the floor would be polished or wet (Reflectance on the floor part: waxed linoleum, glazed
---     tile, marble lab floors, varnished gym boards, damp basement concrete), and painted with SurfaceArt where the
---     floor has a pattern: black-and-white checker down every corridor and across the big halls (the floor part turns
---     into the pale squares, a SurfaceGui adds the dark ones, a little transparent so the gloss still shows through),
---     a subtle two-tone vinyl tile in the classrooms and labs, and court lines on the gymnasium boards.
+--     tile, damp basement concrete), and painted with SurfaceArt where the floor has a pattern: black-and-white checker
+--     down every corridor and across the big halls (the floor part turns into the pale squares, a SurfaceGui adds the
+--     dark ones, a little transparent so the gloss still shows through), and a subtle two-tone vinyl tile in the
+--     classrooms.
 --   * Ceilings. Every plaster ceiling is a drop ceiling: a grid of tile seams, and in the ruined rooms (seeded per
 --     room) a few tiles gone (black holes into the plenum, never where a fixture hangs) and brown water stains. The
 --     first one or two holes of a room are real plates (planCeiling says where), so DecayBuilder can drop their tiles
 --     on the floor below and hang wiring out of them.
 --   * Wainscots. Two-tone walls in the rooms people walk through: a lower band (glazed tile down the corridors, the
---     colour of each wing; dark gloss paint in classrooms, wood panelling in offices, contrasting tile in restrooms,
---     locker rooms and labs) up to 3.2 studs, a chair rail on top of it and a rubber baseboard under painted bands. The
+--     colour of each wing; dark gloss paint in classrooms, wood panelling in offices, contrasting tile in restrooms)
+--     up to 3.2 studs, a chair rail on top of it and a rubber baseboard under painted bands. The
 --     pieces are thin, non-colliding, never queried overlays on each wall face, cut back from every opening (door
 --     casings and steel frames, grates and their frames, low windows, tower openings) and from the props that stand
---     against a wall (hideable lockers, the floodlight switch, terminals). SchoolShellBuilder works out the spans
+--     against a wall (hideable lockers, terminals). SchoolShellBuilder works out the spans
 --     (it owns the wall lines); this module plans their look and builds the pieces.
 --   * Hazard plates. Yellow-and-black striped floor plates either side of every airlock fire door and the hallway gate.
 --   * Wear. Every wall face a room sees carries the dirt of years (one low-resolution SurfaceGui per face): grime
@@ -46,7 +46,6 @@ export type FloorStyle = {
 	key: string?, -- palette key the floor part is recoloured to (the pale squares of a checker)
 	reflectance: number,
 	checker: Checker?,
-	court: boolean?, -- basketball court lines
 }
 
 export type WainscotStyle = {
@@ -100,7 +99,6 @@ Finishes.CeilingTile = Vector2.new(4, 2)
 
 local DARK_SQUARE = Color3.fromRGB(22, 22, 24)
 local VCT_SQUARE = Color3.fromRGB(92, 86, 68)
-local COURT_LINE = Color3.fromRGB(196, 176, 112)
 local HOLE = Color3.fromRGB(7, 7, 8)
 local STAIN = Color3.fromRGB(96, 76, 42)
 local STAIN_RING = Color3.fromRGB(62, 48, 28)
@@ -122,8 +120,6 @@ local WEAR_STRENGTH: { [string]: number } = {
 	Storage = 0.7,
 	Chase = 0,
 	Restroom = 0.66,
-	LockerRoom = 0.64,
-	Pool = 0.6,
 	Airlock = 0.62,
 	Stairwell = 0.62,
 	Roof = 0.5,
@@ -134,33 +130,25 @@ local GLOSS: { [string]: number } = {
 	TileWhite = 0.12,
 	TileGreen = 0.12,
 	TileBlue = 0.12,
-	PoolTile = 0.12,
-	Lab = 0.14,
-	WoodGym = 0.09,
 	WoodPanel = 0.06,
 	MetalGalvanized = 0.05,
 }
 
 -- Layouts whose bare concrete floors are damp.
-local DAMP: { [string]: boolean } = { Level0_Basement = true, Lobby = true, Level4_FloodedPool = true }
+local DAMP: { [string]: boolean } = { Level0_Basement = true, Lobby = true }
 
 -- The glazed tile band of each wing's corridors.
 local CORRIDOR_BAND: { [string]: string } = {
 	Level1_Hallways = "WainscotOxblood",
-	Level2_ScienceHall = "WainscotTeal",
-	Level3_Gymnasium = "WainscotTan",
-	Level4_FloodedPool = "WainscotBlue",
+	Level2_Auditorium = "WainscotTeal",
 }
 
 local DROP_CEILING_KINDS: { [string]: boolean } = {
 	Corridor = true,
 	Classroom = true,
-	Lab = true,
 	Office = true,
 	Restroom = true,
-	LockerRoom = true,
 	Storage = true,
-	Gym = true,
 }
 
 --------------------------------------------------------------------------------
@@ -178,15 +166,12 @@ function Finishes.floorStyle(layoutId: string, room: Room, floorKey: string): Fl
 			checker = { cell = 3, color = DARK_SQUARE, transparency = 0.1 },
 		}
 	end
-	if floorKey == "Linoleum" and (room.kind == "Classroom" or room.kind == "Lab" or room.kind == "Office") then
+	if floorKey == "Linoleum" and (room.kind == "Classroom" or room.kind == "Office") then
 		return {
 			key = "ClassroomVCT",
 			reflectance = 0.1,
 			checker = { cell = 2.5, color = VCT_SQUARE, transparency = 0.45 },
 		}
-	end
-	if floorKey == "WoodGym" then
-		return { reflectance = GLOSS.WoodGym, court = room.kind == "Gym" and area >= 4000 }
 	end
 	local gloss = GLOSS[floorKey]
 	if gloss then
@@ -250,7 +235,7 @@ function Finishes.wainscotStyle(layoutId: string, room: Room, wallKey: string): 
 			return { band = corridorBand, rail = "TileCap" }
 		end
 		return nil
-	elseif kind == "Classroom" or kind == "Gym" or kind == "Storage" then
+	elseif kind == "Classroom" or kind == "Storage" then
 		if string.sub(wallKey, 1, 7) == "Plaster" then
 			return { band = "WainscotPaint", rail = "Trim", base = "Baseboard" }
 		elseif wallKey == "Brick" and kind == "Classroom" then
@@ -262,16 +247,9 @@ function Finishes.wainscotStyle(layoutId: string, room: Room, wallKey: string): 
 			return { band = "WainscotWood", rail = "Trim", base = "Baseboard" }
 		end
 		return nil
-	elseif kind == "Lab" then
+	elseif kind == "Restroom" then
 		if wallKey == "TileWhite" then
 			return { band = "WainscotGreen", rail = "TileCap" }
-		elseif wallKey == "TileGreen" or string.sub(wallKey, 1, 7) == "Plaster" then
-			return { band = "WainscotTeal", rail = "TileCap" }
-		end
-		return nil
-	elseif kind == "Restroom" or kind == "LockerRoom" then
-		if wallKey == "TileWhite" then
-			return { band = if kind == "Restroom" then "WainscotGreen" else "WainscotBlue", rail = "TileCap" }
 		elseif wallKey == "TileBlue" then
 			return { band = "WainscotBlue", rail = "TileCap" }
 		end
@@ -315,42 +293,6 @@ end
 -- Floors
 --------------------------------------------------------------------------------
 
--- Court lines over a gym floor part (centred, so either canvas flip draws the same court).
-local function paintCourt(gui: SurfaceGui, size: Vector3, pps: number): number
-	local w, d = size.X, size.Z
-	local long, wide = math.min(w - 14, 84), math.min(d - 14, 46)
-	if long < 30 or wide < 20 then
-		return 0
-	end
-	local line = math.max(1, math.floor(pps * 0.22 + 0.5))
-	local function box(name: string, cx: number, cz: number, bw: number, bd: number, round: boolean?)
-		SurfaceArt.outline(
-			gui,
-			name,
-			(cx - bw / 2) / w,
-			(cz - bd / 2) / d,
-			bw / w,
-			bd / d,
-			COURT_LINE,
-			line,
-			0.35,
-			round
-		)
-	end
-	local cx, cz = w / 2, d / 2
-	box("Boundary", cx, cz, long, wide)
-	local half = SurfaceArt.frame(gui, "HalfCourt", 0.5, (cz - wide / 2) / d, 0, wide / d, COURT_LINE, 0.35)
-	half.Position = UDim2.new(0.5, -line / 2, (cz - wide / 2) / d, 0)
-	half.Size = UDim2.new(0, line, wide / d, 0)
-	box("CentreCircle", cx, cz, 12, 12, true)
-	local keyLong, keyWide = 19, 12
-	box("KeyWest", cx - long / 2 + keyLong / 2, cz, keyLong, keyWide)
-	box("KeyEast", cx + long / 2 - keyLong / 2, cz, keyLong, keyWide)
-	box("FreeThrowWest", cx - long / 2 + keyLong, cz, 12, 12, true)
-	box("FreeThrowEast", cx + long / 2 - keyLong, cz, 12, 12, true)
-	return 7
-end
-
 -- Finishes one floor piece of `room`. Returns the GuiObjects painted.
 function Finishes.decorateFloor(part: BasePart, layoutId: string, room: Room, floorKey: string): number
 	local style = Finishes.floorStyle(layoutId, room, floorKey)
@@ -365,19 +307,12 @@ function Finishes.decorateFloor(part: BasePart, layoutId: string, room: Room, fl
 	if checker and Palette.variantFor(style.key or floorKey) then
 		checker = nil -- the tile texture is the pattern
 	end
-	if not (checker or style.court) then
+	if not checker then
 		return 0
 	end
-	local gui, pps = SurfaceArt.gui(part, Enum.NormalId.Top, { name = "Finish", pixelsPerStud = 8, maxDistance = 170 })
-	local painted = 0
-	if checker then
-		local cols, rows = Finishes.checkerCounts(part.Size.X, part.Size.Z, checker.cell)
-		painted += SurfaceArt.checker(gui, cols, rows, checker.color, checker.transparency)
-	end
-	if style.court then
-		painted += paintCourt(gui, part.Size, pps)
-	end
-	return painted
+	local gui = SurfaceArt.gui(part, Enum.NormalId.Top, { name = "Finish", pixelsPerStud = 8, maxDistance = 170 })
+	local cols, rows = Finishes.checkerCounts(part.Size.X, part.Size.Z, checker.cell)
+	return SurfaceArt.checker(gui, cols, rows, checker.color, checker.transparency)
 end
 
 --------------------------------------------------------------------------------

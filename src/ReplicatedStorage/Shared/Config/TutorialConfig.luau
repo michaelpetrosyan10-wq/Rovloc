@@ -35,6 +35,7 @@ export type ControlRow = {
 	glyph: string?, -- Strings key prefix for controls without an action
 }
 
+-- The exit locks' hints are keyed by the level's id (ObjLock_<LevelId>).
 export type HintId =
 	"Airlock"
 	| "DownedTeammate"
@@ -42,24 +43,14 @@ export type HintId =
 	| "Flask"
 	| "VentGrate"
 	| "Locker"
-	| "Water"
 	| "LowBattery"
-	| "ObjLock0"
-	| "ObjLock1"
-	| "ObjLock2"
-	| "ObjLock3"
-	| "ObjLock4"
+	| "ObjLock_Level0_Basement"
+	| "ObjLock_Level1_Hallways"
 	| "ObjBreaker"
-	| "ObjFumeHood"
-	| "ObjStoreLock"
-	| "ObjGenerator"
-	| "ObjLockerSearch"
-	| "ObjHatchValve"
-	| "ObjCrateChain"
 
 -- A floor objective's station or lock (FirstTimeHints finds it by ObjectiveId on `level` while its step is undone).
 export type HintSpot = {
-	objectiveId: string, -- ExitLock | BreakerPanel | FumeHood | StoreLock | Generator | Locker | HatchValve | CrateChain
+	objectiveId: string, -- ExitLock | BreakerPanel
 	level: string,
 	step: string, -- shown while this step is not done (ObjectiveSteps)
 	after: string?, -- and only once this one is done
@@ -146,39 +137,18 @@ local HINTS: { Hint } = {
 		setting = "HintAirlock",
 	},
 	{
-		id = "ObjLock0",
+		id = "ObjLock_Level0_Basement",
 		text = "Hint.Obj.Lock.Level0_Basement",
 		inputs = {},
-		setting = "HintObjLock0",
+		setting = "HintObjLock_Level0_Basement",
 		spot = { objectiveId = "ExitLock", level = "Level0_Basement", step = "ThrowBreaker" },
 	},
 	{
-		id = "ObjLock1",
+		id = "ObjLock_Level1_Hallways",
 		text = "Hint.Obj.Lock.Level1_Hallways",
 		inputs = {},
-		setting = "HintObjLock1",
+		setting = "HintObjLock_Level1_Hallways",
 		spot = { objectiveId = "ExitLock", level = "Level1_Hallways", step = "UnlockExit" },
-	},
-	{
-		id = "ObjLock2",
-		text = "Hint.Obj.Lock.Level2_ScienceHall",
-		inputs = {},
-		setting = "HintObjLock2",
-		spot = { objectiveId = "ExitLock", level = "Level2_ScienceHall", step = "BurnChain" },
-	},
-	{
-		id = "ObjLock3",
-		text = "Hint.Obj.Lock.Level3_Gymnasium",
-		inputs = {},
-		setting = "HintObjLock3",
-		spot = { objectiveId = "ExitLock", level = "Level3_Gymnasium", step = "WindMotor" },
-	},
-	{
-		id = "ObjLock4",
-		text = "Hint.Obj.Lock.Level4_FloodedPool",
-		inputs = {},
-		setting = "HintObjLock4",
-		spot = { objectiveId = "ExitLock", level = "Level4_FloodedPool", step = "TurnValve" },
 	},
 	{
 		id = "ObjBreaker",
@@ -186,49 +156,6 @@ local HINTS: { Hint } = {
 		inputs = {},
 		setting = "HintObjBreaker",
 		spot = { objectiveId = "BreakerPanel", level = "Level0_Basement", step = "ThrowBreaker" },
-	},
-	{
-		id = "ObjFumeHood",
-		text = "Hint.Obj.FumeHood",
-		inputs = {},
-		setting = "HintObjFumeHood",
-		spot = { objectiveId = "FumeHood", level = "Level2_ScienceHall", step = "MixAcid" },
-	},
-	{
-		id = "ObjLockerSearch",
-		text = "Hint.Obj.LockerSearch",
-		inputs = {},
-		setting = "HintObjLockerSearch",
-		radius = 8,
-		spot = { objectiveId = "Locker", level = "Level3_Gymnasium", step = "FindCoachKey" },
-	},
-	{
-		id = "ObjStoreLock",
-		text = "Hint.Obj.StoreLock",
-		inputs = {},
-		setting = "HintObjStoreLock",
-		spot = { objectiveId = "StoreLock", level = "Level3_Gymnasium", step = "UnlockStore" },
-	},
-	{
-		id = "ObjGenerator",
-		text = "Hint.Obj.Generator",
-		inputs = {},
-		setting = "HintObjGenerator",
-		spot = { objectiveId = "Generator", level = "Level3_Gymnasium", step = "StartGenerator", after = "UnlockStore" },
-	},
-	{
-		id = "ObjHatchValve",
-		text = "Hint.Obj.HatchValve",
-		inputs = {},
-		setting = "HintObjHatchValve",
-		spot = { objectiveId = "HatchValve", level = "Level4_FloodedPool", step = "FitWheel" },
-	},
-	{
-		id = "ObjCrateChain",
-		text = "Hint.Obj.CrateChain",
-		inputs = {},
-		setting = "HintObjCrateChain",
-		spot = { objectiveId = "CrateChain", level = "Level5_Roof", step = "CutChain" },
 	},
 	{
 		id = "DownedTeammate",
@@ -277,12 +204,6 @@ local HINTS: { Hint } = {
 		radius = 10,
 	},
 	{
-		id = "Water",
-		text = "Hint.Water",
-		inputs = { { action = "Dive", label = "Hint.Input.Dive" } },
-		setting = "HintWater",
-	},
-	{
 		id = "LowBattery",
 		text = "Hint.LowBattery",
 		inputs = { { action = "Flashlight", label = "Hint.Input.Light" } },
@@ -307,44 +228,16 @@ local function stairwellOf(level: Enums.LevelId): string?
 	return nil
 end
 
-local FLOORS: { [string]: Floor } = {
-	Level0_Basement = {
-		title = "Floor.Level0.Title",
-		name = "Floor.Level0.Name",
-		tip = "Objective.Tip.Level0",
-		stairwell = stairwellOf("Level0_Basement"),
-	},
-	Level1_Hallways = {
-		title = "Floor.Level1.Title",
-		name = "Floor.Level1.Name",
-		tip = "Objective.Tip.Level1",
-		stairwell = stairwellOf("Level1_Hallways"),
-	},
-	Level2_ScienceHall = {
-		title = "Floor.Level2.Title",
-		name = "Floor.Level2.Name",
-		tip = "Objective.Tip.Level2",
-		stairwell = stairwellOf("Level2_ScienceHall"),
-	},
-	Level3_Gymnasium = {
-		title = "Floor.Level3.Title",
-		name = "Floor.Level3.Name",
-		tip = "Objective.Tip.Level3",
-		stairwell = stairwellOf("Level3_Gymnasium"),
-	},
-	Level4_FloodedPool = {
-		title = "Floor.Level4.Title",
-		name = "Floor.Level4.Name",
-		tip = "Objective.Tip.Level4",
-		stairwell = stairwellOf("Level4_FloodedPool"),
-	},
-	Level5_Roof = {
-		title = "Floor.Level5.Title",
-		name = "Floor.Level5.Name",
-		tip = "Objective.Tip.Level5",
-		stairwell = nil,
-	},
-}
+-- Every school level by id: its Strings keys are "Floor.<id>.Title", "Floor.<id>.Name" and "Objective.Tip.<id>".
+local FLOORS: { [string]: Floor } = {}
+for _, levelId: Enums.LevelId in WorldConfig.LevelOrder do
+	FLOORS[levelId] = {
+		title = "Floor." .. levelId .. ".Title",
+		name = "Floor." .. levelId .. ".Name",
+		tip = "Objective.Tip." .. levelId,
+		stairwell = stairwellOf(levelId),
+	}
+end
 for _, floor in FLOORS do
 	table.freeze(floor)
 end

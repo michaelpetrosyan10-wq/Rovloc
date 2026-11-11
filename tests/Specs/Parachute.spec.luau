@@ -1,11 +1,10 @@
 --!strict
--- The roof jump (Phase 8): ParachuteMotion's shared rules (where the roof ends, the canopy's path, the auto-deploy and
--- landing heights, the packless fall, the validator's verdict, the jump-gap warnings, the jumper's camera maths, the
--- landing field under the glide) and ParachuteService on a fake clock with injected roots, ground, rigs, locks and
--- senders: taking a pack from the crate (and only one), the leap, the cord (also when it beats the server's sight of
--- the leap), the canopy and its descent, the fair auto-deploy and its hard landing, a freefall held in the air, the
--- fatal fall without a pack, packs going back to the crate, a downed jumper, the scripted landing, the validator, and
--- the run's end.
+-- The roof jump: ParachuteMotion's shared rules (where the roof ends, the canopy's path, the auto-deploy and landing
+-- heights, the validator's verdict, the jump-gap warnings, the jumper's camera maths, the glide down over the street)
+-- and ParachuteService on a fake clock with injected roots, ground, rigs, locks and senders: taking a pack from the
+-- crate (and only one), the leap, the cord (also when it beats the server's sight of the leap), the canopy and its
+-- descent, the fair auto-deploy and its hard landing, a freefall held in the air, a spare pack buckled onto a jumper
+-- without one, packs going back to the crate, a downed jumper, the scripted landing, the validator, and the run's end.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
@@ -31,7 +30,7 @@ type World = {
 	roots: { [Player]: Part },
 	life: { [Player]: Enums.LifeState },
 	ground: number?,
-	executed: { { player: Player, cause: string } },
+	packs: { Player },
 	revived: { { player: Player, fraction: number } },
 	locks: { { player: Player, reason: Enums.ControlLock, mode: Enums.LockMode? } },
 	overrides: { { player: Player, push: boolean, state: Enums.MoveState? } },
@@ -93,7 +92,7 @@ local function withWorld(names: { string }, body: (world: World, players: { Play
 		roots = {},
 		life = {},
 		ground = GROUND,
-		executed = {},
+		packs = {},
 		revived = {},
 		locks = {},
 		overrides = {},
@@ -137,10 +136,6 @@ local function withWorld(names: { string }, body: (world: World, players: { Play
 		groundBelow = function(_player: Player, _position: Vector3): number?
 			return world.ground
 		end,
-		execute = function(player: Player, cause: string)
-			table.insert(world.executed, { player = player, cause = cause })
-			world.life[player] = "Dead"
-		end,
 		revive = function(player: Player, fraction: number)
 			table.insert(world.revived, { player = player, fraction = fraction })
 			world.life[player] = "Alive"
@@ -162,7 +157,8 @@ local function withWorld(names: { string }, body: (world: World, players: { Play
 			world.roots[player].CFrame = cframe
 			return true
 		end,
-		attachPack = function(_player: Player): Instance?
+		attachPack = function(player: Player): Instance?
+			table.insert(world.packs, player)
 			return Instance.new("Model")
 		end,
 		attachCanopy = function(_player: Player): Instance?
@@ -288,15 +284,13 @@ return {
 		t.eq(ParachuteMotion.canopyPosition(from, velocity, -1, 0), from, "no time, no motion")
 	end,
 
-	["ParachuteMotion: auto-deploy, landing and the fatal drop"] = function(t: Expect)
+	["ParachuteMotion: auto-deploy and landing"] = function(t: Expect)
 		local clearance = ParachuteMotion.AutoDeployClearance
 		t.falsy(ParachuteMotion.autoDeployDue(GROUND + clearance + 0.5, GROUND))
 		t.truthy(ParachuteMotion.autoDeployDue(GROUND + clearance, GROUND))
 		t.truthy(ParachuteMotion.landed(GROUND + STAND + ParachuteMotion.LandingSlack, GROUND))
 		t.falsy(ParachuteMotion.landed(GROUND + STAND + ParachuteMotion.LandingSlack + 0.2, GROUND))
 		t.truthy(ParachuteMotion.landed(GROUND + 4.5, GROUND, 4), "a taller standing height")
-		t.falsy(ParachuteMotion.fatal(DECK - ParachuteMotion.FatalDrop + 1))
-		t.truthy(ParachuteMotion.fatal(DECK - ParachuteMotion.FatalDrop))
 		t.truthy(
 			(clearance - STAND) / ParachuteMotion.HardDescentSpeed >= 1.5,
 			"an auto-deployed canopy still flies for a moment before the ground"
@@ -329,7 +323,7 @@ return {
 
 	["ParachuteMotion: the jump gap's warnings"] = function(t: Expect)
 		local near = Vector3.new(6, DECK + STAND, GAP_Z)
-		t.eq(ParachuteMotion.edgeHint(near, false), "Hud.RoofNoPack", "no pack: the fall kills")
+		t.eq(ParachuteMotion.edgeHint(near, false), nil, "no pack: no hint (a spare one is buckled on as they go)")
 		t.eq(ParachuteMotion.edgeHint(near, true), "Hud.RoofLeap", "with a pack: how to go")
 		t.eq(ParachuteMotion.edgeHint(Vector3.new(60, DECK + STAND, 60), false), nil, "far from the gap")
 		t.eq(ParachuteMotion.edgeHint(OFF_EDGE - Vector3.new(0, 5, 0), true), nil, "already off the roof")
@@ -358,19 +352,16 @@ return {
 		t.truthy(ParachuteMotion.landingDip(0.8, true, 1) ~= CFrame.identity, "a hard one takes longer")
 	end,
 
-	["ParachuteMotion: the landing field lies under the glide from the jump gap"] = function(t: Expect)
+	["ParachuteMotion: the glide from the jump gap comes down over the street, clear of the building"] = function(
+		t: Expect
+	)
 		local ext = SchoolShellBuilder.Exterior
-		local field = ext.landing
 		local floor = GROUND + STAND
 		-- The cord pulled the moment they leave: the whole descent under the canopy.
 		local from = Vector3.new(-(ParachuteMotion.OuterFace + ParachuteMotion.LeaveClear), DECK, GAP_Z)
 		local velocity = ParachuteMotion.canopyVelocity(ParachuteMotion.outward(from), false)
 		local seconds = (from.Y - floor) / -velocity.Y
 		local down = ParachuteMotion.canopyPosition(from, velocity, seconds, floor)
-		t.truthy(
-			down.X > field.x and down.X < field.x + field.w and down.Z > field.z and down.Z < field.z + field.d,
-			"an early pull lands in the field"
-		)
 		-- Never pulled: freefall straight down to the auto-deploy height, then the harder canopy.
 		local opened = Vector3.new(from.X, GROUND + ParachuteMotion.AutoDeployClearance, GAP_Z)
 		local hardVelocity = ParachuteMotion.canopyVelocity(ParachuteMotion.outward(from), true)
@@ -411,7 +402,7 @@ return {
 		local high = Vector3.new(-6, DECK - 10, GAP_Z)
 		t.eq(advance("Packed", ON_ROOF), "None")
 		t.eq(advance("Packed", OFF_EDGE), "Leap")
-		t.eq(advance("None", OFF_EDGE), "Fall")
+		t.eq(advance("None", OFF_EDGE), "Leap", "without a pack too")
 		t.eq(advance("Freefall", high), "None")
 		t.eq(advance("Freefall", high, { pullAt = 9.5 }), "Deploy")
 		t.eq(advance("Freefall", high, { pullAt = 9 - ParachuteMotion.PullGrace + 0.05 }), "Deploy", "an early pull")
@@ -424,8 +415,6 @@ return {
 		t.eq(advance("Canopy", Vector3.new(-6, GROUND + STAND + 0.5, GAP_Z)), "Land")
 		t.eq(advance("Canopy", high, { now = 9 + ParachuteMotion.CanopyMax }), "ForceLand")
 		t.eq(advance("Canopy", high, { groundY = nil }), "None", "nothing under it yet")
-		t.eq(advance("Falling", high), "None")
-		t.eq(advance("Falling", Vector3.new(-6, DECK - ParachuteMotion.FatalDrop, GAP_Z)), "Execute")
 		t.eq(advance("Landed", Vector3.new(-6, GROUND + STAND, GAP_Z)), "None")
 	end,
 
@@ -454,11 +443,11 @@ return {
 	["ParachuteService: the leap, the cord, the canopy and the landing"] = function(t: Expect)
 		withWorld({ "Jumper" }, function(world: World, players: { Player })
 			local jumper = players[1]
-			local leaps: { boolean } = {}
+			local leaps: { Player } = {}
 			local opened: { boolean } = {}
 			local downs: { boolean } = {}
-			local c1 = ParachuteService.Leapt:Connect(function(_player: Player, packed: boolean)
-				table.insert(leaps, packed)
+			local c1 = ParachuteService.Leapt:Connect(function(player: Player)
+				table.insert(leaps, player)
 			end)
 			local c2 = ParachuteService.Deployed:Connect(function(_player: Player, auto: boolean)
 				table.insert(opened, auto)
@@ -467,7 +456,7 @@ return {
 				table.insert(downs, hard)
 			end)
 			leap(t, world, jumper)
-			t.eq(leaps[1], true)
+			t.eq(leaps[1], jumper)
 			local jump = ParachuteService.GetJump(jumper)
 			t.truthy(jump ~= nil and jump.leftFrom == OFF_EDGE, "where they left")
 			place(world, jumper, Vector3.new(-4, DECK - 8, GAP_Z))
@@ -491,15 +480,15 @@ return {
 			t.eq(ParachuteService.GetState(jumper), "Landed")
 			t.eq(downs[1], false, "a soft landing")
 			t.eq(world.locks[1].reason, "Parachute")
-			t.eq(world.locks[1].mode, "Anchor", "held for the finale camera")
+			t.eq(world.locks[1].mode, "Anchor", "held for the look-back camera")
 			t.eq(world.overrides[2].push, false, "the override is gone")
 			t.eq(#world.collapses, 1, "the canopy settles")
 			t.eq(world.collapses[1].facing, Vector3.new(1, 0, 0), "behind them, as they face the school")
 			t.eq(soundCount(world, "ParachuteLanding"), 1)
 			t.eq(world.descents[1].instance.Parent, nil, "the descent is off")
 			t.falsy(ParachuteService.Pull(jumper), "no cord on the ground")
-			t.truthy(ParachuteService.IsHeld(jumper), "held for the finale camera")
-			t.truthy(ParachuteService.ReleaseHold(jumper), "the finale lets them go")
+			t.truthy(ParachuteService.IsHeld(jumper), "held for the look-back camera")
+			t.truthy(ParachuteService.ReleaseHold(jumper), "the roof lets them go")
 			t.falsy(ParachuteService.IsHeld(jumper))
 			local last = world.locks[#world.locks]
 			t.truthy(last.reason == "Parachute" and last.mode == nil, "the hold is released")
@@ -552,7 +541,6 @@ return {
 				t.eq(ParachuteService.GetState(player), "Landed")
 			end
 			t.eq(#ParachuteService.Jumpers(), 4)
-			t.eq(#world.executed, 0)
 		end)
 	end,
 
@@ -592,7 +580,7 @@ return {
 			step(world)
 			t.eq(ParachuteService.GetState(frozen), "Landed")
 			t.eq(soundCount(world, "HardLanding"), 1, "a hard landing")
-			t.eq(#world.executed, 0, "fair: nobody dies with a pack on")
+			t.eq(world.life[frozen], "Alive", "fair: nobody dies with a pack on")
 			local jump = ParachuteService.GetJump(frozen)
 			t.truthy(jump ~= nil and jump.hard and jump.auto)
 		end)
@@ -615,28 +603,26 @@ return {
 		end)
 	end,
 
-	["ParachuteService: jumping without a pack is fatal"] = function(t: Expect)
+	["ParachuteService: a jumper without a pack has a spare one buckled on"] = function(t: Expect)
 		withWorld({ "Reckless" }, function(world: World, players: { Player })
 			local reckless = players[1]
-			local leaps: { boolean } = {}
-			local connection = ParachuteService.Leapt:Connect(function(_player: Player, packed: boolean)
-				table.insert(leaps, packed)
+			local leaps: { Player } = {}
+			local connection = ParachuteService.Leapt:Connect(function(player: Player)
+				table.insert(leaps, player)
 			end)
 			place(world, reckless, OFF_EDGE)
 			step(world)
-			t.eq(ParachuteService.GetState(reckless), "Falling")
-			t.eq(leaps[1], false)
-			place(world, reckless, Vector3.new(-4, DECK - ParachuteMotion.FatalDrop + 2, GAP_Z))
+			t.eq(ParachuteService.GetState(reckless), "Freefall", "off the edge: falling with a pack")
+			t.eq(leaps[1], reckless)
+			t.eq(world.packs[1], reckless, "a spare pack on their back")
+			t.eq(#world.shown, 0, "none taken from the crate")
+			t.truthy(ParachuteService.Pull(reckless), "the cord is there to pull")
 			step(world)
-			t.eq(#world.executed, 0, "still falling")
-			place(world, reckless, Vector3.new(-4, DECK - ParachuteMotion.FatalDrop - 1, GAP_Z))
+			t.eq(ParachuteService.GetState(reckless), "Canopy")
+			place(world, reckless, Vector3.new(-30, GROUND + STAND, GAP_Z))
 			step(world)
-			t.eq(#world.executed, 1)
-			t.eq(world.executed[1].cause, "Fall")
-			step(world)
-			t.eq(ParachuteService.GetState(reckless), "None", "dead: the jump is over")
-			t.eq(reckless:GetAttribute(P.Parachute), nil)
-			t.eq(ParachuteService.Pull(reckless), false)
+			t.eq(ParachuteService.GetState(reckless), "Landed")
+			t.eq(world.life[reckless], "Alive", "nobody dies in the fall")
 			connection:Disconnect()
 		end)
 	end,

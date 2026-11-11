@@ -7,8 +7,8 @@
 --   * Plaster damage: in the plastered rooms the ruin seed picks, a patch of wall above the chair rail has come away:
 --     the paint torn back in a pale ring, the hole into the lath (or the brick behind a corridor wall) shaded where the
 --     plaster still overhangs it, flakes of paint curling off the wall and crumbs of plaster on the floor below.
---   * Standing water: dark, glossy puddles across the wet rooms (the basement, the pool level, the lobby, restrooms,
---     locker rooms and boiler rooms) and under the worst holes in a ceiling; never in the solid ground between a
+--   * Standing water: dark, glossy puddles across the wet rooms (the basement, the lobby, restrooms and boiler
+--     rooms) and under the worst holes in a ceiling; never in the solid ground between a
 --     tunnel floor's runs.
 --   * Loose paper: sheets of print scattered down the corridors and across the classrooms and offices.
 -- Everything here is "Detail" (no collision, no query, no shadow) and flat on the floor or close on a wall, so nothing
@@ -62,8 +62,8 @@ local DecayBuilder = {}
 -- Part caps per site.
 DecayBuilder.Budget = table.freeze({ Fall = 4, Damage = 5, Puddle = 2, Paper = 1 })
 
-local DAMP_LAYOUTS: { [string]: boolean } = { Level0_Basement = true, Level4_FloodedPool = true, Lobby = true }
-local WET_KINDS: { [string]: boolean } = { Restroom = true, LockerRoom = true, Boiler = true, Pool = true }
+local DAMP_LAYOUTS: { [string]: boolean } = { Level0_Basement = true, Lobby = true }
+local WET_KINDS: { [string]: boolean } = { Restroom = true, Boiler = true }
 local DRY_KINDS: { [string]: boolean } = { Airlock = true, Stairwell = true, Chase = true, Roof = true }
 local DAMAGE_KINDS: { [string]: boolean } = { Corridor = true, Classroom = true, Office = true }
 -- Loose sheets of paper per room kind: { least, most } (a seeded count in between, each where it fits)
@@ -71,7 +71,6 @@ local PAPER_COUNT: { [string]: { number } } = {
 	Corridor = { 2, 4 },
 	Classroom = { 0, 2 },
 	Office = { 1, 2 },
-	Lab = { 0, 1 },
 	Storage = { 0, 1 },
 }
 DecayBuilder.PaperCount = table.freeze(PAPER_COUNT)

@@ -23,12 +23,7 @@
 -- each node is an Attachment named by its id (tag VentNode; attrs NodeId, Links, LevelId, GrateId?) at the duct
 -- centre; each grate also gets an Attachment `Grate_<grateId>` at the opening centre in the wall plane whose
 -- LookVector points into the room (attrs GrateId, NodeId, FacingZoneId, Lockable, CriticalPath, LevelId).
--- Each duct's floor part is tagged VentShaft (attrs SegmentId "<a>-<b>", LevelId, AdjacentZones, Submerged).
---
--- Submerged ducts hold murky water: a visible, non-colliding, never-queried slab fills the lower half of the bore
--- along the whole duct (through the side-wall opening into the run a branch joins, and at a grate that opens over
--- a pool basin, on through the wall and the basin coping to the pool's own surface). The water is cosmetic; the
--- layout's PoolWater trigger volume is what gameplay tests against.
+-- Each duct's floor part is tagged VentShaft (attrs SegmentId "<a>-<b>", LevelId, AdjacentZones).
 --
 -- Edges that cannot be built as a level, axis-aligned duct (missing node, self loop, diagonal, height change) are
 -- skipped with a warning and left out of Links, so the VentNode graph only ever holds crawlable ducts.
@@ -84,7 +79,6 @@ type NodePlan = {
 	armCount: number,
 	grate: GrateSite?,
 	starts: { [Dir]: number }, -- per arm: signed distance from the centre to where that arm's duct starts
-	waterStarts: { [Dir]: number }, -- per arm: where a submerged duct's water starts (defaults to `starts`)
 	cap: Dir?, -- side of the node an end cap closes
 }
 
@@ -97,8 +91,6 @@ type Builder = {
 	origin: Vector3,
 	ducts: Folder,
 	fittings: Folder,
-	water: Folder?, -- created on the first submerged duct
-	vents: Folder,
 	count: number,
 }
 
@@ -126,12 +118,7 @@ local DUCT_KEY = "MetalGalvanized"
 local ROOT_NAME = "VentNodeRoot"
 local DUCTS_FOLDER = "Ducts"
 local FITTINGS_FOLDER = "Fittings"
-local WATER_FOLDER = "Water"
 local GRATE_PREFIX = "Grate_"
-
--- Water in a submerged duct stands at the duct's centre line: it fills the lower half of the bore.
-local WATER_DEPTH = HALF_BORE
-local WATER_KEY = "Water"
 
 local DIR_VECTOR: { [Dir]: Vector3 } = {
 	["+X"] = Vector3.new(1, 0, 0),
@@ -168,23 +155,12 @@ local metalOptions: Geometry.PartOptions = {
 	color = metalEntry.color,
 }
 
--- Same murky look as a pool basin's surface.
-local waterOptions: Geometry.PartOptions = {
-	transparency = 0.25,
-	canCollide = false,
-	canQuery = false,
-	castShadow = false,
-	reflectance = 0.08,
-}
-
 local VentShaftBuilder = {}
 
 VentShaftBuilder.RootName = ROOT_NAME
 VentShaftBuilder.GratePrefix = GRATE_PREFIX
 VentShaftBuilder.DuctsFolder = DUCTS_FOLDER
 VentShaftBuilder.FittingsFolder = FITTINGS_FOLDER
-VentShaftBuilder.WaterFolder = WATER_FOLDER
-VentShaftBuilder.WaterDepth = WATER_DEPTH
 
 --------------------------------------------------------------------------------
 -- Small helpers
@@ -287,29 +263,6 @@ local function planEdges(
 	return plans
 end
 
--- When the room side of the grate on `node` (just past the wall it is cut through) lies over a pool basin: how
--- far from the node, toward the room, the basin's open water starts (the inner face of its coping). Nil otherwise.
-local function basinReach(layout: Layout, node: VentNodeSpec, inward: Dir): number?
-	local dir = DIR_VECTOR[inward]
-	local probe = GRATE_WALL_HALF + Geometry.BasinWall / 2
-	local x, z = node.x + dir.X * probe, node.z + dir.Z * probe
-	for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-		local r = basin.rect
-		if not LayoutSchema.rectContains(r, x, z) then
-			continue
-		end
-		local wall = Geometry.BasinWall
-		local edge = if inward == "+X"
-			then r.x + wall
-			elseif inward == "-X" then r.x + r.w - wall
-			elseif inward == "+Z" then r.z + wall
-			else r.z + r.d - wall
-		local reach = (edge - (if axisOf(inward) == "X" then node.x else node.z)) * sign(inward)
-		return math.max(reach, GRATE_WALL_HALF)
-	end
-	return nil
-end
-
 local function grateSite(layout: Layout, grate: GrateSpec, node: VentNodeSpec, rooms: { [string]: Room }): GrateSite?
 	local room = rooms[grate.room]
 	if not room then
@@ -390,7 +343,6 @@ local function planNodes(
 			armCount = 0,
 			grate = sites[node.id],
 			starts = {},
-			waterStarts = {},
 			cap = nil,
 		}
 	end
@@ -423,11 +375,6 @@ local function planNodes(
 			local chaseward = OPPOSITE[site.inward]
 			if plan.armCount == 1 and plan.arms[chaseward] then
 				plan.starts[chaseward] = GRATE_WALL_HALF
-				-- over a pool the water runs on through the wall and the basin coping, up to the pool's own surface
-				local reach = basinReach(layout, node, site.inward)
-				if reach then
-					plan.waterStarts[chaseward] = -reach
-				end
 				continue
 			end
 			log.warn(
@@ -470,8 +417,6 @@ local function planNodes(
 		for _, dir in AXIS_DIRS[OTHER_AXIS[through]] do
 			if plan.arms[dir] then
 				plan.starts[dir] = HALF_OUTER
-				-- water reaches through the side-wall opening to the bore of the run it joins
-				plan.waterStarts[dir] = HALF_BORE
 				table.insert(openings, {
 					axis = through,
 					cross = across(node, through),
@@ -650,42 +595,6 @@ local function buildDuct(builder: Builder, edge: EdgePlan, plans: { [string]: No
 	return floor
 end
 
--- The murky water standing in the lower half of a submerged duct's bore, from where its water starts at each end
--- (see NodePlan.waterStarts) so neighbouring flooded ducts meet without overlapping.
-local function buildWater(builder: Builder, edge: EdgePlan, plans: { [string]: NodePlan })
-	local axis = edge.axis
-	local s = sign(edge.fromA)
-	local planA, planB = plans[edge.a.id], plans[edge.b.id]
-	local startA = planA.waterStarts[edge.fromA] or planA.starts[edge.fromA] or 0
-	local startB = planB.waterStarts[edge.fromB] or planB.starts[edge.fromB] or 0
-	local from = along(edge.a, axis) + s * startA
-	local to = along(edge.b, axis) - s * startB
-	if (to - from) * s <= EPS then
-		return
-	end
-	local folder: Folder = builder.water or Geometry.folder(builder.vents, WATER_FOLDER)
-	builder.water = folder
-	local u0, u1 = math.min(from, to), math.max(from, to)
-	local c = across(edge.a, axis)
-	local bottom = LayoutSchema.ventNodeY(edge.a) - HALF_BORE
-	local x0, x1, z0, z1 = c - HALF_BORE, c + HALF_BORE, u0, u1
-	if axis == "X" then
-		x0, x1, z0, z1 = u0, u1, c - HALF_BORE, c + HALF_BORE
-	end
-	local part = Geometry.box(
-		folder,
-		edge.segmentId .. "_Water",
-		builder.origin + Vector3.new(x0, bottom, z0),
-		builder.origin + Vector3.new(x1, bottom + WATER_DEPTH, z1),
-		WATER_KEY,
-		waterOptions
-	)
-	if part then
-		Geometry.makeFixture(part)
-		builder.count += 1
-	end
-end
-
 -- End cap over the whole duct section, half a bore beyond the node on the `plan.cap` side.
 local function buildCap(builder: Builder, plan: NodePlan)
 	local dir = plan.cap
@@ -736,7 +645,7 @@ local function nodeLinks(order: { VentNodeSpec }, edges: { EdgePlan }): { [strin
 end
 
 local function clearPrevious(vents: Instance)
-	for _, name in { ROOT_NAME, DUCTS_FOLDER, FITTINGS_FOLDER, WATER_FOLDER } do
+	for _, name in { ROOT_NAME, DUCTS_FOLDER, FITTINGS_FOLDER } do
 		local previous = vents:FindFirstChild(name)
 		if previous then
 			previous:Destroy()
@@ -751,7 +660,7 @@ end
 -- Level-local boxes the ducts of `layout` occupy (pure, no instances): each buildable duct from end to end with
 -- its shell, reaching half a bore plus the shell past every node it does not end at a grate (which covers junction
 -- boxes and end caps) and through the wall to the wall's far face at a grate. The shell builder keeps the
--- structural slab out of these, so a duct may sit low in its chase (down to a pool's waterline) and stay clear.
+-- structural slab out of these, so a duct may sit low in its chase and stay clear.
 function VentShaftBuilder.envelopes(layout: Layout): { Envelope }
 	local out: { Envelope } = {}
 	local vents = layout.vents
@@ -854,12 +763,10 @@ function VentShaftBuilder.build(layout: Layout, levelModel: Model): number
 		origin = origin,
 		ducts = Geometry.folder(folder, DUCTS_FOLDER),
 		fittings = Geometry.folder(folder, FITTINGS_FOLDER),
-		water = nil,
-		vents = folder,
 		count = 0,
 	}
 
-	-- Ducts, with their floors tagged as VentShaft segments; submerged ducts hold water
+	-- Ducts, with their floors tagged as VentShaft segments
 	for _, edge in edges do
 		local floor = buildDuct(builder, edge, plans, openings)
 		if floor then
@@ -867,10 +774,6 @@ function VentShaftBuilder.build(layout: Layout, levelModel: Model): number
 			floor:SetAttribute(W.SegmentId, edge.segmentId)
 			floor:SetAttribute(W.LevelId, layout.id)
 			floor:SetAttribute(W.AdjacentZones, Attributes.joinList(ZoneGraph.adjacentZones(layout, edge.a, edge.b)))
-			floor:SetAttribute(W.Submerged, edge.spec.submerged == true)
-		end
-		if edge.spec.submerged == true then
-			buildWater(builder, edge, plans)
 		end
 	end
 

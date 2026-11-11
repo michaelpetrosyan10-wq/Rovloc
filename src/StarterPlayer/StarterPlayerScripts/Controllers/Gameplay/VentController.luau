@@ -5,9 +5,9 @@
 -- its character, so the crawl is local physics the server only validates (MovementAuthority's rail validator).
 --
 -- Membership (membership, pure). A session starts when the replicated MoveState becomes VentCrawling or
--- VentScurrying and ends the moment the server's MoveState leaves the duct (an on-foot or swimming state), the
+-- VentScurrying and ends the moment the server's MoveState leaves the duct (an on-foot state), the
 -- character dies or is replaced, or the run ends. An override state while the server still holds the character in
--- Vent collision (DownedCrawling in a duct, a Grabbed / Scripted hold) keeps the session, so a downed player drags
+-- Vent collision (DownedCrawling in a duct, a Scripted hold) keeps the session, so a downed player drags
 -- along the rail at DownedMoveSpeed instead of the Humanoid trying to stand up inside the bore. While a ControlLock is
 -- held (or the root is anchored) the session lets go of the body and the server moves it; afterwards the cursor
 -- snaps to wherever the server left it.
@@ -243,7 +243,6 @@ local VENT_STATES: { [string]: boolean } = { VentCrawling = true, VentScurrying 
 -- Overrides the server can hold while keeping the character in the duct (Vent collision stays on).
 local DUCT_OVERRIDES: { [string]: boolean } = {
 	DownedCrawling = true,
-	Grabbed = true,
 	Trapped = true,
 	Hiding = true,
 	Scripted = true,

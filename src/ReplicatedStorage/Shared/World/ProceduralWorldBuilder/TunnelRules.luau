@@ -18,9 +18,7 @@
 --   crawlways   crawlways[1]..crawlways[2] of them, each at most crawlLength studs long with crawlHeight head room
 --               at its mouths; a crawlway mouth within crawlReach studs walked of every tunnel point;
 --   hides       a hiding spot (Locker, Barrel, Cabinet) within hideReach studs walked of every tunnel point and
---               within objectiveHideReach of every objective place (ObjectivePlaces' stations, locks and items); a
---               place under a pool's water (in a basin, below the deck) is served by dry footing instead, the pool's
---               own rule (ObjectivePlaces.nearestHide, the pool specs: the Creature never leaves the water);
+--               within objectiveHideReach of every objective place (ObjectivePlaces' stations, locks and items);
 --   regions     regions[1]..regions[2] regions with distinct names; every tunnel room in one; a junction plate at
 --               every junction.
 
@@ -141,7 +139,6 @@ type VentNodeLike = { id: string, x: number, z: number }
 type VentEdgeLike = { a: string, b: string }
 type GrateLike = { id: string, node: string, room: string, lockable: boolean }
 type VentsLike = { nodes: { VentNodeLike }, edges: { VentEdgeLike }, grates: { GrateLike } }
-type BasinLike = { room: string, rect: Rect }
 export type LayoutLike = {
 	id: string,
 	height: number,
@@ -150,7 +147,6 @@ export type LayoutLike = {
 	doors: { DoorLike },
 	anchors: { AnchorLike },
 	vents: VentsLike?,
-	basins: { BasinLike }?,
 	tunnels: TunnelData?,
 }
 
@@ -309,30 +305,8 @@ export type WalkGraph = {
 
 local WALK_DOORS: { [string]: boolean } = { Doorway = true, Door = true, Ajar = true, Airlock = true, RoofDoor = true }
 
--- Grates a HatchValve keeps shut (ObjectivePlaces' rule: its grate is no way through until the objective opens it).
-local function hatchShut(layout: LayoutLike, vents: VentsLike): { [string]: boolean }
-	local nodes: { [string]: VentNodeLike } = {}
-	for _, node in vents.nodes do
-		nodes[node.id] = node
-	end
-	local out: { [string]: boolean } = {}
-	for _, anchor in layout.anchors do
-		if anchor.kind ~= "HatchValve" then
-			continue
-		end
-		for _, grate in vents.grates do
-			local node = nodes[grate.node]
-			if node and math.abs(node.x - anchor.pos.X) < 2.5 and math.abs(node.z - anchor.pos.Z) < 1.5 then
-				out[grate.id] = true
-			end
-		end
-	end
-	return out
-end
-
 -- The walk graph of `layout`. `crawl`: keep the crawlway doors (their links cost studs x WalkSpeed / CrouchSpeed when
--- `timed`); otherwise crawlways are shut. The vents a squad can always use (grates that never lock, none a hatch
--- keeps shut) are walked too, whatever `crawl` says: a floor's script may make one the only way on (Level 1's gate
+-- `timed`); otherwise crawlways are shut. The vents a squad can always use (grates that never lock) are walked too, whatever `crawl` says: a floor's script may make one the only way on (Level 1's gate
 -- bypass); timed, their ducts cost studs x WalkSpeed / VentSpeed.
 function TunnelRules.walkGraph(layout: LayoutLike, crawl: boolean, timed: boolean?): WalkGraph
 	local rooms: { [string]: RoomLike } = {}
@@ -371,7 +345,6 @@ function TunnelRules.walkGraph(layout: LayoutLike, crawl: boolean, timed: boolea
 	-- the always-open vents: a node per duct node, linked along the ducts; each open grate's node joins its room
 	local vents = layout.vents
 	if vents then
-		local shut = hatchShut(layout, vents)
 		local ventIndex: { [string]: number } = {}
 		for _, node in vents.nodes do
 			table.insert(g.pos, Vector2.new(node.x, node.z))
@@ -389,7 +362,7 @@ function TunnelRules.walkGraph(layout: LayoutLike, crawl: boolean, timed: boolea
 		end
 		for _, grate in vents.grates do
 			local index = ventIndex[grate.node]
-			if index and not grate.lockable and not shut[grate.id] and rooms[grate.room] then
+			if index and not grate.lockable and rooms[grate.room] then
 				g.members[grate.room] = g.members[grate.room] or {}
 				table.insert(g.members[grate.room], index)
 			end
@@ -594,11 +567,6 @@ TunnelRules.shortestLoopIn = shortestLoop
 
 local STATIONS: { [string]: boolean } = {
 	BreakerPanel = true,
-	FumeHood = true,
-	Generator = true,
-	StoreLock = true,
-	HatchValve = true,
-	CrateChain = true,
 	ExitLock = true,
 }
 local NOT_ITEMS: { [string]: boolean } = { TrapCandidate = true, FlaskCandidate = true, BatteryCandidate = true }
@@ -790,26 +758,7 @@ function TunnelRules.measure(layout: LayoutLike): Measures
 	return m
 end
 
--- Whether the point `pos` of room `room` lies under a pool's water: in a basin of that room, below the deck.
-function TunnelRules.underWater(layout: LayoutLike, room: string, pos: Vector3): boolean
-	if pos.Y > -EPS then
-		return false
-	end
-	for _, basin in layout.basins or {} :: { BasinLike } do
-		local r = basin.rect
-		local inside = pos.X >= r.x - EPS
-			and pos.X <= r.x + r.w + EPS
-			and pos.Z >= r.z - EPS
-			and pos.Z <= r.z + r.d + EPS
-		if basin.room == room and inside then
-			return true
-		end
-	end
-	return false
-end
-
--- The walk from every objective place of `layout` to its nearest hiding spot, on foot ({ anchor id -> studs }); places
--- under a pool's water are left out (dry footing serves them: see the header).
+-- The walk from every objective place of `layout` to its nearest hiding spot, on foot ({ anchor id -> studs }).
 function TunnelRules.objectiveHides(layout: LayoutLike): { [string]: number }
 	local foot = TunnelRules.walkGraph(layout, false)
 	local hideSeeds: { { number } } = {}
@@ -827,9 +776,6 @@ function TunnelRules.objectiveHides(layout: LayoutLike): { [string]: number }
 	local toHide = TunnelRules.distances(foot, hideSeeds)
 	local out: { [string]: number } = {}
 	for _, anchor in objectivePoints(layout) do
-		if TunnelRules.underWater(layout, anchor.room, anchor.pos) then
-			continue
-		end
 		out[anchor.id] = TunnelRules.reach(
 			foot,
 			toHide,

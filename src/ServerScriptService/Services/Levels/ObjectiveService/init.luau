@@ -3,8 +3,9 @@
 -- writer of the objective props' poses after the build, of the ExitLock / station prompts' text and hold, of a
 -- player's Carrying and of the ReplicatedStorage Objective* / Power* attributes.
 --
--- Core rule: a floor's exit (the fire door of the stairwell the run leaves it by, LevelDirector.exitFor; on the roof the
--- parachute crate) stays Locked until the floor's lockStep is done. Every exit candidate carries an ExitLock; only the
+-- Core rule: a floor's exit (the fire door of the stairwell the run leaves it by, LevelDirector.exitFor) stays Locked
+-- until the floor's lockStep is done; a floor without a lock step (ReachExit) is open from the start and its one step
+-- is done when the squad leaves it. Every exit candidate carries an ExitLock; only the
 -- route's is live (the others hold jammed doors, whose own prompt says the stairwell has collapsed, and offer nothing).
 -- BeginRun locks the route's exit fire door (DoorService, snapped shut), resets every lock and station to its built
 -- pose and keeps the picked items (RunDirector.plan's objectives) in the world; CheckpointAirlockService runs nothing on a floor until ExitOpen says so. Completing the lock
@@ -13,48 +14,29 @@
 -- stairwell and Unlocked fires.
 --
 -- Prompts (InteractionService handlers, one per PromptKind; a prompt only answers on the current, active level):
---   Pickup     a picked item in the world (its hold from ObjectiveConfig) into the actor's carry; the acid flask into
---              their hand (ChemicalProjectileService.GiveAcid: a full hand refuses with Hud.FlaskHandsFull)
+--   Pickup     a picked item in the world (its hold from ObjectiveConfig) into the actor's carry
 --   Locked     "Locked — <reason>" (hold 0): a rattle or the keypad's denial, no noise
---   Unlock / CutChain / Pour / FitFuse / FitValve   need the item: shown (with the step's hold) while anyone in the squad
---              carries it, and only its carrier may use it (anyone else: Obj.TeammateHas); without it FitFuse / FitValve
---              read "Find a fuse first" / "Needs the valve wheel" (hold 0: a rattle and the reason)
---   Mix        the fume hood: "Needs 3 reagents" / "Load Reagents" (hold 0: the actor's reagents go in, a jar on each
---              slot, the sash up) until three are loaded, then "Mix Reagents" (5 s, kept when let go)
---   Breaker / Generator / TurnValve   the stations' working holds (TurnValve kept when let go)
---   Search     Floor 3's locker search (the Kick key, 1 s, a soft creak), never the Hide prompt
--- A working hold (unlock, mix, turn, cut) emits the Normal ObjectiveWork noise at its start and once a second, with its
--- loop at the station; the stations animate with the hold (the breaker lever creeps, the cord comes out in pulls, the
--- valve wheel and its stem turn).
+--   Unlock / FitFuse   need the item: shown (with the step's hold) while anyone in the squad carries it, and only its
+--              carrier may use it (anyone else: Obj.TeammateHas); without it FitFuse reads "Find a fuse first" (hold 0:
+--              a rattle and the reason)
+--   Breaker    the breaker panel's working hold
+-- A working hold (the unlock) emits the Normal ObjectiveWork noise at its start and once a second, with its loop at the
+-- station; the breaker lever creeps with its hold.
 --
--- The floors (ObjectiveConfig.Floors):
---   0  fuses into the breaker panel's slots in order (each slot's lamp turns green), then the main breaker: the lever
---      throws, ObjBreakerThrow, the loud noise, and the basement's mains come back on (PowerOffLevel / PowerOnAt: the
---      clients' LightingController holds them at PowerOffFactor until then and stutters them on over PowerOnSeconds).
---   1  the master keys, then Unlock (4 s, the keys worked in the padlock).
---   2  three reagents into the fume hood, Mix (5 s): the acid flask stands at AcidFlaskSpot. Thrown, it burns the chain
---      when it breaks within ChainHitRadius of ChainCentre (BurnSeconds of fumes, then the chain drops); Pour (2 s) at
---      the door does it in hand. A miss (it broke elsewhere, flew out, or its holder lost it) only loses the flask: the
---      reagents stay loaded and the hood brews another (MixAcid reads undone, Obj.AcidMissed).
---   3  Search the locker-room lockers for the coach's key (the key's locker, its layout ref, stands open with the key
---      showing; an empty one swings shut after SearchEmptySeconds; a locker the Creature tore open shows its key), the
---      store's padlock (2 s): the EquipmentStoreDoor swings open; the generator (3 s): the Critical GeneratorStart noise,
---      the running loop, the work lamp, then WindMotor counts down 45 s (ObjectiveTimerEndsAt) with the motor whining at
---      the stairwell door.
---   4  the hatch keeps its grate blocked (VentNetworkService.SetBlocked) until it opens; dive for the valve wheel,
---      FitValve (3 s: its Hub on WheelSeat), TurnValve (4 s, 2.5 turns): the hatch swings up over HatchSeconds.
---   5  the parachute crate stays shut (ParachuteService.SetCrateOpen(false)) until CutChain (4 s) with the bolt cutters:
---      the snap, the loud noise, the chain and padlock drop, the packs are free and Unlocked fires (the roof controller
---      brings the door smash forward if the Creature still waits behind it).
+-- The objectives (ObjectiveConfig.Floors, by id):
+--   RestorePower  fuses into the breaker panel's slots in order (each slot's lamp turns green), then the main breaker:
+--                 the lever throws, ObjBreakerThrow, the loud noise, and the basement's mains come back on
+--                 (PowerOffLevel / PowerOnAt: the clients' LightingController holds them at PowerOffFactor until then
+--                 and stutters them on over PowerOnSeconds).
+--   MasterKeys    the master keys, then Unlock (4 s, the keys worked in the padlock).
+--   ReachExit     nothing to find or unlock: the step is done when the squad leaves the floor.
 --
--- Carrying (Player Carrying, ObjectiveState). Items survive being downed and grabbed. A carrier who dies, is left
--- behind, goes to the lobby or leaves drops everything at their feet (on the pool floor when in the water: the first
--- surface under them, water ignored), each item back in the world with its Pickup prompt, so any teammate can take it
--- on: a floor can never be softlocked by a lost item.
+-- Carrying (Player Carrying, ObjectiveState). Items survive being downed. A carrier who dies, is left behind, goes to
+-- the lobby or leaves drops everything at their feet (the first surface under them), each item back in the world with
+-- its Pickup prompt, so any teammate can take it on: a floor can never be softlocked by a lost item.
 --
--- The HUD (ObjectiveTracker) reads the current floor from ReplicatedStorage: ObjectiveLevel, ObjectiveSteps,
--- ObjectiveUnlocked, ObjectiveTimerEndsAt, ObjectiveActivatedAt (the Tab nudge waits NudgeDelay from it) and
--- ObjectiveTargets (where the next undone step is worked; the nudge points at that room, never the item).
+-- The HUD (ObjectiveTracker) reads the current floor from ReplicatedStorage: ObjectiveLevel, ObjectiveSteps and
+-- ObjectiveUnlocked.
 --
 -- Dev command: objective [done] (the current floor's state, or complete it through its own unlock path).
 -- SetClock swaps the time source; Step(now) runs one tick (the Heartbeat driver; specs drive it by hand).
@@ -82,11 +64,7 @@ local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
 
-local AcidFlaskBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.AcidFlaskBuilder)
 local BreakerPanelBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.BreakerPanelBuilder)
-local FumeHoodBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.FumeHoodBuilder)
-local GeneratorBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.GeneratorBuilder)
-local HatchValveBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.HatchValveBuilder)
 local LockBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.LockBuilder)
 local PropKit = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PropKit)
 
@@ -96,12 +74,7 @@ local LevelDirector = require(ServerScriptService.Services.Core.LevelDirector)
 local NoiseAndDirectorService = require(ServerScriptService.Services.Core.NoiseAndDirectorService)
 local InteractionService = require(ServerScriptService.Services.Player.InteractionService)
 local LifeStateService = require(ServerScriptService.Services.Player.LifeStateService)
-local VentNetworkService = require(ServerScriptService.Services.Vents.VentNetworkService)
-local ChemicalProjectileService = require(ServerScriptService.Services.Mechanics.ChemicalProjectileService)
 local DoorService = require(ServerScriptService.Services.Mechanics.DoorService)
-local HideSpotService = require(ServerScriptService.Services.Mechanics.HideSpotService)
-local ParachuteService = require(ServerScriptService.Services.Mechanics.ParachuteService)
-local MonsterAIService = require(ServerScriptService.Services.Monster.MonsterAIService)
 
 local log = Log.new("Objective")
 
@@ -117,8 +90,7 @@ export type ItemState = "World" | "Carried" | "Used"
 type Item = {
 	model: Model,
 	anchorId: string,
-	slot: number,
-	kind: string, -- the plan prop kind (Fuse, ReagentJar, ...)
+	kind: string, -- the plan prop kind (Fuse, MasterKeys)
 	state: ItemState,
 	carrier: Player?,
 	parent: Instance, -- its runtime folder (where it goes back to)
@@ -145,8 +117,6 @@ type Work = {
 
 type Tween = { startAt: number, seconds: number, update: (t: number) -> (), done: (() -> ())? }
 
-export type AcidState = "None" | "Ready" | "Held" | "Used"
-
 type Floor = {
 	spec: ObjectiveConfig.FloorSpec,
 	levelId: Enums.LevelId,
@@ -154,40 +124,15 @@ type Floor = {
 	progress: { [string]: number },
 	unlocked: boolean,
 	active: boolean,
-	activatedAt: number?,
 	items: { Item },
-	lock: Model?, -- the exit lock (the crate chain on the roof)
+	lock: Model?, -- the exit lock
 	doors: { Model }, -- the exit fire doors it holds
 	works: { [string]: Work },
-	-- Floor 0
+	-- RestorePower
 	panel: Model?,
 	fitted: { [number]: Item },
 	powered: boolean,
 	powerOnAt: number?,
-	-- Floor 2
-	hood: Model?,
-	loaded: { Item },
-	acid: AcidState,
-	acidModel: Model?,
-	acidHolder: Player?,
-	burning: boolean,
-	-- Floor 3
-	lockers: { Model },
-	searched: { [Model]: boolean },
-	keyLocker: Model?,
-	keyShown: boolean,
-	storeLock: Model?,
-	storeDoor: Model?,
-	generator: Model?,
-	running: boolean,
-	motorEndsAt: number?,
-	motorVoice: AudioService.CueHandle?,
-	generatorVoice: AudioService.CueHandle?,
-	-- Floor 4
-	valve: Model?,
-	grateId: string?,
-	wheelFitted: Item?,
-	wheelSeated: CFrame?,
 }
 
 local ObjectiveService = {}
@@ -197,26 +142,15 @@ ObjectiveService.Name = "ObjectiveService"
 local unlockedSignal: Signal.Signal<Enums.LevelId, Player?> = Signal.new()
 local stepSignal: Signal.Signal<Enums.LevelId, string, number> = Signal.new()
 
--- (levelId, actor) when a floor's exit (the roof's crate) unlocks.
+-- (levelId, actor) when a floor's exit unlocks.
 ObjectiveService.Unlocked = unlockedSignal
 -- (levelId, stepId, count) whenever a step advances.
 ObjectiveService.StepAdvanced = stepSignal
 
-local CARRY_KIND: { [string]: string } = {
-	Fuse = "Fuse",
-	MasterKeys = "MasterKeys",
-	ReagentJar = "Reagent",
-	CoachKey = "CoachKey",
-	ValveWheel = "ValveWheel",
-	BoltCutters = "BoltCutters",
-}
 local DROP_STATES: { [string]: boolean } = { Dead = true, Spectating = true, Lobby = true }
 local DROP_RAY = 40
-local MOTOR_PULLS = 3
-local GENERATOR_LOOP_DELAY = 1.1
-local CHAIN_TILT = math.rad(75)
+local PADLOCK_TILT = math.rad(60)
 local NEED_ITEM = "Obj.TeammateHas"
-local HANDS_FULL = "Hud.FlaskHandsFull"
 local LIVE_PHASES: { [string]: boolean } = { Deploying = true, InRun = true }
 
 local serviceTrove = Trove.new()
@@ -232,7 +166,6 @@ local realClock = clock
 local floors: { [string]: Floor } = {}
 local itemsByModel: { [Model]: Item } = {}
 local carries: { [Player]: { order: { string }, items: { Item } } } = {}
-local searchPrompts: { [ProximityPrompt]: Model } = {}
 local tweens: { Tween } = {}
 local storage: Folder? = nil
 
@@ -251,11 +184,6 @@ function ObjectiveService.holdLeft(seconds: number, done: number): number
 	return math.max(0.05, seconds - done)
 end
 
--- Whether an acid flask breaking at `point` burns a chain centred at `centre`.
-function ObjectiveService.chainHit(point: Vector3, centre: Vector3): boolean
-	return (point - centre).Magnitude <= T.ChainHitRadius
-end
-
 -- The spot of the `index`-th item a carrier drops around `centre` (a small spiral, ObjectiveConfig DropSpread apart).
 function ObjectiveService.dropOffset(index: number): Vector3
 	if index <= 1 then
@@ -264,16 +192,6 @@ function ObjectiveService.dropOffset(index: number): Vector3
 	local angle = (index - 2) * 2.4
 	local radius = T.DropSpread * (1 + (index - 2) * 0.25)
 	return Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
-end
-
--- The generator cord's reach (0..1) at hold progress `t`: three yanks, snapping back a little between them.
-function ObjectiveService.cordReach(t: number): number
-	if t >= 1 then
-		return 0
-	end
-	local phase = t * MOTOR_PULLS
-	local within = phase - math.floor(phase)
-	return math.min(1, within * 1.6) * (0.55 + 0.45 * (math.floor(phase) / MOTOR_PULLS))
 end
 
 --------------------------------------------------------------------------------
@@ -311,17 +229,6 @@ local function pointOf(model: Instance?, name: string): Vector3?
 	end
 	if model and model:IsA("Model") then
 		return model.WorldPivot.Position
-	end
-	return nil
-end
-
-local function hostOf(instance: Instance?): Instance?
-	local node = instance
-	while node do
-		if node:HasTag(Tags.Interactable) then
-			return node
-		end
-		node = node.Parent
 	end
 	return nil
 end
@@ -472,8 +379,7 @@ local function writeCarry(player: Player)
 	local order: { string } = {}
 	if carry then
 		for _, item in carry.items do
-			local kind = CARRY_KIND[item.kind] or item.kind
-			counts[kind] = (counts[kind] or 0) + 1
+			counts[item.kind] = (counts[item.kind] or 0) + 1
 		end
 		order = carry.order
 	end
@@ -521,9 +427,8 @@ local function takeInto(player: Player, item: Item)
 	stash(item)
 	local carry = carryOf(player)
 	table.insert(carry.items, item)
-	local kind = CARRY_KIND[item.kind] or item.kind
-	if not table.find(carry.order, kind) then
-		table.insert(carry.order, kind)
+	if not table.find(carry.order, item.kind) then
+		table.insert(carry.order, item.kind)
 	end
 	writeCarry(player)
 end
@@ -546,7 +451,7 @@ local function useCarried(player: Player, kind: string): Item?
 	return nil
 end
 
--- The point a carrier at `position` drops onto: the first surface under it (water and bodies ignored).
+-- The point a carrier at `position` drops onto: the first surface under it (bodies ignored).
 local function dropPoint(position: Vector3): Vector3
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -559,9 +464,6 @@ local function dropPoint(position: Vector3): Vector3
 	local creature = Instances.creature()
 	if creature then
 		table.insert(exclude, creature)
-	end
-	for _, water in CollectionService:GetTagged(Tags.PoolWater) do
-		table.insert(exclude, water)
 	end
 	params.FilterDescendantsInstances = exclude
 	local hit = Workspace:Raycast(position, Vector3.new(0, -DROP_RAY, 0), params)
@@ -683,15 +585,6 @@ local function finishWork(work: Work)
 	end
 end
 
-local function resetWork(work: Work)
-	stopVoice(work)
-	work.done = 0
-	work.since = nil
-	work.actor = nil
-	work.finished = false
-	work.nextNoiseAt = math.huge
-end
-
 local function stepWork(work: Work, floor: Floor, t: number)
 	if work.since == nil then
 		return
@@ -710,99 +603,6 @@ end
 -- Replication (the HUD)
 --------------------------------------------------------------------------------
 
-local function targetsOf(floor: Floor): { ObjectiveState.Target }
-	local out: { ObjectiveState.Target } = {}
-	local layout = Builder.getLayout(floor.levelId)
-	local function add(point: Vector3?, room: string?)
-		if not point then
-			return
-		end
-		local found = room or (if layout then ObjectiveState.roomAt(layout, point) else nil)
-		table.insert(out, { room = found or "", point = point })
-	end
-	local function worldItems(kind: string)
-		for _, item in floor.items do
-			if item.kind == kind and item.state == "World" and item.model.Parent ~= storage then
-				add(item.model.WorldPivot.Position, item.room)
-			end
-		end
-	end
-	local function station(model: Model?, attachment: string)
-		if model then
-			local zone = model:GetAttribute(W.ZoneId)
-			add(pointOf(model, attachment), if type(zone) == "string" and zone ~= "" then zone else nil)
-		end
-	end
-	local level = floor.spec.floor
-	if level == 0 then
-		local fitted = 0
-		for _ in floor.fitted do
-			fitted += 1
-		end
-		local carriedCount = 0
-		for _, item in floor.items do
-			if item.state == "Carried" then
-				carriedCount += 1
-			end
-		end
-		if fitted + carriedCount < floor.spec.item.count then
-			worldItems("Fuse")
-		end
-		if #out == 0 then
-			station(floor.panel, "LeverPrompt")
-		end
-	elseif level == 1 then
-		if not isDone(floor, "FindKeys") then
-			worldItems("MasterKeys")
-		end
-		if #out == 0 then
-			station(floor.lock, "LockPrompt")
-		end
-	elseif level == 2 then
-		if not isDone(floor, "FindReagents") then
-			worldItems("ReagentJar")
-		end
-		if #out == 0 then
-			if not isDone(floor, "MixAcid") or floor.acid == "Ready" then
-				station(floor.hood, "MixPrompt")
-			else
-				station(floor.lock, "ChainCentre")
-			end
-		end
-	elseif level == 3 then
-		if not isDone(floor, "FindCoachKey") then
-			if floor.keyShown then
-				worldItems("CoachKey")
-			else
-				for _, locker in floor.lockers do
-					if not floor.searched[locker] then
-						add(locker.WorldPivot.Position, Attributes.getString(locker, W.ZoneId, ""))
-					end
-				end
-			end
-		elseif not isDone(floor, "UnlockStore") then
-			station(floor.storeLock, "LockPrompt")
-		elseif not isDone(floor, "StartGenerator") then
-			station(floor.generator, "PullPrompt")
-		end
-	elseif level == 4 then
-		if not isDone(floor, "FindWheel") then
-			worldItems("ValveWheel")
-		end
-		if #out == 0 then
-			station(floor.valve, "WheelSeat")
-		end
-	elseif level == 5 then
-		if not isDone(floor, "FindCutters") then
-			worldItems("BoltCutters")
-		end
-		if #out == 0 then
-			station(floor.lock, "ChainCentre")
-		end
-	end
-	return out
-end
-
 local function replicate(floor: Floor)
 	if not floor.active then
 		return
@@ -810,13 +610,6 @@ local function replicate(floor: Floor)
 	Attributes.set(ReplicatedStorage, M.ObjectiveLevel, floor.levelId)
 	Attributes.set(ReplicatedStorage, M.ObjectiveSteps, ObjectiveState.encodeSteps(floor.spec, floor.progress))
 	Attributes.set(ReplicatedStorage, M.ObjectiveUnlocked, floor.unlocked)
-	Attributes.set(ReplicatedStorage, M.ObjectiveTimerEndsAt, floor.motorEndsAt)
-	Attributes.set(ReplicatedStorage, M.ObjectiveActivatedAt, floor.activatedAt)
-	Attributes.set(
-		ReplicatedStorage,
-		M.ObjectiveTargets,
-		if floor.unlocked then "" else ObjectiveState.encodeTargets(targetsOf(floor))
-	)
 end
 
 local function clearReplication()
@@ -825,9 +618,6 @@ local function clearReplication()
 			M.ObjectiveLevel,
 			M.ObjectiveSteps,
 			M.ObjectiveUnlocked,
-			M.ObjectiveTimerEndsAt,
-			M.ObjectiveActivatedAt,
-			M.ObjectiveTargets,
 			M.PowerOffLevel,
 			M.PowerOnAt,
 		}
@@ -840,21 +630,16 @@ end
 -- Prompt state (texts, holds, who serves what)
 --------------------------------------------------------------------------------
 
-local function nextSlot(floor: Floor): number?
-	for slot = 1, floor.spec.item.count do
-		if floor.fitted[slot] == nil then
-			return slot
-		end
-	end
-	return nil
+-- How many items a floor's objective uses (0 without an item).
+local function itemCount(floor: Floor): number
+	local item = floor.spec.item
+	return if item then item.count else 0
 end
 
-local function anyHoldsAcid(): Player?
-	local current = run
-	local list: { Player } = if current then current.participants else {}
-	for _, player in list do
-		if ChemicalProjectileService.HoldsAcid(player) then
-			return player
+local function nextSlot(floor: Floor): number?
+	for slot = 1, itemCount(floor) do
+		if floor.fitted[slot] == nil then
+			return slot
 		end
 	end
 	return nil
@@ -872,14 +657,6 @@ local function refreshHosts(floor: Floor)
 	end
 	add(floor.lock)
 	add(floor.panel)
-	add(floor.hood)
-	add(floor.acidModel)
-	add(floor.storeLock)
-	add(floor.generator)
-	add(floor.valve)
-	for prompt in searchPrompts do
-		add(hostOf(prompt))
-	end
 	for host in hosts do
 		-- protected: one host failing to refresh never stops the floor's other prompts (or a run start)
 		xpcall(InteractionService.Refresh, function(err: any)
@@ -890,8 +667,7 @@ end
 
 refreshFloor = function(floor: Floor)
 	local spec = floor.spec
-	local level = spec.floor
-	if level == 0 and floor.panel then
+	if floor.panel then
 		local slot = nextSlot(floor)
 		local have = anyCarries("Fuse")
 		local fittedCount = 0
@@ -910,54 +686,13 @@ refreshFloor = function(floor: Floor)
 				else
 					setPrompt(
 						prompt,
-						Strings.get("Obj.Prompt.NeedFuse", fittedCount, spec.item.count),
+						Strings.get("Obj.Prompt.NeedFuse", fittedCount, itemCount(floor)),
 						Strings.get("Prompt.BreakerPanel"),
 						0
 					)
 				end
 			end
 		end
-	elseif level == 2 and floor.hood then
-		local prompt = promptsOf(floor.hood, "Mix")[1]
-		local loaded = #floor.loaded
-		if loaded < spec.item.count then
-			local key = if anyCarries("ReagentJar") then "Obj.Prompt.LoadReagents" else "Obj.Prompt.NeedReagents"
-			setPrompt(prompt, Strings.get(key, loaded, spec.item.count), Strings.get("Prompt.FumeHood"), 0)
-		else
-			local work = floor.works.Mix
-			local share = if work then workShare(work) else 0
-			setPrompt(
-				prompt,
-				Strings.get("Prompt.Mix"),
-				if share > 0.01
-					then Strings.get("Obj.Prompt.Mixed", math.floor(share * 100 + 0.5))
-					else Strings.get("Prompt.FumeHood"),
-				if work then ObjectiveService.holdLeft(work.seconds, work.done) else nil
-			)
-		end
-	elseif level == 4 and floor.valve then
-		local fit = promptsOf(floor.valve, "FitValve")[1]
-		if anyCarries("ValveWheel") then
-			setPrompt(
-				fit,
-				Strings.get("Prompt.FitValve"),
-				Strings.get("Prompt.HatchValve"),
-				ObjectiveConfig.hold(spec, "FitValve")
-			)
-		else
-			setPrompt(fit, Strings.get("Obj.Prompt.NeedWheel"), Strings.get("Prompt.HatchValve"), 0)
-		end
-		local turn = promptsOf(floor.valve, "TurnValve")[1]
-		local work = floor.works.TurnValve
-		local share = if work then workShare(work) else 0
-		setPrompt(
-			turn,
-			Strings.get("Prompt.TurnValve"),
-			if share > 0.01
-				then Strings.get("Obj.Prompt.Turned", math.floor(share * 100 + 0.5))
-				else Strings.get("Prompt.HatchValve"),
-			if work then ObjectiveService.holdLeft(work.seconds, work.done) else nil
-		)
 	end
 	refreshHosts(floor)
 	replicate(floor)
@@ -965,68 +700,24 @@ end
 
 -- Whether a prompt of `kind` on `host` answers now (the handlers' filter).
 local function serves(kind: Enums.PromptKind, host: Instance, prompt: ProximityPrompt): boolean
-	if kind == "Search" then
-		local locker: Model? = searchPrompts[prompt]
-		if not locker then
-			return false
-		end
-		local floor = floors[Attributes.getString(locker, W.LevelId, "")]
-		return floor ~= nil
-			and floor.active
-			and live
-			and not isDone(floor, "FindCoachKey")
-			and not floor.searched[locker]
-			and HideSpotService.GetState(locker) == "Free"
-			and not HideSpotService.IsSearchOpen(locker)
-	end
 	local floor = floorOfHost(host)
 	if not floor then
 		return false
 	end
-	local objectiveId = host:GetAttribute(W.ObjectiveId)
 	if kind == "Pickup" then
-		if objectiveId == AcidFlaskBuilder.Kind then
-			return floor.acid == "Ready" and host == floor.acidModel
-		end
 		local item = if host:IsA("Model") then itemsByModel[host] else nil
-		if not item or item.state ~= "World" or item.model.Parent == storage then
-			return false
-		end
-		if item.kind == "CoachKey" then
-			return floor.keyShown
-		end
-		return true
-	end
-	local storeHost = host == floor.storeLock and floor.storeLock ~= nil
-	if storeHost then
-		local open = isDone(floor, "UnlockStore")
-		if kind == "Locked" then
-			return not open and not anyCarries("CoachKey")
-		elseif kind == "Unlock" then
-			return not open and anyCarries("CoachKey")
-		end
-		return false
+		return item ~= nil and item.state == "World" and item.model.Parent ~= storage
 	end
 	if host == floor.lock and floor.lock ~= nil then
 		if floor.unlocked then
 			return false
 		end
-		local level = floor.spec.floor
+		-- the master keys open the padlock; every other lock opens by its floor's own step
+		local keys = floor.spec.lockVariant == "Padlock" and floor.spec.holds.Unlock ~= nil
 		if kind == "Locked" then
-			if level == 1 then
-				return not anyCarries("MasterKeys")
-			elseif level == 2 then
-				return anyHoldsAcid() == nil and not floor.burning
-			elseif level == 5 then
-				return not anyCarries("BoltCutters")
-			end
-			return true
+			return not (keys and anyCarries("MasterKeys"))
 		elseif kind == "Unlock" then
-			return level == 1 and anyCarries("MasterKeys")
-		elseif kind == "Pour" then
-			return level == 2 and anyHoldsAcid() ~= nil and not floor.burning
-		elseif kind == "CutChain" then
-			return level == 5 and anyCarries("BoltCutters")
+			return keys and anyCarries("MasterKeys")
 		end
 		return false
 	end
@@ -1035,16 +726,6 @@ local function serves(kind: Enums.PromptKind, host: Instance, prompt: ProximityP
 			return prompt:GetAttribute(W.Slot) == nextSlot(floor)
 		elseif kind == "Breaker" then
 			return nextSlot(floor) == nil and not floor.powered
-		end
-	elseif host == floor.hood then
-		return kind == "Mix" and floor.acid == "None" and not floor.burning and not floor.unlocked
-	elseif host == floor.generator then
-		return kind == "Generator" and isDone(floor, "UnlockStore") and not floor.running
-	elseif host == floor.valve then
-		if kind == "FitValve" then
-			return floor.wheelFitted == nil
-		elseif kind == "TurnValve" then
-			return floor.wheelFitted ~= nil and not isDone(floor, "TurnValve")
 		end
 	end
 	return false
@@ -1073,7 +754,7 @@ local function dropLeaf(model: Model, name: string, seconds: number, delay: numb
 	end
 	local floorY = model.WorldPivot.Position.Y
 	local fall = math.max(0, rest.Position.Y - floorY - 0.12)
-	local tilt = if name == "Chain" then CHAIN_TILT else CHAIN_TILT * 0.8
+	local tilt = PADLOCK_TILT
 	addTween(seconds, delay, function(t: number)
 		if not model.Parent then
 			return
@@ -1084,8 +765,8 @@ local function dropLeaf(model: Model, name: string, seconds: number, delay: numb
 	end)
 end
 
--- Takes a lock off (Padlock: the padlock springs and drops; Chain: the chain slithers off and the padlock drops;
--- Keypad: the accept chirp, the LED green, the bar slides clear).
+-- Takes a lock off (Padlock: the padlock springs and drops; Keypad: the accept chirp, the LED green, the bar slides
+-- clear).
 local function releaseLock(model: Model)
 	model:SetAttribute(W.Locked, false)
 	local at = pointOf(model, "LockPrompt")
@@ -1107,17 +788,9 @@ local function releaseLock(model: Model)
 	if PropKit.leafRest(model, "Padlock") then
 		dropLeaf(model, "Padlock", seconds * 0.7, 0)
 	end
-	if PropKit.leafRest(model, "Chain") then
-		playAt("ObjChainDrop", pointOf(model, "ChainCentre"))
-		addTween(seconds, 0.12, function(t: number)
-			if model.Parent then
-				LockBuilder.setChain(model, smooth(t) * T.ChainDrop / 2)
-			end
-		end)
-	end
 end
 
--- Once the door swings: the parts riding its leaves go (the dropped padlock and chain stay where they fell).
+-- Once the door swings: the parts riding its leaves go (the dropped padlock stays where it fell).
 local function detachLock(model: Model)
 	if variantOf(model) == "Keypad" then
 		model:Destroy()
@@ -1136,21 +809,6 @@ local function unlock(floor: Floor, actor: Player?)
 	end
 	floor.unlocked = true
 	local lock = floor.lock
-	if floor.spec.lockVariant == nil then
-		-- the roof: the crate is the lock (the cutters stay with the one who cut it)
-		if actor then
-			useCarried(actor, "BoltCutters")
-		end
-		if lock then
-			releaseLock(lock)
-		end
-		ParachuteService.SetCrateOpen(true)
-		notifyLevel(floor.levelId, "Obj.CrateOpen")
-		log.info("%s: the crate is open", floor.levelId)
-		refreshFloor(floor)
-		unlockedSignal:Fire(floor.levelId, actor)
-		return
-	end
 	local doors = floor.doors
 	local at: Vector3? = nil
 	if doors[1] then
@@ -1193,7 +851,7 @@ local function advance(floor: Floor, id: string, actor: Player?, n: number?)
 end
 
 --------------------------------------------------------------------------------
--- Floor 0: power
+-- RestorePower
 --------------------------------------------------------------------------------
 
 local function seatPivot(model: Model, attachmentName: string, seat: CFrame): CFrame
@@ -1251,264 +909,6 @@ local function throwBreaker(floor: Floor, player: Player?)
 end
 
 --------------------------------------------------------------------------------
--- Floor 2: the acid
---------------------------------------------------------------------------------
-
-local function loadReagents(floor: Floor, player: Player)
-	local hood = floor.hood
-	if not hood then
-		return
-	end
-	local at = pointOf(hood, "MixPrompt")
-	local added = 0
-	while #floor.loaded < floor.spec.item.count do
-		local item = useCarried(player, "ReagentJar")
-		if not item then
-			break
-		end
-		local seat = attachmentWorld(hood, "ReagentSlot" .. item.slot)
-		if seat then
-			PropKit.moveModel(item.model, CFrame.new(seat.Position) * item.home.Rotation)
-		end
-		unstash(item)
-		table.insert(floor.loaded, item)
-		added += 1
-	end
-	if added == 0 then
-		playAt("ObjLockRattle", at, { volume = 0.4 })
-		notifyPlayer(player, "Obj.NeedReagents", #floor.loaded, floor.spec.item.count)
-		return
-	end
-	if #floor.loaded == added then
-		-- the first jars in: the sash slides up
-		addTween(T.SashSeconds, 0, function(t: number)
-			FumeHoodBuilder.setSash(hood, 0.5 + 0.5 * smooth(t))
-		end)
-		playAt("ObjLockerSearch", at, { volume = 0.8 })
-	end
-	playAt("ObjFuseClick", at, { volume = 0.6 })
-	notifyPlayer(player, "Obj.ReagentsLoaded", #floor.loaded, floor.spec.item.count)
-	refreshFloor(floor)
-end
-
-local function brewed(floor: Floor)
-	local hood = floor.hood
-	local spot = attachmentWorld(hood, "AcidFlaskSpot")
-	if hood and spot then
-		local parent = Instances.runtimeLevel(floor.levelId, true) :: Folder
-		local model =
-			AcidFlaskBuilder.buildWorld(parent, CFrame.new(spot.Position), Attributes.getString(hood, W.AnchorId, ""))
-		model:SetAttribute(W.LevelId, floor.levelId)
-		floor.acidModel = model
-	end
-	floor.acid = "Ready"
-	playAt("Pickup", if spot then spot.Position else nil)
-	advance(floor, "MixAcid", nil)
-	notifyLevel(floor.levelId, "Obj.AcidReady")
-end
-
-local function missed(floor: Floor)
-	if floor.burning or floor.unlocked or floor.acid == "None" then
-		return
-	end
-	floor.acid = "None"
-	floor.acidHolder = nil
-	local work = floor.works.Mix
-	if work then
-		resetWork(work)
-	end
-	floor.progress.MixAcid = 0
-	notifyLevel(floor.levelId, "Obj.AcidMissed")
-	log.info("%s: the acid was lost; the hood can brew again", floor.levelId)
-	refreshFloor(floor)
-end
-
-local function burn(floor: Floor, actor: Player?)
-	local lock = floor.lock
-	if floor.burning or floor.unlocked or not lock then
-		return
-	end
-	floor.burning = true
-	floor.acid = "Used"
-	floor.acidHolder = nil
-	local at = pointOf(lock, "ChainCentre")
-	playAt("ObjAcidSizzle", at)
-	playAt("ChemHiss", at, { duration = T.BurnSeconds + 2 })
-	addTween(0, T.BurnSeconds, function(_t: number) end, function()
-		advance(floor, "BurnChain", actor)
-	end)
-	refreshFloor(floor)
-end
-
-local function onAcidShattered(point: Vector3, thrower: Player?)
-	local floor = floors.Level2_ScienceHall
-	if not floor or floor.acid ~= "Held" then
-		return
-	end
-	local centre = pointOf(floor.lock, "ChainCentre")
-	if centre and ObjectiveService.chainHit(point, centre) then
-		burn(floor, thrower)
-	else
-		missed(floor)
-	end
-end
-
-local function onAcidLost(_player: Player?)
-	local floor = floors.Level2_ScienceHall
-	if floor and floor.acid == "Held" then
-		missed(floor)
-	end
-end
-
---------------------------------------------------------------------------------
--- Floor 3: the gym
---------------------------------------------------------------------------------
-
-local function showKey(floor: Floor)
-	if floor.keyShown then
-		return
-	end
-	floor.keyShown = true
-	for _, item in floor.items do
-		if item.kind == "CoachKey" and item.state == "World" then
-			unstash(item)
-		end
-	end
-	refreshFloor(floor)
-end
-
-local function search(floor: Floor, player: Player, locker: Model)
-	if floor.searched[locker] or isDone(floor, "FindCoachKey") then
-		return
-	end
-	floor.searched[locker] = true
-	if locker == floor.keyLocker then
-		HideSpotService.SetSearchOpen(locker, true)
-		showKey(floor)
-		notifyPlayer(player, "Obj.KeyFound")
-	else
-		if HideSpotService.SetSearchOpen(locker, true) then
-			addTween(0, T.SearchEmptySeconds, function(_t: number) end, function()
-				HideSpotService.SetSearchOpen(locker, false)
-			end)
-		end
-		notifyPlayer(player, "Obj.LockerEmpty")
-	end
-	refreshFloor(floor)
-end
-
-local function unlockStore(floor: Floor, player: Player)
-	local lock = floor.storeLock
-	if not lock or isDone(floor, "UnlockStore") then
-		return
-	end
-	if not useCarried(player, "CoachKey") then
-		rattle(lock)
-		return
-	end
-	releaseLock(lock)
-	local door = floor.storeDoor
-	addTween(0, T.LockOffSeconds, function(_t: number) end, function()
-		if lock.Parent then
-			detachLock(lock)
-		end
-		if door and door.Parent then
-			DoorService.SetState(door, "Open")
-		end
-	end)
-	advance(floor, "UnlockStore", player)
-end
-
-local function startGenerator(floor: Floor, player: Player?)
-	local generator = floor.generator
-	if not generator or floor.running then
-		return
-	end
-	floor.running = true
-	local at = pointOf(generator, "PullPrompt")
-	playAt("ObjGeneratorPull", at)
-	noise(at, T.GeneratorNoise, player, floor.levelId)
-	GeneratorBuilder.setLamp(generator, true)
-	local lens = generator:FindFirstChild("LampLens", true)
-	local light = if lens then lens:FindFirstChildOfClass("SpotLight") else nil
-	if light then
-		light.Brightness = T.WorkLampBrightness
-	end
-	local exhaust = pointOf(generator, "Exhaust")
-	addTween(0, GENERATOR_LOOP_DELAY, function(_t: number) end, function()
-		if floor.running and floor.active then
-			floor.generatorVoice = playAt("ObjGeneratorRun", exhaust)
-		end
-	end)
-	local step = stepOf(floor.spec, "WindMotor")
-	floor.motorEndsAt = now() + (if step and step.seconds then step.seconds else 0)
-	local door = floor.doors[1]
-	if door then
-		floor.motorVoice = playAt("ObjMotorWhine", door.WorldPivot.Position + Vector3.new(0, 6, 0))
-	end
-	notifyLevel(floor.levelId, "Obj.GeneratorRunning")
-	advance(floor, "StartGenerator", player)
-end
-
---------------------------------------------------------------------------------
--- Floor 4: the valve
---------------------------------------------------------------------------------
-
-local function fitWheel(floor: Floor, player: Player)
-	local valve = floor.valve
-	if not valve or floor.wheelFitted then
-		return
-	end
-	local seat = attachmentWorld(valve, "WheelSeat")
-	local item = useCarried(player, "ValveWheel")
-	if not item then
-		playAt("ObjLockRattle", if seat then seat.Position else nil, { volume = 0.5 })
-		notifyPlayer(player, "Obj.NeedWheel")
-		return
-	end
-	if seat then
-		local pivot = seatPivot(item.model, "Hub", seat)
-		PropKit.moveModel(item.model, pivot)
-		floor.wheelSeated = pivot
-	end
-	unstash(item)
-	floor.wheelFitted = item
-	playAt("ObjWheelFit", if seat then seat.Position else nil)
-	advance(floor, "FitWheel", player)
-end
-
-local function turnTo(floor: Floor, share: number)
-	local valve = floor.valve
-	if not valve then
-		return
-	end
-	local turns = share * T.ValveTurns
-	HatchValveBuilder.setStem(valve, turns)
-	local item, seated = floor.wheelFitted, floor.wheelSeated
-	local seat = attachmentWorld(valve, "WheelSeat")
-	if item and seated and seat then
-		local turned = seat * CFrame.Angles(0, turns * 2 * math.pi, 0) * seat:Inverse() * seated
-		PropKit.moveModel(item.model, turned)
-	end
-end
-
-local function hatchOpened(floor: Floor, player: Player?)
-	local valve = floor.valve
-	if valve then
-		addTween(T.HatchSeconds, 0, function(t: number)
-			HatchValveBuilder.setHatch(valve, smooth(t))
-		end)
-		playAt("MetalCreak", pointOf(valve, "ValvePrompt"))
-	end
-	local grate = floor.grateId
-	if grate then
-		VentNetworkService.SetBlocked(grate, false)
-	end
-	notifyLevel(floor.levelId, "Obj.HatchOpen")
-	advance(floor, "TurnValve", player)
-end
-
---------------------------------------------------------------------------------
 -- Handlers
 --------------------------------------------------------------------------------
 
@@ -1520,22 +920,6 @@ local function carriesOrTeammate(player: Player, kind: string): (boolean, string
 end
 
 local function take(floor: Floor, player: Player, host: Instance)
-	if host == floor.acidModel then
-		if floor.acid ~= "Ready" then
-			return
-		end
-		if not ChemicalProjectileService.GiveAcid(player) then
-			notifyPlayer(player, HANDS_FULL)
-			return
-		end
-		floor.acid = "Held"
-		floor.acidHolder = player
-		playAt("Pickup", pointOf(host, "PromptPoint"))
-		host:Destroy()
-		floor.acidModel = nil
-		refreshFloor(floor)
-		return
-	end
 	local item = if host:IsA("Model") then itemsByModel[host] else nil
 	if not item or item.state ~= "World" then
 		return
@@ -1556,38 +940,12 @@ local function take(floor: Floor, player: Player, host: Instance)
 		if first then
 			advance(floor, "FindKeys", player)
 		end
-	elseif kind == "ReagentJar" then
-		playAt("ObjItemPickup", at)
-		if first then
-			advance(floor, "FindReagents", player)
-		end
-	elseif kind == "CoachKey" then
-		playAt("ObjKeyJingle", at)
-		if floor.keyLocker then
-			HideSpotService.SetSearchOpen(floor.keyLocker, false)
-		end
-		if first then
-			advance(floor, "FindCoachKey", player)
-		end
-	elseif kind == "ValveWheel" then
-		playAt("ObjItemPickup", at)
-		if first then
-			advance(floor, "FindWheel", player)
-		end
-	elseif kind == "BoltCutters" then
-		playAt("ObjItemPickup", at)
-		if first then
-			advance(floor, "FindCutters", player)
-		end
 	end
 	refreshFloor(floor)
 end
 
--- The work of a host and kind, or nil.
-local function workFor(floor: Floor, kind: string, host: Instance): Work?
-	if kind == "Unlock" and host == floor.storeLock then
-		return nil
-	end
+-- The work of a kind, or nil.
+local function workFor(floor: Floor, kind: string): Work?
 	return floor.works[kind]
 end
 
@@ -1596,24 +954,8 @@ local function completeWork(floor: Floor, kind: string, player: Player)
 		if useCarried(player, "MasterKeys") then
 			advance(floor, "UnlockExit", player)
 		end
-	elseif kind == "Mix" then
-		brewed(floor)
-	elseif kind == "Pour" then
-		if ChemicalProjectileService.TakeAcid(player) then
-			burn(floor, player)
-		end
 	elseif kind == "Breaker" then
 		throwBreaker(floor, player)
-	elseif kind == "Generator" then
-		startGenerator(floor, player)
-	elseif kind == "TurnValve" then
-		hatchOpened(floor, player)
-	elseif kind == "CutChain" then
-		local lock = floor.lock
-		local at = pointOf(lock, "ChainCentre")
-		playAt("ObjBoltSnap", at)
-		noise(at, T.LoudNoise, player, floor.levelId)
-		advance(floor, "CutChain", player)
 	end
 end
 
@@ -1626,60 +968,25 @@ local function canUseFor(
 	if LifeStateService.GetState(player) ~= "Alive" then
 		return false, "LifeState"
 	end
-	if kind == "Search" then
-		return true, nil
-	end
-	local floor = floorOfHost(host)
-	if not floor then
+	if not floorOfHost(host) then
 		return false, "Inactive"
-	end
-	if kind == "Pickup" and host == floor.acidModel then
-		if not ChemicalProjectileService.HandsFree(player) then
-			return false, HANDS_FULL
-		end
-		return true, nil
 	end
 	local hold = prompt:GetAttribute(W.BaseHold)
 	local instant = type(hold) == "number" and hold <= 0
 	if kind == "Unlock" then
-		return carriesOrTeammate(player, if host == floor.storeLock then "CoachKey" else "MasterKeys")
-	elseif kind == "CutChain" then
-		return carriesOrTeammate(player, "BoltCutters")
-	elseif kind == "Pour" then
-		if ChemicalProjectileService.HoldsAcid(player) then
-			return true, nil
-		end
-		return false, NEED_ITEM
+		return carriesOrTeammate(player, "MasterKeys")
 	elseif kind == "FitFuse" and not instant then
 		return carriesOrTeammate(player, "Fuse")
-	elseif kind == "FitValve" and not instant then
-		return carriesOrTeammate(player, "ValveWheel")
-	elseif kind == "Mix" and #floor.loaded >= floor.spec.item.count and floor.works.Mix then
-		return true, nil
 	end
 	return true, nil
 end
 
-local function onBegin(kind: Enums.PromptKind, player: Player, prompt: ProximityPrompt, host: Instance)
-	if kind == "Search" then
-		playAt("ObjLockerSearch", InteractionService.PromptPosition(prompt))
-		return
-	end
+local function onBegin(kind: Enums.PromptKind, player: Player, _prompt: ProximityPrompt, host: Instance)
 	local floor = floorOfHost(host)
 	if not floor then
 		return
 	end
-	if kind == "Unlock" and host == floor.storeLock then
-		playAt("ObjKeyJingle", pointOf(host, "LockPrompt"), { volume = 0.7 })
-		return
-	end
-	if kind == "CutChain" then
-		playAt("ObjLockRattle", pointOf(host, "ChainCentre"))
-	end
-	if kind == "Mix" and #floor.loaded < floor.spec.item.count then
-		return
-	end
-	local work = workFor(floor, kind, host)
+	local work = workFor(floor, kind)
 	if work then
 		beginWork(work, player)
 	end
@@ -1692,15 +999,12 @@ local function onCancel(
 	host: Instance,
 	_reason: string
 )
-	if kind == "Search" then
-		return
-	end
 	local levelId = host:GetAttribute(W.LevelId)
 	local floor = if type(levelId) == "string" then floors[levelId] else nil
 	if not floor then
 		return
 	end
-	local work = workFor(floor, kind, host)
+	local work = workFor(floor, kind)
 	if work and work.actor == player then
 		cancelWork(work)
 		refreshFloor(floor)
@@ -1708,14 +1012,6 @@ local function onCancel(
 end
 
 local function onComplete(kind: Enums.PromptKind, player: Player, prompt: ProximityPrompt, host: Instance)
-	if kind == "Search" then
-		local locker = searchPrompts[prompt]
-		local floor = if locker then floors[Attributes.getString(locker, W.LevelId, "")] else nil
-		if floor and locker then
-			search(floor, player, locker)
-		end
-		return
-	end
 	local floor = floorOfHost(host)
 	if not floor then
 		return
@@ -1729,14 +1025,8 @@ local function onComplete(kind: Enums.PromptKind, player: Player, prompt: Proxim
 		if type(slot) == "number" then
 			fitFuse(floor, player, slot)
 		end
-	elseif kind == "FitValve" then
-		fitWheel(floor, player)
-	elseif kind == "Mix" and #floor.loaded < floor.spec.item.count then
-		loadReagents(floor, player)
-	elseif kind == "Unlock" and host == floor.storeLock then
-		unlockStore(floor, player)
 	else
-		local work = workFor(floor, kind, host)
+		local work = workFor(floor, kind)
 		if work and not work.finished then
 			finishWork(work)
 			completeWork(floor, kind, player)
@@ -1745,20 +1035,7 @@ local function onComplete(kind: Enums.PromptKind, player: Player, prompt: Proxim
 	refreshFloor(floor)
 end
 
-local HANDLED: { Enums.PromptKind } = {
-	"Pickup",
-	"Locked",
-	"Unlock",
-	"FitFuse",
-	"Breaker",
-	"Mix",
-	"Pour",
-	"Generator",
-	"FitValve",
-	"TurnValve",
-	"CutChain",
-	"Search",
-}
+local HANDLED: { Enums.PromptKind } = { "Pickup", "Locked", "Unlock", "FitFuse", "Breaker" }
 
 -- The handler serving every objective prompt of `kind` (InteractionService).
 local function handlerFor(kind: Enums.PromptKind): InteractionService.Handler
@@ -1767,10 +1044,6 @@ local function handlerFor(kind: Enums.PromptKind): InteractionService.Handler
 		filter = function(host: Instance, prompt: ProximityPrompt): boolean
 			if kind == "Pickup" and not host:HasTag(Tags.ObjectiveItem) then
 				return false
-			end
-			if kind == "Search" then
-				local locker: Model? = searchPrompts[prompt]
-				return locker ~= nil and serves(kind, host, prompt)
 			end
 			return serves(kind, host, prompt)
 		end,
@@ -1835,31 +1108,7 @@ local function exitDoorsOf(levelId: Enums.LevelId, lock: Model?, stairwellId: st
 	return out
 end
 
-local function addSearchPrompts(floor: Floor)
-	for _, locker in floor.lockers do
-		local hostAttachment = PropKit.findAttachment(locker, "HidePrompt")
-		if not hostAttachment then
-			continue
-		end
-		local hide = PropKit.findPrompt(locker, "Hide")
-		local kind = Attributes.getString(locker, W.HideKind, "Locker")
-		local prompt = PropKit.prompt(hostAttachment, {
-			kind = "Search",
-			action = "Obj.Prompt.Search",
-			object = if kind == "Barrel"
-				then "Prompt.Barrel"
-				elseif kind == "Cabinet" then "Prompt.Cabinet"
-				else "Prompt.Locker",
-			hold = T.SearchHold,
-			distance = if hide then hide.MaxActivationDistance else nil,
-			key = Enum.KeyCode.R,
-			gamepad = Enum.KeyCode.ButtonY,
-		}, hostOf(hostAttachment) or locker)
-		searchPrompts[prompt] = locker
-	end
-end
-
-local function newFloor(spec: ObjectiveConfig.FloorSpec, ctx: Types.RunContext): Floor
+local function newFloor(spec: ObjectiveConfig.FloorSpec): Floor
 	local levelId: Enums.LevelId = spec.levelId
 	local plan = NoiseAndDirectorService.GetPlan()
 	local picks = if plan and plan.objectives then plan.objectives[levelId] else nil
@@ -1868,9 +1117,9 @@ local function newFloor(spec: ObjectiveConfig.FloorSpec, ctx: Types.RunContext):
 		levelId = levelId,
 		picks = picks,
 		progress = {},
-		unlocked = false,
+		-- a floor without a lock step is open from the start
+		unlocked = spec.lockStep == nil,
 		active = false,
-		activatedAt = nil,
 		items = {},
 		lock = nil,
 		doors = {},
@@ -1879,36 +1128,15 @@ local function newFloor(spec: ObjectiveConfig.FloorSpec, ctx: Types.RunContext):
 		fitted = {},
 		powered = false,
 		powerOnAt = nil,
-		hood = nil,
-		loaded = {},
-		acid = "None",
-		acidModel = nil,
-		acidHolder = nil,
-		burning = false,
-		lockers = {},
-		searched = {},
-		keyLocker = nil,
-		keyShown = false,
-		storeLock = nil,
-		storeDoor = nil,
-		generator = nil,
-		running = false,
-		motorEndsAt = nil,
-		motorVoice = nil,
-		generatorVoice = nil,
-		valve = nil,
-		grateId = nil,
-		wheelFitted = nil,
-		wheelSeated = nil,
 	}
-	local _ = ctx
 	-- the picked items (only the run's picks are built)
-	for _, model in tagged(Tags.ObjectiveItem, levelId, spec.item.prop) do
+	local itemSpec = spec.item
+	local models: { Model } = if itemSpec then tagged(Tags.ObjectiveItem, levelId, itemSpec.prop) else {}
+	for _, model in models do
 		local item: Item = {
 			model = model,
 			anchorId = Attributes.getString(model, W.AnchorId, model.Name),
-			slot = Attributes.getNumber(model, W.Slot, 1),
-			kind = spec.item.prop,
+			kind = Attributes.getString(model, W.ObjectiveId, ""),
 			state = "World",
 			carrier = nil,
 			parent = model.Parent or (Instances.runtimeLevel(levelId, true) :: Folder),
@@ -1924,13 +1152,9 @@ local function newFloor(spec: ObjectiveConfig.FloorSpec, ctx: Types.RunContext):
 	-- the exit's lock and doors: the route's stairwell (the other candidates' doors are jammed for the run)
 	local exit = LevelDirector.exitFor(levelId)
 	local exitId = if exit then exit.id else nil
-	local locks = tagged(Tags.ExitLock, levelId, if spec.lockVariant then "ExitLock" else "CrateChain")
+	local locks: { Model } = if spec.lockVariant then tagged(Tags.ExitLock, levelId, "ExitLock") else {}
 	for _, lock in locks do
 		lock:SetAttribute(W.Locked, true)
-		if not spec.lockVariant then
-			floor.lock = floor.lock or lock
-			continue
-		end
 		local doors = exitDoorsOf(levelId, lock, exitId)
 		local stairwell = if doors[1] then doors[1]:GetAttribute(W.StairwellId) else nil
 		if floor.lock == nil and (stairwell == nil or exitId == nil or stairwell == exitId) then
@@ -1944,11 +1168,10 @@ local function newFloor(spec: ObjectiveConfig.FloorSpec, ctx: Types.RunContext):
 	for _, door in floor.doors do
 		DoorService.SetState(door, "Locked", 0)
 	end
-	local level = spec.floor
 	local function station(objectiveId: string): Model?
 		return tagged(Tags.ObjectiveStation, levelId, objectiveId)[1]
 	end
-	if level == 0 then
+	if spec.id == "RestorePower" then
 		local panel = station("BreakerPanel")
 		floor.panel = panel
 		if panel then
@@ -1963,112 +1186,12 @@ local function newFloor(spec: ObjectiveConfig.FloorSpec, ctx: Types.RunContext):
 		end
 		Attributes.set(ReplicatedStorage, M.PowerOffLevel, levelId)
 		ReplicatedStorage:SetAttribute(M.PowerOnAt, nil)
-	elseif level == 1 then
+	elseif spec.id == "MasterKeys" then
 		local lock = floor.lock
 		if lock then
 			floor.works.Unlock = newWork("Unlock", ObjectiveConfig.hold(spec, "Unlock"), function(): Vector3
 				return pointOf(lock, "LockPrompt") or lock.WorldPivot.Position
 			end, { noise = true, sound = "ObjKeysWork" })
-		end
-	elseif level == 2 then
-		local hood = station("FumeHood")
-		floor.hood = hood
-		if hood then
-			FumeHoodBuilder.setSash(hood, 0.5)
-			floor.works.Mix = newWork("Mix", ObjectiveConfig.hold(spec, "Mix"), function(): Vector3
-				return pointOf(hood, "MixPrompt") or hood.WorldPivot.Position
-			end, { keep = true, noise = true, sound = "ObjBubbling" })
-		end
-		local lock = floor.lock
-		if lock then
-			floor.works.Pour = newWork("Pour", ObjectiveConfig.hold(spec, "Pour"), function(): Vector3
-				return pointOf(lock, "ChainCentre") or lock.WorldPivot.Position
-			end, { sound = "ObjAcidSizzle" })
-		end
-	elseif level == 3 then
-		local layout = Builder.getLayout(levelId)
-		local rooms: { [string]: boolean } = {}
-		if layout then
-			for _, anchor in layout.anchors do
-				if anchor.kind == spec.item.candidate then
-					rooms[anchor.room] = true
-				end
-			end
-		end
-		-- every hiding spot in the key's rooms is searched: lockers, and the tunnels' barrels and cabinets
-		for _, locker in CollectionService:GetTagged(Tags.Hideable) do
-			if
-				locker:IsA("Model")
-				and onLevel(locker, levelId)
-				and rooms[Attributes.getString(locker, W.ZoneId, "")]
-			then
-				table.insert(floor.lockers, locker)
-			end
-		end
-		table.sort(floor.lockers, function(a: Model, b: Model): boolean
-			return Attributes.getString(a, W.AnchorId, a.Name) < Attributes.getString(b, W.AnchorId, b.Name)
-		end)
-		for _, item in floor.items do
-			local anchor = layoutAnchor(levelId, item.anchorId)
-			local ref = if anchor then anchor.ref else nil
-			for _, locker in floor.lockers do
-				if ref and locker:GetAttribute(W.AnchorId) == ref then
-					floor.keyLocker = locker
-				end
-			end
-			-- the key hangs out of sight until its locker is searched
-			stash(item)
-		end
-		addSearchPrompts(floor)
-		floor.storeLock = station("StoreLock")
-		local storeDoorId = if floor.storeLock then floor.storeLock:GetAttribute(W.DoorId) else nil
-		floor.storeDoor = DoorService.Get(levelId, "EquipmentStoreDoor")
-			or (if type(storeDoorId) == "string" then DoorService.Get(levelId, storeDoorId) else nil)
-		if floor.storeDoor then
-			DoorService.SetState(floor.storeDoor, "Locked", 0)
-		end
-		local generator = station("Generator")
-		floor.generator = generator
-		if generator then
-			GeneratorBuilder.setPull(generator, 0)
-			GeneratorBuilder.setLamp(generator, false)
-			floor.works.Generator = newWork("Generator", ObjectiveConfig.hold(spec, "Generator"), function(): Vector3
-				return pointOf(generator, "PullPrompt") or generator.WorldPivot.Position
-			end, {
-				onProgress = function(share: number)
-					GeneratorBuilder.setPull(generator, ObjectiveService.cordReach(share))
-				end,
-			})
-		end
-	elseif level == 4 then
-		local valve = station("HatchValve")
-		floor.valve = valve
-		if valve then
-			HatchValveBuilder.setHatch(valve, 0)
-			HatchValveBuilder.setStem(valve, 0)
-			local grate = valve:GetAttribute(W.GrateId)
-			floor.grateId = if type(grate) == "string" then grate else nil
-			if floor.grateId then
-				VentNetworkService.SetBlocked(floor.grateId :: string, true)
-			end
-			floor.works.TurnValve = newWork("TurnValve", ObjectiveConfig.hold(spec, "TurnValve"), function(): Vector3
-				return pointOf(valve, "WheelSeat") or valve.WorldPivot.Position
-			end, {
-				keep = true,
-				noise = true,
-				sound = "ObjValveSqueal",
-				onProgress = function(share: number)
-					turnTo(floor, share)
-				end,
-			})
-		end
-	elseif level == 5 then
-		ParachuteService.SetCrateOpen(false)
-		local lock = floor.lock
-		if lock then
-			floor.works.CutChain = newWork("CutChain", ObjectiveConfig.hold(spec, "CutChain"), function(): Vector3
-				return pointOf(lock, "ChainCentre") or lock.WorldPivot.Position
-			end, { noise = true })
 		end
 	end
 	return floor
@@ -2114,40 +1237,11 @@ function ObjectiveService.Step(at: number?)
 		if not floor.active then
 			continue
 		end
-		local level = floor.spec.floor
-		if level == 0 then
-			local onAt = floor.powerOnAt
-			if onAt and t >= onAt + T.PowerOnSeconds then
-				floor.powerOnAt = nil
-				ReplicatedStorage:SetAttribute(M.PowerOffLevel, nil)
-				notifyLevel(floor.levelId, "Obj.PowerRestored")
-			end
-		elseif level == 2 then
-			-- the hand can change under us (thrown, poured, emptied): keep the door's prompts in step
-			local holder = anyHoldsAcid()
-			if holder ~= floor.acidHolder then
-				floor.acidHolder = holder
-				refreshFloor(floor)
-			end
-		elseif level == 3 then
-			local ends = floor.motorEndsAt
-			if ends and t >= ends and not isDone(floor, "WindMotor") then
-				local voice = floor.motorVoice
-				floor.motorVoice = nil
-				if voice then
-					voice:Stop(0.6)
-				end
-				advance(floor, "WindMotor", nil)
-			end
-			local keyLocker = floor.keyLocker
-			if
-				keyLocker
-				and not floor.keyShown
-				and not isDone(floor, "FindCoachKey")
-				and HideSpotService.GetState(keyLocker) == "Smashed"
-			then
-				showKey(floor)
-			end
+		local onAt = floor.powerOnAt
+		if onAt and t >= onAt + T.PowerOnSeconds then
+			floor.powerOnAt = nil
+			ReplicatedStorage:SetAttribute(M.PowerOffLevel, nil)
+			notifyLevel(floor.levelId, "Obj.PowerRestored")
 		end
 	end
 end
@@ -2156,22 +1250,7 @@ end
 -- Public API
 --------------------------------------------------------------------------------
 
--- Whether `levelId`'s exit may be used (no objective there, its lock step done, or no run tracked).
--- Whether a floor's survive countdown is running (Floor 3's WindMotor: ObjectiveTimerEndsAt still ahead).
-function ObjectiveService.SurviveRunning(): boolean
-	if not running then
-		return false
-	end
-	local t = now()
-	for _, floor in floors do
-		local endsAt = floor.motorEndsAt
-		if endsAt and t < endsAt then
-			return true
-		end
-	end
-	return false
-end
-
+-- Whether `levelId`'s exit may be used (no objective there, no lock on it or its lock step done, or no run tracked).
 function ObjectiveService.ExitOpen(levelId: string): boolean
 	if not running then
 		return true
@@ -2180,13 +1259,13 @@ function ObjectiveService.ExitOpen(levelId: string): boolean
 	return floor == nil or floor.unlocked
 end
 
--- The floor's step progress (a copy), whether it is unlocked, and its acid state (specs, tools).
-function ObjectiveService.GetFloor(levelId: string): ({ [string]: number }?, boolean, AcidState?)
+-- The floor's step progress (a copy) and whether it is unlocked (specs, tools).
+function ObjectiveService.GetFloor(levelId: string): ({ [string]: number }?, boolean)
 	local floor = floors[levelId]
 	if not floor then
-		return nil, false, nil
+		return nil, false
 	end
-	return table.clone(floor.progress), floor.unlocked, floor.acid
+	return table.clone(floor.progress), floor.unlocked
 end
 
 -- The models `player` carries, in carry order.
@@ -2206,24 +1285,13 @@ function ObjectiveService.GetItemState(model: Model): ItemState?
 	return if item then item.state else nil
 end
 
--- The Search prompts this run added (specs).
-function ObjectiveService.GetSearchPrompts(): { [ProximityPrompt]: Model }
-	return table.clone(searchPrompts)
-end
-
--- The live exit lock of `levelId` this run (the route's; the crate chain on the roof), and the fire doors it holds.
+-- The live exit lock of `levelId` this run (the route's), and the fire doors it holds.
 function ObjectiveService.GetExit(levelId: string): (Model?, { Model })
 	local floor = floors[levelId]
 	if not floor then
 		return nil, {}
 	end
 	return floor.lock, table.clone(floor.doors)
-end
-
--- The acid flask standing at the hood, if brewed and not taken.
-function ObjectiveService.GetAcidModel(): Model?
-	local floor = floors.Level2_ScienceHall
-	return if floor then floor.acidModel else nil
 end
 
 -- Completes `levelId`'s objective through its own unlock path (dev).
@@ -2235,11 +1303,9 @@ function ObjectiveService.Complete(levelId: string): boolean
 	for _, step in floor.spec.steps do
 		floor.progress[step.id] = step.count
 	end
-	if floor.spec.floor == 0 then
+	if floor.panel then
 		floor.powered = true
 		ReplicatedStorage:SetAttribute(M.PowerOffLevel, nil)
-	elseif floor.spec.floor == 4 and floor.grateId then
-		VentNetworkService.SetBlocked(floor.grateId :: string, false)
 	end
 	unlock(floor, nil)
 	return true
@@ -2280,18 +1346,6 @@ end
 -- Lifecycle
 --------------------------------------------------------------------------------
 
-local function stopLoops(floor: Floor, fade: number)
-	local generator, motor = floor.generatorVoice, floor.motorVoice
-	floor.generatorVoice = nil
-	floor.motorVoice = nil
-	if generator then
-		generator:Stop(fade)
-	end
-	if motor then
-		motor:Stop(fade)
-	end
-end
-
 local function onLevelActivated(levelId: Enums.LevelId, _ctx: Types.LevelContext)
 	local floor = floors[levelId]
 	if not (running and floor) then
@@ -2299,7 +1353,6 @@ local function onLevelActivated(levelId: Enums.LevelId, _ctx: Types.LevelContext
 		return
 	end
 	floor.active = true
-	floor.activatedAt = now()
 	refreshFloor(floor)
 end
 
@@ -2312,8 +1365,14 @@ local function onLevelDeactivated(levelId: Enums.LevelId)
 				cancelWork(work)
 			end
 		end
-		-- the floor's loops stay behind with it
-		stopLoops(floor, 0.5)
+		-- a floor with nothing to do but cross it is done once the squad leaves it
+		if floor.spec.item == nil and floor.spec.lockStep == nil then
+			for _, step in floor.spec.steps do
+				if not isDone(floor, step.id) then
+					advance(floor, step.id, nil, step.count)
+				end
+			end
+		end
 		refreshHosts(floor)
 	end
 end
@@ -2339,10 +1398,6 @@ function ObjectiveService.Init()
 	serviceTrove:Add(LevelDirector.LevelActivated:Connect(onLevelActivated))
 	serviceTrove:Add(LevelDirector.LevelDeactivated:Connect(onLevelDeactivated))
 	serviceTrove:Add(LifeStateService.StateChanged:Connect(onLifeStateChanged))
-	serviceTrove:Add(ChemicalProjectileService.AcidShattered:Connect(onAcidShattered))
-	serviceTrove:Add(ChemicalProjectileService.AcidLost:Connect(onAcidLost))
-	-- no teleport while a survive countdown runs (Floor 3's motor): the squad holds out against the hunt it has
-	serviceTrove:Add(MonsterAIService.RegisterTeleportBlock(ObjectiveService.SurviveRunning))
 	serviceTrove:Add(ReplicatedStorage:GetAttributeChangedSignal(M.MatchPhase):Connect(function()
 		local phase = ReplicatedStorage:GetAttribute(M.MatchPhase)
 		if type(phase) == "string" and Enums.has(Enums.MatchPhase, phase) then
@@ -2373,7 +1428,7 @@ function ObjectiveService.BeginRun(ctx: Types.RunContext)
 		Attributes.set(player, P.Carrying, "")
 	end
 	for _, spec in ObjectiveConfig.Floors do
-		local ok, result = pcall(newFloor, spec, ctx)
+		local ok, result = pcall(newFloor, spec)
 		if ok then
 			floors[spec.levelId] = result
 		else
@@ -2397,17 +1452,7 @@ function ObjectiveService.EndRun()
 		for _, work in floor.works do
 			stopVoice(work)
 		end
-		stopLoops(floor, 0.3)
-		if floor.grateId then
-			VentNetworkService.SetBlocked(floor.grateId :: string, false)
-		end
 	end
-	for prompt in searchPrompts do
-		if prompt.Parent then
-			prompt:Destroy()
-		end
-	end
-	table.clear(searchPrompts)
 	for player in carries do
 		if player.Parent ~= nil then
 			Attributes.set(player, P.Carrying, "")
@@ -2421,7 +1466,6 @@ function ObjectiveService.EndRun()
 	if folder then
 		folder:ClearAllChildren()
 	end
-	ParachuteService.SetCrateOpen(true)
 	clearReplication()
 	run = nil
 end

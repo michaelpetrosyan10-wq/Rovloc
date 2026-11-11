@@ -77,9 +77,7 @@ function Search.enter(ctx: Context, _from: Enums.MonsterState)
 	ctx.body:SetWalkSpeed(speed)
 	ctx.mover:SetRepathInterval(CreatureConfig.Repath.PatrolInterval / 2)
 	ctx.body:Face(nil)
-	if ctx.mover:Medium() == "Floor" then
-		ctx.body:SetPose("Biped")
-	end
+	ctx.body:SetPose("Biped")
 	local at = ctx.searchFrom or ctx.body:GetPosition()
 	run.at = at
 	run.phase = "Approach"
@@ -159,17 +157,13 @@ function Search.update(ctx: Context, _dt: number)
 	run.index += 1
 	run.stage = "Start"
 	run.inspection = nil
-	if mover:Medium() == "Floor" then
-		ctx.body:SetPose("Biped")
-	end
+	ctx.body:SetPose("Biped")
 end
 
 function Search.exit(ctx: Context, _to: Enums.MonsterState)
 	local run = runOf(ctx)
 	run.inspection = nil
-	if ctx.mover:Medium() == "Floor" then
-		ctx.body:SetPose("Biped")
-	end
+	ctx.body:SetPose("Biped")
 	ctx.body:Face(nil)
 	ctx.searchFrom = nil
 end

@@ -12,10 +12,11 @@
 //    the baked world allows from the same start, found here, crosses the pan too), and its standing spot beside it,
 //    clear of every trap spot, the item's prompt reaching it, and a walk to it from a doorway that never sets a foot on
 //    a pan, all held to the baked collision and the entities' colliders. Every item entity is the prop any run builds
-//    on its anchor (a reagent's Slot its candidate's kind, no Slot without kinds), and what the web draws again away
-//    from the world matches the export: each chemical flask is its anchor's variant and looks as flaskFx.js draws that
-//    variant (ChemicalFlaskBuilder.lookOf on the world's Rng: liquid tiers, crack, colour), and the acid flask stands
-//    on its fume hood's AcidFlaskSpot.
+//    on its anchor (a floor of kinds gives its Slot as its candidate's kind, no Slot without kinds), and what the web
+//    draws again away from the world matches the export: each chemical flask is its anchor's variant and looks as
+//    flaskFx.js draws that variant (ChemicalFlaskBuilder.lookOf on the world's Rng: liquid tiers, crack, colour).
+//    Removals (docs/design/game-spec-v2.md 6): the four-level school only, and nothing of the cut floors, the old roof's
+//    objective or the pool anywhere in the baked data (levels, layouts, entities, anchors, rooms, doors, volumes, routes).
 // 3. Flicker groups: world-wide 16-bit ids within the namespace and the engine's flicker texture, every light's group
 //    resolving (its FlickerGroup, its level), and each tunnel floor's power circuits (Mains: / Circuit:) pooling as
 //    one family: the bake's pooling rule, the family in world.json, one probe grid per family.
@@ -23,7 +24,7 @@
 //    tests/Specs/Rng.spec.luau (an independent C reference of xoshiro128** seeded by SplitMix32), then worldData's port
 //    of RunDirector against RunDirector itself: for every seed and difficulty of the export's build/cache/run-plans.json,
 //    the same objective picks and guard traps, the same bear trap, flask and battery anchors, every prop's variant
-//    (variantOf) and item slot, the same locked grates and the same exit stairwells.
+//    (variantOf), the same locked grates and the same exit stairwells.
 // Exits non-zero on the first category with failures (all failures are listed).
 
 import fs from 'node:fs';
@@ -52,6 +53,7 @@ import {
 import { createSharedUniforms } from '../src/engine/materials.js';
 import { crackFrame, flaskLook, liquidColor, liquidTiers } from '../src/game/mechanics/flaskFx.js';
 import { Rng, cfMatrix, cfPos, hash as fnv, shuffle } from '../src/game/util.js';
+import { LevelOrder as WebLevelOrder } from '../src/game/config.js';
 import { WorldData, variantOf } from '../src/game/worldData.js';
 import { POWER_CIRCUIT, dominantGroup } from './bake/light.mjs';
 
@@ -274,7 +276,7 @@ for (const e of meta.entities) {
   const byType = (type) => meta.entities.filter((e) => e.type === type);
   // the fewest candidates each floor may offer (a rebuilt floor offers at least as many as the one it replaced); every
   // candidate anchor of the item's kind becomes one entity
-  const ITEMS = { Fuse: 14, MasterKeys: 10, ReagentJar: 12, CoachKey: 36, ValveWheel: 8, BoltCutters: 10, AcidFlask: 1 };
+  const ITEMS = { Fuse: 14, MasterKeys: 10 };
   const anchorKind = new Map(meta.anchors.map((a) => [a.id, a.kind]));
   for (const [type, least] of Object.entries(ITEMS)) {
     const list = byType(type);
@@ -291,14 +293,8 @@ for (const e of meta.entities) {
       check(e.prompts.length === 1 && e.prompts[0].name === 'Pickup', `${e.id} Pickup prompt`);
     }
   }
-  check(byType('ValveWheel').every((e) => e.attachments.Hub), 'valve wheels have a Hub');
   const STATIONS = {
     BreakerPanel: ['Door', 'FuseSlot1', 'FuseSlot2', 'FuseSlot3', 'Lever'],
-    FumeHood: ['Sash'],
-    Generator: ['PullCord'],
-    HatchValve: ['Hatch', 'Stem'],
-    CrateChain: ['Chain', 'Padlock'],
-    StoreLock: ['Padlock'],
   };
   for (const [type, leaves] of Object.entries(STATIONS)) {
     const list = byType(type);
@@ -312,15 +308,20 @@ for (const e of meta.entities) {
       check(e.prompts.length >= 1 && e.prompts.every((p) => typeof p.attributes.Step === 'string'), `${type} prompts carry Step`);
     }
   }
+  // an ExitLock on every exit candidate of a floor whose objective has a lock step (floors 0-1; the Auditorium's
+  // interim crossing has none)
+  const lockLevels = new Set(((meta.objectives && meta.objectives.floors) || []).filter((f) => f.lockStep).map((f) => f.levelId));
+  check(lockLevels.size === 2 && lockLevels.has('Level0_Basement') && lockLevels.has('Level1_Hallways'), `floors with a lock step: ${[...lockLevels].join(', ')}`);
   const locks = byType('ExitLock');
-  check(locks.length === 15, `ExitLock: ${locks.length} entities (want 15: one per exit candidate on floors 0-4)`);
+  check(locks.length === 3 * lockLevels.size, `ExitLock: ${locks.length} entities (want ${3 * lockLevels.size}: one per exit candidate on floors 0-1)`);
   for (const e of locks) {
+    check(lockLevels.has(e.level), `${e.id} on a floor with a lock step (${e.level})`);
     check(['Padlock', 'Chain', 'Keypad'].includes(e.attributes.LockVariant) && e.attributes.Locked === true, `${e.id} variant`);
     check(e.prompts.some((p) => p.name === 'Locked'), `${e.id} Locked prompt`);
     check(ids.has(e.attributes.DoorId), `${e.id} names its door entity`);
   }
-  check(byType('StoreDoor').length === 1, 'the equipment store door');
-  check(meta.objectives && Object.keys(meta.objectives.levels || {}).length === 6, 'meta.objectives for six floors');
+  check(meta.objectives && Object.keys(meta.objectives.levels || {}).length === 3 && (meta.objectives.floors || []).length === 3,
+    'meta.objectives for the three floors below the roof');
 }
 
 // floor objectives: every item candidate is fair, and the export seed's picks keep the multi-item rules
@@ -328,9 +329,8 @@ for (const e of meta.entities) {
   const o = meta.objectives || {};
   const rules = o.rules || {};
   check(rules.entryClearance === 35 && rules.pickSpacing === 25 && rules.pickQuarters === 2, 'objective rules exported');
-  const MIN = { Level0_Basement: 12, Level1_Hallways: 9, Level2_ScienceHall: 12, Level3_Gymnasium: 12, Level4_FloodedPool: 6, Level5_Roof: 8 };
+  const MIN = { Level0_Basement: 12, Level1_Hallways: 9 };
   const anchorIds = new Set(meta.anchors.map((a) => a.id));
-  const lockerIds = new Set(meta.entities.filter((e) => e.type === 'Locker').map((e) => e.id));
   const [fw, fd] = rules.footprint || [240, 160];
   const quarterOf = (p) => 1 + (p[0] >= fw / 2 ? 1 : 0) + (p[2] >= fd / 2 ? 2 : 0);
   const flat = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
@@ -339,8 +339,16 @@ for (const e of meta.entities) {
     check(!!level, `${floor.levelId} objective data`);
     if (!level) continue;
     const list = level.candidates || [];
-    check(list.length >= MIN[floor.levelId], `${floor.levelId}: ${list.length} candidates (want >= ${MIN[floor.levelId]})`);
     check(level.entry && level.entry.room && Array.isArray(level.entry.pos), `${floor.levelId} entry point`);
+    if (!floor.item) {
+      // a plain crossing (the Auditorium's interim floor): nothing to find, nothing planned
+      // (Lune's JSON writes an empty Luau table as {})
+      const none = (x) => !x || Object.keys(x).length === 0;
+      check(!(floor.levelId in MIN) && none(level.candidates) && none(level.places) && (!level.picks || none(level.picks.anchors)),
+        `${floor.levelId}: no item, no candidates, no places, no picks`);
+      continue;
+    }
+    check(list.length >= MIN[floor.levelId], `${floor.levelId}: ${list.length} candidates (want >= ${MIN[floor.levelId]})`);
     for (const c of list) {
       check(c.eligible === true, `${c.anchorId} is a candidate a run may use`);
       check(c.entryDistance >= rules.entryClearance, `${c.anchorId} ${c.entryDistance} studs walked from the entry`);
@@ -349,10 +357,6 @@ for (const e of meta.entities) {
       check(c.hide && c.hide.distance <= o.hideReach, `${c.anchorId} hiding spot within ${o.hideReach}`);
       check(c.quarter === quarterOf(c.pos), `${c.anchorId} quarter`);
       if (floor.item.guarded) check(c.ref && anchorIds.has(c.ref), `${c.anchorId} guard trap spot ${c.ref}`);
-      if (floor.item.candidate === 'CoachKeyCandidate') check(lockerIds.has(c.ref), `${c.anchorId} hangs in locker ${c.ref}`);
-    }
-    if (floor.item.slots) {
-      for (let k = 1; k <= floor.item.slots; k++) check(list.filter((c) => c.slot === k).length >= 4, `${floor.levelId} kind ${k} has 4+ spots`);
     }
     const picked = (level.picks ? level.picks.anchors : []).map((id) => list.find((c) => c.anchorId === id));
     check(picked.length === floor.item.count && picked.every(Boolean), `${floor.levelId} export picks`);
@@ -367,15 +371,12 @@ for (const e of meta.entities) {
       }
     }
     if (picked.length >= 3 && picked.every(Boolean)) check(new Set(picked.map((c) => c.quarter)).size >= rules.pickQuarters, `${floor.levelId} picks spread`);
-    if (floor.item.slots) picked.forEach((c, i) => c && check(c.slot === i + 1, `${c.anchorId} is kind ${i + 1}`));
-    // every item entity is the prop any run that picks its anchor builds (RunDirector.objectiveProp): with kinds its
-    // Slot (on the model and its Pickup prompt) is its candidate's kind, without kinds it has none, whatever the picks
-    const slotOf = new Map(list.map((c) => [c.anchorId, c.slot]));
+    // every item entity is the prop any run that picks its anchor builds (RunDirector.objectiveProp): no item has kinds
+    // since the reagents were cut, so none carries a Slot (on the model or its Pickup prompt), whatever the picks
     for (const e of meta.entities.filter((x) => x.type === floor.item.prop)) {
-      const want = floor.item.slots ? slotOf.get(e.attributes.AnchorId) : undefined;
       const prompt = e.prompts.find((p) => p.name === 'Pickup');
-      check(e.attributes.Slot === want && (prompt ? prompt.attributes.Slot : undefined) === want,
-        `${e.id} Slot ${e.attributes.Slot} / prompt ${prompt ? prompt.attributes.Slot : '-'} (want ${want ?? 'none'})`);
+      check(e.attributes.Slot === undefined && (prompt ? prompt.attributes.Slot : undefined) === undefined,
+        `${e.id} Slot ${e.attributes.Slot} / prompt ${prompt ? prompt.attributes.Slot : '-'} (want none)`);
     }
   }
 }
@@ -383,7 +384,8 @@ for (const e of meta.entities) {
 // the props the web draws again away from the world (flaskFx.js: the flask in a hand, in flight and a teammate's): a
 // chemical flask on any anchor is its anchor's variant (RunDirector.variantOf) and looks exactly as the exported world
 // prop (ChemicalFlaskBuilder.lookOf on the world's Rng: the fill line's three liquid tiers, the crack and its frame, the
-// liquid colour); the acid flask stands on its fume hood's AcidFlaskSpot (AcidFlaskBuilder.buildWorld's frame)
+// liquid colour). The four-level school has no flask anchors until RunDirector picks flasks again (WP01b): the count of
+// exported flasks is then only held to the baked entities.
 {
   const before = failures;
   const rawFile = path.join(buildDir, 'cache', 'world-raw.json');
@@ -436,15 +438,11 @@ for (const e of meta.entities) {
         check([0, 1, 2].every((k) => axis(got, k).angleTo(axis(frame, k)) <= 1e-3), `${anchor} crack orientation`);
       }
     }
-    check(flasks > 0 && flasks === meta.entities.filter((x) => x.type === 'ChemicalFlask').length, `${flasks} chemical flasks exported and baked`);
-    for (const acid of meta.entities.filter((x) => x.type === 'AcidFlask')) {
-      const hood = meta.entities.find((x) => x.type === 'FumeHood' && x.level === acid.level && x.attributes.AnchorId === acid.attributes.AnchorId);
-      const spot = hood && hood.attachments.AcidFlaskSpot;
-      check(!!spot, `${acid.id}: its hood's AcidFlaskSpot`);
-      if (spot) check(spot.every((v, k) => near(acid.pivot[k], v, k < 3 ? 1e-3 : 1e-4)), `${acid.id} pivot ${acid.pivot.join(',')} is the AcidFlaskSpot ${spot.join(',')}`);
-    }
+    const anchored = meta.anchors.filter((a) => a.kind === 'FlaskCandidate').length;
+    check(flasks === meta.entities.filter((x) => x.type === 'ChemicalFlask').length && flasks === anchored,
+      `${flasks} chemical flasks exported and baked, one per FlaskCandidate anchor (${anchored})`);
   }
-  if (failures === before) console.log(`  ok   ${flasks} chemical flasks (${cracked} cracked) look as flaskFx draws their variant; the acid flask on its spot`);
+  if (failures === before) console.log(`  ok   ${flasks} chemical flasks (${cracked} cracked) look as flaskFx draws their variant`);
 }
 
 // guarded items (the basement's fuses): every candidate is taken from a spot beside it, clear of every trap spot a run
@@ -631,7 +629,7 @@ for (const e of meta.entities) {
     return null;
   };
   for (const floor of o.floors || []) {
-    if (!floor.item.guarded) continue;
+    if (!floor.item || !floor.item.guarded) continue;
     const level = (o.levels || {})[floor.levelId];
     if (!level) continue;
     guarded += level.candidates.length;
@@ -801,8 +799,29 @@ for (const e of meta.entities) {
   check(searched === guarded, `${searched} of ${guarded} guarded items' guards on the shortest walk the baked world allows`);
   console.log(`  ok   guarded items: ${sprung} guards on the careless walk in (${searched} on the shortest walk the baked world allows), ${held} standing spots and their walks (${walked} steps) clear of every trap spot`);
 }
+// removals (docs/design/game-spec-v2.md 6): the baked world is the four-level school; no level, layout, route,
+// stairwell, entity, anchor, room, door, volume or name in it comes from the cut floors (the Science Hall, the Gym, the
+// pool), the old roof's objective and landing field, or the stairwells above the old Level 3; no pool water data
+{
+  const before = failures;
+  const SCHOOL = ['Level0_Basement', 'Level1_Hallways', 'Level2_Auditorium', 'Level3_Roof'];
+  check(Object.keys(meta.levels).filter((id) => id.startsWith('Level')).sort().join() === SCHOOL.join(), `levels: ${Object.keys(meta.levels).join(', ')}`);
+  check(Object.keys(meta.layouts || {}).filter((id) => id !== 'Lobby').sort().join() === SCHOOL.join(), `layouts: ${Object.keys(meta.layouts || {}).join(', ')}`);
+  check(!('pools' in meta) && !('basins' in meta), 'no pool water or basins');
+  const CUT = ['Level2_ScienceHall', 'Level3_Gymnasium', 'Level4_FloodedPool', 'Level5_Roof', 'Stairwell_3_4', 'Stairwell_4_5',
+    'ScienceHall', 'Gymnasium', 'FloodedPool', 'PoolWater', 'Basin', 'FumeHood', 'AcidFlask', 'Reagent', 'Generator',
+    'CoachKey', 'StoreLock', 'EquipmentStoreDoor', 'ValveWheel', 'HatchValve', 'FloodlightSwitch', 'BoltCutter',
+    'CrateChain', 'CutCrate', 'LandingField', 'flasksScienceHall', 'flasksPool'];
+  const text = JSON.stringify(meta);
+  for (const cut of CUT) check(!text.includes(cut), `the baked data names ${cut} (cut)`);
+  const oldFloor = /"L[45]_/g;
+  const hits = text.match(oldFloor) || [];
+  check(hits.length === 0, `${hits.length} ids of the old floors 4 and 5 (L4_ / L5_) in the baked data`);
+  if (failures === before) console.log(`  ok   removals: the four-level school, ${CUT.length} cut names and the L4_ / L5_ ids absent from ${(text.length / 1e6).toFixed(1)} MB of meta`);
+}
 // routes: three candidate stairwells per floor pair, each complete (exit fire doors, entry doors, Checkpoint volume,
-// arrival spawns, an ExitLock on every exit candidate below the roof), its doors carrying the jam data, every
+// arrival spawns, an ExitLock on every exit candidate of a floor with a lock step and none elsewhere, the Creature's
+// spot in every roof housing), its doors carrying the jam data, every
 // candidate reachable and fair from at least one way in, and the export seed's pick among them
 {
   const routes = meta.routes || {};
@@ -813,8 +832,12 @@ for (const e of meta.entities) {
   const triggerIds = new Set(meta.triggers.map((t) => t.id));
   const roomIds = new Set(meta.rooms.map((r) => r.id));
   const stairIds = new Set((meta.stairwells || []).map((s) => s.id));
-  check(pairs.length === 5, `5 floor pairs (${pairs.length})`);
-  check(stairIds.size === 15, `15 stairwells in meta.stairwells (${stairIds.size})`);
+  const order = (meta.worldConfig && meta.worldConfig.LevelOrder) || [];
+  const roof = order[order.length - 1];
+  const lockLevels = new Set(((meta.objectives && meta.objectives.floors) || []).filter((f) => f.lockStep).map((f) => f.levelId));
+  check(order.join() === 'Level0_Basement,Level1_Hallways,Level2_Auditorium,Level3_Roof', `the school's levels: ${order.join(', ')}`);
+  check(pairs.length === 3 && pairs.every((p, i) => p.from === order[i]), `3 floor pairs (${pairs.map((p) => p.from).join(', ')})`);
+  check(stairIds.size === 9, `9 stairwells in meta.stairwells (${stairIds.size})`);
   check(rule.stream === 'Route|<from>' && rule.attempts > 0 && rule.fairShare > 0, 'route rule');
   for (const p of pairs) {
     const list = routes[p.from] || [];
@@ -838,8 +861,9 @@ for (const e of meta.entities) {
       }
       check(triggerIds.has(c.checkpoint), `${tag} Checkpoint ${c.checkpoint}`);
       check(c.spawns.length >= 4 && c.spawns.every((id) => anchorById.has(id) && anchorById.get(id).room === c.toRoom), `${tag} 4+ arrival spawns`);
-      if (c.from !== 'Level5_Roof') check(!!c.exitLock && entityById.has(c.exitLock) && c.exitDoorIds.includes(entityById.get(c.exitLock).attributes.DoorId), `${tag} ExitLock on its fire door`);
-      if (c.to === 'Level5_Roof') check(!!c.creatureSpawn && anchorById.has(c.creatureSpawn), `${tag} housing has the Creature's spot`);
+      if (lockLevels.has(c.from)) check(!!c.exitLock && entityById.has(c.exitLock) && c.exitDoorIds.includes(entityById.get(c.exitLock).attributes.DoorId), `${tag} ExitLock on its fire door`);
+      else check(!c.exitLock, `${tag}: no ExitLock (${c.from} has no lock step)`);
+      if (c.to === roof) check(!!c.creatureSpawn && anchorById.has(c.creatureSpawn), `${tag} housing has the Creature's spot`);
       const verdicts = Object.values((rule.checks || {})[p.from] || {}).map((list2) => list2.find((v) => v.stairwellId === c.stairwellId));
       check(verdicts.length >= 1 && verdicts.every((v) => v && v.distance > 0), `${tag} reachable from every way in`);
       check(verdicts.some((v) => v && v.fair), `${tag} fair from some way in`);
@@ -905,8 +929,15 @@ for (const e of meta.entities) {
       }
     }
     const marks = (meta.landmarks || {})[level] || [];
+    // a plate on every junction of the planner's graph (TunnelRules), at least 20 on a full-size floor (a crossing rule
+    // of 1100 studs or more; the Auditorium's interim crossing is a short one)
     const own2 = marks.filter((m) => m.kind === 'JunctionPlate');
-    check(own2.length >= 20 && own2.every((m) => /^J-\d\d$/.test(m.text)), `${level}: ${own2.length} junction plates J-NN`);
+    const tunnels = (meta.layouts[level] && meta.layouts[level].tunnels) || {};
+    const junctions = (tunnels.nodes || []).filter((n) => n.kind === 'Junction');
+    const full = !!(tunnels.rules && tunnels.rules.crossing && tunnels.rules.crossing[0] >= 1100);
+    check(junctions.length > 0 && own2.length === junctions.length && new Set(own2.map((m) => m.text)).size === own2.length,
+      `${level}: ${own2.length} junction plates for ${junctions.length} junctions`);
+    check(own2.length >= (full ? 20 : 1) && own2.every((m) => /^J-\d\d$/.test(m.text)), `${level}: ${own2.length} junction plates J-NN${full ? ' (a full-size floor: 20 or more)' : ''}`);
     check(marks.every((m) => rooms.has(m.room) && rooms.get(m.room).level === level && m.text), `${level}: landmarks name their room and text`);
     const named = (meta.regions || {})[level] || [];
     check(named.length >= 4 && named.length <= 6 && new Set(named.map((r) => r.name)).size === named.length, `${level}: ${named.length} named regions`);
@@ -1090,15 +1121,29 @@ console.log('== run plan (the web replays RunDirector)');
   const plansFile = path.join(buildDir, 'cache', 'run-plans.json');
   check(fs.existsSync(plansFile), `RunDirector's plans exported (${plansFile})`);
   let replayed = 0;
+  const school = (meta.worldConfig && meta.worldConfig.LevelOrder) || [];
+  const unported = school.filter((level) => !WebLevelOrder.includes(level));
+  const ported = (level) => !unported.includes(level);
   if (fs.existsSync(plansFile)) {
     const plans = JSON.parse(fs.readFileSync(plansFile, 'utf8'));
-    const wd = new WorldData(meta);
+    // RunDirector plans picks only on a floor with an item; the web's port (worldData.pickObjective) still expects an
+    // item on every floor it is given, so it replays the floors that have one (the itemless Auditorium crossing has no
+    // picks to replay; WP02 teaches the port such floors)
+    const floors = (meta.objectives && meta.objectives.floors) || [];
+    const itemless = new Set(floors.filter((f) => !f.item).map((f) => f.levelId));
+    const wd = new WorldData({ ...meta, objectives: { ...meta.objectives, floors: floors.filter((f) => f.item) } });
+    // the port walks the web's own level list (src/game/config.js LevelOrder) for batteries, grates and routes: a school
+    // level the web does not list yet is not replayed (reported below), and every other level is replayed in full, so
+    // the check is whole again the moment the web lists the four-level school (WP02)
     const sorted = (a) => [...a].sort();
     // (Lune's JSON writes an empty Luau table as {})
     const arr = (x) => (Array.isArray(x) ? x : []);
     for (const want of plans) {
       const tag = `seed ${want.seed} ${want.difficulty}`;
       const got = wd.plan(want.difficulty, want.seed);
+      const planned = Object.keys(want.objectives || {});
+      check(planned.length === floors.length - itemless.size && planned.every((level) => !itemless.has(level)),
+        `${tag}: RunDirector picks on the floors with an item (${planned.join(', ')})`);
       for (const [level, picks] of Object.entries(want.objectives || {})) {
         const mine = got.objectives[level];
         const anchors = arr(picks.anchors);
@@ -1106,29 +1151,28 @@ console.log('== run plan (the web replays RunDirector)');
         check(!!mine && same(mine.anchors, anchors), `${tag} ${level} objective picks ${mine ? mine.anchors.join(',') : '-'} (RunDirector: ${anchors.join(',')})`);
         check(!!mine && same(mine.guards, guards), `${tag} ${level} guard traps ${mine ? mine.guards.join(',') : '-'} (RunDirector: ${guards.join(',')})`);
       }
-      const props = sorted(arr(want.props).filter((p) => ['BearTrap', 'ChemicalFlask', 'Battery'].includes(p.kind)).map((p) => p.anchorId));
+      const props = sorted(arr(want.props).filter((p) => ['BearTrap', 'ChemicalFlask', 'Battery'].includes(p.kind) && ported(p.levelId)).map((p) => p.anchorId));
       check(same(sorted(got.props), props), `${tag} trap / flask / battery anchors (${got.props.size} vs ${props.length})`);
-      // every prop as RunDirector plans it: its anchor's own variant, and an objective item's slot its candidate's kind
-      // (none without kinds), so the entity the export built on that anchor is the run's prop
+      // every prop as RunDirector plans it: its anchor's own variant, and no objective item with a slot (no floor has
+      // kinds), so the entity the export built on that anchor is the run's prop
       for (const p of arr(want.props)) {
         check(variantOf(p.kind, p.levelId, p.anchorId) === p.variant, `${tag} ${p.anchorId}: variantOf ${variantOf(p.kind, p.levelId, p.anchorId)} (RunDirector: ${p.variant})`);
         const picks = got.objectives[p.levelId];
-        if (picks && picks.anchors.includes(p.anchorId)) {
-          const slot = picks.slots[p.anchorId];
-          check((slot ?? null) === (p.slot ?? null), `${tag} ${p.anchorId} slot ${slot ?? 'none'} (RunDirector: ${p.slot ?? 'none'})`);
-        }
+        if (picks && picks.anchors.includes(p.anchorId)) check(picks.slots[p.anchorId] === undefined, `${tag} ${p.anchorId} has no slot`);
       }
       check(got.placements.size === 0, `${tag} every chosen anchor has its own entity`);
       const locked = sorted(arr(want.lockedGrates));
       check(same(sorted(got.lockedGrates), locked), `${tag} locked grates ${sorted(got.lockedGrates).join(',')} (RunDirector: ${locked.join(',')})`);
       const routes = wd.routes(want.seed);
       for (const [from, id] of Object.entries(want.route || {})) {
+        if (!ported(from)) continue;
         check(routes[from] && routes[from].stairwellId === id, `${tag} ${from} leaves by ${routes[from] ? routes[from].stairwellId : '-'} (RunDirector: ${id})`);
       }
       replayed++;
     }
   }
   if (failures === before) console.log(`  ok   Rng golden values; ${replayed} RunDirector plans replayed pick for pick`);
+  if (unported.length) console.log(`  skip props and routes of ${unported.join(', ')}: not in the web's LevelOrder yet (src/game/config.js, WP02)`);
 }
 
 console.log(failures ? `FAILED: ${failures} of ${checks} checks` : `PASSED: ${checks} checks`);

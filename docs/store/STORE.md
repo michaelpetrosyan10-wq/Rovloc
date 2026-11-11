@@ -23,10 +23,6 @@ Rovloc is a 1-4 player co-op horror escape. Climb from the basement to the roof,
 
 ⚡ Restore the basement's power
 🔑 Steal the janitor's master keys
-🧪 Brew acid to burn through a chained door
-🏀 Start the gym generator — then survive
-🌊 Dive into the flooded pool for the valve wheel
-🪂 Cut open the parachute crate and jump
 
 It hears every footstep. Hide in lockers and hold your breath. Crawl through the vents. Throw chemicals to stun it. Revive your friends before they bleed out.
 
@@ -92,7 +88,6 @@ you can answer accurately:
   - jumpscares;
   - a scripted monster reveal on Floor 1;
   - ambient scares (bangs, a child's whisper and giggle);
-  - being dragged underwater in the pool;
   - chase sequences.
 - **Other categories:**
   - Drugs and alcohol: none. The syringe is a medical revive item.

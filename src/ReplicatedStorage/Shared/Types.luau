@@ -131,7 +131,6 @@ export type PlannedProp = {
 	levelId: Enums.LayoutId,
 	cframe: CFrame, -- world space
 	variant: number, -- fixed per anchor (RunDirector.variantOf), for visual variety
-	slot: number?, -- floor objective items of a floor with kinds: the item's kind (a reagent's colour); else nil
 }
 
 -- One floor objective's seeded picks (RunDirector.plan; ObjectiveConfig names the floor's item and counts).
@@ -182,9 +181,6 @@ export type LockerVerdict = "Empty" | "HiddenSafe" | "Caught"
 -- Registered with MonsterAIService by HideSpotService (lockers, barrels and cabinets alike).
 export type LockerInspector = (locker: Instance) -> LockerVerdict
 
--- Registered with MonsterAIService by FloodedPoolService. Returns true when the grab started.
-export type PoolGrabber = (player: Player) -> boolean
-
 export type LevelContext = {
 	levelId: Enums.LevelId,
 	run: RunContext,
@@ -207,17 +203,13 @@ export type ClientWorldReadyPayload = { partCount: number }
 
 -- Level-encoded: every message carries the full intended posture, so a message dropped by the rate limiter is
 -- corrected by the next one. `seq` increases per message; the server ignores anything older than the last seen.
-export type MoveIntentPayload = { crouch: boolean, sprint: boolean, dive: boolean, seq: number }
+export type MoveIntentPayload = { crouch: boolean, sprint: boolean, seq: number }
 
 export type FlashlightTogglePayload = { on: boolean }
 
 export type ItemThrowPayload = { direction: Vector3 }
 
 export type BreathInputPayload = { held: boolean }
-
-export type StrugglePressPayload = { sequence: number }
-
-export type UseSyringePayload = { mode: Enums.SyringeMode }
 
 export type LobbyActionPayload = {
 	action: Enums.LobbyActionKind,
@@ -269,7 +261,7 @@ export type AudioStopPayload = { id: number, fade: number? }
 
 -- One thrown flask (ChemicalProjectileService -> every client). "Spawn" is the Launch: the parabola every client flies
 -- (Ballistics: `origin` and `velocity` at server time `t0` under `gravity`), the flask's look (`variant`) and who threw
--- it. "Resolve" repeats those and says how it ended: hitKind World / Creature / Water (it shattered at hitPosition,
+-- it. "Resolve" repeats those and says how it ended: hitKind World / Creature (it shattered at hitPosition,
 -- against a surface facing hitNormal; inVent when that was inside a duct) or Expired (no contact before
 -- FlaskMaxFlightSeconds; nothing happens).
 export type ProjectileEventPayload = {
@@ -285,7 +277,6 @@ export type ProjectileEventPayload = {
 	hitNormal: Vector3?,
 	hitKind: Enums.ProjectileHitKind?,
 	inVent: boolean?,
-	item: Enums.ItemId?, -- "AcidFlask" for Floor 2's acid (no stun cloud); nil for a chemical flask
 }
 
 export type LookSample = { userId: number, yaw: number, pitch: number }

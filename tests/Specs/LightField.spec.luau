@@ -54,18 +54,14 @@ spec["luminance: the light colour's linear luminance"] = function(t: Expect)
 	t.truthy(LightField.colorLuminance(Color3.fromRGB(255, 214, 170)) > 0.6, "a warm bulb is still bright")
 end
 
-spec["include: the base light leaves out power circuits, scripted groups, glows, floodlights and broken bulbs"] = function(
-	t: Expect
-)
-	t.truthy(LightField.include("Level1_Hallways", "Ceiling", nil, 1), "a plain fixture")
-	t.truthy(LightField.include("Level1_Hallways", "Ceiling", "HallA", 1), "a flicker group of its own")
-	t.falsy(LightField.include("Level0_Basement", "Bulb", "Mains:North", 1), "a tunnel's mains (the power switch)")
-	t.falsy(LightField.include("Level0_Basement", "Bulb", "Circuit:3", 1), "a flickering circuit")
-	t.falsy(LightField.include("Level2_ScienceHall", "Ceiling", "Scripted:Lab", 1), "a scripted group")
-	t.falsy(LightField.include("Level1_Hallways", "ClassroomGlow", nil, 1), "the classroom glow")
-	t.falsy(LightField.include("Level4_FloodedPool", "Floodlight", nil, 2), "the pool's floodlights (their switch)")
-	t.truthy(LightField.include("Level5_Roof", "Floodlight", nil, 2), "a floodlight elsewhere")
-	t.falsy(LightField.include("Level1_Hallways", "Ceiling", nil, 0), "a broken fixture")
+spec["include: the base light leaves out power circuits, scripted groups, glows and broken bulbs"] = function(t: Expect)
+	t.truthy(LightField.include("Ceiling", nil, 1), "a plain fixture")
+	t.truthy(LightField.include("Ceiling", "HallA", 1), "a flicker group of its own")
+	t.falsy(LightField.include("Bulb", "Mains:North", 1), "a tunnel's mains (the power switch)")
+	t.falsy(LightField.include("Bulb", "Circuit:3", 1), "a flickering circuit")
+	t.falsy(LightField.include("Ceiling", "Scripted:Lab", 1), "a scripted group")
+	t.falsy(LightField.include("ClassroomGlow", nil, 1), "the classroom glow")
+	t.falsy(LightField.include("Ceiling", nil, 0), "a broken fixture")
 end
 
 spec["lit: the sum of the fixtures in range, shadows cut, above LitIrradiance"] = function(t: Expect)

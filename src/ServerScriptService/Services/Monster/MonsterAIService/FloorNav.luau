@@ -24,12 +24,7 @@
 -- floor points over the walkable rooms; reachable(from) tells which points a walk from `from` can get to through the
 -- portals open now (a level may fall apart into parts joined only by locked airlocks or ducts).
 --
--- Pools. A basin's water is no floor (the Creature enters and leaves the water only by a warp): a room a basin lies in
--- keeps only the deck round it, as up to four strips (west and east the room's full depth, north and south between
--- them; one narrower than MIN_DECK is left out), each a node of its own (`key`; `id` stays the room's), joined where
--- they meet. A door opens onto the strip it lies on, none onto the water. So no route crosses the pool.
---
--- Pure (tests/Specs/FloorNav.spec.luau): new, funnel, spaced, deckParts, crossesRect, aroundIn, sharedEdge.
+-- Pure (tests/Specs/FloorNav.spec.luau): new, funnel, spaced, crossesRect, aroundIn, sharedEdge.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -40,7 +35,7 @@ local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
 export type NavRoom = {
 	id: string, -- the layout room's
-	key: string, -- the node in the route graph: the room's id, or "<id>#<side>" for one strip of a pool's deck
+	key: string, -- the node in the route graph (the room's id)
 	kind: string,
 	minX: number,
 	maxX: number,
@@ -96,8 +91,7 @@ export type Nav = {
 local PASSABLE: { [string]: boolean } =
 	{ Doorway = true, Door = true, Ajar = true, RoofDoor = true, Gate = true, Airlock = true }
 local NO_FLOOR: { [string]: boolean } = { Chase = true, Crawlway = true, Solid = true }
-local NO_SAMPLES: { [string]: boolean } =
-	{ Airlock = true, Chase = true, Stairwell = true, Crawlway = true, Pool = true }
+local NO_SAMPLES: { [string]: boolean } = { Airlock = true, Chase = true, Stairwell = true, Crawlway = true }
 local SCRIPTED: { [string]: boolean } = { Gate = true, Airlock = true, RoofDoor = true }
 local SAMPLE_INSET = 2.5
 local PORTAL_REACH = 3 -- within this of a portal's opening its clearance counts
@@ -109,7 +103,6 @@ local WALL_CLEARANCE = RADIUS + WorldConfig.WallThickness / 2 -- a detour corner
 local INTERIOR = 0.01 -- footprints shrink by this for the crossing test, so legs along their edges are clear
 local MAX_SPLITS = 24
 local SPACING = CreatureConfig.PathAgent.WaypointSpacing
-local MIN_DECK = 2 -- a deck strip narrower than this beside a pool is no floor
 local STEP_UP = 1.6 -- ledges the walker steps up
 local CELL = 16 -- the room index's grid
 local NO_ROOMS: { NavRoom } = {}
@@ -186,50 +179,6 @@ local function blocked(obstacles: { Obstacle }, ax: number, az: number, bx: numb
 		end
 	end
 	return false
-end
-
--- The floor of `room` round the pools in it: { room } when no basin lies in it, else the deck strips round each basin.
-function FloorNav.deckParts(room: NavRoom, basins: { Rect }): { NavRoom }
-	local parts = { room }
-	for _, b in basins do
-		local nextParts: { NavRoom } = {}
-		for _, p in parts do
-			if
-				not (
-					b.minX < p.maxX - EPS
-					and b.maxX > p.minX + EPS
-					and b.minZ < p.maxZ - EPS
-					and b.maxZ > p.minZ + EPS
-				)
-			then
-				table.insert(nextParts, p)
-				continue
-			end
-			local x0 = math.max(p.minX, b.minX)
-			local x1 = math.min(p.maxX, b.maxX)
-			local function strip(side: string, minX: number, maxX: number, minZ: number, maxZ: number)
-				if maxX - minX >= MIN_DECK and maxZ - minZ >= MIN_DECK then
-					table.insert(nextParts, {
-						id = p.id,
-						key = p.key .. "#" .. side,
-						kind = p.kind,
-						minX = minX,
-						maxX = maxX,
-						minZ = minZ,
-						maxZ = maxZ,
-						floorY = p.floorY,
-						height = p.height,
-					})
-				end
-			end
-			strip("W", p.minX, x0, p.minZ, p.maxZ)
-			strip("E", x1, p.maxX, p.minZ, p.maxZ)
-			strip("N", x0, x1, p.minZ, math.max(p.minZ, b.minZ))
-			strip("S", x0, x1, math.min(p.maxZ, b.maxZ), p.maxZ)
-		end
-		parts = nextParts
-	end
-	return parts
 end
 
 type Segment = { p: Vector3, q: Vector3 }
@@ -519,16 +468,6 @@ function FloorNav.new(
 	nav.partsOf = {}
 	nav.portals = {}
 	nav.portalsOf = {}
-	local basins: { Rect } = {}
-	for _, b in layout.basins or {} :: { LayoutSchema.Basin } do
-		local r = b.rect
-		table.insert(basins, {
-			minX = origin.X + r.x,
-			maxX = origin.X + r.x + r.w,
-			minZ = origin.Z + r.z,
-			maxZ = origin.Z + r.z + r.d,
-		})
-	end
 	for _, room in layout.rooms do
 		if NO_FLOOR[room.kind] then
 			continue
@@ -545,13 +484,10 @@ function FloorNav.new(
 			floorY = origin.Y,
 			height = LayoutSchema.roomHeight(layout, room),
 		}
-		local parts = FloorNav.deckParts(nr, basins)
-		nav.partsOf[room.id] = parts
-		for _, part in parts do
-			table.insert(nav.rooms, part)
-			nav.roomByKey[part.key] = part
-			nav.portalsOf[part.key] = {}
-		end
+		nav.partsOf[room.id] = { nr }
+		table.insert(nav.rooms, nr)
+		nav.roomByKey[nr.key] = nr
+		nav.portalsOf[nr.key] = {}
 	end
 
 	local function addPortal(
@@ -610,18 +546,6 @@ function FloorNav.new(
 					continue
 				end
 				addPortal(door.id, door.kind, a, b, edge, u0, u1, SCRIPTED[door.kind] == true, clearance)
-			end
-		end
-	end
-	-- the strips of a deck join where they meet, round the pool's corners
-	for _, parts in nav.partsOf do
-		for i = 1, #parts do
-			for j = i + 1, #parts do
-				local edge = FloorNav.sharedEdge(parts[i], parts[j])
-				if edge then
-					local id = parts[i].key .. "|" .. parts[j].key
-					addPortal(id, "Doorway", parts[i], parts[j], edge, edge.from, edge.to, false, math.huge)
-				end
 			end
 		end
 	end

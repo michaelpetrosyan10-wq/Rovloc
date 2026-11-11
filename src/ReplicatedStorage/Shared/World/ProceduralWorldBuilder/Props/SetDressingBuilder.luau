@@ -2,9 +2,6 @@
 -- SetDressingBuilder: the school's non-interactive dressing, built from the layouts' anchors and triggers.
 --
 -- Statics (server, once at boot, into <level>.Props; the same geometry on every server):
---   * LabCounter: chemistry lab islands. A cabinet base with doors on both faces, a dark epoxy worktop with a cup
---     sink and gooseneck faucet, gas taps, and a reagent shelf of jars and beakers (some smashed). The worktop is set
---     at the height of the FlaskCandidate anchors the layout stands on it, so every flask rests on the epoxy.
 --   * SmashedLocker: a bank of 3-5 school lockers backed onto the wall behind the anchor: dented doors, doors torn off
 --     or hanging from one hinge, sometimes one locker ripped out and dropped on its side, papers spilling out.
 --   * DripPipe: an overhead pipe run under the room's ceiling through the anchor, a corroded leaking flange joint,
@@ -25,7 +22,7 @@
 -- pieces get PropKit.detail; "Visible" pieces are seen and queried but never collide). A plan is checked against the
 -- level's clearances: door openings and the arcs their leaves sweep, vent-grate fronts, airlocks and stair landings,
 -- spawn points and the anchors gameplay props use, and (for solid pieces) the walking lane down every corridor.
--- Only a plan that fits is built. The same planning kit is exported (SetDressingBuilder.Kit) for the pool dressing.
+-- Only a plan that fits is built. The same planning kit is exported (SetDressingBuilder.Kit).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -71,7 +68,6 @@ local CORRIDOR_LANE = 3.3 -- solid dressing in a corridor stays within this of a
 
 -- Part budgets (hard caps per anchor / trigger)
 local BUDGET = table.freeze({
-	LabCounter = 26,
 	SmashedLocker = 40,
 	DripPipe = 16,
 	FloorDebris = 24,
@@ -80,19 +76,8 @@ local BUDGET = table.freeze({
 	DripCosmetic = 6,
 })
 
--- Lab counters (Level2_ScienceHall: each LabCounter anchor is the floor centre of a 10 x 3.5 worktop whose long axis
--- runs along the anchor's RightVector; FlaskCandidate anchors stand on it at worktop height).
-local COUNTER_LENGTH = 10
-local COUNTER_DEPTH = 3.5
-local DEFAULT_WORKTOP = 3.2 -- used only when no counter in the layout carries a flask to read the height from
-local TOP_THICKNESS = 0.25
-local PLINTH = 0.3
-local CARCASS_INSET = 0.16
-local LEAF = 0.06
-local LEAF_WIDTH = 2.2 -- cupboard doors at both ends of each face; the knee space between them is panelled
-local SINK_WIDTH = 1.3
-local SINK_Z0, SINK_Z1 = -0.85, 0.4
-local FLASK_CLEAR = 0.85 -- worktop items keep this far from a flask's foot
+-- A flask candidate's foot: other dressing keeps this clear of it
+local FLASK_CLEAR = 0.85
 local FLASK_HEIGHT = 1.6
 
 -- Smashed lockers (bank-local: X along the wall, -Z into the room, the wall face at z = 0)
@@ -162,7 +147,6 @@ type RoomCache = {
 	zones: { Zone },
 	pillars: { Box },
 	platforms: { Box },
-	water: { Box }, -- open water (basin interiors) from the floor of the basin to its surface
 }
 
 export type LevelInfo = {
@@ -173,7 +157,6 @@ export type LevelInfo = {
 	zones: { Zone },
 	pillars: { Box },
 	platforms: { Box },
-	water: { Box },
 	byRoom: { [string]: RoomCache },
 }
 
@@ -600,46 +583,6 @@ local function across(wall: WallSide, x: number, z: number): number
 	return if wall.axis == "Z" then z else x
 end
 
--- Lab counter flasks: FlaskCandidate (and objective ReagentCandidate) anchors standing on the worktop of `anchor`, in
--- counter-local space.
-local function counterFlasks(layout: Layout, anchor: Anchor): { Vector3 }
-	local frame = levelLocal(anchor)
-	local out: { Vector3 } = {}
-	for _, other in layout.anchors do
-		if (other.kind ~= "FlaskCandidate" and other.kind ~= "ReagentCandidate") or other.room ~= anchor.room then
-			continue
-		end
-		local p = frame:PointToObjectSpace(other.pos)
-		if
-			math.abs(p.X) <= COUNTER_LENGTH / 2 - 0.2
-			and math.abs(p.Z) <= COUNTER_DEPTH / 2 - 0.2
-			and p.Y > 1
-			and p.Y < 6
-		then
-			table.insert(out, p)
-		end
-	end
-	return out
-end
-
--- Worktop height above the counter's floor: the height of the flasks it carries (the layout's WORKTOP); counters
--- without flasks match the other counters of the layout.
-local function counterTop(layout: Layout, anchor: Anchor): number
-	local flasks = counterFlasks(layout, anchor)
-	if #flasks > 0 then
-		return flasks[1].Y
-	end
-	for _, other in layout.anchors do
-		if other.kind == "LabCounter" then
-			local list = counterFlasks(layout, other)
-			if #list > 0 then
-				return list[1].Y
-			end
-		end
-	end
-	return DEFAULT_WORKTOP
-end
-
 -- The free stretch of wall behind a SmashedLocker anchor: doors (with their casings), grates, low windows, hideable
 -- lockers, pillars, plant and the neighbouring banks all stop it. Pure layout maths, shared by the bank builder and
 -- the clearance zone that keeps other dressing off the bank.
@@ -763,7 +706,6 @@ local ANCHOR_CLEAR: { [string]: AnchorClear } = {
 	FlaskCandidate = { half = FLASK_CLEAR, y0 = 0, y1 = FLASK_HEIGHT },
 	Locker = { half = 1.6, back = 1.5, front = 4.1, y0 = -0.3, y1 = 8 },
 	ParachuteCrate = { half = 3.5, y0 = -0.3, y1 = 5 },
-	FloodlightSwitch = { half = 1.6, back = 1, front = 3.2, y0 = -4.3, y1 = 3.5 },
 	ReadyPad = { half = 3, y0 = -0.3, y1 = 7 },
 	Terminal = { half = 2.2, back = 1.5, front = 3.2, y0 = -0.3, y1 = 6 },
 	Corpse = { half = 2.6, y0 = -0.3, y1 = 3, owned = true },
@@ -771,13 +713,7 @@ local ANCHOR_CLEAR: { [string]: AnchorClear } = {
 	-- Floor objectives: the items' candidate spots and the stations (wall-mounted ones reach forward from the wall)
 	FuseCandidate = { half = 1.2, y0 = -0.3, y1 = 1.5 },
 	MasterKeyCandidate = { half = 0.9, back = 0.6, front = 1.4, y0 = -1.8, y1 = 0.8 },
-	ReagentCandidate = { half = FLASK_CLEAR, y0 = 0, y1 = FLASK_HEIGHT },
-	ValveWheelCandidate = { half = 1.4, y0 = -0.3, y1 = 1.2 },
-	BoltCutterCandidate = { half = 1.6, y0 = -0.3, y1 = 3 },
 	BreakerPanel = { half = 2.3, back = 0.5, front = 3.6, y0 = -0.3, y1 = 9 },
-	FumeHood = { half = 3.1, back = 0.5, front = 4.4, y0 = -0.3, y1 = 9 },
-	Generator = { half = 2.4, back = 1.8, front = 3.4, y0 = -0.3, y1 = 6 },
-	HatchValve = { half = 4.4, back = 0.5, front = 2.2, y0 = -3, y1 = 3 },
 }
 
 -- Statics are fixed; the client dressing (corpses, clutter) arranges itself around them, so statics ignore the
@@ -980,13 +916,6 @@ local function buildZones(layout: Layout, rooms: { [string]: Room }, inner: { [s
 					owner
 				)
 			end
-		elseif anchor.kind == "LabCounter" then
-			-- The island, and the arc its cupboard doors may hang open through (flat litter may lie under a leaf)
-			local top = counterTop(layout, anchor)
-			local hl, hd = COUNTER_LENGTH / 2 + 0.2, COUNTER_DEPTH / 2 + 0.2
-			anchorZone(zones, "Counter", frame, -hl, hl, -hd, hd, -0.3, top + 2.3, anchor.id)
-			local reach = hd + LEAF_WIDTH
-			anchorZone(zones, "CounterSwing", frame, -hl, hl, -reach, reach, SWING_FLOOR, top, anchor.id)
 		elseif anchor.kind == "SmashedLocker" then
 			local span = lockerSpan(layout, rooms, inner, anchor)
 			if span then
@@ -1033,10 +962,6 @@ function Kit.info(layout: Layout): LevelInfo
 	for _, platform in (layout.platforms or {}) :: { LayoutSchema.Platform } do
 		table.insert(platforms, rectBox(platform.rect, platform.top - platform.thickness, platform.top))
 	end
-	local water: { Box } = {}
-	for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-		table.insert(water, rectBox(Geometry.insetRect(basin.rect, Geometry.BasinWall), -basin.depth, basin.waterLevel))
-	end
 	local info: LevelInfo = {
 		layout = layout,
 		origin = WorldConfig.levelOrigin(layout.id),
@@ -1045,14 +970,13 @@ function Kit.info(layout: Layout): LevelInfo
 		zones = buildZones(layout, rooms, inner),
 		pillars = pillars,
 		platforms = platforms,
-		water = water,
 		byRoom = {},
 	}
 	infoCache[layout] = info
 	return info
 end
 
--- Zones, pillars, platforms and water touching one room (a room-sized window over the level lists).
+-- Zones, pillars and platforms touching one room (a room-sized window over the level lists).
 local function roomCache(info: LevelInfo, roomId: string): RoomCache?
 	local cached = info.byRoom[roomId]
 	if cached then
@@ -1080,14 +1004,13 @@ local function roomCache(info: LevelInfo, roomId: string): RoomCache?
 		zones = within(info.zones) :: { Zone },
 		pillars = within(info.pillars) :: { Box },
 		platforms = within(info.platforms) :: { Box },
-		water = within(info.water) :: { Box },
 	}
 	info.byRoom[roomId] = entry
 	return entry
 end
 
 -- True when the level-local footprint point (x, z) is carried at height `ground` in `cache`'s room: a platform top
--- there, or the floor (y 0) where no pool water is.
+-- there, or the floor (y 0).
 local function carried(cache: RoomCache, room: Room, x: number, z: number, ground: number): boolean
 	for _, platform in cache.platforms do
 		if x >= platform.x0 - EPS and x <= platform.x1 + EPS and z >= platform.z0 - EPS and z <= platform.z1 + EPS then
@@ -1099,15 +1022,7 @@ local function carried(cache: RoomCache, room: Room, x: number, z: number, groun
 	if math.abs(ground) > 0.2 then
 		return false
 	end
-	if not LayoutSchema.rectContains(room.rect, x, z) then
-		return false
-	end
-	for _, pool in cache.water do
-		if x > pool.x0 + EPS and x < pool.x1 - EPS and z > pool.z0 + EPS and z < pool.z1 - EPS then
-			return false
-		end
-	end
-	return true
+	return LayoutSchema.rectContains(room.rect, x, z)
 end
 
 -- Whether `pieces` (world) clear every zone (and, with options.room, stay in that room on carried ground).
@@ -1213,399 +1128,6 @@ end
 local function stamp(model: Model, info: LevelInfo, values: { [string]: any })
 	model:SetAttribute(W.LevelId, info.layout.id)
 	PropKit.setAttributes(model, values)
-end
-
---------------------------------------------------------------------------------
--- Lab counters
---------------------------------------------------------------------------------
-
-local CASEWORK: { { body: Color3, leaf: Color3, material: Enum.Material } } = {
-	{ body = rgb(70, 54, 40), leaf = rgb(82, 64, 46), material = Enum.Material.Wood },
-	{ body = rgb(62, 70, 66), leaf = rgb(72, 80, 76), material = Enum.Material.Metal },
-	{ body = rgb(78, 74, 62), leaf = rgb(88, 84, 70), material = Enum.Material.Metal },
-}
-
-local EPOXY = paint(rgb(28, 30, 29), Enum.Material.SmoothPlastic)
-local STEEL = { color = rgb(96, 100, 98), material = Enum.Material.Metal, reflectance = 0.08 }
-local BRASS = paint(rgb(104, 88, 52), Enum.Material.Metal)
-local VOID = paint(rgb(16, 16, 15), Enum.Material.SmoothPlastic)
-
-local REAGENTS: { { color: Color3, transparency: number, d: number, h: number } } = {
-	{ color = rgb(74, 48, 30), transparency = 0.15, d = 0.34, h = 0.72 }, -- brown reagent bottle
-	{ color = rgb(80, 96, 70), transparency = 0.35, d = 0.55, h = 0.58 }, -- murky jar
-	{ color = rgb(132, 140, 136), transparency = 0.55, d = 0.46, h = 0.5 }, -- beaker
-	{ color = rgb(58, 70, 84), transparency = 0.3, d = 0.3, h = 0.85 }, -- tall cobalt bottle
-}
-
--- The island's body keeps the footprint the layout gives it, even where an ordinary classroom door's swing box
--- reaches it (DoorBuilder hangs that leaf round the built island); a cupboard door hanging open must clear everything.
-local COUNTER_IGNORE: { [string]: boolean } = { CorpseSpot = true, ClutterSpot = true, DoorSwing = true }
-local COUNTER_PROBE_IGNORE: { [string]: boolean } =
-	{ FlaskCandidate = true, CorpseSpot = true, ClutterSpot = true, DoorSwing = true }
-
--- One lab island. Counter-local frame: X along the worktop (the anchor's RightVector), Y up, -Z the anchor's facing.
-local function planCounter(info: LevelInfo, anchor: Anchor, random: Rng): { Piece }
-	local layout = info.layout
-	local flasks = counterFlasks(layout, anchor)
-	local top = counterTop(layout, anchor)
-	if #flasks > 0 then
-		for _, flask in flasks do
-			if math.abs(flask.Y - top) > 0.05 then
-				log.warn("%s: flask at %.2f does not match the worktop at %.2f", anchor.id, flask.Y, top)
-			end
-		end
-	end
-	local frame = CFrame.new(info.origin) * levelLocal(anchor)
-	local halfD = COUNTER_DEPTH / 2
-	local base = top - TOP_THICKNESS
-
-	-- Trim an end that would reach into a doorway, grate front or landing (never past the flasks it carries).
-	local minNeg, minPos = 2.2, 2.2
-	for _, flask in flasks do
-		if flask.X < 0 then
-			minNeg = math.max(minNeg, -flask.X + 1)
-		else
-			minPos = math.max(minPos, flask.X + 1)
-		end
-	end
-	local function endClear(x0: number, x1: number): boolean
-		local probe =
-			{ Kit.box(frame, "Probe", Vector3.new(x0, 0, -halfD), Vector3.new(x1, top, halfD), "Concrete", "Solid") }
-		return Kit.fits(info, probe, { owner = anchor.id, ignore = COUNTER_PROBE_IGNORE })
-	end
-	local x0, x1 = -COUNTER_LENGTH / 2, COUNTER_LENGTH / 2
-	while x1 > minPos and not endClear(x1 - 0.5, x1) do
-		x1 -= 0.25
-	end
-	while -x0 > minNeg and not endClear(x0, x0 + 0.5) do
-		x0 += 0.25
-	end
-	local mid = (x0 + x1) / 2
-	local pieces: { Piece } = {}
-	local function add(piece: Piece)
-		table.insert(pieces, piece)
-	end
-	local style = pick(random, CASEWORK)
-
-	-- Cabinet base
-	add(
-		Kit.box(
-			frame,
-			"Plinth",
-			Vector3.new(x0 + 0.3, 0, -halfD + 0.35),
-			Vector3.new(x1 - 0.3, PLINTH, halfD - 0.35),
-			"Rubber",
-			"Solid"
-		)
-	)
-	add(
-		Kit.box(
-			frame,
-			"Carcass",
-			Vector3.new(x0 + 0.12, PLINTH, -halfD + CARCASS_INSET),
-			Vector3.new(x1 - 0.12, base, halfD - CARCASS_INSET),
-			"WoodPanel",
-			"Solid",
-			paint(style.body, style.material)
-		)
-	)
-
-	-- Cupboard doors: one at each end of each face, hinged on the outer end. At most one hangs open or is gone (dark
-	-- cavity); a door with no room to hang open was torn off instead.
-	local leafY0, leafY1 = PLINTH + 0.06, base - 0.08
-	local leafH = leafY1 - leafY0
-	local carcassLength = (x1 - 0.12) - (x0 + 0.12)
-	local leafW = math.min(LEAF_WIDTH, (carcassLength - 0.5) / 2)
-	local brokenSlot = if chance(random, 0.55) then random:NextInteger(1, 4) else 0
-	local labelSlot = if chance(random, 0.4) then pick(random, { 1, 2 }) else 0
-	local slot = 0
-	for _, side in { -1, 1 } do
-		local faceZ = side * (halfD - CARCASS_INSET)
-		local normal = Vector3.new(0, 0, side)
-		for _, hingeSign in { -1, 1 } do
-			slot += 1
-			local hingeX = if hingeSign < 0 then x0 + 0.2 else x1 - 0.2
-			local toFree = Vector3.new(-hingeSign, 0, 0)
-			local state = if slot == brokenSlot then (if chance(random, 0.6) then "Open" else "Missing") else "Shut"
-			local angle = if state == "Open" then between(random, 62, 112) else between(random, 0, 5)
-			local a = math.rad(angle)
-			local dir = toFree * math.cos(a) + normal * math.sin(a)
-			local hinge = Vector3.new(hingeX, (leafY0 + leafY1) / 2, faceZ)
-			local centre = hinge + dir * (leafW / 2) + normal * (LEAF / 2 + 0.005)
-			local leaf = Kit.block(
-				"Leaf" .. slot,
-				CFrame.fromMatrix(frame:PointToWorldSpace(centre), frame:VectorToWorldSpace(dir), frame.UpVector),
-				Vector3.new(leafW, leafH, LEAF),
-				"WoodPanel",
-				"Solid",
-				paint(tint(style.leaf, random, 0.06), style.material)
-			)
-			if state == "Open" and not Kit.fits(info, { leaf }, { owner = anchor.id, ignore = STATIC_IGNORE }) then
-				state = "Missing"
-			end
-			if state ~= "Shut" then
-				local free = hingeX + toFree.X * leafW
-				add(
-					Kit.box(
-						frame,
-						"Cavity" .. slot,
-						Vector3.new(math.min(hingeX, free) + 0.03, leafY0 + 0.03, faceZ),
-						Vector3.new(math.max(hingeX, free) - 0.03, leafY1 - 0.03, faceZ + side * 0.02),
-						"Rubber",
-						"Detail",
-						VOID
-					)
-				)
-			end
-			if state == "Missing" then
-				continue
-			end
-			if slot == labelSlot and state == "Shut" then
-				leaf.label = "Prop.Lab.Hazard"
-				leaf.labelNormal = frame:VectorToWorldSpace(normal)
-			end
-			add(leaf)
-		end
-	end
-
-	-- Sink: as far from the flasks as the worktop allows
-	local candidates = { x0 + 1.25, x0 + (x1 - x0) * 0.3, mid, x1 - (x1 - x0) * 0.3, x1 - 1.25 }
-	local sinkX, bestScore = mid, -math.huge
-	for _, x in shuffled(random, candidates) do
-		local score = 6
-		for _, flask in flasks do
-			score = math.min(score, math.abs(flask.X - x))
-		end
-		if score > bestScore + 0.25 then
-			sinkX, bestScore = x, score
-		end
-	end
-	local hx0, hx1 = sinkX - SINK_WIDTH / 2, sinkX + SINK_WIDTH / 2
-
-	-- Epoxy worktop around the sink hole
-	add(
-		Kit.box(
-			frame,
-			"Top_1",
-			Vector3.new(x0, base, -halfD),
-			Vector3.new(hx0, top, halfD),
-			"LabWorktop",
-			"Solid",
-			EPOXY
-		)
-	)
-	add(
-		Kit.box(
-			frame,
-			"Top_2",
-			Vector3.new(hx1, base, -halfD),
-			Vector3.new(x1, top, halfD),
-			"LabWorktop",
-			"Solid",
-			EPOXY
-		)
-	)
-	add(
-		Kit.box(
-			frame,
-			"Top_3",
-			Vector3.new(hx0, base, -halfD),
-			Vector3.new(hx1, top, SINK_Z0),
-			"LabWorktop",
-			"Solid",
-			EPOXY
-		)
-	)
-	add(
-		Kit.box(
-			frame,
-			"Top_4",
-			Vector3.new(hx0, base, SINK_Z1),
-			Vector3.new(hx1, top, halfD),
-			"LabWorktop",
-			"Solid",
-			EPOXY
-		)
-	)
-	add(
-		Kit.box(
-			frame,
-			"Sink",
-			Vector3.new(hx0, base - 0.2, SINK_Z0),
-			Vector3.new(hx1, top - 0.22, SINK_Z1),
-			"TrimMetal",
-			"Solid",
-			STEEL
-		)
-	)
-
-	-- Gooseneck faucet behind the sink, turned a little on its riser
-	local turn = math.rad(between(random, -28, 28))
-	local riserZ = SINK_Z1 + 0.22
-	local function swivel(dz: number, y: number): Vector3
-		return frame:PointToWorldSpace(Vector3.new(sinkX + math.sin(turn) * dz, top + y, riserZ + math.cos(turn) * dz))
-	end
-	add(Kit.cylinder("FaucetRiser", swivel(0, 0), swivel(0, 1.08), 0.13, "TrimMetal", "Detail", STEEL))
-	add(Kit.cylinder("FaucetNeck", swivel(0, 1.04), swivel(-0.42, 1.34), 0.11, "TrimMetal", "Detail", STEEL))
-	add(Kit.cylinder("FaucetSpout", swivel(-0.4, 1.36), swivel(-0.68, 1.06), 0.1, "TrimMetal", "Detail", STEEL))
-
-	-- Reagent shelf along the back edge, gas taps on its uprights
-	local shelfZ0, shelfZ1 = halfD - 0.55, halfD - 0.08
-	local ux0, ux1 = x0 + 0.5, x1 - 0.5
-	for i, ux in { ux0, ux1 } do
-		add(
-			Kit.box(
-				frame,
-				"ShelfPost" .. i,
-				Vector3.new(ux - 0.06, top, shelfZ0),
-				Vector3.new(ux + 0.06, top + 1.85, shelfZ1),
-				"WoodPanel",
-				"Solid",
-				paint(style.body, style.material)
-			)
-		)
-		add(
-			Kit.cylinder(
-				"GasTap" .. i,
-				frame:PointToWorldSpace(Vector3.new(ux + (if i == 1 then 0.06 else -0.06), top + 0.42, shelfZ0 + 0.12)),
-				frame:PointToWorldSpace(Vector3.new(ux + (if i == 1 then 0.36 else -0.36), top + 0.42, shelfZ0 + 0.12)),
-				0.1,
-				"TrimMetal",
-				"Detail",
-				BRASS
-			)
-		)
-	end
-	local boardY = top + 1.1
-	add(
-		Kit.box(
-			frame,
-			"ShelfBoard",
-			Vector3.new(ux0, boardY, shelfZ0),
-			Vector3.new(ux1, boardY + 0.08, shelfZ1),
-			"WoodPanel",
-			"Solid",
-			paint(style.body, style.material)
-		)
-	)
-
-	-- Jars and beakers: on the board and under it on the worktop; one may lie smashed
-	local spots: { number } = {}
-	local smashed = chance(random, 0.75)
-	for i = 1, 3 do
-		local placed = false
-		for _ = 1, 8 do
-			local x = between(random, ux0 + 0.45, ux1 - 0.45)
-			local ok = math.abs(x - ux0) > 0.6 and math.abs(x - ux1) > 0.6
-			for _, other in spots do
-				ok = ok and math.abs(other - x) > 0.75
-			end
-			if ok then
-				table.insert(spots, x)
-				local onBoard = i ~= 2 or chance(random, 0.5)
-				local y = if onBoard then boardY + 0.08 else top
-				local kind = pick(random, REAGENTS)
-				local z = (shelfZ0 + shelfZ1) / 2
-				local height = if smashed and i == 3 then 0.2 else kind.h
-				local foot = frame:PointToWorldSpace(Vector3.new(x, y, z))
-				local head = frame:PointToWorldSpace(Vector3.new(x, y + height, z))
-				add(
-					Kit.cylinder(
-						if height < kind.h then "BrokenJar" else "Jar" .. i,
-						foot,
-						head,
-						kind.d,
-						"Glass",
-						"Detail",
-						glass(kind.color, kind.transparency)
-					)
-				)
-				placed = true
-				break
-			end
-		end
-		if not placed then
-			smashed = false
-		end
-	end
-
-	-- Shards of the smashed jar and a dried spill on the worktop, clear of the sink and every flask's foot
-	local function clearOfFlasks(x: number, z: number, reach: number): boolean
-		for _, flask in flasks do
-			if math.abs(flask.X - x) < FLASK_CLEAR + reach and math.abs(flask.Z - z) < FLASK_CLEAR + reach then
-				return false
-			end
-		end
-		return math.abs(x - sinkX) > SINK_WIDTH / 2 + reach + 0.15
-	end
-	local litter = (if smashed then 2 else 0) + 1
-	for i = 1, litter do
-		for _ = 1, 10 do
-			local isSpill = i == litter
-			local reach = if isSpill then 0.55 else 0.3
-			local x = between(random, x0 + reach + 0.1, x1 - reach - 0.1)
-			local z = if isSpill
-				then between(random, -halfD + reach + 0.1, -0.2)
-				else between(random, 0.5, shelfZ0 - 0.1)
-			if clearOfFlasks(x, z, reach) then
-				if isSpill then
-					local d = between(random, 0.7, 1.05)
-					add(
-						Kit.disc(
-							"Spill",
-							frame:PointToWorldSpace(Vector3.new(x, top, z)),
-							d,
-							0.015,
-							"Rubber",
-							"Detail",
-							paint(rgb(46, 50, 30), Enum.Material.SmoothPlastic, 0.2)
-						)
-					)
-				else
-					local cf = frame * CFrame.new(x, top + 0.016, z) * ry(between(random, 0, 360)) * FLAT
-					add(
-						Kit.wedge(
-							"Shard" .. i,
-							cf,
-							Vector3.new(0.03, between(random, 0.22, 0.4), between(random, 0.25, 0.45)),
-							"Glass",
-							"Detail",
-							glass(rgb(120, 130, 126), 0.35)
-						)
-					)
-				end
-				break
-			end
-		end
-	end
-	return pieces
-end
-
-local function buildLabCounters(ctx: PropKit.StaticContext): number
-	local counters = PropKit.anchorsOf(ctx.layout, "LabCounter")
-	if #counters == 0 then
-		return 0
-	end
-	local info = Kit.info(ctx.layout)
-	local seed = ctx.random:NextInteger(1, 2_000_000_000)
-	local built = 0
-	for _, anchor in counters do
-		local random = Rng.seeded(seed, anchor.id)
-		local pieces = planCounter(info, anchor, random)
-		if not Kit.fits(info, pieces, { owner = anchor.id, ignore = COUNTER_IGNORE }) then
-			log.warn("%s reaches into a clearance zone", anchor.id)
-		end
-		local model =
-			PropKit.model(ctx.parent, "LabCounter_" .. anchor.id, CFrame.new(info.origin) * levelLocal(anchor))
-		Kit.realize(model, pieces, "BySize")
-		stamp(model, info, {
-			[W.AnchorId] = anchor.id,
-			[W.AnchorKind] = anchor.kind,
-			[W.ZoneId] = anchor.room,
-		})
-		built += 1
-	end
-	return built
 end
 
 --------------------------------------------------------------------------------
@@ -2130,14 +1652,9 @@ local function planRun(info: LevelInfo, anchor: Anchor, random: Rng?, half: numb
 	return nil
 end
 
--- Level-local Y of the surface the drips land on: pool water, a platform or worktop, else the floor.
-local function dripSurface(info: LevelInfo, anchor: Anchor): (number, boolean)
+-- Level-local Y of the surface the drips land on: a platform, else the floor.
+local function dripSurface(info: LevelInfo, anchor: Anchor): number
 	local x, z = anchor.pos.X, anchor.pos.Z
-	for _, pool in info.water do
-		if x > pool.x0 and x < pool.x1 and z > pool.z0 and z < pool.z1 then
-			return pool.y1, true
-		end
-	end
 	local surface = 0
 	for _, platform in info.platforms do
 		if
@@ -2150,15 +1667,7 @@ local function dripSurface(info: LevelInfo, anchor: Anchor): (number, boolean)
 			surface = math.max(surface, platform.y1)
 		end
 	end
-	for _, other in info.layout.anchors do
-		if other.kind == "LabCounter" and other.room == anchor.room then
-			local p = levelLocal(other):PointToObjectSpace(Vector3.new(x, 0, z))
-			if math.abs(p.X) <= COUNTER_LENGTH / 2 and math.abs(p.Z) <= COUNTER_DEPTH / 2 then
-				surface = math.max(surface, counterTop(info.layout, other))
-			end
-		end
-	end
-	return surface, false
+	return surface
 end
 
 local function dripPointIn(info: LevelInfo, anchor: Anchor): Vector3
@@ -2369,11 +1878,9 @@ local function buildDripPipes(ctx: PropKit.StaticContext): number
 			continue
 		end
 		local drip = dripPointIn(info, anchor)
-		local surface, onWater = dripSurface(info, anchor)
-		if not onWater then
-			for _, piece in planPuddle(info, anchor, random, Vector3.new(drip.X, info.origin.Y + surface, drip.Z)) do
-				table.insert(pipe, piece)
-			end
+		local surface = dripSurface(info, anchor)
+		for _, piece in planPuddle(info, anchor, random, Vector3.new(drip.X, info.origin.Y + surface, drip.Z)) do
+			table.insert(pipe, piece)
 		end
 		local model = PropKit.model(ctx.parent, "DripPipe_" .. anchor.id, CFrame.new(drip))
 		Kit.realize(model, pipe, "BySize")
@@ -3045,18 +2552,7 @@ end
 -- Clutter (cosmetic)
 --------------------------------------------------------------------------------
 
-type ItemKind =
-	"Paper"
-	| "Book"
-	| "OpenBook"
-	| "Chair"
-	| "Backpack"
-	| "Bottle"
-	| "Tile"
-	| "Beaker"
-	| "Ball"
-	| "Box"
-	| "Chunk"
+type ItemKind = "Paper" | "Book" | "OpenBook" | "Chair" | "Backpack" | "Bottle" | "Tile" | "Box" | "Chunk"
 
 local CHAIR_SHELL: { Color3 } = { rgb(70, 76, 84), rgb(92, 62, 46), rgb(64, 74, 58), rgb(82, 80, 72) }
 local BAGS: { Color3 } = { rgb(46, 54, 74), rgb(84, 40, 40), rgb(44, 58, 46), rgb(70, 66, 58), rgb(30, 30, 32) }
@@ -3142,11 +2638,9 @@ local function itemPieces(kind: ItemKind, room: Room, random: Rng): { Piece }
 		Kit.transform(list, rx(-90 + between(random, -12, 12)) * rz(between(random, -10, 10)))
 		Kit.offset(list, Vector3.new(0, -lowest(list) + 0.005, 0))
 		return list
-	elseif kind == "Bottle" or kind == "Beaker" then
-		local isBeaker = kind == "Beaker"
-		local d = if isBeaker then 0.45 else 0.28
-		local h = if isBeaker then 0.55 else 0.85
-		local color = if isBeaker then rgb(130, 138, 134) else pick(random, BOTTLES)
+	elseif kind == "Bottle" then
+		local d, h = 0.28, 0.85
+		local color = pick(random, BOTTLES)
 		if chance(random, 0.6) then
 			return {
 				Kit.cylinder(
@@ -3180,18 +2674,6 @@ local function itemPieces(kind: ItemKind, room: Room, random: Rng): { Piece }
 				CFrame.new(0, s * 0.2, 0) * rz(between(random, -10, 10)),
 				Vector3.new(s, s * 0.45, s * 1.3),
 				if room.kind == "Roof" then "Brick" else "Rubble"
-			),
-		}
-	elseif kind == "Ball" then
-		local d = between(random, 0.9, 1.15)
-		return {
-			Kit.ball(
-				"Ball",
-				Vector3.new(0, d / 2, 0),
-				d,
-				"Rubber",
-				"Detail",
-				paint(rgb(104, 60, 40), Enum.Material.Rubber)
 			),
 		}
 	end
@@ -3233,11 +2715,7 @@ local function clutterList(room: Room, random: Rng): { ItemKind }
 		push("Backpack", 1, 3)
 	end
 	local kind = room.kind
-	if kind == "Lab" then
-		push("Beaker", random:NextInteger(1, 2), 1)
-	elseif kind == "Gym" or kind == "Pool" or kind == "LockerRoom" then
-		push("Ball", 1, 1)
-	elseif kind == "Storage" or kind == "Boiler" or kind == "LobbyHall" then
+	if kind == "Storage" or kind == "Boiler" or kind == "LobbyHall" then
 		push("Box", 1, 2)
 	end
 	if hasCeiling then
@@ -3377,7 +2855,6 @@ SetDressingBuilder.Budget = BUDGET
 SetDressingBuilder.Kit = table.freeze(Kit)
 
 function SetDressingBuilder.register(registrar: PropKit.Registrar)
-	registrar.static("LabCounter", buildLabCounters)
 	registrar.static("SmashedLocker", buildSmashedLockers)
 	registrar.static("DripPipe", buildDripPipes)
 	registrar.static("FloorDebris", buildFloorDebris)

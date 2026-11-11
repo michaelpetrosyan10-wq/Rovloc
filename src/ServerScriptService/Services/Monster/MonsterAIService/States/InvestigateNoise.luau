@@ -93,9 +93,7 @@ local function begin(ctx: Context, run: Run, investigation: Brain.Investigation?
 	run.stage = "Start"
 	run.inspection = nil
 	run.approachUntil = ctx.now() + APPROACH_SECONDS
-	if ctx.mover:Medium() == "Floor" then
-		ctx.body:SetPose("Biped")
-	end
+	ctx.body:SetPose("Biped")
 	local goal = if investigation then investigation.position else ctx.body:GetPosition()
 	ctx.mover:GoTo(goal, { arrive = ARRIVE })
 end
@@ -117,9 +115,7 @@ local function nextStep(ctx: Context, run: Run)
 	run.index += 1
 	run.stage = "Start"
 	run.inspection = nil
-	if ctx.mover:Medium() == "Floor" then
-		ctx.body:SetPose("Biped")
-	end
+	ctx.body:SetPose("Biped")
 end
 
 local function startHold(ctx: Context, run: Run, step: Step)
@@ -211,9 +207,7 @@ end
 function InvestigateNoise.exit(ctx: Context, _to: Enums.MonsterState)
 	local run = runOf(ctx)
 	run.inspection = nil
-	if ctx.mover:Medium() == "Floor" then
-		ctx.body:SetPose("Biped")
-	end
+	ctx.body:SetPose("Biped")
 	ctx.body:Face(nil)
 	ctx.investigation = nil
 end

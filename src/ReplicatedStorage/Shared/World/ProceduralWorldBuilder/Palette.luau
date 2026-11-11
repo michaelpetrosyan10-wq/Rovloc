@@ -35,7 +35,6 @@ local entries: { [string]: Entry } = {
 	TileGreen = entry(Enum.Material.CeramicTiles, 84, 104, 86, "Tile"),
 	TileBlue = entry(Enum.Material.CeramicTiles, 70, 92, 110, "Tile"),
 	Linoleum = entry(Enum.Material.Plastic, 104, 102, 88, "Tile"),
-	WoodGym = entry(Enum.Material.WoodPlanks, 120, 92, 60, "Wood"),
 	WoodPanel = entry(Enum.Material.Wood, 76, 56, 40, "Wood"),
 	PlasterSchool = entry(Enum.Material.Plaster, 128, 122, 102, "Concrete"),
 	PlasterGreen = entry(Enum.Material.Plaster, 82, 98, 80, "Concrete"),
@@ -44,9 +43,7 @@ local entries: { [string]: Entry } = {
 	MetalGalvanized = entry(Enum.Material.Metal, 112, 118, 120, "Metal"),
 	RoofGravel = entry(Enum.Material.Pebble, 64, 64, 62, "Concrete"),
 	Asphalt = entry(Enum.Material.Asphalt, 40, 40, 42, "Concrete"),
-	PoolTile = entry(Enum.Material.CeramicTiles, 70, 104, 102, "Tile"),
 	Carpet = entry(Enum.Material.Carpet, 72, 40, 42, "Carpet"),
-	Lab = entry(Enum.Material.Marble, 82, 88, 84, "Tile"),
 
 	-- Builder-only keys
 	Trim = entry(Enum.Material.Wood, 62, 48, 36, "Wood"),
@@ -57,7 +54,6 @@ local entries: { [string]: Entry } = {
 	Water = entry(Enum.Material.Glass, 38, 46, 30, "Water"),
 	Soil = entry(Enum.Material.Ground, 46, 38, 30, "Grass"),
 	Mud = entry(Enum.Material.Mud, 52, 44, 34, "Grass"),
-	DeadGrass = entry(Enum.Material.Grass, 70, 66, 44, "Grass"),
 	Sidewalk = entry(Enum.Material.Pavement, 84, 84, 80, "Concrete"),
 	SlabEdge = entry(Enum.Material.Concrete, 98, 96, 90, "Concrete"), -- floor-slab band on the brick facade
 	Rubble = entry(Enum.Material.Slate, 70, 68, 64, "Concrete"),
@@ -76,9 +72,8 @@ local entries: { [string]: Entry } = {
 	Baseboard = entry(Enum.Material.Rubber, 30, 29, 27, "Concrete"), -- rubber cove base
 	TileCap = entry(Enum.Material.CeramicTiles, 44, 54, 48, "Tile"), -- glazed bullnose cap over a tile wainscot
 	WainscotOxblood = entry(Enum.Material.CeramicTiles, 92, 44, 40, "Tile"), -- glazed corridor tile (Level 1)
-	WainscotTeal = entry(Enum.Material.CeramicTiles, 46, 84, 82, "Tile"), -- science wing (Level 2)
-	WainscotTan = entry(Enum.Material.CeramicTiles, 132, 112, 80, "Tile"), -- gym wing, under the brick (Level 3)
-	WainscotBlue = entry(Enum.Material.CeramicTiles, 46, 72, 98, "Tile"), -- pool wing (Level 4)
+	WainscotTeal = entry(Enum.Material.CeramicTiles, 46, 84, 82, "Tile"), -- Auditorium storey corridors (Level 2)
+	WainscotBlue = entry(Enum.Material.CeramicTiles, 46, 72, 98, "Tile"), -- restrooms and wet rooms
 	WainscotGreen = entry(Enum.Material.CeramicTiles, 54, 86, 68, "Tile"), -- restrooms, locker rooms
 	WainscotPaint = entry(Enum.Material.Plaster, 70, 80, 62, "Concrete"), -- classroom dado: dark olive gloss paint
 	WainscotWood = entry(Enum.Material.Wood, 70, 50, 34, "Wood"), -- office panelling
@@ -131,13 +126,11 @@ local textured: { [string]: string } = {
 	TrimMetal = "RustedMetal",
 	MetalGalvanized = "GalvanizedMetal",
 	Conduit = "GalvanizedMetal",
-	WoodGym = "WornWood",
 	WoodPanel = "WornWood",
 	Plank = "WornWood",
 	PlankDark = "WornWood",
 	Trim = "WornWood",
 	WainscotWood = "WornWood",
-	PoolTile = "PoolMosaic",
 	TileWhite = "PoolMosaic",
 	TileGreen = "PoolMosaic",
 	TileBlue = "PoolMosaic",
@@ -171,7 +164,6 @@ local layoutKeys: { string } = {
 	"TileGreen",
 	"TileBlue",
 	"Linoleum",
-	"WoodGym",
 	"WoodPanel",
 	"PlasterSchool",
 	"PlasterGreen",
@@ -180,9 +172,7 @@ local layoutKeys: { string } = {
 	"MetalGalvanized",
 	"RoofGravel",
 	"Asphalt",
-	"PoolTile",
 	"Carpet",
-	"Lab",
 }
 
 table.freeze(layoutKeys)

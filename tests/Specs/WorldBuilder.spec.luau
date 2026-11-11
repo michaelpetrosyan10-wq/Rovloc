@@ -3,8 +3,8 @@
 -- they are present): openings stay clear, wall pieces tile every wall exactly once, gameplay volumes and anchors
 -- carry the right tags and attributes, stairs are climbable, and stacked stair segments never overlap. Visual
 -- contracts too: fixtures cast shadows (so light stays in its room), the facade shows one slab-edge material
--- between storeys and its own skin at every corner, low platforms never z-fight the pool coping, and open
--- PoolWater volumes are visible. The exterior is walled in and the lighting rig never writes plugin-only props.
+-- between storeys and its own skin at every corner, and platforms stop at the wall faces. The exterior is walled in
+-- and the lighting rig never writes plugin-only props.
 -- Finishes too: fixtures glow with their light (Neon tubes, dead grey glass, self-lit exit letters) and broken ones
 -- only come apart within their own footprint; wainscots clear every opening and its frame and meet cleanly at corners;
 -- corridors get glossy checker floors, classrooms vinyl tile, plaster ceilings a drop-ceiling grid whose missing tiles
@@ -231,63 +231,43 @@ local function hallwaySlice(): Layout
 		triggers = {
 			{ id = "T_Scare", kind = "ScareStep", room = "T_Hall", rect = R(204, 70, 4, 4), height = 6 },
 			{ id = "T_Check", kind = "Checkpoint", room = "L1_AirlockEast", rect = R(229, 67, 10, 26), height = 10 },
-			-- water standing in the chase is the duct's business: no surface from the shell
-			{ id = "T_Flood", kind = "PoolWater", room = "T_Chase", rect = R(200, 61, 28, 5), height = 2 },
 		},
 		windows = windows,
 	}
 end
 
-local function poolSlice(): Layout
-	local windows: { LayoutSchema.Window } = {
-		{ room = "P_Hall", side = "W", at = 20, width = 6, height = 6, sill = 8, boarded = true },
-	}
+local function deckSlice(): Layout
 	return {
-		id = "Level4_FloodedPool",
+		id = "Level2_Auditorium",
 		height = 28,
 		acoustic = "Hall",
-		ambience = "DronePool",
+		ambience = "DroneLobby",
 		entry = "P_Hall",
 		exit = "P_Hall",
-		rooms = { { id = "P_Hall", kind = "Pool", rect = R(0, 0, 40, 40) } },
+		rooms = { { id = "P_Hall", kind = "Storage", rect = R(0, 0, 40, 40) } },
 		doors = {},
 		anchors = {},
-		triggers = {
-			-- a puddle on the deck (gets a surface) and a volume over the basin (whose own surface covers it)
-			{ id = "P_Puddle", kind = "PoolWater", room = "P_Hall", rect = R(36, 10, 3, 6), height = 0.3 },
-			{ id = "P_Deep", kind = "PoolWater", room = "P_Hall", rect = R(10, 10, 5, 5), y = -5, height = 4 },
-		},
-		basins = { { id = "P_Basin", room = "P_Hall", rect = R(5, 5, 30, 30), depth = 10, waterLevel = -1 } },
+		triggers = {},
 		platforms = {
 			{
 				id = "P_Walk",
 				room = "P_Hall",
 				rect = R(10, 18, 20, 4),
-				top = -0.5,
+				top = 1.5,
 				thickness = 1,
 				material = "Concrete",
 			},
-			-- a walkway fragment laid from the basin edge, its top flush with the deck
-			{
-				id = "P_Bridge",
-				room = "P_Hall",
-				rect = R(5, 24, 8, 4),
-				top = 0,
-				thickness = 1,
-				material = "Concrete",
-			},
-			-- a raised curb on the deck (above it, so it is left alone)
+			-- a raised curb laid past the west wall: it stops at the wall's inner face
 			{
 				id = "P_Curb",
 				room = "P_Hall",
-				rect = R(36, 30, 2, 4),
+				rect = R(-4, 30, 8, 4),
 				top = 0.5,
-				thickness = 1,
+				thickness = 0.5,
 				material = "Concrete",
 			},
 		},
 		pillars = { { room = "P_Hall", x = 2.5, z = 2.5, size = 2 } },
-		windows = windows,
 	}
 end
 
@@ -365,7 +345,6 @@ return {
 			"TileGreen",
 			"TileBlue",
 			"Linoleum",
-			"WoodGym",
 			"WoodPanel",
 			"PlasterSchool",
 			"PlasterGreen",
@@ -374,9 +353,7 @@ return {
 			"MetalGalvanized",
 			"RoofGravel",
 			"Asphalt",
-			"PoolTile",
 			"Carpet",
-			"Lab",
 		}
 		for _, key in required do
 			t.truthy(Palette.has(key), "missing palette key " .. key)
@@ -670,7 +647,7 @@ return {
 		root:Destroy()
 	end,
 
-	["zones, triggers and pool volumes carry ids, tags and attributes"] = function(t: Expect)
+	["zones and triggers carry ids, tags and attributes"] = function(t: Expect)
 		local layout = hallwaySlice()
 		local root = buildSlice(layout)
 		local zones = child(root, "Zones")
@@ -696,100 +673,23 @@ return {
 		t.eq(scare:GetAttribute(W.ZoneId), "T_Hall")
 		t.truthy(childPart(triggers, "T_Check"):HasTag(Tags.CheckpointVolume))
 		root:Destroy()
-
-		local pool = poolSlice()
-		local poolRoot = buildSlice(pool)
-		local poolOrigin = WorldConfig.levelOrigin(pool.id)
-		local water = childPart(child(poolRoot, "Triggers"), "P_Basin")
-		t.truthy(water:HasTag(Tags.PoolWater))
-		t.truthy(isVolume(water))
-		t.eq(water:GetAttribute(W.TriggerKind), "PoolWater")
-		t.eq(water:GetAttribute(W.ZoneId), "P_Hall")
-		t.near(water.Size.Y, 9, 1e-3, "water from the basin floor to the surface")
-		t.near(water.CFrame.Position.Y, poolOrigin.Y - 5.5, 1e-3)
-		local poolZone = childPart(child(poolRoot, "Zones"), "P_Hall")
-		local zLo = aabb(poolZone)
-		t.near(zLo.Y, poolOrigin.Y - 10, 1e-3, "pool zone reaches the basin floor")
-		poolRoot:Destroy()
 	end,
 
-	["basins carve the pool deck; platforms, pillars and the surface are built"] = function(t: Expect)
-		local pool = poolSlice()
-		local root = buildSlice(pool)
+	["platforms stop at the wall faces; pillars block with a pass-through trim"] = function(t: Expect)
+		local deck = deckSlice()
+		local root = buildSlice(deck)
 		local shell = child(root, "Shell")
-		local origin = WorldConfig.levelOrigin(pool.id)
-		local basinLo = origin + Vector3.new(5.01, -1.99, 5.01)
-		local basinHi = origin + Vector3.new(34.99, -0.01, 34.99)
-		local floors = 0
-		for _, part in parts(shell) do
-			if string.sub(part.Name, 1, 6) == "Floor_" then
-				floors += 1
-				local a, b = aabb(part)
-				t.eq(overlapVolume(a, b, basinLo, basinHi), 0, part.Name .. " covers the basin")
-			end
-		end
-		t.truthy(floors >= 4, "deck split around the basin")
-		local basinFloor = childPart(shell, "P_Basin_Floor")
-		local _, top = aabb(basinFloor)
-		t.near(top.Y, origin.Y - 10, 1e-3, "basin floor at depth")
-		for i = 1, 4 do
-			childPart(shell, "P_Basin_Wall" .. i)
-		end
-		local surface = childPart(shell, "P_Basin_Surface")
-		t.falsy(surface.CanCollide)
-		t.eq(surface.CollisionGroup, CollisionGroups.NoCollide)
-		t.near(surface.Transparency, 0.25, 1e-3)
-		local _, walkTop = aabb(childPart(shell, "Platform_P_Walk"))
-		t.near(walkTop.Y, origin.Y - 0.5, 1e-3, "platform top")
-		-- At deck level a platform only shows over open water: clipped off the coping and the deck.
-		local bridgeLo, bridgeHi = aabb(childPart(shell, "Platform_P_Bridge"))
-		t.near(bridgeLo.X, origin.X + 6, 1e-3, "flush platform starts at the coping's inner face")
-		t.near(bridgeHi.X, origin.X + 13, 1e-3, "and keeps its far end")
-		t.near(bridgeHi.Y, origin.Y, 1e-3, "top flush with the deck")
-		for _, part in parts(shell) do
-			if part.Name == "Platform_P_Bridge" or part.Transparency > 0 then
-				continue
-			end
-			local lo, hi = aabb(part)
-			if math.abs(hi.Y - bridgeHi.Y) < 1e-3 then
-				local dx = math.min(hi.X, bridgeHi.X) - math.max(lo.X, bridgeLo.X)
-				local dz = math.min(hi.Z, bridgeHi.Z) - math.max(lo.Z, bridgeLo.Z)
-				t.truthy(dx <= 1e-3 or dz <= 1e-3, "platform top z-fights " .. part.Name)
-			end
-		end
+		local origin = WorldConfig.levelOrigin(deck.id)
+		local walkLo, walkTop = aabb(childPart(shell, "Platform_P_Walk"))
+		t.near(walkTop.Y, origin.Y + 1.5, 1e-3, "platform top")
+		t.near(walkTop.X - walkLo.X, 20, 1e-3, "an inside platform keeps its size")
 		local curbLo, curbHi = aabb(childPart(shell, "Platform_P_Curb"))
-		t.near(curbHi.Y, origin.Y + 0.5, 1e-3, "raised curb untouched")
-		t.near(curbHi.X - curbLo.X, 2, 1e-3, "raised curb keeps its size")
+		t.truthy(curbLo.X > origin.X, "the curb stops at the west wall's inner face")
+		t.near(curbHi.X, origin.X + 4, 1e-3, "and keeps its far end")
+		t.near(curbHi.Y, origin.Y + 0.5, 1e-3, "curb top")
 		t.eq(childPart(shell, "Pillar_1").CollisionGroup, "Default", "pillar core blocks")
 		t.eq(childPart(shell, "Pillar_1_Trim1").CollisionGroup, CollisionGroups.MonsterPassthrough)
 		root:Destroy()
-	end,
-
-	["open PoolWater volumes get a murky surface; basins and chases do not get a second one"] = function(t: Expect)
-		local pool = poolSlice()
-		local root = buildSlice(pool)
-		local shell = child(root, "Shell")
-		local origin = WorldConfig.levelOrigin(pool.id)
-		local puddle = childPart(shell, "P_Puddle_Surface")
-		local lo, hi = aabb(puddle)
-		t.near(hi.Y, origin.Y + 0.3, 1e-3, "surface at the volume's top")
-		t.near(hi.Y - lo.Y, 0.2, 1e-3, "a thin surface")
-		t.truthy(lo.X >= origin.X + 36 - 1e-3 and hi.X <= origin.X + 39 + 1e-3, "over the volume")
-		t.falsy(puddle.CanCollide, "never collides")
-		t.falsy(puddle.CanQuery, "never queried")
-		t.falsy(puddle.CastShadow, "no shadow")
-		t.eq(puddle.CollisionGroup, CollisionGroups.NoCollide)
-		t.near(puddle.Transparency, 0.25, 1e-3, "visible murky water")
-		t.eq(puddle.Material, Palette.get("Water").material)
-		t.falsy(shell:FindFirstChild("P_Deep_Surface"), "a volume inside the basin adds no second surface")
-		t.truthy(childPart(child(root, "Triggers"), "P_Puddle"):HasTag(Tags.PoolWater), "the volume itself")
-		root:Destroy()
-
-		local hall = hallwaySlice()
-		local hallRoot = buildSlice(hall)
-		t.falsy(child(hallRoot, "Shell"):FindFirstChild("T_Flood_Surface"), "water in a chase is the duct's")
-		t.truthy(childPart(child(hallRoot, "Triggers"), "T_Flood"):HasTag(Tags.PoolWater))
-		hallRoot:Destroy()
 	end,
 
 	["floors stay in their rooms; one slab-edge material closes the facade between storeys"] = function(t: Expect)
@@ -1609,11 +1509,7 @@ return {
 			end
 		end
 		t.truthy(grounds >= 4, "ground pieces around the footprint")
-		local field = exterior:FindFirstChild("LandingField")
-		t.truthy(field ~= nil, "parachute landing field")
-		if field and field:IsA("BasePart") then
-			t.truthy(field.CFrame.Position.X < 0, "landing field west of the school")
-		end
+		t.falsy(exterior:FindFirstChild("LandingField"), "no landing field: the glide comes down over the street")
 		-- Invisible walls around the slab edge keep everyone on the ground.
 		local ext = SchoolShellBuilder.Exterior
 		local lo, hi = Vector3.one * math.huge, -Vector3.one * math.huge
@@ -1731,12 +1627,12 @@ return {
 		-- a tunnel floor (TunnelPlanner: walls round every run, caged bulbs, the dressing, most of it Detail a low
 		-- graphics setting drops) fits 16000 parts, any other level 6000, the lobby, towers and exterior 6000
 		local budget = 6000
-		for _, id: Enums.LevelId in Enums.LevelId do
+		for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 			local layout = Builder.getLayout(id)
 			budget += if layout and layout.tunnels then 16000 else 6000
 		end
 		t.truthy(result.partCount < budget, string.format("part budget (%d of %d)", result.partCount, budget))
-		for _, id: Enums.LevelId in Enums.LevelId do
+		for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 			local level = result.levels[id]
 			assert(level, "level " .. id)
 			t.eq(level:GetAttribute(W.LayoutId), id)

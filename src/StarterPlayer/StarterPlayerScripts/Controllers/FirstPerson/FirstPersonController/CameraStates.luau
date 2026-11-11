@@ -4,19 +4,19 @@
 --
 -- Eye offsets. CameraConfig.StateOffsets[state] moves the eye away from the standing eye (rotated by camera yaw, so
 -- the vent crawl's -0.5 Z always leans into the duct ahead). Several MoveStates share one camera state (Sprinting
--- rides Standing, Freestyle rides SurfaceSwimming, Grabbed rides UnderwaterSwimming, ...). Each camera state has a
+-- rides Standing, VentScurrying rides VentCrawling, ...). Each camera state has a
 -- primary MoveState whose eye is exactly the configured offset; a sibling MoveState adds a vertical trim equal to
 -- the difference between the two states' server eye heights (CameraConfig.EyeHeightAboveRoot, the point Creature
 -- line of sight aims at). A sprinting player therefore sees from 0.1 lower than a walking one, exactly as the
 -- server's eye point drops, and a camera state forced by a later phase (LockerPeeking, ParachuteLookback, ...) uses
 -- its configured offset as is.
 --
--- Pitch ranges are degrees (CameraConfig.Pitch): free on foot and in water, ±35 in the 3.5-stud ducts, narrow
+-- Pitch ranges are degrees (CameraConfig.Pitch): free on foot, ±35 in the 3.5-stud ducts, narrow
 -- behind the locker slits, and limited downward while crawling on the stomach.
 --
 -- Bob profiles scale CameraConfig.Bob per MoveState: `amplitude` multiplies the walk bob, `frequency` the gait
 -- cadence at the state's own nominal speed (GameConfig), so the bob's rhythm follows the legs in every posture.
--- States where the body is held still (hiding, trapped, grabbed, parachuting, scripted) do not bob.
+-- States where the body is held still (hiding, trapped, parachuting, scripted) do not bob.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -41,12 +41,8 @@ local MOVE_TO_CAMERA: { [string]: Enums.CameraState } = {
 	VentCrawling = "VentCrawling",
 	VentScurrying = "VentCrawling",
 	DownedCrawling = "DownedCrawling",
-	Treading = "SurfaceSwimming",
-	Freestyle = "SurfaceSwimming",
-	Underwater = "UnderwaterSwimming",
 	Hiding = "LockerPeeking",
 	Trapped = "Standing",
-	Grabbed = "UnderwaterSwimming",
 	Parachuting = "Standing",
 	Scripted = "Standing",
 }
@@ -58,8 +54,6 @@ local PRIMARY_MOVE: { [string]: Enums.MoveState } = {
 	VentCrawling = "VentCrawling",
 	DownedCrawling = "DownedCrawling",
 	LockerPeeking = "Hiding",
-	SurfaceSwimming = "Treading",
-	UnderwaterSwimming = "Underwater",
 	ParachuteLookback = "Parachuting",
 }
 
@@ -71,8 +65,6 @@ local PITCH: { [string]: PitchRange } = {
 	VentCrawling = { min = P.VentMin, max = P.VentMax },
 	DownedCrawling = { min = -50, max = 65 },
 	LockerPeeking = { min = -25, max = 25 },
-	SurfaceSwimming = { min = -70, max = 75 },
-	UnderwaterSwimming = { min = P.Min, max = P.Max },
 	ParachuteLookback = { min = P.Min, max = P.Max },
 }
 
@@ -87,12 +79,8 @@ local BOB: { [string]: BobProfile } = {
 	VentCrawling = { amplitude = B.VentMultiplier, frequency = 0.7, nominalSpeed = GameConfig.VentCrawlSpeed },
 	VentScurrying = { amplitude = B.VentMultiplier * 1.4, frequency = 0.95, nominalSpeed = GameConfig.VentScurrySpeed },
 	DownedCrawling = { amplitude = 0.9, frequency = 0.5, nominalSpeed = GameConfig.DownedMoveSpeed },
-	Treading = { amplitude = 0.35, frequency = 0.45, nominalSpeed = GameConfig.TreadSpeed },
-	Freestyle = { amplitude = 0.6, frequency = 0.65, nominalSpeed = GameConfig.FreestyleSpeed },
-	Underwater = { amplitude = 0.3, frequency = 0.4, nominalSpeed = GameConfig.UnderwaterSpeed },
 	Hiding = STILL,
 	Trapped = STILL,
-	Grabbed = STILL,
 	Parachuting = STILL,
 	Scripted = STILL,
 }

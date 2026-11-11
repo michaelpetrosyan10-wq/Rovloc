@@ -119,7 +119,7 @@ local function loadLayouts(): { Layout }
 	return list
 end
 
--- Lobby, Level0..Level5 in run order (loaded once from Layouts/*).
+-- The lobby, then the school levels in climbing order (loaded once from Layouts/*).
 function Builder.layouts(): { Layout }
 	local cached = loadedLayouts
 	if cached then
@@ -332,7 +332,7 @@ local function buildStatics(layout: Layout, root: Model)
 	end
 end
 
--- Server: lobby + six levels + stair towers + exterior. Replaces any previous build under `parent`.
+-- Server: lobby + the school levels + stair towers + exterior. Replaces any previous build under `parent`.
 function Builder.BuildAuthoritative(options: BuildOptions?): BuildResult
 	local opts: BuildOptions = options or {}
 	local parent: Instance = opts.parent or Workspace
@@ -377,7 +377,7 @@ function Builder.BuildAuthoritative(options: BuildOptions?): BuildResult
 	school.Parent = parent
 	local levels: { [string]: Model } = {}
 	local anyLevel = false
-	for _, levelId: Enums.LevelId in Enums.LevelId do
+	for _, levelId: Enums.LevelId in WorldConfig.LevelOrder do
 		if not selected[levelId] then
 			continue
 		end

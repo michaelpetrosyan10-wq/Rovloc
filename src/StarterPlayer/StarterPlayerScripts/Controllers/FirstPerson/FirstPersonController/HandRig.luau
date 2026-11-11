@@ -19,7 +19,7 @@
 --   * Flask       the right hand at `target` itself (a held chemical flask: ChemicalThrowController moves it through
 --                 the carry, the wind-up and the throw), left hand free; the torch rides on the chest strap.
 -- Placements for Pry / Ripcord / SlitGrip are fixed offsets in the target's frame; a pose that needs a target and
--- has none falls back to Free. While the body itself needs the hands (crawling a duct or downed, swimming, grabbed),
+-- has none falls back to Free. While the body itself needs the hands (crawling a duct or downed, parachuting),
 -- the Flashlight and Flask poses stow the torch on the chest and release the hands. Goals go to
 -- CharacterAnimationController.SetHandTarget / SetHandGrip (bound with Bind); blending between poses is the
 -- animator's IK.
@@ -86,10 +86,6 @@ local BUSY_STATES: { [string]: boolean } = {
 	VentCrawling = true,
 	VentScurrying = true,
 	DownedCrawling = true,
-	Treading = true,
-	Freestyle = true,
-	Underwater = true,
-	Grabbed = true,
 	Parachuting = true,
 }
 

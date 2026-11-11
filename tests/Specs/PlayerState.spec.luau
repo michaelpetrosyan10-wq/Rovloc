@@ -1,7 +1,7 @@
 --!strict
 -- PlayerStateService: the MoveState derivation table per mode, override priority, exhaustion, walk speeds and drains,
--- the stamina / oxygen meter maths and their scheduled crossings (a fake clock runs a vent sprint until the meter
--- empties, the forced drop to crawling, the regen delay and the refill), intents ordered by seq, the lobby baseline,
+-- the stamina meter maths and its scheduled crossings (a fake clock runs a vent sprint until the meter empties, the
+-- forced drop to crawling and the regen delay), intents ordered by seq, the lobby baseline,
 -- LookRelay quantization and the batched LookBroadcast.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,7 +12,6 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Types = require(ReplicatedStorage.Shared.Types)
 local CharacterService = require(ServerScriptService.Services.Core.CharacterService)
-local LoadoutService = require(ServerScriptService.Services.Player.LoadoutService)
 local PlayerStateService = require(ServerScriptService.Services.Player.PlayerStateService)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
@@ -105,8 +104,8 @@ local function context(players: { Player }): Types.RunContext
 	return { runId = "player-state-spec", seed = 1, difficulty = "Standard", participants = players, startedAt = 1000 }
 end
 
-local function intent(crouch: boolean, sprint: boolean, dive: boolean): Intent
-	return { crouch = crouch, sprint = sprint, dive = dive }
+local function intent(crouch: boolean, sprint: boolean): Intent
+	return { crouch = crouch, sprint = sprint }
 end
 
 local function input(
@@ -147,15 +146,14 @@ end
 return {
 	["derive: on foot, crouch beats sprint, sprint needs stamina and motion"] = function(t: Expect)
 		local derive = PlayerStateService.deriveState
-		t.eq(derive(input("OnFoot", intent(false, false, false), 100, false)), "Standing")
-		t.eq(derive(input("OnFoot", intent(false, false, false), 100, true)), "Standing", "walking is Standing")
-		t.eq(derive(input("OnFoot", intent(true, false, false), 100, true)), "Crouching")
-		t.eq(derive(input("OnFoot", intent(true, true, false), 100, true)), "Crouching", "crouch beats sprint")
-		t.eq(derive(input("OnFoot", intent(false, true, false), 100, true)), "Sprinting")
-		t.eq(derive(input("OnFoot", intent(false, true, false), 100, false)), "Standing", "no sprint standing still")
-		t.eq(derive(input("OnFoot", intent(false, true, false), 0, true)), "Standing", "no sprint on empty")
-		t.eq(derive(input("OnFoot", intent(false, false, true), 100, true)), "Standing", "dive means nothing on foot")
-		local tired = input("OnFoot", intent(false, true, false), 50, true)
+		t.eq(derive(input("OnFoot", intent(false, false), 100, false)), "Standing")
+		t.eq(derive(input("OnFoot", intent(false, false), 100, true)), "Standing", "walking is Standing")
+		t.eq(derive(input("OnFoot", intent(true, false), 100, true)), "Crouching")
+		t.eq(derive(input("OnFoot", intent(true, true), 100, true)), "Crouching", "crouch beats sprint")
+		t.eq(derive(input("OnFoot", intent(false, true), 100, true)), "Sprinting")
+		t.eq(derive(input("OnFoot", intent(false, true), 100, false)), "Standing", "no sprint standing still")
+		t.eq(derive(input("OnFoot", intent(false, true), 0, true)), "Standing", "no sprint on empty")
+		local tired = input("OnFoot", intent(false, true), 50, true)
 		tired.exhausted = true
 		t.eq(derive(tired), "Standing", "no sprint while exhausted")
 	end,
@@ -167,26 +165,20 @@ return {
 			entry.lowCeiling = true
 			return entry
 		end
-		t.eq(derive(low("OnFoot", intent(false, false, false))), "Crouching", "cannot stand under a crawlway's mouth")
-		t.eq(derive(low("OnFoot", intent(false, true, false))), "Crouching", "nor sprint through one")
-		t.eq(derive(low("Vent", intent(false, false, false))), "VentCrawling", "means nothing in a duct")
-		t.eq(derive(low("Swim", intent(false, false, false))), "Treading", "means nothing in the water")
-		t.eq(derive(low("OnFoot", intent(false, false, false), "Hiding")), "Hiding", "an override still wins")
+		t.eq(derive(low("OnFoot", intent(false, false))), "Crouching", "cannot stand under a crawlway's mouth")
+		t.eq(derive(low("OnFoot", intent(false, true))), "Crouching", "nor sprint through one")
+		t.eq(derive(low("Vent", intent(false, false))), "VentCrawling", "means nothing in a duct")
+		t.eq(derive(low("OnFoot", intent(false, false), "Hiding")), "Hiding", "an override still wins")
 		-- the speed a forced crouch moves at is the crouch speed: never a sprint through a crawlway
 		t.eq(PlayerStateService.walkSpeedFor("Crouching"), GameConfig.CrouchSpeed)
 	end,
 
-	["derive: vent and swim modes"] = function(t: Expect)
+	["derive: the vent mode"] = function(t: Expect)
 		local derive = PlayerStateService.deriveState
-		t.eq(derive(input("Vent", intent(false, false, false), 100, false)), "VentCrawling")
-		t.eq(derive(input("Vent", intent(false, true, false), 100, false)), "VentScurrying", "no motion test in ducts")
-		t.eq(derive(input("Vent", intent(false, true, false), 0, true)), "VentCrawling")
-		t.eq(derive(input("Vent", intent(true, false, false), 100, true)), "VentCrawling", "crouch means nothing")
-		t.eq(derive(input("Swim", intent(false, false, false), 100, false)), "Treading")
-		t.eq(derive(input("Swim", intent(false, true, false), 100, false)), "Freestyle")
-		t.eq(derive(input("Swim", intent(false, true, false), 0, false)), "Treading")
-		t.eq(derive(input("Swim", intent(false, true, true), 100, false)), "Underwater", "dive beats sprint")
-		t.eq(derive(input("Swim", intent(false, false, true), 0, false)), "Underwater")
+		t.eq(derive(input("Vent", intent(false, false), 100, false)), "VentCrawling")
+		t.eq(derive(input("Vent", intent(false, true), 100, false)), "VentScurrying", "no motion test in ducts")
+		t.eq(derive(input("Vent", intent(false, true), 0, true)), "VentCrawling")
+		t.eq(derive(input("Vent", intent(true, false), 100, true)), "VentCrawling", "crouch means nothing")
 	end,
 
 	["derive: overrides win, highest priority first"] = function(t: Expect)
@@ -195,8 +187,8 @@ return {
 		t.eq(resolve({ life = "DownedCrawling" }), "DownedCrawling")
 		t.eq(resolve({ life = "DownedCrawling", trap = "Trapped" }), "Trapped")
 		t.eq(resolve({ chute = "Parachuting", locker = "Hiding" }), "Hiding")
-		t.eq(resolve({ trap = "Trapped", grab = "Grabbed" }), "Grabbed")
-		t.eq(resolve({ grab = "Grabbed", cut = "Scripted", life = "DownedCrawling" }), "Scripted")
+		t.eq(resolve({ locker = "Hiding", trap = "Trapped" }), "Trapped")
+		t.eq(resolve({ trap = "Trapped", cut = "Scripted", life = "DownedCrawling" }), "Scripted")
 		local order = PlayerStateService.OverridePriority
 		for index = 1, #order - 1 do
 			t.truthy(
@@ -206,8 +198,8 @@ return {
 		end
 		t.eq(PlayerStateService.overrideRank("Sprinting"), 0, "base states are not overrides")
 		local derive = PlayerStateService.deriveState
-		t.eq(derive(input("Vent", intent(false, true, false), 100, true, "Grabbed")), "Grabbed")
-		t.eq(derive(input("OnFoot", intent(false, true, false), 100, true, "DownedCrawling")), "DownedCrawling")
+		t.eq(derive(input("Vent", intent(false, true), 100, true, "Trapped")), "Trapped")
+		t.eq(derive(input("OnFoot", intent(false, true), 100, true, "DownedCrawling")), "DownedCrawling")
 	end,
 
 	["exhaustion: set at empty with sprint held, cleared by release or a full meter"] = function(t: Expect)
@@ -229,20 +221,15 @@ return {
 		t.eq(speed("VentCrawling"), GameConfig.VentCrawlSpeed)
 		t.eq(speed("VentScurrying"), GameConfig.VentScurrySpeed)
 		t.eq(speed("DownedCrawling"), GameConfig.DownedMoveSpeed)
-		t.eq(speed("Treading"), GameConfig.TreadSpeed)
-		t.eq(speed("Freestyle"), GameConfig.FreestyleSpeed)
-		t.eq(speed("Underwater"), GameConfig.UnderwaterSpeed)
 		t.eq(speed("Parachuting"), GameConfig.WalkSpeed)
-		local held: { Enums.MoveState } = { "Hiding", "Trapped", "Grabbed", "Scripted" }
+		local held: { Enums.MoveState } = { "Hiding", "Trapped", "Scripted" }
 		for _, state: Enums.MoveState in held do
 			t.eq(speed(state), 0, state .. " holds still")
 		end
 		local drain = PlayerStateService.drainFor
 		t.eq(drain("Sprinting"), GameConfig.StaminaSprintDrain)
 		t.eq(drain("VentScurrying"), GameConfig.StaminaScurryDrain)
-		t.eq(drain("Freestyle"), GameConfig.StaminaFreestyleDrain)
-		t.eq(drain("Treading"), GameConfig.StaminaTreadDrain)
-		local resting: { Enums.MoveState } = { "Standing", "Crouching", "VentCrawling", "DownedCrawling", "Underwater" }
+		local resting: { Enums.MoveState } = { "Standing", "Crouching", "VentCrawling", "DownedCrawling" }
 		for _, state: Enums.MoveState in resting do
 			t.eq(drain(state), 0, state .. " does not drain")
 		end
@@ -259,9 +246,6 @@ return {
 		t.eq(at(50, -10, 100, 100, 99), 50, "never extrapolates backwards")
 		t.eq(at(50, -10, 100, 100, 104.99995), 0, "snaps onto empty")
 		t.eq(at(99.9995, 0, 100, 100, 100), 100, "snaps onto full")
-		t.eq(PlayerStateService.oxygenEmptyAt(70, -7, 10), 20)
-		t.eq(PlayerStateService.oxygenEmptyAt(70, 0, 10), nil)
-		t.eq(PlayerStateService.oxygenEmptyAt(0, -7, 10), nil, "already empty")
 	end,
 
 	["stamina plan: drain to empty, regen after the delay, rise to full"] = function(t: Expect)
@@ -285,9 +269,9 @@ return {
 		local full = plan(max, 20, 0, 19, max)
 		t.eq(full.rate, 0)
 		t.eq(full.nextAt, nil)
-		local treadingEmpty = plan(0, 20, GameConfig.StaminaTreadDrain, nil, max)
-		t.eq(treadingEmpty.rate, 0, "an empty meter in a draining state stays flat")
-		t.eq(treadingEmpty.nextAt, nil)
+		local scurryEmpty = plan(0, 20, GameConfig.StaminaScurryDrain, nil, max)
+		t.eq(scurryEmpty.rate, 0, "an empty meter in a draining state stays flat")
+		t.eq(scurryEmpty.nextAt, nil)
 	end,
 
 	["service: a vent sprint empties the meter, drops to crawling at 0, then regenerates"] = function(t: Expect)
@@ -307,7 +291,7 @@ return {
 			t.eq(PlayerStateService.GetMode(player), "Vent")
 			t.eq(player:GetAttribute("MoveState"), "VentCrawling")
 			t.eq(humanoid.WalkSpeed, GameConfig.VentCrawlSpeed)
-			t.truthy(PlayerStateService.SubmitIntent(player, { crouch = false, sprint = true, dive = false, seq = 1 }))
+			t.truthy(PlayerStateService.SubmitIntent(player, { crouch = false, sprint = true, seq = 1 }))
 			t.eq(player:GetAttribute("MoveState"), "VentScurrying")
 			t.eq(humanoid.WalkSpeed, GameConfig.VentScurrySpeed)
 			local value, rate, at = meter(player)
@@ -331,11 +315,11 @@ return {
 			t.eq(regenRate, GameConfig.StaminaRegen, "regenerating after the delay")
 			t.eq(player:GetAttribute("MoveState"), "VentCrawling", "exhausted: holding sprint does not scurry")
 			t.truthy(PlayerStateService.GetStamina(player) > 0)
-			PlayerStateService.SubmitIntent(player, { crouch = false, sprint = false, dive = false, seq = 2 })
+			PlayerStateService.SubmitIntent(player, { crouch = false, sprint = false, seq = 2 })
 			t.falsy(PlayerStateService.IsExhausted(player), "released")
-			PlayerStateService.SubmitIntent(player, { crouch = false, sprint = true, dive = false, seq = 3 })
+			PlayerStateService.SubmitIntent(player, { crouch = false, sprint = true, seq = 3 })
 			t.eq(player:GetAttribute("MoveState"), "VentScurrying", "a fresh press scurries again")
-			PlayerStateService.SubmitIntent(player, { crouch = false, sprint = false, dive = false, seq = 4 })
+			PlayerStateService.SubmitIntent(player, { crouch = false, sprint = false, seq = 4 })
 			clock.advance(GameConfig.StaminaRegenDelay + GameConfig.StaminaMax / GameConfig.StaminaRegen + 1)
 			value, rate = meter(player)
 			t.eq(value, GameConfig.StaminaMax, "full")
@@ -352,13 +336,13 @@ return {
 	["service: intents apply in seq order and reset with a new character"] = function(t: Expect)
 		inRun(function(player: Player)
 			PlayerStateService.SetMode(player, "Vent")
-			t.truthy(PlayerStateService.SubmitIntent(player, { crouch = false, sprint = true, dive = false, seq = 5 }))
+			t.truthy(PlayerStateService.SubmitIntent(player, { crouch = false, sprint = true, seq = 5 }))
 			t.falsy(
-				PlayerStateService.SubmitIntent(player, { crouch = false, sprint = false, dive = false, seq = 4 }),
+				PlayerStateService.SubmitIntent(player, { crouch = false, sprint = false, seq = 4 }),
 				"older seq ignored"
 			)
 			t.falsy(
-				PlayerStateService.SubmitIntent(player, { crouch = false, sprint = false, dive = false, seq = 5 }),
+				PlayerStateService.SubmitIntent(player, { crouch = false, sprint = false, seq = 5 }),
 				"repeated seq ignored"
 			)
 			t.eq(player:GetAttribute("MoveState"), "VentScurrying")
@@ -368,7 +352,7 @@ return {
 			t.falsy(PlayerStateService.GetIntent(player).sprint, "a new body starts neutral")
 			t.eq(player:GetAttribute("MoveState"), "VentCrawling")
 			t.truthy(
-				PlayerStateService.SubmitIntent(player, { crouch = false, sprint = true, dive = false, seq = 1 }),
+				PlayerStateService.SubmitIntent(player, { crouch = false, sprint = true, seq = 1 }),
 				"a restarted counter is accepted"
 			)
 		end)
@@ -394,16 +378,14 @@ return {
 			PlayerStateService.PopOverride(player, "LifeState")
 			t.eq(player:GetAttribute("MoveState"), "Standing")
 			t.eq(humanoid.WalkSpeed, GameConfig.WalkSpeed)
-			PlayerStateService.SetMode(player, "Swim")
-			t.eq(player:GetAttribute("MoveState"), "Treading")
+			PlayerStateService.SetMode(player, "Vent")
+			t.eq(player:GetAttribute("MoveState"), "VentCrawling")
 			PlayerStateService.SetMode(player, "Ladder" :: any)
-			t.eq(PlayerStateService.GetMode(player), "Swim", "unknown modes are refused")
+			t.eq(PlayerStateService.GetMode(player), "Vent", "unknown modes are refused")
 		end)
 	end,
 
-	["service: spends delay regen, refills and the syringe fill the meter, oxygen depletion fires"] = function(
-		t: Expect
-	)
+	["service: a spend delays the regen"] = function(t: Expect)
 		inRun(function(player: Player, _humanoid: Humanoid, clock: FakeClock)
 			PlayerStateService.Init()
 			PlayerStateService.AddStamina(player, -30)
@@ -412,33 +394,14 @@ return {
 			t.eq(rate, 0, "a spend restarts the regen delay")
 			clock.advance(GameConfig.StaminaRegenDelay + 0.5)
 			t.near(PlayerStateService.GetStamina(player), 70 + 0.5 * GameConfig.StaminaRegen, 1e-6)
-			PlayerStateService.RefillStamina(player)
-			t.eq(PlayerStateService.GetStamina(player), GameConfig.StaminaMax)
-			PlayerStateService.AddStamina(player, -60)
-			LoadoutService.SyringeUsed:Fire(player, "Stamina")
-			t.eq(PlayerStateService.GetStamina(player), GameConfig.StaminaMax, "the stamina syringe refills")
-
-			local depleted = 0
-			local connection = PlayerStateService.OxygenDepleted:Connect(function(who: Player)
-				if who == player then
-					depleted += 1
-				end
-			end)
-			t.eq(player:GetAttribute("OxygenMax"), GameConfig.OxygenMax)
-			PlayerStateService.SetOxygenRate(player, -GameConfig.OxygenDrain)
-			t.eq(player:GetAttribute("OxygenRate"), -GameConfig.OxygenDrain)
-			clock.advance(GameConfig.OxygenMax / GameConfig.OxygenDrain - 1)
-			t.eq(depleted, 0)
-			t.near(PlayerStateService.GetOxygen(player), GameConfig.OxygenDrain, 1e-6)
-			PlayerStateService.AddOxygen(player, 7)
-			clock.advance(1.5)
-			t.eq(depleted, 0, "the breath pushed the crossing back")
-			clock.advance(1)
-			t.eq(depleted, 1, "OxygenDepleted at 0")
-			t.eq(PlayerStateService.GetOxygen(player), 0)
-			clock.advance(10)
-			t.eq(depleted, 1, "fires once per crossing")
-			connection:Disconnect()
+			PlayerStateService.AddStamina(player, -20)
+			clock.advance(GameConfig.StaminaRegenDelay - 0.5)
+			t.near(
+				PlayerStateService.GetStamina(player),
+				50 + 0.5 * GameConfig.StaminaRegen,
+				1e-6,
+				"the next spend restarts the delay"
+			)
 		end)
 	end,
 
@@ -448,9 +411,7 @@ return {
 		t.eq(player:GetAttribute("MoveState"), "Standing")
 		t.eq(player:GetAttribute("Stamina"), GameConfig.StaminaMax)
 		t.eq(player:GetAttribute("StaminaRate"), 0)
-		t.eq(player:GetAttribute("Oxygen"), GameConfig.OxygenMax)
-		t.eq(player:GetAttribute("OxygenRate"), 0)
-		PlayerStateService.SubmitIntent(player, { crouch = true, sprint = false, dive = false, seq = 1 })
+		PlayerStateService.SubmitIntent(player, { crouch = true, sprint = false, seq = 1 })
 		t.eq(player:GetAttribute("MoveState"), "Standing", "no posture outside a run")
 		PlayerStateService.AddStamina(player, -40)
 		t.eq(PlayerStateService.GetStamina(player), GameConfig.StaminaMax, "meters do not run in the lobby")
@@ -461,7 +422,7 @@ return {
 
 		inRun(function(runner: Player)
 			PlayerStateService.SetMode(runner, "Vent")
-			PlayerStateService.SubmitIntent(runner, { crouch = false, sprint = true, dive = false, seq = 1 })
+			PlayerStateService.SubmitIntent(runner, { crouch = false, sprint = true, seq = 1 })
 			t.eq(runner:GetAttribute("StaminaRate"), -GameConfig.StaminaScurryDrain)
 			runner:SetAttribute("LifeState", "Dead")
 			PlayerStateService.Refresh(runner)

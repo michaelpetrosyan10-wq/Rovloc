@@ -52,7 +52,6 @@ local LIGHT_DEFAULTS: { [string]: LightDefaults } = {
 	Bulb = { brightness = 0.55, range = 20, color = Color3.fromRGB(255, 184, 116) },
 	EmergencyRed = { brightness = 0.45, range = 16, color = Color3.fromRGB(255, 34, 18) },
 	ClassroomGlow = { brightness = 1.1, range = 34, color = Color3.fromRGB(198, 220, 255) },
-	Floodlight = { brightness = 2, range = 60, color = Color3.fromRGB(236, 240, 255) },
 	ExitSign = { brightness = 0.3, range = 8, color = Color3.fromRGB(70, 255, 120) },
 	BoilerGlow = { brightness = 1.3, range = 32, color = Color3.fromRGB(255, 120, 44) },
 }

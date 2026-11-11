@@ -14,7 +14,6 @@ export type PerkSpec = {
 	maxEquipped: number,
 	unscrewSeconds: number?,
 	batteryCapacityMultiplier: number?,
-	syringeCharges: number?,
 }
 
 local Perks: { [string]: PerkSpec } = {
@@ -30,11 +29,11 @@ local Perks: { [string]: PerkSpec } = {
 		maxEquipped = 1,
 		batteryCapacityMultiplier = 1.5,
 	} :: PerkSpec),
+	-- (sold and equipped as before; what it does in a run is being redesigned: docs/design/game-spec-v2.md 3.3)
 	AdrenalineSyringe = table.freeze({
 		id = "AdrenalineSyringe",
 		cost = 120,
 		maxEquipped = 1,
-		syringeCharges = 1, -- one use: self-revive while Downed, or an instant stamina refill while Alive
 	} :: PerkSpec),
 }
 table.freeze(Perks)
@@ -87,14 +86,6 @@ function PerkConfig.batteryCapacity(perks: { Enums.PerkId }): number
 		multiplier = Perks.LithiumCell.batteryCapacityMultiplier or 1
 	end
 	return GameConfig.BatteryMax * multiplier
-end
-
--- Syringe charges a run starts with for a player with `perks`.
-function PerkConfig.syringeCharges(perks: { Enums.PerkId }): number
-	if PerkConfig.has(perks, "AdrenalineSyringe") then
-		return Perks.AdrenalineSyringe.syringeCharges or 0
-	end
-	return 0
 end
 
 -- Most unused units of one perk a player may own (PerkShopService refuses purchases past it).

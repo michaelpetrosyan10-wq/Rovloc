@@ -175,13 +175,13 @@ return {
 		local scared = CharacterService.summarizeLocks({ Locker = { "Anchor" }, Jumpscare = { "Anchor" } })
 		t.eq(scared.reason, "Jumpscare")
 
-		local dragged = CharacterService.summarizeLocks({ Drag = { "ServerOwned" } })
-		t.eq(dragged.reason, "Drag")
-		t.truthy(dragged.locked)
-		t.falsy(dragged.anchored, "ServerOwned keeps the root simulated")
+		local gliding = CharacterService.summarizeLocks({ Parachute = { "ServerOwned" } })
+		t.eq(gliding.reason, "Parachute")
+		t.truthy(gliding.locked)
+		t.falsy(gliding.anchored, "ServerOwned keeps the root simulated")
 
-		local mixed = CharacterService.summarizeLocks({ Drag = { "ServerOwned" }, Airlock = { "Anchor" } })
-		t.eq(mixed.reason, "Drag")
+		local mixed = CharacterService.summarizeLocks({ Parachute = { "ServerOwned" }, Airlock = { "Anchor" } })
+		t.eq(mixed.reason, "Parachute")
 		t.truthy(mixed.anchored)
 
 		local released = CharacterService.summarizeLocks({ Trap = {} })
@@ -274,8 +274,8 @@ return {
 		local east = box("East", CFrame.new(30, 5, 10), Vector3.new(20, 10, 20), "Level0_Basement", Tags.Zone)
 		local above = box("Above", CFrame.new(10, 25, 10), Vector3.new(20, 10, 20), "Level1_Hallways", Tags.Zone)
 		local debris = box("Debris", CFrame.new(30, 1, 10), Vector3.new(4, 2, 4), "Level0_Basement", Tags.FloorDebris)
-		local water = box("Water", CFrame.new(30, 1, 10), Vector3.new(8, 2, 8), "Level0_Basement", Tags.PoolWater)
-		local index = ZoneService.buildIndex({ west, east, above }, { debris, water, west })
+		local step = box("Step", CFrame.new(30, 1, 10), Vector3.new(8, 2, 8), "Level0_Basement", Tags.ScareTrigger)
+		local index = ZoneService.buildIndex({ west, east, above }, { debris, step, west })
 
 		t.eq(ZoneService.locate(index, Vector3.new(5, 3, 5), nil, nil), west)
 		t.eq(ZoneService.locate(index, Vector3.new(35, 3, 5), nil, "Level0_Basement"), east)
@@ -291,7 +291,7 @@ return {
 
 		local inside = ZoneService.volumesAt(index, { Vector3.new(30, 4, 10), Vector3.new(30, 0.5, 10) })
 		t.eq(inside[debris], Tags.FloorDebris, "the feet point catches floor triggers")
-		t.eq(inside[water], Tags.PoolWater)
+		t.eq(inside[step], Tags.ScareTrigger)
 		t.eq(inside[west], nil, "zones are not trigger volumes")
 		local none = ZoneService.volumesAt(index, { Vector3.new(30, 4, 10) })
 		t.eq(next(none), nil)
@@ -343,15 +343,16 @@ return {
 	end,
 
 	["levels: run order ends on the roof"] = function(t: Expect)
-		local levelId: Enums.LevelId? = Enums.LevelId[1]
+		local levelId: Enums.LevelId? = WorldConfig.LevelOrder[1]
 		local visited = 0
 		while levelId do
 			visited += 1
-			t.eq(levelId, Enums.LevelId[visited])
+			t.eq(levelId, WorldConfig.LevelOrder[visited])
 			levelId = LevelDirector.nextLevel(levelId)
 		end
-		t.eq(visited, #Enums.LevelId)
-		t.eq(LevelDirector.nextLevel("Level5_Roof"), nil)
+		t.eq(visited, #WorldConfig.LevelOrder)
+		t.eq(visited, 4, "the school's four levels")
+		t.eq(LevelDirector.nextLevel("Level3_Roof"), nil)
 	end,
 
 	["dev tools: command arguments parse in any order and case"] = function(t: Expect)
@@ -365,13 +366,13 @@ return {
 		t.eq(swapped.difficulty, "Standard")
 		t.eq(swapped.seed, 77)
 
-		t.eq(DevToolsService.parseLevel("0"), "Level0_Basement")
-		t.eq(DevToolsService.parseLevel("5"), "Level5_Roof")
-		t.eq(DevToolsService.parseLevel("6"), nil)
-		t.eq(DevToolsService.parseLevel("-1"), nil)
-		t.eq(DevToolsService.parseLevel("1.5"), nil)
-		t.eq(DevToolsService.parseLevel("level2"), "Level2_ScienceHall")
-		t.eq(DevToolsService.parseLevel("LEVEL4_FLOODEDPOOL"), "Level4_FloodedPool")
+		t.eq(DevToolsService.parseLevel("level0"), "Level0_Basement")
+		t.eq(DevToolsService.parseLevel("Level3"), "Level3_Roof")
+		t.eq(DevToolsService.parseLevel("level2"), "Level2_Auditorium")
+		t.eq(DevToolsService.parseLevel("LEVEL1_HALLWAYS"), "Level1_Hallways")
+		t.eq(DevToolsService.parseLevel("0"), nil, "levels go by id, never by number")
+		t.eq(DevToolsService.parseLevel("level4"), nil, "only the school's levels")
+		t.eq(DevToolsService.parseLevel("City1_Rooftops"), nil, "the city levels have no world yet")
 		t.eq(DevToolsService.parseLevel("pool"), nil)
 		t.eq(DevToolsService.parseLevel(nil), nil)
 

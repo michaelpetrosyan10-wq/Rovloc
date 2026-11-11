@@ -58,7 +58,6 @@ return {
 			for _, entry in entriesOf(layout) do
 				local light = entry.light
 				local kept = (mood.keepDark ~= nil and table.find(mood.keepDark, entry.room.id) ~= nil)
-					or light.kind == "Floodlight"
 					or light.kind == "ClassroomGlow"
 				if kept then
 					local resolved = LightingMood.resolve(layout.id, entry.room.id, light)
@@ -91,27 +90,22 @@ return {
 		local white = Color3.new(1, 1, 1)
 		local hallways = LightingMood.cast("Level1_Hallways", "L1_NorthHall_West", "Fluorescent", white)
 		t.truthy(hallways.G > hallways.R and hallways.G > hallways.B, "the classroom floors burn a sickly green")
-		local science = LightingMood.cast("Level2_ScienceHall", "L2_NorthHall", "Fluorescent", white)
-		t.truthy(science.G > science.R and science.B > science.R, "the science wing a green-teal")
+		local auditorium = LightingMood.cast("Level2_Auditorium", "L2_AirlockWest", "Fluorescent", white)
+		t.truthy(auditorium.G > auditorium.R and auditorium.B > auditorium.R, "the Auditorium storey a green-teal")
 		local basement = LightingMood.cast("Level0_Basement", "L0_BoilerHall", "Fluorescent", white)
 		t.truthy(basement.R > basement.G and basement.G > basement.B, "the basement tubes an amber")
 		local bulb = LightingMood.cast("Level0_Basement", "L0_BoilerHall", "Bulb", white)
 		t.truthy(bulb.R > bulb.B + 0.2, "the basement bulbs a warm sodium")
-		local pool = LightingMood.cast("Level4_FloodedPool", "L4_PumpRoom", "Fluorescent", white)
-		t.truthy(pool.B > pool.R and pool.B >= pool.G, "the pool a cold cyan")
 		-- the pull is partial: the layout's own colour still shows through
 		t.truthy(hallways.R > 0.5, "a cast, not a recolour")
 
 		local red = Color3.fromRGB(255, 34, 22)
 		t.eq(LightingMood.cast("Level1_Hallways", "L1_AirlockEast", "EmergencyRed", red), red, "emergency reds")
 		t.eq(LightingMood.cast("Level1_Hallways", "L1_Corridor_West", "ExitSign", red), red, "exit signs")
-		t.eq(LightingMood.cast("Level4_FloodedPool", "L4_Natatorium", "Floodlight", white), white, "floodlights")
 		t.eq(LightingMood.cast("Level1_Hallways", "L1_Classroom_108", "ClassroomGlow", white), white, "the glow")
 		t.eq(LightingMood.cast("Level1_Hallways", "L1_Corridor_East", "Fluorescent", white), white, "kept dark")
 
 		t.eq(LightingMood.grade(nil), white, "no grade outside every building")
-		local poolGrade = LightingMood.grade("Level4_FloodedPool")
-		t.truthy(poolGrade.B > poolGrade.R, "the pool grade is cold")
 		local basementGrade = LightingMood.grade("Level0_Basement")
 		t.truthy(basementGrade.R > basementGrade.B, "the basement grade is warm")
 		for _, layout in Builder.layouts() do
@@ -149,9 +143,9 @@ return {
 		end
 		t.eq(LightingMood.film(nil), LightingMood.OutdoorFilm, "outdoors is the storm")
 		t.eq(LightingMood.film("NoSuchLevel"), LightingMood.BaseFilm, "an unknown layout takes the base film")
-		local lobby, basement, pool = films.Lobby, films.Level0_Basement, films.Level4_FloodedPool
-		if lobby and basement and pool then
-			t.truthy(basement.density > lobby.density and pool.density > lobby.density, "the depths are hazier")
+		local lobby, basement = films.Lobby, films.Level0_Basement
+		if lobby and basement then
+			t.truthy(basement.density > lobby.density, "the depths are hazier")
 			t.truthy(basement.dust > lobby.dust, "the basement is the dustiest")
 			t.eq(basement.moon, 0, "no moonlight in the basement")
 		end

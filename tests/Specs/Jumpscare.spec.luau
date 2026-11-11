@@ -55,7 +55,7 @@ local MAX = GameConfig.MaxHealth
 local LUNGE = J.LungeSeconds
 local HOLD = J.HoldSeconds
 local FACE = J.HoldDistance -- the camera's lock off the mask (docs/MONSTER-LOOK.md HOLD_DISTANCE)
-local KINDS: { Enums.JumpscareKind } = { "Hallway", "Vent", "Locker", "Underwater" }
+local KINDS: { Enums.JumpscareKind } = { "Hallway", "Vent", "Locker" }
 local NOT_PLAYING: { Enums.LifeState } = { "Lobby", "Dead", "Spectating" }
 local VICTIM_ROOT_HEIGHT = 3 -- a standing victim's root above the floor (hip 2 + half the 2-stud root)
 local CREATURE_ROOT_HEIGHT = CreatureConfig.Rig.HipHeight + CreatureConfig.Rig.RootSize.Y / 2
@@ -308,7 +308,7 @@ return {
 		t.eq(verdict(JumpscareHandler.validate(baseCheck({ hasBody = false }))), "NoBody")
 		t.eq(verdict(JumpscareHandler.validate(baseCheck({ caught = true }))), "Caught", "already caught")
 		t.eq(verdict(JumpscareHandler.validate(baseCheck({ controlLock = "Cutscene" }))), "Cutscene")
-		for _, lock: Enums.ControlLock in { "Trap", "Locker", "Drag" } :: { Enums.ControlLock } do
+		for _, lock: Enums.ControlLock in { "Trap", "Locker" } :: { Enums.ControlLock } do
 			t.eq(
 				verdict(JumpscareHandler.validate(baseCheck({ controlLock = lock }))),
 				"ok",

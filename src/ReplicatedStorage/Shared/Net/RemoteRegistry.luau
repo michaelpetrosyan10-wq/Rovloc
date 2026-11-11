@@ -61,7 +61,6 @@ local list: { RemoteSpec } = {
 		validate = V.shape({
 			crouch = V.boolean(),
 			sprint = V.boolean(),
-			dive = V.boolean(),
 			seq = V.integer(0, 2 ^ 31),
 		}),
 		rate = { burst = 12, perSecond = 8 },
@@ -92,24 +91,6 @@ local list: { RemoteSpec } = {
 		rate = { burst = 10, perSecond = 6 },
 		phases = RUN_PHASES,
 		lifeStates = ALIVE,
-	},
-	{
-		name = "StrugglePress",
-		kind = "Event",
-		direction = "ToServer",
-		validate = V.shape({ sequence = V.integer(0, 1_000_000) }),
-		rate = { burst = 12, perSecond = 12 },
-		phases = RUN_PHASES,
-		lifeStates = PLAYING,
-	},
-	{
-		name = "UseSyringe",
-		kind = "Event",
-		direction = "ToServer",
-		validate = V.shape({ mode = V.enum(Enums.SyringeMode) }),
-		rate = { burst = 2, perSecond = 0.5 },
-		phases = RUN_PHASES,
-		lifeStates = PLAYING,
 	},
 	{
 		name = "ExitHide",

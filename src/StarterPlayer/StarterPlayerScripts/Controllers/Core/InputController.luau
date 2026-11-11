@@ -3,7 +3,7 @@
 --
 --   * Contexts. Systems push an Enums.InputContext under a token (a vent controller pushes "Vent", the settings menu
 --     pushes "Menu") and pop it by the same token. The active context is the highest-priority pushed one, in
---     Enums.InputContext order (Menu > Cutscene > Struggle > ... > OnFoot > Spectator); with nothing pushed it is the
+--     Enums.InputContext order (Menu > Cutscene > ... > OnFoot > Spectator); with nothing pushed it is the
 --     "OnFoot" baseline. Only the actions InputConfig marks live in the active context are bound.
 --   * Bindings. Each live action is one ContextActionService binding (keyboard + gamepad inputs from InputConfig) at
 --     InputConfig.ActionPriority, above the PlayerModule's jump. Actions that claim the keys the default controls own

@@ -11,7 +11,7 @@
 -- lockers, desks and debris block it.
 --
 -- Who can be seen: only a playing player (Alive or Downed). Never: MoveState Hiding; a player in a duct or a crawlway
--- (it never goes in after them); an Underwater player unless the Creature swims (PoseMode Swim or AquaticStalk).
+-- (it never goes in after them).
 -- How far: SightTorch with their torch on, SightLit with it off in a lit pool (the fixture light at their chest,
 -- LightField, above LitIrradiance), SightDark with it off in the dark; crouched (or crawling downed) x CrouchFactor;
 -- times the difficulty's sightRangeMultiplier. The view cone is SightHalfAngle (MovingHalfAngle while they move), and
@@ -65,7 +65,6 @@ export type Viewer = {
 	eye: Vector3,
 	facing: Vector3,
 	difficulty: Enums.Difficulty,
-	aquatic: boolean,
 	targetUserId: number?,
 	blindPeripheral: boolean?, -- looking away: no peripheral sense
 	raycast: (from: Vector3, to: Vector3) -> boolean,
@@ -104,7 +103,7 @@ local function difficultySpec(difficulty: Enums.Difficulty): DifficultyConfig.Di
 	return if difficulty == "Nightmare" then DifficultyConfig.Nightmare else DifficultyConfig.Standard
 end
 
--- The Creature's eye for a root frame and PoseMode (the contract's: Biped, Hunched, Swim, Stunned).
+-- The Creature's eye for a root frame and PoseMode (the contract's: Biped, Hunched, Quadruped, Stunned).
 function Perception.creatureEyeAt(rootCFrame: CFrame, poseMode: string): Vector3
 	local height = CreatureConfig.EyeHeightAboveRoot[poseMode] or CreatureConfig.EyeHeightAboveRoot.Biped
 	return (rootCFrame * CFrame.new(0, height, -EYE_FORWARD)).Position
@@ -153,15 +152,12 @@ function Perception.inViewCone(
 end
 
 -- Why a player is out of the candidate set before any geometry is tested (nil = still a candidate).
-function Perception.excluded(viewer: Viewer, o: Observation): string?
+function Perception.excluded(o: Observation): string?
 	if not o.playing then
 		return "NotPlaying"
 	end
 	if o.moveState == "Hiding" then
 		return "Hiding"
-	end
-	if o.moveState == "Underwater" and not viewer.aquatic then
-		return "Underwater"
 	end
 	if o.inVent then
 		return "InVent"
@@ -196,7 +192,7 @@ end
 
 -- The Sighting of one player, or nil (the line test runs last).
 function Perception.judge(viewer: Viewer, o: Observation): Sighting?
-	if Perception.excluded(viewer, o) ~= nil then
+	if Perception.excluded(o) ~= nil then
 		return nil
 	end
 	local distance = (o.eye - viewer.eye).Magnitude
@@ -299,7 +295,7 @@ local function creatureRoot(creature: Model): BasePart?
 	return if root and root:IsA("BasePart") then root else nil
 end
 
--- The contract's pose of a Creature model: PoseMode (Biped / Hunched / Swim / Quadruped), Stunned while its
+-- The contract's pose of a Creature model: PoseMode (Biped / Hunched / Quadruped), Stunned while its
 -- MonsterState is.
 function Perception.poseOf(creature: Model): string
 	if creature:GetAttribute(C.MonsterState) == "Stunned" then

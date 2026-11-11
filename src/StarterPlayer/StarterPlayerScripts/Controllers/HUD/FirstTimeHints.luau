@@ -15,10 +15,9 @@
 --     key, button or the touch button's label), fading in, staying TutorialConfig.Timing.HintSeconds, fading out; at
 --     most one at a time, HintGap quiet seconds between two.
 --   * Never at a bad moment (allowed): only for an Alive player in a run, with Settings "First-time hints" on, the HUD
---     visible, no onboarding screen up, outside the Cutscene / Menu / Struggle / Locker / Trapped / Parachute input
+--     visible, no onboarding screen up, outside the Cutscene / Menu / Locker / Trapped / Parachute input
 --     contexts (a locker, a trap and the jump show their own lines), under no Cutscene /
---     Jumpscare / Drag control lock, not while the Creature is chasing this player (WallChase, AquaticStalk
---     with TargetUserId = me) and not while the panic is above HintPanicMax. A hint that is due while held back waits
+--     Jumpscare control lock, not while the Creature is chasing this player (WallChase with TargetUserId = me) and not while the panic is above HintPanicMax. A hint that is due while held back waits
 --     (it shows once the moment passes, if it is still due); a card already up fades out early when the moment turns.
 --
 -- Pure (tests/Specs/Onboarding.spec.luau): allowed, pick, chased, batteryLow, seenAll.
@@ -92,11 +91,10 @@ local FADE_IN = 3
 local FADE_OUT = 2
 local QUICK_FADE_OUT = 6
 local BLOCKED_CONTEXTS: { [string]: boolean } =
-	{ Cutscene = true, Menu = true, Struggle = true, Locker = true, Trapped = true, Parachute = true }
+	{ Cutscene = true, Menu = true, Locker = true, Trapped = true, Parachute = true }
 local AIRLOCK_HINT_RADIUS = 22 -- the airlock hint also shows this close to an idle checkpoint
-local BLOCKED_LOCKS: { [string]: boolean } = { Cutscene = true, Jumpscare = true, Drag = true }
-local CHASE_STATES: { [string]: boolean } = { WallChase = true, AquaticStalk = true }
-local WATER_STATES: { [string]: boolean } = { Treading = true, Freestyle = true, Underwater = true }
+local BLOCKED_LOCKS: { [string]: boolean } = { Cutscene = true, Jumpscare = true }
+local CHASE_STATES: { [string]: boolean } = { WallChase = true }
 local GRATE_SHUT: { [string]: boolean } = { Closed = true, Unscrewing = true, Locked = true }
 
 local FirstTimeHints = {}
@@ -255,15 +253,6 @@ local function anyPromptUp(model: Instance): boolean
 	return false
 end
 
-local function searchable(locker: Instance): boolean
-	for _, descendant in locker:GetDescendants() do
-		if descendant:IsA("ProximityPrompt") and descendant:GetAttribute(W.PromptKind) == "Search" then
-			return descendant.Enabled
-		end
-	end
-	return false
-end
-
 -- Whether the objective hint `hint` is due for an eye at `eye` on `level`.
 local function objectiveDue(hint: TutorialConfig.Hint, level: string, eye: Vector3): boolean
 	local spot = hint.spot
@@ -280,19 +269,12 @@ local function objectiveDue(hint: TutorialConfig.Hint, level: string, eye: Vecto
 		return false
 	end
 	local radius = hint.radius or ObjectiveConfig.Tuning.HintRadius
-	local tag = if spot.objectiveId == "Locker"
-		then Tags.HideableLocker
-		elseif spot.objectiveId == "ExitLock" or spot.objectiveId == "CrateChain" then Tags.ExitLock
-		else Tags.ObjectiveStation
+	local tag = if spot.objectiveId == "ExitLock" then Tags.ExitLock else Tags.ObjectiveStation
 	for _, model in CollectionService:GetTagged(tag) do
 		if not onLevel(model, level) then
 			continue
 		end
-		if spot.objectiveId == "Locker" then
-			if not searchable(model) then
-				continue
-			end
-		elseif model:GetAttribute(W.ObjectiveId) ~= spot.objectiveId then
+		if model:GetAttribute(W.ObjectiveId) ~= spot.objectiveId then
 			continue
 		elseif spot.objectiveId == "ExitLock" and not anyPromptUp(model) then
 			continue -- a jammed stairwell's lock (only the run's exit lock offers its prompts)
@@ -383,8 +365,6 @@ local function scanDue(player: Player, seen: { [string]: boolean })
 			return true
 		end)
 	end
-	local moveState = player:GetAttribute(P.MoveState)
-	due.Water = type(moveState) == "string" and WATER_STATES[moveState] == true
 	if not seen.LowBattery then
 		local max = Attributes.getNumber(player, P.BatteryMax, GameConfig.BatteryMax)
 		local battery =

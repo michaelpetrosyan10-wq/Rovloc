@@ -49,22 +49,15 @@ export function falloff(d, range) {
  */
 export function collectLights(raw) {
   const fixtures = raw.fixtures;
-  const layoutLights = new Map();
-  for (const id of Object.keys(raw.layouts)) {
-    const layout = raw.layouts[id];
-    for (const room of asArray(layout.rooms)) {
-      for (const light of asArray(room.lights)) layoutLights.set(light.id, { ...light, room: room.id });
-    }
-  }
   const groups = [{ id: 0, name: null, kind: 'steady', initial: 1, lights: [] }];
   const groupIndex = new Map();
-  const groupOf = (name, kind, level, initial) => {
+  const groupOf = (name, kind, level) => {
     if (!name) return 0;
     let g = groupIndex.get(name);
     if (g === undefined) {
       g = groups.length;
       if (g > FLICKER_GROUP_LIMIT) throw new Error(`more than ${FLICKER_GROUP_LIMIT} flicker groups`);
-      groups.push({ id: g, name, kind, level, initial, lights: [] });
+      groups.push({ id: g, name, kind, level, initial: 1, lights: [] });
       groupIndex.set(name, g);
     }
     return g;
@@ -76,20 +69,11 @@ export function collectLights(raw) {
     const fa = fixture.attributes || {};
     const kind = fa.LightKind || null;
     const level = fa.LevelId || null;
-    let brightness = l.enabled ? l.brightness : 0;
+    const brightness = l.enabled ? l.brightness : 0;
     let groupName = fa.FlickerGroup || null;
     let groupKind = 'flicker';
-    let initial = 1;
-    // Scripted owners: the pool's emergency floodlights stay off until the switch (lit at the layout brightness),
-    // the Floor 1 classroom glow and its spill die in the scare's light burst.
-    if (kind === 'Floodlight' && level === 'Level4_FloodedPool') {
-      const spec = layoutLights.get(fixture.name);
-      const base = spec ? spec.brightness : 2;
-      brightness = l.name === 'Light' ? base : base * 0.35;
-      groupName = 'Scripted:Floodlights';
-      groupKind = 'scripted';
-      initial = 0;
-    } else if (kind === 'ClassroomGlow') {
+    // Scripted owners: the Floor 1 classroom glow and its spill die in the scare's light burst.
+    if (kind === 'ClassroomGlow') {
       groupName = `Scripted:${fixture.name}`;
       groupKind = 'scripted';
     } else if (groupName && groupName.startsWith('Mains:')) {
@@ -97,7 +81,7 @@ export function collectLights(raw) {
       groupKind = 'scripted';
     }
     if (!(brightness > 0) || !(l.range > 0)) return;
-    const g = groupOf(groupName, groupKind, level, initial);
+    const g = groupOf(groupName, groupKind, level);
     const desc = buildDescriptor(l, brightness);
     desc.index = index;
     desc.fixture = fixture.name;

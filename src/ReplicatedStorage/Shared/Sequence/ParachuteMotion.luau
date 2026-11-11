@@ -3,7 +3,7 @@
 -- (the jumper's own prediction), so both sides agree on when someone has left the roof, how a canopy flies, when it
 -- opens by itself and when it is down. Pure: no services and no clock; callers pass positions and times.
 --
--- The roof is Level5_Roof's deck: WorldConfig.FootprintSize from WorldConfig.SchoolOrigin at the level's elevation,
+-- The roof is Level3_Roof's deck: WorldConfig.FootprintSize from WorldConfig.SchoolOrigin at the level's elevation,
 -- walled by a parapet everywhere but the jump gap (the layout's exit room, a stretch of the west edge). A root is off
 -- the roof once it is LeaveClear studs past the exterior wall's outer face, or past the face and already dropping
 -- under the deck. The stair towers outside the footprint are the stairwells, never the drop.
@@ -14,13 +14,13 @@
 --
 -- Canopy. A LinearVelocity holds the root at canopyVelocity: DescentSpeed down (GameConfig.ParachuteDescentSpeed) and
 -- DriftSpeed out along the outward normal of the edge the jumper left (the storm wind carries them away from the
--- building, out over the landing field west of the school). The body faces back up at the ledge the whole way down, so
+-- building). The body faces back up at the ledge the whole way down, so
 -- the canopy flies backward on the wind. canopyPosition(from, velocity, elapsed) is the canonical path the server's
 -- validator holds a canopy to (descentVerdict): more than PathTolerance above it, or LateralTolerance off it sideways,
 -- is put back on it. DeployGrace covers the opening, while the client is still braking.
 --
--- Landing: the root within its standing height + LandingSlack over the ground under it (the street, the sidewalk, the
--- field, whatever is there). A packless jumper is dead FatalDrop studs under the deck.
+-- Landing: the root within its standing height + LandingSlack over the ground under it (the street, the sidewalk,
+-- whatever is there).
 --
 -- The jumper's camera (ParachuteController): lookback (locked on the ledge they jumped from, a slow pendulum sway),
 -- deployJolt (the opening shock) and landingDip (the knees taking the landing, deeper for a hard one), each scaled by
@@ -36,7 +36,7 @@ local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
-local RoofLayout = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level5_Roof)
+local RoofLayout = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level3_Roof)
 
 export type DescentInput = {
 	position: Vector3, -- the root now
@@ -48,7 +48,7 @@ export type DescentInput = {
 
 export type Rect = { minX: number, maxX: number, minZ: number, maxZ: number }
 
-local LEVEL: Enums.LevelId = "Level5_Roof"
+local LEVEL: Enums.LevelId = "Level3_Roof"
 local ORIGIN = WorldConfig.levelOrigin(LEVEL)
 local DECK_Y = ORIGIN.Y
 local FOOTPRINT: Rect = {
@@ -64,7 +64,6 @@ local DESCENT = GameConfig.ParachuteDescentSpeed
 local HARD_DESCENT = 15
 local DRIFT = 7
 local AUTO_CLEARANCE = 32
-local FATAL_DROP = 26
 local FREEFALL_MAX = 3.5
 local CANOPY_MAX = 30
 local ROOT_HEIGHT = 3 -- an R15 root's centre over the floor it stands on (HipHeight 2 + half the root)
@@ -89,7 +88,7 @@ local function gapRect(): Rect
 			}
 		end
 	end
-	error("Level5_Roof has no exit room " .. RoofLayout.exit)
+	error("Level3_Roof has no exit room " .. RoofLayout.exit)
 end
 
 local GAP = gapRect()
@@ -107,7 +106,6 @@ ParachuteMotion.DescentSpeed = DESCENT
 ParachuteMotion.HardDescentSpeed = HARD_DESCENT
 ParachuteMotion.DriftSpeed = DRIFT
 ParachuteMotion.AutoDeployClearance = AUTO_CLEARANCE
-ParachuteMotion.FatalDrop = FATAL_DROP
 ParachuteMotion.FreefallMax = FREEFALL_MAX
 ParachuteMotion.CanopyMax = CANOPY_MAX
 ParachuteMotion.RootHeight = ROOT_HEIGHT
@@ -200,13 +198,12 @@ function ParachuteMotion.ledgeAim(leftFrom: Vector3): Vector3
 	return ParachuteMotion.edgePoint(leftFrom) + Vector3.new(0, LEDGE_AIM, 0)
 end
 
--- The warning (a Strings key) for a player on the roof at `position`, or nil: near the jump gap with a pack on, how to
--- go; without one, that the fall will kill them.
+-- The hint (a Strings key) for a player on the roof at `position`, or nil: near the jump gap with a pack on, how to go.
 function ParachuteMotion.edgeHint(position: Vector3, hasPack: boolean): string?
-	if ParachuteMotion.offRoof(position) or rectDistance(GAP, position) > WARN_DISTANCE then
+	if not hasPack or ParachuteMotion.offRoof(position) or rectDistance(GAP, position) > WARN_DISTANCE then
 		return nil
 	end
-	return if hasPack then "Hud.RoofLeap" else "Hud.RoofNoPack"
+	return "Hud.RoofLeap"
 end
 
 --------------------------------------------------------------------------------
@@ -238,11 +235,6 @@ end
 -- Whether a root `rootY` over ground at `groundY` is down (`rootHeight`: its standing height, default RootHeight).
 function ParachuteMotion.landed(rootY: number, groundY: number, rootHeight: number?): boolean
 	return rootY - groundY <= (rootHeight or ROOT_HEIGHT) + LANDING_SLACK
-end
-
--- Whether a packless faller at `rootY` is past saving.
-function ParachuteMotion.fatal(rootY: number): boolean
-	return rootY <= DECK_Y - FATAL_DROP
 end
 
 -- The validator's verdict on a canopy (see the header): "Ok", or "Correct" with the point on the canonical path to

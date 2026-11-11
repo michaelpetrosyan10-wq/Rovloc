@@ -2,7 +2,7 @@
 -- ServicePipeBuilder: the exposed service runs under the ceilings of the plant rooms (static kind "ServicePipes":
 -- once at boot, the same on every server, into <level>.Props as one Model "Pipes_<layoutId>").
 --
--- Every boiler, pump and filter room, the basement's stores and undercrofts and the pool's chlorine store carry
+-- Every boiler room and the basement's stores and undercrofts carry
 -- pipework along their long walls: a corroded iron main, a copper branch and a galvanized electrical conduit, each a
 -- straight run from wall to wall (they pass through the walls at both ends) hung a little under the ceiling on straps,
 -- the boiler rooms' mains with a gate valve and its handwheel. A run keeps clear of every ceiling fixture

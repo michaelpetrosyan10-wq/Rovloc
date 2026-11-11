@@ -5,10 +5,10 @@
 -- of two tiers:
 --   * the MoveState tier: what the server-confirmed Player.MoveState says the character is doing, and
 --   * the observed-speed tier: horizontal root speed the server itself measures from root position deltas over
---     time, looked up in NoiseConfig.SpeedTiers / VentSpeedTiers / WaterSpeedTiers for the state's medium
---     (VentCrawling / VentScurrying = in a vent, Treading / Freestyle / Underwater = in the water).
+--     time, looked up in NoiseConfig.SpeedTiers / VentSpeedTiers for the state's medium (VentCrawling / VentScurrying
+--     = in a vent).
 -- A character slower than its medium's slowest tier is standing still and makes no locomotion noise, whatever it
--- claims. States without footsteps (Hiding, Trapped, Grabbed, Parachuting, Scripted) are silent: the server put the
+-- claims. States without footsteps (Hiding, Trapped, Parachuting, Scripted) are silent: the server put the
 -- character there and anchors or carries it. Pulses from one character are spaced by at least the NoiseConfig
 -- interval of the kind being pulsed.
 --
@@ -26,10 +26,7 @@
 -- The lobby is the safe zone: a character standing in a Lobby room right now (ZoneService: ZoneId set and
 -- LevelId "Lobby") is never heard. Outside every room (stair shafts, the street) characters are heard as usual.
 --
--- This module also owns the splash-meter arithmetic (NoiseConfig.SplashMeter) that NoiseAndDirectorService applies
--- to every water noise.
---
--- The tier tables, speed tracking, pacing and meter maths are pure functions (tests/Specs/Noise.spec.luau feeds
+-- The tier tables, speed tracking and pacing are pure functions (tests/Specs/Noise.spec.luau feeds
 -- them fake samples); step() is the only function that reads Players and characters.
 
 local Players = game:GetService("Players")
@@ -81,9 +78,6 @@ export type SuspiciousStep = {
 
 export type SuspicionReporter = (player: Player, step: SuspiciousStep) -> ()
 
--- Per-player splash meter: `value` at time `at`, decaying linearly; `crossed` while it sits above the threshold.
-export type SplashMeter = { value: number, at: number, crossed: boolean }
-
 type SpeedTier = { minSpeed: number, kind: Enums.NoiseKind }
 
 local Sampler = {}
@@ -99,9 +93,6 @@ Sampler.TeleportGraceSeconds = 1
 Sampler.MaxStallSeconds = 1
 -- A gap between samples longer than this (seconds) restarts the speed window.
 Sampler.StaleSeconds = 1
--- Splash meters never hold more than this multiple of the grab threshold, so a calm spell re-arms them within
--- (cap - rearmBelow) / decayPerSecond seconds, however long the splashing went on.
-Sampler.SplashCapFactor = 1.5
 
 local PACE_EPSILON = 1e-6
 -- Root movement below this (studs) between samples is physics jitter, not a change of position.
@@ -109,7 +100,6 @@ local MOVE_EPSILON = 0.05
 
 local AIR: Enums.NoiseMedium = "Air"
 local VENT: Enums.NoiseMedium = "Vent"
-local WATER: Enums.NoiseMedium = "Water"
 
 local MEDIUM_BY_STATE: { [string]: Enums.NoiseMedium } = {
 	Standing = AIR,
@@ -118,9 +108,6 @@ local MEDIUM_BY_STATE: { [string]: Enums.NoiseMedium } = {
 	DownedCrawling = AIR,
 	VentCrawling = VENT,
 	VentScurrying = VENT,
-	Treading = WATER,
-	Freestyle = WATER,
-	Underwater = WATER,
 }
 
 local WALK: Enums.NoiseKind = "Walk"
@@ -128,8 +115,6 @@ local SPRINT: Enums.NoiseKind = "Sprint"
 local CROUCH_WALK: Enums.NoiseKind = "CrouchWalk"
 local SLOW_VENT_CRAWL: Enums.NoiseKind = "SlowVentCrawl"
 local VENT_SCURRY: Enums.NoiseKind = "VentScurry"
-local TREADING: Enums.NoiseKind = "Treading"
-local FREESTYLE: Enums.NoiseKind = "Freestyle"
 
 -- What each moving state sounds like at the least. Standing means upright: moving upright is walking.
 local TIER_BY_STATE: { [string]: Enums.NoiseKind } = {
@@ -139,26 +124,14 @@ local TIER_BY_STATE: { [string]: Enums.NoiseKind } = {
 	DownedCrawling = CROUCH_WALK,
 	VentCrawling = SLOW_VENT_CRAWL,
 	VentScurrying = VENT_SCURRY,
-	Treading = TREADING,
-	Freestyle = FREESTYLE,
-	Underwater = TREADING,
 }
 
 local SPEED_TIERS: { [string]: { SpeedTier } } = {
 	Air = NoiseConfig.SpeedTiers,
 	Vent = NoiseConfig.VentSpeedTiers,
-	Water = NoiseConfig.WaterSpeedTiers,
 }
 
 local PRIORITY_RANK: { [string]: number } = { Low = 1, Normal = 2, High = 3, Critical = 4 }
-
-local SPLASH = NoiseConfig.SplashMeter
-
-local SPLASH_GAIN: { [string]: number } = {
-	Freestyle = SPLASH.perFreestylePulse,
-	Splash = SPLASH.perSplash,
-	Treading = SPLASH.perTreadingPulse,
-}
 
 local SILENT_LIFE_STATES: { [string]: boolean } = { Lobby = true, Dead = true, Spectating = true }
 local LOBBY_LEVEL = "Lobby"
@@ -249,7 +222,7 @@ function Sampler.newTrack(): Track
 	}
 end
 
--- States that land on their feet (a landing from a vent, the water or a cutscene is no JumpLand).
+-- States that land on their feet (a landing from a vent or a cutscene is no JumpLand).
 local ON_FOOT: { [string]: boolean } = { Standing = true, Sprinting = true, Crouching = true }
 
 -- Whether this sample lands a jump or a fall worth a JumpLand: `airborne` now, at `now`, in `moveState`. Tracks the
@@ -375,7 +348,7 @@ function Sampler.sample(
 ): (Enums.NoiseKind?, SuspiciousStep?)
 	local medium: Enums.NoiseMedium? = Sampler.mediumFor(moveState)
 	if medium ~= track.medium then
-		-- Entering or leaving a vent, the water or a lock usually moves the root in one jump; never hear that jump.
+		-- Entering or leaving a vent or a lock usually moves the root in one jump; never hear that jump.
 		Sampler.restartWindow(track)
 		track.medium = medium
 	end
@@ -388,45 +361,6 @@ function Sampler.sample(
 		return kind, suspicious
 	end
 	return nil, suspicious
-end
-
---------------------------------------------------------------------------------
--- Splash meter (pure)
---------------------------------------------------------------------------------
-
-function Sampler.newSplashMeter(now: number): SplashMeter
-	return { value = 0, at = now, crossed = false }
-end
-
--- How much one pulse of `kind` adds to a splash meter (0 for dry noises).
-function Sampler.splashGain(kind: Enums.NoiseKind): number
-	return SPLASH_GAIN[kind] or 0
-end
-
--- The meter's value at `now` after decay.
-function Sampler.splashValue(meter: SplashMeter, now: number): number
-	local elapsed = math.max(0, now - meter.at)
-	return math.max(0, meter.value - SPLASH.decayPerSecond * elapsed)
-end
-
--- Adds `amount` at `now`. Returns true exactly when this add carried the meter up across the grab threshold; the
--- meter re-arms only once it has decayed below NoiseConfig.SplashMeter.rearmBelow (hysteresis: the dip between two
--- strokes of one swim never re-arms it).
-function Sampler.addSplash(meter: SplashMeter, amount: number, now: number): boolean
-	local value = Sampler.splashValue(meter, now)
-	if meter.crossed and value < SPLASH.rearmBelow then
-		meter.crossed = false
-	end
-	if MathUtil.isFinite(amount) and amount > 0 then
-		value = math.min(SPLASH.grabThreshold * Sampler.SplashCapFactor, value + amount)
-	end
-	meter.value = value
-	meter.at = math.max(meter.at, now)
-	if not meter.crossed and value >= SPLASH.grabThreshold then
-		meter.crossed = true
-		return true
-	end
-	return false
 end
 
 --------------------------------------------------------------------------------

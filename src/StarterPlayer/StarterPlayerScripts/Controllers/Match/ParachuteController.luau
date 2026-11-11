@@ -1,11 +1,12 @@
 --!strict
--- ParachuteController: the roof jump and the ending on this client (spec, Level 5). ParachuteService judges the jump
--- (Player Parachute / ParachuteAt / ParachuteAuto, ParachuteMotion's rules); this client predicts it so every moment
--- answers at once, and shoots the finale.
+-- ParachuteController: the roof jump on this client (spec, Level 3). ParachuteService judges the jump (Player
+-- Parachute / ParachuteAt / ParachuteAuto, ParachuteMotion's rules); this client predicts it so every moment answers
+-- at once.
 --
---   * The edge. Playing on the roof, not jumped, near the jump gap: ParachuteMotion.edgeHint as the HUD hint
---     (Hud.RoofLeap with a pack on; Hud.RoofNoPack without: that fall kills).
---   * Freefall, from the frame the root leaves the roof with a pack on (ParachuteMotion.offRoof, the server's own rule):
+--   * The edge. Playing on the roof with a pack on, not jumped, near the jump gap: ParachuteMotion.edgeHint as the HUD
+--     hint (Hud.RoofLeap).
+--   * Freefall, from the frame the root leaves the roof (ParachuteMotion.offRoof, the server's own rule; the server
+--     buckles a spare pack onto anyone who goes without one):
 --     the "Parachute" input context (Ripcord: Space, A or the PULL CORD touch button), the device's Hud.Ripcord.* hint,
 --     the wind roaring louder with speed (WindRush) and the view buffeting. The cord fires ParachutePull and opens the
 --     canopy here at once: a local LinearVelocity at ParachuteMotion.canopyVelocity, dropped as soon as the server's own
@@ -16,20 +17,15 @@
 --     (camera state ParachuteLookback and a Cutscene override) turns smoothly over LOOKBACK_BLEND from where the
 --     player was looking and locks back up at the ledge they jumped from (ParachuteMotion.lookback, with the canopy's
 --     sway). The base look follows it, so the body, the torch, LookRelay and anyone spectating look up at the ledge
---     too. The HUD hides and the ambient storm stops: the finale owns the sky. From here until the finale's fade is black
---     (or the server's landing hold ends) the Cutscene input context holds the view, which also holds back the ESCAPED
---     summary (EscapeSummaryController waits for it).
---   * Landed, from touchdown (the server anchors the body a moment later): every descent constraint is switched off
---     locally on the same frame, ParachuteLanding (HardLanding after an auto-deploy), the knees taking it
---     (ParachuteMotion.landingDip), and the lookback held from the ground.
---   * The roof scenes' tracks (Scenes.RoofTracks): roofShake (the blows on the door shake cameras within
---     RoofDoor.ShakeRadius), roofPanic (the panic floor of players still on the roof near the door), finaleFocus (the
---     lookback tightens from the ledge onto the Creature's eyes and the view narrows to FOCUS_FOV), finalePanic and
---     finaleFade (a black screen at FADE_ORDER: over the panic vignette and the HUD's overlay, under the HUD and every
---     menu, so the ESCAPED summary draws above it). The finale's fade, focus and panic are for its jumpers (Canopy or
---     Landed) and for spectators (Dead / Spectating); "L5_Touchdown" is only for args.subject. A completed fade holds
---     black until the run ends, or lifts after BLACK_HOLD when no RunSummary came (someone is still up there): then the
+--     too, and whatever stands on the ledge (the Creature, staged there once the squad has jumped) is watched from
+--     under the canopy. The HUD hides and the ambient storm stops. Until the landing has settled the Cutscene input
+--     context holds the view, which also holds back the ESCAPED summary (EscapeSummaryController waits for it).
+--   * Landed, from touchdown: every descent constraint is switched off locally on the same frame, ParachuteLanding
+--     (HardLanding after an auto-deploy), the knees taking it (ParachuteMotion.landingDip) and the lookback held from
+--     the ground. LANDING_SETTLE after touchdown, once the server's landing hold (ControlLock Parachute) is off, the
 --     jump is over on this client and the view (camera, HUD, hands) is the player's again.
+--   * The roof door's tracks (Scenes.RoofTracks): roofShake (the blows on the door shake cameras within
+--     RoofDoor.ShakeRadius) and roofPanic (the panic floor of players still on the roof near the door).
 -- Everything is released when the run ends.
 
 local Players = game:GetService("Players")
@@ -59,7 +55,6 @@ local SequenceController = require(Controllers.Core.SequenceController)
 local SettingsController = require(Controllers.Core.SettingsController)
 local FirstPersonController = require(Controllers.FirstPerson.FirstPersonController)
 local HUD = require(Controllers.HUD)
-local UIKit = require(Controllers.HUD.UIKit)
 
 local log = Log.new("Parachute")
 
@@ -70,7 +65,6 @@ type Voice = SoundSynthesizer.Voice
 type Phase = "Ground" | "Freefall" | "Canopy" | "Landed"
 
 local TOKEN = "Parachute"
-local FINALE_PANIC = "RoofFinale"
 local ROOF_PANIC = "RoofDoor"
 local OVERRIDE: Enums.CameraOverride = "Cutscene"
 local LOOKBACK_STATE: Enums.CameraState = "ParachuteLookback"
@@ -80,19 +74,15 @@ local VIEW_TOKEN = "ParachuteView"
 local HOLD_LOCK: Enums.ControlLock = "Parachute"
 local LOOKBACK_BLEND = 0.9
 local OVERRIDE_BLEND_OUT = 0.6
-local FOCUS_FOV = 46
 local PREDICT_SECONDS = 1.5 -- a local canopy the server has not confirmed by then is dropped
 local RIPCORD_SECONDS = 0.35 -- the hand stays on the handle this long after the pull
 local SHAKE_EVERY = 0.15
 local GROUND_REACH = 400
 local WIND_SPEED_FULL = 120 -- studs/s of fall at which the wind is at full volume
-local FADE_ORDER = 18
-local BLACK_HOLD = 8
-local FADE_OUT_SECONDS = 1.2
+local LANDING_SETTLE = 1.6 -- seconds after touchdown before the view is the player's again
 local DESCENT_FORCE = 2e5
 local DESCENT_NAME = "ParachuteDescent"
 local PREDICT_NAME = "ParachutePredict"
-local AIRBORNE_SERVER: { [string]: boolean } = { Freefall = true, Canopy = true }
 local WATCHING: { [string]: boolean } = { Dead = true, Spectating = true }
 local PLAYING: { [string]: boolean } = { Alive = true, Downed = true }
 local ROOF = Scenes.RoofDoor
@@ -117,10 +107,7 @@ local predicted: Instance? = nil
 local predictedAt = 0
 local lookStart = 0
 local startYaw, startPitch = 0, 0
-local source: { cframe: () -> CFrame, fov: number?, blendIn: number?, blendOut: number? }? = nil
 local overridden = false
-local focus = 0
-local focusHead: Vector3? = nil
 local hint: string? = nil
 local wind: Voice? = nil
 local flutter: Voice? = nil
@@ -128,14 +115,7 @@ local nextShakeAt = 0
 local ripcordHold = false -- falling: the right hand rides the ripcord handle
 local ripcordUntil = 0 -- after the pull: it stays on it until then
 local handOnCord = false
-local fadeGui: ScreenGui? = nil
-local fadeFrame: Frame? = nil
-local fadeAlpha = 0
-local fadeOutFrom: number? = nil -- os.clock() when a held fade started lifting
-local fadeHeldAt: number? = nil
-local summaryShown = false
-local viewHeld = false -- the Cutscene input context is pushed for the finale
-local heldSeen = false -- the server's landing hold (ControlLock Parachute) has reached this client
+local viewHeld = false -- the Cutscene input context is pushed for the jump
 local finished = false -- this jump is over here (see finishView)
 local hudHidden = false
 local stormStopped = false
@@ -211,65 +191,6 @@ local function stopVoice(voice: Voice?, fade: number)
 end
 
 --------------------------------------------------------------------------------
--- The fade
---------------------------------------------------------------------------------
-
-local function ensureFade(): Frame?
-	local frame = fadeFrame
-	if frame and frame.Parent ~= nil then
-		return frame
-	end
-	local player = localPlayer
-	local playerGui = if player then player:FindFirstChildOfClass("PlayerGui") else nil
-	if not playerGui then
-		return nil
-	end
-	local gui = UIKit.screenGui("FinaleFade", FADE_ORDER, Enum.ScreenInsets.None)
-	gui.IgnoreGuiInset = true
-	local black = Instance.new("Frame")
-	black.Name = "Black"
-	black.BorderSizePixel = 0
-	black.BackgroundColor3 = Color3.new(0, 0, 0)
-	black.BackgroundTransparency = 1
-	black.Size = UDim2.fromScale(1, 1)
-	black.Parent = gui
-	gui.Parent = playerGui
-	fadeGui = gui
-	fadeFrame = black
-	return black
-end
-
-local function setFade(alpha: number)
-	fadeAlpha = MathUtil.clamp01(alpha)
-	local frame = if fadeAlpha > 0 then ensureFade() else fadeFrame
-	if frame then
-		frame.BackgroundTransparency = 1 - fadeAlpha
-		local gui = fadeGui
-		if gui then
-			gui.Enabled = fadeAlpha > 0
-		end
-	end
-end
-
-local function liftFade()
-	fadeHeldAt = nil
-	if fadeAlpha > 0 then
-		fadeOutFrom = os.clock()
-	end
-end
-
--- Whether a finale track of `ctx` is for this client: args.subject's alone when set, else the finale's jumpers and
--- spectators.
-local function inFinale(ctx: Timeline.Context): boolean
-	local subject = ctx.args[ROOF_ARGS.Subject]
-	local player = localPlayer
-	if subject ~= nil then
-		return player ~= nil and subject == player.UserId
-	end
-	return phase == "Canopy" or phase == "Landed" or WATCHING[lifeState()] == true
-end
-
---------------------------------------------------------------------------------
 -- The lookback camera
 --------------------------------------------------------------------------------
 
@@ -277,10 +198,7 @@ local function lookbackFrame(): CFrame
 	local now = os.clock()
 	local eye = FirstPersonController.GetEyeCFrame().Position
 	local aim = ParachuteMotion.ledgeAim(leftFrom or eye)
-	local head = focusHead
-	local weight = MathUtil.smoothstep(0, 1, focus)
-	local target = if head and weight > 0 then aim:Lerp(head, weight) else aim
-	local targetYaw, targetPitch = MathUtil.yawPitchFromVector(target - eye)
+	local targetYaw, targetPitch = MathUtil.yawPitchFromVector(aim - eye)
 	local blend = MathUtil.smoothstep(0, LOOKBACK_BLEND, now - lookStart)
 	local yaw = startYaw + MathUtil.angleDelta(startYaw, targetYaw) * blend
 	local pitch = MathUtil.lerp(startPitch, targetPitch, blend)
@@ -295,12 +213,6 @@ local function lookbackFrame(): CFrame
 	if down then
 		view *= ParachuteMotion.landingDip(now - down, hardLanding, scale)
 	end
-	local current = source
-	if current then
-		current.fov = if weight > 0
-			then MathUtil.lerp(SettingsController.GetNumber("BaseFov"), FOCUS_FOV, weight)
-			else nil
-	end
 	return view
 end
 
@@ -312,7 +224,6 @@ local function startLookback()
 	lookStart = os.clock()
 	startYaw, startPitch = FirstPersonController.GetLook()
 	local layer = { cframe = lookbackFrame, fov = nil, blendIn = 0.05, blendOut = OVERRIDE_BLEND_OUT }
-	source = layer
 	FirstPersonController.ForceCameraState(TOKEN, LOOKBACK_STATE)
 	FirstPersonController.PushOverride(OVERRIDE, layer)
 	if not hudHidden then
@@ -325,7 +236,7 @@ local function startLookback()
 	end
 end
 
--- The finale owns the view (the Cutscene input context: no other actions, no look input; the ESCAPED summary waits).
+-- The jump owns the view (the Cutscene input context: no other actions, no look input; the ESCAPED summary waits).
 local function holdView()
 	if not viewHeld then
 		viewHeld = true
@@ -507,7 +418,6 @@ local function restoreView()
 	wind, flutter = nil, nil
 	if overridden then
 		overridden = false
-		source = nil
 		FirstPersonController.PopOverride(OVERRIDE)
 		FirstPersonController.ForceCameraState(TOKEN, nil)
 		FirstPersonController.SetHandPose("Flashlight", nil)
@@ -530,13 +440,12 @@ local function release()
 	phase = "Ground"
 	leftFrom, direction, deployedAt, landedAt = nil, nil, nil, nil
 	auto, hardLanding = false, false
-	focus, focusHead = 0, nil
-	finished, heldSeen = false, false
+	finished = false
 	restoreView()
 end
 
--- This jump is over on this client (escaped; the finale has played and the run goes on for someone still up there):
--- the view goes back to the player, and nothing re-enters the jump until the run ends.
+-- This jump is over on this client (escaped, the landing settled): the view goes back to the player, and nothing
+-- re-enters the jump until the run ends.
 local function finishView()
 	finished = true
 	restoreView()
@@ -594,26 +503,6 @@ local function stepCanopy(root: BasePart)
 	end
 end
 
-local function stepFade(now: number)
-	local held = fadeHeldAt
-	if held and not summaryShown and now - held >= BLACK_HOLD then
-		-- no summary: the run goes on for someone still up there, and the view is this player's again
-		liftFade()
-		if phase == "Landed" then
-			finishView()
-		end
-	end
-	local lifting = fadeOutFrom
-	if lifting then
-		local u = MathUtil.clamp01((now - lifting) / FADE_OUT_SECONDS)
-		setFade(fadeAlpha * (1 - u))
-		if u >= 1 or fadeAlpha <= 0.001 then
-			fadeOutFrom = nil
-			setFade(0)
-		end
-	end
-end
-
 -- The right hand on the ripcord handle while falling and through the pull (the body moves fast: re-aimed every frame),
 -- then up on the risers.
 local function stepHand(now: number)
@@ -632,7 +521,6 @@ end
 
 local function frame()
 	local now = os.clock()
-	stepFade(now)
 	stepHand(now)
 	local player = localPlayer
 	if not player then
@@ -648,15 +536,10 @@ local function frame()
 		return
 	end
 	if phase == "Landed" then
-		-- the server's hold ends when the finale has played for this player: the view is theirs, the summary may show
+		-- the landing has settled and the server's hold is off: the view is theirs, the summary may show
 		local held = Attributes.getString(player, P.ControlLock, "None") == HOLD_LOCK
-		if held then
-			heldSeen = true
-		elseif heldSeen then
-			freeView()
-			if fadeAlpha < 0.5 then
-				finishView()
-			end
+		if not held and now - (landedAt or now) >= LANDING_SETTLE then
+			finishView()
 		end
 		return
 	end
@@ -667,11 +550,10 @@ local function frame()
 			enterCanopy(root, player:GetAttribute(P.ParachuteAuto) == true, false)
 		elseif root and onRoof() and PLAYING[lifeState()] then
 			local position = root.CFrame.Position
-			local packed = server == "Packed" or AIRBORNE_SERVER[server] == true
-			if packed and ParachuteMotion.offRoof(position) then
+			if ParachuteMotion.offRoof(position) then
 				enterFreefall(position)
 			elseif lifeState() == "Alive" then
-				showHint(ParachuteMotion.edgeHint(position, packed))
+				showHint(ParachuteMotion.edgeHint(position, server == "Packed"))
 			else
 				showHint(nil)
 			end
@@ -736,57 +618,6 @@ local PANIC: Timeline.TrackHandler = {
 	end,
 }
 
-local FOCUS: Timeline.TrackHandler = {
-	mode = "Continuous",
-	apply = function(ctx: Timeline.Context, _track: Timeline.Track, value: Timeline.Value)
-		if type(value) ~= "number" then
-			return
-		end
-		focus = MathUtil.clamp01(value)
-		focusHead = vectorArg(ctx, ROOF_ARGS.Head)
-	end,
-	stop = function(_ctx: Timeline.Context, _track: Timeline.Track, _completed: boolean)
-		focus = 0
-	end,
-}
-
-local FINALE_PANIC_TRACK: Timeline.TrackHandler = {
-	mode = "Continuous",
-	apply = function(ctx: Timeline.Context, _track: Timeline.Track, value: Timeline.Value)
-		if type(value) ~= "number" or not inFinale(ctx) then
-			setPanic(FINALE_PANIC, nil)
-			return
-		end
-		setPanic(FINALE_PANIC, value)
-	end,
-	stop = function(_ctx: Timeline.Context, _track: Timeline.Track, _completed: boolean)
-		setPanic(FINALE_PANIC, nil)
-	end,
-}
-
-local FADE: Timeline.TrackHandler = {
-	mode = "Continuous",
-	apply = function(ctx: Timeline.Context, _track: Timeline.Track, value: Timeline.Value)
-		if type(value) ~= "number" or not inFinale(ctx) then
-			return
-		end
-		fadeOutFrom = nil
-		setFade(value)
-	end,
-	stop = function(ctx: Timeline.Context, _track: Timeline.Track, completed: boolean)
-		if not inFinale(ctx) then
-			return
-		end
-		if completed and fadeAlpha >= 0.99 then
-			-- black: the finale is over for this player and the ESCAPED summary may take the screen
-			fadeHeldAt = os.clock()
-			freeView()
-		else
-			liftFade()
-		end
-	end,
-}
-
 --------------------------------------------------------------------------------
 -- Lifecycle
 --------------------------------------------------------------------------------
@@ -794,9 +625,6 @@ local FADE: Timeline.TrackHandler = {
 function ParachuteController.Init()
 	SequenceController.RegisterTrackHandler(ROOF_TRACKS.Shake, SHAKE)
 	SequenceController.RegisterTrackHandler(ROOF_TRACKS.Panic, PANIC)
-	SequenceController.RegisterTrackHandler(ROOF_TRACKS.Focus, FOCUS)
-	SequenceController.RegisterTrackHandler(ROOF_TRACKS.FinalePanic, FINALE_PANIC_TRACK)
-	SequenceController.RegisterTrackHandler(ROOF_TRACKS.Fade, FADE)
 	serviceTrove:Add(InputController.Action("Ripcord"):Connect(function(inputPhase: InputController.Phase)
 		if inputPhase == "Begin" then
 			pull()
@@ -810,26 +638,14 @@ function ParachuteController.Start()
 			log.warnThrottled("frame", 10, "parachute frame failed: %s\n%s", tostring(err), debug.traceback())
 		end)
 	end)
-	local connection = Net.Client.on("RunSummary", function(_payload: any)
-		summaryShown = true
-	end)
-	if connection then
-		serviceTrove:Add(connection)
-	end
 end
 
 function ParachuteController.OnRunStarted(_info: Types.RunInfo)
 	release()
-	summaryShown = false
-	fadeHeldAt = nil
-	fadeOutFrom = nil
-	setFade(0)
 end
 
 function ParachuteController.OnRunEnded()
 	release()
-	summaryShown = false
-	liftFade()
 end
 
 return table.freeze(ParachuteController)

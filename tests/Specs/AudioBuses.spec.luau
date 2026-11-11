@@ -3,7 +3,7 @@
 -- Body EQs, with values in the documented ranges; the SoundGroup tree builds (Master > Ambience, Room, Body, UI;
 -- Room > World, Monster, Player, with the one environment chain on Room) and every environment applies onto it (the
 -- Lune harness checks each class and property name against the reflection database); the Body bus only ever gets an
--- EQ (a heartbeat never picks up room reverb) yet is muffled underwater and in ducts; neutral slots are bypassed;
+-- EQ (a heartbeat never picks up room reverb) yet is muffled in ducts; neutral slots are bypassed;
 -- echo delays never jump while their echo is audible; volumes are clamped, unknown buses ignored, and Body follows
 -- the Player volume until it is set on its own.
 
@@ -136,12 +136,10 @@ return {
 		destroy(tree)
 	end,
 
-	["body sounds are muffled underwater and in ducts but never reverberate"] = function(t: Expect)
+	["body sounds are muffled in ducts but never reverberate"] = function(t: Expect)
 		local tree = scratchTree()
 		AudioBuses.applyEnvironment(tree, "Basement")
 		t.falsy(tree.bodyEq.Enabled, "the basement's long reverb does not touch the body")
-		AudioBuses.applyEnvironment(tree, "Underwater")
-		t.truthy(tree.bodyEq.Enabled and tree.bodyEq.HighGain < -10, "underwater dulls the heartbeat")
 		AudioBuses.applyEnvironment(tree, "Vent")
 		t.truthy(tree.bodyEq.Enabled, "boxed in inside a duct")
 		destroy(tree)
@@ -156,13 +154,6 @@ return {
 		t.truthy(chain[3].Enabled, "room reverb on")
 		t.falsy(chain[4].Enabled, "no echo in a room")
 		t.falsy(tree.ambienceEq.Enabled, "ambience untouched in a room")
-
-		AudioBuses.applyEnvironment(tree, "Underwater")
-		t.truthy(chain[1].Enabled, "underwater low-pass on")
-		t.truthy(chain[2].Enabled, "underwater wobble on")
-		t.truthy(tree.ambienceEq.Enabled, "ambience muffled underwater")
-		local eq = chain[1] :: EqualizerSoundEffect
-		t.truthy(eq.HighGain <= -40, "underwater cuts the highs hard")
 
 		AudioBuses.applyEnvironment(tree, "Vent")
 		t.truthy(chain[4].Enabled, "vents ring with a tight echo")
@@ -179,7 +170,6 @@ return {
 		t.truthy(decay("Basement") > decay("Room"), "concrete basement rings")
 		t.truthy(envOf("Outdoor").effects[3].props.WetLevel <= -24, "outdoors is nearly dry")
 		t.truthy(envOf("Stairwell").effects[4].props.WetLevel > -80, "stairwells slap back")
-		t.truthy(envOf("Underwater").gain < 1, "underwater is quieter")
 	end,
 
 	["echo delays never jump while the echo is audible"] = function(t: Expect)

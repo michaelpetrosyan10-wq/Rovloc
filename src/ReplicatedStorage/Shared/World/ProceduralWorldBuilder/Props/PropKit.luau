@@ -6,11 +6,10 @@
 --     into Workspace.Runtime.<level> at Deploying.
 --   * Fixtures (RegisterFixture): stateful, interactive set pieces taken from layout data (vent grates, airlock fire
 --     doors, the hallway gate, the roof stairwell door, the ajar classroom door, hideable lockers, the parachute
---     crate, the floodlight switch). Rebuilt into Workspace.Runtime.<level> at every Deploying, so a new run always
+--     crate). Rebuilt into Workspace.Runtime.<level> at every Deploying, so a new run always
 --     starts from fresh state with nothing to reset by hand.
 --   * Statics (RegisterStatic): non-interactive server geometry built once at boot into <level>.Props (open
---     classroom doors, lab counters, smashed lockers, drip pipes, debris over FloorDebris triggers, the pool's
---     collapsed walkways).
+--     classroom doors, smashed lockers, drip pipes, debris over FloorDebris triggers).
 --   * Cosmetic anchors (RegisterCosmeticAnchor): client-local dressing per layout anchor (posed corpses, clutter,
 --     drip particles). Never replicated, never collided.
 --   * Rigs (RegisterRig): models built on demand by kind (the Creature, held / thrown flask visuals, parachute

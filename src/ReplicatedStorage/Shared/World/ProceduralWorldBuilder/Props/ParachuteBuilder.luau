@@ -1,7 +1,7 @@
 --!strict
 -- ParachuteBuilder: the roof's parachute crate (fixture) and the two parachute rigs (worn pack, deployed canopy).
 --
--- Fixture kind "ParachuteCrate" (the ParachuteCrate anchor on Level5_Roof, rebuilt at every run start into
+-- Fixture kind "ParachuteCrate" (the ParachuteCrate anchor on Level3_Roof, rebuilt at every run start into
 -- Workspace.Runtime.<level>.ParachuteCrates): a weathered olive-drab wooden supply crate on two skids, its front
 -- toward the anchor's LookVector (the jump gap in the parapet), lid hinged along the back edge and propped open by a
 -- stick, stencilled "EMERGENCY CHUTES" on the front and across the lid's outer face (the face the squad sees as it
@@ -316,12 +316,6 @@ local function buildCratePack(crate: Model, index: number, frame: CFrame, spec: 
 	pack:AddTag(Tags.ParachutePack)
 	PropKit.prompt(grab, GRAB_PROMPT, pack)
 	return pack
-end
-
--- The crate's half length (along X), half depth, rim height and wall thickness for `packCount` packs (crate space).
-function ParachuteBuilder.crateExtents(packCount: number): (number, number, number, number)
-	local inner = math.max(0, packCount) * PACK_SPACING + 2 * END_PAD
-	return (inner + 2 * WALL) / 2, CRATE_DEPTH / 2, RIM, WALL
 end
 
 -- Builds the crate and its packs into `parent`. Every random choice draws from `random`.

@@ -827,7 +827,7 @@ return {
 				t.eq(VentNetworkService.GetEntryGrate(player), id)
 				local occupants = VentNetworkService.OccupantsOf(LEVEL)
 				t.truthy(#occupants == 1 and occupants[1] == player)
-				t.eq(#VentNetworkService.OccupantsOf("Level2_ScienceHall"), 0)
+				t.eq(#VentNetworkService.OccupantsOf("Level2_Auditorium"), 0)
 				local rail = VentNetworkService.GetRailPoint(player)
 				t.truthy(rail ~= nil and rail.distance < 1e-3, "on the rail")
 
@@ -977,7 +977,7 @@ return {
 				t.truthy(string.find(reply, LEVEL .. ":", 1, true) ~= nil, "a line per level")
 				t.truthy(string.find(reply, id .. "=Closed", 1, true) ~= nil, "each grate with its state")
 				t.truthy(string.find(reply, "crawling: nobody", 1, true) ~= nil)
-				reply = dev("vents", { "2" })
+				reply = dev("vents", { "Level2_Auditorium" })
 				t.eq(reply, "no grates this run", "Level 2 was not built here")
 				reply = dev("vents", { "bogus" })
 				t.eq(reply, 'unknown level "bogus"')

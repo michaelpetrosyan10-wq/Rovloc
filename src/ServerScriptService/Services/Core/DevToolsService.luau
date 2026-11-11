@@ -10,7 +10,7 @@
 -- Built-ins:
 --   devrun [Standard|Nightmare] [seed]   start a run with every player and spawn them at Level0 PlayerSpawn anchors
 --   endrun                               end the run (CharacterService returns everyone to the lobby)
---   level <LevelId|0-5|next>             enter that level (starting a dev run first if none) and move every player to
+--   level <LevelId|LevelN|next>             enter that level (starting a dev run first if none) and move every player to
 --                                        its entry room (PlayerSpawn anchors there, else the room centre)
 --   next                                 same as `level next`
 --   noise <NoiseKind>                    emit that noise at the caller (radius from NoiseConfig)
@@ -130,20 +130,13 @@ function DevToolsService.parseDevRunArgs(args: { string }): DevRunArgs
 	return parsed
 end
 
--- A level from `level` input: an index 0-5, a full LevelId, or its "LevelN" prefix (any case). nil when unknown.
+-- A school level from `level` input: a full LevelId or its "LevelN" prefix (any case). nil when unknown.
 function DevToolsService.parseLevel(arg: string?): Enums.LevelId?
 	if arg == nil or arg == "" then
 		return nil
 	end
-	local number = tonumber(arg)
-	if number ~= nil then
-		if number % 1 ~= 0 then
-			return nil
-		end
-		return Enums.LevelId[number + 1]
-	end
 	local lowered = string.lower(arg)
-	for _, levelId: Enums.LevelId in Enums.LevelId do
+	for _, levelId: Enums.LevelId in WorldConfig.LevelOrder do
 		local id = string.lower(levelId)
 		if id == lowered or string.split(id, "_")[1] == lowered then
 			return levelId
@@ -207,7 +200,7 @@ function DevToolsService.planOverlay(
 		end
 	end
 	local locked, lockable = 0, 0
-	for _, id: Enums.LevelId in Enums.LevelId do
+	for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 		if levelId ~= nil and id ~= levelId then
 			continue
 		end
@@ -346,7 +339,7 @@ end
 local function enterLevel(levelId: Enums.LevelId): string
 	if not RunLifecycleService.GetRun() or not inRunPhase() then
 		local ctx = startDevRun("Standard", nil, levelId)
-		if levelId ~= Enums.LevelId[1] and not LevelDirector.EnterLevel(levelId) then
+		if levelId ~= WorldConfig.LevelOrder[1] and not LevelDirector.EnterLevel(levelId) then
 			return string.format("dev run %s started, but %s could not be entered", ctx.runId, levelId)
 		end
 		return string.format("dev run %s started on %s", ctx.runId, levelId)
@@ -364,7 +357,7 @@ local function levelCommand(args: { string }): string
 		local currentLevel: Enums.LevelId? = LevelDirector.GetCurrentLevel()
 		local nextLevel: Enums.LevelId? = if currentLevel
 			then LevelDirector.nextLevel(currentLevel)
-			else Enums.LevelId[1]
+			else WorldConfig.LevelOrder[1]
 		if not nextLevel then
 			return "already on the last level"
 		end
@@ -372,7 +365,7 @@ local function levelCommand(args: { string }): string
 	end
 	local levelId: Enums.LevelId? = DevToolsService.parseLevel(arg)
 	if not levelId then
-		return "usage: level <0-5|" .. table.concat(Enums.LevelId, "|") .. "|next>"
+		return "usage: level <" .. table.concat(WorldConfig.LevelOrder, "|") .. "|LevelN|next>"
 	end
 	return enterLevel(levelId)
 end
@@ -441,7 +434,7 @@ local function registerBuiltIns()
 		"devrun [Standard|Nightmare] [seed]: start a run with everyone in the basement",
 		function(_player: Player, args: { string }): string?
 			local parsed = DevToolsService.parseDevRunArgs(args)
-			local ctx = startDevRun(parsed.difficulty, parsed.seed, Enums.LevelId[1])
+			local ctx = startDevRun(parsed.difficulty, parsed.seed, WorldConfig.LevelOrder[1])
 			return string.format("run %s started (%s, seed %d)", ctx.runId, ctx.difficulty, ctx.seed)
 		end
 	)
@@ -456,7 +449,7 @@ local function registerBuiltIns()
 
 	DevToolsService.Register(
 		"level",
-		"level <0-5|LevelId|next>: jump the squad to a level",
+		"level <LevelId|LevelN|next>: jump the squad to a school level",
 		function(_player: Player, args: { string }): string?
 			return levelCommand(args)
 		end
@@ -592,7 +585,7 @@ local function autoRun()
 	if phase ~= "Lobby" and phase ~= "Booting" then
 		return
 	end
-	local ctx = startDevRun("Standard", nil, Enums.LevelId[1])
+	local ctx = startDevRun("Standard", nil, WorldConfig.LevelOrder[1])
 	log.info("auto dev run %s started (seed %d)", ctx.runId, ctx.seed)
 end
 

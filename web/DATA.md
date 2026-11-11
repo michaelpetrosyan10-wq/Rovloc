@@ -74,7 +74,7 @@ intermediates and is not shipped.
 | field | meaning |
 | --- | --- |
 | `kind` | `static` (world space), `entity` (world space at rest, see Entities), `creature` (rig model space, rest pose) |
-| `level` | `Lobby`, `Level0_Basement` … `Level5_Roof`, `Stairwells`, `Exterior` (street + skyline), `Creature` |
+| `level` | `Lobby`, `Level0_Basement`, `Level1_Hallways`, `Level2_Auditorium`, `Level3_Roof`, `Stairwells`, `Exterior` (street + skyline), `Creature` |
 | `bucket` | `opaque`; `transparent` (glass / water / bulbs; per-vertex `alpha`); `emissive` (Neon: self-lit in its colour × its flicker); `decal`; `wear` |
 | `material` | key into `meta.materials` |
 | `aabb` | min xyz, max xyz |
@@ -170,9 +170,8 @@ The atlases `Decals<N>` and `Wear<N>` have `atlas: true` and `studsPerTile` 1.
 - **Flicker groups (`meta.flickerGroups[id]`):** `{ id, name, kind, level, family, initial, lights }`, indexed by id.
   - `kind` `flicker`: the Roblox FlickerGroup. The level is a pure function of (RunSeed or 1, name, server time),
     as in LightingController.
-  - `kind` `scripted`: `Scripted:Floodlights` (L4 pool, `initial` 0, on at the switch) and
-    `Scripted:L1_Light_ClassroomGlow[Spill]` (die in the Floor 1 scare's burst), and the tunnel floors' steady
-    circuits `Mains:<...>`.
+  - `kind` `scripted`: `Scripted:L1_Light_ClassroomGlow[Spill]` (die in the Floor 1 scare's burst) and the tunnel
+    floors' steady circuits `Mains:<...>`.
   - **Power circuits (tunnel floors):** TunnelPlanner wires every run's caged bulbs in local circuits of up to four
     neighbours, each its own group: `Mains:L0_<Region>_<nn>` burns steady (`scripted`), a bad circuit
     `Circuit:L0_<Region>_<nn>` flickers (`flicker`); every keep-room is its own `Mains:<roomId>`. A teleport
@@ -193,7 +192,7 @@ The atlases `Decals<N>` and `Wear<N>` have `atlas: true` and `studsPerTile` 1.
   omnidirectionally (N·L = 1). Probe (x, y, z) is at `((y * nz + z) * nx + x) * 3`. Probes inside solids are filled
   from their neighbours.
   - `data` excludes the scripted groups. `groups` has one extra grid per scripted group that reaches the level
-    (`Scripted:Floodlights` on L4, the classroom glow on L1) and one per power family (L0: every `Mains:` /
+    (the classroom glow on L1) and one per power family (L0: every `Mains:` /
     `Circuit:` circuit's light, scaled by the family's first steady circuit). Add `level[group] × extra`.
   - `sampleProbe(grid, x, y, z, out, groupLevels)` does this when given the group levels (for example the flicker
     table).
@@ -211,17 +210,16 @@ Each entity is one interactive or scripted object of a run. `type` is one of:
 
 - `AirlockDoor`, `HallwayGate`, `ClassroomDoor`, `RoofStairDoor`;
 - `VentGrate`, `BearTrap`, `Locker`, `ChemicalFlask`, `Battery`;
-- `ParachuteCrate`, `FloodlightSwitch`;
+- `ParachuteCrate`;
 - `ReadyPad`, `Terminal`;
 - `Barrel`, `Cabinet`: the tunnels' other hiding spots (HideBuilder; tag `Hideable`, attribute `HideKind`
   `Barrel` / `Cabinet`, lockers carry `HideKind` `Locker` too). Same attachments and Hide prompt as a locker. Most
   stand free in a niche: their anchor's `exit` puts the `ExitAnchor` 1.3 studs off the prop's Left (−X) or Right (+X)
   side, looking out that way (a side the Creature may not be standing on); the rest step out at the front;
 - floor objectives (see "Floor objectives" below):
-  - items: `Fuse`, `MasterKeys`, `ReagentJar`, `CoachKey`, `ValveWheel`, `BoltCutters`, `AcidFlask`;
-  - stations: `BreakerPanel`, `FumeHood`, `Generator`, `HatchValve`, `StoreLock`, `CrateChain`;
-  - `ExitLock` (one per exit candidate on floors 0-4, on its fire door) and `StoreDoor` (the Level 3 equipment store's steel
-    door, `DoorKind` RoofDoor, `ScriptedId` EquipmentStoreDoor).
+  - items: `Fuse`, `MasterKeys`;
+  - stations: `BreakerPanel`;
+  - `ExitLock` (one per exit candidate of a floor with a lock step, floors 0-1, on its fire door).
 
 Fields:
 
@@ -289,77 +287,59 @@ Every floor's exit stays locked until its objective is done (ObjectiveConfig in
   farthest any walk passes from the guard's centre)})}], `picks` (the
   export seed's RunDirector picks: `anchors` in pick order,
   `guards`), `places` (every candidate, station and lock with its nearest hiding spot: `hide` {kind Locker / Vent /
-  DarkCorner / DryFooting / Cover, id, distance}).
+  DarkCorner, id, distance}). The Auditorium's interim floor (ObjectiveConfig `ReachExit`: no item, no lock) has
+  an entry and no candidates, picks or places.
 
 | Floor | Item candidates (brief minimum) | Where |
 | --- | --- | --- |
 | 0 | 14 `Fuse` (12), each with a guard trap spot `L0_TrapGuard_NN` / `L0_TrapGuard_TNN` (its `ref`) on its careless walk in (`careless`) and a standing spot clear of every trap spot (`stand`) | eight in the keep-rooms (the coal heap's front, the cage's shelving, the workbench, by the boilers, past the pumps, before the switchgear), six on the back-wall shelves of tunnel guard bays (9 x 8 niches, the trap in the mouth toward the side the squad comes along the run from) |
 | 1 | 14 `MasterKeys` (9), all west of the gate | ten on hooks in tunnel niches west of the gate (TunnelPlanner items, `wall`), two in the janitor's closet, two in the main office |
-| 2 | 15 `ReagentJar` (12), five per kind | five on tunnel niche shelves, six on the islands of Chem Lab 203 and Bio Lab 209, two on the chem store's shelving, two on the specimen store's racks (hideable lockers in every lab and store) |
-| 3 | 32 `CoachKey` (12) | inside every locker of both locker rooms (`ref` = the locker) |
-| 4 | 8 `ValveWheel` (6) | the deep pool floor in open water, never under a walkway, each 12 studs or less of swim from dry footing |
-| 5 | 9 `BoltCutters` (8) | against the HVAC units, the water tank, the boiler flue and the tool locker (new static `L5_ToolLocker`), on the maintenance box |
+| 2 | none (reach the east stairs) | the interim Auditorium storey |
 
-Objective entities carry attributes `Floor` (0-5), `Step`, `ObjectiveId` (= the entity type), `LevelId`, `AnchorId`
-(the entity id; the acid flask's id is its name), and tags `ObjectiveItem` / `ObjectiveStation` / `ExitLock`.
+Objective entities carry attributes `Floor` (0-5, `StageConfig`'s dense floor), `Step`, `ObjectiveId` (= the entity
+type), `LevelId`, `AnchorId` (the entity id), and tags `ObjectiveItem` / `ObjectiveStation` / `ExitLock`.
 
 - **Items** are exported for every candidate, not just the export seed's picks: attribute `Planned` says which ones
   the export seed uses; hide the others and pick per run with RunDirector.pickObjective's rule. One stream per level,
   `Rng.seeded(seed, "Objective|" + levelId)`, over the level's candidates in layout order (all eligible):
-  - one item (keys, coach key, valve wheel, bolt cutters): `shuffle(candidates)`, take the first;
+  - one item (the master keys): `shuffle(candidates)`, take the first;
   - several items, up to `pickAttempts` passes on the same stream: fuses `shuffle(candidates)` and take, in that
     order, each candidate in another room than the items taken so far and at least `pickSpacing` from each of them,
-    until `item.count`; reagents (slot of candidate i = `(i - 1) % 3 + 1`) for k = 1..3 `shuffle(slot k's
-    candidates)` and take the first that keeps the same rule. A pass stands when it is full and its three items lie
-    in at least `pickQuarters` quarters; otherwise the next pass reshuffles (if none stands, the first fullest pass
-    is used). A reagent's slot is its candidate's kind (`slot`), never its place in the picks; other items have none;
+    until `item.count`. A pass stands when it is full and its three items lie in at least `pickQuarters` quarters;
+    otherwise the next pass reshuffles (if none stands, the first fullest pass is used);
   - the basement arms the guard trap (`ref`) of the first two fuses picked.
-  Item attributes add `Slot` (reagents only: the candidate's colour / kind 1-3, also on the `Pickup` prompt; an item
-  is the prop any run builds on its anchor, RunDirector.objectiveProp), `Candidate` (the anchor kind). Attachments
-  `Grip` (the hand), `PromptPoint` (a disabled `Pickup` prompt with the item's hold), and on the valve wheel `Hub`
-  (its axis is the UpVector). The `AcidFlask` stands at the fume hood's `AcidFlaskSpot` (the attachment's whole
-  frame, its tag towards the Mix prompt) with `Planned` false: show it when the mix is done.
+  Item attributes add `Candidate` (the anchor kind; an item is the prop any run builds on its anchor,
+  RunDirector.objectiveProp). Attachments `Grip` (the hand) and `PromptPoint` (a disabled `Pickup` prompt with the
+  item's hold).
 - **Stations** (nodes = their leaves; each leaf's rest pose is attachment `<Leaf>Rest`):
   - `BreakerPanel`: nodes `Door` (built open, `DoorOpen`), `FuseSlot1..3` (attachments `FuseSlot<i>Seat`: pose a
     fitted fuse so its `Grip` lands there; `FuseSlot<i>Prompt` with a FitFuse prompt, `Slot` i), `Lever` (Breaker
-    prompt on `LeverPrompt`; ON is a rotation of `LeverThrow` = 110 degrees about the lever's X axis);
-  - `FumeHood`: node `Sash` (slides up, `SashOpen`), Mix prompt on `MixPrompt`, `ReagentSlot1..3`, `AcidFlaskSpot`,
-    `Exhaust`;
-  - `Generator`: node `PullCord` (slides out, `PullOut`), Generator prompt on `PullPrompt`, `Exhaust`, `LampHead` and
-    a disabled SpotLight `WorkLamp` in `LampLens`;
-  - `HatchValve`: nodes `Hatch` (top-hinged, `HatchOpen`) and `Stem` (turns about its axis), FitValve + TurnValve
-    prompts on `ValvePrompt`, `WheelSeat` (pose the wheel so its `Hub` lands there), `GrateId` = the duct grate it
-    shuts (the grate is unusable while the hatch is shut);
-  - `StoreLock`: the equipment store door's padlock (node `Padlock`), Locked + Unlock prompts on `LockPrompt`;
-  - `CrateChain`: nodes `Chain` and `Padlock`, Locked + CutChain prompts on `LockPrompt`, `ChainCentre`.
+    prompt on `LeverPrompt`; ON is a rotation of `LeverThrow` = 110 degrees about the lever's X axis).
 - **ExitLock**: on the exit airlock door's shut leaves (the doors are exported open: close them at run start), with
-  `LockVariant` Padlock (L1: node `Padlock`), Chain (L2: nodes `Chain`, `Padlock`; `ChainCentre` is the throw target)
-  or Keypad (L0, L3, L4: node `Bar`), `Locked` true, `DoorId` (the door entity's id), a `Locked` prompt (hold 0,
-  ActionText "Locked — <reason>") and on L1 an `Unlock`, on L2 a `Pour` prompt, all on `LockPrompt`.
+  `LockVariant` Padlock (L1: node `Padlock`) or Keypad (L0: node `Bar`), `Locked` true, `DoorId` (the door entity's
+  id), a `Locked` prompt (hold 0, ActionText "Locked — <reason>") and on L1 an `Unlock` prompt, all on `LockPrompt`.
 
 ## Routes: random exits (`meta.routes`, `meta.routePairs`, `meta.routeRule`)
 
-Every floor pair (1-5) has **three candidate stairwells**, one per stair tower on its side wall: slot `North`
-(towers `NorthWest` / `NorthEast`, Z -4..28, opening at z 12), `Middle` (`West` / `East`, Z 64..96, opening at z 80;
-the five original ids) and `South` (`SouthWest` / `SouthEast`, Z 132..164, opening at z 148). East side: 0→1, 2→3,
-4→5; west side: 1→2, 3→4. A run uses one per pair; **the other two are jammed** for that run. `meta.stairwells`
-lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones first) and `worldConfig.Towers` all six
-(`minX, maxX, minZ, maxZ, side, openingZ`).
+Every floor pair of the four-level school (0→1, 1→2, 2→3; `worldConfig.LevelOrder`) has **three candidate
+stairwells**, one per stair tower on its side wall: slot `North` (towers `NorthWest` / `NorthEast`, Z -4..28, opening
+at z 12), `Middle` (`West` / `East`, Z 64..96, opening at z 80) and `South` (`SouthWest` / `SouthEast`, Z 132..164,
+opening at z 148). East side: 0→1, 2→3; west side: 1→2. A run uses one per pair; **the other two are jammed** for that
+run. `meta.stairwells` lists all 9 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones first) and
+`worldConfig.Towers` all six (`minX, maxX, minZ, maxZ, side, openingZ`).
 
 | Pair | North | Middle | South |
 | --- | --- | --- | --- |
 | 0→1 | `Stairwell_0_1_North`: `L0_AirlockNorthEast` → `L1_AirlockNorthEast` | `Stairwell_0_1`: `L0_AirlockEast` → `L1_AirlockEast` | `Stairwell_0_1_South`: `L0_AirlockSouthEast` → `L1_AirlockSouthEast` |
 | 1→2 | `Stairwell_1_2_North`: `L1_AirlockNorthWest` → `L2_AirlockNorthWest` | `Stairwell_1_2` (West) | `Stairwell_1_2_South`: `L1_AirlockSouthWest` → `L2_AirlockSouthWest` |
-| 2→3 | `Stairwell_2_3_North`: `L2_AirlockNorthEast` → `L3_AirlockNorthEast` | `Stairwell_2_3` (East) | `Stairwell_2_3_South`: `L2_AirlockSouthEast` → `L3_AirlockSouthEast` |
-| 3→4 | `Stairwell_3_4_North`: `L3_AirlockNorthWest` → `L4_AirlockNorthWest` | `Stairwell_3_4` (West) | `Stairwell_3_4_South`: `L3_AirlockSouthWest` → `L4_AirlockSouthWest` |
-| 4→5 | `Stairwell_4_5_North`: `L4_AirlockNorthEast` → `L5_RoofAccessNorth` | `Stairwell_4_5`: → `L5_RoofAccess` | `Stairwell_4_5_South`: `L4_AirlockSouthEast` → `L5_RoofAccessSouth` |
+| 2→3 | `Stairwell_2_3_North`: `L2_AirlockNorthEast` → `L3_RoofAccessNorth` | `Stairwell_2_3`: → `L3_RoofAccess` | `Stairwell_2_3_South`: `L2_AirlockSouthEast` → `L3_RoofAccessSouth` |
 
 - **`meta.routes[from]`** (the shape `worldData.routeCandidates` consumes): the floor's exit candidates in slot order
   North, Middle, South, each `{ id = stairwellId, stairwellId, pair, slot, tower, from, to, fromRoom, toRoom,
   exitDoorIds, entryDoorIds, checkpoint, spawns, exitLock, creatureSpawn, picked }`: the fire door between the floor
   and the exit vestibule, the upper floor's entry door (a fire door, or on the roof the housing's `RoofStairDoor*`),
   the exit vestibule's Checkpoint trigger id, the upper vestibule's PlayerSpawn anchor ids (sorted: slot 1 first),
-  the ExitLock entity id on the exit door (none on the roof), the housing's CreatureSpawn anchor (roof only) and
+  the ExitLock entity id on the exit door (none on a floor without a lock step), the housing's CreatureSpawn anchor (roof only) and
   whether it is the export seed's pick.
 - **`meta.routePairs`**: `[{ pair, from, to, candidates: [ids], picked }]` (`picked` = RunDirector's route for the
   export seed; `plan.route` holds the same as `{ [from]: id }`).
@@ -368,7 +348,7 @@ lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones f
   entry, else draw again from the same stream, up to `attempts` (8) draws, then take the first fair candidate in slot
   order (else the middle one). The entry is the basement's layout entry, then each pick's `toRoom`. Fair: its exit
   vestibule is at least `fairShare` (0.6) of the longest candidate's walk from the entry (the floor's door / vent walk
-  graph, worst case: gates shut, lockable grates locked), and on `creatureSpawnLevels` (Levels 2, 3) the next floor
+  graph, worst case: gates shut, lockable grates locked), and on `creatureSpawnLevels` (`Level2_Auditorium`) the next floor
   keeps at least `minCreatureSpawns` (2) Creature starts (PatrolWaypoint / CreatureSpawn anchors) `creatureBand`
   (70-140) studs walked from that candidate's entry vestibule, outside it and the rooms its doorways open into, and
   outside every objective room (stations and every item candidate's room, whatever a run picks). The verdicts are
@@ -385,19 +365,16 @@ lists all 15 (`id, pair, slot, tower, from, to, fromRoom, toRoom`; middle ones f
   route's doors hide `Jam`. (In Roblox DoorBuilder.setJammed does this at build and DoorService starts such a door
   Locked.)
 - **Per vestibule:** a Checkpoint volume, a dim EmergencyRed lamp (the same whichever route is picked; light is baked
-  once), 4 PlayerSpawn anchors on entry vestibules, an ExitLock anchor on every exit candidate's fire door (L0-L4) and
+  once), 4 PlayerSpawn anchors on entry vestibules, an ExitLock anchor on every exit candidate's fire door (L0-L1) and
   a hideable locker within reach of each new lock. Each roof housing has its `RoofStairDoor` /
-  `RoofStairDoorNorth` / `RoofStairDoorSouth` (ScriptedId), a CreatureSpawn behind it (`L5_CreatureSpawn`, `_North`,
+  `RoofStairDoorNorth` / `RoofStairDoorSouth` (ScriptedId), a CreatureSpawn behind it (`L3_CreatureSpawn`, `_North`,
   `_South`), 4 PlayerSpawns, the same lamps, and the tower below it.
 - **Floor changes for the corner vestibules:** the corner rooms shrank (their side-wall windows went); L0's south-east
-  vestibule opens off `L0_Store_E2` (the condemned store stays boarded); L1-L3's open off the outer halls (L1's west
-  ones inside the sealed west half); L3's west halls are caved in at x = 60 (`L3_Door_NorthCaveIn` /
-  `L3_Door_SouthCaveIn`, Boarded; new rooms `L3_NorthHall_Mid` / `L3_SouthHall_Mid`), so the corner exits are only
-  reached across the gym floor; L4's corner vestibules open off the corner rooms, the east ones reached only from the
-  east deck: `L4_ChlorineHall` (x 214..228, z 25..30, a passage from the deck to the chlorine store; the maintenance
-  chase now ends at x 214) and a door from the deck into the scoreboard room (its door to `L4_Storage_E2` went).
+  vestibule opens off `L0_Store_E2` (the condemned store stays boarded); L1's open off the outer halls (its west ones
+  inside the sealed west half); the interim L2's six vestibules stand at the ends of its corridors.
 - **Bear traps, chemical flasks, batteries:** one entity on every candidate anchor a run may pick (every TrapCandidate
-  outside the trap-free rooms, every FlaskCandidate, every BatteryCandidate), each exactly the prop a live run builds
+  outside the trap-free rooms, every FlaskCandidate (none in the four-level school until flasks are placed again),
+  every BatteryCandidate), each exactly the prop a live run builds
   there (a prop's stream and its variant are its anchor's, never the run's: Builder.propRandom, RunDirector.variantOf);
   `Planned` is true on this seed's Standard picks. `worldData.plan` replays RunDirector's draws (`Traps|`, `Flasks|`,
   `Batteries|` streams of the run seed) and shows the entities on its picks. `worldData.variantOf` is
@@ -435,7 +412,7 @@ The Tall Man (CreatureRigBuilder): an 11-stud shadow figure with a porcelain mas
   - `height` (11): standing, floor to the crown;
   - `hunchedHeight` (9): bent under a 10-11 stud ceiling;
   - `eyeHeight` (10.34): the standing eyes over the floor; `eyeHeights` per PoseMode over the floor (`Biped`,
-    `Hunched`, `Quadruped`, `Swim`); `eyeHeightAboveRoot` per PoseMode over the root centre;
+    `Hunched`, `Quadruped`); `eyeHeightAboveRoot` per PoseMode over the root centre;
   - `reach` (4): how far from its root a catch reaches;
   - `rootHeight` (4.7), `armLength` (6.3);
   - `hitboxes[poseMode] = { size, offset }`: the CreatureHitbox per PoseMode, `offset` its CFrame relative to the
@@ -467,8 +444,7 @@ The Tall Man (CreatureRigBuilder): an 11-stud shadow figure with a porcelain mas
 | `zones` | the Zone volumes (cframe, size, roomKind, acoustic preset, surface) |
 | `anchors` | every layout anchor: PlayerSpawn, CreatureSpawn, CreatureScarePose, PatrolWaypoint (+ `loop`, `order`), Trap / Flask / BatteryCandidate, ParachuteCrate, Locker, Corpse, ... (`cframe`, `room`) |
 | `patrolLoops` | `[{ level, loop, waypoints: [{ id, room, pos }] }]` in walking order (the last leads back to the first) |
-| `triggers` | ScareStep, FloorDebris, Checkpoint, PoolWater, LevelExit volumes (`cframe`, `size`, `attributes`) |
-| `pools` | PoolWater volumes as surface Y, rect and depth (`basins`: the layout basins) |
+| `triggers` | ScareStep, FloorDebris, Checkpoint, LevelExit volumes (`cframe`, `size`, `attributes`) |
 | `doors` | layout door anchors (Door / Ajar / Gate / Airlock / RoofDoor: cframe looking into the next room, width, height, scriptedId) |
 | `layoutDoors` | every layout door incl. Boarded / Doorway, level-local, each with `clearance` (studs of head room: the lintel or the lower ceiling either side, minus the panel) and `crawlOnly` (a crawlway's mouth) |
 | `zoneGraph` | `ZoneGraph.build` output: `nodes`, `edges`, `adjacency` (rooms + portals); door edges carry `clearance` and `crawlOnly` (the Creature never takes a crawl-only edge, nor one under 9; it hunches under 12.5) |

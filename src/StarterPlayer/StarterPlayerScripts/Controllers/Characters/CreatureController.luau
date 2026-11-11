@@ -7,7 +7,7 @@
 --   * Inputs, read when the driver is about to step the rig (LOD): the profile state from MonsterState + PoseMode +
 --     InVent (Creature.resolveState), the hunch from PoseMode Hunched, the root's velocity (replicated assembly
 --     velocity, or measured from its motion when the server moves it kinematically), grounded (a short ray; always
---     in ducts and water), server time as the animator clock (so actions and seeded twitches line up on every
+--     in ducts), server time as the animator clock (so actions and seeded twitches line up on every
 --     client) and the look: the player whose UserId is TargetUserId (their eyes; the camera for this client's own
 --     player), measured from the Creature's eye point (SpatialQuery.creatureEye). With no target the head scans by
 --     itself. The rig steps at full rate while it hunts this client's player, otherwise under the render budget's
@@ -159,7 +159,6 @@ local waiting: Trove.Trove? = nil
 local pending: { Pending } = {}
 local lights: { BasePart } = {}
 local zones: { BasePart } = {}
-local waters: { BasePart } = {}
 local budgetFar = ProceduralAnimator.DefaultFar
 
 --------------------------------------------------------------------------------
@@ -301,15 +300,6 @@ local function lightSamples(point: Vector3): { LightSample }
 	return samples
 end
 
-local function inWater(point: Vector3): boolean
-	for _, volume in waters do
-		if volume.Parent ~= nil and SpatialQuery.pointInPart(volume, point) then
-			return true
-		end
-	end
-	return false
-end
-
 local function zoneSurface(point: Vector3): unknown
 	for _, zone in zones do
 		if zone.Parent ~= nil and SpatialQuery.pointInPart(zone, point) then
@@ -329,12 +319,7 @@ local function surfaceAt(entry: Entry, position: Vector3): Enums.SurfaceKind
 	end
 	local fromMaterial = if material then CharacterAnimationController.materialSurface(material) else nil
 	local zone = if partSurface == nil and fromMaterial == nil then zoneSurface(position) else nil
-	return CharacterAnimationController.surfaceFor(
-		inWater(position + Vector3.new(0, 0.3, 0)),
-		partSurface,
-		material,
-		zone
-	)
+	return CharacterAnimationController.surfaceFor(partSurface, material, zone)
 end
 
 --------------------------------------------------------------------------------
@@ -384,7 +369,7 @@ local function feed(entry: Entry, animator: ProceduralAnimator.Animator, dt: num
 	entry.speed = Vector3.new(entry.velocity.X, 0, entry.velocity.Z).Magnitude
 
 	local grounded = true
-	if not QUADRUPED_STATES[stateName] and stateName ~= "Swim" then
+	if not QUADRUPED_STATES[stateName] then
 		grounded = Workspace:Raycast(
 			position,
 			Vector3.new(0, -(entry.groundDistance + GROUND_MARGIN), 0),
@@ -961,7 +946,6 @@ function CreatureController.Init()
 	SequenceController.RegisterTrackHandler(TRACK_KIND, TRACK)
 	watchParts(Tags.LevelLight, lights)
 	watchParts(Tags.Zone, zones)
-	watchParts(Tags.PoolWater, waters)
 	serviceTrove:Add(RenderBudgetController.BudgetChanged:Connect(function(budget: RenderBudgetController.Budget)
 		budgetFar = budget.animFar
 	end))

@@ -1,5 +1,5 @@
 --!strict
--- ParachuteService: the roof jump (spec, Level 5). The only writer of ParachutePack TakenByUserId and of every player's
+-- ParachuteService: the roof jump (spec, Level 3). The only writer of ParachutePack TakenByUserId and of every player's
 -- parachute state (Player Parachute / ParachuteAt / ParachuteAuto). The rules it shares with the jumping client live in
 -- Shared/Sequence/ParachuteMotion.
 --
@@ -9,13 +9,12 @@
 -- Hud.ParachuteHaveOne). The pack vanishes from the crate (its parts go transparent and its prompt closes),
 -- TakenByUserId names the taker, the worn ParachuteBackpack rig is welded onto their UpperTorso, the buckles click
 -- (PackBuckle) and they are told how to go (Hud.ParachuteTaken): state Packed. A pack goes back into the crate when its
--- wearer dies, leaves or loses their body before jumping, so the packs always cover the squad. While the roof
--- objective keeps the crate chained (SetCrateOpen(false)) no pack can be taken.
+-- wearer dies, leaves or loses their body before jumping, so the packs always cover the squad.
 --
 -- The jump, every Heartbeat while the roof is the live level, for each of the run's participants with a body (the
 -- transition is advance, pure):
---   None / Packed  a root off the roof (ParachuteMotion.offRoof): with a pack, Freefall (the edge they left decides the
---                  drift); without one, Falling, executed ("Fall") past FatalDrop or on whatever it hits. Both fire Leapt.
+--   None / Packed  a root off the roof (ParachuteMotion.offRoof): Freefall (the edge they left decides the drift); a
+--                  jumper without a pack has a spare one buckled on as they go. Leapt fires.
 --   Freefall       ParachutePull (Alive; a pull that reaches the server up to PullGrace before it sees the leap counts)
 --                  opens the canopy. So does the ground coming up to AutoDeployClearance or FreefallMax in the air:
 --                  the fair auto-deploy, a late canopy (HardDescentSpeed) and a hard landing. Down on something before
@@ -27,14 +26,13 @@
 --                  everyone but the jumper (whose client plays its own). Down over the ground under the root
 --                  (ParachuteMotion.landed), or CanopyMax in the air (ForceLand): Landed.
 --   Landed         the descent comes off, the canopy collapses onto the ground behind them, the override goes and
---                  the body is held for the finale camera (CharacterService.Lock "Parachute", Anchor). A Downed jumper
+--                  the body is held (CharacterService.Lock "Parachute", Anchor) until the roof lets it go. A Downed jumper
 --                  is back on their feet: they made it out. ParachuteLanding (HardLanding after an auto-deploy) for
 --                  everyone but the jumper. Landed fires.
--- ForceLand(player) is the scripted landing (the finale's fade to black): a jumper still in the air is put on the
--- ground under them and lands. ReleaseHold(player) ends a lander's hold once the finale is over for them (the Level 5
--- controller); every hold ends with the run.
+-- ForceLand(player) is the scripted landing: a jumper still in the air is put on the ground under them and lands.
+-- ReleaseHold(player) ends a lander's hold (the roof controller, at the landing); every hold ends with the run.
 --
--- Signals: Leapt(player, packed), Deployed(player, auto), Landed(player, hard).
+-- Signals: Leapt(player), Deployed(player, auto), Landed(player, hard).
 -- Dev command: chute [give|pull|land] (the caller; no argument reports their jump).
 --
 -- Pure rules (tests/Specs/Parachute.spec.luau): grabCheck, advance. SetDependencies swaps every engine and
@@ -79,7 +77,7 @@ local W = Attributes.World
 
 export type State = Enums.ParachuteState
 
-export type Action = "None" | "Leap" | "Fall" | "Execute" | "Deploy" | "AutoDeploy" | "Land" | "LandHard" | "ForceLand"
+export type Action = "None" | "Leap" | "Deploy" | "AutoDeploy" | "Land" | "LandHard" | "ForceLand"
 
 export type AdvanceInput = {
 	state: State,
@@ -115,7 +113,6 @@ export type Dependencies = {
 	rootHeight: (player: Player) -> number,
 	lifeState: (player: Player) -> Enums.LifeState,
 	groundBelow: (player: Player, position: Vector3) -> number?,
-	execute: (player: Player, cause: string) -> (),
 	revive: (player: Player, fraction: number) -> (),
 	lock: (player: Player, reason: Enums.ControlLock, mode: Enums.LockMode) -> (),
 	unlock: (player: Player, reason: Enums.ControlLock) -> (),
@@ -162,7 +159,6 @@ local OVERRIDE_TOKEN = "Parachute"
 local OVERRIDE_STATE: Enums.MoveState = "Parachuting"
 local LOCK_REASON: Enums.ControlLock = "Parachute"
 local LOCK_MODE: Enums.LockMode = "Anchor"
-local FALL_CAUSE = "Fall"
 local HAVE_ONE_KEY = "Hud.ParachuteHaveOne"
 local TAKEN_KEY = "Hud.ParachuteTaken"
 local BUCKLE_PRESET = "PackBuckle"
@@ -177,7 +173,7 @@ local COLLAPSE_SECONDS = 0.9
 local COLLAPSE_TIP = math.rad(96) -- the canopy tips back over the lander's head onto the ground
 local COLLAPSE_DROP = 2 -- studs under the lander's root its harness point comes to rest
 local LIVE_PHASES: { [string]: boolean } = { InRun = true }
-local AIRBORNE: { [string]: boolean } = { Freefall = true, Canopy = true, Falling = true }
+local AIRBORNE: { [string]: boolean } = { Freefall = true, Canopy = true }
 
 local ParachuteService = {}
 
@@ -185,13 +181,12 @@ ParachuteService.Name = "ParachuteService"
 ParachuteService.ValidatorName = VALIDATOR_NAME
 ParachuteService.OverrideToken = OVERRIDE_TOKEN
 ParachuteService.LandingRevive = LANDING_REVIVE
-ParachuteService.FallCause = FALL_CAUSE
 
-local leapt: Signal.Signal<Player, boolean> = Signal.new()
+local leapt: Signal.Signal<Player> = Signal.new()
 local deployed: Signal.Signal<Player, boolean> = Signal.new()
 local landed: Signal.Signal<Player, boolean> = Signal.new()
 
--- (player, packed) when a root leaves the roof: with a pack (Freefall) or without (Falling).
+-- (player) when a root leaves the roof (Freefall).
 ParachuteService.Leapt = leapt
 -- (player, auto) when a canopy opens: pulled, or by itself.
 ParachuteService.Deployed = deployed
@@ -201,7 +196,6 @@ ParachuteService.Landed = landed
 local serviceTrove = Trove.new()
 local records: { [Player]: Record } = {}
 local initialized = false
-local crateOpen = true -- the roof objective keeps the crate chained until its chain is cut
 
 --------------------------------------------------------------------------------
 -- Pure rules
@@ -230,12 +224,8 @@ function ParachuteService.advance(input: AdvanceInput): Action
 	local position = input.position
 	local groundY = input.groundY
 	local down = groundY ~= nil and ParachuteMotion.landed(position.Y, groundY, input.rootHeight)
-	if state == "None" then
-		return if ParachuteMotion.offRoof(position) then "Fall" else "None"
-	elseif state == "Packed" then
+	if state == "None" or state == "Packed" then
 		return if ParachuteMotion.offRoof(position) then "Leap" else "None"
-	elseif state == "Falling" then
-		return if down or ParachuteMotion.fatal(position.Y) then "Execute" else "None"
 	elseif state == "Freefall" then
 		if down then
 			return "LandHard"
@@ -467,7 +457,6 @@ local function realDependencies(): Dependencies
 		end,
 		lifeState = LifeStateService.GetState,
 		groundBelow = realGroundBelow,
-		execute = LifeStateService.Execute,
 		revive = LifeStateService.Revive,
 		lock = CharacterService.Lock,
 		unlock = CharacterService.Unlock,
@@ -630,13 +619,19 @@ local function take(player: Player, pack: Model?): boolean
 	return true
 end
 
-local function leave(record: Record, position: Vector3, packed: boolean, now: number)
+-- `record` leaves the roof at `position`; a jumper without a pack has a spare one buckled on as they go.
+local function leave(record: Record, position: Vector3, now: number)
+	if record.state == "None" then
+		record.character = record.player.Character
+		destroy(record.backpack)
+		record.backpack = deps.attachPack(record.player)
+	end
 	record.leftFrom = position
 	record.leftAt = now
 	record.direction = ParachuteMotion.outward(position)
 	record.pack = nil -- jumped with it: it never goes back to the crate
-	setState(record, if packed then "Freefall" else "Falling", now)
-	leapt:Fire(record.player, packed)
+	setState(record, "Freefall", now)
+	leapt:Fire(record.player)
 end
 
 local function deploy(record: Record, root: BasePart, auto: boolean, now: number)
@@ -719,12 +714,7 @@ local function stepRecord(record: Record, root: BasePart, now: number)
 		alive = deps.lifeState(player) == "Alive",
 	})
 	if action == "Leap" then
-		leave(record, position, true, now)
-	elseif action == "Fall" then
-		leave(record, position, false, now)
-	elseif action == "Execute" then
-		deps.execute(player, FALL_CAUSE)
-		log.info("%s jumped without a parachute", player.Name)
+		leave(record, position, now)
 	elseif action == "Deploy" then
 		deploy(record, root, false, now)
 	elseif action == "AutoDeploy" then
@@ -842,7 +832,7 @@ function ParachuteService.ForceLand(player: Player): boolean
 	return true
 end
 
--- Ends a lander's hold (the finale's fade is done: the view is theirs again); they stay Landed. False when `player`
+-- Ends a lander's hold (the view is theirs again); they stay Landed. False when `player`
 -- is not held.
 function ParachuteService.ReleaseHold(player: Player): boolean
 	local record = records[player]
@@ -854,7 +844,7 @@ function ParachuteService.ReleaseHold(player: Player): boolean
 	return true
 end
 
--- Whether `player` is down below and still held for the finale camera.
+-- Whether `player` is down below and still held.
 function ParachuteService.IsHeld(player: Player): boolean
 	local record = records[player]
 	return record ~= nil and record.locked
@@ -906,7 +896,7 @@ local function chuteCommand(player: Player, args: { string }): string?
 	local action = string.lower(args[1] or "")
 	if action == "give" then
 		if not deps.live() then
-			return "go to the roof first (level 5)"
+			return "go to the roof first (level Level3_Roof)"
 		end
 		if ParachuteService.GetState(player) ~= "None" then
 			return "you already have one"
@@ -933,24 +923,6 @@ end
 -- Lifecycle
 --------------------------------------------------------------------------------
 
--- The roof objective's lock (ObjectiveService): while the crate is chained (false) no pack can be taken. Open by
--- default and again at every run end.
-function ParachuteService.SetCrateOpen(open: boolean)
-	if crateOpen == open then
-		return
-	end
-	crateOpen = open
-	for _, pack in CollectionService:GetTagged(Tags.ParachutePack) do
-		xpcall(InteractionService.Refresh, function(err: any)
-			log.warnThrottled("refresh", 10, "pack prompt refresh failed: %s", tostring(err))
-		end, pack)
-	end
-end
-
-function ParachuteService.IsCrateOpen(): boolean
-	return crateOpen
-end
-
 function ParachuteService.Init()
 	if initialized then
 		return
@@ -959,7 +931,7 @@ function ParachuteService.Init()
 	serviceTrove:Add(InteractionService.Register({
 		kind = PROMPT_KIND,
 		filter = function(host: Instance, _prompt: ProximityPrompt): boolean
-			return crateOpen and host:HasTag(Tags.ParachutePack) and host:GetAttribute(W.TakenByUserId) == nil
+			return host:HasTag(Tags.ParachutePack) and host:GetAttribute(W.TakenByUserId) == nil
 		end,
 		canUse = function(player: Player, _prompt: ProximityPrompt, host: Instance): (boolean, string?)
 			return ParachuteService.grabCheck(
@@ -1000,7 +972,6 @@ function ParachuteService.EndRun()
 	for _, record in table.clone(records) do
 		reset(record)
 	end
-	crateOpen = true
 end
 
 function ParachuteService.OnPlayerRemoving(player: Player)

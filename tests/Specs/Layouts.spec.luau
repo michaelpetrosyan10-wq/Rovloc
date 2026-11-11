@@ -1,18 +1,17 @@
 --!strict
 -- Every level blueprint validates (LayoutSchema.validate) and carries the content its level needs (USER_SPEC
 -- "LEVELS"), plus the cross-cutting rules the builders rely on: unique ids, dark lighting, patrol loops that hop
--- through doorways, openings that never collide on a wall, and a pool basin that clears the level below it.
+-- through doorways, openings that never collide on a wall, and ducts that clear the level below them.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CameraConfig = require(ReplicatedStorage.Shared.Config.CameraConfig)
 local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local Enums = require(ReplicatedStorage.Shared.Enums)
+local ObjectiveConfig = require(ReplicatedStorage.Shared.Config.ObjectiveConfig)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
-local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
 local ObjectivePlaces = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces)
-local PoolWaterBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PoolWaterBuilder)
 local RunDirector = require(ReplicatedStorage.Shared.World.RunDirector)
 local SpecRunner = require(script.Parent.Parent.SpecRunner)
 
@@ -28,10 +27,8 @@ local LAYOUTS: { [string]: Layout } = {
 	Lobby = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Lobby),
 	Level0_Basement = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level0_Basement),
 	Level1_Hallways = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level1_Hallways),
-	Level2_ScienceHall = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level2_ScienceHall),
-	Level3_Gymnasium = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level3_Gymnasium),
-	Level4_FloodedPool = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level4_FloodedPool),
-	Level5_Roof = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level5_Roof),
+	Level2_Auditorium = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level2_Auditorium),
+	Level3_Roof = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Layouts.Level3_Roof),
 }
 
 -- Palette keys the layouts may use (docs: PHASE1 brief, "Palette keys used by layouts").
@@ -43,7 +40,6 @@ local PALETTE_KEYS: { string } = {
 	"TileGreen",
 	"TileBlue",
 	"Linoleum",
-	"WoodGym",
 	"WoodPanel",
 	"PlasterSchool",
 	"PlasterGreen",
@@ -52,42 +48,24 @@ local PALETTE_KEYS: { string } = {
 	"MetalGalvanized",
 	"RoofGravel",
 	"Asphalt",
-	"PoolTile",
 	"Carpet",
-	"Lab",
 }
 
 local AMBIENCE: { [string]: string } = {
 	Lobby = "DroneLobby",
 	Level0_Basement = "DroneBasement",
 	Level1_Hallways = "DroneHallways",
-	Level2_ScienceHall = "DroneScience",
-	Level3_Gymnasium = "DroneGym",
-	Level4_FloodedPool = "DronePool",
-	Level5_Roof = "DroneRoof",
+	Level2_Auditorium = "DroneHallways",
+	Level3_Roof = "DroneRoof",
 }
 
 local EPS = 1e-3
--- Floor 4 fairness: walkway pieces this wide at least, swims between dry spots this long at most, a gap that is not a
--- step-over this wide at least (clearly a swim, never a tempting jump), and the climb-out band over the water
--- (SwimController.ClimbMin / ClimbMax).
-local POOL_MIN_WIDTH = 6
-local POOL_MAX_LEG = 25
-local POOL_SWIM_GAP_MIN = 6
-local POOL_CLIMB_MIN, POOL_CLIMB_MAX = 0.1, 2.3
 local HALF_BORE = WorldConfig.VentBore / 2
 local HALF_OUTER = HALF_BORE + WorldConfig.VentShell
 -- Standing eye height over the floor: a normalized R15 root centre (HipHeight 2 + half the 2-stud root) plus the
 -- standing eye offset the server uses for line of sight.
 local STANDING_EYE = 3 + CameraConfig.EyeHeightAboveRoot.Standing
-local SCHOOL_ORDER: { string } = {
-	"Level0_Basement",
-	"Level1_Hallways",
-	"Level2_ScienceHall",
-	"Level3_Gymnasium",
-	"Level4_FloodedPool",
-	"Level5_Roof",
-}
+local SCHOOL_ORDER: { string } = { "Level0_Basement", "Level1_Hallways", "Level2_Auditorium", "Level3_Roof" }
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -144,7 +122,7 @@ end
 
 local function schoolLevels(): { string }
 	local out: { string } = {}
-	for _, id: Enums.LevelId in Enums.LevelId do
+	for _, id: Enums.LevelId in WorldConfig.LevelOrder do
 		table.insert(out, id)
 	end
 	return out
@@ -282,7 +260,8 @@ return {
 			t.truthy(lower and lower.kind == "Airlock", spec.id .. " leaves from an airlock vestibule")
 			t.truthy(upper and (upper.kind == "Airlock" or upper.kind == "Stairwell"), spec.id .. " arrives in one")
 		end
-		for pair = 1, 5 do
+		t.eq(table.concat(SCHOOL_ORDER, ","), table.concat(WorldConfig.LevelOrder, ","), "the school's four levels")
+		for pair = 1, #SCHOOL_ORDER - 1 do
 			local slots = {}
 			for _, spec in WorldConfig.Stairwells do
 				if spec.pair == pair then
@@ -296,11 +275,11 @@ return {
 			basementEntry and basementEntry.rect.x + basementEntry.rect.w <= WorldConfig.FootprintSize.X / 4,
 			"the basement arrival bay is on the west side (its first quarter)"
 		)
-		local roofExit = roomOf(LAYOUTS.Level5_Roof, LAYOUTS.Level5_Roof.exit)
+		local roofExit = roomOf(LAYOUTS.Level3_Roof, LAYOUTS.Level3_Roof.exit)
 		t.truthy(roofExit and roofExit.rect.x == 0, "the roof exit is the west edge")
 		for id, layout in LAYOUTS do
 			t.eq(layout.ambience, AMBIENCE[id], id .. " ambience bed")
-			if id ~= "Lobby" and id ~= "Level5_Roof" then
+			if id ~= "Lobby" and id ~= "Level3_Roof" then
 				t.near(layout.height, WorldConfig.Levels[id].height, EPS, id .. " height matches WorldConfig")
 			end
 		end
@@ -330,9 +309,6 @@ return {
 			end
 			for _, p in (layout.platforms or {}) :: { LayoutSchema.Platform } do
 				claim(p.id, layoutId)
-			end
-			for _, b in (layout.basins or {}) :: { LayoutSchema.Basin } do
-				claim(b.id, layoutId)
 			end
 			local vents = layout.vents
 			if vents then
@@ -382,11 +358,11 @@ return {
 			if LAYOUTS[id].tunnels then
 				-- a tunnel floor: the Creature hunts the tunnels, several starts for the spawn rule to choose from
 				t.truthy(count >= 4, id .. ": the tunnels hold several Creature starts")
-			elseif id == "Level5_Roof" then
+			elseif id == "Level3_Roof" then
 				-- one behind each stair housing's roof door (the run arrives in one of them)
 				t.eq(count, 3, id .. " CreatureSpawn per stair housing")
 				for _, a in anchorsOf(LAYOUTS[id], "CreatureSpawn") do
-					t.eq(string.sub(a.room, 1, 13), "L5_RoofAccess", a.id .. " waits in a housing")
+					t.eq(string.sub(a.room, 1, 13), "L3_RoofAccess", a.id .. " waits in a housing")
 				end
 			else
 				t.eq(count, 1, id .. " CreatureSpawn")
@@ -462,7 +438,7 @@ return {
 		end
 	end,
 
-	["patrol loops hop through doorways and cover levels 1-5"] = function(t: Expect)
+	["patrol loops hop through doorways and cover every level"] = function(t: Expect)
 		for id, layout in LAYOUTS do
 			local rooms = LayoutSchema.indexRooms(layout)
 			local joined: { [string]: boolean } = {}
@@ -514,15 +490,11 @@ return {
 	["anchors stay inside their room's volume"] = function(t: Expect)
 		for id, layout in LAYOUTS do
 			local rooms = LayoutSchema.indexRooms(layout)
-			local floorOf: { [string]: number } = {}
-			for _, b in (layout.basins or {}) :: { LayoutSchema.Basin } do
-				floorOf[b.room] = math.min(floorOf[b.room] or 0, -b.depth)
-			end
 			for _, a in layout.anchors do
 				local r = rooms[a.room]
 				if r then
 					t.truthy(a.pos.Y <= LayoutSchema.roomHeight(layout, r), id .. " " .. a.id .. " under the ceiling")
-					t.truthy(a.pos.Y >= (floorOf[a.room] or 0), id .. " " .. a.id .. " above the floor")
+					t.truthy(a.pos.Y >= 0, id .. " " .. a.id .. " above the floor")
 				end
 			end
 		end
@@ -849,7 +821,7 @@ return {
 		t.truthy(#triggersOf(layout, "Checkpoint") == 3, "a checkpoint in every exit vestibule candidate")
 	end,
 
-	["the hallway and science floors keep the classic vent only where the script needs it"] = function(t: Expect)
+	["the hallway and Auditorium floors keep the classic vent only where the script needs it"] = function(t: Expect)
 		-- Tunnel floors escape by crawlways (TunnelPlanner); Level 1 keeps one vent, the gate's bypass, because the
 		-- scare's gate is scripted around it (both runtimes crawl vents; crawlways are not on Roblox yet)
 		local l1 = LAYOUTS.Level1_Hallways
@@ -881,8 +853,8 @@ return {
 			end
 		end
 		t.truthy(rooms1.L1_Classroom_108 ~= nil, "the scare classroom")
-		t.falsy(LAYOUTS.Level2_ScienceHall.vents, "no vents in the science wing (crawlways instead)")
-		for _, id in { "Level1_Hallways", "Level2_ScienceHall" } do
+		t.falsy(LAYOUTS.Level2_Auditorium.vents, "no vents on the Auditorium storey (crawlways instead)")
+		for _, id in { "Level1_Hallways", "Level2_Auditorium" } do
 			local crawls = 0
 			for _, r in LAYOUTS[id].rooms do
 				if r.kind == "Crawlway" then
@@ -893,442 +865,8 @@ return {
 		end
 	end,
 
-	["science hall: labs, the fume hood, flasks on lab counters and in tunnel caches"] = function(t: Expect)
-		local layout = LAYOUTS.Level2_ScienceHall
-		local rooms = LayoutSchema.indexRooms(layout)
-		local labs = 0
-		for _, r in layout.rooms do
-			if r.kind == "Lab" then
-				labs += 1
-			end
-		end
-		t.truthy(labs >= 3, "chem prep and two labs")
-		local hoods = anchorsOf(layout, "FumeHood")
-		t.eq(#hoods, 1, "one fume hood")
-		t.eq(hoods[1].room, "L2_ChemPrep_205", "the hood stands in Chem Prep 205")
-		for _, id in { "L2_ChemStore_243", "L2_SpecimenStore_225" } do
-			local held = 0
-			for _, a in anchorsOf(layout, "ReagentCandidate") do
-				if a.room == id then
-					held += 1
-				end
-			end
-			t.truthy(rooms[id] and held >= 1, id .. " holds reagents")
-		end
-		local counters = anchorsOf(layout, "LabCounter")
-		local flasks = anchorsOf(layout, "FlaskCandidate")
-		t.truthy(#counters >= 8, "lab counters")
-		t.truthy(#flasks >= 10, "at least 10 flask candidates")
-		local cached = 0
-		for _, f in flasks do
-			local onCounter, onShelf = false, false
-			for _, c in counters do
-				if c.room == f.room and math.abs(f.pos.X - c.pos.X) <= 5 and math.abs(f.pos.Z - c.pos.Z) <= 1.75 then
-					onCounter = true
-				end
-			end
-			for _, p in (layout.platforms or {}) :: { LayoutSchema.Platform } do
-				if
-					p.room == f.room
-					and LayoutSchema.rectContains(p.rect, f.pos.X, f.pos.Z)
-					and math.abs(p.top - f.pos.Y) < 1e-3
-				then
-					onShelf = true
-				end
-			end
-			if onShelf then
-				cached += 1
-			end
-			t.truthy((onCounter or onShelf) and f.pos.Y > 2.5, f.id .. " stands on a lab counter or a cache shelf")
-		end
-		t.truthy(cached >= 3, string.format("%d flasks cached in the tunnels", cached))
-		t.truthy(#anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
-	end,
-
-	["gymnasium: a tall gym across the floor's fold, the equipment store off it, the locker rooms"] = function(
-		t: Expect
-	)
-		local layout = LAYOUTS.Level3_Gymnasium
-		local rooms = LayoutSchema.indexRooms(layout)
-		t.truthy(layout.tunnels ~= nil, "the gym's floor is a tunnel floor (TunnelPlanner)")
-		local gym: Room? = nil
-		local lockerRooms: { [string]: boolean } = {}
-		local coach = false
-		for _, r in layout.rooms do
-			if r.kind == "Gym" and LayoutSchema.roomHeight(layout, r) >= 28 then
-				gym = r
-			elseif r.kind == "LockerRoom" then
-				lockerRooms[r.id] = true
-			end
-			if string.find(r.id, "Coach", 1, true) then
-				coach = true
-			end
-		end
-		t.truthy(gym, "a tall gym")
-		t.truthy(coach, "a coach office")
-		if not gym then
-			return
-		end
-		t.truthy(gym.rect.w >= 100 and gym.rect.d >= 60, "the gym is massive")
-		local bleachers = 0
-		for _, p in (layout.platforms or {}) :: { LayoutSchema.Platform } do
-			if p.room == gym.id then
-				bleachers += 1
-			end
-		end
-		t.truthy(bleachers >= 4, "bleachers")
-		local lockers = anchorsOf(layout, "Locker")
-		t.truthy(#lockers >= 20, "many hideable lockers")
-		local inLockerRooms = 0
-		for _, a in lockers do
-			if lockerRooms[a.room] then
-				inLockerRooms += 1
-			end
-		end
-		t.truthy(inLockerRooms * 2 >= #lockers, "most lockers line the locker rooms")
-		t.eq(#anchorsOf(layout, "CoachKeyCandidate"), inLockerRooms, "every locker-room locker may hold the key")
-		-- the equipment store opens off the gym: its steel door is the floor objective's StoreDoor
-		local store = doorsWhere(layout, function(d: Door): boolean
-			return d.scriptedId == "EquipmentStoreDoor"
-		end)
-		t.eq(#store, 1, "one equipment store door")
-		if store[1] then
-			t.eq(store[1].kind, "RoofDoor", "a single dented steel leaf")
-			t.truthy(table.find(store[1].rooms, gym.id) ~= nil, "the store opens off the gym")
-			t.truthy(table.find(store[1].rooms, "L3_EquipmentStore") ~= nil, "into the equipment store")
-		end
-		-- the floor is folded so that the way west crosses the court and passes through a locker room: without the
-		-- gym's doors, or without the locker rooms', the exit cannot be reached
-		local function reachesExit(blocked: (Door) -> boolean): boolean
-			local adjacency: { [string]: { string } } = {}
-			for _, d in layout.doors do
-				if d.kind ~= "Boarded" and not blocked(d) then
-					for i = 1, 2 do
-						local a, b = d.rooms[i], d.rooms[3 - i]
-						adjacency[a] = adjacency[a] or {}
-						table.insert(adjacency[a], b)
-					end
-				end
-			end
-			local seen: { [string]: boolean } = { [layout.entry] = true }
-			local queue = { layout.entry }
-			local head = 1
-			while head <= #queue do
-				local current = queue[head]
-				head += 1
-				for _, nextId in adjacency[current] or {} :: { string } do
-					if not seen[nextId] then
-						seen[nextId] = true
-						table.insert(queue, nextId)
-					end
-				end
-			end
-			return seen[layout.exit] == true
-		end
-		-- (crawlways are shortcuts, never the only way: they stay shut here too)
-		local function crawl(d: Door): boolean
-			return LayoutSchema.doorCrawlOnly(layout, d)
-		end
-		t.truthy(reachesExit(crawl), "the exit is reached on foot")
-		t.falsy(
-			reachesExit(function(d: Door): boolean
-				return crawl(d) or table.find(d.rooms, gym.id) ~= nil
-			end),
-			"only across the gym"
-		)
-		t.falsy(
-			reachesExit(function(d: Door): boolean
-				return crawl(d) or lockerRooms[d.rooms[1]] == true or lockerRooms[d.rooms[2]] == true
-			end),
-			"only through a locker room"
-		)
-		t.truthy(rooms[layout.exit] and #anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
-	end,
-
-	["flooded pool: deep basin, collapsed walkways, submerged ducts, floodlight switch"] = function(t: Expect)
-		local layout = LAYOUTS.Level4_FloodedPool
-		local pool: Room? = nil
-		for _, r in layout.rooms do
-			if r.kind == "Pool" then
-				pool = r
-			end
-		end
-		t.truthy(pool, "a pool hall")
-		if not pool then
-			return
-		end
-		t.truthy(LayoutSchema.roomHeight(layout, pool) >= 26, "cavernous")
-		t.truthy(pool.rect.w >= 120 and pool.rect.d >= 90, "about 140 x 100")
-		local basins = layout.basins or {}
-		t.eq(#basins, 1, "one basin")
-		local basin = basins[1]
-		t.eq(basin.room, pool.id, "the basin is in the pool hall")
-		t.near(basin.waterLevel, WorldConfig.WaterSurfaceOffset, EPS, "murky water just below the deck")
-		t.truthy(basin.depth >= 8, "deep enough to swim")
-		t.truthy(basin.rect.w * basin.rect.d >= 0.5 * pool.rect.w * pool.rect.d, "the hall is mostly basin")
-		t.truthy(
-			math.abs(basin.rect.z - pool.rect.z) < EPS and math.abs(basin.rect.d - pool.rect.d) < EPS,
-			"the basin runs wall to wall, so only the walkway crosses it dry"
-		)
-		local fragments = 0
-		for _, p in (layout.platforms or {}) :: { LayoutSchema.Platform } do
-			if LayoutSchema.rectOverlapArea(p.rect, basin.rect) > 0 and math.abs(p.top) <= 1 then
-				fragments += 1
-			end
-		end
-		t.truthy(fragments >= 3, "collapsed walkway fragments")
-		local vents = layout.vents
-		t.truthy(vents, "maintenance ducts")
-		if vents then
-			local submerged = 0
-			for _, e in vents.edges do
-				if e.submerged then
-					submerged += 1
-				end
-			end
-			t.truthy(submerged >= 1, "half-submerged duct edges")
-			local criticalIntoPool = 0
-			for _, g in vents.grates do
-				if g.criticalPath and g.room == pool.id then
-					criticalIntoPool += 1
-				end
-			end
-			t.truthy(criticalIntoPool >= 2, "the flooded duct is part of the route across the pool")
-			-- half-flooded: the duct's centre line is the water surface, so the water fills the lower half of the bore
-			for _, n in vents.nodes do
-				t.near(LayoutSchema.ventNodeY(n), basin.waterLevel, EPS, n.id .. " sits at the waterline")
-			end
-			-- the swim is mandatory: every grate of the duct opens low in the pool wall, wholly over the water
-			-- (inside the basin's coping), never onto the dry deck
-			local wall = Geometry.BasinWall
-			for _, g in vents.grates do
-				local node = nodeById(layout, g.node)
-				t.eq(g.room, pool.id, g.id .. " opens into the pool hall")
-				t.truthy(node, g.id .. " node")
-				if node then
-					local side = LayoutSchema.sideOfPoint(pool.rect, node.x, node.z)
-					local alongX = side == "N" or side == "S"
-					local u = if alongX then node.x else node.z
-					local lo = if alongX then basin.rect.x else basin.rect.z
-					local span = if alongX then basin.rect.w else basin.rect.d
-					local onEdge = if side == "N"
-						then math.abs(node.z - basin.rect.z) < EPS
-						elseif side == "S" then math.abs(node.z - (basin.rect.z + basin.rect.d)) < EPS
-						elseif side == "W" then math.abs(node.x - basin.rect.x) < EPS
-						else math.abs(node.x - (basin.rect.x + basin.rect.w)) < EPS
-					t.truthy(onEdge, g.id .. " opens straight onto the basin")
-					t.truthy(
-						u - HALF_BORE >= lo + wall - EPS and u + HALF_BORE <= lo + span - wall + EPS,
-						g.id .. " opens over the water, inside the coping"
-					)
-				end
-			end
-			-- the duct's PoolWater volume is the flooded half of the bore: bore floor to the water surface, over every
-			-- flooded duct inside its chase
-			local ductWater: { LayoutSchema.Trigger } = {}
-			for _, tr in triggersOf(layout, "PoolWater") do
-				local r = roomOf(layout, tr.room)
-				if r and r.kind == "Chase" then
-					table.insert(ductWater, tr)
-					t.near(tr.y or 0, basin.waterLevel - HALF_BORE, EPS, tr.id .. " starts at the bore floor")
-					t.near((tr.y or 0) + tr.height, basin.waterLevel, EPS, tr.id .. " ends at the water surface")
-				end
-			end
-			t.truthy(#ductWater >= 1, "the flooded duct has a PoolWater volume")
-			for _, e in vents.edges do
-				local a, b = nodeById(layout, e.a), nodeById(layout, e.b)
-				local chase = a and chaseOf(layout, a)
-				if e.submerged and a and b and chase then
-					for _, p in { a, b } :: { LayoutSchema.VentNodeSpec } do
-						local x = math.clamp(p.x, chase.rect.x, chase.rect.x + chase.rect.w)
-						local z = math.clamp(p.z, chase.rect.z, chase.rect.z + chase.rect.d)
-						local covered = false
-						for _, tr in ductWater do
-							covered = covered or LayoutSchema.rectContains(tr.rect, x, z)
-						end
-						t.truthy(covered, string.format("%s-%s: water covers the bore at %.1f, %.1f", e.a, e.b, x, z))
-					end
-				end
-			end
-		end
-		t.eq(#anchorsOf(layout, "FloodlightSwitch"), 1, "the emergency floodlight switch")
-		local deckFlasks = 0
-		for _, f in anchorsOf(layout, "FlaskCandidate") do
-			if f.room == pool.id and f.pos.Y >= 0 then
-				deckFlasks += 1
-			end
-		end
-		t.truthy(deckFlasks >= 3, "flasks on the deck")
-		t.truthy(#triggersOf(layout, "PoolWater") >= 1, "pool water volumes")
-		local floodlights = 0
-		for _, l in lightsOf(layout) do
-			if l.kind == "Floodlight" then
-				floodlights += 1
-			end
-		end
-		t.truthy(floodlights >= 4, "pool floodlights for the switch")
-		-- the pool must be crossed: with the hall shut (its doors and its grates) no exit vestibule is reached from the
-		-- entry, not by a tunnel, a crawlway or a duct; with it, every one is
-		local tunnels = layout.tunnels
-		t.truthy(tunnels, "the pool's floor is a tunnel floor (TunnelPlanner)")
-		if tunnels then
-			local hall = "room:" .. pool.id
-			local function exitsReached(withHall: boolean): number
-				local adjacency: { [string]: { string } } = {}
-				local function link(a: string, b: string)
-					if withHall or (a ~= hall and b ~= hall) then
-						adjacency[a] = adjacency[a] or {}
-						adjacency[b] = adjacency[b] or {}
-						table.insert(adjacency[a], b)
-						table.insert(adjacency[b], a)
-					end
-				end
-				for _, d in layout.doors do
-					if d.kind ~= "Boarded" then
-						link("room:" .. d.rooms[1], "room:" .. d.rooms[2])
-					end
-				end
-				local ducts = layout.vents
-				if ducts then
-					for _, e in ducts.edges do
-						link("vent:" .. e.a, "vent:" .. e.b)
-					end
-					for _, g in ducts.grates do
-						link("room:" .. g.room, "vent:" .. g.node)
-					end
-				end
-				local seen: { [string]: boolean } = { ["room:" .. layout.entry] = true }
-				local queue: { string } = { "room:" .. layout.entry }
-				local head = 1
-				while head <= #queue do
-					local current = queue[head]
-					head += 1
-					for _, nextId in (adjacency[current] or {}) :: { string } do
-						if not seen[nextId] then
-							seen[nextId] = true
-							table.insert(queue, nextId)
-						end
-					end
-				end
-				local reached = 0
-				for _, id in tunnels.exits do
-					if seen["room:" .. id] then
-						reached += 1
-					end
-				end
-				return reached
-			end
-			t.eq(exitsReached(true), #tunnels.exits, "every exit vestibule is reached across the pool")
-			t.eq(exitsReached(false), 0, "no dry way round the pool")
-		end
-	end,
-
-	["pool fragments stand on piers or rubble, none hovers over the water"] = function(t: Expect)
-		local layout = LAYOUTS.Level4_FloodedPool
-		local platforms: { LayoutSchema.Platform } = layout.platforms or {}
-		for _, basin in (layout.basins or {}) :: { LayoutSchema.Basin } do
-			local interior = Geometry.insetRect(basin.rect, Geometry.BasinWall)
-			for _, p in platforms do
-				if p.top > EPS or LayoutSchema.rectOverlapArea(p.rect, interior) <= 0 then
-					continue
-				end
-				local underside = p.top - p.thickness
-				t.truthy(underside < basin.waterLevel - EPS, p.id .. " sits in the water, not above it")
-				local supported = math.abs(underside + basin.depth) < EPS
-				for _, q in platforms do
-					if
-						q ~= p
-						and math.abs(q.top - underside) < EPS
-						and math.abs(q.top - q.thickness + basin.depth) < EPS
-						and LayoutSchema.rectInside(q.rect, p.rect)
-					then
-						supported = true
-					end
-				end
-				t.truthy(supported, p.id .. " rests on the basin floor or on a support standing on it")
-			end
-		end
-	end,
-
-	["flooded pool: a fair route (wide walkways, step-over cracks, short swims, most of the hall dry)"] = function(
-		t: Expect
-	)
-		local layout = LAYOUTS.Level4_FloodedPool
-		local basin = (layout.basins or {})[1]
-		assert(basin, "the pool basin")
-		local classified = PoolWaterBuilder.classify(layout, basin)
-		local interior = classified.interior
-		-- Every walkway piece is at least 6 studs wide
-		t.truthy(#classified.fragments >= 10, "a walkway of slabs, spurs and rest islands")
-		for _, f in classified.fragments do
-			t.truthy(
-				math.min(f.rect.w, f.rect.d) >= POOL_MIN_WIDTH - EPS,
-				string.format("%s is %.1f x %.1f (at least %d wide)", f.id, f.rect.w, f.rect.d, POOL_MIN_WIDTH)
-			)
-		end
-		-- Facing pieces are either a step-over apart or a clear swim apart: never a jump that tempts
-		for _, edge in PoolWaterBuilder.breakEdges(classified) do
-			t.truthy(
-				edge.gap <= PoolWaterBuilder.StepOver + EPS or edge.gap >= POOL_SWIM_GAP_MIN - EPS,
-				string.format("%s: a %.1f-stud gap is neither a step-over nor a swim", edge.fragment.id, edge.gap)
-			)
-			t.truthy(edge.gap <= POOL_MAX_LEG + EPS, edge.fragment.id .. " faces a swim no longer than a leg")
-		end
-		local groups = PoolWaterBuilder.dryGroups(layout, basin, POOL_CLIMB_MIN, POOL_CLIMB_MAX)
-		-- The dry route: the west deck's walkway reaches the duct's west grate, the east deck's the deep end, and the
-		-- crossing between them is one short swim (the fallen span)
-		local legs = PoolWaterBuilder.swimLegs(groups)
-		t.truthy(#legs >= 1, "the design keeps a swim")
-		for _, leg in legs do
-			t.truthy(
-				leg.length <= POOL_MAX_LEG + EPS,
-				string.format("a %.1f-stud swim leg between dry spots (at most %d)", leg.length, POOL_MAX_LEG)
-			)
-		end
-		local decks = 0
-		for _, group in groups do
-			if group.deck then
-				decks += 1
-				local gap = math.huge
-				for _, other in groups do
-					if other ~= group and other.deck then
-						gap = math.min(gap, PoolWaterBuilder.groupGap(group, other))
-					end
-				end
-				t.truthy(gap <= POOL_MAX_LEG / 2 + EPS, string.format("deck to deck is a %.1f-stud swim", gap))
-			end
-		end
-		t.eq(decks, 2, "the west and east decks are two dry groups, a swim apart")
-		-- Most of the hall is near dry footing: three quarters of the open water within half a leg of a dry spot
-		local near, total = 0, 0
-		for x = interior.x + 0.5, interior.x + interior.w, 1 do
-			for z = interior.z + 0.5, interior.z + interior.d, 1 do
-				local swim = PoolWaterBuilder.swimToDry(groups, x, z)
-				if swim > 0 then
-					total += 1
-					if swim <= POOL_MAX_LEG / 2 then
-						near += 1
-					end
-				end
-			end
-		end
-		t.truthy(near >= 0.75 * total, string.format("%d of %d stud cells of water near dry footing", near, total))
-		-- The duct's west grate is a short swim from the walkway (the hatch objective is worked treading water)
-		local nodes: { [string]: LayoutSchema.VentNodeSpec } = {}
-		for _, n in (layout.vents :: LayoutSchema.VentNetwork).nodes do
-			nodes[n.id] = n
-		end
-		for _, g in (layout.vents :: LayoutSchema.VentNetwork).grates do
-			local n = nodes[g.node]
-			if g.criticalPath and n then
-				local swim = PoolWaterBuilder.swimToDry(groups, n.x, n.z + 1)
-				t.truthy(swim <= POOL_MAX_LEG / 2, string.format("%s is a %.1f-stud swim from dry footing", g.id, swim))
-			end
-		end
-	end,
-
 	["roof: parapets, the roof stair door, HVAC, crate and the jump"] = function(t: Expect)
-		local layout = LAYOUTS.Level5_Roof
+		local layout = LAYOUTS.Level3_Roof
 		local rooms = LayoutSchema.indexRooms(layout)
 		for _, r in layout.rooms do
 			if r.kind == "Roof" then
@@ -1340,7 +878,7 @@ return {
 				end
 			end
 		end
-		t.eq(layout.entry, "L5_RoofAccess", "entry is the roof access housing")
+		t.eq(layout.entry, "L3_RoofAccess", "entry is the roof access housing")
 		local roofDoors = doorsWhere(layout, function(d: Door): boolean
 			return d.kind == "RoofDoor"
 		end)
@@ -1349,7 +887,7 @@ return {
 			local found = false
 			for _, door in roofDoors do
 				if door.scriptedId == "RoofStairDoor" .. slot then
-					found = table.find(door.rooms, "L5_RoofAccess" .. slot) ~= nil
+					found = table.find(door.rooms, "L3_RoofAccess" .. slot) ~= nil
 				end
 			end
 			t.truthy(found, "the roof door RoofStairDoor" .. slot .. " opens from its housing")
@@ -1382,6 +920,50 @@ return {
 		end
 		t.truthy(#(layout.platforms or {}) >= 3, "HVAC units")
 		t.truthy(#lightsOf(layout) <= 10, "almost no lights (the three stair housings' lamps and the beacon)")
+		-- the old maze is gone: no objective on the roof, and every roof cell opens onto its neighbours
+		t.eq(ObjectiveConfig.forLevel(layout.id), nil, "no floor objective")
+		local itemSpots: { [string]: boolean } = {}
+		for _, floor in ObjectiveConfig.Floors do
+			local item = floor.item
+			if item then
+				itemSpots[item.candidate] = true
+			end
+		end
+		for _, a in layout.anchors do
+			t.falsy(itemSpots[a.kind], a.id .. " is no objective item spot")
+		end
+		local cells = 0
+		for _, r in layout.rooms do
+			if r.kind == "Roof" and r.id ~= layout.exit then
+				cells += 1
+			end
+		end
+		local seen = reachable(layout, layout.entry, { noVents = true })
+		for _, r in layout.rooms do
+			if r.kind == "Roof" then
+				t.truthy(seen["room:" .. r.id], r.id .. " is walkable from the housing")
+			end
+		end
+		t.truthy(cells >= 9, "the open roof cells")
+	end,
+
+	["auditorium storey: an interim tunnel floor, west in, east out, 28 high"] = function(t: Expect)
+		local layout = LAYOUTS.Level2_Auditorium
+		t.truthy(layout.tunnels ~= nil, "a tunnel floor (TunnelPlanner)")
+		t.near(layout.height, 28, EPS, "the storey the theatre will fill")
+		local entry = roomOf(layout, layout.entry)
+		local exit = roomOf(layout, layout.exit)
+		t.truthy(entry and entry.kind == "Airlock" and entry.rect.x + entry.rect.w <= 40, "in from the west vestibules")
+		t.truthy(
+			exit and exit.kind == "Airlock" and exit.rect.x >= WorldConfig.FootprintSize.X - 40,
+			"out by the east vestibules"
+		)
+		t.eq(#triggersOf(layout, "Checkpoint"), 3, "a checkpoint in every exit vestibule candidate")
+		t.truthy(#anchorsOf(layout, "BatteryCandidate") >= 6, "battery candidates")
+		t.truthy(
+			reachable(layout, layout.entry, { noVents = true })["room:" .. layout.exit],
+			"the exit is reached on foot"
+		)
 	end,
 
 	["lobby: spawns, ready pads and both terminals, no hazards"] = function(t: Expect)
@@ -1399,29 +981,6 @@ return {
 		t.falsy(layout.vents, "no vents")
 		t.eq(#anchorsOf(layout, "TrapCandidate"), 0, "no traps")
 		t.eq(#layout.triggers, 0, "no hazard volumes")
-	end,
-
-	["the pool basin clears the level below"] = function(t: Expect)
-		local upperId, lowerId = "Level4_FloodedPool", "Level3_Gymnasium"
-		local upper, lower = LAYOUTS[upperId], LAYOUTS[lowerId]
-		for _, basin in (upper.basins or {}) :: { LayoutSchema.Basin } do
-			local basinUnderside = WorldConfig.levelElevation(upperId) - basin.depth - WorldConfig.SlabThickness
-			for _, r in lower.rooms do
-				if LayoutSchema.rectOverlapArea(r.rect, basin.rect) > 0 then
-					local ceilingTop = WorldConfig.levelElevation(lowerId) + LayoutSchema.roomHeight(lower, r) + 1
-					t.truthy(
-						ceilingTop <= basinUnderside,
-						string.format(
-							"%s (top %.1f) clears basin %s (%.1f)",
-							r.id,
-							ceilingTop,
-							basin.id,
-							basinUnderside
-						)
-					)
-				end
-			end
-		end
 	end,
 
 	["ducts sunk below a floor clear the ceilings of the level below"] = function(t: Expect)

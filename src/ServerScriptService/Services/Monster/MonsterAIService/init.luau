@@ -1,7 +1,7 @@
 --!strict
 -- MonsterAIService: the Creature's brain ("the Tall Man"; docs/MONSTER.md is the spec, the website's
 -- web/src/creature/service.js the reference). The only writer of the Creature's attributes (MonsterState, StateSince,
--- PoseMode, TargetUserId, Hidden, GrabbedUserId, LevelId and the view contract's Action, ActionAt, Fade; WorldService
+-- PoseMode, TargetUserId, Hidden, LevelId and the view contract's Action, ActionAt, Fade; WorldService
 -- only seeds LevelId / MonsterState when it builds the rig). Server-authoritative: it sees, hears, chases, teleports to
 -- and catches every participant in play (co-op 1-4).
 --
@@ -13,16 +13,14 @@
 --             hidden, fading or startled), every NoiseEmitted pulse since the last tick through Hearing.perceive (the
 --             pacing's HearingScale), plus scripted Alerts. "Lit" is the fixture light at a point (LightField), never
 --             anything a client renders. It remembers the target's last seen or heard position, the rooms it heard
---             noises in (the Stalk leans toward them), a swimmer on the pool level and who was loud lately (a teleport
---             target weighs more).
+--             noises in (the Stalk leans toward them) and who was loud lately (a teleport target weighs more).
 --   pace      PacingDirector.Tick (chasing, target in sight, nearest player).
 --   decide    Brain.decide over a Summary (the transition table); entering a state runs the old state's exit and the
 --             new one's enter; the current state updates once per tick (not while a catch, a ReachIn or a warp runs).
---   act       the states drive Locomotion on the level's FloorNav (the zone graph: never a crawlway, a duct or a pool's
---             water; hunched under low clearances), stepped every Heartbeat so kinematic motion is smooth.
+--   act       the states drive Locomotion on the level's FloorNav (the zone graph: never a crawlway or a duct; hunched
+--             under low clearances), stepped every Heartbeat so kinematic motion is smooth.
 --
--- Warps: every FadeOut / FadeIn relocation (a teleport, a chase giving up, the pool entered or left, a concealed
--- Creature revealing itself) runs through one machine: FadeOut (0.6 s) -> Hidden (placed at the destination; waits
+-- Warps: every FadeOut / FadeIn relocation (a teleport, a chase giving up, a concealed Creature revealing itself) runs through one machine: FadeOut (0.6 s) -> Hidden (placed at the destination; waits
 -- until no player can see it there, or picks another spot) -> Warning (teleports only: 1.6 s; the lights near the spot
 -- stutter (OneShot TeleportWarning), the target's torch stutters (PrivateCue Scare TorchStutter), a hiss rises) ->
 -- FadeIn (0.8 s) -> Stare (teleports only: 1.2 s, the reveal check). The brain holds its state while a warp runs.
@@ -31,7 +29,7 @@
 -- route is under HunchBelow, and while sniffing), Action (Stare, ReachIn, LookAway, FadeOut, FadeIn, Jumpscare; "" for
 -- none), ActionAt (server time) and Fade (0..1 visible). CreatureController animates them.
 --
--- Catches go through JumpscareHandler (Hallway on floors, Locker through a ReachIn, Underwater through CatchGrabbed).
+-- Catches go through JumpscareHandler (Hallway on floors, Locker through a ReachIn).
 -- While a catch runs the brain leaves the body alone; when it finishes the movement is re-synced, the pacing notes the
 -- catch (cooldown, Relax) and the Creature withdraws out of sight. A mover that stalls for good is put back at the
 -- nearest standing spot nobody can see, and only while nobody can see the Creature either.
@@ -39,17 +37,15 @@
 -- Levels. Every level's activation (the basement too): PacingDirector.NoteAirlock (grace), the Creature is moved hidden
 -- to that level's CreatureSpawn if it is elsewhere, fades in once nobody can see it, and wakes into Patrol WakeDelay
 -- seconds later; the first teleport waits FloorGrace + Teleport.FirstAfterGrace. A level controller that acquired it
--- (AcquireScripted) in its Activate keeps it. On Levels 0, 2 and 3 (SpawnRule, ObjectiveConfig.Spawn) it starts at the
+-- (AcquireScripted) in its Activate keeps it. On the levels of ObjectiveConfig.Spawn (SpawnRule) it starts at the
 -- run's seeded pick among the level's PatrolWaypoint / CreatureSpawn anchors 70-140 studs walked from the entry, out of
 -- sight of it and outside the objective rooms, and its grace there is ObjectiveConfig.graceFor(difficulty), ended early
 -- by a participant's High / Critical noise on the level, by a participant within ReleaseNear, or by one with a clear
 -- line to its head within ReleaseSight.
 --
 -- Hooks: RegisterLockerInspector and RegisterHideSpots (HideSpotService: the breath check, the hiding spots of a level,
--- who is in which), NotePulled (a teammate's pull-out: no catch, a startle), RegisterPoolGrabber (FloodedPoolService;
--- CatchGrabbed finishes a held swimmer who ran out of air), RegisterTeleportBlock (an objective's survive countdown,
--- the roof's finale), AcquireScripted (cutscenes; SetScriptedTarget), Stun (flasks), Alert (scripted noises),
--- SetSpeedScale (level tuning: Level 3's gym), Reveal (a fake-out's scare).
+-- who is in which), NotePulled (a teammate's pull-out: no catch, a startle), AcquireScripted (cutscenes;
+-- SetScriptedTarget), Stun (flasks), Alert (scripted noises), Reveal (a fake-out's scare).
 --
 -- Dev commands (DevToolsService): ai [state|pause|resume|tp], hunt, ignoreme.
 
@@ -105,7 +101,6 @@ local Locomotion = require(script.Locomotion)
 local Perception = require(script.Perception)
 local SpawnRule = require(script.SpawnRule)
 
-local AquaticStalk = require(script.States.AquaticStalk)
 local Dormant = require(script.States.Dormant)
 local HidingResponse = require(script.States.HidingResponse)
 local InvestigateNoise = require(script.States.InvestigateNoise)
@@ -178,7 +173,7 @@ type Record = {
 	life: Enums.LifeState?,
 	loudAt: number,
 }
-type WarpKind = "Teleport" | "GiveUp" | "Pool" | "Reveal"
+type WarpKind = "Teleport" | "GiveUp" | "Reveal"
 type WarpPhase = "FadeOut" | "Hidden" | "Warning" | "FadeIn" | "Stare"
 type Warp = {
 	kind: WarpKind,
@@ -232,20 +227,15 @@ local STATES: { [string]: Brain.StateModule } = {
 	HidingResponse = I.stateModule("HidingResponse", HidingResponse.enter, HidingResponse.update, HidingResponse.exit),
 	Teleport = I.stateModule("Teleport", Teleport.enter, Teleport.update, Teleport.exit),
 	Stunned = I.stateModule("Stunned", Stunned.enter, Stunned.update, Stunned.exit),
-	AquaticStalk = I.stateModule("AquaticStalk", AquaticStalk.enter, AquaticStalk.update, AquaticStalk.exit),
 	Scripted = I.stateModule("Scripted", Scripted.enter, Scripted.update, Scripted.exit),
 }
 
 I.T = CreatureConfig.Teleport
 I.H = CreatureConfig.Hiding
 I.SENSES = CreatureConfig.Senses
-I.WATER = CreatureConfig.Water
 I.SPAWN = ObjectiveConfig.Spawn
 I.TICK = 1 / GameConfig.ServerTickHz
 I.WAKE_DELAY = 4 -- seconds after a level activates before the Creature starts its patrol
-I.SWIMMER_MEMORY = 6
-I.GRAB_ARMED_SECONDS = 10
-I.GRAB_GRACE = 1 -- seconds a grabbed player may read as not Grabbed before the grab counts as over
 I.CATCH_TIMEOUT = GameConfig.OneShotLead
 	+ CreatureConfig.Jumpscare.LungeSeconds
 	+ CreatureConfig.Jumpscare.HoldSeconds
@@ -267,10 +257,6 @@ I.STUN_PRESET = "Screech"
 I.GRUNT_PRESET = "CreatureGrunt"
 I.VANISH_PRESET = "CreatureVanish"
 I.HISS_PRESET = "TeleportHiss"
-I.TELEGRAPH_PRESET = "CreatureGrowl"
-I.MIN_SPEED_SCALE = 0.5
-I.MAX_SPEED_SCALE = 2
-local SWIM_STATES: { [string]: boolean } = { Treading = true, Freestyle = true, Underwater = true, Grabbed = true }
 local LOUD: { [string]: boolean } = { High = true, Critical = true }
 I.EXIT_ANCHOR = "ExitAnchor"
 I.TRAIL_SECONDS = 15
@@ -302,7 +288,6 @@ MonsterAIService.WakeDelay = I.WAKE_DELAY
 
 local stateChanged: Signal.Signal<Enums.MonsterState, Enums.MonsterState> = Signal.new()
 local caught: Signal.Signal<Player, Enums.JumpscareKind> = Signal.new()
-local lungeTelegraph: Signal.Signal<Vector3, number> = Signal.new()
 local teleportWarning: Signal.Signal<Vector3, Player?, number> = Signal.new()
 local revealed: Signal.Signal<Player, string> = Signal.new()
 local stared: Signal.Signal<Player> = Signal.new()
@@ -313,8 +298,6 @@ local grunted: Signal.Signal<Vector3> = Signal.new()
 MonsterAIService.StateChanged = stateChanged
 -- (victim, kind) when a catch starts.
 MonsterAIService.Caught = caught
--- (origin, seconds) when a pool lunge is telegraphed (the clients show the bubbles and the ripple ring there).
-MonsterAIService.LungeTelegraph = lungeTelegraph
 -- (floor point, target, seconds) a teleport's warning starts: the lights there stutter, a hiss rises.
 MonsterAIService.TeleportWarning = teleportWarning
 -- (target, kind) the target looked at it as it formed: their reveal scare ("Teleport").
@@ -339,7 +322,6 @@ local customLights: { [string]: { LightField.Fixture } }? = nil
 -- the run
 local running = false
 local difficulty: Enums.Difficulty = "Standard"
-local speedScale = 1 -- SetSpeedScale (level tuning); every pace but a scripted one
 local participants: { Player } = {}
 local pacing: PacingDirector.Pacing? = nil
 local runSeed = 0
@@ -370,22 +352,14 @@ local stunUntil = 0
 local devHuntUntil = 0
 local catching: Catching? = nil
 local pendingReach: Reach? = nil
-local grabbed: Player? = nil
-local grabbedHeldAt = 0
 local scripted: Hold? = nil
 local noiseQueue: { Types.NoiseEvent } = {}
 local alerts: { Brain.HeardNoise } = {}
 local lastSeen: { [Player]: number } = {}
-local splashArmed: { [Player]: number } = {}
 local records: { [Player]: Record } = {}
 local pulled: { [Player]: number } = {}
-local swimmerAt = -math.huge
-local swimmerPlayer: Player? = nil
 local ignored: { [number]: boolean } = {}
 local graceLevel: Enums.LevelId? = nil -- the spawn rule's grace holds the Creature on this level
-local poolEnteredAt: number? = nil -- when a participant first stood in a pool room on this level
-local poolRetreatUntil = -math.huge -- it retreats in the water after a grab until then
-local telegraphSeq = 0
 local oneShotSeq = 0
 
 -- the view contract
@@ -415,9 +389,8 @@ local creatureLit = false
 
 -- hooks
 local lockerInspector: Types.LockerInspector? = nil
-local poolGrabber: Types.PoolGrabber? = nil
-local hideSpots: HideSpots? = nil
 local teleportBlocks: { () -> boolean } = {}
+local hideSpots: HideSpots? = nil
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -555,10 +528,6 @@ function I.playingPlayers(): { Player }
 	return out
 end
 
-function I.swimmingPlayer(player: Player): boolean
-	return PlayerStateService.GetMode(player) == "Swim" or SWIM_STATES[I.moveStateOf(player)] == true
-end
-
 -- In a duct, or crouched in a crawlway of the Creature's level: it never goes in after them (or sees them there).
 function I.inVent(player: Player): boolean
 	if VentNetworkService.IsInVent(player) then
@@ -578,14 +547,14 @@ function I.playerEye(player: Player): Vector3?
 	return if root then Perception.playerEyeAt(root, I.moveStateOf(player)) else nil
 end
 
--- The contract's poseMode: Stunned, Swim, Hunched (posed so, or under a low clearance), else Biped.
+-- The contract's poseMode: Stunned, Hunched (posed so, or under a low clearance), else Biped.
 function I.poseMode(): string
 	if state == "Stunned" then
 		return "Stunned"
 	end
 	local b = body
 	local pose = if b then b.pose else "Biped"
-	if pose == "Swim" or pose == "Hunched" then
+	if pose == "Hunched" then
 		return pose
 	end
 	return if clearance < CreatureConfig.HunchBelow then "Hunched" else "Biped"
@@ -603,10 +572,6 @@ end
 -- How high its head stands over a root at `point` on land: hunched where the head room there is low.
 function I.headLift(point: Vector3): number
 	local eyes = CreatureConfig.EyeHeightAboveRoot
-	local m = mover
-	if m and m:BasinAt(point) then
-		return eyes.Biped
-	end
 	local nav = I.navFor(creatureLevel)
 	return if nav and nav:clearanceAt(point) < CreatureConfig.HunchBelow then eyes.Hunched else eyes.Biped
 end
@@ -656,11 +621,9 @@ function I.visible(point: Vector3): boolean
 end
 
 -- Whether a player sees the Creature with its root at `point`: inside their view cone (Teleport.ViewHalfAngle of their
--- look) with a clear line to its head or its chest, or right at their eye. Under a pool's surface only a player within
--- the murk range sees it. Every player in play counts, ignored ones included.
+-- look) with a clear line to its head or its chest, or right at their eye. Every player in play counts, ignored ones
+-- included.
 function I.inViewOfAnyone(point: Vector3): boolean
-	local m = mover
-	local murky = m ~= nil and m:BasinAt(point) ~= nil
 	local head = I.headLift(point)
 	for _, player in I.playingPlayers() do
 		local eye = I.playerEye(player)
@@ -674,7 +637,7 @@ function I.inViewOfAnyone(point: Vector3): boolean
 			if d <= I.NEAR_EYE then
 				return true
 			end
-			if d > I.SIGHT_RANGE_LIMIT or (murky and d > I.WATER.MurkRange) then
+			if d > I.SIGHT_RANGE_LIMIT then
 				continue
 			end
 			if Perception.stareAngle(eye, look, q) <= I.T.ViewHalfAngle and I.lineClear(eye, q) then
@@ -720,30 +683,18 @@ function I.playerEyes(): { Vector3 }
 	return out
 end
 
--- Root positions the Creature can stand at on its level: every patrol waypoint (under water where the waypoint is).
+-- Root positions the Creature can stand at on its level: every patrol waypoint.
 function I.standingSpots(info: Brain.LevelInfo): { Vector3 }
-	local m = mover
 	local out: { Vector3 } = {}
 	for _, waypoint in info.waypoints do
-		local point = waypoint.position
-		if m and m:BasinAt(point) then
-			table.insert(out, point)
-		else
-			table.insert(out, point + Vector3.new(0, CreatureBody.RootHeight, 0))
-		end
+		table.insert(out, waypoint.position + Vector3.new(0, CreatureBody.RootHeight, 0))
 	end
 	return out
 end
 
--- Root positions over the whole floor: the waypoints, then the nav's lattice (land only).
+-- Root positions over the whole floor: the waypoints, then the nav's lattice.
 function I.landSpots(info: Brain.LevelInfo): { Vector3 }
-	local m = mover
-	local out: { Vector3 } = {}
-	for _, point in I.standingSpots(info) do
-		if not (m and m:BasinAt(point)) then
-			table.insert(out, point)
-		end
-	end
+	local out: { Vector3 } = I.standingSpots(info)
 	local nav = I.navFor(info.levelId)
 	if nav then
 		for _, sample in nav:samplePoints(I.SAMPLE_SPACING) do
@@ -922,7 +873,6 @@ function I.publish()
 	Attributes.set(model, I.C.TargetUserId, if target then target.UserId else 0)
 	Attributes.set(model, I.C.InVent, false)
 	Attributes.set(model, I.C.Hidden, b.hidden)
-	Attributes.set(model, I.C.GrabbedUserId, if grabbed then (grabbed :: Player).UserId else 0)
 	Attributes.set(model, I.C.Action, action or I.ACTION_NONE)
 	Attributes.set(model, I.C.ActionAt, actionAt)
 	if creatureLevel then
@@ -948,22 +898,18 @@ end
 -- Body placement
 --------------------------------------------------------------------------------
 
--- Puts the root at `cframe` (anchored, held), in the medium that point is in.
+-- Puts the root at `cframe` (anchored, held).
 function I.placeBody(cframe: CFrame)
 	local b, m = body, mover
 	if not (b and m) then
 		return
 	end
-	m:Reset("Floor")
+	m:Reset()
 	b:Face(nil)
 	b:SetAnchored(true)
 	b:PlaceAt(cframe)
 	placements += 1
-	local water = m:BasinAt(cframe.Position) ~= nil
-	m:Reset(if water then "Water" else "Floor")
-	if water then
-		b:SetPose("Swim")
-	elseif b.pose == "Swim" or b.pose == "Quadruped" then
+	if b.pose == "Quadruped" then
 		b:SetPose("Biped")
 	end
 	clearance = I.headroom(cframe.Position)
@@ -1019,14 +965,11 @@ function I.forgetMind()
 	stareTrigger = nil
 	pendingReach = nil
 	lookAway = nil
-	swimmerPlayer = nil
-	swimmerAt = -math.huge
-	poolRetreatUntil = -math.huge
 	chaseStarted = nil
 end
 
 -- The CreatureSpawn of `levelId` by the run's arrival: on the roof the one in the access housing the route arrives by
--- (L5_CreatureSpawnNorth / South, or the middle L5_CreatureSpawn), elsewhere the level's own.
+-- (L3_CreatureSpawnNorth / South, or the middle L3_CreatureSpawn), elsewhere the level's own.
 function I.arrivalSpawn(levelId: Enums.LevelId, info: Brain.LevelInfo): CFrame?
 	local layout = Builder.getLayout(levelId)
 	local entry = LevelDirector.entryFor(levelId)
@@ -1054,7 +997,6 @@ function I.setLevel(levelId: Enums.LevelId)
 	local info = I.levelInfoFor(levelId)
 	creatureLevel = levelId
 	c.level = info
-	m:SetLevel(if info then info.basins else {})
 	table.clear(doorModels)
 end
 
@@ -1067,7 +1009,6 @@ function I.relocate(levelId: Enums.LevelId, conceal: boolean)
 	I.setLevel(levelId)
 	I.forgetMind()
 	I.cancelWarp()
-	poolEnteredAt = nil
 	local info = c.level
 	local spawn = if info then I.arrivalSpawn(levelId, info) else nil
 	if not spawn and info and info.waypoints[1] then
@@ -1134,10 +1075,6 @@ function I.clearToAppear(cframe: CFrame, kind: WarpKind): boolean
 	if kind == "Teleport" then
 		return not I.inViewOfAnyone(p)
 	end
-	local m = mover
-	if m and m:BasinAt(p) then
-		return not I.inViewOfAnyone(p)
-	end
 	return not I.visible(p)
 end
 
@@ -1173,7 +1110,7 @@ function I.endWarp()
 		b:SetHidden(false)
 	end
 	if m and b then
-		m:Reset(if m:BasinAt(b:GetPosition()) then "Water" else "Floor")
+		m:Reset()
 	end
 	if w and w.kind == "Teleport" then
 		lastSeenAny = math.max(lastSeenAny, I.now())
@@ -1368,74 +1305,6 @@ I.unseenSpot = function(minDistance: number): CFrame?
 	return CFrame.lookAt(point, point + facing)
 end
 
--- A point under the water of `basin`, nearest `goal`, that no swimmer close by would see.
-function I.waterSpot(basin: Locomotion.Basin?, goal: Vector3): CFrame?
-	if not basin then
-		return nil
-	end
-	local depth = Locomotion.SwimDepth
-	local candidates: { Vector3 } = { Locomotion.clampToWater(basin, goal, depth) }
-	for _, x in { basin.minX, (basin.minX + basin.maxX) / 2, basin.maxX } do
-		for _, k in { 0, 0.25, 0.5, 0.75, 1 } do
-			local z = basin.minZ + (basin.maxZ - basin.minZ) * k
-			table.insert(candidates, Locomotion.clampToWater(basin, Vector3.new(x, basin.surfaceY - depth, z), depth))
-		end
-	end
-	table.sort(candidates, function(a: Vector3, b: Vector3): boolean
-		return (a - goal).Magnitude < (b - goal).Magnitude
-	end)
-	for _, p in candidates do
-		local facing = CreatureBody.flatDirection(goal - p) or Vector3.new(0, 0, -1)
-		local cf = CFrame.lookAt(p, p + facing)
-		if I.clearToAppear(cf, "Pool") then
-			return cf
-		end
-	end
-	return nil
-end
-
--- A land spot out of the pool (ExitMin from everyone, out of sight), nearest `goal`.
-function I.landSpot(goal: Vector3): CFrame?
-	local c = ctx
-	local info = c and c.level
-	if not info then
-		return nil
-	end
-	local point =
-		PacingDirector.repositionPoint(I.landSpots(info), I.playerEyes(), goal, I.WATER.ExitMin, math.huge, I.visible)
-	if not point then
-		return nil
-	end
-	local toward = I.nearestRoot(point)
-	local facing = (if toward then CreatureBody.flatDirection(toward - point) else nil) or Vector3.new(0, 0, -1)
-	return CFrame.lookAt(point, point + facing)
-end
-
--- Warps for the Mover (into / out of a pool): a fade out here and in at the destination, out of sight.
-function I.warpForMover(goal: Vector3, medium: Locomotion.Medium): boolean
-	local m = mover
-	if warp or not ctx or not m then
-		return false
-	end
-	if medium == "Water" then
-		local basin = m:BasinAt(goal)
-		I.startWarp({
-			kind = "Pool",
-			pick = function(): CFrame?
-				return I.waterSpot(basin, goal)
-			end,
-		})
-	else
-		I.startWarp({
-			kind = "Pool",
-			pick = function(): CFrame?
-				return I.landSpot(goal)
-			end,
-		})
-	end
-	return true
-end
-
 function I.setTarget(player: Player?)
 	local c = ctx
 	if not c or c.target == player then
@@ -1506,16 +1375,11 @@ function I.teleportBlocked(): boolean
 	return false
 end
 
--- The players a teleport may go for: hunted, on its level, on foot (not hiding, in a duct or crawlway, or swimming).
+-- The players a teleport may go for: hunted, on its level, on foot (not hiding, in a duct or crawlway).
 function I.teleportTargets(): { Player }
 	local out: { Player } = {}
 	for _, player in I.huntablePlayers() do
-		if
-			not I.inVent(player)
-			and not I.swimmingPlayer(player)
-			and I.moveStateOf(player) ~= "Hiding"
-			and I.onLevel(player)
-		then
+		if not I.inVent(player) and I.moveStateOf(player) ~= "Hiding" and I.onLevel(player) then
 			table.insert(out, player)
 		end
 	end
@@ -1657,7 +1521,7 @@ end
 -- The teleport is due now: every condition of docs/MONSTER.md 7.2 holds and a plan exists (ctx.teleportPlan).
 function I.teleportDue(t: number): boolean
 	local c, m = ctx, mover
-	if not (c and m and c.level) or state ~= "Patrol" or warp then
+	if not (c and m and c.level) or state ~= "Patrol" or warp or I.teleportBlocked() then
 		return false
 	end
 	if t < teleportReadyAt or t < nextTeleportTry then
@@ -1667,9 +1531,6 @@ function I.teleportDue(t: number): boolean
 		return false
 	end
 	if t < lastCatchAt + I.T.AfterCatch or t < lastDownAt + I.T.AfterCatch then
-		return false
-	end
-	if m:Medium() ~= "Floor" or I.teleportBlocked() then
 		return false
 	end
 	local plan = I.planTeleport()
@@ -1706,90 +1567,6 @@ function I.startTeleport(plan: Brain.TeleportPlan): boolean
 	})
 	log.debug("teleport %s %s (%.0f studs walked)", plan.side, plan.target.Name, plan.walk)
 	return true
-end
-
---------------------------------------------------------------------------------
--- The pool (Level 4 fairness)
---------------------------------------------------------------------------------
-
--- Whether `point` stands in a pool room (a basin's water, or a room of kind Pool) of the Creature's level.
-function I.inPoolRoomAt(point: Vector3?): boolean
-	local c, m = ctx, mover
-	local info = c and c.level
-	if not (point and info and m) or #info.basins == 0 then
-		return false
-	end
-	if m:BasinAt(point) then
-		return true
-	end
-	local room = Brain.roomAt(info, point)
-	return room ~= nil and room.kind == "Pool"
-end
-
-function I.inPoolRoom(player: Player): boolean
-	return I.swimmingPlayer(player) or I.inPoolRoomAt(I.rootOf(player))
-end
-
--- The pool grace starts the first time a participant stands in a pool room on this level.
-function I.updatePoolGrace(t: number)
-	local c = ctx
-	if poolEnteredAt ~= nil or not (c and c.level) or #(c.level :: Brain.LevelInfo).basins == 0 then
-		return
-	end
-	for _, player in I.playingPlayers() do
-		if I.inPoolRoom(player) then
-			poolEnteredAt = t
-			log.info("the pool grace runs (%ds)", I.WATER.PoolGraceSeconds)
-			return
-		end
-	end
-end
-
--- The grace after first entering the pool room, or the retreat after a grab: the pool rooms are left alone.
-function I.poolQuiet(t: number): boolean
-	local entered = poolEnteredAt
-	return (entered ~= nil and t < entered + I.WATER.PoolGraceSeconds) or t < poolRetreatUntil
-end
-
--- While it retreats after a grab: the point of its pool farthest from the nearest player (else nil).
-function I.poolRetreatPoint(): Vector3?
-	local b, m = body, mover
-	if not (b and m) or I.now() >= poolRetreatUntil or m:Medium() ~= "Water" then
-		return nil
-	end
-	local here = b:GetPosition()
-	local basin = m:BasinAt(here)
-	if not basin then
-		return nil
-	end
-	local from = I.nearestRoot(here) or here
-	local best: Vector3? = nil
-	local bestDistance = -1
-	for _, x in { basin.minX, (basin.minX + basin.maxX) / 2, basin.maxX } do
-		for _, z in { basin.minZ, (basin.minZ + basin.maxZ) / 2, basin.maxZ } do
-			local point = Locomotion.clampToWater(basin, Vector3.new(x, basin.surfaceY - Locomotion.SwimDepth, z))
-			local d = MathUtil.horizontalDistance(point, from)
-			if d > bestDistance then
-				best, bestDistance = point, d
-			end
-		end
-	end
-	return best
-end
-
--- A lunge is coming: a low growl at its origin, and the clients' bubbles and ripple ring (OneShot LungeTelegraph).
-function I.telegraph(origin: Vector3, seconds: number)
-	AudioService.PlayAt(I.TELEGRAPH_PRESET, origin, { volume = 1.2 })
-	telegraphSeq += 1
-	local event: Types.OneShotEvent = {
-		seq = telegraphSeq,
-		kind = "LungeTelegraph",
-		subject = nil,
-		startAt = I.now(),
-		args = { origin = origin, seconds = seconds },
-	}
-	Net.Server.fireAll("OneShot", event)
-	lungeTelegraph:Fire(origin, seconds)
 end
 
 -- Teleports to the nearest standing spot (>= UNSTICK_MIN away) nobody can see, only while nobody sees it here.
@@ -1842,8 +1619,6 @@ function I.catchKindFor(player: Player): Enums.JumpscareKind?
 		vertical = math.abs(here.Y - target.Y),
 		reach = CreatureConfig.Rig.Reach,
 		targetInVent = I.inVent(player),
-		creatureInWater = m:Medium() == "Water",
-		targetSwimming = I.swimmingPlayer(player),
 		lineClear = I.lineClear(I.creatureEye(), eye),
 		bodyClear = I.bodyClear(player, nil),
 		playing = I.huntable(player),
@@ -2005,8 +1780,6 @@ function I.transition(decision: Brain.Decision, t: number)
 	if nextState == "WallChase" then
 		local target = c.target
 		I.chase(stareTrigger or (if target and I.sees(target) then target else I.bestSeen()), t)
-	elseif nextState == "AquaticStalk" then
-		I.setTarget(swimmerPlayer)
 	elseif nextState == "InvestigateNoise" then
 		local heard = c.heard
 		local memory = c.memory
@@ -2043,8 +1816,8 @@ function I.transition(decision: Brain.Decision, t: number)
 	I.enterState(nextState, t)
 end
 
--- Who it looks at this tick: the chase's target (switching to whoever it can see when the target is out of sight), a
--- swimmer, or outside the chases whoever it sees best.
+-- Who it looks at this tick: the chase's target (switching to whoever it can see when the target is out of sight), or
+-- outside the chases whoever it sees best.
 function I.updateTarget()
 	local c = ctx
 	if not c then
@@ -2057,11 +1830,6 @@ function I.updateTarget()
 			if other then
 				I.setTarget(other)
 			end
-		end
-	elseif state == "AquaticStalk" then
-		local swimmer = swimmerPlayer
-		if swimmer and target ~= swimmer and not (target and I.sees(target)) then
-			I.setTarget(swimmer)
 		end
 	elseif state == "Patrol" or state == "InvestigateNoise" or state == "Search" then
 		I.setTarget(I.bestSeen())
@@ -2099,10 +1867,6 @@ function I.noteHeard(noise: Brain.HeardNoise, best: Brain.HeardNoise?, t: number
 	if source and I.huntable(source) then
 		if noise.rank >= I.LOUD_RANK then
 			I.recordOf(source).loudAt = t
-		end
-		if noise.medium == "Water" and I.swimmingPlayer(source) then
-			swimmerAt = t
-			swimmerPlayer = source
 		end
 		I.remember(source, noise.position, t)
 	end
@@ -2237,7 +2001,6 @@ function I.sense(t: number)
 		facing = lookAway or b:GetCFrame().LookVector,
 		blindPeripheral = lookAway ~= nil,
 		difficulty = difficulty,
-		aquatic = b.pose == "Swim" or state == "AquaticStalk",
 		targetUserId = if target then target.UserId else nil,
 		raycast = function(a: Vector3, z: Vector3): boolean
 			return I.lineClear(a, z)
@@ -2268,13 +2031,7 @@ function I.sense(t: number)
 			})
 		end
 	end
-	local quiet = I.poolQuiet(t)
-	local sightings: { Perception.Sighting } = {}
-	for _, sighting in Perception.scan(viewer, observations) do
-		if not (quiet and I.inPoolRoom(sighting.player)) then
-			table.insert(sightings, sighting)
-		end
-	end
+	local sightings = Perception.scan(viewer, observations)
 	c.sightings = sightings
 	if #sightings > 0 then
 		lastSeenAny = t
@@ -2288,10 +2045,6 @@ function I.sense(t: number)
 		local position = I.rootOf(player)
 		if position then
 			I.remember(player, position, t)
-		end
-		if c.level and #(c.level :: Brain.LevelInfo).basins > 0 and I.swimmingPlayer(player) then
-			swimmerAt = t
-			swimmerPlayer = player
 		end
 	end
 
@@ -2315,9 +2068,6 @@ function I.sense(t: number)
 		if sourceId and ignored[sourceId] then
 			continue
 		end
-		if quiet and (event.medium == "Water" or I.inPoolRoomAt(event.position)) then
-			continue
-		end
 		local heard = Hearing.perceive(event, listener)
 		if not heard then
 			continue
@@ -2339,9 +2089,7 @@ function I.sense(t: number)
 	local pending = alerts
 	alerts = {}
 	for _, alert in pending do
-		if not (quiet and I.inPoolRoomAt(alert.position)) then
-			best = I.noteHeard(alert, best, t)
-		end
+		best = I.noteHeard(alert, best, t)
 	end
 	c.heard = best
 	for zone, heard in c.heardZones do
@@ -2391,7 +2139,6 @@ function I.summarize(t: number): Brain.Summary
 		end
 	end
 	local chaseSeconds = if chaseStarted then t - (chaseStarted :: number) else 0
-	local level = c.level
 	local canHunt = devHunt or p:CanHunt(t)
 	local investigation = c.investigation
 	local heard = c.heard
@@ -2401,7 +2148,7 @@ function I.summarize(t: number): Brain.Summary
 		scripted = scripted ~= nil,
 		stunned = t < stunUntil,
 		awake = awake,
-		catching = catching ~= nil or grabbed ~= nil or pendingReach ~= nil,
+		catching = catching ~= nil or pendingReach ~= nil,
 		warping = warp ~= nil,
 		canHunt = canHunt,
 		sees = seesAny,
@@ -2413,9 +2160,6 @@ function I.summarize(t: number): Brain.Summary
 		lostSeconds = if state == "WallChase" then t - chaseSeenAt else 0,
 		maxChase = spec.maxChaseSeconds,
 		chaseLost = spec.chaseLostSeconds,
-		swimmer = level ~= nil and #level.basins > 0 and t - swimmerAt <= I.SWIMMER_MEMORY,
-		inWater = m:Medium() == "Water",
-		retreating = t < poolRetreatUntil,
 		teleportDue = false,
 		stateDone = c.stateDone,
 	}
@@ -2427,7 +2171,6 @@ function I.summarize(t: number): Brain.Summary
 		and not summary.stared
 		and not summary.hidingWatch
 		and summary.heard == 0
-		and not summary.swimmer
 		and not summary.catching
 		and not summary.warping
 		and not summary.stunned
@@ -2442,32 +2185,6 @@ end
 -- Upkeep
 --------------------------------------------------------------------------------
 
-function I.updateGrab(t: number)
-	local victim = grabbed
-	local c, p = ctx, pacing
-	if not (victim and c and p) then
-		return
-	end
-	local holding = victim.Parent == Players and I.moveStateOf(victim) == "Grabbed"
-	if holding then
-		grabbedHeldAt = t
-	end
-	if
-		victim.Parent ~= Players
-		or not LifeStateService.IsPlaying(victim)
-		or (not holding and t - grabbedHeldAt > I.GRAB_GRACE)
-	then
-		grabbed = nil
-		p:NoteCatch(t)
-		lastCatchAt = t
-		c.reposition = true
-		-- Level 4 fairness: off to the far end of the water for a while, and that swimmer's splashing starts over
-		poolRetreatUntil = t + I.WATER.GrabRetreatSeconds
-		splashArmed[victim] = nil
-		AquaticStalk.released(c)
-	end
-end
-
 -- A mover that stalled for good is moved unseen to a standing spot and the state starts over from there; while
 -- someone watches it, it keeps trying where it stands.
 function I.handleMover()
@@ -2478,7 +2195,7 @@ function I.handleMover()
 	if I.relocateUnseen() then
 		current.enter(c, state)
 	else
-		m:Reset(m:Medium())
+		m:Reset()
 	end
 end
 
@@ -2495,7 +2212,7 @@ function I.settleCatch(outcome: string)
 	-- the handler moved and re-anchored the root: take the body and the movement from where it really is
 	b.anchored = b.root.Anchored
 	b:Reassert()
-	m:Reset(m:Medium())
+	m:Reset()
 	local t = I.now()
 	if outcome ~= "Aborted" then
 		p:NoteCatch(t)
@@ -2565,25 +2282,15 @@ function MonsterAIService.Step(dt: number)
 		end
 	end
 	I.stepReach(t)
-	I.updateGrab(t)
 	if scripted then
 		noiseQueue = {}
 		alerts = {}
 		I.publish()
 		return
 	end
-	I.updatePoolGrace(t)
 	I.updateSpawnGrace(t)
-	m:SetWaterSpeedCap(c.speedOf("AquaticStalk"))
 	I.watchPlayers(t, dt)
 	I.sense(t)
-	-- leaving the water, not yet gone: a swimmer turns it back (the warp is called off where it still is)
-	local w = warp
-	if w and w.kind == "Pool" and not w.placed and m:Medium() == "Water" and t - swimmerAt <= I.SWIMMER_MEMORY then
-		I.cancelWarp()
-		b:SetHidden(false)
-		m:Reset("Water")
-	end
 	local target = c.target
 	c.phase = p:Tick(dt, {
 		chasing = Brain.isChase(state),
@@ -2617,7 +2324,7 @@ end
 -- before its head reaches a lintel or a tunnel's ceiling. math.huge off the floor.
 I.headroom = function(root: Vector3): number
 	local m, b = mover, body
-	local nav = if m and m:Medium() == "Floor" then I.navFor(creatureLevel) else nil
+	local nav = if m then I.navFor(creatureLevel) else nil
 	if not (nav and m and b) then
 		return math.huge
 	end
@@ -2683,19 +2390,14 @@ end
 -- Context
 --------------------------------------------------------------------------------
 
--- Which points it can walk to from where it stands now (through the portals open now; a point in a pool counts, it
--- gets in by a warp): a test, or nil off the floor.
+-- Which points it can walk to from where it stands now (through the portals open now): a test, or nil off the floor.
 function I.reachableTest(): ((point: Vector3) -> boolean)?
-	local m, b = mover, body
-	local nav = if m and m:Medium() == "Floor" then I.navFor(creatureLevel) else nil
-	if not (nav and m and b) then
+	local b = body
+	local nav = I.navFor(creatureLevel)
+	if not (nav and b) then
 		return nil
 	end
-	local walk = nav:reachable(b:GetPosition())
-	local mm = m :: Locomotion.Mover
-	return function(point: Vector3): boolean
-		return mm:BasinAt(point) ~= nil or walk(point)
-	end
+	return nav:reachable(b:GetPosition())
 end
 
 -- Down the tunnel, away from the spot it watches: the more open of its two sides (a level-headed look).
@@ -2745,7 +2447,7 @@ function I.newContext(model: Model, b: CreatureBody.Body, m: Locomotion.Mover): 
 		stunFrom = nil,
 		speedOf = function(name: Enums.MonsterState): number
 			local base = Brain.speedFor(name, difficulty)
-			return if name == "Scripted" then base else math.min(CreatureConfig.SpeedCap, base * speedScale)
+			return if name == "Scripted" then base else math.min(CreatureConfig.SpeedCap, base)
 		end,
 		setTarget = I.setTarget,
 		catchKind = I.catchKindFor,
@@ -2772,20 +2474,7 @@ function I.newContext(model: Model, b: CreatureBody.Body, m: Locomotion.Mover): 
 		lockerInspector = function(): Types.LockerInspector?
 			return lockerInspector
 		end,
-		poolGrabber = function(): Types.PoolGrabber?
-			return poolGrabber
-		end,
-		grabArmed = function(player: Player): boolean
-			local at = splashArmed[player]
-			return at ~= nil and I.now() - at <= I.GRAB_ARMED_SECONDS and not I.poolQuiet(I.now())
-		end,
-		setGrabbed = function(player: Player?)
-			grabbed = player
-			grabbedHeldAt = I.now()
-			I.publish()
-		end,
 		inVent = I.inVent,
-		swimming = I.swimmingPlayer,
 		playing = I.huntable,
 		isHiding = function(player: Player): boolean
 			return I.moveStateOf(player) == "Hiding"
@@ -2800,8 +2489,6 @@ function I.newContext(model: Model, b: CreatureBody.Body, m: Locomotion.Mover): 
 		bodyClear = function(player: Player): boolean
 			return I.bodyClear(player, nil)
 		end,
-		telegraph = I.telegraph,
-		poolRetreat = I.poolRetreatPoint,
 		rootOf = I.rootOf,
 		floorPointNear = I.floorPointNear,
 		lineClear = function(from: Vector3, to: Vector3): boolean
@@ -2861,18 +2548,13 @@ function MonsterAIService.Attach(model: Model?)
 		return
 	end
 	local engine = customEngine or Locomotion.defaultEngine(I.navPath)
-	local m = Locomotion.new(b, engine, {
-		warp = I.warpForMover,
-		warping = function(): boolean
-			return warp ~= nil
-		end,
-	}, I.now)
+	local m = Locomotion.new(b, engine, I.now)
 	creature = model
 	body = b
 	mover = m
 	local c = I.newContext(model, b, m)
 	ctx = c
-	local fallback: Enums.LevelId = LevelDirector.GetCurrentLevel() or Enums.LevelId[1]
+	local fallback: Enums.LevelId = LevelDirector.GetCurrentLevel() or WorldConfig.LevelOrder[1]
 	local levelId = Attributes.getEnum(model, I.C.LevelId, Enums.LevelId, fallback)
 	state = "Dormant"
 	current = I.DORMANT
@@ -2945,7 +2627,6 @@ function I.onLevelActivated(levelId: Enums.LevelId)
 		JumpscareHandler.Abort("Level")
 	end
 	stunUntil = 0
-	grabbed = nil
 	pendingReach = nil
 	if creatureLevel ~= levelId then
 		I.relocate(levelId, true)
@@ -2955,8 +2636,6 @@ function I.onLevelActivated(levelId: Enums.LevelId)
 	awake = false
 	wakeAt = t + I.WAKE_DELAY
 	graceLevel = nil
-	poolEnteredAt = nil
-	poolRetreatUntil = -math.huge
 	lastSeenAny = t
 	teleportReadyAt = t
 		+ (CreatureConfig.FloorGrace[difficulty] or CreatureConfig.FloorGrace.Standard)
@@ -3128,10 +2807,6 @@ function I.releaseScripted(nextState: Enums.MonsterState?)
 		local near = I.nearestPlayerTo(here, nil)
 		local position = if near then I.rootOf(near) else nil
 		c.investigation = { position = I.floorPointNear(position or here), rank = I.EXACT_RANK, at = t }
-	elseif wanted == "AquaticStalk" then
-		if swimmerPlayer == nil then
-			wanted = "Patrol"
-		end
 	elseif wanted == "Stunned" then
 		stunUntil = math.max(stunUntil, t + GameConfig.StunSeconds)
 		c.stunFrom = here + b:GetCFrame().LookVector
@@ -3248,34 +2923,8 @@ function MonsterAIService.SetScriptedTarget(token: string, player: Player?): boo
 	return true
 end
 
--- Level tuning (Level 3's gym): every state's pace times `scale` (clamped MIN_SPEED_SCALE..MAX_SPEED_SCALE, never past
--- SpeedCap; 1, the default, is as configured; EndRun restores it). A pace already set follows at once.
-function MonsterAIService.SetSpeedScale(scale: number)
-	local value = if MathUtil.isFinite(scale) then math.clamp(scale, I.MIN_SPEED_SCALE, I.MAX_SPEED_SCALE) else 1
-	local previous = speedScale
-	if math.abs(value - previous) < 1e-6 then
-		return
-	end
-	speedScale = value
-	local m, b = mover, body
-	local walker = if b then b.humanoid else nil
-	if m and b and walker and scripted == nil and catching == nil and state ~= "Scripted" then
-		local pace = math.min(CreatureConfig.SpeedCap, walker.WalkSpeed * value / previous)
-		m:SetSpeed(pace)
-		b:SetWalkSpeed(pace)
-	end
-end
-
-function MonsterAIService.GetSpeedScale(): number
-	return speedScale
-end
-
 function MonsterAIService.RegisterLockerInspector(fn: Types.LockerInspector)
 	lockerInspector = fn
-end
-
-function MonsterAIService.RegisterPoolGrabber(fn: Types.PoolGrabber)
-	poolGrabber = fn
 end
 
 -- HideSpotService: the hiding spots of a level, and who is in which.
@@ -3283,7 +2932,7 @@ function MonsterAIService.RegisterHideSpots(provider: HideSpots?)
 	hideSpots = provider
 end
 
--- The game forbids a teleport while `fn` returns true (an objective's survive countdown, the roof's finale chase).
+-- The game forbids a teleport while `fn` returns true (the roof's door and chase).
 -- Returns a function that removes it.
 function MonsterAIService.RegisterTeleportBlock(fn: () -> boolean): () -> ()
 	table.insert(teleportBlocks, fn)
@@ -3314,31 +2963,6 @@ end
 function MonsterAIService.Reveal(player: Player, kind: string)
 	I.sendScare(player, if kind == "Fakeout" then "Fakeout" else "Reveal", "kind", kind)
 	revealed:Fire(player, kind)
-end
-
--- The swimmer the Creature is holding (the PoolGrabber's grab) ran out of air: the Underwater jumpscare instead of
--- drowning. False, with nothing changed, when `player` is not the one held, a catch is running, or the Creature is
--- stunned, hidden or out of reach (JumpscareHandler.Catch refuses).
-function MonsterAIService.CatchGrabbed(player: Player): boolean
-	local model, m, c = creature, mover, ctx
-	if not (running and model and m and c) or grabbed ~= player then
-		return false
-	end
-	if catching ~= nil or JumpscareHandler.IsBusy() or I.now() < stunUntil then
-		return false
-	end
-	if not JumpscareHandler.Catch(model, player, "Underwater") then
-		return false
-	end
-	grabbed = nil
-	AquaticStalk.released(c)
-	catching = { player = player, kind = "Underwater", at = I.now() }
-	lastCatchAt = I.now()
-	I.setAction("Jumpscare")
-	m:Stop()
-	I.publish()
-	caught:Fire(player, "Underwater")
-	return true
 end
 
 -- Replaces the server-time source (specs pass a fake clock; nil restores GetServerTimeNow).
@@ -3411,13 +3035,12 @@ function I.describe(): string
 	local t = I.now()
 	local w = warp
 	return string.format(
-		"%s for %.1fs (%s) | target %s | pose %s | %s%s%s | %s | next teleport in %.0fs | pacing %s, tension %.2f%s%s%s",
+		"%s for %.1fs (%s) | target %s | pose %s%s%s | %s | next teleport in %.0fs | pacing %s, tension %.2f%s%s%s",
 		state,
 		t - stateSince,
 		lastReason,
 		if target then target.Name else "none",
 		I.poseMode(),
-		m:Medium(),
 		if b.hidden then ", hidden" else "",
 		if w then ", warp " .. w.kind .. "/" .. w.phase else "",
 		tostring(creatureLevel),
@@ -3576,15 +3199,6 @@ function I.force(player: Player, wanted: Enums.MonsterState): string
 		end
 		hideWatch = { player = player, spot = spot, front = front, since = t }
 		I.transition({ state = "HidingResponse", reason = "ai HidingResponse", reposition = false, giveUp = false }, t)
-	elseif wanted == "AquaticStalk" then
-		local level = c.level
-		if not (level and #level.basins > 0) then
-			return "no pool on this level"
-		end
-		swimmerAt = t
-		swimmerPlayer = player
-		I.setTarget(player)
-		I.enterState("AquaticStalk", t)
 	end
 	I.publish()
 	return string.format("Creature %s (hunting allowed for %ds)%s", wanted, I.DEV_FORCE_SECONDS, where)
@@ -3677,19 +3291,12 @@ function I.onNoise(event: Types.NoiseEvent)
 	table.insert(noiseQueue, event)
 end
 
-function I.onSplash(player: Player)
-	if running then
-		splashArmed[player] = I.now()
-	end
-end
-
 function MonsterAIService.Init()
 	if initialized then
 		return
 	end
 	initialized = true
 	serviceTrove:Add(NoiseAndDirectorService.NoiseEmitted:Connect(I.onNoise))
-	serviceTrove:Add(NoiseAndDirectorService.SplashThresholdCrossed:Connect(I.onSplash))
 	serviceTrove:Add(LevelDirector.LevelActivated:Connect(function(levelId: Enums.LevelId, _context: Types.LevelContext)
 		I.protected("level activation", function()
 			I.onLevelActivated(levelId)
@@ -3732,8 +3339,6 @@ function MonsterAIService.BeginRun(runContext: Types.RunContext)
 	difficulty = runContext.difficulty
 	runSeed = runContext.seed
 	graceLevel = nil
-	poolEnteredAt = nil
-	poolRetreatUntil = -math.huge
 	participants = table.clone(runContext.participants)
 	pacing = PacingDirector.new(difficulty, I.now())
 	paused = false
@@ -3741,9 +3346,7 @@ function MonsterAIService.BeginRun(runContext: Types.RunContext)
 	devHuntUntil = 0
 	catching = nil
 	pendingReach = nil
-	grabbed = nil
 	scripted = nil
-	table.clear(splashArmed)
 	lastCatchAt = -math.huge
 	lastDownAt = -math.huge
 	teleportReadyAt = math.huge
@@ -3760,7 +3363,6 @@ function MonsterAIService.EndRun()
 	scripted = nil
 	catching = nil
 	pendingReach = nil
-	grabbed = nil
 	warp = nil
 	action = nil
 	I.detach()
@@ -3772,8 +3374,6 @@ function MonsterAIService.EndRun()
 	awake = false
 	wakeAt = nil
 	paused = false
-	speedScale = 1
-	table.clear(splashArmed)
 	table.clear(lastSeen)
 	table.clear(lights)
 	table.clear(doorModels)
@@ -3819,15 +3419,6 @@ function MonsterAIService.OnPlayerRemoving(player: Player)
 	if watch and watch.player == player then
 		hideWatch = nil
 	end
-	if grabbed == player then
-		grabbed = nil
-		if c then
-			AquaticStalk.released(c)
-		end
-	end
-	if swimmerPlayer == player then
-		swimmerPlayer = nil
-	end
 	if lastTeleportTarget == player then
 		lastTeleportTarget = nil
 	end
@@ -3840,7 +3431,6 @@ function MonsterAIService.OnPlayerRemoving(player: Player)
 		table.remove(participants, index)
 	end
 	lastSeen[player] = nil
-	splashArmed[player] = nil
 	records[player] = nil
 	pulled[player] = nil
 	ignored[player.UserId] = nil

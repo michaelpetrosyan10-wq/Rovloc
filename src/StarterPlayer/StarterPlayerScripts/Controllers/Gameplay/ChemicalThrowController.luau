@@ -2,16 +2,13 @@
 -- ChemicalThrowController: chemical flasks on this client. ChemicalProjectileService judges every pickup, throw and
 -- shatter; this controller presents them.
 --
--- The acid flask (Floor 2's objective, HeldItem "AcidFlask"; a Launch with item "AcidFlask") is held, thrown and
--- drawn exactly like a flask (AcidFlaskBuilder's visual, its acid green), but breaks without a gas cloud.
---
 -- Held flasks. Every player whose HeldItem is "ChemicalFlask" carries ChemicalFlaskBuilder.buildVisual (of their
 -- HeldItemVariant) in the right hand: a client-local, cosmetic, anchored model placed every frame (PreRender) with its
 -- Grip on the RightHand's grip point (HandGrip), on the local body (seen in first person) and on teammates' rigs within
 -- HELD_RANGE alike. The local right hand takes HandRig's "Flask" pose (FirstPersonController.SetHandPose): carried low
 -- in the right of the view, drawn back beside the head while winding up, swung through on the throw; the torch rides
 -- on the chest strap meanwhile. The pose is written only while no other system needs the hands (shouldPose: not
--- Hiding, Trapped, Grabbed, Parachuting or Scripted, whose controllers own the hands then; the local flask is hidden
+-- Hiding, Trapped, Parachuting or Scripted, whose controllers own the hands then; the local flask is hidden
 -- meanwhile) and is handed back as "Flashlight" once the flask is gone or the hands are taken.
 --
 -- Throwing (InputController "Throw", a Hold: LMB / R2 / the touch THROW button). A press winds up when canWindUp
@@ -24,11 +21,11 @@
 -- plus the gap between the two at that moment, which shrinks to nothing over RECONCILE_SECONDS. If the hand still
 -- holds the flask PREDICTION_TIMEOUT after the release, the server refused: the predicted flask goes and the hand's
 -- comes back (a predicted flask that hits something before its Launch arrives waits, hidden, for the verdict). An
--- End that comes because the action went away (a context change: trapped, grabbed, a menu) cancels the throw.
+-- End that comes because the action went away (a context change: trapped, a menu) cancels the throw.
 --
 -- Flights (ProjectileEvent). Every Launch flies along the same Ballistics parabola from its t0 (a late one fast-
 -- forwards; one older than the flight's maximum is ignored), tumbling, with each frame's step cast against the world
--- (the Projectiles group, characters excluded, plus the PoolWater surfaces): the first contact plays the glass and
+-- (the Projectiles group, characters excluded): the first contact plays the glass and
 -- splash there at once and hides the flask. The Resolve snaps to the server: when no local shatter played, or it
 -- played more than SNAP_TOLERANCE from the server's point, the glass and splash play at the server's point; the cloud
 -- (and a puddle on a floor) always appears at the server's point. Expired flights just vanish.
@@ -41,14 +38,13 @@
 -- glow and the aim arc.
 --
 -- HUD. While the local player holds a flask they may throw, the hint line says how (Hud.FlaskThrow.<Device>, for the
--- current input device); never inside a locker, a trap, the water's grab, a parachute or a cutscene (the input context
+-- current input device); never inside a locker, a trap, a parachute or a cutscene (the input context
 -- or a Cutscene / Jumpscare control lock), where no throw can happen.
 --
 -- Pure maths (tests/Specs/Chemical.spec.luau): handTarget, windupAmount, followAmount, reconcileWeight,
 -- refusedAfter, shouldPose, canWindUp, hintKey, snapNeeded, cloudRate, cloudGlow, shardCount, fadeAlpha,
 -- heldPivot, flightPivot.
 
-local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -64,11 +60,9 @@ local Log = require(ReplicatedStorage.Shared.Util.Log)
 local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 local Net = require(ReplicatedStorage.Shared.Net)
 local SpatialQuery = require(ReplicatedStorage.Shared.Util.SpatialQuery)
-local Tags = require(ReplicatedStorage.Shared.Tags)
 local Trove = require(ReplicatedStorage.Shared.Util.Trove)
 local Types = require(ReplicatedStorage.Shared.Types)
 
-local AcidFlaskBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.AcidFlaskBuilder)
 local ChemicalFlaskBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.ChemicalFlaskBuilder)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 
@@ -83,10 +77,8 @@ local log = Log.new("ChemicalClient")
 local P = Attributes.Player
 
 local ITEM: Enums.ItemId = "ChemicalFlask"
-local ACID_ITEM: Enums.ItemId = "AcidFlask"
-local ACID_VARIANT = -1 -- the variant every visual of the acid flask carries on this client
 local HINT_BLOCKED_CONTEXTS: { [string]: boolean } =
-	{ Locker = true, Trapped = true, Struggle = true, Parachute = true, Cutscene = true, Menu = true }
+	{ Locker = true, Trapped = true, Parachute = true, Cutscene = true, Menu = true }
 local HINT_BLOCKED_LOCKS: { [string]: boolean } = { Cutscene = true, Jumpscare = true }
 local THROW_ACTION: Enums.InputAction = "Throw"
 local FOLDER_NAME = "Chemicals"
@@ -383,26 +375,13 @@ local function budget(): RenderBudgetController.Budget
 	return RenderBudgetController.GetBudget()
 end
 
--- "ChemicalFlask" for a flask or the acid flask in hand (both are thrown the same way), else what the hand holds.
+-- What `player`'s hand holds ("ChemicalFlask" or "None").
 local function heldItemOf(player: Player): string
-	local item = Attributes.getString(player, P.HeldItem, "None")
-	return if item == ACID_ITEM then ITEM else item
+	return Attributes.getString(player, P.HeldItem, "None")
 end
 
 local function variantOf(player: Player): number
-	if Attributes.getString(player, P.HeldItem, "None") == ACID_ITEM then
-		return ACID_VARIANT
-	end
 	return Attributes.getNumber(player, P.HeldItemVariant, 0)
-end
-
--- A flight's look: the acid's own variant, else the flask's.
-local function payloadVariant(payload: Types.ProjectileEventPayload): number
-	return if payload.item == ACID_ITEM then ACID_VARIANT else payload.variant
-end
-
-local function liquidOf(variant: number): Color3
-	return if variant == ACID_VARIANT then AcidFlaskBuilder.AcidColor else ChemicalFlaskBuilder.liquidColor(variant)
 end
 
 local function myLifeState(): Enums.LifeState
@@ -461,11 +440,6 @@ local function place(rigid: Rigid, pivot: CFrame)
 end
 
 local function buildFlask(variant: number): Rigid
-	if variant == ACID_VARIANT then
-		-- built so its own grip lands where a flask's grip does (heldPivot / flightPivot are the flask's)
-		local at = ChemicalFlaskBuilder.GripOffset * AcidFlaskBuilder.GripOffset:Inverse()
-		return rigidOf(AcidFlaskBuilder.buildVisual(chemicalsFolder(), at), CFrame.identity)
-	end
 	local model = ChemicalFlaskBuilder.buildVisual(chemicalsFolder(), CFrame.identity, variant)
 	return rigidOf(model, CFrame.identity)
 end
@@ -491,8 +465,8 @@ local function params(): RaycastParams
 	return fresh
 end
 
--- The first contact on from -> to: the world, and with `water` the pool's surfaces too.
-local function localCast(from: Vector3, to: Vector3, water: boolean): Ballistics.Hit?
+-- The first contact on from -> to.
+local function localCast(from: Vector3, to: Vector3): Ballistics.Hit?
 	local delta = to - from
 	local length = delta.Magnitude
 	if length < 1e-4 or not MathUtil.isFiniteVector(delta) then
@@ -510,30 +484,7 @@ local function localCast(from: Vector3, to: Vector3, water: boolean): Ballistics
 			instance = result.Instance,
 		}
 	end
-	if water then
-		for _, volume in CollectionService:GetTagged(Tags.PoolWater) do
-			if not volume:IsA("BasePart") then
-				continue
-			end
-			local fraction = Ballistics.surfaceCrossing(volume.CFrame, volume.Size, from, to)
-			local current = best
-			if fraction ~= nil and (current == nil or fraction < current.fraction) then
-				local up = volume.CFrame.UpVector
-				best = {
-					position = from + delta * fraction,
-					normal = if delta:Dot(up) > 0 then -up else up,
-					fraction = fraction,
-					kind = "Water",
-					instance = volume :: Instance,
-				}
-			end
-		end
-	end
 	return best
-end
-
-local function flightCast(from: Vector3, to: Vector3): Ballistics.Hit?
-	return localCast(from, to, true)
 end
 
 local function rightHand(player: Player): BasePart?
@@ -608,7 +559,7 @@ local function spawnShards(point: Vector3, normal: Vector3, liquid: Color3)
 		for _, shard in shards do
 			if not shard.settled then
 				local nextPosition = shard.position + shard.velocity * dt
-				local hit = localCast(shard.position, nextPosition, false)
+				local hit = localCast(shard.position, nextPosition)
 				if hit then
 					shard.settled = true
 					shard.position = hit.position + hit.normal * 0.02
@@ -761,7 +712,7 @@ end
 
 -- Glass and splash (the moment of the shatter).
 local function burst(point: Vector3, normal: Vector3, variant: number)
-	local liquid = liquidOf(variant)
+	local liquid = ChemicalFlaskBuilder.liquidColor(variant)
 	spawnShards(point, normal, liquid)
 	spawnSplash(point, normal, liquid)
 end
@@ -879,15 +830,8 @@ local function onLaunch(payload: Types.ProjectileEventPayload)
 	if findProjectile(payload.id) or serverNow() - payload.t0 > GameConfig.FlaskMaxFlightSeconds then
 		return
 	end
-	local projectile = newProjectile(
-		payload.origin,
-		payload.velocity,
-		payload.gravity,
-		payload.t0,
-		payloadVariant(payload),
-		payload.id,
-		false
-	)
+	local projectile =
+		newProjectile(payload.origin, payload.velocity, payload.gravity, payload.t0, payload.variant, payload.id, false)
 	projectile.id = payload.id
 end
 
@@ -904,14 +848,11 @@ local function onResolve(payload: Types.ProjectileEventPayload)
 	local rawNormal = payload.hitNormal
 	local normal = if rawNormal and rawNormal.Magnitude > 1e-6 then rawNormal.Unit else Vector3.yAxis
 	local played = if projectile and projectile.burstPlayed then projectile.impactPoint else nil
-	local variant = payloadVariant(payload)
+	local variant = payload.variant
 	if ChemicalThrowController.snapNeeded(played, point) then
 		burst(point, normal, variant)
 	end
-	if variant == ACID_VARIANT then
-		return -- the acid eats in where it lands (the server's sizzle); no gas cloud
-	end
-	local liquid = liquidOf(variant)
+	local liquid = ChemicalFlaskBuilder.liquidColor(variant)
 	local inVent = payload.inVent == true
 	spawnCloud(point + normal * 0.6, normal, liquid, inVent)
 	if kind == "World" and not inVent and normal.Y >= FLOOR_NORMAL_Y then
@@ -948,7 +889,7 @@ local function stepProjectiles()
 			continue
 		end
 		local position = visualPosition(projectile, now)
-		local hit = flightCast(projectile.last, position)
+		local hit = localCast(projectile.last, position)
 		if hit then
 			projectile.impacted = true
 			projectile.impactPoint = hit.position
@@ -1079,9 +1020,9 @@ local function updateArc(dt: number, origin: Vector3, velocity: Vector3, variant
 	arcAlpha = math.min(1, arcAlpha + dt / ARC_FADE)
 	local dots, ring = arcParts()
 	local hit, points =
-		Ballistics.trace(origin, velocity, Ballistics.Gravity, GameConfig.FlaskMaxFlightSeconds, ARC_STEP, flightCast)
+		Ballistics.trace(origin, velocity, Ballistics.Gravity, GameConfig.FlaskMaxFlightSeconds, ARC_STEP, localCast)
 	local beads = Ballistics.resample(points, ARC_DOTS + 1)
-	local color = liquidOf(variant)
+	local color = ChemicalFlaskBuilder.liquidColor(variant)
 	local transparency = 1 - (1 - ARC_TRANSPARENCY) * arcAlpha
 	local frames: { CFrame } = table.create(ARC_DOTS)
 	for index, dot in dots do
@@ -1142,7 +1083,7 @@ local function predictedThrow(): (Vector3, Vector3, Vector3)
 	local direction = MathUtil.vectorFromYawPitch(yaw, pitch)
 	local eye = FirstPersonController.GetEyeCFrame().Position
 	local release = Ballistics.releasePoint(eye, direction)
-	local blocked = localCast(eye, release, false)
+	local blocked = localCast(eye, release)
 	local origin = Ballistics.pullBack(eye, release, if blocked then blocked.position else nil)
 	local speed = Ballistics.throwSpeed(FirstPersonController.GetPredictedMoveState())
 	return origin, Ballistics.launchVelocity(direction, speed), direction

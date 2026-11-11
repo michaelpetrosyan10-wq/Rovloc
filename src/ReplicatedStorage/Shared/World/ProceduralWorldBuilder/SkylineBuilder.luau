@@ -80,12 +80,14 @@ local function overlaps(placed: { Footprint }, x: number, z: number, r: number):
 	return false
 end
 
-local function inLandingField(x: number, z: number, r: number): boolean
-	local field = SchoolShellBuilder.Exterior.landing
-	return x + r > field.x - 40
-		and x - r < field.x + field.w + 40
-		and z + r > field.z - 40
-		and z - r < field.z + field.d + 40
+-- The ground under the parachute glide west of the school stays clear of skyline blocks (world X / Z, studs).
+local GLIDE_CLEAR = { minX = -230, maxX = 0, minZ = 34, maxZ = 254 }
+
+local function inGlide(x: number, z: number, r: number): boolean
+	return x + r > GLIDE_CLEAR.minX
+		and x - r < GLIDE_CLEAR.maxX
+		and z + r > GLIDE_CLEAR.minZ
+		and z - r < GLIDE_CLEAR.maxZ
 end
 
 -- The building face (local +-X / +-Z) that looks most toward the school, as a local unit normal.
@@ -225,7 +227,7 @@ function SkylineBuilder.build(seed: number, parent: Instance): number
 		local lobby = WorldConfig.LobbyOrigin
 		local nearLobby = math.abs(x - lobby.X) < LOBBY_CLEARANCE + footprintRadius
 			and math.abs(z - lobby.Z) < LOBBY_CLEARANCE + footprintRadius
-		if overlaps(placed, x, z, footprintRadius) or inLandingField(x, z, footprintRadius) or nearLobby then
+		if overlaps(placed, x, z, footprintRadius) or inGlide(x, z, footprintRadius) or nearLobby then
 			continue
 		end
 		built += 1
