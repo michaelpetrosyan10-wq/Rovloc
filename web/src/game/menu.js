@@ -4,8 +4,7 @@
 // Web: played alone, the menu really pauses: the game clock stops while it is open (the Roblox menu cannot stop a
 // shared server), so the Creature, timers and scenes all wait.
 
-import { LevelOrder } from './config.js';
-import { S } from './strings.js';
+import { S } from './strings/index.js';
 import { C } from './coop/strings.js';
 
 export class Menu {
@@ -50,10 +49,10 @@ export class Menu {
         } });
       }
       if (game.phase === 'InRun') {
-        for (const level of LevelOrder) {
-          buttons.push({ label: `Dev: ${level.replace(/_/g, ' ')}`, onClick: () => {
+        for (const { id } of game.stages.order) {
+          buttons.push({ label: `Dev: ${id.replace(/_/g, ' ')}`, onClick: () => {
             close();
-            this.dev.gotoLevel(level);
+            this.dev.gotoStage(id);
           } });
         }
         buttons.push({ label: 'Dev: signature moment here', onClick: () => {

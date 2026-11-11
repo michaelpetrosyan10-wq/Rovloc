@@ -27,6 +27,7 @@ import { Signal } from '../util.js';
 import { Actions } from './actions.js';
 import { Avatars } from './avatars.js';
 import { CreatureNet } from './creature.js';
+import { EventRegistry } from './events.js';
 import { LobbyNet } from './lobby.js';
 import { MechanicsNet } from './mechanics.js';
 import { RunNet } from './run.js';
@@ -79,6 +80,8 @@ export class Coop {
     this.squadChanged = new Signal();
     /** @type {Record<string, (from: string, msg: any) => void>} */
     this.handlers = {};
+    /** the message registry: every message a feature adds, with its rules (events.js) */
+    this.events = new EventRegistry(this);
     this.actions = new Actions(this);
     this.lobbyNet = new LobbyNet(this);
     this.runNet = new RunNet(this);
@@ -115,7 +118,7 @@ export class Coop {
     return this.me ? this.me.id : null;
   }
 
-  /** Solo rules apply (alone, or a room with one participant): a Downed player's syringe gets them back up. */
+  /** Solo rules apply (alone, or a room with one participant): nobody is there to revive a Downed player. */
   soloRules() {
     if (!this.active) return true;
     const run = this.game.run;
@@ -234,6 +237,7 @@ export class Coop {
     this.me = null;
     this.actor = null;
     this.creatureNet.uninstall();
+    this.events.reset();
     await session.close('left');
     if (this.game.menu) this.game.menu.restoreButtons();
     if (toTitle) this.runNet.backToTitle(reason);
@@ -259,16 +263,13 @@ export class Coop {
   /** Host: a message to every client and handled here too (the host is a player like the others). */
   everyone(msg) {
     this.broadcast(msg);
-    const fn = this.handlers[msg.t];
-    if (fn) fn(this.localId, msg);
+    this._handle(this.localId, msg);
   }
 
   /** A message to one member: sent, or handled here when it is this page's. */
   toMember(id, msg) {
-    if (this.me && id === this.me.id) {
-      const fn = this.handlers[msg.t];
-      if (fn) fn(id, msg);
-    } else this.send(id, msg);
+    if (this.me && id === this.me.id) this._handle(id, msg);
+    else this.send(id, msg);
   }
 
   // ---------------------------------------------------------------------------------------------------- receiving
@@ -292,6 +293,12 @@ export class Coop {
 
   _onEvent(from, msg) {
     if (this.isClient() && !this.welcomed && msg.t !== 'welcome') return;
+    this._handle(from, msg);
+  }
+
+  /** One message: through the registry (events.js) when its type is registered, else the modules' handler tables. */
+  _handle(from, msg) {
+    if (!msg || typeof msg.t !== 'string' || this.events.dispatch(from, msg)) return;
     const fn = this.handlers[msg.t];
     if (fn) fn(from, msg);
   }
@@ -517,6 +524,10 @@ export class Coop {
 
   endRun() {
     for (const m of this.modules) if (m.endRun) m.endRun();
+  }
+
+  stageActivated(stage) {
+    for (const m of this.modules) if (m.stageActivated) m.stageActivated(stage);
   }
 
   levelActivated(level) {

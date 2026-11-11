@@ -148,6 +148,7 @@ export function createCreature(engine, opts = {}) {
   const events = {
     stateChanged: new Signal(), caught: new Signal(), jumpscareFinished: new Signal(),
     teleportWarning: new Signal(), revealed: new Signal(), stared: new Signal(), gaveUp: new Signal(), grunted: new Signal(),
+    feed: new Signal(),
   };
   service.stateChanged.connect((next, previous) => events.stateChanged.fire(next, previous));
   service.caught.connect((player, kind) => {
@@ -170,6 +171,7 @@ export function createCreature(engine, opts = {}) {
   });
   service.gaveUp.connect((player, position) => events.gaveUp.fire(position, player === PLAYER));
   service.grunted.connect((position) => events.grunted.fire(position));
+  service.feed.connect((event) => events.feed.fire({ ...event, player: event.player === PLAYER ? true : event.player || null }));
 
   return {
     PLAYER,
@@ -187,6 +189,8 @@ export function createCreature(engine, opts = {}) {
     setSpeedScale: (scale) => service.setSpeedScale(scale),
     getSpeedScale: () => service.getSpeedScale(),
     notePulled: (player = PLAYER) => service.notePulled(player),
+    ignore: (player, seconds) => service.ignore(player === true ? PLAYER : player, seconds),
+    relocateFrom: (entry, opts) => service.relocateFrom(entry, opts),
     stateChanged: service.stateChanged,
     caught: service.caught,
     jumpscareFinished: service.jumpscareFinished,

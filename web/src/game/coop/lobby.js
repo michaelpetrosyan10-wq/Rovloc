@@ -186,7 +186,7 @@ export class LobbyNet {
     const seed = game.match.runSeed();
     const runId = newRunId();
     const difficulty = this.chosen;
-    this.coop.runNet.deployed();
+    this.coop.runNet.deployed(difficulty);
     this.coop.broadcast({ t: 'deploy', seed, d: difficulty, id: runId });
     game.lobby.deployWith(difficulty, { seed, runId, slot: this.coop.me ? this.coop.me.slot : 0 }).finally(() => {
       this.deploying = false;

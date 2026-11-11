@@ -23,7 +23,7 @@
 //   engine.lighting   setOverride(lightId, brightness), setGroupFactor(groupId, factor), setGroupStutter(groupId,
 //                     factor), burst(lightId), lightning({intensity, stages}), setStormEnabled, resetForRun, addLight
 //   engine.save / engine.settings   localStorage blob (get / set / update / flush / persistent) and the settings
-//   engine            setCurrentLevel, setAmbienceEnabled, menuEnabled, syringes, renderer.camera / height, spawnPoints,
+//   engine            setCurrentLevel, setAmbienceEnabled, menuEnabled, renderer.camera / height, spawnPoints,
 //                     buildStamp
 
 import * as THREE from 'three';
@@ -322,11 +322,6 @@ export class Env {
   /** Clears run-scoped camera / movement state (overrides, locks, layers, hand pose). */
   resetPlayerForRun() {
     this.engine.player.resetForRun();
-  }
-
-  /** Syringe pips on the status bars. */
-  setSyringePips(n) {
-    this.engine.syringes = n;
   }
 
   // ---------------------------------------------------------------------------------------------------- noise

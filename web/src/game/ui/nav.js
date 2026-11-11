@@ -4,6 +4,8 @@
 // the buttons themselves (pointer events), hover moves the focus. Glyph labels for the current device come from
 // glyphFor (InputGlyphs.forAction).
 
+import { S } from '../strings/index.js';
+
 const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'SELECT', 'START', 'L3', 'R3', '▲', '▼', '◀', '▶'];
 const KEY_NAMES = {
   ShiftLeft: 'SHIFT', ControlLeft: 'CTRL', Space: 'SPACE', Tab: 'TAB', Escape: 'ESC', Mouse0: 'LMB', Enter: 'ENTER',
@@ -29,7 +31,7 @@ export function glyphFor(env, action, device = env.device()) {
   const b = env.bindingOf(action);
   if (!b) return '?';
   if (device === 'Gamepad') return PAD_NAMES[b.gamepad[0]] || '?';
-  if (device === 'Touch') return b.touch ? b.touch.label : 'TAP';
+  if (device === 'Touch') return b.touch ? S(b.touch.label) : 'TAP';
   return keyName(b.keyboard[0]);
 }
 

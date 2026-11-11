@@ -281,7 +281,11 @@ export class CreatureNet {
         });
       },
       catchAbort: () => coop.send(member.id, { t: 'catchAbort' }),
-      catchOutcome: (outcome) => coop.send(member.id, { t: 'catchEnd', o: outcome }),
+      // the catch's end on their page; the host applies it to their lives (LivesRules.lethal on its book)
+      catchOutcome: (outcome) => {
+        coop.send(member.id, { t: 'catchEnd', o: outcome });
+        coop.runNet.hostLethal(member, 'Catch', 'Creature');
+      },
     };
     this.handles.set(member.id, h);
     return h;

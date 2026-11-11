@@ -27,7 +27,7 @@
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { cfPos, clamp01, frameAt, lookAtMatrix, smoothstep, yawOf } from '../util.js';
 
 const LEVEL = 'Level3_Roof';

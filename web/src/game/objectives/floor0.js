@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import { FloorObjective } from './base.js';
 import { ObjectiveTuning, holdOf } from './config.js';
 import { Ease, holdCallbacks, seatPivot } from './kit.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { cfMatrix, seededRandom } from '../util.js';
 
 const PANEL = 'BreakerPanel';

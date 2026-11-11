@@ -7,8 +7,8 @@
 // to fuses to breaker to the exit unlocked and the airlock out).
 //
 // For every seed (a fresh page with ?dev&seed=N, so the run's picks, plan, routes and Creature start come from it):
-// the lobby's ready pad (real keys), the countdown, the deploy; then every floor's objective with real input and the
-// prompts' real holds (E held for each hold, Space to pull the cord). The harness may teleport the player next to a step's spot within a floor (a clear spot within reach, facing
+// the lobby's ready pad (real keys), the countdown, the deploy, the Back Lot's stand-in (Skip); then every floor's
+// objective with real input and the prompts' real holds (E held for each hold, Space to pull the cord). The harness may teleport the player next to a step's spot within a floor (a clear spot within reach, facing
 // it, never on an armed trap); every gate is the game's own logic. The Creature is told to ignore the player
 // ("ignoreme") so a hunt cannot end the run; its start rule and grace are still checked:
 //   floors 0-1   the exit is locked before (its door Locked, the airlock idle) and open after; walking at the locked
@@ -20,8 +20,9 @@
 //                exit open from the start, the tracker on the way to the stairwell; the step done on leaving.
 //   Level 3      the roof: the arrival housing's door open, the Creature hidden behind it; every pack free; the door
 //                smashed after the grace once out; the first seed takes a pack, the others step off without one (a
-//                spare is buckled on); the cord, the landing (escaped at the touchdown, within one roof check at
-//                ServerTickHz, the hold released at once), the Creature on the ledge over the jumper, the ESCAPED results.
+//                spare is buckled on); the cord, the Creature on the ledge over the jumper at the touchdown, the landing
+//                (the roof done at the touchdown, within one roof check at ServerTickHz: on to City1_Rooftops; the hold
+//                released at once); the stand-ins of the stages still to be built play out; the ESCAPED results.
 //   Routes       each seed's random exits are logged (North / Middle / South per floor); every stairwell off the
 //                route is jammed (its doors shut and Locked at both ends, the debris shown, the "collapsed" prompt,
 //                walking at it does not get you through) and stays so all run (checked on every floor); the route's
@@ -407,10 +408,15 @@ for (const [si, seed] of SEEDS.entries()) {
     await tab.keyboard.down('KeyW');
     await ff(Math.max(0.1, (await tab.evaluate(() => window.__padD)) / 11));
     await tab.keyboard.up('KeyW');
-    await ff(12);
+    await ff(10);
     let p = null;
-    let s = await G((g) => ({ phase: g.phase, level: g.level, seed: g.run && g.run.seed }));
-    check('deployed into Level 0 on the pinned seed', s.phase === 'InRun' && s.level === 'Level0_Basement' && s.seed === seed, s);
+    let s = await G((g) => ({ phase: g.phase, stage: g.stage, standIn: g.standIn.stage() }));
+    check('deployed: the run opens on the Back Lot\'s stand-in', s.phase === 'InRun' && s.stage === 'BackLot' &&
+      s.standIn === 'BackLot', s);
+    await tab.keyboard.press('Enter');
+    await ff(2.5);
+    s = await G((g) => ({ phase: g.phase, level: g.level, seed: g.run && g.run.seed }));
+    check('Skip: on into Level 0 on the pinned seed', s.phase === 'InRun' && s.level === 'Level0_Basement' && s.seed === seed, s);
     await G((g) => g.creature.devCommand('ignoreme'));
     await noiseLog();
     const picks = await G((g) => Object.fromEntries(Object.entries(g.run.plan.objectives).map(([k, v]) => [k, v.anchors])));
@@ -687,8 +693,9 @@ for (const [si, seed] of SEEDS.entries()) {
     check(first ? 'L3: off the gap with the pack: freefall' : 'L3: off the gap without a pack: a spare buckled on, freefall (nobody dies in the fall)',
       s.chute === 'Freefall' && s.pack && s.life === 'Alive', s);
     await tab.keyboard.press('Space');
-    // the descent stepped in the page one frame at a time (no real frames in between) up to the touchdown, then one roof
-    // check (the roof's checks run at ServerTickHz, as on Roblox: Roof.spec times the escape within that of the touchdown)
+    // the descent stepped in the page one frame at a time (no real frames in between) up to the touchdown, then until the
+    // stage changes, at most one roof check (the roof's checks run at ServerTickHz, as on Roblox: Roof.spec times the
+    // landing within that of the touchdown)
     s = await tab.evaluate(({ tick, limit }) => {
       const loop = window.__rovloc.engine.loop;
       const g = window.__rovlocGame.game;
@@ -696,31 +703,40 @@ for (const [si, seed] of SEEDS.entries()) {
       loop.stop();
       const render = e.renderer.render;
       e.renderer.render = () => {};
+      let changedAt = null;
+      const off = g.stageActivated.connect(() => {
+        if (changedAt === null) changedAt = g.env.now();
+      });
       try {
         for (let i = 0; i < limit * 30 && g.parachute.state !== 'Landed'; i++) loop._run(1 / 30, 1 / 30);
         const landedAt = g.parachute.landedAt;
-        while (g.parachute.state === 'Landed' && g.match.outcome === 'Pending' && g.env.now() - landedAt < tick) {
-          loop._run(1 / 30, 1 / 30);
-        }
-        return { chute: g.parachute.state, outcome: g.match.outcome, lock: g.controlLock(), life: g.life.state,
-          escapedAfter: g.match.escapedAt === null || landedAt === null ? null : g.match.escapedAt - landedAt };
+        const ledge = { phase: g.level3.phase, ledgeAt: g.level3.ledgeAt, hidden: g.creature.isHidden() };
+        while (g.parachute.state === 'Landed' && changedAt === null && g.env.now() - landedAt < tick) loop._run(1 / 30, 1 / 30);
+        return { chute: g.parachute.state, stage: g.stage, lock: g.controlLock(), life: g.life.state, ledge, landedAt,
+          doneAfter: changedAt === null || landedAt === null ? null : changedAt - landedAt };
       } finally {
+        off();
         e.renderer.render = render;
         loop.start();
       }
     }, { tick: 1 / GameConfig.ServerTickHz, limit: 15 });
-    check('L3: the cord, landed: escaped at the touchdown (within one roof check), the landing hold released at once',
-      s.chute === 'Landed' && s.outcome === 'Escaped' && s.escapedAfter !== null && s.escapedAfter >= 0 &&
-      s.escapedAfter <= 1 / GameConfig.ServerTickHz + 1e-6 && s.lock === 'None' && s.life === 'Alive', s);
-    await ff(3);
-    s = await G((g) => ({ phase: g.level3.phase, ledgeAt: g.level3.ledgeAt, hidden: g.creature.isHidden(),
-      view: g.parachute.viewHeld, match: g.phase }));
-    check('L3: the Creature stands on the ledge over the jumper; the view is the player\'s again; the results follow',
-      s.phase === 'Ledge' && s.ledgeAt !== null && !s.hidden && !s.view && s.match === 'Results', s);
+    // (the roof is done in the touchdown's own tick on some seeds, so it may have let the Creature go by then)
+    check('L3: the Creature was put on the ledge over the jumper before the touchdown, shown', s.ledge.ledgeAt !== null &&
+      s.landedAt !== null && s.ledge.ledgeAt <= s.landedAt && !s.ledge.hidden, s);
+    check('L3: the cord, landed: the roof done at the touchdown (within one roof check), on to City1_Rooftops; the ' +
+      'landing hold released at once', s.chute === 'Landed' && s.stage === 'City1_Rooftops' && s.doneAfter !== null &&
+      s.doneAfter >= 0 && s.doneAfter <= 1 / GameConfig.ServerTickHz + 1e-6 && s.lock !== 'Parachute' &&
+      s.life === 'Alive', s);
+    // the stages still to be built play their stand-ins, each to its own end, then the results
+    await ff(28);
+    s = await G((g) => ({ match: g.phase, cleared: [...g.cleared], view: g.parachute.viewHeld }));
+    check('the stand-ins of the city, the runway and the Bahamas play out; the view is the player\'s again; the results ' +
+      'follow', s.match === 'Results' && !s.view &&
+      ['City1_Rooftops', 'City2_Airport', 'Runway', 'Bahamas'].every((id) => s.cleared.includes(id)), s);
     await ff(1.5);
     await shot('L3-results.png');
     s = await G((g) => ({ open: g.results.showing, title: g.results.title.textContent }));
-    check('L3: the ESCAPED results', s.open && /ESCAPED/.test(String(s.title)), s);
+    check('the ESCAPED results', s.open && /ESCAPED/.test(String(s.title)), s);
   } catch (err) {
     if (err instanceof FloorsDone) {
       console.log(`  stopped after ${err.message} (--floors)`);

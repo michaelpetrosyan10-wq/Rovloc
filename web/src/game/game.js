@@ -1,21 +1,28 @@
 // game.js: the game's root (the web counterpart of ServerMain + ClientMain for one player): it owns the systems,
-// the match phases (RunLifecycleService), the run's level (LevelDirector), the run stats (RunStatsService), the
-// scene sequencer (SequenceController) and the control locks (CharacterService.Lock reasons), and drives every
-// system at the engine's fixed 30 Hz tick and once per rendered frame.
+// the match phases (RunLifecycleService), the run's stage and level (LevelDirector over StageConfig: stages.js), the
+// run stats (RunStatsService), the scene sequencer (SequenceController) and the control locks (CharacterService.Lock
+// reasons), and drives every system at the engine's fixed 30 Hz tick and once per rendered frame.
+//
+// The run is the stage list: game.stage is the stage being played (a stage id); game.level is the level of the school
+// it plays on (the same id) for a stage the school's scripts play, null for one the StandIn plays. advance() leaves
+// the stage (cleared) for the next one; after the last the run ends (Match.finishRun).
 //
 // Systems implement any of: beginRun(run) (forward order), endRun() (reverse order), tick(dt, now), frame(dt, now),
-// levelActivated(level), levelDeactivated(level), phaseChanged(phase, previous).
+// stageActivated(stage), stageDeactivated(stage), levelActivated(level), levelDeactivated(level),
+// phaseChanged(phase, previous).
 
 import * as THREE from 'three';
-import { StatKeys, nextLevel } from './config.js';
-import { S } from './strings.js';
+import { StatKeys } from './config.js';
+import { Stages } from './stages.js';
+import { S } from './strings/index.js';
 import { Sequencer } from './timeline.js';
 import { Signal } from './util.js';
 
 /**
  * @typedef {'Title'|'Lobby'|'Countdown'|'Deploying'|'InRun'|'RunEnded'|'Results'|'Resetting'} Phase
  * @typedef {{runId: string, difficulty: string, plan: import('./worldData.js').Plan, routes: Record<string, import('./worldData.js').Route>,
- *   perks: string[], startedAt: number, seed: number, devRun: boolean}} Run
+ *   perks: string[], startedAt: number, seed: number, devRun: boolean, slot: number,
+ *   clockFrom: number|null, clockTo: number|null}} Run
  */
 
 export class RunStats {
@@ -58,10 +65,15 @@ export class Game {
     this.phase = 'Title';
     /** @type {Run|null} */
     this.run = null;
-    /** @type {string|null} the run's current level (LevelDirector) */
+    /** the run's stages (meta.stageConfig) and the script of each */
+    this.stages = new Stages(world.meta);
+    /** @type {string|null} the run's current stage (a stage id) */
+    this.stage = null;
+    this.stageActive = false;
+    /** @type {string|null} the run's current level (LevelDirector): the stage when the school plays it, else null */
     this.level = null;
     this.levelActive = false;
-    /** @type {Set<string>} levels marked Cleared this run */
+    /** @type {Set<string>} stages marked Cleared this run */
     this.cleared = new Set();
     /** @type {Array<any>} */
     this.systems = [];
@@ -69,6 +81,8 @@ export class Game {
     this.locks = new Map();
     /** @type {Signal<[Phase, Phase]>} */
     this.phaseChanged = new Signal();
+    /** @type {Signal<[string]>} */
+    this.stageActivated = new Signal();
     /** @type {Signal<[string]>} */
     this.levelActivated = new Signal();
     /** @type {Signal<[string]>} */
@@ -114,7 +128,8 @@ export class Game {
 
   /** EndRun on every system in reverse order. */
   endRun() {
-    this.deactivateLevel();
+    this.deactivateStage();
+    this.stage = null;
     this.level = null;
     this.env.setCurrentLevel(null);
     for (let i = this.systems.length - 1; i >= 0; i--) {
@@ -126,14 +141,58 @@ export class Game {
     this.run = null;
   }
 
-  // ---------------------------------------------------------------------------------------------------- levels
+  // ---------------------------------------------------------------------------------------------------- stages
 
-  /** LevelDirector.EnterLevel: switches the level at once; activates it when the run is InRun. */
-  enterLevel(level) {
+  /**
+   * LevelDirector.EnterLevel over the stage list: switches to stage `stage` at once (its level when the school plays
+   * it) and activates it when the run is InRun. `spawn`: the player is put at their slot's spawn at its entry (entering
+   * the school from a stand-in or at the deploy; an airlock's stairs bring them there themselves).
+   * @param {string} stage
+   * @param {{spawn?: boolean}} [opts]
+   */
+  enterStage(stage, opts = {}) {
+    this.deactivateStage();
+    this.stage = stage;
+    this.level = this.stages.isLevel(stage) ? stage : null;
+    this.env.setCurrentLevel(this.level);
+    if (this.level && opts.spawn) this.match.spawnAt(this.level, this.match.slot());
+    if (this.phase === 'InRun') this.activateStage();
+  }
+
+  /** The stage's activation (every system's stageActivated), then its level's. */
+  activateStage() {
+    if (this.stageActive || !this.stage) return;
+    this.stageActive = true;
+    const stage = this.stage;
+    for (const s of this.systems) if (s.stageActivated && !this._follows(s)) safe(() => s.stageActivated(stage), s, this);
+    this.stageActivated.fire(stage);
+    if (this.level) this.activateLevel();
+  }
+
+  deactivateStage() {
     this.deactivateLevel();
-    this.level = level;
-    this.env.setCurrentLevel(level);
-    if (this.phase === 'InRun') this.activateLevel();
+    if (!this.stageActive || !this.stage) {
+      this.stageActive = false;
+      return;
+    }
+    const stage = this.stage;
+    this.stageActive = false;
+    for (const s of this.systems) if (s.stageDeactivated && !this._follows(s)) safe(() => s.stageDeactivated(stage), s, this);
+  }
+
+  /** LevelDirector.MarkCleared + Advance: the stage is cleared and the next one entered; after the last the run ends. */
+  advance() {
+    if (!this.stage || !this.run) return null;
+    const from = this.stage;
+    this.cleared.add(from);
+    this.match.stageCleared(from);
+    const next = this.stages.next(from);
+    if (next) this.enterStage(next, { spawn: !this.stages.isLevel(from) });
+    else {
+      this.deactivateStage();
+      this.match.finishRun();
+    }
+    return next;
   }
 
   activateLevel() {
@@ -155,18 +214,9 @@ export class Game {
     this.levelDeactivated.fire(level);
   }
 
-  /** LevelDirector.MarkCleared + Advance: the next level (null after the roof). */
-  advance() {
-    if (!this.level) return null;
-    this.cleared.add(this.level);
-    const next = nextLevel(this.level);
-    if (next) this.enterLevel(next);
-    return next;
-  }
-
   // ---------------------------------------------------------------------------------------------------- locks
 
-  /** CharacterService.Lock: a ControlLock reason (Trap, Locker, Jumpscare, Cutscene, Parachute, Airlock). */
+  /** CharacterService.Lock: a ControlLock reason (Trap, Locker, Jumpscare, Cutscene, Respawn, Parachute, Airlock). */
   lock(reason) {
     this.locks.set(reason, true);
     this.env.lock(reason);
@@ -180,7 +230,7 @@ export class Game {
   /** The ControlLock the HUD reads ('None' when free); a jumpscare the Creature holds counts too. */
   controlLock() {
     if (this.env.hasLock('Jumpscare')) return 'Jumpscare';
-    for (const r of ['Cutscene', 'Locker', 'Trap', 'Parachute', 'Airlock']) if (this.locks.has(r)) return r;
+    for (const r of ['Cutscene', 'Respawn', 'Locker', 'Trap', 'Parachute', 'Airlock']) if (this.locks.has(r)) return r;
     for (const r of this.locks.keys()) return r;
     return 'None';
   }

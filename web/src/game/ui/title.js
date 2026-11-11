@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { TutorialConfig } from '../config.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { lookAtMatrix } from '../util.js';
 import { FocusGroup, glyphFor } from './nav.js';
 import { C } from '../coop/strings.js';
@@ -447,17 +447,13 @@ const ART = {
     });
   },
   Teamwork(parent) {
-    // played alone: a downed figure and the syringe that gets it up; a stairwell's fire doors shut in the ring
+    // a downed figure and the chevron of the get-up (once a floor); a stairwell's fire doors shut in the ring
     const s = svg(parent);
     const g = node(s, 'g', { transform: 'translate(92 118) rotate(90)' });
     node(g, 'circle', { cx: 0, cy: -26, r: 9, fill: Palette.Ember });
     node(g, 'rect', { x: -9, y: -15, width: 18, height: 48, rx: 6, fill: Palette.Ember });
-    const syringe = node(s, 'g', { transform: 'translate(70 52) rotate(-35)' });
-    node(syringe, 'rect', { x: 0, y: -5, width: 34, height: 10, rx: 2, fill: 'none', stroke: Palette.Moss, 'stroke-width': 2.5 });
-    node(syringe, 'rect', { x: 2, y: -3, width: 18, height: 6, fill: Palette.Moss });
-    node(syringe, 'rect', { x: 34, y: -1, width: 16, height: 2, fill: Palette.Bone });
-    node(syringe, 'rect', { x: -10, y: -1.5, width: 10, height: 3, fill: Palette.Moss });
-    node(syringe, 'rect', { x: -13, y: -7, width: 3, height: 14, fill: Palette.Moss });
+    node(s, 'polyline', { points: '72,70 92,48 112,70', fill: 'none', stroke: Palette.Moss, 'stroke-width': 6,
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
     caption(s, 92, 172, S('Tutorial.Art.Revive'), Palette.Moss);
     const r = 34;
     node(s, 'circle', { cx: 196, cy: 198, r, fill: 'none', stroke: Palette.Amber, 'stroke-width': 5 });

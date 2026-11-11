@@ -222,6 +222,9 @@ export class MonsterAI {
     this.gaveUp = new Signal();
     /** (position) the low grunt before a LookAway. */
     this.grunted = new Signal();
+    /** ({kind, ...}) what it is about to do that the game may answer: ReachIn {player, spot, at} (the catch's time),
+     * Sniff {spot} (a breath check at a hiding spot begins), Stun {seconds, from} */
+    this.feed = new Signal();
 
     this.metrics = creatureMetrics(env.meta());
     this.running = false;
@@ -257,6 +260,8 @@ export class MonsterAI {
     this.alerts = [];
     this.lastSeen = new Map();
     this.ignored = false;
+    /** @type {Map<any, number>} player -> the time until which it ignores them (a respawn's grace) */
+    this.graceUntil = new Map();
     this.accumulated = 0;
     this.lockerInspector = null;
     /** @type {() => RemotePlayer[]} the co-op host's remote players (none when played alone) */
@@ -415,7 +420,7 @@ export class MonsterAI {
     if (this.hideWatch && this.hideWatch.player === player) this.hideWatch = null;
     if (this.lastTeleportTarget === player) this.lastTeleportTarget = null;
     if (this.pendingReach && this.pendingReach.player === player) this.pendingReach = null;
-    for (const map of [this.lastSeen, this.records, this.pulled]) map.delete(player);
+    for (const map of [this.lastSeen, this.records, this.pulled, this.graceUntil]) map.delete(player);
     if (this.jumpscare.getVictim() === player) this.jumpscare.abort('Left');
   }
 
@@ -467,7 +472,69 @@ export class MonsterAI {
   }
 
   _huntable(player) {
-    return !this.ignored && this._playing(player);
+    return !this._ignores(player) && this._playing(player);
+  }
+
+  /** Whether it ignores `player`: the dev's ignoreme (everyone), or their respawn's grace (unseen, unheard, uncaught). */
+  _ignores(player) {
+    if (this.ignored) return true;
+    const until = this.graceUntil.get(player);
+    return until !== undefined && this.now() < until;
+  }
+
+  /**
+   * A respawn's grace: `player` (PLAYER, or a co-op roster handle) is not seen, heard or caught for `seconds`; a hunt
+   * or a memory of them is dropped at once.
+   */
+  ignore(player, seconds) {
+    if (!player || !(seconds > 0)) return;
+    this.graceUntil.set(player, this.now() + seconds);
+    const c = this.ctx;
+    if (!c) return;
+    if (c.target === player) this._setTarget(null);
+    if (c.memory && c.memory.player === player) c.memory = null;
+    c.sightings = c.sightings.filter((s) => s.player !== player);
+    if (this.pendingReach && this.pendingReach.player === player) this.pendingReach = null;
+  }
+
+  /**
+   * A respawn at `entry` (a floor point): when it stands within `walked` studs walked of it, it is moved, unwarned and
+   * unseen, to the nearest land spot at least `walked` walked from the entry, `clear` from every player and out of
+   * everyone's sight, and its next teleport is at least `teleportDelay` off. Returns {moved, walk, to}.
+   * @param {THREE.Vector3} entry
+   * @param {{walked: number, clear: number, teleportDelay: number}} opts
+   */
+  relocateFrom(entry, opts) {
+    const c = this.ctx;
+    const info = c ? c.level : null;
+    const nav = info ? this._nav(info.levelId) : null;
+    if (!c || !info || !nav || this.scripted || !this.running) return { moved: false, walk: null, to: null };
+    const t = this.now();
+    this.teleportReadyAt = Math.max(this.teleportReadyAt, t + opts.teleportDelay);
+    const here = this.body.getPosition();
+    const feet = (p) => new THREE.Vector3(p.x, p.y - ROOT_HEIGHT, p.z);
+    const walk = nav.pathLength(entry, feet(here));
+    if (walk >= opts.walked) return { moved: false, walk, to: null };
+    const roots = this._players().map((p) => this._rootOf(p)).filter(Boolean);
+    let best = null;
+    for (const spot of this._landSpots(info)) {
+      if (roots.some((r) => horizontalDistance(r, spot) < opts.clear)) continue;
+      const w = nav.pathLength(entry, feet(spot));
+      if (!(w >= opts.walked) || !Number.isFinite(w) || (best && w >= best.walk)) continue;
+      if (this._visible(spot)) continue;
+      best = { spot, walk: w };
+    }
+    if (!best) return { moved: false, walk, to: null };
+    if (this.catching) this.jumpscare.abort('Respawn');
+    this._cancelWarp();
+    this.pendingReach = null;
+    this.lookAway = null;
+    const toward = this._nearestRoot(best.spot);
+    const facing = (toward && flatDirection(toward.clone().sub(best.spot))) || new THREE.Vector3(0, 0, -1);
+    this._placeBody(CFrame.lookAt(best.spot, best.spot.clone().add(facing)));
+    this.body.setHidden(false);
+    this._forgetMind();
+    return { moved: true, walk, to: best.spot.clone(), toWalk: best.walk };
   }
 
   _huntablePlayers() {
@@ -1208,7 +1275,7 @@ export class MonsterAI {
 
   _tryCatch(player, kind) {
     if (!this.mover || this.catching !== null || this.jumpscare.isBusy() || !this._canHuntNow()) return false;
-    if (this.ignored || this.now() < this.stunUntil || this.warp) return false;
+    if (this._ignores(player) || this.now() < this.stunUntil || this.warp) return false;
     if (!this.jumpscare.catch(player, kind)) return false;
     this.catching = { player, kind, at: this.now() };
     this.lastCatchAt = this.now();
@@ -1225,6 +1292,7 @@ export class MonsterAI {
     this.lookAway = null;
     this._setAction('ReachIn');
     this.pendingReach = { player, spot, at: this.now() + H.ReachInLead };
+    this.feed.fire({ kind: 'ReachIn', player, spot, at: this.pendingReach.at });
   }
 
   _stepReach(t) {
@@ -1485,7 +1553,8 @@ export class MonsterAI {
     const events = this.noiseQueue;
     this.noiseQueue = [];
     for (const event of events) {
-      if (this.ignored && this._playerByUserId(event.sourceUserId)) continue;
+      const source = this._playerByUserId(event.sourceUserId);
+      if (source && this._ignores(source)) continue;
       const heard = Hearing.perceive(event, listener);
       if (!heard) continue;
       const room = c.level ? Brain.roomAt(c.level, heard.position) : null;
@@ -1739,7 +1808,10 @@ export class MonsterAI {
           maxDistance, (p) => this._visible(p));
       },
       playerPositions: () => this._playerEyes(),
-      lockerInspector: () => this.lockerInspector,
+      lockerInspector: () => (this.lockerInspector ? (spot) => {
+        this.feed.fire({ kind: 'Sniff', spot });
+        return this.lockerInspector(spot);
+      } : null),
       inVent: (player) => this._inVent(player),
       playing: (player) => this._huntable(player),
       isHiding: (player) => this._moveStateOf(player) === 'Hiding',
@@ -1843,6 +1915,7 @@ export class MonsterAI {
     this.stunUntil = 0;
     this.devHuntUntil = 0;
     this.catching = null;
+    this.graceUntil.clear();
     this.pendingReach = null;
     this.scripted = null;
     this.accumulated = 0;
@@ -1918,6 +1991,7 @@ export class MonsterAI {
     const t = this.now();
     this.stunUntil = Math.max(this.stunUntil, t + Math.max(0, seconds));
     c.stunFrom = from.clone();
+    this.feed.fire({ kind: 'Stun', seconds, from: from.clone() });
     this._setTarget(null);
     this.pendingReach = null;
     this.lookAway = null;

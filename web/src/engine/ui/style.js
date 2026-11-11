@@ -59,8 +59,6 @@ export const CSS = `
 .rv-meter { position: relative; height: 4px; width: 168px; background: rgba(40,37,35,0.65); border-radius: 2px; overflow: hidden; }
 .rv-meter-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px;
   background-image: linear-gradient(90deg, rgba(0,0,0,0.35), rgba(0,0,0,0) 85%); }
-.rv-pips { display: flex; gap: 4px; margin-top: 4px; }
-.rv-pip { width: 6px; height: 14px; border-radius: 2px; background: ${Palette.Ember}; opacity: 0.85; }
 
 /* prompts */
 .rv-prompt { position: absolute; display: flex; align-items: center; gap: 12px; width: 270px; height: 54px;

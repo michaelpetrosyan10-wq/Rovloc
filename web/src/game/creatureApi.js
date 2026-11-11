@@ -8,6 +8,9 @@
 //   registerLockerInspector(fn)           fn(lockerId) -> Promise<'Empty' | 'HiddenSafe' | 'Caught'>
 //   setSpeedScale(scale)
 //   events stateChanged(state, prev), caught(kind), jumpscareFinished(kind, outcome)
+//   feed: one stream of everything it does that the game may answer ({kind, at}: State, LookAway, ReachIn, Sniff,
+//     TeleportWarning, Stun), for any system to subscribe to
+//   ignore(who, seconds) (a respawn's grace), relocateFrom(entry, opts) (a respawn's clearance)
 //   activateLevel(levelId) / deactivate()
 //
 // plus what the level scenes and mechanics read from it, called when the module offers them:
@@ -93,12 +96,31 @@ export class CreatureApi {
     this.gaveUp = new Signal();
     /** @type {Signal<[THREE.Vector3]>} the grunt before a LookAway */
     this.grunted = new Signal();
+    /**
+     * The event feed: everything the Creature does that the game may answer, as one stream of {kind, at: game time,
+     * ...}: State {state, previous}, LookAway {position} (the grunt), ReachIn {player, spot, due} (when its catch
+     * lands), Sniff {spot} (a breath check begins), TeleportWarning {spot, targetsMe, seconds}, Stun {seconds, from}.
+     * @type {Signal<[{kind: string, at: number}]>}
+     */
+    this.feed = new Signal();
     if (this.c) {
       this._bridge('stateChanged', this.stateChanged);
       this._bridge('caught', this.caught);
       this._bridge('jumpscareFinished', this.jumpscareFinished);
       for (const name of ['teleportWarning', 'revealed', 'stared', 'gaveUp', 'grunted']) this._bridge(name, this[name]);
+      const feed = new Signal();
+      this._bridge('feed', feed);
+      feed.connect((e) => this._feed(e.kind, e.kind === 'ReachIn' ? { player: e.player, spot: e.spot, due: e.at }
+        : e.kind === 'Sniff' ? { spot: e.spot } : { seconds: e.seconds, from: e.from }));
     }
+    this.stateChanged.connect((state, previous) => this._feed('State', { state, previous }));
+    this.grunted.connect((position) => this._feed('LookAway', { position }));
+    this.teleportWarning.connect((spot, targetsMe, seconds) => this._feed('TeleportWarning', { spot, targetsMe, seconds }));
+  }
+
+  _feed(kind, fields) {
+    const clock = this.c && typeof this.c.service === 'object' && this.c.service ? this.c.service.now() : 0;
+    this.feed.fire({ kind, at: clock, ...fields });
   }
 
   /** Whether a Creature module is present. */
@@ -203,6 +225,25 @@ export class CreatureApi {
   /** A teammate pulled `player` out of a hiding spot (no catch for it). */
   notePulled(player) {
     this._call('notePulled', player);
+  }
+
+  /**
+   * A respawn's grace: `who` (true: this page's player; a co-op roster handle, coop/creature.js handleOf) is not seen,
+   * heard or caught for `seconds`.
+   */
+  ignore(who, seconds) {
+    this._call('ignore', who, seconds);
+  }
+
+  /**
+   * A respawn at `entry` (a floor point): within `walked` studs walked of it, the Creature is moved unwarned and unseen
+   * to the nearest land spot at least `walked` walked from it and `clear` from every player; its next teleport at
+   * least `teleportDelay` off. {moved, walk, to} (moved false without a Creature).
+   * @param {THREE.Vector3} entry
+   * @param {{walked: number, clear: number, teleportDelay: number}} opts
+   */
+  relocateFrom(entry, opts) {
+    return this._call('relocateFrom', entry, opts) || { moved: false, walk: null, to: null };
   }
 
   // ---------------------------------------------------------------------------------------------------- commands

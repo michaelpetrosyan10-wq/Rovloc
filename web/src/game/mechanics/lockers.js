@@ -43,7 +43,7 @@
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { Palette, el, meter } from '../ui/style.js';
 import { cfMatrix, clamp01, frameAt, horizontalDistance, lerpFrame, seededRandom, smoothstep, wrapAngle, yawOf } from '../util.js';
 import { valueAt } from './doors.js';

@@ -13,7 +13,7 @@
 // the next run.
 
 import * as THREE from 'three';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { ObjectiveTuning, roomName, stepOf } from './config.js';
 import { LockFixture } from './locks.js';
 import { Tweens, WorkHold, entityPrompt } from './kit.js';

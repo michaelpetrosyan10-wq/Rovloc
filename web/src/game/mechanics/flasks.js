@@ -31,7 +31,7 @@
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { cfMatrix, clamp01, frameAt, smoothstep } from '../util.js';
 import { variantOf } from '../worldData.js';
 import * as Ballistics from './ballistics.js';
@@ -603,7 +603,9 @@ export class Flasks {
 
   tick(dt, now) {
     const game = this.game;
-    if (this.held && game.run && (game.life.state === 'Dead' || game.life.state === 'Spectating')) this._emptyHand();
+    // out of play the flask is gone; a respawn keeps it (LivesRules.respawn)
+    const out = game.life.state === 'Spectating' || (game.life.state === 'Dead' && !game.life.respawning);
+    if (this.held && game.run && out) this._emptyHand();
     this._stepFlights(now);
     this.pollClock += dt;
     if (this.pollClock >= POLL) {

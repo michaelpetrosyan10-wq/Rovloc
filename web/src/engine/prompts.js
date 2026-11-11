@@ -6,7 +6,8 @@
 // nearest wins (ties go to the one nearer the centre of the view); one without line of sight still never answers
 // through a wall. Holding Interact fills its ring over holdSeconds (0 = instant); releasing drains it; leaving range
 // cancels. onTriggered fires once per completed hold (before its onHoldEnded). Touch / a free cursor press the row
-// itself. The input context must have Interact live (on foot, in a vent, trapped, in a locker).
+// itself. The input context must have Interact live (on foot, in a vent, trapped, in a locker); nobody Downed or Dead
+// uses one (a Downed player's Interact is their get-up).
 
 import * as THREE from 'three';
 
@@ -173,7 +174,7 @@ export class Prompts {
     const best = new Map();
     for (const p of this.list.values()) {
       p.shown = false;
-      if (!p.enabled || !input.isLive(p.action) || player.lifeState === 'Dead') continue;
+      if (!p.enabled || !input.isLive(p.action) || player.lifeState === 'Dead' || player.lifeState === 'Downed') continue;
       if (!this._anchor(p, p.world)) continue;
       const d = p.world.distanceTo(root);
       if (d > p.distance) continue;

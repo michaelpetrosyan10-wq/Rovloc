@@ -15,21 +15,28 @@
 // The pages run in real time with the 3D drawing switched off (headless WebGL is software).
 //
 //   lobby      host through the title's PLAY WITH FRIENDS (the code shown), two joins by code, the squad list on every
-//              page (link Direct / Relay and ping), the difficulty vote, ready on every page -> the countdown -> one
-//              run deployed everywhere (same seed, own spawn slots)
+//              page (link Direct / Relay and ping), the difficulty vote, ready on every page -> the countdown -> the
+//              Back Lot's stand-in on every page (Skip is a vote: one of three does not end it, two do) -> one run on
+//              Level 0 everywhere (same seed, own spawn slots)
 //   Level 0    two players doing the fuses (the host one, a client two: each carries their own); a fourth player joins
 //              mid-run and spectates; the host's networking per tick measured with four players and its CPU slowed 4x;
 //              the fuses fitted by both, the breaker thrown: the progress, the carry and the exit door the same on
 //              every page
 //   downed     the relayed client goes down; the other client revives them (the Revive hold on their avatar)
+//   lives      the two-page case (the host decides, the client's page applies): the revived client's next lethal hit
+//              kills him; the host spends his stage respawn, his page goes black (NOT YET.) and he stands up 4 s later
+//              at his spawn at the floor's entry at 50; the host's Creature, put beside that entry first, is moved at
+//              least 70 studs walked from it and keeps off him for the grace; down again, he gets up by himself
+//              (hold E from 3 s for 4 s) at 50; Level 1's activation gives his stage respawn back
 //   airlock    the host and a client in the vestibule, the relayed client outside: the airlock waits (the straggler
 //              timer on every page), the straggler comes in, it seals, every page moves to Level 1; the late joiner
-//              gets up there at half health (then leaves)
+//              gets up there at half health, the checkpoint return (then leaves)
 //   Level 1    the classroom scare set off by a client (the scene on the host, the gate slam everywhere); the Creature
 //              hunts and chases a client (not the host): its state, its target and its position agree on that page,
 //              and its pose (the host's hunch rule) and its eye (the rig's height for that pose)
 //   leaving    a client carrying the master keys closes their page: the keys drop where they stood on the other pages
-//   the end    the last client dies and spectates the host; the host dies: a wipe, results on both pages, Play Again
+//   the end    the last client dies and comes back (his Level 1 respawn), dies again and, out of respawns, spectates the
+//              host; the host dies, comes back, dies again: a wipe, results on both pages, Play Again
 //              waits for both and brings them back to the lobby Ready; then the host closes their page: the client is
 //              told "The host left" and is back on the title screen
 //   always     poses agree across pages (within interpolation), doors and objective counts agree, the relay sends at
@@ -237,6 +244,15 @@ try {
   const phases = [];
   for (const p of players) phases.push(await G(p, () => window.__phases.slice()));
   check('every page counts down once the squad is ready', phases.every((list) => list.includes('Countdown')), phases);
+  // the run opens on the Back Lot's stand-in on every page; Skip is a vote: one of three does not end it, two do
+  const opened = [];
+  for (const p of players) opened.push(await until(p, (g) => (g.phase === 'InRun' && g.standIn.stage() === 'BackLot' ? g.stage : null), null, 20));
+  check('every page opens the run on the Back Lot\'s stand-in', opened.every((st) => st === 'BackLot'), opened);
+  await G(alice, (g) => g.standIn.pressSkip());
+  await sleep(1200);
+  const oneVote = await G(host, (g) => ({ stage: g.stage, ends: g.standIn.current && g.standIn.current.endsAt }));
+  check('one Skip of three does not end the stand-in', oneVote.stage === 'BackLot' && oneVote.ends === null, oneVote);
+  await G(host, (g) => g.standIn.pressSkip());
   const runs = [];
   for (const p of players) {
     runs.push(await until(p, (g) => (g.phase === 'InRun' && g.level === 'Level0_Basement' ? { seed: g.run.seed, id: g.run.runId,
@@ -405,6 +421,68 @@ try {
   const revives = await G(alice, (g) => g.stats.get('Revives'));
   check('Alice\'s run counts the revive', revives === 1, revives);
 
+  // ---------------------------------------------------------------------------------------------- lives: respawn, get-up
+  // (the host owns the lives: Bob's page sends what happens to him, the host's word comes back)
+  // the Creature put beside Bob's entry first, out of its start's hold and told to catch nobody meanwhile
+  const near = await G(host, (g, dev, id) => {
+    const T = g.env.THREE;
+    const s = g.creature.c.service;
+    if (g.floors.spawns.holding(g.level)) g.floors.spawns._letGo('Test');
+    s.ignored = true;
+    const bobMember = g.coop.squad.get(id);
+    const spawn = g.match.spawnOf(g.level, bobMember.slot).cframe;
+    const entry = new T.Vector3(spawn[0], spawn[1] - 3, spawn[2]);
+    const nav = s._nav(s.creatureLevel);
+    const p = nav.samplePoints(6).map((x) => x.position).find((x) => {
+      const w = nav.pathLength(entry, x);
+      return w > 12 && w < 40;
+    });
+    s._placeBody(s.body.getCFrame().constructor.lookAt(new T.Vector3(p.x, p.y + 3.2, p.z), new T.Vector3(entry.x, p.y + 3.2, entry.z)));
+    return { entry: entry.toArray(), walk: nav.pathLength(entry, p) };
+  }, ids.bob);
+  // revived, Bob has had this stage's down: the next lethal hit kills him; he has the stage's respawn
+  await G(bob, (g) => g.life.down('Test'));
+  const killed = await until(bob, (g) => (g.life.state === 'Dead' && g.life.respawning
+    ? { lives: g.life.lives, black: g.livesHud.notYet.textContent, source: g.life.respawning.source } : null), null, 8);
+  const hostSees = await until(host, (g, dev, id) => {
+    const rec = g.coop.runNet.book.get(id);
+    return g.coop.squad.get(id).life === 'Dead' && rec && rec.respawning ? { lives: rec.lives } : null;
+  }, ids.bob, 8);
+  check('Bob\'s next lethal hit on the floor kills him: the host spends his stage respawn, his page goes black (NOT YET.)',
+    !!killed && !!hostSees && killed.source === 'stage' && killed.lives.stage === 0 && killed.black === 'NOT YET.' &&
+    hostSees.lives.stage === 0, { killed, hostSees });
+  const stoodUp = await until(bob, (g, dev, a) => {
+    if (g.life.state !== 'Alive') return null;
+    const root = g.env.rootPosition();
+    return { health: g.life.health, atEntry: Math.hypot(root.x - a.entry[0], root.z - a.entry[2]), getUpUsed: g.life.lives.getUpUsed };
+  }, near, 10);
+  check('4 s later Bob stands up at his spawn at the floor\'s entry at 50, the get-up given back', !!stoodUp &&
+    stoodUp.health === 50 && stoodUp.atEntry < 1.5 && !stoodUp.getUpUsed, stoodUp);
+  const cleared = await until(host, (g, dev, a) => {
+    const T = g.env.THREE;
+    const s = g.creature.c.service;
+    const nav = s._nav(s.creatureLevel);
+    const here = s.body.getPosition();
+    const walk = nav.pathLength(new T.Vector3(...a.entry), new T.Vector3(here.x, here.y - 3.2, here.z));
+    const handle = g.coop.creatureNet.handleOf(a.id);
+    const grace = s.graceUntil.get(handle);
+    return grace !== undefined ? { walk, graceLeft: grace - s.now(), teleportIn: s.teleportReadyAt - s.now() } : null;
+  }, { ...near, id: ids.bob }, 6);
+  check(`the host moved its Creature from ${near.walk.toFixed(0)} to at least 70 studs walked from Bob's entry and keeps it off ` +
+    'him for 10 s', !!cleared && near.walk < 70 && cleared.walk >= 70 && cleared.graceLeft > 5 && cleared.graceLeft <= 10 &&
+    cleared.teleportIn > 35, cleared);
+  // down again (the respawn reset his downs): this time he gets up by himself
+  await G(bob, (g) => g.life.down('Test'));
+  await until(bob, (g) => g.life.state === 'Downed', null, 6);
+  await hold(bob, 7.6);
+  const up = await until(bob, (g) => (g.life.state === 'Alive' ? { health: g.life.health, used: g.life.lives.getUpUsed } : null), null, 6);
+  const hostUp = await G(host, (g, dev, id) => ({ life: g.coop.squad.get(id).life, used: g.coop.runNet.book.get(id).lives.getUpUsed }), ids.bob);
+  check('Bob down again: holding E from 3 s for 4 s, the host lets him get up by himself at 50 (once this floor)', !!up &&
+    up.health === 50 && up.used && hostUp.used && hostUp.life === 'Alive', { up, hostUp });
+  await G(host, (g) => {
+    g.creature.c.service.ignored = false;
+  });
+
   // ---------------------------------------------------------------------------------------------- the airlock
   const vestibule = await G(host, (g) => {
     const T = g.env.THREE;
@@ -438,6 +516,9 @@ try {
   }
   check('the straggler made it: sealed, every page on Level 1, the floor cleared for all three', sealed.every((s) => s &&
     s.cleared === 1 && s.life === 'Alive'), sealed);
+  const bobLives = await until(bob, (g) => (g.level === 'Level1_Hallways' && g.life.lives.stage === 1 ? g.life.lives : null), null, 8);
+  check('Level 1\'s activation: the host sets Bob\'s spent stage respawn back to 1, his get-up and downs reset', !!bobLives &&
+    !bobLives.getUpUsed && bobLives.downs === 0, bobLives);
   const danaUp = await until(dana, (g) => (g.level === 'Level1_Hallways' && g.life.state === 'Alive'
     ? { health: g.life.health, cleared: g.stats.get('FloorsCleared') } : null), null, 10);
   check('the late joiner gets up at the new floor with half health (no floor credited)', !!danaUp && danaUp.health === 50 &&
@@ -595,20 +676,29 @@ try {
   check(`the relay stays frugal: Bob ${(bobSent / elapsed).toFixed(1)} and the host ${(hostSent / elapsed).toFixed(1)} messages/s`,
     bobSent / elapsed <= 10.5 && hostSent / elapsed <= 10.5 && bobSent > 0, { bobSent, hostSent, seconds: Math.round(elapsed) });
 
-  // dead: Bob watches the host; then the host dies too: the squad is wiped, results on both pages, Play Again
-  await G(bob, (g) => {
+  // dead: Bob's Level 1 respawn brings him back once; dying again he has none left and watches the host; the host
+  // dies, comes back once, dies again: the squad is wiped, results on both pages, Play Again
+  const kill = (p) => G(p, (g) => {
     g.life.down('Test');
     g.life.execute('Test');
   });
+  await kill(bob);
+  const bobAgain = await until(bob, (g) => (g.life.state === 'Dead' && g.life.respawning ? g.life.respawning.source : null), null, 8);
+  check('Bob dies on Level 1: the stage respawn the floor gave him back brings him back (NOT YET.)', bobAgain === 'stage', bobAgain);
+  await until(bob, (g) => g.life.state === 'Alive', null, 10);
+  await kill(bob);
   const watching = await until(bob, (g, dev, id) => (g.coop.runNet.spectating && g.coop.runNet.spectating.id === id
     ? g.coop.runNet.hudName.textContent : null), ids.host, 10);
-  check('Bob dies and spectates the host (camera in their eyes, the HUD says who)', !!watching && /Hana/.test(watching), watching);
+  check('Bob dies again, out of respawns: he spectates the host (camera in their eyes, the HUD says who)', !!watching &&
+    /Hana/.test(watching), watching);
   const going = await G(host, (g) => ({ phase: g.phase, verdict: g.match.verdict() }));
   check('the run goes on while the host is alive', going.phase === 'InRun' && going.verdict === 'Continue', going);
-  await G(host, (g) => {
-    g.life.down('Test');
-    g.life.execute('Test');
-  });
+  await kill(host);
+  const hostBack = await until(host, (g) => (g.life.respawning ? { phase: g.phase, verdict: g.match.verdict() } : null), null, 8);
+  check('the host dies: their respawn keeps the run going (nobody playing, but a respawn under way)', !!hostBack &&
+    hostBack.phase === 'InRun' && hostBack.verdict === 'Continue', hostBack);
+  await until(host, (g) => g.life.state === 'Alive', null, 10);
+  await kill(host);
   const results = [];
   for (const p of [host, bob]) {
     results.push(await until(p, (g) => (g.phase === 'Results' && g.match.summary ? { outcome: g.match.summary.outcome,

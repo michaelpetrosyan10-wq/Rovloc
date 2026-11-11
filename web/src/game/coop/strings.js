@@ -2,7 +2,7 @@
 // HUD, spectating, the room's messages). C(key, ...args) formats like the game's S() and falls back to it, so the
 // squad lines the Roblox game already had (Downed.*, Spectate.*, Revive.*, Airlock.*) are used as they are.
 
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 
 const COOP_STRINGS = {
   'Title.PlaySolo': 'PLAY SOLO',

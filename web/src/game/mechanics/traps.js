@@ -19,7 +19,7 @@
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { cfMatrix, cfPos, clamp01, deg, horizontalDistance, lerp, rad, smoothstep } from '../util.js';
 
 const SNAP_SECONDS = 0.07;

@@ -22,14 +22,15 @@
 // not hold it), LEDGE_DELAY after the last one left (ledgeReady), the Creature is taken back (a busy one is asked for
 // again at the tick rate), put on the ledge the squad jumped from (revealPose: on the edge, facing out over them),
 // shown, and turned to stare at the jumper nearest under it (stareTarget): the look-back camera of everyone under a
-// canopy finds it there. It stays there, held, until the run ends.
+// canopy finds it there. It stays there, held, until the roof is done.
 //
-// Escapes. A jumper escapes the moment they are down below (or set down by parachute.forceLand), and their landing
-// hold ends at once (parachute.releaseHold): the escape counts at the touchdown and the results follow. Nobody jumps
-// without a pack: parachute.js buckles a spare one onto anyone who leaves the roof without one. Anyone who stays on the
-// roof keeps playing: the Creature hunts them until they jump, bleed out or are caught. Co-op: this runs on the host;
-// a client's page counts its own player's landing (coop/run.js), and a teammate's jump is read from their root leaving
-// the roof (offRoof, the rule parachute.js judges a jump by).
+// The touchdown. A jumper is done with the roof the moment they are down below (or set down by parachute.forceLand),
+// and their landing hold ends at once (parachute.releaseHold). Alone the roof is done then and the run moves on to the
+// next stage; in a squad once every participant still playing has landed (a Downed or dead one does not hold it).
+// Nobody jumps without a pack: parachute.js buckles a spare one onto anyone who leaves the roof without one. Anyone
+// who stays on the roof keeps playing: the Creature hunts them until they jump, bleed out or are caught. Co-op: this
+// runs on the host; a client's page tells the host its own player's landing (coop/run.js), and a teammate's jump is
+// read from their root leaving the roof (offRoof, the rule parachute.js judges a jump by).
 //
 // Deactivate and endRun cancel everything scheduled and let a held Creature go (Dormant).
 
@@ -374,13 +375,25 @@ export class Level3 {
 
   // ---------------------------------------------------------------------------------------------------- escapes
 
-  /** This page's player down below: the escape counts at the touchdown and the landing hold ends at once. */
+  /**
+   * The roof is done at the touchdown: alone this page's landing moves the run on (the next stage) and the landing
+   * hold ends at once; in a squad (on the host) once every participant still playing is down below.
+   */
   _noteLanding() {
-    const p = this.game.parachute;
-    if (p.state !== 'Landed' || this.escaped) return;
-    this.escaped = true;
-    this.game.match.markEscaped();
-    p.releaseHold();
+    const g = this.game;
+    const p = g.parachute;
+    const coop = g.coop && g.coop.active ? g.coop : null;
+    if (p.state === 'Landed' && !this.escaped) {
+      this.escaped = true;
+      p.releaseHold();
+      g.stats.increment('FloorsCleared');
+      if (coop) coop.runNet.localLanded();
+      else {
+        g.advance();
+        return;
+      }
+    }
+    if (coop && coop.runNet.squadLanded()) coop.runNet.stageDone(LEVEL);
   }
 
   // ---------------------------------------------------------------------------------------------------- lifecycle

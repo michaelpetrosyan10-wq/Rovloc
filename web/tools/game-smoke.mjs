@@ -3,7 +3,8 @@
 //   node tools/game-smoke.mjs [--html <page>] [--shots <dir>] [--no-build]
 //
 // Builds the game test page (tools/game-build.mjs, unless --html names one), opens it with ?dev and plays:
-//   title -> walkthrough -> lobby -> onto a ready pad -> countdown -> deploy -> Level 0: walk onto a bear trap ->
+//   title -> walkthrough -> lobby -> onto a ready pad -> countdown -> deploy -> the Back Lot's stand-in (its name and
+//   the honest line; Skip) -> Level 0: walk onto a bear trap ->
 //   look down and pry free -> walk into the stairwell airlock -> it seals -> Level 1 starts;
 // then each floor's signature moment:
 //   Level 1 the classroom scare (walking into Classroom 108), the gate slamming, and the bypass vent (kick the grate:
@@ -12,7 +13,11 @@
 //   stepping out);
 //   then, by the dev level skip with the Creature told to ignore the player (so a hunt cannot end the run before every
 //   moment is checked): Level 2 the Auditorium (its exit open from the start, the Creature held at its start), Level 3
-//   the roof (the door smash, the jump, the canopy, the Creature on the ledge, the landing, ESCAPED, the results).
+//   the roof (the door smash, the jump, the canopy, the Creature on the ledge, the landing: the roof done within one
+//   roof check); then every stage still on the stand-in (City1_Rooftops held to its own end, City2_Airport, Runway and
+//   Bahamas skipped, each its card or name), ESCAPED and the chapter strip 8 / 8 on the results. Play Again, and the
+//   same on Nightmare: the Back Lot, the four school levels (one respawn for the run), the roof's jump, the stand-ins,
+//   the results. The stages still on the stand-in are printed at the end.
 // Every step asserts the game's state; each moment is screenshotted into the shots directory (default
 // build/cache/game-shots). Headless WebGL is SwiftShader (slow), so the game clock is fast-forwarded between shots by
 // stepping the engine loop with rendering skipped. Exit code 1 on any failure.
@@ -138,6 +143,49 @@ const walk = async (seconds, key = 'KeyW') => {
   await tab.keyboard.up(key);
 };
 
+/**
+ * The descent stepped in the page one frame at a time (no real frames in between) up to the touchdown (at most `limit`
+ * seconds), then until the run's stage changes or one roof check (ServerTickHz) has passed: the stage then and how
+ * long after the touchdown it changed.
+ */
+const landing = (limit) => tab.evaluate(({ tick, max }) => {
+  const e = window.__rovloc.engine;
+  const g = window.__rovlocGame.game;
+  const loop = e.loop;
+  loop.stop();
+  const render = e.renderer.render;
+  e.renderer.render = () => {};
+  let changedAt = null;
+  const off = g.stageActivated.connect(() => {
+    if (changedAt === null) changedAt = g.env.now();
+  });
+  try {
+    for (let i = 0; i < max * 30 && g.parachute.state !== 'Landed'; i++) loop._run(1 / 30, 1 / 30);
+    const landedAt = g.parachute.landedAt;
+    while (g.parachute.state === 'Landed' && changedAt === null && g.env.now() - landedAt < tick) loop._run(1 / 30, 1 / 30);
+    return { chute: g.parachute.state, stage: g.stage, outcome: g.match.outcome, lock: g.controlLock(),
+      doneAfter: changedAt === null || landedAt === null ? null : changedAt - landedAt };
+  } finally {
+    off();
+    e.renderer.render = render;
+    loop.start();
+  }
+}, { tick: 1 / GameConfig.ServerTickHz, max: limit });
+
+/** Skips each of `stages` in turn (Skip on its stand-in), checking its card text where `cards` names one. */
+const skipStandIns = async (stages, cards) => {
+  const seen = [];
+  for (const stage of stages) {
+    const at = await G((g) => ({ stage: g.stage, standIn: g.standIn.stage(), title: g.standIn.title.textContent }));
+    seen.push(at);
+    if (at.stage !== stage || at.standIn !== stage || (cards[stage] && at.title !== cards[stage])) return { ok: false, seen };
+    await tab.keyboard.press('Enter');
+    await ff(2.2);
+  }
+  return { ok: true, seen };
+};
+
+let standIns = null;
 const shotsTaken = [];
 try {
   // a pinned run seed: the plan (which traps, where) is the same every smoke run
@@ -179,9 +227,19 @@ try {
   check('ready pad starts the countdown', s.phase === 'Countdown' && s.ready, s);
   shotsTaken.push(await shot('04-countdown.png'));
   await ff(9);
+  await ff(1.5);
+  s = await G((g) => ({ phase: g.phase, stage: g.stage, level: g.level, standIn: g.standIn.stage(), lock: g.controlLock(),
+    title: g.standIn.title.textContent, line: g.standIn.line.textContent, lives: g.life.lives }));
+  check('deployed: the run starts on its first stage, the Back Lot, on the stand-in (its name, the honest line, held)',
+    s.phase === 'InRun' && s.stage === 'BackLot' && s.level === null && s.standIn === 'BackLot' && s.lock === 'Cutscene' &&
+    /BACK LOT/.test(s.title) && /still being built/.test(s.line), s);
+  shotsTaken.push(await shot('05a-standin.png'));
+  await tab.keyboard.press('Enter');
   await ff(2.5);
   s = await state();
-  check('deployed into Level 0', s.phase === 'InRun' && s.level === 'Level0_Basement' && s.life === 'Alive', s);
+  const lives = await G((g) => g.life.lives);
+  check('Skip: on into Level 0 (Standard: one stage respawn, the get-up unused)', s.phase === 'InRun' &&
+    s.level === 'Level0_Basement' && s.life === 'Alive' && lives.stage === 1 && !lives.getUpUsed, { ...s, lives });
   await G((g) => g.env.setFlashlight(true));
   shotsTaken.push(await shot('05-level0.png'));
 
@@ -401,33 +459,69 @@ try {
   shotsTaken.push(await shot('19-l3-ledge.png'));
   // the rest of the descent stepped in the page one frame at a time (no real frames in between) up to the touchdown, then
   // one roof check (the roof's checks run at ServerTickHz, as on Roblox: Roof.spec times the escape within that)
-  s = await tab.evaluate(({ tick, limit }) => {
-    const e = window.__rovloc.engine;
-    const g = window.__rovlocGame.game;
-    const loop = e.loop;
-    loop.stop();
-    const render = e.renderer.render;
-    e.renderer.render = () => {};
-    try {
-      for (let i = 0; i < limit * 30 && g.parachute.state !== 'Landed'; i++) loop._run(1 / 30, 1 / 30);
-      const landedAt = g.parachute.landedAt;
-      while (g.parachute.state === 'Landed' && g.match.outcome === 'Pending' && g.env.now() - landedAt < tick) {
-        loop._run(1 / 30, 1 / 30);
-      }
-      return { chute: g.parachute.state, outcome: g.match.outcome, lock: g.controlLock(),
-        escapedAfter: g.match.escapedAt === null || landedAt === null ? null : g.match.escapedAt - landedAt };
-    } finally {
-      e.renderer.render = render;
-      loop.start();
-    }
-  }, { tick: 1 / GameConfig.ServerTickHz, limit: 10 });
-  check('landed below: ESCAPED at the touchdown (within one roof check), the landing hold released', s.chute === 'Landed' &&
-    s.outcome === 'Escaped' && s.escapedAfter !== null && s.escapedAfter >= 0 &&
-    s.escapedAfter <= 1 / GameConfig.ServerTickHz + 1e-6 && s.lock === 'None', s);
-  await ff(3);
-  s = await G((g) => ({ phase: g.phase, showing: g.results.showing }));
-  check('the results screen', s.phase === 'Results' && s.showing, s);
-  shotsTaken.push(await shot('20-results.png'));
+  s = await landing(10);
+  check('landed below: the roof done at the touchdown (within one roof check), on to the next stage; the landing hold ' +
+    'released', s.chute === 'Landed' && s.stage === 'City1_Rooftops' && s.doneAfter !== null && s.doneAfter >= 0 &&
+    s.doneAfter <= 1 / GameConfig.ServerTickHz + 1e-6 && s.lock !== 'Parachute' && s.outcome === 'Pending', s);
+  // the stages still to be built: each its stand-in (its card, the honest line), the first one held to its end
+  await ff(0.5);
+  s = await G((g) => ({ stage: g.stage, standIn: g.standIn.stage(), title: g.standIn.title.textContent, lock: g.controlLock() }));
+  check('City1_Rooftops: the stand-in shows its card (PART TWO · THE CITY · ROOFTOPS), the controls held', s.stage === 'City1_Rooftops' &&
+    s.standIn === 'City1_Rooftops' && s.title === 'PART TWO · THE CITY · ROOFTOPS' && s.lock === 'Cutscene', s);
+  shotsTaken.push(await shot('20-standin-city1.png'));
+  await ff(6.5);
+  s = await G((g) => ({ stage: g.stage, title: g.standIn.title.textContent }));
+  check('the stand-in holds, fades and moves on by itself: City2_Airport (THE CITY · AIRPORT)', s.stage === 'City2_Airport' &&
+    s.title === 'THE CITY · AIRPORT', s);
+  s = await skipStandIns(['City2_Airport', 'Runway', 'Bahamas'], { Runway: 'WHEELS UP', Bahamas: 'THE BAHAMAS' });
+  check('Skip goes on through the Runway (WHEELS UP) and the Bahamas (no card: its name) to the results', s.ok, s);
+  await ff(1.5);
+  s = await G((g) => ({ phase: g.phase, showing: g.results.showing, title: g.results.title.textContent,
+    chapters: g.results.chapters.textContent, outcome: g.match.summary && g.match.summary.outcome }));
+  check('after the last stage the run ends: the ESCAPED results, the chapter strip 8 / 8', s.phase === 'Results' && s.showing &&
+    s.outcome === 'Escaped' && /ESCAPED/.test(s.title) && s.chapters === 'CHAPTER 8 / 8', s);
+  shotsTaken.push(await shot('21-results.png'));
+
+  // ------------------------------------------------------------------------------------------- Nightmare: every stage again
+  await G((g) => g.match.pressPlayAgain());
+  await ff(2);
+  s = await G((g) => ({ phase: g.phase }));
+  check('Play Again: back in the lobby', s.phase === 'Lobby' || s.phase === 'Countdown', s);
+  await G((g, dev) => {
+    dev.deploy('Nightmare');
+  });
+  await ff(2);
+  s = await G((g) => ({ stage: g.stage, difficulty: g.run && g.run.difficulty, standIn: g.standIn.stage() }));
+  check('Nightmare: the run starts on the Back Lot\'s stand-in', s.stage === 'BackLot' && s.difficulty === 'Nightmare' &&
+    s.standIn === 'BackLot', s);
+  await tab.keyboard.press('Enter');
+  await ff(2.5);
+  await G((g) => g.creature.devCommand('ignoreme'));
+  s = await G((g) => ({ stage: g.stage, lives: g.life.lives }));
+  check('Nightmare: Level 0 with no stage respawn and one for the run', s.stage === 'Level0_Basement' && s.lives.stage === 0 &&
+    s.lives.run === 1, s);
+  for (const level of ['Level1_Hallways', 'Level2_Auditorium', 'Level3_Roof']) {
+    await G((g, dev, l) => dev.gotoStage(l), level);
+    await ff(1);
+    s = await G((g) => ({ stage: g.stage, level: g.level, phase: g.phase, lives: g.life.lives, life: g.life.state }));
+    check(`Nightmare: ${level} (still one respawn for the run)`, s.stage === level && s.level === level && s.phase === 'InRun' &&
+      s.life === 'Alive' && s.lives.stage === 0 && s.lives.run === 1, s);
+  }
+  await G((g, dev) => dev.roof('smash'));
+  await ff(6.5);
+  await G((g, dev) => dev.signature('Level3_Roof'));
+  s = await landing(15);
+  check('Nightmare: the jump and the landing move the run on to City1_Rooftops', s.chute === 'Landed' &&
+    s.stage === 'City1_Rooftops', s);
+  s = await skipStandIns(['City1_Rooftops', 'City2_Airport', 'Runway', 'Bahamas'], {});
+  check('Nightmare: every stand-in skipped to the end', s.ok, s);
+  await ff(1.5);
+  s = await G((g) => ({ phase: g.phase, title: g.results.title.textContent, chapters: g.results.chapters.textContent,
+    difficulty: g.match.summary && g.match.summary.difficulty }));
+  check('Nightmare: the ESCAPED results, 8 / 8', s.phase === 'Results' && /ESCAPED/.test(s.title) &&
+    s.chapters === 'CHAPTER 8 / 8' && s.difficulty === 'Nightmare', s);
+  shotsTaken.push(await shot('22-results-nightmare.png'));
+  standIns = await G((g) => g.stages.standIns());
 } catch (err) {
   check('smoke run completed', false, String(err && err.stack ? err.stack : err));
   try {
@@ -438,6 +532,8 @@ try {
 const fatal = logs.filter((l) => /pageerror|\[game\]|TypeError|ReferenceError/.test(l));
 check('no page errors or game errors in the console', fatal.length === 0, fatal.slice(0, 8));
 if (logs.length) console.log(`console (${logs.length}):\n${logs.slice(0, 30).join('\n')}`);
+// the stages a release build may not have: still played by the stand-in (data-test --release fails on any)
+console.log(`stages on the stand-in: ${standIns ? standIns.join(', ') || 'none' : '(not reached)'}`);
 console.log(`screenshots in ${shots}:\n${shotsTaken.map((f) => `  ${path.basename(f)}`).join('\n')}`);
 await browser.close();
 console.log(failures.length ? `\n${failures.length} FAILED: ${failures.join(', ')}` : '\nall checks passed');

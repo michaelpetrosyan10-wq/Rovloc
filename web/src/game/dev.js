@@ -4,10 +4,12 @@
 //
 //   skipTitle()            past the title screen (the walkthrough marked done) into the lobby
 //   deploy(difficulty?)    straight into a run
-//   gotoLevel(level)       the level skip: enter the level, stand at its first spawn slot
+//   gotoStage(stage)       go to a stage: enter it (a level: at its first spawn slot; a stand-in: its card)
+//   gotoLevel(level)       the level skip (gotoStage for a level of the school)
+//   respawns(n)            set your respawns left: n stage respawns, none from the run or the syringe
 //   snapTrap()             spring the nearest armed trap on yourself          seal()  seal the current airlock now
 //   seed(n)                pin the next runs' seed (null: random)          completeObjective(level?) the floor done at once
-//   beat(kind?)            a basement beat now                                 escape() count yourself escaped
+//   beat(kind?)            a basement beat now
 //   roof(smash|ledge)      the roof door sequence now, or the Creature on the ledge once someone has jumped
 //   signature(level)       the level's signature moment: the basement a trap, the Hallways the classroom scare, the
 //                          roof the jump (a pack on, off the gap, the cord pulled)
@@ -40,17 +42,33 @@ export class Dev {
     return g.match.deploy(difficulty || g.lobby.difficulty());
   }
 
-  /** The level skip: the level entered (and activated), the player at its first spawn slot. */
-  gotoLevel(level) {
+  /** Go to a stage: entered (and activated); on a level of the school the player stands at its first spawn slot. */
+  gotoStage(stage) {
     const g = this.game;
-    if (!g.run) return false;
+    if (!g.run || !g.stages.get(stage)) return false;
     this._mark();
     if (g.traps.caught) g.traps._free(g.traps.caught, 'Release');
     if (g.vents.inVent()) g.vents.leave();
     g.lockers.release();
-    g.match.spawnAt(level, 0);
-    g.traps.noteTeleport();
-    g.enterLevel(level);
+    if (g.stages.isLevel(stage)) {
+      g.match.spawnAt(stage, 0);
+      g.traps.noteTeleport();
+    }
+    g.enterStage(stage);
+    return true;
+  }
+
+  /** The level skip (a level of the school). */
+  gotoLevel(level) {
+    return this.game.stages.isLevel(level) && this.gotoStage(level);
+  }
+
+  /** Sets this player's respawns left: `n` stage respawns, none from the run or the syringe (alone, or the host). */
+  respawns(n) {
+    const life = this.game.life;
+    if (!this.game.run || !life.authority() || !Number.isInteger(n) || n < 0) return false;
+    this._mark();
+    life.setLives({ ...life.lives, stage: n, run: 0, syringe: 0 });
     return true;
   }
 
@@ -91,11 +109,6 @@ export class Dev {
 
   beat(kind) {
     return this.game.level0.tryBeat(this.game.env.now(), kind || null);
-  }
-
-  escape() {
-    this._mark();
-    return this.game.match.markEscaped();
   }
 
   /**

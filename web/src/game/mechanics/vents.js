@@ -21,7 +21,7 @@
 
 import * as THREE from 'three';
 import { GameConfig, perkHoldSeconds } from '../config.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { approach, cfMatrix, cfPos, clamp, smoothstep } from '../util.js';
 import { el } from '../ui/style.js';
 

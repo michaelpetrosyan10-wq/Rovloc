@@ -1,8 +1,9 @@
-// Every player-facing string, keyed (Shared/Strings.luau, value for value). UI code calls S(key, ...args) and never
-// embeds text. A few lines name a Roblox key the web binds differently (the flask's throw on a gamepad; the lobby's
-// ready key is the Kick action's R / Y) or speaks to a squad where the web plays alone; WEB_OVERRIDES restates those.
+// base.js: the game's player-facing strings that came with the four-level school, keyed (Shared/Strings.luau, value
+// for value), and WEB_OVERRIDES: the lines whose Roblox wording names a key the web binds differently (the flask's throw
+// on a gamepad; the lobby's ready key is the Kick action's R / Y) or speaks to a squad where the web plays alone.
+// strings/index.js serves them; a package's own lines live in a file of its own beside this one (strings/run.js).
 
-const STRINGS = {
+export const STRINGS = {
   // Boot / loading
   "Boot.Generating": "THE SCHOOL IS WAKING UP",
   "Boot.Receiving": "Receiving the building... %d%%",
@@ -72,7 +73,7 @@ const STRINGS = {
   "Perk.LithiumCell": "Heavy-Duty Lithium Cell",
   "Perk.LithiumCell.Desc": "+50% flashlight battery capacity.",
   "Perk.AdrenalineSyringe": "Adrenaline Syringe",
-  "Perk.AdrenalineSyringe.Desc": "One use: revive yourself when downed, or refill your stamina.",
+  "Perk.AdrenalineSyringe.Desc": "One more chance.",
   // Prompts
   "Prompt.Unscrew": "Unscrew Quietly",
   "Prompt.Kick": "Kick Open",
@@ -130,11 +131,11 @@ const STRINGS = {
   "Input.Flashlight": "LIGHT",
   "Input.Throw": "THROW",
   "Input.HoldBreath": "HOLD BREATH",
-  "Input.Syringe": "SYRINGE",
   "Input.Ripcord": "PULL CORD",
   "Input.SpectatePrev": "<",
   "Input.SpectateNext": ">",
   "Input.Menu": "MENU",
+  "Input.Jump": "JUMP",
   "Input.Objective": "GOAL",
   "Input.Mouse.MouseButton1": "LMB",
   "Input.Mouse.MouseButton2": "RMB",
@@ -145,7 +146,6 @@ const STRINGS = {
   "Hud.Stamina": "STAMINA",
   "Hud.Bleedout": "BLEEDING OUT",
   "Hud.Downed": "You are down. Crawl to safety.",
-  "Hud.SelfRevive": "Use your syringe to get back up.",
   "Hud.Trapped": "Your leg is caught. Look down and pry the jaws open.",
   "Hud.HoldBreath": "It's right outside. Hold your breath.",
   "Hud.HoldBreathNow": "HOLD YOUR BREATH",
@@ -161,7 +161,6 @@ const STRINGS = {
   "Hud.LockerBlocked": "Something is blocking the door.",
   "Hud.Ripcord": "Pull the cord!",
   "Hud.BatteryEmpty": "Your flashlight is dead.",
-  "Hud.SyringeUsed": "Adrenaline floods your veins.",
   "Hud.Spectating": "Spectating %s",
   "Hud.NoOneToSpectate": "No survivors to watch.",
   "Hud.Straggler": "The door seals in %d...",
@@ -490,7 +489,7 @@ const STRINGS = {
   "Dev.Panel.Creature": "%s | %s | target %s",};
 
 /** Lines whose Roblox wording names a binding the web changed (see the header). */
-const WEB_OVERRIDES = {
+export const WEB_OVERRIDES = {
   "Hud.FlaskThrow.Gamepad": "Hold RT to aim the flask, release to throw.",
   "Results.PlayAgain": "PLAY AGAIN",
   "Results.Lobby": "BACK TO THE BOILER ROOM",
@@ -508,43 +507,14 @@ const WEB_OVERRIDES = {
   "Lobby.DifficultyTitle": "BOILER TERMINAL: DIFFICULTY",
   "Lobby.Vote": "VOTE",
   "Lobby.Voted": "VOTED",
-  "Downed.UseSyringe": "USE SYRINGE",
   "Downed.BleedingOut": "Bleeding out in %d",
   // played alone: the squad's lines restated for one player (the stairwell seals as soon as you are in it)
   "Tutorial.Teamwork.Title": "GOING DOWN",
-  "Tutorial.Teamwork.Body": "The first time something gets you in a run, you go down instead of dying. A Syringe from the loadout gets you back up before you bleed out; without one, the run is over. Every stairwell is a checkpoint: step inside and its fire doors seal behind you.",
-  "Tutorial.Art.Revive": "SYRINGE",
+  "Tutorial.Teamwork.Body": "The first time something gets you on a floor, you go down instead of dying, and once a floor you can get back up by yourself. Killed, you get one more chance on every floor (one for the whole night on Nightmare). Every stairwell is a checkpoint: step inside and its fire doors seal behind you.",
+  "Tutorial.Art.Revive": "GET UP",
   "Tutorial.Art.Seal": "CHECKPOINT",
   "Objective.Airlock.Wait": "Stay inside while the fire doors seal",
   "Hint.Airlock": "The stairwell is a checkpoint. Step inside and its fire doors seal behind you.",
   "Lobby.WaitingForSquad": "Ready up to go down (%d / %d ready)",
   "Results.Waiting": "Heading back down...",
 };
-
-/**
- * Formats a string by key (Strings.get): %d, %s, %.Nf, %02d and %% like Lua's string.format. Unknown keys return the
- * key itself so a missing string is visible but harmless.
- * @param {string} key
- * @param {...any} args
- * @returns {string}
- */
-export function S(key, ...args) {
-  const template = WEB_OVERRIDES[key] ?? STRINGS[key];
-  if (template === undefined) return key;
-  if (args.length === 0) return template.replace(/%%/g, '%');
-  let i = 0;
-  return template.replace(/%(%|0?\d*d|s|\.\d+f|d)/g, (m) => {
-    if (m === '%%') return '%';
-    const v = args[i++];
-    if (m === '%s') return String(v);
-    if (m.endsWith('f')) return Number(v).toFixed(Number(m.slice(2, -1)));
-    const n = Math.trunc(Number(v) || 0);
-    const pad = m.match(/^%0(\d+)d$/);
-    return pad ? String(n).padStart(Number(pad[1]), '0') : String(n);
-  });
-}
-
-/** Whether a key exists. */
-export function hasString(key) {
-  return key in WEB_OVERRIDES || key in STRINGS;
-}

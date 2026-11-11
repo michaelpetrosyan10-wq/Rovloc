@@ -73,7 +73,15 @@ export class Input {
     this.enabled = true;
     /** Text entry (a focused input element) suspends everything. */
     this.typing = false;
+    /** A touch button's label: its Strings key resolved (setLabels; the key itself until the game names a resolver) */
+    this.labelOf = (key) => key;
     this._bind();
+  }
+
+  /** Resolves the touch buttons' Strings keys with `fn` (the game's strings) and redraws them. */
+  setLabels(fn) {
+    this.labelOf = fn;
+    this._renderTouch();
   }
 
   // ------------------------------------------------------------------ contexts
@@ -488,7 +496,7 @@ export class Input {
       if (!b.touch || !b.contexts.includes(this.context)) continue;
       const btn = document.createElement('button');
       btn.className = 'rv-round';
-      btn.textContent = b.touch.label;
+      btn.textContent = this.labelOf(b.touch.label);
       const [sx, ox, sy, oy] = b.touch.position;
       const size = b.touch.size;
       btn.style.width = btn.style.height = `${size}px`;

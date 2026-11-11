@@ -166,63 +166,127 @@ export const NoiseConfig = Object.freeze({
 });
 
 /**
- * InputConfig.luau with web key codes (KeyboardEvent.code / 'Mouse0') and standard-gamepad button indices.
- * Touch buttons keep their Roblox UDim2 positions: [scaleX, offsetX, scaleY, offsetY] and size in px.
- * LeftControl is not bound on the web: Ctrl+W (crouch while walking) would close the browser tab.
+ * InputConfig.luau, read from the world (world.json meta.inputConfig: every action, keyed as there) at the engine's
+ * start (installInputBindings), with web key codes (KeyboardEvent.code / 'Mouse0') and standard-gamepad button indices.
+ * Touch buttons keep their Roblox UDim2 positions: [scaleX, offsetX, scaleY, offsetY] and size in px; their labels
+ * stay Strings keys (the touch layer resolves them). What the web does beyond InputConfig:
+ *   - LeftControl is not bound: Ctrl+W (crouch while walking) would close the browser tab.
+ *   - Menu also answers Escape and the gamepad's Start; Jump is the default character control (Roblox PlayerModule).
+ *   - Interact is live while Downed too: the get-up's hold (the GetUp prompt reads its key itself on Roblox).
+ *   - CROUCH's touch button sits clear above JUMP (their circles overlapped at -150 / -90); the Radar action's button
+ *     reads GOAL while it drives the objective nudge (WebTouch).
+ *   - PendingActions: InputConfig's actions whose feature the website does not have yet are not bound at all (no key,
+ *     no touch button, never live); the package that builds one takes it off the list.
+ * data-test holds the bound table to the export's (every action, its keys, buttons, kind and contexts).
  */
-export const InputBindings = Object.freeze({
-  Sprint: { kind: 'Hold', keyboard: ['ShiftLeft'], gamepad: [10], touch: { label: 'RUN', position: [1, -170, 1, -230], size: 76 }, contexts: ['OnFoot', 'Vent'] },
-  // CROUCH sits clear above JUMP (their circles overlapped at -150 / -90)
-  Crouch: { kind: 'Toggle', keyboard: ['KeyC'], gamepad: [1], touch: { label: 'CROUCH', position: [1, -90, 1, -172], size: 76 }, contexts: ['OnFoot'] },
-  Flashlight: { kind: 'Tap', keyboard: ['KeyF'], gamepad: [12], touch: { label: 'LIGHT', position: [1, -90, 1, -310], size: 64 }, contexts: ['OnFoot', 'Vent', 'Downed', 'Trapped', 'Locker'] },
-  Interact: { kind: 'Hold', keyboard: ['KeyE'], gamepad: [2], touch: null, contexts: ['OnFoot', 'Vent', 'Trapped', 'Locker'] },
-  Kick: { kind: 'Tap', keyboard: ['KeyR'], gamepad: [3], touch: null, contexts: ['OnFoot', 'Vent'] },
-  Throw: { kind: 'Hold', keyboard: ['Mouse0'], gamepad: [7], touch: { label: 'THROW', position: [1, -250, 1, -150], size: 76 }, contexts: ['OnFoot', 'Vent'] },
-  HoldBreath: { kind: 'Hold', keyboard: ['Space'], gamepad: [0], touch: { label: 'HOLD BREATH', position: [1, -110, 1, -130], size: 110 }, contexts: ['Locker'] },
-  Syringe: { kind: 'Tap', keyboard: ['KeyG'], gamepad: [13], touch: { label: 'SYRINGE', position: [1, -170, 1, -310], size: 64 }, contexts: ['OnFoot', 'Downed', 'Vent'] },
-  Ripcord: { kind: 'Tap', keyboard: ['Space'], gamepad: [0], touch: { label: 'PULL CORD', position: [0.5, 0, 1, -140], size: 130 }, contexts: ['Parachute'] },
-  SpectatePrev: { kind: 'Tap', keyboard: ['KeyQ'], gamepad: [4], touch: { label: '<', position: [0, 70, 0.5, 0], size: 70 }, contexts: ['Spectator'] },
-  SpectateNext: { kind: 'Tap', keyboard: ['KeyE'], gamepad: [5], touch: { label: '>', position: [1, -70, 0.5, 0], size: 70 }, contexts: ['Spectator'] },
-  Menu: { kind: 'Tap', keyboard: ['KeyM', 'Escape'], gamepad: [8, 9], touch: { label: 'MENU', position: [0, 60, 0, 60], size: 56 }, contexts: ['Menu', 'OnFoot', 'Vent', 'Downed', 'Trapped', 'Locker', 'Spectator'] },
-  Objective: { kind: 'Tap', keyboard: ['Tab'], gamepad: [15], touch: { label: 'GOAL', position: [0, 60, 0, 124], size: 56 }, contexts: ['OnFoot', 'Vent'] },
-  // The default character controls (Roblox PlayerModule): live wherever no context action claims Space.
-  Jump: { kind: 'Hold', keyboard: ['Space'], gamepad: [0], touch: { label: 'JUMP', position: [1, -95, 1, -90], size: 70 }, contexts: ['OnFoot'] },
+export const PendingActions = Object.freeze(['LookBack', 'Fire', 'LowerGun', 'Steer', 'PullUp']);
+
+/** Roblox Enum.KeyCode / UserInputType names -> KeyboardEvent.code ('Mouse0': the left button). */
+const KEY_CODES = Object.freeze({
+  Space: 'Space', LeftShift: 'ShiftLeft', Tab: 'Tab', Return: 'Enter', Left: 'ArrowLeft', Right: 'ArrowRight',
+  Up: 'ArrowUp', Down: 'ArrowDown', MouseButton1: 'Mouse0',
 });
+/** Keys the web leaves unbound (see above). */
+const UNBOUND_KEYS = new Set(['LeftControl']);
+/** Roblox gamepad KeyCodes -> standard-mapping button indices (Thumbstick1 is the move stick, no button). */
+const PAD_BUTTONS = Object.freeze({
+  ButtonA: 0, ButtonB: 1, ButtonX: 2, ButtonY: 3, ButtonL1: 4, ButtonR1: 5, ButtonL2: 6, ButtonR2: 7, ButtonSelect: 8,
+  ButtonStart: 9, ButtonL3: 10, ButtonR3: 11, DPadUp: 12, DPadDown: 13, DPadLeft: 14, DPadRight: 15,
+});
+/** The web's additions to an exported action's keys, buttons and contexts. */
+const WEB_EXTRA = Object.freeze({
+  Menu: { keyboard: ['Escape'], gamepad: [9], contexts: [] },
+  Interact: { keyboard: [], gamepad: [], contexts: ['Downed'] },
+});
+/** The web's own touch placement and labels (Strings keys) of an exported action's button. */
+export const WebTouch = Object.freeze({
+  Crouch: { position: [1, -90, 1, -172] },
+  Radar: { label: 'Input.Objective' },
+});
+/** The actions the web adds (the default character controls). */
+const WEB_ACTIONS = Object.freeze({
+  Jump: { kind: 'Hold', keyboard: ['Space'], gamepad: [0], touch: { label: 'Input.Jump', position: [1, -95, 1, -90], size: 70 }, contexts: ['OnFoot'] },
+});
+
+/** One Roblox key name as a KeyboardEvent.code (letters and digits by rule, the rest by table), or null. */
+export function webKey(name) {
+  if (UNBOUND_KEYS.has(name)) return null;
+  if (KEY_CODES[name]) return KEY_CODES[name];
+  if (/^[A-Z]$/.test(name)) return `Key${name}`;
+  if (/^(Zero|One|Two|Three|Four|Five|Six|Seven|Eight|Nine)$/.test(name)) {
+    return `Digit${['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'].indexOf(name)}`;
+  }
+  return null;
+}
+
+/**
+ * The web's bindings for an exported InputConfig ({bindings: {Action: {kind, keyboard, gamepad, touch?, contexts}}}).
+ * @param {{bindings: Record<string, any>}} inputConfig
+ */
+export function inputBindingsFrom(inputConfig) {
+  const out = {};
+  const exported = (inputConfig && inputConfig.bindings) || {};
+  for (const action of Object.keys(exported).sort()) {
+    if (PendingActions.includes(action)) continue;
+    const b = exported[action];
+    const extra = WEB_EXTRA[action] || { keyboard: [], gamepad: [], contexts: [] };
+    const keyboard = [...(b.keyboard || []).map(webKey).filter(Boolean), ...extra.keyboard];
+    const gamepad = [...(b.gamepad || []).map((n) => PAD_BUTTONS[n]).filter((n) => n !== undefined), ...extra.gamepad];
+    const touch = b.touch ? { ...b.touch, ...(WebTouch[action] || {}) } : null;
+    out[action] = Object.freeze({ kind: b.kind, keyboard, gamepad, touch, contexts: [...(b.contexts || []), ...extra.contexts] });
+  }
+  for (const [action, b] of Object.entries(WEB_ACTIONS)) out[action] = Object.freeze(b);
+  return out;
+}
+
+/** The engine's bindings, filled from the world once at start (installInputBindings). */
+export const InputBindings = {};
+
+/** Fills InputBindings from the world's meta.inputConfig (the engine's constructor, before its Input exists). */
+export function installInputBindings(meta) {
+  for (const k of Object.keys(InputBindings)) delete InputBindings[k];
+  Object.assign(InputBindings, inputBindingsFrom(meta && meta.inputConfig));
+}
 
 /** Context priority, highest first (Enums.InputContext). OnFoot is the baseline. */
 export const InputContexts = Object.freeze(['Menu', 'Cutscene', 'Locker', 'Trapped', 'Downed', 'Vent', 'Parachute',
   'OnFoot', 'Spectator']);
 
-/** SettingsSchema.luau (labels are Strings keys) + the web's Quality entry, which the Roblox engine picked by itself. */
-export const SettingsList = Object.freeze([
-  { key: 'MouseSensitivity', kind: 'Number', label: 'Settings.MouseSensitivity', min: 0.2, max: 3, step: 0.05, default: 1 },
-  { key: 'GamepadSensitivity', kind: 'Number', label: 'Settings.GamepadSensitivity', min: 0.2, max: 3, step: 0.05, default: 1 },
-  { key: 'TouchSensitivity', kind: 'Number', label: 'Settings.TouchSensitivity', min: 0.2, max: 3, step: 0.05, default: 1 },
-  { key: 'InvertY', kind: 'Bool', label: 'Settings.InvertY', default: false },
-  { key: 'BaseFov', kind: 'Number', label: 'Settings.BaseFov', min: 60, max: 90, step: 1, default: 70 },
-  { key: 'MotionScale', kind: 'Number', label: 'Settings.MotionScale', min: 0, max: 1, step: 0.05, default: 1 },
-  { key: 'FlashScale', kind: 'Number', label: 'Settings.FlashScale', min: 0, max: 1, step: 0.05, default: 1 },
-  { key: 'MasterVolume', kind: 'Number', label: 'Settings.MasterVolume', min: 0, max: 1, step: 0.05, default: 1 },
-  { key: 'AmbienceVolume', kind: 'Number', label: 'Settings.AmbienceVolume', min: 0, max: 1, step: 0.05, default: 0.85 },
-  { key: 'WorldVolume', kind: 'Number', label: 'Settings.WorldVolume', min: 0, max: 1, step: 0.05, default: 1 },
-  { key: 'MonsterVolume', kind: 'Number', label: 'Settings.MonsterVolume', min: 0, max: 1, step: 0.05, default: 1 },
-  { key: 'PlayerVolume', kind: 'Number', label: 'Settings.PlayerVolume', min: 0, max: 1, step: 0.05, default: 0.9 },
-  { key: 'UIVolume', kind: 'Number', label: 'Settings.UIVolume', min: 0, max: 1, step: 0.05, default: 0.8 },
-  { key: 'Captions', kind: 'Bool', label: 'Settings.Captions', default: false },
-  { key: 'ShowHints', kind: 'Bool', label: 'Settings.ShowHints', default: true },
-  // How much this page renders, best first (quality.js tiers; GraphicsConfig on Roblox). Visual only.
-  { key: 'Graphics', kind: 'Choice', label: 'Settings.Graphics', options: ['Max', 'High', 'Medium', 'Low', 'Potato'], default: 'Max' },
-  // Max+: Max rendered at 150 % and scaled down (supersampling); only shown and only used at Max
+/**
+ * SettingsSchema.luau, read from the world (meta.settingsSchema: every setting, keyed as there; a Choice's default is
+ * its option's 1-based index there and its option here) at the engine's start (installSettings), plus the web's
+ * Supersample (Max+: Max rendered at 150 % and scaled down; only shown and only used at Max). PendingSettings: the
+ * settings whose feature the website does not have yet keep their stored value but are never shown; the package that
+ * builds one takes it off the list.
+ */
+export const PendingSettings = Object.freeze(['Brightness', 'LeapAssist', 'MonsterVoice', 'SayNames', 'VoiceVolume',
+  'ReplayCutscenes']);
+
+const WEB_SETTINGS = Object.freeze([
   { key: 'Supersample', kind: 'Bool', label: 'Settings.Supersample', default: false },
-  { key: 'TutorialDone', kind: 'Bool', label: 'Settings.TutorialDone', hidden: true, default: false },
-  { key: 'HintBearTrap', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
-  { key: 'HintVentGrate', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
-  { key: 'HintFlask', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
-  { key: 'HintLocker', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
-  { key: 'HintDownedTeammate', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
-  { key: 'HintLowBattery', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
-  { key: 'HintAirlock', kind: 'Bool', label: 'Settings.HintSeen', hidden: true, default: false },
 ]);
+
+/** The web's settings list for an exported SettingsSchema ({list: [{key, kind, label, default, ...}]}). */
+export function settingsFrom(schema) {
+  const out = [];
+  for (const s of (schema && Array.isArray(schema.list) ? schema.list : [])) {
+    const row = { ...s };
+    if (s.kind === 'Choice') row.default = s.options[(s.default || 1) - 1];
+    if (PendingSettings.includes(s.key)) row.hidden = true;
+    out.push(Object.freeze(row));
+  }
+  for (const s of WEB_SETTINGS) out.push(s);
+  return out;
+}
+
+/** The engine's settings, filled from the world once at start (installSettings). */
+export const SettingsList = [];
+
+/** Fills SettingsList from the world's meta.settingsSchema (the engine's constructor, before its Settings exist). */
+export function installSettings(meta) {
+  SettingsList.length = 0;
+  SettingsList.push(...settingsFrom(meta && meta.settingsSchema));
+}
 
 /**
  * WorldConfig.luau (the parts the engine needs; the full layout, the footprint included, comes with the world data in

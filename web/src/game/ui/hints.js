@@ -1,7 +1,8 @@
 // hints.js: one short line the first time something new turns up (FirstTimeHints).
 //
-// TutorialConfig.Hints, highest priority first: the stairwell airlock (near its vestibule, or its countdown), a downed
-// teammate (never solo), the first bear trap, flask, vent grate or locker within the hint's radius on the current
+// The world's first-time hints (meta.tutorialConfig.hints, keyed as there; WEB_HINTS: the ones this card shows, those
+// whose moment the website has; the get-up's is the downed screen's, ui/lives.js), highest priority first: the
+// stairwell airlock (near its vestibule, or its countdown), a downed teammate (never solo), the first bear trap, flask, vent grate or locker within the hint's radius on the current
 // level, a low battery with the light on. Each shows once ever: its hidden setting (Hint<Id>) is set the moment it
 // shows and saved with the settings. After the airlock come the floor objective's stations and locks
 // (FloorObjectives.hintSpots: a Hint.Obj.<what> line the first time one is within HintRadius of the eye with a clear
@@ -13,7 +14,7 @@
 
 import * as THREE from 'three';
 import { TutorialConfig } from '../config.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { cfPos } from '../util.js';
 import { glyphFor } from './nav.js';
 import { ObjectiveTuning } from '../objectives/config.js';
@@ -30,6 +31,10 @@ const BLOCKED_LOCKS = new Set(['Cutscene', 'Jumpscare']);
 const GRATE_SHUT = new Set(['Closed', 'Unscrewing', 'Locked']);
 const AIRLOCK_HINT_RADIUS = 22;
 const OBJECTIVE_HINTS = 'ObjectiveHintsSeen';
+/** The hints this card shows (the rest have no moment on the website yet, or are shown elsewhere). */
+const WEB_HINTS = new Set(['Airlock', 'DownedTeammate', 'BearTrap', 'Flask', 'VentGrate', 'Locker', 'LowBattery']);
+/** A Luau list as JSON carries it (an empty one arrives as {}). */
+const list = (v) => (Array.isArray(v) ? v : []);
 
 export class Hints {
   /** @param {import('../game.js').Game} game */
@@ -46,6 +51,11 @@ export class Hints {
     /** @type {Set<string>} */
     this.due = new Set();
     this.positions = new Map();
+    const tc = game.world.meta.tutorialConfig;
+    /** the hints, highest priority first ({id, text, inputs, setting, radius?}) */
+    this.list = list(tc.hints).filter((h) => WEB_HINTS.has(h.id)).map((h) => ({ ...h, inputs: list(h.inputs) }));
+    this.hintsSetting = tc.hintsSetting;
+    this.lowBattery = tc.lowBatteryFraction;
     for (const type of ['Locker', 'VentGrate']) {
       for (const e of game.world.entities(type)) this.positions.set(e.id, cfPos(e.pivot));
     }
@@ -65,13 +75,13 @@ export class Hints {
 
   _seen() {
     const out = {};
-    for (const h of TutorialConfig.Hints) out[h.id] = !!this.env.setting(h.setting);
+    for (const h of this.list) out[h.id] = !!this.env.setting(h.setting);
     return out;
   }
 
   _allowed() {
     const g = this.game;
-    return !!this.env.setting(TutorialConfig.HintsSetting) && g.phase === 'InRun' && g.life.state === 'Alive' &&
+    return !!this.env.setting(this.hintsSetting) && g.phase === 'InRun' && g.life.state === 'Alive' &&
       this.env.hudVisible() && !(g.onboarding && g.onboarding.busy()) && !BLOCKED_CONTEXTS.has(this.env.context()) &&
       !BLOCKED_LOCKS.has(g.controlLock()) && !g.creature.chasingPlayer() && this.env.panic() <= T.HintPanicMax;
   }
@@ -92,7 +102,7 @@ export class Hints {
     if (g.phase !== 'InRun' || g.life.state !== 'Alive' || !g.level) return;
     const level = g.level;
     const from = this.env.rootPosition(_from);
-    const radius = (id) => (TutorialConfig.Hints.find((h) => h.id === id) || {}).radius || 0;
+    const radius = (id) => (this.list.find((h) => h.id === id) || {}).radius || 0;
     // what the stairwell airlock does, told on the way in (alone, Waiting lasts one poll: the doors are already
     // sealing by the time a countdown hint could show, and it used to ride on into the next floor)
     if (!seen.Airlock && g.airlock.level === level && (g.airlock.phase === 'Waiting' ||
@@ -134,7 +144,7 @@ export class Hints {
     if (!seen.LowBattery) {
       const b = this.env.meters().battery;
       const f = b.max > 0 ? b.value / b.max : 0;
-      if (this.env.flashlightOn() && f > 0 && f <= TutorialConfig.LowBatteryFraction) this.due.add('LowBattery');
+      if (this.env.flashlightOn() && f > 0 && f <= this.lowBattery) this.due.add('LowBattery');
     }
   }
 
@@ -178,7 +188,7 @@ export class Hints {
     const seen = this._seen();
     if (this.clock - this.scannedAt >= SCAN) {
       this.scannedAt = this.clock;
-      if (TutorialConfig.Hints.some((h) => !seen[h.id])) this._scan(seen);
+      if (this.list.some((h) => !seen[h.id])) this._scan(seen);
       else this.due.clear();
       this.objectiveDue = this._scanObjective();
     }
@@ -191,7 +201,7 @@ export class Hints {
       }
     } else if (ok && this.clock - this.endedAt >= T.HintGap) {
       // the airlock first, then a station or lock of the floor objective seen for the first time, then the rest
-      let next = TutorialConfig.Hints.find((h) => this.due.has(h.id) && !seen[h.id]);
+      let next = this.list.find((h) => this.due.has(h.id) && !seen[h.id]);
       // (still a hint spot now: the step may have been done since the scan)
       const spots = this.game.floors && this.game.level ? this.game.floors.hintSpots(this.game.level) : [];
       if (this.objectiveDue && !spots.some((x) => x.key === this.objectiveDue)) this.objectiveDue = null;

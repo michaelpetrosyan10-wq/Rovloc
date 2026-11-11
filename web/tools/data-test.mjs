@@ -1,4 +1,4 @@
-// Round-trip test of the world data format: `node web/tools/data-test.mjs [buildDir]` (default web/build).
+// Round-trip test of the world data format: `node web/tools/data-test.mjs [buildDir] [--release]` (default web/build).
 //
 // 1. The codec on synthetic data: delta / triangle-delta coding at every element width, the sqrt light encoding.
 // 2. The baked world: decodeWorld(world.json, world.bin) against the bake's own pre-encoding samples
@@ -33,6 +33,11 @@
 //    parses and gives every rule module rows ({ name, fn, args, expect }, names unique, at least 12 per module); the
 //    run plan's spec v2 picks (meta.plan.batteries, meta.plan.flasks and every replayed plan's) are anchors of the right
 //    kind on their level, as many as the rules allow; the CreatureBlocks (meta.creatureBlocks) are boxes on a level.
+// 6. The run's stages: every stage script names a stage of meta.stageConfig and every stage is played by its script or
+//    the stand-in; the stages still on the stand-in are listed, and with --release (a build to ship) any one fails.
+//    The input actions, settings and hints the website reads from meta: every InputConfig action is bound with its
+//    keys, buttons, kind and contexts translated (PendingActions, the features not built yet, are not bound at all),
+//    the removed Syringe and Objective actions are gone, every SettingsSchema row is the web's (PendingSettings hidden).
 // Exits non-zero on the first category with failures (all failures are listed).
 
 import fs from 'node:fs';
@@ -61,7 +66,9 @@ import {
 import { createSharedUniforms } from '../src/engine/materials.js';
 import { crackFrame, flaskLook, liquidColor, liquidTiers } from '../src/game/mechanics/flaskFx.js';
 import { Rng, cfMatrix, cfPos, hash as fnv, shuffle } from '../src/game/util.js';
-import { WorldConfig as WebWorldConfig } from '../src/engine/config.js';
+import { PendingActions, PendingSettings, WorldConfig as WebWorldConfig, inputBindingsFrom, settingsFrom, webKey }
+  from '../src/engine/config.js';
+import { StageScripts, Stages } from '../src/game/stages.js';
 import { LevelOrder as WebLevelOrder, TutorialConfig } from '../src/game/config.js';
 import { SpawnTuning } from '../src/game/objectives/config.js';
 import { Levels as NetLevels } from '../src/net/codec.js';
@@ -69,7 +76,10 @@ import { WorldData, variantOf } from '../src/game/worldData.js';
 import { POWER_CIRCUIT, dominantGroup } from './bake/light.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const buildDir = path.resolve(process.argv[2] || path.join(here, '..', 'build'));
+const args = process.argv.slice(2);
+/** --release: a build to ship: every stage has its own script (none on the stand-in) */
+const release = args.includes('--release');
+const buildDir = path.resolve(args.find((a) => !a.startsWith('--')) || path.join(here, '..', 'build'));
 
 let failures = 0;
 let checks = 0;
@@ -833,7 +843,8 @@ for (const e of meta.entities) {
 }
 // removals in the website's own sources: no cut floor's id, no old floor 4 / 5 id, and no swimming, oxygen, struggle,
 // reagent, acid flask, fume hood, gym generator, coach's key, valve wheel, bolt cutters, crate chain, floodlight or
-// landing field anywhere under web/src and web/tools (this file names them here on purpose and is not scanned). The
+// landing field, nor the syringe's button, action or self-revive, anywhere under web/src and web/tools (this file names
+// them here on purpose and is not scanned). The
 // one "Swim" left is a sample's name (SoundLibrary's Swimming loop, kept for the rain and the drones).
 {
   const before = failures;
@@ -857,6 +868,7 @@ for (const e of meta.entities) {
     ['the coach\'s key', /coach'?s? ?key/i], ['the valve wheel', /valve ?wheel|HatchValve|TurnValve|FitValve/i],
     ['the bolt cutters', /bolt ?cutter/i], ['the crate chain', /crate ?chain|CutCrate|crateOpen|crateCut/i],
     ['the floodlights', /floodlight/i], ['the landing field', /landing ?field/i],
+    ['the syringe\'s button, action or self-revive', /useSyringe|onAction\('Syringe'|setSyringePips|Downed\.UseSyringe|'SelfRevive'/],
   ];
   let scanned = 0;
   for (const file of sources) {
@@ -1358,6 +1370,55 @@ console.log('== shared rules (configs, goldens, picks)');
   }
   if (failures === before) {
     console.log(`  ok   ${listed.length} configs in meta (${listed.join(', ')}); ${rows} golden rows of ${names.length} modules; plan picks of ${plans.length + 1} plans; ${(blocks || []).length} CreatureBlocks`);
+  }
+}
+
+// the run's stages, and the input actions and settings read from the world
+console.log('== stages, input, settings');
+{
+  const before = failures;
+  const stages = new Stages(meta);
+  const ids = new Set(stages.order.map((st) => st.id));
+  for (const id of Object.keys(StageScripts)) check(ids.has(id), `stage script ${id} names a stage of meta.stageConfig`);
+  for (const id of ids) check(['School', 'StandIn'].includes(stages.scriptOf(id)), `${id} is played by ${stages.scriptOf(id)}`);
+  for (const id of Object.keys(StageScripts)) check(meta.levels[id] && meta.layouts[id], `${id}: played by the school, a level of the world`);
+  const standIns = stages.standIns();
+  console.log(`  stages on the stand-in: ${standIns.length ? standIns.join(', ') : 'none'}`);
+  if (release) check(standIns.length === 0, `--release: ${standIns.length} stages still on the stand-in (${standIns.join(', ')})`);
+  // the input actions: every exported action bound as exported (keys, buttons, kind, contexts), the pending ones not
+  const exported = (meta.inputConfig && meta.inputConfig.bindings) || {};
+  const bound = inputBindingsFrom(meta.inputConfig);
+  const PADS = { ButtonA: 0, ButtonB: 1, ButtonX: 2, ButtonY: 3, ButtonL1: 4, ButtonR1: 5, ButtonL2: 6, ButtonR2: 7,
+    ButtonSelect: 8, ButtonStart: 9, ButtonL3: 10, ButtonR3: 11, DPadUp: 12, DPadDown: 13, DPadLeft: 14, DPadRight: 15 };
+  for (const a of PendingActions) check(a in exported, `pending action ${a} is an InputConfig action`);
+  for (const [action, b] of Object.entries(exported)) {
+    const web = bound[action];
+    if (PendingActions.includes(action)) {
+      check(!web, `${action}: its feature is not built yet, so it is not bound`);
+      continue;
+    }
+    check(!!web, `${action} is bound`);
+    if (!web) continue;
+    check(web.kind === b.kind, `${action}: kind ${web.kind} (InputConfig ${b.kind})`);
+    for (const k of b.keyboard || []) check(k === 'LeftControl' || web.keyboard.includes(webKey(k)), `${action}: key ${k}`);
+    for (const k of b.gamepad || []) check(!(k in PADS) || web.gamepad.includes(PADS[k]), `${action}: button ${k}`);
+    for (const c of b.contexts || []) check(web.contexts.includes(c), `${action}: context ${c}`);
+    check(!!b.touch === !!web.touch, `${action}: a touch button as InputConfig`);
+  }
+  for (const gone of ['Syringe', 'Objective']) check(!(gone in exported) && !(gone in bound), `the ${gone} action is gone`);
+  // the settings: every exported row the web's, the pending ones hidden
+  const rows = settingsFrom(meta.settingsSchema);
+  const list = (meta.settingsSchema && meta.settingsSchema.list) || [];
+  for (const k of PendingSettings) check(list.some((r) => r.key === k), `pending setting ${k} is a SettingsSchema row`);
+  for (const r of list) {
+    const web = rows.find((x) => x.key === r.key);
+    check(!!web && web.kind === r.kind && web.label === r.label, `setting ${r.key} is the web's`);
+    if (web && r.kind === 'Choice') check(web.default === r.options[r.default - 1], `setting ${r.key}: default ${web.default}`);
+    if (web && PendingSettings.includes(r.key)) check(web.hidden === true, `setting ${r.key}: not shown until its feature is built`);
+  }
+  if (failures === before) {
+    console.log(`  ok   ${stages.order.length} stages (${stages.order.length - standIns.length} scripted); ${Object.keys(exported).length} input actions ` +
+      `(${PendingActions.length} pending); ${list.length} settings (${PendingSettings.length} pending)`);
   }
 }
 

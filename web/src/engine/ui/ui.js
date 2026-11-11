@@ -406,9 +406,8 @@ export class UI {
    * Draws the meters (battery / stamina) each frame.
    * @param {number} dt
    * @param {Array<{id: string, label: string, fraction: number, color: string, active: boolean}>} meters
-   * @param {number} [syringes] charges left (pips)
    */
-  updateStatus(dt, meters, syringes = 0) {
+  updateStatus(dt, meters) {
     for (const m of meters) {
       let row = this.meterRows.get(m.id);
       if (!row) {
@@ -437,11 +436,6 @@ export class UI {
       row.bar.setFraction(m.fraction);
       row.frame.style.opacity = String(row.alpha * pulse);
       row.frame.classList.toggle('collapsed', row.alpha < 0.01);
-    }
-    if (!this.pipsEl) this.pipsEl = el('div', 'rv-pips', this.status);
-    if (this.pipsEl.childElementCount !== Math.min(4, syringes)) {
-      this.pipsEl.textContent = '';
-      for (let i = 0; i < Math.min(4, syringes); i++) el('div', 'rv-pip', this.pipsEl);
     }
   }
 

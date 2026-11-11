@@ -11,7 +11,7 @@
 // variant, on either platform.
 
 import * as THREE from 'three';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { Fonts } from '../ui/style.js';
 import { Rng, clamp01, seededRandom, smoothstep } from '../util.js';
 

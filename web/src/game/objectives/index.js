@@ -16,7 +16,7 @@ import { registerObjectiveSounds } from './sounds.js';
 import { FloorObjective } from './base.js';
 import { Floor0 } from './floor0.js';
 import { Floor1 } from './floor1.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 
 /** The floor scripts by level id (any other floor with an objective runs the base FloorObjective). */
 const FLOORS = Object.freeze({ Level0_Basement: Floor0, Level1_Hallways: Floor1 });
@@ -125,13 +125,16 @@ export class FloorObjectives {
     return f && f.active ? f.hintSpots() : [];
   }
 
-  /** Co-op: everything a player carried is set down at `at` (they died or left); returns how many items dropped. */
+  /**
+   * Everything a player carried is set down at `at` (they died or left; owner '' is the one player alone); returns the
+   * items dropped ([{id, kind, at}]).
+   */
   dropCarried(owner, at) {
-    let dropped = 0;
-    for (const { id } of this.carry.dropAll(owner)) {
+    const dropped = [];
+    for (const { id, kind } of this.carry.dropAll(owner)) {
       for (const f of this.floors.values()) {
         if (f.dropItem(id, at)) {
-          dropped++;
+          dropped.push({ id, kind, at: at.clone() });
           break;
         }
       }

@@ -6,9 +6,11 @@ import { createCreatureApi } from './creatureApi.js';
 import { Dev } from './dev.js';
 import { Env } from './env.js';
 import { Game } from './game.js';
-import { BatteryPickups, DownedHud, Life } from './life.js';
+import { BatteryPickups, Life } from './life.js';
 import { Lobby } from './lobby.js';
 import { Match } from './match.js';
+import { StandIn } from './stages.js';
+import { S } from './strings/index.js';
 import { Menu } from './menu.js';
 import { Profile } from './profile.js';
 import { registerSceneTracks } from './sceneTracks.js';
@@ -29,6 +31,7 @@ import { FloorObjectives } from './objectives/index.js';
 import { Hints } from './ui/hints.js';
 import { Nav } from './ui/nav.js';
 import { Objectives } from './ui/objectives.js';
+import { LivesHud } from './ui/lives.js';
 import { Results } from './ui/results.js';
 import { installStyle } from './ui/style.js';
 import { Onboarding } from './ui/title.js';
@@ -59,6 +62,7 @@ export async function start(engine, opts = {}) {
   game.parachute = game.add(new Parachute(game));
   game.add(new Debris(game));
   game.airlock = game.add(new Airlock(game));
+  game.standIn = game.add(new StandIn(game));
   game.add(new CreatureLevels(game));
   // the Tall Man's warnings, chase music, stings and the brain's game-state vetoes (Tunnels)
   game.monsterFx = game.add(new MonsterFx(game));
@@ -70,7 +74,7 @@ export async function start(engine, opts = {}) {
   game.onboarding = game.add(new Onboarding(game));
   game.objectives = game.add(new Objectives(game));
   game.hints = game.add(new Hints(game));
-  game.downed = game.add(new DownedHud(game));
+  game.livesHud = game.add(new LivesHud(game));
   game.results = game.add(new Results(game));
   // co-op (game/coop): first in the tick order, so the room's messages are applied before the systems tick; inert alone
   game.coop = new Coop(game);
@@ -82,6 +86,8 @@ export async function start(engine, opts = {}) {
 
   env.onTick((dt) => game.tick(dt));
   env.onFrame((dt) => game.frame(dt));
+  // the touch buttons' labels are the world's Strings keys (meta.inputConfig)
+  engine.input.setLabels(S);
 
   game.setPhase('Lobby');
   game.lobby.arrive(false);
@@ -130,16 +136,20 @@ class CreatureLevels {
   }
 }
 
-/** The game's side of a catch: JumpscareHandler's outcome rule applied to the life state. */
+/**
+ * The game's side of a catch: the lives rules' outcome (a stage's first lethal hit downs, the next kills) applied to the
+ * life state. A co-op client's catches are the host's (its Creature's, its lives record): the host applies them there
+ * and sends the outcome (coop/run.js), so the catch's end changes nothing here.
+ */
 function wireCreature(game) {
   const { creature, life } = game;
   let applied = false;
-  const outcome = () => (life.state === 'Alive' && life.downedCount <= 0 ? 'Down' : 'Execute');
-  const apply = (result) => {
+  const outcome = () => life.lethalAction();
+  const apply = () => {
     if (applied || !game.live()) return;
     applied = true;
-    if (result === 'Down') life.down('Creature');
-    else if (result === 'Execute') life.execute('Creature');
+    if (game.coop && game.coop.active && game.coop.isClient()) return;
+    life.lethal('Catch', 'Creature');
   };
   creature.setCatchHooks({
     canCatch: () => game.playing() && game.controlLock() !== 'Cutscene',
@@ -151,6 +161,6 @@ function wireCreature(game) {
   });
   creature.jumpscareFinished.connect((kind, result) => {
     if (result === 'Aborted') return;
-    apply(result === 'Down' || result === 'Execute' ? result : outcome());
+    apply();
   });
 }

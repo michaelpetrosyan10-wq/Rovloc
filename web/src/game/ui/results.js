@@ -1,14 +1,18 @@
 // results.js: the end-of-run screen (EscapeSummaryController).
 //
-// The run's summary opens a full-screen card: ESCAPED in bone white with a cold glow, landing with a lightning flash
-// (FlashScale), or THE SCHOOL KEPT YOU / YOU DIDN'T MAKE IT in blood red with a failing-bulb flicker; the squad line
-// (only for a squad) and the difficulty; the run time, the best time and NEW BEST TIME; the credits counting up; the
-// stat rows; "This run was not saved." when it paid nothing. PLAY AGAIN (click / tap, gamepad A, Enter) and the
+// The run's summary opens a full-screen card (docs/design/game-spec-v2.md 4.10): ESCAPED in bone white with a cold
+// glow, landing with a lightning flash (FlashScale), or THE NIGHT TOOK YOU / YOU DIDN'T MAKE IT in blood red with a
+// failing-bulb flicker; the chapter strip (a cell per chapter, the stages after the opening: lit up to the stage the
+// run reached, the rest dark; all of them after an escape); the squad line (survivors n / N, only for a squad) and the
+// difficulty; the run time (the first playable stage to the last one's end), the best time and NEW BEST TIME; the
+// credits counting up; the stat rows (downs and the chances used among them); "This run was not saved." when it paid
+// nothing. PLAY AGAIN (click / tap, gamepad A, Enter) and the
 // auto-return countdown with a draining bar. While it is up the cursor is free, gameplay input is off (Menu context)
 // and the HUD is hidden. It waits while the escape shot or a jumpscare owns the view (Cutscene context, Cutscene /
 // Jumpscare / Parachute lock), at most 10 s, then fades in from black.
 
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
+import '../strings/run.js';
 import { formatTime } from '../util.js';
 import { FocusGroup } from './nav.js';
 import { Palette, el, meter } from './style.js';
@@ -24,13 +28,24 @@ const HOLDING_LOCKS = new Set(['Cutscene', 'Jumpscare', 'Parachute']);
 const STAT_ROWS = [
   ['TrapsTriggered', 'Results.TrapsTriggered'], ['VentsCrawled', 'Results.VentsCrawled'],
   ['FlasksThrown', 'Results.FlasksThrown'], ['Stuns', 'Results.Stuns'],
-  ['LockersHidden', 'Results.LockersHidden'], ['FloorsCleared', 'Results.FloorsCleared'], ['TimesDowned', 'Results.TimesDowned'],
+  ['LockersHidden', 'Results.LockersHidden'], ['FloorsCleared', 'Results.FloorsCleared'],
+  ['TimesDowned', 'Results.TimesDowned'], ['RespawnsUsed', 'Results.RespawnsUsed'],
 ];
 
 /** EscapeSummaryController.titleKind */
 export function titleKind(outcome, escapees) {
   if (outcome === 'Escaped') return 'Escaped';
   return (escapees || 0) > 0 ? 'Dead' : 'Wiped';
+}
+
+/**
+ * The chapters a run reached (4.10's chapter strip): all of them after an escape, else every chapter up to and with
+ * the stage the run ended on.
+ * @param {string[]} chapters @param {{outcome: string, reached: string|null}} summary
+ */
+export function chaptersReached(chapters, summary) {
+  if (summary.outcome === 'Escaped') return chapters.length;
+  return summary.reached ? chapters.indexOf(summary.reached) + 1 : 0;
 }
 
 /** EscapeSummaryController.countUp */
@@ -74,6 +89,14 @@ export class Results {
     Object.assign(this.title.style, { fontSize: 'clamp(40px, 8vw, 58px)', lineHeight: '1.1' });
     this.rule = el('div', 'rg-rule', col);
     this.rule.style.width = '60%';
+    this.chapters = el('div', 'rg-caps', col, '');
+    this.strip = el('div', '', col);
+    Object.assign(this.strip.style, { display: 'flex', gap: '4px', margin: '2px 0 6px' });
+    this.cells = this.game.stages.chapters().map(() => {
+      const c = el('div', '', this.strip);
+      Object.assign(c.style, { width: '30px', height: '8px', borderRadius: '2px' });
+      return c;
+    });
     this.squad = el('div', 'rg-caps', col, '');
     this.difficulty = el('div', 'rg-caps', col, '');
     this.time = el('div', 'rg-title', col, '');
@@ -135,7 +158,13 @@ export class Results {
     this.root.classList.remove('rg-hidden');
     this.root.style.opacity = '0';
     this.alpha = 0;
-    this.title.textContent = S(kind === 'Escaped' ? 'Results.Escaped' : kind === 'Dead' ? 'Results.Dead' : 'Results.Wiped');
+    this.title.textContent = S(kind === 'Escaped' ? 'Results.Escaped' : kind === 'Dead' ? 'Results.Dead' : 'Results.Night');
+    const reached = chaptersReached(this.game.stages.chapters(), s);
+    this.chapters.textContent = S('Results.Chapters', reached, this.cells.length);
+    this.cells.forEach((c, i) => {
+      c.style.background = i < reached ? (kind === 'Escaped' ? Palette.Bone : Palette.Ember) : Palette.Track;
+      c.style.opacity = i < reached ? '1' : '0.55';
+    });
     this.title.style.color = kind === 'Escaped' ? Palette.Bone : Palette.Blood;
     this.title.style.textShadow = kind === 'Escaped' ? '0 0 22px rgba(160,190,220,0.45)' : '0 0 2px rgba(8,8,9,0.9)';
     this.title.style.animation = kind === 'Escaped' ? '' : 'rg-flicker 5s infinite';

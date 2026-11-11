@@ -4,7 +4,7 @@
 // the HUD visible, outside the Cutscene / Menu contexts and under no Cutscene / Jumpscare lock; hidden inside a locker
 // (the locker view owns the bottom of the screen).
 
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { Palette, el } from '../ui/style.js';
 
 const HIDDEN_CONTEXTS = new Set(['Cutscene', 'Menu', 'Locker', 'Parachute']);

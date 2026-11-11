@@ -17,7 +17,7 @@
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { formatTime } from '../util.js';
 import { Palette, el, meter } from '../ui/style.js';
 

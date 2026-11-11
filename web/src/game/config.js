@@ -106,12 +106,12 @@ export const PerkIds = Object.freeze(['RustyScrewdriver', 'LithiumCell', 'Adrena
 /**
  * PerkConfig.luau
  * @type {Readonly<Record<string, {id: string, cost: number, maxEquipped: number, unscrewSeconds?: number,
- *   batteryCapacityMultiplier?: number, syringeCharges?: number}>>}
+ *   batteryCapacityMultiplier?: number}>>} (the syringe's one more respawn is LivesConfig.SyringeRespawns)
  */
 export const Perks = Object.freeze({
   RustyScrewdriver: Object.freeze({ id: 'RustyScrewdriver', cost: 60, maxEquipped: 1, unscrewSeconds: 1.2 }),
   LithiumCell: Object.freeze({ id: 'LithiumCell', cost: 80, maxEquipped: 1, batteryCapacityMultiplier: 1.5 }),
-  AdrenalineSyringe: Object.freeze({ id: 'AdrenalineSyringe', cost: 120, maxEquipped: 1, syringeCharges: 1 }),
+  AdrenalineSyringe: Object.freeze({ id: 'AdrenalineSyringe', cost: 120, maxEquipped: 1 }),
 });
 
 /** PerkConfig.MaxStock: units of one perk a player may own. */
@@ -130,15 +130,12 @@ export function batteryCapacity(perks) {
   return GameConfig.BatteryMax * (perks.includes('LithiumCell') ? Perks.LithiumCell.batteryCapacityMultiplier : 1);
 }
 
-/** PerkConfig.syringeCharges */
-export function syringeCharges(perks) {
-  return perks.includes('AdrenalineSyringe') ? Perks.AdrenalineSyringe.syringeCharges : 0;
-}
-
-/** TutorialConfig.luau */
+/**
+ * TutorialConfig.luau: the walkthrough, its control rows and timings (the first-time hints come from the world,
+ * meta.tutorialConfig: ui/hints.js and the downed screen's get-up hint, ui/lives.js).
+ */
 export const TutorialConfig = Object.freeze({
   TutorialSetting: 'TutorialDone',
-  HintsSetting: 'ShowHints',
   Pages: Object.freeze([
     { id: 'Goal', art: 'Goal', title: 'Tutorial.Goal.Title', body: 'Tutorial.Goal.Body', deviceBody: false },
     { id: 'Creature', art: 'Creature', title: 'Tutorial.Creature.Title', body: 'Tutorial.Creature.Body', deviceBody: false },
@@ -157,32 +154,9 @@ export const TutorialConfig = Object.freeze({
     { label: 'Tutorial.Control.Interact', action: 'Interact' },
     { label: 'Tutorial.Control.Kick', action: 'Kick' },
     { label: 'Tutorial.Control.Throw', action: 'Throw' },
-    { label: 'Tutorial.Control.Objective', action: 'Objective' },
+    { label: 'Tutorial.Control.Objective', action: 'Radar' },
     { label: 'Tutorial.Control.Menu', action: 'Menu' },
   ]),
-  // Highest priority first.
-  Hints: Object.freeze([
-    { id: 'Airlock', text: 'Hint.Airlock', inputs: [], setting: 'HintAirlock' },
-    { id: 'DownedTeammate', text: 'Hint.DownedTeammate', inputs: [{ action: 'Interact', label: 'Hint.Input.Revive' }], setting: 'HintDownedTeammate' },
-    {
-      id: 'BearTrap', text: 'Hint.BearTrap', setting: 'HintBearTrap', radius: 16,
-      inputs: [{ action: 'Crouch', label: 'Hint.Input.Crouch' }, { action: 'Interact', label: 'Hint.Input.Pry' }],
-    },
-    {
-      id: 'Flask', text: 'Hint.Flask', setting: 'HintFlask', radius: 12,
-      inputs: [{ action: 'Interact', label: 'Hint.Input.PickUp' }, { action: 'Throw', label: 'Hint.Input.Throw' }],
-    },
-    {
-      id: 'VentGrate', text: 'Hint.VentGrate', setting: 'HintVentGrate', radius: 11,
-      inputs: [{ action: 'Interact', label: 'Hint.Input.Unscrew' }, { action: 'Kick', label: 'Hint.Input.Kick' }],
-    },
-    {
-      id: 'Locker', text: 'Hint.Locker', setting: 'HintLocker', radius: 10,
-      inputs: [{ action: 'Interact', label: 'Hint.Input.Hide' }, { action: 'HoldBreath', label: 'Hint.Input.HoldBreath' }],
-    },
-    { id: 'LowBattery', text: 'Hint.LowBattery', inputs: [{ action: 'Flashlight', label: 'Hint.Input.Light' }], setting: 'HintLowBattery' },
-  ]),
-  LowBatteryFraction: 0.2,
   // Every school level by id: its Strings keys are Floor.<id>.Title, Floor.<id>.Name and Objective.Tip.<id>; the
   // stairwell is the side of the middle stairwell up (none on the roof).
   Floors: Object.freeze(Object.fromEntries(LevelOrder.map((id) => [id, Object.freeze({
@@ -222,10 +196,6 @@ export const TutorialConfig = Object.freeze({
   ]),
 });
 
-/** The hidden settings the game keeps (SettingsSchema's hidden Bools). */
-export const HiddenSettings = Object.freeze(['TutorialDone', 'HintBearTrap', 'HintVentGrate', 'HintFlask',
-  'HintLocker', 'HintDownedTeammate', 'HintLowBattery', 'HintAirlock']);
-
 /** Enums.StatKey (RunStatsService counters). */
 export const StatKeys = Object.freeze(['TrapsTriggered', 'VentsCrawled', 'TimesDowned', 'Revives', 'FlasksThrown',
-  'Stuns', 'LockersHidden', 'FloorsCleared', 'CreditsEarned']);
+  'Stuns', 'LockersHidden', 'FloorsCleared', 'CreditsEarned', 'RespawnsUsed']);

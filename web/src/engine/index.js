@@ -25,7 +25,8 @@
 
 import * as THREE from 'three';
 import { Audio } from './audio/audio.js';
-import { CameraConfig, GameConfig, InputBindings, NoiseConfig, PhysicsConfig, WorldConfig } from './config.js';
+import { CameraConfig, GameConfig, InputBindings, NoiseConfig, PhysicsConfig, WorldConfig, installInputBindings,
+  installSettings } from './config.js';
 import { decodeWorld } from './data.js';
 import { Entities } from './entities.js';
 import { Input } from './input.js';
@@ -185,6 +186,9 @@ export class Engine {
 
   constructor(root, decoded, images, progress = () => {}, assets = {}) {
     this.root = root;
+    // the world's input actions and settings (meta.inputConfig, meta.settingsSchema), before anything reads them
+    installInputBindings(decoded.meta);
+    installSettings(decoded.meta);
     /** The configuration ports (GameConfig, CameraConfig, NoiseConfig, InputBindings, WorldConfig, PhysicsConfig). */
     this.config = { GameConfig, CameraConfig, NoiseConfig, InputBindings, WorldConfig, PhysicsConfig };
     this.THREE = THREE;
@@ -338,7 +342,7 @@ export class Engine {
     this.ui.updateStatus(realDt, [
       { id: 'Battery', label: getString('Hud.Battery'), fraction: m.battery.fraction, color: 'rgb(204,158,88)', active: this.player.flashlight.on },
       { id: 'Stamina', label: getString('Hud.Stamina'), fraction: m.stamina.fraction, color: 'rgb(150,158,132)', active: false },
-    ], this.syringes || 0);
+    ]);
     this.ui.update(realDt);
 
     if (!this.skipRender) {

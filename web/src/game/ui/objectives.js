@@ -1,7 +1,7 @@
 // objectives.js: what to do next, always one glance away (ObjectiveTracker).
 //
 //   Tracker   a compact sheet top-left (top-right on touch): OBJECTIVE, the goal, the floor's tip, the key that asks
-//             for directions. Fully shown when the goal changes or the Objective action is pressed (Tab / d-pad
+//             for directions. Fully shown when the goal changes or the Radar action is pressed (Tab / d-pad
 //             right / GOAL), fading after TrackerHold seconds idle; in the lobby it stays, with the optional lines
 //             (vote, perks) ticking off and a HOW TO PLAY button (H / d-pad left / tap) that replays the walkthrough.
 //   Goals     lobby: the bus -> a pad -> waiting -> the countdown; every floor: its objective (the title and each step
@@ -11,19 +11,20 @@
 //             vent around it, crawl through (as the tip); the roof: out of the stair housing, find the parachutes, run
 //             for them once the door is smashed, the gap with a pack on, the cord, landed.
 //   Marker    a floating diamond over the lobby's current step (the bus's rear door, then the nearest free pad).
-//   Directions the Objective action shows a chevron around the crosshair at the goal with its distance and the marker
-//             over it for DirectionShow seconds, then cools down for DirectionCooldown. On an objective floor it points
-//             at the ROOM of the nearest undone step's target (its centre, or its doorway nearest you; labelled with the
-//             room's name), never at the item; it is first available NudgeDelay after arriving and cools down for
-//             NudgeCooldown.
-//   Floor card FLOOR 1 / MAIN HALLWAYS / OBJECTIVE: <the floor's objective> in the centre-top on each new level, held
-//             while the HUD is hidden (up to FloorCardWait seconds).
+//   Directions the Radar action (the radar is a later package) shows a chevron around the crosshair at the goal with
+//             its distance and the marker over it for DirectionShow seconds, then cools down for DirectionCooldown. On
+//             an objective floor it points at the ROOM of the nearest undone step's target (its centre, or its doorway
+//             nearest you; labelled with the room's name), never at the item; it is first available NudgeDelay after
+//             arriving and cools down for NudgeCooldown.
+//   Stage card the stage's card (StageConfig's Card text: FLOOR 1 · HALLWAYS), the level's name and OBJECTIVE: <the
+//             floor's objective> in the centre-top on each new level, held while the HUD is hidden (up to
+//             FloorCardWait seconds).
 // Hidden while the HUD is hidden, in the Cutscene / Menu contexts, under a Cutscene / Jumpscare lock, while the
 // onboarding screens are up and while the player is not Alive on a level.
 
 import * as THREE from 'three';
 import { TutorialConfig } from '../config.js';
-import { S } from '../strings.js';
+import { S } from '../strings/index.js';
 import { cfPos } from '../util.js';
 import { glyphFor } from './nav.js';
 import { ObjectiveTuning } from '../objectives/config.js';
@@ -120,7 +121,7 @@ export class Objectives {
     this.shownLevel = null;
     this.scan = { objective: null, lobby: null, target: null, inLobby: false };
     this._build();
-    this.env.onAction('Objective', (phase) => this._objective(phase));
+    this.env.onAction('Radar', (phase) => this._objective(phase));
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyH' && !e.repeat) this._help();
     });
@@ -355,8 +356,9 @@ export class Objectives {
     if (this.cardLevel && this.cardStartedAt === null) {
       if (canShow) {
         const floor = TutorialConfig.Floors[this.cardLevel];
-        if (floor) {
-          this.cardTitle.textContent = S(floor.title);
+        const stage = g.stages.get(this.cardLevel);
+        if (floor && stage && stage.card) {
+          this.cardTitle.textContent = S(stage.card);
           this.cardName.textContent = S(floor.name);
           const goal = this.game.floors ? this.game.floors.floor(this.cardLevel) : null;
           this.cardGoal.textContent = goal ? S('Obj.Card', S(goal.spec.title)) : '';
@@ -432,7 +434,7 @@ export class Objectives {
     const timing = this._nudgeTiming();
     const remaining = Math.max(timing.wait, timing.cooldown - (this.clock - this.directionAt));
     const ready = remaining <= 0;
-    this.keyCap.textContent = glyphFor(env, 'Objective', device);
+    this.keyCap.textContent = glyphFor(env, 'Radar', device);
     this.keyLabel.textContent = ready ? S('Objective.Direction') : S('Objective.DirectionWait', Math.ceil(remaining));
     this.keyCap.style.display = this.scan.target ? '' : 'none';
     this.keyLabel.style.display = this.scan.target ? '' : 'none';

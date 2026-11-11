@@ -15,7 +15,7 @@
 
 import * as THREE from 'three';
 import { DifficultyConfig, GameConfig, PerkIds, Perks, MaxPerkStock } from './config.js';
-import { S } from './strings.js';
+import { S } from './strings/index.js';
 import { cfPos } from './util.js';
 import { FocusGroup } from './ui/nav.js';
 import { Palette, el, meter } from './ui/style.js';
