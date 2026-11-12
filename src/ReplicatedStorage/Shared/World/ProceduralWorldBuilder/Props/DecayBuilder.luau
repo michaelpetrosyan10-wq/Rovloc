@@ -75,13 +75,13 @@ local PAPER_COUNT: { [string]: { number } } = {
 }
 DecayBuilder.PaperCount = table.freeze(PAPER_COUNT)
 
-local LATH = Color3.fromRGB(82, 75, 67)
+local LATH = Color3.fromRGB(96, 72, 46)
 local LATH_GAP = Color3.fromRGB(18, 14, 11)
-local BRICK = Color3.fromRGB(73, 60, 57)
+local BRICK = Color3.fromRGB(96, 52, 40)
 local MORTAR = Color3.fromRGB(116, 110, 96)
 local VOID_SHADE = Color3.fromRGB(8, 7, 6)
 local PRINT = Color3.fromRGB(62, 64, 74)
-local STAIN = Color3.fromRGB(95, 88, 77)
+local STAIN = Color3.fromRGB(110, 86, 48)
 
 --------------------------------------------------------------------------------
 -- Helpers
@@ -462,7 +462,7 @@ local function paintPaper(part: BasePart, paper: Color3, random: Rng)
 	if random:NextNumber() < 0.4 then
 		SurfaceArt.stain(gui, between(random, 0.3, 0.7), between(random, 0.3, 0.7), 0.5, 0.4, STAIN, 0.7, nil, 2)
 	end
-	SurfaceArt.grime(gui, Color3.fromRGB(63, 60, 54), between(random, 0.2, 0.45), random:NextNumber() < 0.5, 3)
+	SurfaceArt.grime(gui, Color3.fromRGB(70, 60, 40), between(random, 0.2, 0.45), random:NextNumber() < 0.5, 3)
 end
 
 local function planPaper(state: State, room: Room, random: Rng)

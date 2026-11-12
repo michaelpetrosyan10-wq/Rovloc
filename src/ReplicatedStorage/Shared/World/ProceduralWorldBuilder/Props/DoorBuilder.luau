@@ -195,7 +195,7 @@ local SIGN_PIXELS = 48
 local SIGN_LIGHT_CLEARANCE = 1.3 -- a wall fixture this close in front of a sign moves it to the other face
 
 -- Palette
-local WOOD_COLOR = Color3.fromRGB(72, 65, 59)
+local WOOD_COLOR = Color3.fromRGB(84, 62, 43)
 local FIRE_RED = Color3.fromRGB(112, 31, 27)
 local STEEL_GREY = Color3.fromRGB(82, 86, 84)
 local GLASS_COLOR = Color3.fromRGB(96, 110, 104)

@@ -49,11 +49,11 @@ local SIGN_X = -5.6
 local BOARD = Vector2.new(1.15, 2.05)
 local BOARD_LEAN = math.rad(13)
 
-local PLASTIC = rgb(76, 78, 80)
-local PLASTIC_DARK = rgb(56, 58, 60)
-local FRAME = rgb(72, 74, 76)
-local BAG = rgb(30, 31, 33)
-local MOP = rgb(150, 148, 142)
+local PLASTIC = rgb(110, 92, 52) -- janitor's-cart yellow, faded and grimed
+local PLASTIC_DARK = rgb(76, 64, 38)
+local FRAME = rgb(74, 76, 68)
+local BAG = rgb(30, 31, 27)
+local MOP = rgb(148, 138, 112) -- grey-brown cotton strings
 local INK = rgb(24, 22, 18)
 
 local MopCartBuilder = {}
@@ -87,7 +87,7 @@ local function paintSign(part: BasePart)
 	local band = SurfaceArt.frame(gui, "Band", 0, 0.86, 1, 0.1, INK, 0, 1)
 	band.ClipsDescendants = true
 	SurfaceArt.hazard(band, Vector2.new(BOARD.X, BOARD.Y * 0.1), pps, 0.12)
-	SurfaceArt.grime(gui, rgb(40, 38, 34), 0.35, false, 4)
+	SurfaceArt.grime(gui, rgb(70, 54, 30), 0.35, false, 4)
 end
 
 -- Every piece of one cart, its bucket and its sign, in world space.
@@ -232,7 +232,7 @@ local function planCart(frame: CFrame, name: string): { Piece }
 		"CabinetSteel",
 		FRAME
 	)
-	rod("Mop", Vector3.new(-3.85, 1.0, 0.05), Vector3.new(-3.35, 5.7, 0.4), 0.12, "WoodPanel", rgb(80, 78, 74))
+	rod("Mop", Vector3.new(-3.85, 1.0, 0.05), Vector3.new(-3.35, 5.7, 0.4), 0.12, "WoodPanel", rgb(92, 72, 50))
 	solid("MopHead", Vector3.new(-4.2, 0.9, -0.4), Vector3.new(-3.5, 1.45, 0.45), "PaperSheet", MOP)
 	-- WET FLOOR: an A-frame whose boards face along the run, both ways
 	local base = frame * CFrame.new(SIGN_X, 0, -0.2) * CFrame.Angles(0, math.rad(90), 0)

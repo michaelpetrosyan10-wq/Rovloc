@@ -35,7 +35,7 @@ LightingRig.Names = table.freeze({
 -- Baseline values, also read by clients as the rest state their pulses decay back to (and the place the film grade
 -- of each level, LightingMood.film, starts from: the client eases Atmosphere, grade, bloom, sun rays and exposure
 -- toward the level the camera is on).
--- Dark but readable: a cold gray ambient fill lets shapes read at the edge of every lit pool (the player is
+-- Dark but readable: a cold blue-grey ambient fill lets shapes read at the edge of every lit pool (the player is
 -- never staring into a void), haze gives long corridors depth, bloom makes the fixtures glow and the grade drains
 -- some colour without turning the school grey. The darkness comes from contrast with the level lights
 -- (LightingMood) and the flashlight, not from switching everything off. The sky's diffuse fill is kept low (it
@@ -44,8 +44,8 @@ LightingRig.Names = table.freeze({
 LightingRig.Baseline = table.freeze({
 	ClockTime = 0.5,
 	Brightness = 0.5,
-	Ambient = Color3.fromRGB(27, 27, 28),
-	OutdoorAmbient = Color3.fromRGB(48, 49, 52),
+	Ambient = Color3.fromRGB(24, 27, 35),
+	OutdoorAmbient = Color3.fromRGB(44, 49, 62),
 	EnvironmentDiffuseScale = 0.22,
 	EnvironmentSpecularScale = 1,
 	ExposureCompensation = 0.3,
@@ -54,8 +54,8 @@ LightingRig.Baseline = table.freeze({
 	AtmosphereOffset = 0.06,
 	AtmosphereHaze = 1.9,
 	AtmosphereGlare = 0.2,
-	AtmosphereColor = Color3.fromRGB(44, 46, 48),
-	AtmosphereDecay = Color3.fromRGB(24, 25, 28),
+	AtmosphereColor = Color3.fromRGB(42, 48, 52),
+	AtmosphereDecay = Color3.fromRGB(20, 26, 28),
 	GradeBrightness = 0.015,
 	GradeContrast = 0.2,
 	GradeSaturation = -0.22,
@@ -67,7 +67,7 @@ LightingRig.Baseline = table.freeze({
 	SunRaysSpread = 0.6,
 	CloudCover = 0.93,
 	CloudDensity = 0.78,
-	CloudColor = Color3.fromRGB(40, 41, 43),
+	CloudColor = Color3.fromRGB(38, 40, 46),
 })
 
 local Baseline = LightingRig.Baseline

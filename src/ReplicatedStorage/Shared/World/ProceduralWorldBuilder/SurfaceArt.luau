@@ -2,7 +2,7 @@
 -- SurfaceArt: procedural paint for part faces. Every pattern is a SurfaceGui of plain Frames (and the odd TextLabel,
 -- UICorner, UIStroke or UIGradient): no images, no decals, no textures. Used for the traffic lanes of vinyl floors,
 -- drop-ceiling grids, hazard stripes, signs and posters, and the wear on every wall: grime at the foot, soot under the
--- ceiling, dirt in the corners, water runs and cracks. No pattern here tiles a floor in two tones (the gray look,
+-- ceiling, dirt in the corners, water runs and cracks. No pattern here tiles a floor in two tones (no checkerboard:
 -- docs/design/game-spec-v2.md 5.1).
 --
 -- Rules every surface follows:

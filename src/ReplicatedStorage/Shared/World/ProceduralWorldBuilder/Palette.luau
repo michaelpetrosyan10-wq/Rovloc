@@ -1,10 +1,7 @@
 --!strict
 -- Material + colour grading for every surface the builders make. Layouts name entries by key (room floor / wall /
 -- ceiling, platform material); builders use the extra keys below for trims, boards, water and set pieces.
--- The gray look (docs/design/game-spec-v2.md 5.1): every surface is a dark, cold gray, told apart by its material,
--- texture and lightness, never by a hue of its own; no key a school layout uses is more saturated than 0.25. The
--- only colours left are the ones that do a job: the hazard plates at the fire doors, the boiler's blue pilot flame
--- and the lobby's school bus (GrayLook.spec lists them by name).
+-- Colours are graded dark, desaturated and slightly green: the school has been rotting in the dark for years.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -31,80 +28,81 @@ end
 
 local entries: { [string]: Entry } = {
 	-- Keys layouts use
-	Concrete = entry(Enum.Material.Concrete, 91, 92, 93, "Concrete"),
-	ConcreteDark = entry(Enum.Material.Concrete, 57, 58, 59, "Concrete"),
-	ConcreteStained = entry(Enum.Material.Concrete, 68, 70, 72, "Concrete"),
-	TileWhite = entry(Enum.Material.CeramicTiles, 146, 148, 150, "Tile"),
-	TileGreen = entry(Enum.Material.CeramicTiles, 92, 94, 94, "Tile"),
-	TileBlue = entry(Enum.Material.CeramicTiles, 88, 90, 93, "Tile"),
-	Linoleum = entry(Enum.Material.Plastic, 99, 100, 100, "Tile"),
-	WoodPanel = entry(Enum.Material.Wood, 62, 60, 58, "Wood"),
-	PlasterSchool = entry(Enum.Material.Plaster, 119, 120, 121, "Concrete"),
-	PlasterAsh = entry(Enum.Material.Plaster, 104, 106, 108, "Concrete"),
-	BlockGray = entry(Enum.Material.Brick, 70, 72, 74, "Concrete"), -- painted concrete block
-	MetalRust = entry(Enum.Material.CorrodedMetal, 76, 74, 72, "Metal"), -- mill scale
+	Concrete = entry(Enum.Material.Concrete, 92, 92, 88, "Concrete"),
+	ConcreteDark = entry(Enum.Material.Concrete, 58, 58, 56, "Concrete"),
+	ConcreteStained = entry(Enum.Material.Concrete, 74, 72, 60, "Concrete"),
+	TileWhite = entry(Enum.Material.CeramicTiles, 150, 150, 138, "Tile"),
+	TileGreen = entry(Enum.Material.CeramicTiles, 84, 104, 86, "Tile"),
+	TileBlue = entry(Enum.Material.CeramicTiles, 70, 92, 110, "Tile"),
+	Linoleum = entry(Enum.Material.Plastic, 104, 102, 88, "Tile"),
+	WoodPanel = entry(Enum.Material.Wood, 76, 56, 40, "Wood"),
+	PlasterSchool = entry(Enum.Material.Plaster, 128, 122, 102, "Concrete"),
+	PlasterGreen = entry(Enum.Material.Plaster, 82, 98, 80, "Concrete"),
+	Brick = entry(Enum.Material.Brick, 92, 56, 44, "Concrete"),
+	MetalRust = entry(Enum.Material.CorrodedMetal, 98, 70, 50, "Metal"),
 	MetalGalvanized = entry(Enum.Material.Metal, 112, 118, 120, "Metal"),
 	RoofGravel = entry(Enum.Material.Pebble, 64, 64, 62, "Concrete"),
 	Asphalt = entry(Enum.Material.Asphalt, 40, 40, 42, "Concrete"),
-	Carpet = entry(Enum.Material.Carpet, 54, 52, 53, "Carpet"), -- charcoal with a hint of wine
+	Carpet = entry(Enum.Material.Carpet, 72, 40, 42, "Carpet"),
 
 	-- Builder-only keys
-	Trim = entry(Enum.Material.Wood, 52, 52, 52, "Wood"),
+	Trim = entry(Enum.Material.Wood, 62, 48, 36, "Wood"),
 	TrimMetal = entry(Enum.Material.Metal, 70, 72, 74, "Metal"),
-	Plank = entry(Enum.Material.WoodPlanks, 78, 78, 78, "Wood"),
-	PlankDark = entry(Enum.Material.WoodPlanks, 54, 54, 54, "Wood"),
-	Glass = entry(Enum.Material.Glass, 120, 128, 132, "Glass"),
-	Water = entry(Enum.Material.Glass, 34, 38, 40, "Water"),
-	Soil = entry(Enum.Material.Ground, 42, 40, 38, "Grass"),
-	Mud = entry(Enum.Material.Mud, 48, 46, 44, "Grass"),
-	Sidewalk = entry(Enum.Material.Pavement, 84, 85, 86, "Concrete"),
-	SlabEdge = entry(Enum.Material.Concrete, 96, 97, 98, "Concrete"), -- floor-slab band on the block facade
-	Rubble = entry(Enum.Material.Slate, 68, 68, 66, "Concrete"),
-	Iron = entry(Enum.Material.CorrodedMetal, 48, 49, 50, "Metal"),
+	Plank = entry(Enum.Material.WoodPlanks, 94, 76, 54, "Wood"),
+	PlankDark = entry(Enum.Material.WoodPlanks, 66, 52, 38, "Wood"),
+	Glass = entry(Enum.Material.Glass, 120, 130, 128, "Glass"),
+	Water = entry(Enum.Material.Glass, 38, 46, 30, "Water"),
+	Soil = entry(Enum.Material.Ground, 46, 38, 30, "Grass"),
+	Mud = entry(Enum.Material.Mud, 52, 44, 34, "Grass"),
+	Sidewalk = entry(Enum.Material.Pavement, 84, 84, 80, "Concrete"),
+	SlabEdge = entry(Enum.Material.Concrete, 98, 96, 90, "Concrete"), -- floor-slab band on the brick facade
+	Rubble = entry(Enum.Material.Slate, 70, 68, 64, "Concrete"),
+	Iron = entry(Enum.Material.CorrodedMetal, 54, 44, 38, "Metal"),
 	BusPaint = entry(Enum.Material.CorrodedMetal, 150, 112, 34, "Metal"),
 	Rubber = entry(Enum.Material.Rubber, 26, 26, 26, "Concrete"),
-	Ember = entry(Enum.Material.Glass, 120, 170, 255, "Metal"), -- the boiler's blue pilot flame
-	Fixture = entry(Enum.Material.SmoothPlastic, 148, 150, 152, "Metal"),
-	Screen = entry(Enum.Material.Glass, 24, 27, 29, "Glass"),
+	Ember = entry(Enum.Material.Glass, 255, 120, 40, "Metal"),
+	Fixture = entry(Enum.Material.SmoothPlastic, 150, 152, 146, "Metal"),
+	Screen = entry(Enum.Material.Glass, 20, 34, 28, "Glass"),
 	SkylineConcrete = entry(Enum.Material.Concrete, 30, 31, 33, "Concrete"),
 	SkylineSoot = entry(Enum.Material.Slate, 22, 22, 24, "Concrete"),
 	SkylineWindow = entry(Enum.Material.Glass, 10, 11, 13, "Glass"),
-	SkylineLit = entry(Enum.Material.Neon, 88, 98, 112, "Glass"),
+	SkylineLit = entry(Enum.Material.Neon, 110, 74, 36, "Glass"),
 
-	-- Interior finishes (Finishes): wainscots, chair rails, baseboards, vinyl floors
-	Baseboard = entry(Enum.Material.Rubber, 28, 28, 29, "Concrete"), -- rubber cove base
-	TileCap = entry(Enum.Material.CeramicTiles, 46, 50, 54, "Tile"), -- glazed bullnose cap over a tile wainscot
-	WainscotSlate = entry(Enum.Material.CeramicTiles, 58, 62, 66, "Tile"), -- glazed corridor tile
-	WainscotBlue = entry(Enum.Material.CeramicTiles, 64, 67, 71, "Tile"), -- restrooms and wet rooms
-	WainscotGreen = entry(Enum.Material.CeramicTiles, 70, 72, 72, "Tile"), -- restrooms, locker rooms
-	WainscotPaint = entry(Enum.Material.Plaster, 73, 74, 75, "Concrete"), -- classroom dado: dark gray gloss paint
-	WainscotWood = entry(Enum.Material.Wood, 58, 56, 54, "Wood"), -- office panelling
-	VinylGray = entry(Enum.Material.Plastic, 88, 90, 92, "Tile"), -- worn sheet vinyl down the corridors
-	ClassroomVCT = entry(Enum.Material.Plastic, 110, 112, 112, "Tile"), -- speckled vinyl tile
+	-- Interior finishes (Finishes): wainscots, chair rails, baseboards, linoleum and vinyl floors
+	Baseboard = entry(Enum.Material.Rubber, 30, 29, 27, "Concrete"), -- rubber cove base
+	TileCap = entry(Enum.Material.CeramicTiles, 44, 54, 48, "Tile"), -- glazed bullnose cap over a tile wainscot
+	WainscotOxblood = entry(Enum.Material.CeramicTiles, 92, 44, 40, "Tile"), -- glazed corridor tile (Level 1)
+	WainscotTeal = entry(Enum.Material.CeramicTiles, 46, 84, 82, "Tile"), -- Auditorium storey corridors (Level 2)
+	WainscotBlue = entry(Enum.Material.CeramicTiles, 46, 72, 98, "Tile"), -- restrooms and wet rooms
+	WainscotGreen = entry(Enum.Material.CeramicTiles, 54, 86, 68, "Tile"), -- restrooms, locker rooms
+	WainscotPaint = entry(Enum.Material.Plaster, 70, 80, 62, "Concrete"), -- classroom dado: dark olive gloss paint
+	WainscotWood = entry(Enum.Material.Wood, 70, 50, 34, "Wood"), -- office panelling
+	LinoleumBeige = entry(Enum.Material.Plastic, 120, 114, 96, "Tile"), -- worn linoleum down the corridors and halls
+	ClassroomVCT = entry(Enum.Material.Plastic, 132, 126, 106, "Tile"), -- speckled vinyl tile
 
 	-- Signage and service runs
-	SignPaper = entry(Enum.Material.SmoothPlastic, 186, 186, 182, "Metal"),
-	SignPlate = entry(Enum.Material.SmoothPlastic, 42, 47, 54, "Metal"), -- enamelled room plate
+	SignPaper = entry(Enum.Material.SmoothPlastic, 196, 188, 162, "Metal"),
+	SignPlate = entry(Enum.Material.SmoothPlastic, 34, 52, 74, "Metal"), -- enamelled room plate
 	SignMetal = entry(Enum.Material.Metal, 132, 136, 132, "Metal"),
 	HazardYellow = entry(Enum.Material.SmoothPlastic, 206, 162, 26, "Metal"),
-	PipeIron = entry(Enum.Material.CorrodedMetal, 60, 61, 62, "Metal"),
-	PipeLead = entry(Enum.Material.CorrodedMetal, 84, 86, 88, "Metal"),
+	PipeIron = entry(Enum.Material.CorrodedMetal, 72, 58, 48, "Metal"),
+	PipeCopper = entry(Enum.Material.CorrodedMetal, 112, 82, 58, "Metal"),
 	Conduit = entry(Enum.Material.Metal, 128, 132, 130, "Metal"),
 
 	-- Wear, furniture and decay (Finishes, FurnitureBuilder, DecayBuilder)
-	CeilingTile = entry(Enum.Material.Plaster, 117, 118, 119, "Concrete"), -- acoustic drop-ceiling tile
+	CeilingTile = entry(Enum.Material.Plaster, 128, 122, 102, "Concrete"), -- acoustic drop-ceiling tile
 	CeilingVoid = entry(Enum.Material.SmoothPlastic, 7, 7, 8, "Concrete"), -- the plenum behind a missing tile
-	DeskTop = entry(Enum.Material.Wood, 92, 90, 88, "Wood"), -- laminated school desk top
+	DeskTop = entry(Enum.Material.Wood, 112, 92, 66, "Wood"), -- laminated school desk top
 	DeskSteel = entry(Enum.Material.Metal, 52, 56, 54, "Metal"), -- tubular desk and chair frames
-	ChairShell = entry(Enum.Material.Plastic, 60, 61, 62, "Wood"), -- moulded chair seats and backs
-	Chalkboard = entry(Enum.Material.Slate, 34, 38, 38, "Concrete"),
+	ChairShell = entry(Enum.Material.Plastic, 70, 62, 48, "Wood"), -- moulded chair seats and backs
+	Chalkboard = entry(Enum.Material.Slate, 30, 44, 36, "Concrete"),
 	ChalkFrame = entry(Enum.Material.Metal, 104, 106, 100, "Metal"), -- aluminium board frame and chalk tray
-	Cork = entry(Enum.Material.Cardboard, 96, 92, 88, "Wood"), -- noticeboard
-	CabinetSteel = entry(Enum.Material.Metal, 74, 77, 80, "Metal"), -- filing cabinets, office desk carcasses
-	PaperSheet = entry(Enum.Material.SmoothPlastic, 170, 170, 168, "Concrete"), -- loose paper on the floor
+	Cork = entry(Enum.Material.Cardboard, 118, 88, 58, "Wood"), -- noticeboard
+	CabinetSteel = entry(Enum.Material.Metal, 74, 80, 74, "Metal"), -- filing cabinets, office desk carcasses
+	PaperSheet = entry(Enum.Material.SmoothPlastic, 176, 170, 148, "Concrete"), -- loose paper on the floor
 	Puddle = entry(Enum.Material.Glass, 14, 16, 14, "Water"), -- standing water: dark, glossy
-	PlasterFlap = entry(Enum.Material.Plaster, 124, 126, 128, "Concrete"), -- paint and plaster peeling off a wall
-	Lath = entry(Enum.Material.WoodPlanks, 66, 64, 62, "Wood"),
+	PlasterFlap = entry(Enum.Material.Plaster, 136, 128, 106, "Concrete"), -- paint and plaster peeling off a wall
+	Lath = entry(Enum.Material.WoodPlanks, 84, 62, 40, "Wood"),
 	Cable = entry(Enum.Material.Rubber, 20, 20, 20, "Concrete"), -- wiring hanging out of the ceiling
 	LabWorktop = entry(Enum.Material.SmoothPlastic, 28, 30, 29, "Metal"), -- black epoxy resin bench top
 }
@@ -113,7 +111,7 @@ local entries: { [string]: Entry } = {
 -- texture's manifest `bases` lists the materials of its keys; `python3 tools/textures/generate.py --check` verifies.
 local textured: { [string]: string } = {
 	PlasterSchool = "PaintedPlaster",
-	PlasterAsh = "PaintedPlaster",
+	PlasterGreen = "PaintedPlaster",
 	WainscotPaint = "PaintedPlaster",
 	Concrete = "StainedConcrete",
 	ConcreteDark = "StainedConcrete",
@@ -137,9 +135,10 @@ local textured: { [string]: string } = {
 	TileBlue = "PoolMosaic",
 	WainscotBlue = "PoolMosaic",
 	WainscotGreen = "PoolMosaic",
-	BlockGray = "StainedBrick",
+	WainscotTeal = "PoolMosaic",
+	Brick = "StainedBrick",
 	Linoleum = "VinylTile",
-	VinylGray = "VinylTile",
+	LinoleumBeige = "VinylTile",
 	ClassroomVCT = "VinylTile",
 	LabWorktop = "LabWorktop",
 	Rubber = "RubberMat",
@@ -167,8 +166,8 @@ local layoutKeys: { string } = {
 	"Linoleum",
 	"WoodPanel",
 	"PlasterSchool",
-	"PlasterAsh",
-	"BlockGray",
+	"PlasterGreen",
+	"Brick",
 	"MetalRust",
 	"MetalGalvanized",
 	"RoofGravel",

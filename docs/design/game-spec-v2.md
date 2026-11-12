@@ -1221,31 +1221,43 @@ runway, v speed, x the offset from the centre line)
 ## 5. Art direction, performance and sound
 
 ### 5.1 The rule of the look
-- **Every stage is dark, cold, gray and scary.** No warm light anywhere before the Bahamas.
-- **Two accents only.** **Red** means threat or locked: emergency lamps, lock lights, obstacle beacons on the runway.
-  **Cold white** means help: guidance beacons, chevrons, arrows, battery LEDs, EXIT signs (their green goes).
-- **Green** exists in two places: the radar on the HUD, and the airport beacon (the goal you can see from the roofs).
-- **No black-and-white checkerboard floors anywhere.** `Finishes` drops its checker rule and `SurfaceArt.checker`;
-  the `CheckerTile` texture and the `CheckerLight` key are retired.
-- **The gate:** on three reference views per school stage, at Max and at Potato, the mean HSV saturation of the frame
-  is ≤ 0.15; no palette key a school layout uses has saturation above 0.25, the red accent aside.
+- **The school keeps its own colours, in the dark.** Dark and ruined, a school after hours, but not gray: every
+  stage keeps the original look's palette, light colours, film and textures. The Basement is red brick, copper pipes
+  and rust under a sodium amber; the Hallways green plaster over oxblood tile under sick-green tubes; the Auditorium
+  storey teal tile; the Roof a cold blue night. The tunnel regions keep their own pipe colours and bands, the EXIT
+  signs their green.
+- **The Basement's amber is held a third short of full.** Its tube and bulb casts, boiler glow, grade, haze and decay
+  keep two thirds of the full amber's saturation at its hue and exactly its linear luminance (so the baked light the
+  monster and the hide rules read does not move), so brick, pipes, concrete and steel read as different colours
+  instead of one copper wash.
+- **No black-and-white checkerboard floors anywhere, and no two-tone tiling.** `Finishes` has no checker rule and
+  `SurfaceArt` no checker painter; the `CheckerTile` texture and the `CheckerLight` key are retired. The corridors and
+  big halls that had the checker are plain worn beige linoleum (`LinoleumBeige`) with one soft traffic lane worn
+  down their middle; classroom vinyl tile is one tone.
+- **The gates:** `Look.spec` (no checker key, texture, painter, SurfaceGui or square in the sources or the built
+  world; the named coloured surfaces keep their colour; the basement's amber is two thirds of full at the same
+  luminance) and the screenshot check: on three reference views per school stage, at Max and at Potato, the mean HSV
+  saturation of the frame is ≥ 0.18 (the all-gray pass measured 0.09 to 0.15), and the basement's views are not one
+  copper wash: the mean over its three views of the share of visible pixels that are copper (hue 0 to 45°, saturation
+  ≥ 0.6) is ≤ 0.85 at each tier (the full amber measured 0.88 to 0.90).
 
 ### 5.2 Per stage (RGB; "was" values are today's `Palette` and `LightingMood`)
 
 | Stage | Surfaces | Lights and air |
 |---|---|---|
-| **Basement** | red `Brick` (was 92, 56, 44) → `BlockGray`, painted concrete block (70, 72, 74). `ConcreteStained` (74, 72, 60) → (68, 70, 72). `PipeCopper` (112, 82, 58) → `PipeLead` (84, 86, 88). `MetalRust` (98, 70, 50) → mill scale (76, 74, 72). `WoodPanel` → (62, 60, 58). The regions' red, yellow, blue and green mains become dark iron (58, 60, 62) with a 0.5-stud band in the old hue at 30 % saturation, so regions still read | bulbs (255, 196, 140) → cold white (206, 220, 232). Level cast (236, 200, 136) → (196, 206, 220). Haze colour (62, 50, 36) → (40, 44, 50). The orange boiler glow (255, 118, 40) → small blue pilot flames (120, 170, 255). Emergency reds stay |
-| **Hallways** | corridors: `VinylGray` (88, 90, 92), plain worn sheet vinyl with a darker traffic lane (wear paint). `PlasterGreen` (82, 98, 80) → `PlasterAsh` (104, 106, 108). `WainscotOxblood` (92, 44, 40) → `WainscotSlate` (58, 62, 66). Classroom vinyl → speckled gray (110, 112, 112) | the sick-green cast (168, 236, 196) → cold fluorescent (200, 214, 226). Haze (42, 52, 48) → (42, 46, 50) |
-| **Auditorium** | curtains and seats charcoal (48, 46, 50) with a tenth of wine; stage boards (70, 66, 62); walls `PlasterAsh`; backstage block gray | aisle lights cold white; the ghost light a bare cold bulb; the beam white; cast (200, 210, 226); haze (40, 44, 52) |
+| **Basement** | as it was: red `Brick` (92, 56, 44), `ConcreteStained` (74, 72, 60), `PipeCopper` (112, 82, 58), `MetalRust` (98, 70, 50), `WoodPanel` (76, 56, 40); the regions' own mains (gray 48, 48, 50; red 132, 30, 24; yellow 176, 136, 24; blue 36, 78, 128; green 54, 92, 58) with their bands | the amber a third short of full at the same luminance: bulb cast (255, 160, 84) → (220, 173, 136), tube cast (236, 200, 136) → (227, 201, 159), boiler glow (255, 112, 36) → (218, 135, 92), grade (255, 236, 214) → (249, 237, 223), haze (62, 50, 36) → (58, 51, 42), decay (34, 24, 14) → (31, 25, 19). Exposure 0.05 EV as it was. Emergency reds and the green EXIT signs stay |
+| **Hallways** | corridors: `LinoleumBeige` (120, 114, 96), plain worn linoleum (one tone, the vinyl tile texture) with a darker traffic lane (wear paint, 34, 29, 22), where the black-and-white checker was. `PlasterGreen` (82, 98, 80), `WainscotOxblood` (92, 44, 40), classroom vinyl `ClassroomVCT` (132, 126, 106) in one tone | as it was: the sick-green cast (168, 236, 196), haze (42, 52, 48), exposure 0.08 EV |
+| **Auditorium** | curtains and seats charcoal (48, 46, 50) with a tenth of wine; stage boards (70, 66, 62); the storey's corridors `WainscotTeal` (46, 84, 82) tile under `PlasterGreen`; backstage brick | the storey's green-teal cast (160, 232, 222) and haze (38, 52, 54) as they were; the ghost light a bare bulb; the beam white |
 | **Roof** | wet slate (52, 54, 58), zinc (96, 100, 104), mesh and duct in galvanized gray | clock faces bone white (220, 226, 232); white strobes; cold lightning; rain |
-| **Back Lot** | asphalt (40, 40, 42), the gray block façade, galvanized bins | day: flat overcast (`dayAmount` 0.65); night: the one cold lamp and the red strobe |
+| **Back Lot** | asphalt (40, 40, 42), the brick façade, galvanized bins | day: flat overcast (`dayAmount` 0.65); night: the one cold lamp and the red strobe |
 | **Rooftops** | tar (30, 32, 34), zinc, soot brick (60, 56, 54), dead neon tubes, orange netting in the alleys (the one warm colour, and it means "safe") | 97 % of windows dark; three signs flicker ice blue (150, 200, 255); the cloud's underside a teal gray (44, 52, 58); the airport beacon sweeps white and green on the western sky |
 | **Airport** | wet concrete (72, 76, 80) with worn white paint; galvanized hangars (112, 118, 120); containers in four grays; the plane white (210, 214, 218) with a faded teal stripe (70, 120, 124) so it reads in the dark | blue taxiway edge lights (60, 110, 255); white runway lights; red obstruction lamps; two cold masts |
 | **Bahamas** | sea turquoise (64, 196, 196); sand (236, 214, 170); palms (46, 120, 70); a sky from blue (120, 190, 255) to cream (255, 236, 200) | a gold sun (255, 214, 140); `dayAmount` 1; saturation +0.15; exposure +0.6 EV. The only stage with a positive saturation |
 
-- **Film.** Every stage but the Bahamas grades to saturation ≤ −0.35 with a cold tint (232, 238, 245).
-- **Textures.** Colour maps that carry their own hue (`RustedMetal`, `StainedConcrete`, `WornWood`) are regenerated
-  or desaturated so the palette's gray is what shows at Max; Low and Potato already show the plain palette colour.
+- **Film.** Each school stage keeps its original film: saturation −0.18 to −0.24, each level's own grade tint (the
+  Basement's held a third short, above) and haze; the Bahamas alone goes positive.
+- **Textures.** Every colour map shows its own hues as its recipe paints them (manifest `chroma` 1): rust, stains,
+  grout and wood grain in their own colours. `VinylTile` stays one tone (no two-tone tile layout).
 - **`dayAmount`** is one uniform for the three sets: it adds `dayAmount × (ambient + sun × max(N·L, 0))`, unshadowed,
   to every material (Roblox: the same number drives `ClockTime`, `Brightness` and `Ambient`). Under the Bahamas'
   palms and plane, blob shadows are dark discs.
@@ -1779,6 +1791,20 @@ Numbers are positions in `finale-critiques.json`, counted from 1 (1–37 are cri
 - 4.7 (WP07): the spawn hold's 70..140 walked (leaps counted) reaches only the north roof's east half out of the landing's sight (every other roof is 160 or more): two Creature starts stand by its east parapet, the others on the north and south roofs' west halves. "N, S, NW or SW" does not hold on a 400 x 288 ring.
 - 4.7 (WP07): a deck's walk graph members are its stairs only: a walk that starts on a deck climbs out by a stair; dropping off a lip reaches the deck's stairs.
 - 4.7 / 5.4 (WP07): the stage's far scenery (street, skyline, beacon) is not baked: the bake probes the whole box of a level, so every stud of scenery out to the canyon is lighting work. The façade band (30..44 high) is the canyon's near wall; the far skyline is WP14's runtime scenery.
-- 3.6 / 2.2 (WP07): Gus's key ring is welded, not jointed (11 keys, two chain links, the ring), and adds exactly one attachment (`KeyJingle`) to the rig; his 38 added parts are all non-colliding, massless and unqueried. The host is a Creature attribute (`Host`), and `meta.creatureHosts` carries both hosts' dress relative to the rig part each rides.
+- 3.6 / 2.2 (WP07): Gus's key ring is welded, not jointed (11 keys, two chain links, the ring), and adds exactly one attachment (`KeyJingle`) to the rig; his 39 added parts are all non-colliding, massless and unqueried (the mask's seam is three pieces that follow the shell: brow, face, jaw). The host is a Creature attribute (`Host`), and `meta.creatureHosts` carries both hosts' dress relative to the rig part each rides.
 - 4.7 (WP07): an open-air stage gets none of the school's signage (room plates, STAIRS, posters): its signs are RooftopBuilder's (the billboard, ROXY, the laundry, the feeder placards).
 - 4.7 (WP07): the stage's ambience is `DroneRoof` (there is no `WindDrone` preset).
+- 5.1 / 5.2 (look restored): the player, after the all-gray pass: "By gray feel i didn't mean everything look gray, I meant like look at threshold its like dark gray theme, that doesnt mean all colors are actually gray ... a spooky theme like a school after hours dark and ruined but not all gray." and "So somewhat like the original i guess I liked the original Icl I just want it to have a more scary theme like I dont want only the monster to be scary but the surroundings too". The original look is back, without the checkerboard and with the Basement's amber a third short of full; the scarier surroundings are a separate package.
+- 2.3 (WP11): StoryConfig exports as `meta.storyConfig` (the generic export's name), not `meta.story`; its tick is `TickRate` 30 (the export keeps six decimals, so 1/30 would not reach the web exactly), and every position and yaw StoryConfig works out is rounded to six decimals at the source, so the web's port replays the goldens to 1e-9.
+- 2.3 (WP11): a cutscene is "seen" by a player when its Full cut played to its end on their page, or they voted it away (profile `CutscenesSeen`); the first-timer's veto and Full or Short read that.
+- 2.4 (WP11): the PA line "LOCKDOWN. LOCKDOWN." starts at 61.5 s with a 2.2 s slot (the table gives none), inside the Short cut's S13 piece.
+- 2.4 (WP11): the Short cut's pieces are one-for-one spans of the Full timeline: S1 0-3, S6 from "Booo." 26.4-29.9 (S6 has only 2.1 s after it, so the piece runs into S7's insert), S8 31.5-34, S9's end and S10 36.5-43, S11 44.5-47.5, S13 from the windows 61-65, S15 74.5-78.
+- 2.4 (WP11): S12's one shared shot is through Dumpster A's gap (slot 1's bin, the one whose lid rests ajar); the Tall Man reaches for, and hunches over, the gap of the bin the host's (alone: your) player hides in. Its head comes down hunched (the Quadruped pose cannot be held: a scripted teleport stands it up), so the mask fills the gap's top, not the gap itself.
+- 2.4 (WP11): the opening's set events are data in StoryConfig: the lamp off by day, flickering 34-38.6, dead 38.6-39, on after; the strobe off until the shutter crashes (63.6); the shutter up by day; the two window rows lit by day and dark at 61.8 and 62.8; S14's time-lapse a tint on `dayAmount` (grey, orange, deep blue). The Back Lot's day light (ambient, sun and its direction) is `StoryConfig.Sets.BackLot.day`; no shared day config existed.
+- 2.2 (WP11): clips added for the opening: Reach, HoldUp, Lifted (avatars); the crawler's Folded, Held, Unfold, Wrap; the Monster's Hunch (hunched over a gap, staring). Clip `slow` replaces a rate (S10's unfold: FadeIn `slow` 3.25).
+- 2.5 (WP11): Gus's muffled "Get it— GET IT OFF—" plays at rate 1.0 (panic): at his 0.9 its five words need 2.14 s of its 2.0 s slot.
+- 2.6 / 2.7 (WP11): lines the tables give no time: the Fall's co-op "Your turn." 11.5 s (slot 1.5), its solo whisper "{you}…" 11.0 s (1.5); Sunrise's P2 subtitle 33.0 s with a 3.0 s slot. The Fall's toll is co-op only and its lid creak solo only (events carry minPlayers / maxPlayers).
+- 3.4 (WP11): the web speaks only with voices the device has (`localService`): a remote SpeechSynthesis voice would send the line to a foreign host. With none, or on a speech error, the line's body is a murmur (one breathy syllable a syllable, SpeechMurmur) and the subtitle; WP12's throat layer takes the murmur's place for the monster's lines.
+- 3.4 (WP11): the web keeps the name as its own setting `PlayerName` (a Text row in Settings) with `NameAsked` (hidden): SettingsSchema has no text kind and Roblox uses the DisplayName.
+- 4.1 (WP11): the prologue's "at most 50 s" is a timer: the chute's cut also falls 50 s after the hand-over when nobody has climbed in (CinematicTracks.chuteCutAt). "Climb in" answers within 3 studs round the ChuteHatch trigger (the hatch's prompt reaches past the box).
+- 4.1 (WP11): the bins (their lids), the chute hatch (its doors) and the staff doors' shutter are exported as entities (drawn with the exterior) so the opening and the prologue can move them; the bins' PushLid and the hatch's ClimbIn are their prompts.

@@ -65,7 +65,7 @@ local SIDE_EXIT_GAP = 1.3 -- a side exit's distance off the prop's side
 local PROMPT_OUT = 0.6
 local PROMPT_Y = 3.4
 
-local RUST = Color3.fromRGB(72, 60, 54)
+local RUST = Color3.fromRGB(92, 54, 34)
 local GRIME = Color3.fromRGB(16, 15, 13)
 local STEEL = Color3.fromRGB(70, 72, 74)
 local HAZARD = Color3.fromRGB(196, 150, 28)
@@ -81,10 +81,10 @@ local LID_LIFT = 0.32 -- the lid rests on lugs this far above the rim: the slot 
 local LID_OPEN_ANGLE = math.rad(105)
 HideBuilder.LidOpenAngle = LID_OPEN_ANGLE
 local BARREL_PAINTS: { Color3 } = {
-	Color3.fromRGB(60, 68, 78), -- drum blue
-	Color3.fromRGB(72, 49, 48), -- drum red
-	Color3.fromRGB(67, 71, 62), -- army green
-	Color3.fromRGB(126, 116, 90), -- hazard yellow
+	Color3.fromRGB(46, 70, 104), -- drum blue
+	Color3.fromRGB(110, 34, 28), -- drum red
+	Color3.fromRGB(62, 76, 48), -- army green
+	Color3.fromRGB(150, 116, 30), -- hazard yellow
 	Color3.fromRGB(52, 52, 54), -- black
 }
 
@@ -111,7 +111,7 @@ local CABINET_PAINTS: { Color3 } = {
 	Color3.fromRGB(78, 86, 72), -- stores green
 	Color3.fromRGB(86, 88, 90), -- battleship grey
 	Color3.fromRGB(64, 72, 84), -- slate blue
-	Color3.fromRGB(86, 81, 74), -- tan
+	Color3.fromRGB(96, 80, 56), -- tan
 }
 
 local HIDE_PROMPT_BARREL: PropKit.PromptSpec = {

@@ -309,12 +309,11 @@ return {
 		for _, layout in tunnelLayouts() do
 			local tunnels = layout.tunnels :: LayoutSchema.TunnelData
 			t.truthy(#tunnels.regions >= 4 and #tunnels.regions <= 6, layout.id .. " has 4-6 regions")
-			-- the gray look (spec v2 5.2): every main is the same dark iron, and a band of the region's own hue tells it
-			local bands: { [string]: boolean } = {}
+			local pipes: { [string]: boolean } = {}
 			for _, region in tunnels.regions do
-				local key = string.format("%.2f,%.2f,%.2f", region.band.R, region.band.G, region.band.B)
-				t.falsy(bands[key], region.name .. " has its own band colour")
-				bands[key] = true
+				local key = string.format("%.2f,%.2f,%.2f", region.pipe.R, region.pipe.G, region.pipe.B)
+				t.falsy(pipes[key], region.name .. " has its own pipe colour")
+				pipes[key] = true
 				t.truthy(#region.graffiti >= 2, region.name .. " has its own graffiti")
 				t.truthy(#region.rooms >= 1, region.name .. " holds tunnels")
 			end

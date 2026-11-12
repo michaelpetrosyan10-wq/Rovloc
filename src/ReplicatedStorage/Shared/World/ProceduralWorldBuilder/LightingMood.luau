@@ -12,11 +12,13 @@
 --     their layout marks untouched;
 --   * kinds with a scripted owner keep their marks too: the classroom glow is the Floor 1 scare's own light;
 --   * emergency reds and exit signs always burn: they are the player's wayfinding;
---   * the gray look (docs/design/game-spec-v2.md 5.1): no warm light anywhere. Every tube and bulb is pulled toward a
---     cold white (`cast`, `bulbCast`; scripted and wayfinding lights keep their own colour), each cast as bright
---     (in linear luminance) as the warm colour it replaced, so the baked light the monster and the hide rules read is
---     unchanged; `grade` is the cold tint the client's colour grade blends toward while the camera is on that level
---     (LightingController).
+--   * every wing has its own colour (`cast`): the tubes of the classroom floors burn a sickly green-teal, the
+--     basement's tubes and bulbs a sodium amber. The layout's light colour is pulled toward the cast (scripted and
+--     wayfinding lights keep theirs), and `grade` is the gentle tint the client's colour grade blends toward while the
+--     camera is on that level (LightingController).
+--   * the basement's amber (its casts, its boiler glow, grade, haze and decay) is held a third short of full orange,
+--     each colour as bright in linear luminance as the full amber it replaced, so brick, pipes, concrete and steel
+--     keep colours of their own under it instead of one copper wash.
 -- Pools, not floods: working fixtures burn hard (strong keys under each fixture) over a tighter reach, so the floor
 -- between two pools falls off into shadow instead of a flat wash; the ambient fill (LightingRig) keeps those gaps
 -- readable.
@@ -170,17 +172,14 @@ end
 -- How far a light's own colour is pulled toward its level's cast.
 local CAST_AMOUNT = 0.7
 
--- The cold tint every level grades toward (spec v2 5.2 "Film").
-local COLD_TINT = rgb(232, 238, 245)
-
 local LEVELS: { [string]: LevelMood } = {
 	Lobby = {
 		revive = 1,
 		flicker = 0.1,
 		brightness = 2.2,
 		range = 1.15,
-		bulbCast = rgb(189, 190, 192),
-		grade = COLD_TINT,
+		bulbCast = rgb(255, 172, 98),
+		grade = rgb(255, 240, 222),
 	},
 	-- The tunnels: TunnelPlanner already decides which caged bulbs are dead and which flicker (and puts every working
 	-- one on a "Mains:" group the power switch holds), so nothing here revives a broken one.
@@ -189,9 +188,9 @@ local LEVELS: { [string]: LevelMood } = {
 		flicker = 0,
 		brightness = 2.75,
 		range = 1.3,
-		cast = rgb(203, 204, 206),
-		bulbCast = rgb(181, 183, 184),
-		grade = COLD_TINT,
+		cast = rgb(227, 201, 159),
+		bulbCast = rgb(220, 173, 136),
+		grade = rgb(249, 237, 223),
 	},
 	-- Levels 1 and 2 are tunnel floors too (TunnelPlanner decides their dead and flickering bulbs): nothing revived.
 	Level1_Hallways = {
@@ -201,40 +200,39 @@ local LEVELS: { [string]: LevelMood } = {
 		range = 1.25,
 		-- The scare: the hallway outside Classroom 108 stays dark except for the glow spilling from its door.
 		keepDark = { "L1_Corridor_East", "L1_Classroom_108" },
-		cast = rgb(219, 220, 222),
-		bulbCast = rgb(214, 215, 217),
-		grade = COLD_TINT,
+		cast = rgb(168, 236, 196),
+		bulbCast = rgb(240, 212, 150),
+		grade = rgb(236, 255, 244),
 	},
-	-- The Auditorium storey (an interim tunnel floor).
+	-- The Auditorium storey (an interim tunnel floor) keeps the science storey's mood until its own look.
 	Level2_Auditorium = {
 		revive = 0,
 		flicker = 0,
 		brightness = 2.75,
 		range = 1.25,
-		cast = rgb(217, 218, 220),
-		bulbCast = rgb(214, 216, 217),
-		grade = COLD_TINT,
+		cast = rgb(160, 232, 222),
+		bulbCast = rgb(236, 214, 160),
+		grade = rgb(232, 252, 252),
 	},
 	Level3_Roof = {
 		revive = 0.5,
 		flicker = 0.5,
 		brightness = 2.2,
 		range = 1.15,
-		cast = rgb(204, 206, 207),
-		grade = COLD_TINT,
+		cast = rgb(190, 206, 236),
+		grade = rgb(234, 240, 255),
 	},
 }
 
 local DEFAULT: LevelMood = { revive = 0.4, flicker = 0.35, brightness = 2.65, range = 1.25 }
 
 -- The base film: a cold, hazy school night. Contrast up with the blacks lifted a touch (so the gaps between pools
--- read as dark grey-blue, not void), colour drained to the gray look's -0.35 (spec v2 5.2), bloom catching only what
--- really burns (threshold above 1: tubes, lenses, glossy highlights), far-focus depth of field that only softens the
--- end of a long corridor.
+-- read as dark grey-blue, not void), colour drained, bloom catching only what really burns (threshold above 1:
+-- tubes, lenses, glossy highlights), far-focus depth of field that only softens the end of a long corridor.
 local BASE_FILM: Film = table.freeze({
 	exposure = 0.08,
 	contrast = 0.2,
-	saturation = -0.35,
+	saturation = -0.22,
 	lift = 0.015,
 	bloomIntensity = 0.85,
 	bloomSize = 34,
@@ -243,8 +241,8 @@ local BASE_FILM: Film = table.freeze({
 	offset = 0.06,
 	haze = 1.9,
 	glare = 0.2,
-	hazeColor = rgb(44, 46, 48),
-	decay = rgb(24, 25, 27),
+	hazeColor = rgb(42, 48, 52),
+	decay = rgb(20, 26, 28),
 	sunRays = 0.03,
 	dofFar = 0.14,
 	dofFocus = 38,
@@ -256,18 +254,19 @@ local BASE_FILM: Film = table.freeze({
 })
 
 local FILM_PATCHES: { [string]: FilmPatch } = {
-	-- Brighter, clearer air: the squad's last look at something like safety, still cold.
+	-- Warm, safe-ish, clearer air: the squad's last look at something like comfort.
 	Lobby = {
 		exposure = 0.1,
 		contrast = 0.14,
+		saturation = -0.12,
 		bloomIntensity = 0.8,
 		bloomSize = 32,
 		bloomThreshold = 1.15,
 		density = 0.28,
 		offset = 0.1,
 		haze = 1.4,
-		hazeColor = rgb(46, 48, 52),
-		decay = rgb(24, 25, 27),
+		hazeColor = rgb(60, 52, 44),
+		decay = rgb(30, 24, 20),
 		dofFar = 0.1,
 		dofRadius = 50,
 		vignette = 0.26,
@@ -275,9 +274,10 @@ local FILM_PATCHES: { [string]: FilmPatch } = {
 		dust = 0.8,
 		moon = 0,
 	},
-	-- Cold bulbs in thick, dusty air: the boilers' damp haze, heavy bloom on the bulbs.
+	-- Sodium amber in thick, dusty air: the boilers' heat haze, heavy bloom on the bulbs.
 	Level0_Basement = {
-		exposure = 0.15, -- the gray look kept as bright as the warm one it replaced
+		exposure = 0.05,
+		saturation = -0.18,
 		bloomIntensity = 0.95,
 		bloomSize = 36,
 		bloomThreshold = 1.05,
@@ -285,8 +285,8 @@ local FILM_PATCHES: { [string]: FilmPatch } = {
 		offset = 0.04,
 		haze = 2.4,
 		glare = 0.35,
-		hazeColor = rgb(42, 44, 46),
-		decay = rgb(24, 25, 27),
+		hazeColor = rgb(58, 51, 42),
+		decay = rgb(31, 25, 19),
 		sunRays = 0,
 		dofFar = 0.16,
 		dofFocus = 34,
@@ -296,21 +296,21 @@ local FILM_PATCHES: { [string]: FilmPatch } = {
 		dust = 1.4,
 		moon = 0, -- every basement window looks into a soil-filled light well
 	},
-	-- Cold fluorescent tubes in a stale, medium haze.
+	-- Sickly green tubes in a stale, medium haze.
 	Level1_Hallways = {
-		exposure = 0.15, -- the gray look kept as bright as the green one it replaced
-		hazeColor = rgb(44, 46, 48),
-		decay = rgb(24, 25, 27),
+		saturation = -0.24,
+		hazeColor = rgb(42, 52, 48),
+		decay = rgb(20, 28, 26),
 	},
-	-- A little clearer, colder.
+	-- Clinical teal, a little clearer, colder.
 	Level2_Auditorium = {
-		exposure = 0.26, -- the gray look kept as bright as the teal one it replaced
+		exposure = 0.1,
 		bloomIntensity = 0.9,
 		bloomThreshold = 1.1,
 		density = 0.32,
 		haze = 1.7,
-		hazeColor = rgb(42, 44, 47),
-		decay = rgb(24, 25, 27),
+		hazeColor = rgb(38, 52, 54),
+		decay = rgb(18, 28, 30),
 		shafts = 0.95,
 		dust = 0.9,
 	},
@@ -325,8 +325,8 @@ local FILM_PATCHES: { [string]: FilmPatch } = {
 		offset = 0.12,
 		haze = 2.2,
 		glare = 0.1,
-		hazeColor = rgb(43, 44, 46),
-		decay = rgb(24, 25, 28),
+		hazeColor = rgb(40, 44, 54),
+		decay = rgb(20, 24, 30),
 		sunRays = 0.06,
 		dofFar = 0.12,
 		dofFocus = 48,
@@ -396,8 +396,8 @@ local BASE_RENDER: Render = table.freeze({
 	contrast = 0.145,
 	brightness = 0.069,
 	tint = rgb(255, 255, 255),
-	ambient = rgb(55, 56, 58),
-	outdoorAmbient = rgb(92, 94, 96),
+	ambient = rgb(51, 56, 70),
+	outdoorAmbient = rgb(85, 93, 115),
 	haze = 0.76,
 	fixtureGain = 1.6,
 	fixtureRange = 1.05,
@@ -416,9 +416,9 @@ local RENDER_PATCHES: { [string]: RenderPatch } = {
 		torch = 1.05,
 	},
 	-- Low bulbs and boilers close to the floor: the falloffs differ least, so the smallest gain.
-	Level0_Basement = { exposure = 0.7, haze = 0.96, fixtureGain = 1.25, fixtureRange = 1.1 },
-	Level1_Hallways = { exposure = 0.7, fixtureGain = 1.65 },
-	Level2_Auditorium = { exposure = 0.81, haze = 0.68, fixtureGain = 1.65 },
+	Level0_Basement = { exposure = 0.6, haze = 0.96, fixtureGain = 1.25, fixtureRange = 1.1 },
+	Level1_Hallways = { exposure = 0.63, fixtureGain = 1.65 },
+	Level2_Auditorium = { exposure = 0.65, haze = 0.68, fixtureGain = 1.65 },
 	-- Open sky: the outdoor fill does the work; the few lamps need the most gain over their short reach.
 	Level3_Roof = {
 		exposure = 0.75,
@@ -608,7 +608,7 @@ end
 
 -- Moonlight through the boarded windows (a level's `film.moon` scales its brightness).
 LightingMood.Moonlight = table.freeze({
-	color = rgb(171, 174, 180),
+	color = rgb(150, 174, 226),
 	brightness = 2.4, -- a shadowed spill: only the gaps between the planks let it through
 	unshadowedShare = 0.32, -- an unshadowed spill lights its whole cone, so it burns at about the planks' open share
 	range = 26,

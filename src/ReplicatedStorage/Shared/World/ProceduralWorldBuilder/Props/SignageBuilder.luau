@@ -190,8 +190,8 @@ local INK = rgb(30, 26, 22)
 local CREAM = rgb(226, 214, 178)
 local SCHOOL_GREEN = rgb(30, 62, 46)
 local BOILER_RED = rgb(104, 28, 24)
-local STAIN = rgb(114, 106, 92)
-local STAIN_RING = rgb(82, 74, 65)
+local STAIN = rgb(132, 104, 56)
+local STAIN_RING = rgb(96, 72, 40)
 local SCRAWL_INK = rgb(82, 16, 12)
 local OLD_PAPER = rgb(166, 142, 96)
 
@@ -446,7 +446,7 @@ local function weather(gui: SurfaceGui, random: Rng, wallColor: Color3, size: Ve
 		tear.Size = UDim2.fromScale(side, side * size.X / size.Y)
 		tear.Rotation = 45 + random:NextNumber(-18, 18)
 	end
-	SurfaceArt.grime(gui, rgb(60, 55, 48), random:NextNumber(0.25, 0.45), false, 6)
+	SurfaceArt.grime(gui, rgb(70, 54, 30), random:NextNumber(0.25, 0.45), false, 6)
 end
 
 local function paintPoster(part: BasePart, style: Style, text: string, random: Rng, wallColor: Color3)

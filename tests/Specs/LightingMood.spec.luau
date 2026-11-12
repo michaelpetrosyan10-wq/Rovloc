@@ -1,14 +1,11 @@
 --!strict
 -- LightingMood: the built lighting is dark but readable — a real share of each level's fixtures burn, the story's
--- dark rooms and scripted lights keep their layout marks, wayfinding lights always burn, every wing burns a cold white
--- as bright as the warm light it replaced, with the gray look's cold grade and drained film, and it's deterministic.
+-- dark rooms and scripted lights keep their layout marks, wayfinding lights always burn, every wing casts its own
+-- colour (green-teal school floors, amber basement, cyan pool) with a gentle grade to match, and it's deterministic.
 -- Each level's Roblox render reproduces the browser build's frame (docs/LIGHTING-PARITY.md): its exposure, its
 -- dark-frame contrast curve, a fill that keeps the gaps readable, and the Brightness setting's steps around it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local Enums = require(ReplicatedStorage.Shared.Enums)
-local MathUtil = require(ReplicatedStorage.Shared.Util.MathUtil)
 
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
@@ -89,85 +86,18 @@ return {
 		end
 	end,
 
-	["every wing burns a cold white as bright as its old warm light; wayfinding, scripted, kept-dark lights keep theirs"] = function(
-		t: Expect
-	)
+	["each wing casts its own colour; wayfinding, scripted and kept-dark lights keep theirs"] = function(t: Expect)
 		local white = Color3.new(1, 1, 1)
-		local function cold(c: Color3, label: string)
-			t.truthy(c.B >= c.G and c.G >= c.R, label .. " is cold (blue >= green >= red)")
-			local hi = math.max(c.R, c.G, c.B)
-			t.truthy((hi - math.min(c.R, c.G, c.B)) / hi <= 0.25, label .. " is a white, not a colour")
-		end
-		for _, layout in Builder.layouts() do
-			local mood = LightingMood.levelMood(layout.id)
-			for _, kind in { "Fluorescent", "Bulb" } do
-				local target = if kind == "Fluorescent" then mood.cast else mood.bulbCast
-				if target then
-					cold(target, layout.id .. " " .. kind .. " cast")
-				end
-			end
-			t.eq(LightingMood.grade(layout.id), Color3.fromRGB(232, 238, 245), layout.id .. " grades to the cold tint")
-		end
-		-- the pull is partial: the layout's own colour still shows through
 		local hallways = LightingMood.cast("Level1_Hallways", "L1_NorthHall_West", "Fluorescent", white)
+		t.truthy(hallways.G > hallways.R and hallways.G > hallways.B, "the classroom floors burn a sickly green")
+		local auditorium = LightingMood.cast("Level2_Auditorium", "L2_AirlockWest", "Fluorescent", white)
+		t.truthy(auditorium.G > auditorium.R and auditorium.B > auditorium.R, "the Auditorium storey a green-teal")
+		local basement = LightingMood.cast("Level0_Basement", "L0_BoilerHall", "Fluorescent", white)
+		t.truthy(basement.R > basement.G and basement.G > basement.B, "the basement tubes an amber")
+		local bulb = LightingMood.cast("Level0_Basement", "L0_BoilerHall", "Bulb", white)
+		t.truthy(bulb.R > bulb.B + 0.2, "the basement bulbs a warm sodium")
+		-- the pull is partial: the layout's own colour still shows through
 		t.truthy(hallways.R > 0.5, "a cast, not a recolour")
-
-		-- The baked light the monster and the hide rules read is the fixtures' linear luminance: each cold light burns
-		-- as bright as the warm one it replaced (spec v2 5.2's "was" colours, resolved through the old casts).
-		local function luminance(c: Color3): number
-			local function lin(x: number): number
-				return if x <= 0.04045 then x / 12.92 else ((x + 0.055) / 1.055) ^ 2.4
-			end
-			return 0.2126 * lin(c.R) + 0.7152 * lin(c.G) + 0.0722 * lin(c.B)
-		end
-		local rgb = Color3.fromRGB
-		local was: { { level: string, kind: Enums.LightKind, old: Color3, new: Color3 } } = {
-			{
-				level = "Level0_Basement",
-				kind = "Bulb",
-				old = MathUtil.lerpColor(rgb(255, 190, 128), rgb(255, 160, 84), LightingMood.CastAmount),
-				new = rgb(201, 203, 205),
-			},
-			{
-				level = "Level0_Basement",
-				kind = "Fluorescent",
-				old = MathUtil.lerpColor(rgb(214, 232, 236), rgb(236, 200, 136), LightingMood.CastAmount),
-				new = rgb(214, 232, 236),
-			},
-			{
-				level = "Level1_Hallways",
-				kind = "Bulb",
-				old = MathUtil.lerpColor(rgb(255, 196, 140), rgb(240, 212, 150), LightingMood.CastAmount),
-				new = rgb(206, 207, 209),
-			},
-			{
-				level = "Level1_Hallways",
-				kind = "Fluorescent",
-				old = MathUtil.lerpColor(rgb(214, 232, 236), rgb(168, 236, 196), LightingMood.CastAmount),
-				new = rgb(214, 232, 236),
-			},
-			{
-				level = "Level2_Auditorium",
-				kind = "Bulb",
-				old = MathUtil.lerpColor(rgb(255, 196, 140), rgb(236, 214, 160), LightingMood.CastAmount),
-				new = rgb(206, 207, 209),
-			},
-			{
-				level = "Lobby",
-				kind = "Bulb",
-				old = MathUtil.lerpColor(rgb(255, 184, 116), rgb(255, 172, 98), LightingMood.CastAmount),
-				new = rgb(197, 199, 200),
-			},
-		}
-		for _, row in was do
-			local now = LightingMood.cast(row.level, "AnyRoom", row.kind, row.new)
-			cold(now, row.level .. " " .. row.kind)
-			local ratio = luminance(now) / luminance(row.old)
-			t.truthy(
-				math.abs(ratio - 1) <= 0.01,
-				string.format("%s %s keeps its luminance (%.3f of the warm light's)", row.level, row.kind, ratio)
-			)
-		end
 
 		local red = Color3.fromRGB(255, 34, 22)
 		t.eq(LightingMood.cast("Level1_Hallways", "L1_AirlockEast", "EmergencyRed", red), red, "emergency reds")
@@ -176,6 +106,8 @@ return {
 		t.eq(LightingMood.cast("Level1_Hallways", "L1_Corridor_East", "Fluorescent", white), white, "kept dark")
 
 		t.eq(LightingMood.grade(nil), white, "no grade outside every building")
+		local basementGrade = LightingMood.grade("Level0_Basement")
+		t.truthy(basementGrade.R > basementGrade.B, "the basement grade is warm")
 		for _, layout in Builder.layouts() do
 			local grade = LightingMood.grade(layout.id)
 			t.truthy(math.min(grade.R, grade.G, grade.B) > 0.8, layout.id .. " grade stays gentle")
@@ -202,10 +134,7 @@ return {
 			t.truthy(film.exposure >= 0 and film.exposure <= 0.3, id .. ": exposure trims up, never down")
 			t.truthy(film.lift >= 0 and film.lift <= 0.05, id .. ": the blacks are lifted a touch, never washed")
 			t.truthy(film.contrast > 0 and film.contrast <= 0.25, id .. ": contrast without crushing the shadows")
-			t.truthy(
-				film.saturation <= -0.35 and film.saturation > -0.4,
-				id .. ": drained to the gray look, not black and white"
-			)
+			t.truthy(film.saturation < 0 and film.saturation > -0.4, id .. ": drained, not grey")
 			t.truthy(film.bloomThreshold >= 1, id .. ": only what really burns blooms")
 			t.truthy(film.density > 0 and film.density <= 0.5, id .. ": haze, not fog")
 			t.truthy(film.vignette > 0 and film.vignette <= 0.4, id .. ": a vignette that frames, not blinds")

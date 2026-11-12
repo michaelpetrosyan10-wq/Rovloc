@@ -12,9 +12,10 @@ Output (default tools/textures/out, git-ignored): <Id>_<Map>.png (1024 x 1024, o
 normal RGB in the OpenGL tangent-space convention Roblox uses; roughness / metalness 8-bit grey), meta.json (the
 sha256 of every map and each texture's reference albedo, read by upload.py), preview.png (every surface lit at game
 scale, tinted with its palette colour) and with --detail preview_<Id>.png (the maps side by side, 1:1 crops).
-Every recipe is seeded from the manifest, so the same inputs give the same pixels. A variant's colour map keeps only
-`chroma` (its manifest share, 0..1) of its own hue around its base layer (texlib.chroma): the gray look of spec v2 5.1,
-where the palette's cold gray shows through every stain, chip and grout line.
+Every recipe is seeded from the manifest, so the same inputs give the same pixels. A variant's colour map keeps
+`chroma` (its manifest share, in (0, 1]) of its own hue around its base layer (texlib.chroma): 1 is the texture
+exactly as its recipe paints it, every stain, chip and grout line in its own colour; less drains it toward the
+palette colour.
 """
 
 from __future__ import annotations
@@ -250,7 +251,7 @@ def main() -> int:
             continue
         started = time.time()
         surface = RECIPES[m["id"]](Field(m["seed"], size, design))
-        if m["kind"] == "variant":
+        if m["kind"] == "variant" and m["chroma"] < 1:
             surface.color = np.clip(chroma(surface.color, surface.reference, m["chroma"]), 0, 1)
         maps = surface_maps(m, surface, size / design)
         files = {}

@@ -2,9 +2,9 @@
 -- Finishes: what the shell's rooms are finished in, over the bare slabs, walls and ceilings SchoolShellBuilder cuts.
 --
 --   * Floors. Glossy where the floor would be polished or wet (Reflectance on the floor part: waxed linoleum, glazed
---     tile, damp basement concrete). The vinyl walkways and big halls are worn gray sheet vinyl with a darker traffic
---     lane worn down their middle (one soft SurfaceArt band along the floor's long axis); classrooms and offices are a
---     plain speckled gray tile. No floor is patterned in two tones (the gray look: docs/design/game-spec-v2.md 5.1).
+--     tile, damp basement concrete). Every corridor and the big halls are laid in plain, worn beige linoleum with a
+--     darker traffic lane worn down their middle (one soft SurfaceArt band along the floor's long axis); classrooms
+--     and offices are a plain speckled vinyl tile. No floor is patterned in two tones (no checkerboard: spec v2 5.1).
 --   * Ceilings. Every plaster ceiling is a drop ceiling: a grid of tile seams, and in the ruined rooms (seeded per
 --     room) a few tiles gone (black holes into the plenum, never where a fixture hangs) and brown water stains. The
 --     first one or two holes of a room are real plates (planCeiling says where), so DecayBuilder can drop their tiles
@@ -93,17 +93,18 @@ Finishes.MinSpan = 0.8 -- shorter leftovers between openings are left bare
 Finishes.CeilingTile = Vector2.new(4, 2)
 
 local HOLE = Color3.fromRGB(7, 7, 8)
-local STAIN = Color3.fromRGB(78, 76, 70)
-local STAIN_RING = Color3.fromRGB(50, 48, 44)
+local STAIN = Color3.fromRGB(96, 76, 42)
+local STAIN_RING = Color3.fromRGB(62, 48, 28)
 
-local GRIME = Color3.fromRGB(26, 26, 25)
-local SOOT = Color3.fromRGB(15, 15, 15)
-local RUN = Color3.fromRGB(52, 50, 46)
-local CRACK = Color3.fromRGB(20, 20, 19)
+local GRIME = Color3.fromRGB(30, 26, 19)
+local SOOT = Color3.fromRGB(16, 15, 13)
+local RUN = Color3.fromRGB(62, 48, 28)
+local CRACK = Color3.fromRGB(22, 20, 17)
 
--- The traffic lane worn down a vinyl walkway: its colour, its share of the floor's width (at most LaneMaxWidth
--- studs), how dark it gets at its middle, and how much longer than wide a floor piece must be to have a direction.
-local LANE = Color3.fromRGB(34, 35, 36)
+-- The traffic lane worn down a linoleum walkway: its colour (the brown-black of trodden-in dirt), its share of the
+-- floor's width (at most LaneMaxWidth studs), how dark it gets at its middle, and how much longer than wide a floor
+-- piece must be to have a direction.
+local LANE = Color3.fromRGB(34, 29, 22)
 Finishes.LaneShare = 0.45
 Finishes.LaneMaxWidth = 4
 Finishes.LaneStrength = 0.38
@@ -138,14 +139,10 @@ local GLOSS: { [string]: number } = {
 -- Layouts whose bare concrete floors are damp.
 local DAMP: { [string]: boolean } = { Level0_Basement = true, Lobby = true }
 
--- The glazed tile band of the corridors (every wing the same slate gray).
-local CORRIDOR_BAND = "WainscotSlate"
-
--- Room kinds whose vinyl floor is a walkway: worn sheet vinyl with a traffic lane.
-local WALKWAY_KINDS: { [string]: boolean } = {
-	Corridor = true,
-	Tunnel = true,
-	Gallery = true,
+-- The glazed tile band of each wing's corridors.
+local CORRIDOR_BAND: { [string]: string } = {
+	Level1_Hallways = "WainscotOxblood",
+	Level2_Auditorium = "WainscotTeal",
 }
 
 local DROP_CEILING_KINDS: { [string]: boolean } = {
@@ -162,13 +159,13 @@ local DROP_CEILING_KINDS: { [string]: boolean } = {
 
 -- How the floor of `room` (palette `floorKey`) on `layoutId` is finished; nil for a bare floor.
 function Finishes.floorStyle(layoutId: string, room: Room, floorKey: string): FloorStyle?
-	if floorKey == "Linoleum" then
-		if room.kind == "Classroom" or room.kind == "Office" then
-			return { key = "ClassroomVCT", reflectance = 0.1 }
-		end
-		if WALKWAY_KINDS[room.kind] or room.rect.w * room.rect.d >= 1800 then
-			return { key = "VinylGray", reflectance = 0.1, lane = true }
-		end
+	local area = room.rect.w * room.rect.d
+	local walkway = floorKey == "Linoleum" or floorKey == "TileWhite"
+	if walkway and (room.kind == "Corridor" or (floorKey == "Linoleum" and area >= 1800)) then
+		return { key = "LinoleumBeige", reflectance = 0.12, lane = true }
+	end
+	if floorKey == "Linoleum" and (room.kind == "Classroom" or room.kind == "Office") then
+		return { key = "ClassroomVCT", reflectance = 0.1 }
 	end
 	local gloss = GLOSS[floorKey]
 	if gloss then
@@ -202,19 +199,20 @@ function Finishes.ceilingGrid(w: number, d: number): (number, number)
 	return math.max(1, math.floor(w / cw + 0.5)), math.max(1, math.floor(d / cd + 0.5))
 end
 
--- The wainscot of `room` (wall palette `wallKey`), or nil for bare walls.
-function Finishes.wainscotStyle(room: Room, wallKey: string): WainscotStyle?
+-- The wainscot of `room` (wall palette `wallKey`) on `layoutId`, or nil for bare walls.
+function Finishes.wainscotStyle(layoutId: string, room: Room, wallKey: string): WainscotStyle?
 	local kind = room.kind
+	local corridorBand = CORRIDOR_BAND[layoutId] or "WainscotOxblood"
 	if kind == "Corridor" then
-		if wallKey == "BlockGray" or string.sub(wallKey, 1, 7) == "Plaster" then
-			return { band = CORRIDOR_BAND, rail = "TileCap" }
+		if wallKey == "Brick" or string.sub(wallKey, 1, 7) == "Plaster" then
+			return { band = corridorBand, rail = "TileCap" }
 		end
 		return nil
 	elseif kind == "Classroom" or kind == "Storage" then
 		if string.sub(wallKey, 1, 7) == "Plaster" then
 			return { band = "WainscotPaint", rail = "Trim", base = "Baseboard" }
-		elseif wallKey == "BlockGray" and kind == "Classroom" then
-			return { band = CORRIDOR_BAND, rail = "TileCap" } -- the cafeteria
+		elseif wallKey == "Brick" and kind == "Classroom" then
+			return { band = corridorBand, rail = "TileCap" } -- the cafeteria
 		end
 		return nil
 	elseif kind == "Office" then

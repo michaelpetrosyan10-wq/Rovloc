@@ -27,9 +27,9 @@ local WALL_GAP = 0.55 -- the flask's foot off the wall (ExtraAnchors' niche spot
 local LENGTH = 2.6
 local DEPTH = 1.05
 local BOARD = 0.12
-local STEEL = rgb(86, 88, 90)
-local JUG = rgb(176, 178, 176)
-local LABEL = rgb(140, 142, 140)
+local STEEL = rgb(88, 86, 76)
+local JUG = rgb(170, 162, 134) -- yellowed white plastic
+local LABEL = rgb(150, 126, 76)
 
 local CleaningShelfBuilder = {}
 
@@ -120,7 +120,7 @@ local function buildShelf(model: Model, frame: CFrame)
 		frame * CFrame.new(0.95, 0.86, back - 0.6),
 		Vector3.new(0.16, 0.2, 0.3),
 		"Rubber",
-		{ color = rgb(46, 48, 50) }
+		{ color = rgb(44, 46, 40) }
 	)
 	PropKit.decor(nozzle, 3)
 end

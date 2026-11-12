@@ -167,7 +167,7 @@ local DEFAULT_FLOOR: { [string]: string } = {
 }
 
 local DEFAULT_WALL: { [string]: string } = {
-	Corridor = "PlasterAsh",
+	Corridor = "PlasterGreen",
 	Classroom = "PlasterSchool",
 	Boiler = "ConcreteDark",
 	Storage = "Concrete",
@@ -176,10 +176,10 @@ local DEFAULT_WALL: { [string]: string } = {
 	Chase = "Concrete",
 	Airlock = "ConcreteDark",
 	Stairwell = "ConcreteDark",
-	Roof = "BlockGray",
-	LobbyHall = "BlockGray",
+	Roof = "Brick",
+	LobbyHall = "Brick",
 	Tunnel = "ConcreteDark",
-	Gallery = "BlockGray",
+	Gallery = "Brick",
 	Crawlway = "ConcreteDark",
 	Solid = "ConcreteDark",
 }
@@ -209,11 +209,11 @@ local TRIGGER_TAGS: { [string]: string } = {
 
 local LIGHT_COLORS: { [string]: Color3 } = {
 	Fluorescent = Color3.fromRGB(214, 228, 236),
-	Bulb = Color3.fromRGB(206, 207, 209),
+	Bulb = Color3.fromRGB(255, 196, 140),
 	EmergencyRed = Color3.fromRGB(255, 34, 22),
 	ClassroomGlow = Color3.fromRGB(196, 214, 236),
-	ExitSign = Color3.fromRGB(222, 224, 226),
-	BoilerGlow = Color3.fromRGB(158, 158, 160),
+	ExitSign = Color3.fromRGB(60, 255, 110),
+	BoilerGlow = Color3.fromRGB(255, 118, 34),
 }
 
 local W = Attributes.World
@@ -393,7 +393,7 @@ function SchoolShellBuilder.levelOptions(layoutId: string): LevelOptions
 		bottom = WorldConfig.previousLevel(layoutId) == nil,
 		hasLevelAbove = nextId ~= nil,
 		facadeTop = facadeTop,
-		facadeKey = if aboveGrade then "BlockGray" else nil,
+		facadeKey = if aboveGrade then "Brick" else nil,
 		gradeY = WorldConfig.GroundY - elevation,
 		groundUnderside = WorldConfig.GroundY - SchoolShellBuilder.Exterior.groundThickness - elevation,
 		slabEdgeKey = if aboveGrade then FACADE_SLAB_EDGE_KEY else SLAB_EDGE_KEY,
@@ -962,7 +962,7 @@ local function wearContext(layout: Layout, exteriorSides: { [string]: { [string]
 	local wainscoted: { [string]: boolean } = {}
 	for _, room in layout.rooms do
 		inner[room.id] = innerRect(room, exteriorSides)
-		wainscoted[room.id] = Finishes.wainscotStyle(room, SchoolShellBuilder.wallKey(room)) ~= nil
+		wainscoted[room.id] = Finishes.wainscotStyle(layout.id, room, SchoolShellBuilder.wallKey(room)) ~= nil
 	end
 	return { layout = layout, inner = inner, wainscoted = wainscoted }
 end
@@ -1481,7 +1481,7 @@ local function buildWainscots(
 	local cuts = wainscotCuts(placed)
 	local count = 0
 	for _, room in layout.rooms do
-		local style = Finishes.wainscotStyle(room, SchoolShellBuilder.wallKey(room))
+		local style = Finishes.wainscotStyle(layout.id, room, SchoolShellBuilder.wallKey(room))
 		if not style then
 			continue
 		end
@@ -2157,7 +2157,7 @@ SchoolShellBuilder.BackLotFacade = table.freeze({
 
 local FACADE_STEEL = Color3.fromRGB(58, 61, 63)
 local SHUTTER = Color3.fromRGB(96, 100, 102)
-local PANE_LIT = Color3.fromRGB(196, 204, 214)
+local PANE_LIT = Color3.fromRGB(200, 212, 192) -- the Hallways' tubes seen from the lot
 
 local function buildBackLotFacade(parent: Instance)
 	local spec = SchoolShellBuilder.BackLotFacade
@@ -2166,7 +2166,7 @@ local function buildBackLotFacade(parent: Instance)
 	local model = Instance.new("Model")
 	model.Name = "BackLotFacade"
 	model.Parent = parent
-	-- the staff doors: a steel frame proud of the block, the shutter rolled down in its guides, the housing over it
+	-- the staff doors: a steel frame proud of the brick, the shutter rolled down in its guides, the housing over it
 	local d = spec.doors
 	local top = ground + d.height
 	local mid = (d.x0 + d.x1) / 2

@@ -339,20 +339,32 @@ async function soloRun(page) {
 
 const mb = (n) => (n / 1048576).toFixed(2);
 
-// ---------------------------------------------------------------------------------------------- the gray look gate
+// --------------------------------------------------------------------------------------------------- the look gate
 /**
- * The gray look (docs/design/game-spec-v2.md 5.1): three reference views per school stage, each rendered at Max and at
- * Potato, torch on, must show a frame whose mean HSV saturation is at most GRAY_LIMIT. A pixel's saturation counts
- * only where it has a colour to speak of: below GRAY_FLOOR of value (about 10/255) the 8-bit channels are too coarse
- * to carry a hue (one count of blue in a 3/255 pixel reads as "33 % saturated"), so those near-black pixels count as
- * gray. The views are walkways lit by the stage's own fixtures (a frame filled by an emergency lamp's pool measures the
- * red accent 5.1 keeps, not the grade). Each is drawn at one fixed moment of the flicker clock with lightning off, so
- * the gate never reads a stutter or a flash. `setTier(tier)` switches the held sandbox page's tier and waits for its
+ * The look (docs/design/game-spec-v2.md 5.1): the school keeps its own colours in the dark. Three reference views per
+ * school stage, each rendered at Max and at Potato, torch on, must show a frame that is not all gray (its mean HSV
+ * saturation at least LOOK_MIN_SATURATION; the all-gray pass measured 0.09 to 0.15 on these frames, this look 0.2 and
+ * up), and the basement's views must not be one copper wash. Copper is a pixel bright enough to carry a hue (value at
+ * least COPPER_VALUE) that is strongly saturated (at least COPPER_SATURATION) in the orange sector (hue COPPER_HUES);
+ * the copper share of a frame is its copper pixels over its pixels bright enough to carry a hue, and the mean copper
+ * share of the basement's three views at each tier must stay at most BASEMENT_COPPER_LIMIT (the first look's full
+ * amber measured 0.88 to 0.90 there; brick, rust and pipes keep enough of their own colour that this look still
+ * measures 0.74 to 0.79). Every coloured basement pixel is red or orange in both looks (brick, rust and the amber
+ * share the sector), so the share is taken over the visible pixels: what the pulled-back amber gives back is concrete
+ * and steel that read gray-brown and green-gray again. A pixel's saturation counts only where it has a colour to
+ * speak of: below LOOK_FLOOR of value (about 10/255) the 8-bit channels are too coarse to carry a hue (one count of
+ * blue in a 3/255 pixel reads as "33 % saturated"), so those near-black pixels count as gray. The views are walkways
+ * lit by the stage's own fixtures. Each is drawn at one fixed moment of the flicker clock with lightning off, so the
+ * gate never reads a stutter or a flash. `setTier(tier)` switches the held sandbox page's tier and waits for its
  * texture set.
  */
-const GRAY_LIMIT = 0.15;
-const GRAY_FLOOR = 0.04;
-const GRAY_VIEWS = {
+const LOOK_MIN_SATURATION = 0.18;
+const LOOK_FLOOR = 0.04;
+const COPPER_VALUE = 0.08;
+const COPPER_SATURATION = 0.6;
+const COPPER_HUES = [0, 45];
+const BASEMENT_COPPER_LIMIT = 0.85;
+const LOOK_VIEWS = {
   Level0_Basement: {
     'l0-boiler': { p: [207, 3.5, 238], yaw: -90, pitch: -4 },
     'l0-west': { p: [60, 3.5, 200], yaw: 0, pitch: 0 },
@@ -375,7 +387,7 @@ const GRAY_VIEWS = {
   },
 };
 
-async function grayLook(page, setTier, quick) {
+async function lookGate(page, setTier, quick) {
   const tiers = quick ? ['Potato'] : ['Max', 'Potato'];
   const flashScale = await page.evaluate(() => {
     const e = window.__rovloc.engine;
@@ -386,9 +398,9 @@ async function grayLook(page, setTier, quick) {
   const measured = [];
   for (const tier of tiers) {
     await setTier(tier);
-    for (const [stage, views] of Object.entries(GRAY_VIEWS)) {
+    for (const [stage, views] of Object.entries(LOOK_VIEWS)) {
       for (const [name, view] of Object.entries(views)) {
-        const m = await page.evaluate(([v, floor]) => {
+        const m = await page.evaluate(([v, floor, copperValue, copperSaturation, copperHues]) => {
           const e = window.__rovloc.engine;
           e.player.teleport({ position: { x: v.p[0], y: v.p[1], z: v.p[2] }, yaw: (v.yaw * Math.PI) / 180 });
           e.player.setLook((v.yaw * Math.PI) / 180, (v.pitch * Math.PI) / 180);
@@ -407,25 +419,48 @@ async function grayLook(page, setTier, quick) {
           gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
           let sat = 0;
           let lum = 0;
+          let visible = 0;
+          let copper = 0;
           for (let i = 0; i < px.length; i += 4) {
-            const hi = Math.max(px[i], px[i + 1], px[i + 2]);
-            lum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-            if (hi >= floor * 255) sat += (hi - Math.min(px[i], px[i + 1], px[i + 2])) / hi;
+            const r = px[i];
+            const g = px[i + 1];
+            const b = px[i + 2];
+            const hi = Math.max(r, g, b);
+            const d = hi - Math.min(r, g, b);
+            lum += 0.299 * r + 0.587 * g + 0.114 * b;
+            if (hi >= floor * 255) sat += d / hi;
+            if (hi >= copperValue * 255) {
+              visible++;
+              if (d / hi >= copperSaturation) {
+                const hue = 60 * (hi === r ? ((g - b) / d + 6) % 6 : hi === g ? (b - r) / d + 2 : (r - g) / d + 4);
+                if (hue >= copperHues[0] && hue < copperHues[1]) copper++;
+              }
+            }
           }
-          return { saturation: sat / (w * h), luminance: lum / (w * h) };
-        }, [view, GRAY_FLOOR]);
+          return { saturation: sat / (w * h), luminance: lum / (w * h), copper: visible ? copper / visible : 0 };
+        }, [view, LOOK_FLOOR, COPPER_VALUE, COPPER_SATURATION, COPPER_HUES]);
         measured.push({ stage, name, tier, ...m });
       }
     }
   }
   await page.evaluate((v) => window.__rovloc.engine.settings.set('FlashScale', v), flashScale);
-  console.log(`INFO  gray look, mean saturation / luminance per view: ${measured
-    .map((m) => `${m.name} ${m.tier} ${m.saturation.toFixed(3)} / ${m.luminance.toFixed(1)}`).join(', ')}`);
-  const over = measured.filter((m) => !(m.saturation <= GRAY_LIMIT));
-  report(over.length === 0 && measured.length === tiers.length * 12,
-    `the gray look: every school stage's three reference views at ${tiers.join(' and ')} keep a mean saturation <= ${GRAY_LIMIT}`,
-    over.length ? over.map((m) => `${m.name} ${m.tier} ${m.saturation.toFixed(3)}`).join(', ')
-      : `worst ${Math.max(...measured.map((m) => m.saturation)).toFixed(3)} over ${measured.length} frames`);
+  console.log(`INFO  look, mean saturation / luminance / copper share per view: ${measured
+    .map((m) => `${m.name} ${m.tier} ${m.saturation.toFixed(3)} / ${m.luminance.toFixed(1)} / ${m.copper.toFixed(3)}`)
+    .join(', ')}`);
+  const complete = measured.length === tiers.length * 12;
+  const gray = measured.filter((m) => !(m.saturation >= LOOK_MIN_SATURATION));
+  report(complete && gray.length === 0,
+    `the look is not all gray: every school stage's three reference views at ${tiers.join(' and ')} keep a mean saturation >= ${LOOK_MIN_SATURATION}`,
+    gray.length ? gray.map((m) => `${m.name} ${m.tier} ${m.saturation.toFixed(3)}`).join(', ')
+      : `least ${Math.min(...measured.map((m) => m.saturation)).toFixed(3)} over ${measured.length} frames`);
+  const copper = tiers.map((tier) => {
+    const frames = measured.filter((m) => m.stage === 'Level0_Basement' && m.tier === tier);
+    return { tier, frames: frames.length, mean: frames.reduce((sum, m) => sum + m.copper, 0) / Math.max(1, frames.length) };
+  });
+  const washed = copper.filter((c) => !(c.frames === 3 && c.mean <= BASEMENT_COPPER_LIMIT));
+  report(complete && washed.length === 0,
+    `the basement is no copper wash: its three views' mean copper share at ${tiers.join(' and ')} is at most ${BASEMENT_COPPER_LIMIT}`,
+    copper.map((c) => `${c.tier} ${c.mean.toFixed(3)}`).join(', '));
 }
 
 async function main() {
@@ -672,7 +707,7 @@ async function main() {
       e.quality.adapt = false;
     });
   } else {
-    // the Level 1 vinyl hallway (its world rect, from the layout): the walk starts near its east end
+    // the Level 1 linoleum hallway (its world rect, from the layout): the walk starts near its east end
     const hall = await page.evaluate(() => {
       const r = window.__rovloc.engine.world.meta.rooms.find((x) => x.id === 'L1_Corridor_East');
       return { x: r.rect.x, z: r.rect.z, w: r.rect.w, d: r.rect.d, floorY: r.floorY, y: r.floorY + 3 };
@@ -901,7 +936,7 @@ async function main() {
     }, tier);
     await texturesSettled(page);
   };
-  // the Level 1 vinyl hallway (west, toward the gate), the Level 0 tunnels (down a lit pipe gallery, the power
+  // the Level 1 linoleum hallway (west, toward the gate), the Level 0 tunnels (down a lit pipe gallery, the power
   // on), Level 2's west gallery (north along its 240 studs) and the lobby
   const places = {
     L1: { p: [380, 21, 144], yaw: Math.PI / 2 },
@@ -1025,8 +1060,8 @@ async function main() {
   }
   console.log(`INFO  mean luminance per tier: ${Object.entries(brightness).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(', ')}`);
 
-  // ------------------------------------------------------------------ 4b. the gray look's saturation gate
-  await grayLook(page, setTier, quick);
+  // ------------------------------------------------------------------ 4b. the look gate: colour, and no copper wash
+  await lookGate(page, setTier, quick);
 
   // the Graphics menu (at Max, Max+ shown)
   await setTier('Max');

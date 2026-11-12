@@ -146,15 +146,15 @@ local LANDING_OBSTACLE_MARGIN = 0.25
 
 -- Finish
 local PAINTS: { Color3 } = {
-	Color3.fromRGB(72, 80, 79), -- faded teal
-	Color3.fromRGB(57, 61, 66), -- school navy
-	Color3.fromRGB(72, 59, 56), -- oxide red
-	Color3.fromRGB(77, 79, 72), -- olive drab
-	Color3.fromRGB(82, 83, 84), -- battleship grey
-	Color3.fromRGB(95, 91, 80), -- tired mustard
+	Color3.fromRGB(58, 86, 84), -- faded teal
+	Color3.fromRGB(50, 62, 80), -- school navy
+	Color3.fromRGB(94, 50, 42), -- oxide red
+	Color3.fromRGB(76, 82, 58), -- olive drab
+	Color3.fromRGB(80, 84, 86), -- battleship grey
+	Color3.fromRGB(104, 92, 54), -- tired mustard
 }
-local RUST = Color3.fromRGB(72, 60, 54)
-local RUST_DARK = Color3.fromRGB(46, 41, 38)
+local RUST = Color3.fromRGB(92, 54, 34)
+local RUST_DARK = Color3.fromRGB(56, 38, 28)
 local GRIME = Color3.fromRGB(16, 15, 13)
 local STEEL = Color3.fromRGB(74, 76, 78)
 local PLATE = Color3.fromRGB(146, 142, 124) -- enamel number plate

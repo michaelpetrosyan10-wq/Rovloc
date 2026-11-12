@@ -7,8 +7,8 @@
 -- and the lighting rig never writes plugin-only props.
 -- Finishes too: fixtures glow with their light (Neon tubes, dead grey glass, self-lit exit letters) and broken ones
 -- only come apart within their own footprint; wainscots clear every opening and its frame and meet cleanly at corners;
--- corridors get worn sheet vinyl with a traffic lane, classrooms plain vinyl tile, plaster ceilings a drop-ceiling grid whose missing tiles
--- never hang over a fixture; striped hazard plates flank the fire doors and the gate.
+-- corridors get worn linoleum with a traffic lane, classrooms plain vinyl tile, plaster ceilings a drop-ceiling grid
+-- whose missing tiles never hang over a fixture; striped hazard plates flank the fire doors and the gate.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -347,8 +347,8 @@ return {
 			"Linoleum",
 			"WoodPanel",
 			"PlasterSchool",
-			"PlasterAsh",
-			"BlockGray",
+			"PlasterGreen",
+			"Brick",
 			"MetalRust",
 			"MetalGalvanized",
 			"RoofGravel",
@@ -778,7 +778,7 @@ return {
 		local root = buildSlice(layout)
 		local shell = child(root, "Shell")
 		local origin = WorldConfig.levelOrigin(layout.id)
-		local facadeKey = SchoolShellBuilder.levelOptions(layout.id).facadeKey or "BlockGray"
+		local facadeKey = SchoolShellBuilder.levelOptions(layout.id).facadeKey or "Brick"
 		local facade = Palette.get(facadeKey)
 		local half = WorldConfig.ExteriorWallThickness / 2
 		local skin = 0.05 -- just inside the outer face
@@ -1142,7 +1142,7 @@ return {
 		root:Destroy()
 	end,
 
-	["finishes: worn vinyl corridor with a traffic lane, plain vinyl classroom, drop ceilings, hazard plates"] = function(
+	["finishes: worn linoleum corridor with a traffic lane, plain vinyl classroom, drop ceilings, hazard plates"] = function(
 		t: Expect
 	)
 		local layout = hallwaySlice()
@@ -1170,11 +1170,11 @@ return {
 		end
 
 		local hall = childPart(shell, "Floor_T_Hall_1")
-		local vinyl = Palette.get("VinylGray")
-		t.eq(hall.Material, vinyl.material, "the corridor floor is worn sheet vinyl")
-		t.eq(hall.Color, Palette.colorFor("VinylGray"))
+		local linoleum = Palette.get("LinoleumBeige")
+		t.eq(hall.Material, linoleum.material, "the corridor floor is worn linoleum")
+		t.eq(hall.Color, Palette.colorFor("LinoleumBeige"))
 		t.truthy(hall.Reflectance >= 0.05 and hall.Reflectance <= 0.15, "waxed and glossy")
-		local hallTexture = Palette.variantFor("VinylGray")
+		local hallTexture = Palette.variantFor("LinoleumBeige")
 		if hallTexture then
 			t.eq(hall.MaterialVariant, hallTexture, "the generated vinyl texture")
 		end

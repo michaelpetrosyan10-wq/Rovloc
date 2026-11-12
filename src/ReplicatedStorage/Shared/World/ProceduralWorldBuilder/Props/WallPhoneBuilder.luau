@@ -20,11 +20,11 @@ local W = Attributes.World
 local rgb = Color3.fromRGB
 
 local ANSWER_HOLD = 0.6
-local CASE = rgb(52, 54, 56)
-local PLATE = rgb(70, 72, 74)
-local BLACK = rgb(30, 30, 32)
-local BELL = rgb(118, 120, 122)
-local DIAL = rgb(150, 150, 146)
+local CASE = rgb(58, 64, 50) -- olive-drab hammertone steel
+local PLATE = rgb(74, 72, 62)
+local BLACK = rgb(30, 28, 26) -- bakelite
+local BELL = rgb(122, 108, 76) -- tarnished brass
+local DIAL = rgb(160, 150, 124) -- yellowed ivory
 
 local ANSWER_PROMPT: PropKit.PromptSpec = {
 	kind = "AnswerPhone",

@@ -144,7 +144,7 @@ return {
 		withFilled(function()
 			local plaster = Palette.get("PlasterSchool")
 			t.eq(Palette.variantFor("PlasterSchool"), "RovlocPaintedPlaster_Plaster", "plaster walls are dressed")
-			t.eq(Palette.variantFor("PlasterAsh"), "RovlocPaintedPlaster_Plaster", "every key of the texture")
+			t.eq(Palette.variantFor("PlasterGreen"), "RovlocPaintedPlaster_Plaster", "every key of the texture")
 			t.eq(Palette.variantFor("MetalRust"), "RovlocRustedMetal_CorrodedMetal", "per base material: corroded")
 			t.eq(Palette.variantFor("TrimMetal"), "RovlocRustedMetal_Metal", "per base material: metal")
 			t.eq(Palette.variantFor("Concrete"), nil, "a normal map alone does not switch a texture on")

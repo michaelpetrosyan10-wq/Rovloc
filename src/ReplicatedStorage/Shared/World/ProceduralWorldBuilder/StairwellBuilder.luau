@@ -146,8 +146,8 @@ local function setAttributes(instance: Instance, values: { [string]: any })
 	end
 end
 
-local GRIME = Color3.fromRGB(23, 23, 22)
-local RUN = Color3.fromRGB(50, 48, 45)
+local GRIME = Color3.fromRGB(26, 22, 17)
+local RUN = Color3.fromRGB(58, 44, 28)
 
 -- Years on a shaft wall's inner `face`: soot under the cap, grime at the foot, and water that has run down it from
 -- the roof for the whole height of the shaft.
@@ -246,26 +246,8 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 	if plan.topmost then
 		box("Cap", dims.halfExt, dims.depth, top, top + slab, tower.minZ, tower.maxZ, "RoofGravel")
 		local lipTop = top + slab + WorldConfig.ParapetHeight
-		box(
-			"ParapetNorth",
-			dims.halfExt,
-			dims.depth,
-			top + slab,
-			lipTop,
-			tower.minZ,
-			tower.minZ + TOWER_WALL,
-			"BlockGray"
-		)
-		box(
-			"ParapetSouth",
-			dims.halfExt,
-			dims.depth,
-			top + slab,
-			lipTop,
-			tower.maxZ - TOWER_WALL,
-			tower.maxZ,
-			"BlockGray"
-		)
+		box("ParapetNorth", dims.halfExt, dims.depth, top + slab, lipTop, tower.minZ, tower.minZ + TOWER_WALL, "Brick")
+		box("ParapetSouth", dims.halfExt, dims.depth, top + slab, lipTop, tower.maxZ - TOWER_WALL, tower.maxZ, "Brick")
 		box(
 			"ParapetOuter",
 			dims.depth - TOWER_WALL,
@@ -274,7 +256,7 @@ local function buildSegment(plan: SegmentPlan, parent: Instance): Model
 			lipTop,
 			dims.vInner0,
 			dims.vInner1,
-			"BlockGray"
+			"Brick"
 		)
 	end
 

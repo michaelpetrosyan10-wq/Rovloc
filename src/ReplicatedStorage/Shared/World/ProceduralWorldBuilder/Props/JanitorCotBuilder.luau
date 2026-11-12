@@ -49,23 +49,23 @@ local WALL_HALF = WorldConfig.WallThickness / 2
 local SIGN_Y = 5.4
 local HOOK_Y = 4.6
 
-local FRAME = rgb(70, 72, 66)
-local CANVAS = rgb(80, 82, 76)
-local PAD = rgb(92, 92, 88)
-local PILLOW = rgb(150, 148, 142)
-local BLANKET = rgb(62, 65, 56) -- army olive, drained
-local HUNG = rgb(42, 44, 39) -- the blanket he hung up, darker with dust and damp
-local HUNG_FOLD = rgb(31, 33, 29) -- its folds turned from the light
+local FRAME = rgb(64, 66, 56) -- olive-drab steel
+local CANVAS = rgb(80, 80, 66)
+local PAD = rgb(104, 96, 78) -- stained ticking
+local PILLOW = rgb(152, 144, 120)
+local BLANKET = rgb(62, 64, 50) -- army olive, faded
+local HUNG = rgb(42, 43, 34) -- the blanket he hung up, darker with dust and damp
+local HUNG_FOLD = rgb(30, 31, 25) -- its folds turned from the light
 local HAIR = rgb(126, 124, 120)
-local BOOT = rgb(56, 50, 46)
-local RADIO = rgb(66, 64, 60)
-local BLACK = rgb(34, 34, 36)
-local DISH = rgb(150, 150, 146)
+local BOOT = rgb(66, 50, 36) -- brown leather
+local RADIO = rgb(96, 72, 50)
+local BLACK = rgb(32, 31, 28)
+local DISH = rgb(156, 150, 128)
 local HEARING_AID = rgb(196, 172, 154)
 local LED = rgb(196, 44, 34)
-local CABINET = rgb(58, 61, 63)
-local CABINET_DARK = rgb(42, 44, 46)
-local PAPER = rgb(176, 174, 166)
+local CABINET = rgb(60, 68, 58) -- institutional green-gray steel
+local CABINET_DARK = rgb(42, 48, 40)
+local PAPER = rgb(180, 172, 146)
 local INK = rgb(28, 26, 24)
 
 local WAKE_PROMPT: PropKit.PromptSpec = {
@@ -252,7 +252,7 @@ local function buildShelf(model: Model, origin: Vector3, shelf: LayoutSchema.Pla
 		radioFrame * CFrame.new(-0.18, 0.36, -0.215),
 		Vector3.new(0.6, 0.5, 0.02),
 		"Fixture",
-		{ color = rgb(120, 120, 116) }
+		{ color = rgb(124, 116, 96) }
 	)
 	Geometry.part(
 		model,
@@ -261,7 +261,7 @@ local function buildShelf(model: Model, origin: Vector3, shelf: LayoutSchema.Pla
 		Vector3.new(0.22, 0.22, 0.03),
 		"Fixture",
 		{
-			color = rgb(170, 168, 160),
+			color = rgb(176, 164, 126),
 		}
 	)
 	Geometry.cylinder(
@@ -374,7 +374,7 @@ local function card(
 	part.CanQuery = true
 	local gui = SurfaceArt.gui(part, Enum.NormalId.Front, { name = "Print", pixelsPerStud = 40, maxDistance = 45 })
 	SurfaceArt.text(gui, "Text", text, 0.06, 0.08, 0.88, 0.84, INK, font, 2)
-	SurfaceArt.grime(gui, rgb(60, 56, 50), 0.35, false, 3)
+	SurfaceArt.grime(gui, rgb(70, 54, 30), 0.35, false, 3)
 	return part
 end
 

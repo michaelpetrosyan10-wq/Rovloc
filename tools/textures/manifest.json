@@ -8,18 +8,18 @@
     {
       "id": "PaintedPlaster",
       "kind": "variant",
-      "chroma": 0.1,
+      "chroma": 1,
       "seed": 1101,
       "studsPerTile": 10,
       "pattern": "Regular",
       "bases": ["Plaster"],
       "maps": ["ColorMap", "NormalMap", "RoughnessMap"],
-      "description": "Stained painted plaster: chipped paint over an older coat, hairline cracks, grime, water runs, mildew."
+      "description": "Stained painted plaster: chipped paint over an older green coat, hairline cracks, grime, water runs, mildew."
     },
     {
       "id": "StainedConcrete",
       "kind": "variant",
-      "chroma": 0.1,
+      "chroma": 1,
       "seed": 1303,
       "studsPerTile": 14,
       "pattern": "Organic",
@@ -30,7 +30,7 @@
     {
       "id": "CeilingTile",
       "kind": "variant",
-      "chroma": 0.1,
+      "chroma": 1,
       "seed": 1404,
       "studsPerTile": 8,
       "pattern": "Regular",
@@ -41,7 +41,7 @@
     {
       "id": "RustedMetal",
       "kind": "variant",
-      "chroma": 0.15,
+      "chroma": 1,
       "seed": 1505,
       "studsPerTile": 6,
       "pattern": "Regular",
@@ -52,7 +52,7 @@
     {
       "id": "GalvanizedMetal",
       "kind": "variant",
-      "chroma": 0.3,
+      "chroma": 1,
       "seed": 1606,
       "studsPerTile": 8,
       "pattern": "Organic",
@@ -63,7 +63,7 @@
     {
       "id": "WornWood",
       "kind": "variant",
-      "chroma": 0.15,
+      "chroma": 1,
       "seed": 1707,
       "studsPerTile": 8,
       "pattern": "Regular",
@@ -74,7 +74,7 @@
     {
       "id": "PoolMosaic",
       "kind": "variant",
-      "chroma": 0.15,
+      "chroma": 1,
       "seed": 1808,
       "studsPerTile": 8,
       "pattern": "Regular",
@@ -85,7 +85,7 @@
     {
       "id": "StainedBrick",
       "kind": "variant",
-      "chroma": 0.06,
+      "chroma": 1,
       "seed": 1909,
       "studsPerTile": 6,
       "pattern": "Regular",
@@ -96,7 +96,7 @@
     {
       "id": "VinylTile",
       "kind": "variant",
-      "chroma": 0.1,
+      "chroma": 1,
       "seed": 2010,
       "studsPerTile": 8,
       "pattern": "Regular",
@@ -107,7 +107,7 @@
     {
       "id": "RubberMat",
       "kind": "variant",
-      "chroma": 0.3,
+      "chroma": 1,
       "seed": 2111,
       "studsPerTile": 6,
       "pattern": "Organic",
@@ -118,7 +118,7 @@
     {
       "id": "RoofGravel",
       "kind": "variant",
-      "chroma": 0.15,
+      "chroma": 1,
       "seed": 2212,
       "studsPerTile": 10,
       "pattern": "Organic",
@@ -129,7 +129,7 @@
     {
       "id": "LabWorktop",
       "kind": "variant",
-      "chroma": 0.3,
+      "chroma": 1,
       "seed": 2313,
       "studsPerTile": 6,
       "pattern": "Organic",

@@ -60,22 +60,22 @@ const rgb = (r, g, b) => [r, g, b];
 
 /** LightingMood BASE_FILM and the per-level patches (used when the world data carries no film). */
 const BASE_FILM = Object.freeze({
-  exposure: 0.08, contrast: 0.2, saturation: -0.35, lift: 0.015, bloomIntensity: 0.85, bloomSize: 34,
-  bloomThreshold: 1.12, density: 0.34, offset: 0.06, haze: 1.9, glare: 0.2, hazeColor: rgb(44, 46, 48),
-  decay: rgb(24, 25, 27), sunRays: 0.03, dofFar: 0.14, dofFocus: 38, dofRadius: 44, vignette: 0.32, shafts: 1,
+  exposure: 0.08, contrast: 0.2, saturation: -0.22, lift: 0.015, bloomIntensity: 0.85, bloomSize: 34,
+  bloomThreshold: 1.12, density: 0.34, offset: 0.06, haze: 1.9, glare: 0.2, hazeColor: rgb(42, 48, 52),
+  decay: rgb(20, 26, 28), sunRays: 0.03, dofFar: 0.14, dofFocus: 38, dofRadius: 44, vignette: 0.32, shafts: 1,
   dust: 1, moon: 1,
 });
 const FILM_PATCHES = {
-  Lobby: { exposure: 0.1, contrast: 0.14, bloomIntensity: 0.8, bloomSize: 32, bloomThreshold: 1.15, density: 0.28, offset: 0.1, haze: 1.4, hazeColor: rgb(46, 48, 52), decay: rgb(24, 25, 27), dofFar: 0.1, dofRadius: 50, vignette: 0.26, shafts: 0.8, dust: 0.8, moon: 0 },
-  Level0_Basement: { exposure: 0.15, bloomIntensity: 0.95, bloomSize: 36, bloomThreshold: 1.05, density: 0.42, offset: 0.04, haze: 2.4, glare: 0.35, hazeColor: rgb(42, 44, 46), decay: rgb(24, 25, 27), sunRays: 0, dofFar: 0.16, dofFocus: 34, dofRadius: 40, vignette: 0.36, shafts: 1.25, dust: 1.4, moon: 0 },
-  Level1_Hallways: { exposure: 0.15, hazeColor: rgb(44, 46, 48), decay: rgb(24, 25, 27) },
-  Level2_Auditorium: { exposure: 0.26, bloomIntensity: 0.9, bloomThreshold: 1.1, density: 0.32, haze: 1.7, hazeColor: rgb(42, 44, 47), decay: rgb(24, 25, 27), shafts: 0.95, dust: 0.9 },
-  Level3_Roof: { exposure: 0.2, contrast: 0.16, bloomIntensity: 0.75, bloomSize: 30, bloomThreshold: 1.2, density: 0.36, offset: 0.12, haze: 2.2, glare: 0.1, hazeColor: rgb(43, 44, 46), decay: rgb(24, 25, 28), sunRays: 0.06, dofFar: 0.12, dofFocus: 48, dofRadius: 60, vignette: 0.3, shafts: 0.8, dust: 0, moon: 0 },
+  Lobby: { exposure: 0.1, contrast: 0.14, saturation: -0.12, bloomIntensity: 0.8, bloomSize: 32, bloomThreshold: 1.15, density: 0.28, offset: 0.1, haze: 1.4, hazeColor: rgb(60, 52, 44), decay: rgb(30, 24, 20), dofFar: 0.1, dofRadius: 50, vignette: 0.26, shafts: 0.8, dust: 0.8, moon: 0 },
+  Level0_Basement: { exposure: 0.05, saturation: -0.18, bloomIntensity: 0.95, bloomSize: 36, bloomThreshold: 1.05, density: 0.42, offset: 0.04, haze: 2.4, glare: 0.35, hazeColor: rgb(58, 51, 42), decay: rgb(31, 25, 19), sunRays: 0, dofFar: 0.16, dofFocus: 34, dofRadius: 40, vignette: 0.36, shafts: 1.25, dust: 1.4, moon: 0 },
+  Level1_Hallways: { saturation: -0.24, hazeColor: rgb(42, 52, 48), decay: rgb(20, 28, 26) },
+  Level2_Auditorium: { exposure: 0.1, bloomIntensity: 0.9, bloomThreshold: 1.1, density: 0.32, haze: 1.7, hazeColor: rgb(38, 52, 54), decay: rgb(18, 28, 30), shafts: 0.95, dust: 0.9 },
+  Level3_Roof: { exposure: 0.2, contrast: 0.16, bloomIntensity: 0.75, bloomSize: 30, bloomThreshold: 1.2, density: 0.36, offset: 0.12, haze: 2.2, glare: 0.1, hazeColor: rgb(40, 44, 54), decay: rgb(20, 24, 30), sunRays: 0.06, dofFar: 0.12, dofFocus: 48, dofRadius: 60, vignette: 0.3, shafts: 0.8, dust: 0, moon: 0 },
 };
 /** LightingMood.LEVELS grade tints. */
 const GRADES = {
-  Lobby: rgb(232, 238, 245), Level0_Basement: rgb(232, 238, 245), Level1_Hallways: rgb(232, 238, 245),
-  Level2_Auditorium: rgb(232, 238, 245), Level3_Roof: rgb(232, 238, 245),
+  Lobby: rgb(255, 240, 222), Level0_Basement: rgb(249, 237, 223), Level1_Hallways: rgb(236, 255, 244),
+  Level2_Auditorium: rgb(232, 252, 252), Level3_Roof: rgb(234, 240, 255),
 };
 /** The open roof: its film and grade are the outdoors' (LightingMood OUTDOOR_FILM). */
 const OUTDOOR_LEVEL = 'Level3_Roof';

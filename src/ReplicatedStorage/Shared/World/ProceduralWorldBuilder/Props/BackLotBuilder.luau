@@ -100,12 +100,12 @@ BackLotBuilder.ClimbHold = CLIMB_HOLD
 
 local STEEL = rgb(86, 90, 92)
 local STEEL_DARK = rgb(58, 61, 63)
-local BIN_STEEL = rgb(60, 64, 62) -- painted steel gone dull, the rust showing through
-local LID = rgb(34, 35, 37)
-local HATCH_PLATE = rgb(62, 64, 64) -- the chute doors' tread plate, scuffed dull
+local BIN_STEEL = rgb(54, 66, 54) -- dumpster-green paint gone dull, the rust showing through
+local LID = rgb(32, 34, 30)
+local HATCH_PLATE = rgb(70, 60, 50) -- the chute doors' tread plate, scuffed and rusting
 local MESH = rgb(120, 124, 126)
-local CARDBOARD = rgb(104, 98, 90)
-local CRATE = rgb(78, 74, 70)
+local CARDBOARD = rgb(106, 86, 60)
+local CRATE = rgb(88, 68, 46)
 local INK = rgb(30, 28, 26)
 
 -- The ground under (x, z): the sidewalk ring or the asphalt.
@@ -149,7 +149,7 @@ end
 local function printOn(part: BasePart, face: Enum.NormalId, text: string, ink: Color3, font: Enum.Font)
 	local gui = SurfaceArt.gui(part, face, { name = "Print", pixelsPerStud = 30, maxDistance = 60 })
 	SurfaceArt.text(gui, "Text", text, 0.06, 0.12, 0.88, 0.76, ink, font, 2)
-	SurfaceArt.grime(gui, rgb(50, 46, 40), 0.4, false, 3)
+	SurfaceArt.grime(gui, rgb(70, 54, 30), 0.4, false, 3)
 end
 
 local function anchorAttachment(root: BasePart, id: string, kind: string, cframe: CFrame): Attachment
@@ -345,7 +345,7 @@ local function buildBin(parent: Instance, root: BasePart, bin: Bin): Model
 	local model = PropKit.model(parent, "Bin_" .. bin.name, base)
 	local hx, hz, h = size.X / 2, size.Z / 2, size.Y
 	local t = 0.18
-	local color = if bin.kind == "Wheelie" then rgb(48, 51, 52) else BIN_STEEL
+	local color = if bin.kind == "Wheelie" then rgb(40, 52, 42) else BIN_STEEL
 	local key = if bin.kind == "Wheelie" then "ChairShell" else "MetalRust"
 	local floor = solid(model, "Floor", base * CFrame.new(0, 0.35, 0), Vector3.new(size.X, 0.3, size.Z), key, color)
 	model.PrimaryPart = floor
@@ -505,7 +505,7 @@ local function buildDiscards(parent: Instance, bin: Bin)
 		crate * CFrame.new(0, 1.52, 0),
 		Vector3.new(2.1, 0.08, 1.3),
 		"PaperSheet",
-		rgb(132, 126, 108),
+		rgb(138, 120, 80),
 		3
 	)
 end
@@ -681,7 +681,7 @@ local function buildDressing(parent: Instance)
 		CFrame.new(76.9, GROUND + 10.5, 314),
 		Vector3.new(0.12, 2.6, 4.2),
 		"Fixture",
-		rgb(120, 122, 122),
+		rgb(124, 122, 112),
 		2
 	)
 	local rim = rod(
@@ -699,7 +699,7 @@ local function buildDressing(parent: Instance)
 	-- pallets stacked against the east fence, one fallen flat
 	for i, p in { { 72, 341, 0, 0 }, { 72, 341, 0.55, 8 }, { 66, 344, 0, 34 } } do
 		local cframe = CFrame.new(p[1], GROUND + p[3] + 0.25, p[2]) * CFrame.Angles(0, math.rad(p[4]), 0)
-		decor(parent, "Pallet" .. i, cframe, Vector3.new(4, 0.5, 3.4), "Plank", rgb(70, 68, 64), 2)
+		decor(parent, "Pallet" .. i, cframe, Vector3.new(4, 0.5, 3.4), "Plank", rgb(84, 66, 46), 2)
 	end
 	-- puddles on the asphalt
 	for i, p in { { 40, 318, 5, 3.2 }, { 18, 341, 3.4, 2.4 }, { 56, 334, 4.2, 2.8 }, { 30, 304, 3, 2 } } do
