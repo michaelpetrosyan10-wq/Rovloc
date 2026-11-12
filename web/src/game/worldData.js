@@ -557,10 +557,11 @@ export class WorldData {
 
   /**
    * The run's spawn plan (RunDirector.plan) for a difficulty and seed: the objective picks (on every floor with an
-   * item), which traps are live and where (props: live entity ids; placements: the world pivot of an entity moved onto
-   * an anchor without one of its own, none with today's export), the radar's batteries and the stun flasks of every
-   * stage that has them (batteries, flasks: anchor ids in pick order), which grates are rusted shut. `short` counts
-   * anchors chosen beyond the entities the export built (per kind).
+   * item), which traps and stun flasks are live and where (props: live entity ids; placements: the world pivot of an
+   * entity moved onto an anchor without one of its own, none with today's export), the radar's batteries and the stun
+   * flasks of every stage that has them (batteries, flasks: anchor ids in pick order; each picked flask spot's
+   * ChemicalFlask is live in props), which grates are rusted shut. `short` counts anchors chosen beyond the entities
+   * the export built (per kind).
    * @param {string} difficulty
    * @param {number} seed
    * @returns {Plan}
@@ -602,7 +603,11 @@ export class WorldData {
         const picked = objectives[level] ? objectives[level].anchors : null;
         batteries[level] = this.pickBatteries(s, difficulty, level, this.entryPlace(level, routes), this.mainStations(level, route, picked));
       }
-      if ((flaskCounts[level] || 0) > 0) flasks[level] = this.pickFlasks(s, flaskCounts[level], level);
+      if ((flaskCounts[level] || 0) > 0) {
+        flasks[level] = this.pickFlasks(s, flaskCounts[level], level);
+        // each picked spot holds its stun flask (RunDirector adds a ChemicalFlask prop per pick)
+        this._assign('ChemicalFlask', level, flasks[level].map((id) => withPos(this.anchor(id))), props, placements, short);
+      }
     }
 
     // grate locks

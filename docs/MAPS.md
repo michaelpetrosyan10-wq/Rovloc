@@ -15,6 +15,7 @@ interim tunnel floor, a short plain crossing, until its theatre is built; Level 
 | `Layouts/Level2_Auditorium.luau` | The Auditorium storey (28 high), interim: three west entry and three east exit vestibules joined by a short ladder of service corridors, with its own thresholds. |
 | `Props/TunnelDressingBuilder.luau` | The tunnels' dressing: pipes, trays, steam vents, markers, grime, landmarks, floor clutter (all decor, `Detail` 1..3). |
 | `Props/HideBuilder.luau` | Barrels and cabinets (hiding spots beside the lockers). |
+| `ExtraAnchors.luau` | The post-plan pass (its own `Rng` streams): 36 battery candidates and 8 flask spots on the Basement and the Hallways, without touching the plan (`ExtraAnchors.spec` holds both floors' plan hashes). |
 | `tests/Specs/TunnelPlanner.spec.luau` | The planner's specs: the rules on every tunnel floor, determinism, crawlways, plates, teleport points, hides. |
 
 ## 1. The footprint and the towers
@@ -199,8 +200,15 @@ at its west end sealing it from `L1_Corridor_West`. The gate's bypass is a vent 
 vents, and crouch through crawlways): a grate low in the hallway's north wall ten studs east of the gate, one in the west
 hall ten studs west of it, the duct in the chase behind them; neither ever locks. Regions: Locker Banks (east; its hide
 niches hold lockers), Offices & Records, Library Stacks, Collapsed Main Hall, Kitchen Service. Keep-rooms: the
-janitor's closet and the main office. The master keys: 14 candidates, all west of the gate: ten on hooks in tunnel
-niches (`items.wall`, `items.areas`), two in the janitor's closet, two in the main office.
+janitor's closet (Gus asleep on his cot: `JanitorCot`) and the main office. The master keys: 14 candidates, all west of
+the gate: ten on hooks in tunnel niches (`items.wall`, `items.areas`), two in the main office, two on the handles of
+the six mop carts (`MopCart` anchors, `Props/MopCartBuilder`) along the west half; the closet's hook is empty.
+
+**Batteries and flasks (both floors).** After the planner, `ExtraAnchors` keeps the planner's battery candidates that
+stand in no dead end and 32 studs walked from each other, then adds candidates against the runs' walls up to 36: one in
+the entry band of every way in, one in reach of every main station, the rest farthest-first, every pair 32 apart. The
+8 flask spots are the ones 4.2 and 4.3 name (keep-room shelves and benches, the four flask carts) and shelves over the
+drums of barrel niches (`Props/CleaningShelfBuilder`).
 
 **Level 2 (the Auditorium storey, interim).** Entered from the west vestibules (the hallways' exits), left by the east
 ones; nothing is locked (ObjectiveConfig: ReachExit). A lane up each side past the vestibules and corridors across

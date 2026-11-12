@@ -5,7 +5,8 @@
 // Builds the game test page (tools/game-build.mjs, unless --html names one), opens it with ?dev and plays:
 //   title -> walkthrough -> lobby -> onto a ready pad -> countdown -> deploy -> the Back Lot's stand-in (its name and
 //   the honest line; Skip) -> Level 0: walk onto a bear trap ->
-//   look down and pry free -> walk into the stairwell airlock -> it seals -> Level 1 starts;
+//   look down and pry free -> take a stun flask from its spot (hold E) and throw it at the Creature: it is stunned ->
+//   walk into the stairwell airlock -> it seals -> Level 1 starts;
 // then each floor's signature moment:
 //   Level 1 the classroom scare (walking into Classroom 108), the gate slamming, and the bypass vent (kick the grate:
 //   its panel and screws land in both looks; crouch in, crawl the duct, kick the far grate, out beyond the gate),
@@ -280,6 +281,72 @@ try {
   await ff(0.5);
   s = await G((g) => ({ caught: !!g.traps.caught, ms: g.env.moveState(), ctx: g.env.context() }));
   check('looking down and holding E pries the trap open', !s.caught && s.ms !== 'Trapped' && s.ctx === 'OnFoot', s);
+
+  // ------------------------------------------------------------------------------------------- Level 0: a stun flask
+  // one of the run's planned flasks (Gus's cleaning chemicals) taken from its spot by its own Pickup prompt (hold E),
+  // then thrown (the real Throw input) at the Creature brought near and in plain sight: the cloud stuns it
+  s = await G((g) => {
+    const flasks = g.flasks.pickupsOn(g.level);
+    const f = flasks[0];
+    if (!f) return { planned: 0 };
+    const T = g.env.THREE;
+    // stand 2.6 studs off the flask on the floor, on the side its spot faces (the anchor's look), looking at it
+    const anchor = g.world.meta.anchors.find((a) => a.id === f.id);
+    const look = anchor ? new T.Vector3(-anchor.cframe[5], 0, -anchor.cframe[11]).normalize() : new T.Vector3(0, 0, 1);
+    const floorY = g.world.meta.levels[g.level].elevation;
+    const at = new T.Vector3(f.position.x + look.x * 2.6, floorY + 3, f.position.z + look.z * 2.6);
+    g.env.teleport({ position: { x: at.x, y: at.y, z: at.z }, yaw: Math.atan2(look.x, look.z) });
+    g.traps.noteTeleport();
+    const eye = g.env.eye(new T.Vector3());
+    const to = new T.Vector3(f.position.x, f.position.y, f.position.z).sub(eye);
+    g.env.setLook(Math.atan2(-to.x, -to.z), Math.atan2(to.y, Math.hypot(to.x, to.z)));
+    g.creature.devCommand('ignoreme');
+    return { planned: flasks.length, id: f.id };
+  });
+  check('the Basement plans its stun flasks on their spots (3 on Standard)', s.planned === 3, s);
+  await ff(0.3);
+  await tab.keyboard.down('KeyE');
+  await ff(0.7);
+  await tab.keyboard.up('KeyE');
+  await ff(0.3);
+  const taken = await G((g) => ({ held: g.flasks.held ? g.flasks.held.id : null, left: g.flasks.pickupsOn(g.level).length }));
+  check('holding E on a flask spot takes the flask into the hand', taken.held === s.id && taken.left === 2, { ...s, ...taken });
+  shotsTaken.push(await shot('07a-l0-flask.png'));
+  s = await G((g) => {
+    const T = g.env.THREE;
+    g.creature.devCommand('ai tp');
+    const c = g.creature.snapshot();
+    if (!c || !c.position) return { creature: null };
+    // the player 9 studs from it, back along the line toward where they stood, when that line is clear
+    const p = new T.Vector3(c.position.x, c.position.y, c.position.z);
+    const root = g.env.rootPosition().clone();
+    const away = new T.Vector3(root.x - p.x, 0, root.z - p.z);
+    let spot = null;
+    for (let k = 0; k < 16 && !spot; k++) {
+      const dir = away.lengthSq() > 1e-6 ? away.clone().normalize().applyAxisAngle(new T.Vector3(0, 1, 0), (k * Math.PI) / 8)
+        : new T.Vector3(Math.sin(k), 0, Math.cos(k));
+      const cand = new T.Vector3(p.x + dir.x * 9, root.y, p.z + dir.z * 9);
+      const chest = new T.Vector3(p.x, root.y + 1.5, p.z);
+      if (g.env.lineClear(new T.Vector3(cand.x, root.y + 1.5, cand.z), chest)) spot = cand;
+    }
+    if (!spot) return { creature: c.state, spot: null };
+    g.env.teleport({ position: { x: spot.x, y: spot.y, z: spot.z }, yaw: 0 });
+    g.traps.noteTeleport();
+    const eye = g.env.eye(new T.Vector3());
+    const to = new T.Vector3(p.x, root.y + 1.2, p.z).sub(eye);
+    g.env.setLook(Math.atan2(-to.x, -to.z), Math.atan2(to.y, Math.hypot(to.x, to.z)) + 0.1);
+    return { creature: c.state, hidden: c.hidden, spot: spot.toArray() };
+  });
+  check('the Creature brought near on the Basement, a clear line to it', !!s.spot && s.creature && !s.hidden, s);
+  await G((g) => g.env.injectAction('Throw', 'smoke', true));
+  await ff(0.45);
+  await G((g) => g.env.injectAction('Throw', 'smoke', false));
+  await ff(1.5);
+  s = await G((g) => ({ thrown: g.stats.get('FlasksThrown'), stuns: g.stats.get('Stuns'), state: g.creature.getState(),
+    held: !!g.flasks.held }));
+  check('the flask thrown at it stuns the Creature', s.thrown >= 1 && s.stuns >= 1 && s.state === 'Stunned' && !s.held, s);
+  shotsTaken.push(await shot('07b-l0-stunned.png'));
+  await G((g) => g.creature.devCommand('ignoreme'));
 
   // ------------------------------------------------------------------------------------------- the airlock -> Level 1
   // the exit stays locked until the floor's objective is done (tools/objective-run.mjs plays the objectives for real)

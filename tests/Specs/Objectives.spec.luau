@@ -25,6 +25,7 @@ local BreakerPanelBuilder = require(ReplicatedStorage.Shared.World.ProceduralWor
 local Builder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder)
 local Geometry = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Geometry)
 local LockBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.LockBuilder)
+local MopCartBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.MopCartBuilder)
 local ObjectiveItemBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.ObjectiveItemBuilder)
 local ObjectivePlaces = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ObjectivePlaces)
 local PickupBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.PickupBuilder)
@@ -389,7 +390,13 @@ return {
 						supported, why = true, platform.id
 					end
 				end
-				if anchor.kind == "MasterKeyCandidate" then
+				local cart = if anchor.ref then anchorById(layout, anchor.ref) else nil
+				if anchor.kind == "MasterKeyCandidate" and cart and cart.kind == "MopCart" then
+					-- a nail in a mop cart's handle (spec 4.3): exactly the cart's key hook
+					local hook = MopCartBuilder.keySpot(cart.pos, cart.yaw or 0)
+					supported = (hook.pos - anchor.pos).Magnitude < EPS and math.abs(hook.yaw - (anchor.yaw or 0)) < EPS
+					why = cart.id .. "'s handle"
+				elseif anchor.kind == "MasterKeyCandidate" then
 					-- a nail in the wall: the anchor stands on a wall face
 					local room = LayoutSchema.indexRooms(layout)[anchor.room]
 					local r = room.rect

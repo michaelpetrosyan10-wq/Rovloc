@@ -89,8 +89,12 @@ plus the cutscenes, the roof chase and the takeoff).
     and a short grace.
   - **The syringe gives one extra respawn** (once per run).
   - Per player in co-op. Say what Nightmare changes, if anything.
-- **Look:** every stage is dark, cold, gray and scary. The basement loses its warm copper/red-brick look. No black and
-  white checkerboard floors anywhere. The Bahamas ending is the one bright, warm scene in the game.
+- **Look (corrected by the player on Nov 11):** "By gray feel i didn't mean everything look gray, I meant like look at
+  threshold its like dark gray theme, that doesnt mean all colors are actually gray ... a spooky theme like a school after
+  hours dark and ruined but not all gray." So: a dark, ruined school at night, gray-leaning overall like Threshold, with
+  real faded colours in the materials (paint, lockers, wood, brick, rust, painted mains). No orange wash (the basement was
+  "copper looking"), no all-gray frame, no black and white checkerboard floors anywhere. The Bahamas ending is the one
+  bright, warm scene in the game.
 - **Stun flasks stay** as a mechanic (cleaning chemicals), with spawn spots on the remaining stages.
 - **Kept from before:** tunnels unless necessary; random exits (3 stairwells per side) between school floors; random
   item spots with the fairness rules; hiding spots (lockers, barrels, cabinets, drapes); crawlways; bear traps in the

@@ -22,6 +22,11 @@
 -- 192, band 4 at z 52, 144 and 216), so a culvert the Creature cannot enter is never more than 60 studs' walk away
 -- (the planner keeps every tunnel within reach of one); each also skips a band's turn, a shortcut for whoever dares
 -- to crawl.
+--
+-- The squad arrives by the coal chute from the Back Lot (its mouth in the delivery bay's west wall, a CutsceneMark the
+-- prologue lands on). The workshop's wall phone rings for one player once a run (spec 3.5). The stun flasks are Gus
+-- Pruitt's cleaning chemicals; after the planner and the keep-rooms ExtraAnchors adds the floor's 36 battery candidates
+-- and 8 flask spots (the storage cage's shelves twice, the workbench, the boiler room's shelf, four tunnel niches).
 
 -- Anchor heights: props rest on the floor (y = 0) or on a shelf / bench (its top); DripPipe sits under the ceiling;
 -- PlayerSpawn is at HumanoidRootPart height plus clearance (3.5) and Creature placements at the rig's root height (5).
@@ -32,6 +37,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local ExtraAnchors = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ExtraAnchors)
 local TunnelPlanner = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelPlanner)
 local TunnelRules = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules)
 
@@ -607,7 +613,11 @@ anchor("Clutter", 100, 0, 68, 45)
 anchor("Clutter", 136, 0, 108, 10)
 anchor("Corpse", 40, 0, 176, 60)
 anchor("DripPipe", 224, HEIGHT - 1.2, 245)
-anchor("BatteryCandidate", 24, 0, 270)
+
+-- The workshop's wall phone (spec 3.5): on the west wall past the bench, the handset at shoulder height
+anchor("WallPhone", 132.55, 4.6, 107, FACE_E, "L0_WallPhone")
+-- The coal chute's mouth in the delivery bay's west wall: where the prologue drops the squad in (spec 4.1)
+anchor("CutsceneMark", 22.6, 0, 260, FACE_E, "L0_Mark_ChuteMouth")
 
 --------------------------------------------------------------------------------
 -- Triggers
@@ -635,6 +645,20 @@ local layout: LayoutSchema.LevelLayout = {
 	platforms = platforms,
 	tunnels = plan.tunnels,
 }
+
+-- The floor's 36 battery candidates and 8 flask spots (spec 4.2): the storage cage's shelf twice, the workbench, the
+-- boiler room's wall shelf (CleaningShelfBuilder), four shelves over the drums of tunnel niches
+ExtraAnchors.apply(layout, {
+	seed = SEED,
+	stations = { "BreakerPanel" },
+	flasks = {
+		{ pos = Vector3.new(100, 4, 65.9), yaw = FACE_S },
+		{ pos = Vector3.new(104.5, 4, 65.9), yaw = FACE_S },
+		{ pos = Vector3.new(135, 3, 103.2), yaw = FACE_E },
+		{ pos = Vector3.new(226, 4.2, 248.95), yaw = FACE_N },
+	},
+	nicheFlasks = 4,
+})
 
 deepFreeze(layout)
 

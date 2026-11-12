@@ -247,8 +247,15 @@ local function buildRuns(layout: Layout, regions: { [string]: Region }): { Run }
 	for _, anchor in layout.anchors do
 		local run = byRoom[anchor.room]
 		if run then
+			-- a mop cart with its bucket and sign stands along the wall: its stretch of wall and floor stays bare
+			local reach = if anchor.kind == "MopCart" then 7 else 2.6
 			local p = anchor.pos
-			table.insert(run.floorBusy, { x0 = p.X - 2.6, z0 = p.Z - 2.6, x1 = p.X + 2.6, z1 = p.Z + 2.6 })
+			table.insert(run.floorBusy, { x0 = p.X - reach, z0 = p.Z - reach, x1 = p.X + reach, z1 = p.Z + reach })
+			if anchor.kind == "MopCart" then
+				local u = if run.axis == "X" then p.X else p.Z
+				local c = if run.axis == "X" then p.Z else p.X
+				markBusy(run, if c < run.cross then -1 else 1, u - reach, u + reach)
+			end
 		end
 	end
 	for _, trigger in layout.triggers do

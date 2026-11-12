@@ -131,6 +131,7 @@ local STRINGS: { [string]: string } = {
 	["Prompt.Chute"] = "Chute",
 	["Prompt.Janitor"] = "Sleeping Janitor",
 	["Prompt.WallPhone"] = "Wall Phone",
+	["Prompt.StreetGate"] = "Street Gate",
 	["Prompt.FilmReel"] = "Film Reel",
 	["Prompt.Projector"] = "Projector",
 	["Prompt.StrikeLampName"] = "Arc Lamp",
@@ -163,7 +164,7 @@ local STRINGS: { [string]: string } = {
 
 	-- Printed on props (signs, stencils, labels)
 	["Prop.Parachute.Stencil"] = "EMERGENCY CHUTES",
-	["Prop.Lab.Hazard"] = "DANGER: CORROSIVE",
+	["Prop.Lab.Hazard"] = "G. PRUITT — DO NOT MIX", -- the stun flasks are Gus's cleaning chemicals
 	["Prop.Airlock.Sign"] = "FIRE DOOR - KEEP CLOSED",
 	["Prop.Roof.Sign"] = "ROOF ACCESS",
 	["Prop.Lock.Locked"] = "LOCKED",
@@ -176,7 +177,7 @@ local STRINGS: { [string]: string } = {
 	["Prop.Breaker.Danger"] = "DANGER 480V",
 	["Prop.Breaker.Main"] = "MAIN",
 	["Prop.Fuse.Rating"] = "100A",
-	["Prop.Keys.Tag"] = "MASTER",
+	["Prop.Keys.Tag"] = "GUS",
 	["Prop.Locker.Number"] = "%d",
 	["Prop.Sign.NoRunning"] = "NO RUNNING IN THE HALLS",
 	["Prop.Sign.Exit"] = "EXIT",
@@ -191,6 +192,17 @@ local STRINGS: { [string]: string } = {
 	["Prop.Sign.Room"] = "ROOM %d",
 	["Prop.Sign.Caution"] = "CAUTION",
 	["Prop.Sign.WetFloor"] = "WET FLOOR",
+	-- Gus's closet and the main office (spec 4.3)
+	["Prop.Gus.DoorSign"] = "NIGHT SHIFT SLEEPING. KNOCK LOUD. — GUS",
+	["Prop.Gus.Roster"] = "NIGHTS: G. PRUITT 11 PM – 7 AM",
+	["Prop.Gus.HookTag"] = "MASTER RING — if it's not here I left it on a cart. — G.",
+	["Prop.Gus.Clock"] = "12:00",
+	-- the Back Lot (spec 4.1)
+	["Prop.BackLot.Discard"] = "DRAMA — PROP ROOM — DISCARD",
+	["Prop.BackLot.Masque"] = "MASQUE — DO NOT REMOVE — W.H.",
+	["Prop.BackLot.Lockdown"] = "LOCKDOWN",
+	["Prop.BackLot.Chained"] = "Chained.",
+	["Prop.BackLot.StaffOnly"] = "STAFF ONLY",
 
 	-- Input labels (touch buttons and hints)
 	["Input.Sprint"] = "RUN",

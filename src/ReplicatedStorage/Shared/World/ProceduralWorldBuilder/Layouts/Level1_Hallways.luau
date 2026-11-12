@@ -24,8 +24,13 @@
 --   the exit run  (x 0..44)   Kitchen Service in the south, Library Stacks in the north: S2 joins it at its south end,
 --                             and it runs north past the three stair vestibules (south z 260, middle 144, north 28)
 -- Crawlways cut the lanes' barriers (shortcuts for whoever dares to crawl), so a culvert the Creature cannot enter is
--- never more than 60 studs' walk away. The master keys hang on a nail in one of twelve places past the gate: the
--- janitor's closet, the main office, and hooks in niches all over the far side.
+-- never more than 60 studs' walk away. The master keys hang on a hook in one of fourteen places past the gate: ten
+-- niches all over the far side, the main office, and two of the six mop carts Gus left along the west half (spec 4.3).
+--
+-- Gus Pruitt, the night janitor, sleeps in his closet (L1_JanitorCloset, the Kitchen Service lane): his cot along the
+-- west wall behind a hung blanket (the JanitorCot anchor), his radio, hearing aid and clock-radio on the shelf. His
+-- hook there is empty: his keys are on the carts. After the planner and the keep-rooms, ExtraAnchors adds the floor's
+-- 36 battery candidates and 8 flask spots (the closet shelf, the four flask carts, two Kitchen Service niches).
 --
 -- Anchor heights: props rest on the floor (y = 0) or on a shelf (its top); the keys' nails are 4.6 up the wall;
 -- DripPipe sits under the ceiling; PlayerSpawn is at HumanoidRootPart height plus clearance (3.5) and Creature
@@ -36,6 +41,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Enums = require(ReplicatedStorage.Shared.Enums)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 local LayoutSchema = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.LayoutSchema)
+local ExtraAnchors = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.ExtraAnchors)
+local MopCartBuilder = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.Props.MopCartBuilder)
 local TunnelPlanner = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelPlanner)
 local TunnelRules = require(ReplicatedStorage.Shared.World.ProceduralWorldBuilder.TunnelRules)
 
@@ -828,14 +835,12 @@ end
 -- outside the ajar door a westbound squad looks diagonally through the doorway straight at it.
 anchor("CreatureScarePose", CLASS_X + 3.5, 5, CLASS_Z + 3.5, 45, "L1_ScarePose_Classroom108")
 
--- Floor objective (MasterKeys): the janitor's master keys hang on a nail in one of twelve places past the gate (the
--- anchor is the nail on the wall face, facing into the room): two in the janitor's closet, two in the main office,
--- and the planner's ten on hooks in niches all over the far side; hideable lockers in the two rooms keep a hiding
--- spot near every step. The exit locks on the three west stair vestibules' fire doors (the floor point on each door's
--- corridor face, facing out of the door).
+-- Floor objective (MasterKeys): Gus's master keys hang on a nail in one of fourteen places past the gate (the anchor
+-- is the nail on the wall face, facing into the room): two in the main office, two on mop carts (below) and the
+-- planner's ten on hooks in niches all over the far side; never in his closet, whose hook is empty. Hideable lockers
+-- in the office and the closet keep a hiding spot near every step. The exit locks on the three west stair vestibules'
+-- fire doors (the floor point on each door's corridor face, facing out of the door).
 local KEY_HOOK_Y = 4.6
-anchor("MasterKeyCandidate", 117.5, KEY_HOOK_Y, 279, FACE_W) -- janitor's closet, east wall
-anchor("MasterKeyCandidate", 102, KEY_HOOK_Y, 270.5, FACE_S) -- janitor's closet, beside the door
 anchor("MasterKeyCandidate", 136.5, KEY_HOOK_Y, 8, FACE_E) -- main office, behind the counter
 anchor("MasterKeyCandidate", 175.5, KEY_HOOK_Y, 12, FACE_W) -- main office, the key cabinet's wall
 anchor("Locker", 115.95, 0, 284, FACE_W) -- janitor's closet
@@ -872,10 +877,43 @@ scatter("SmashedLocker", 0, {
 scatter("DripPipe", HEIGHT - 1.2, { { 344, HALL_Z }, { 310, HALL_Z - 3 }, { 276, HALL_Z } })
 scatter("Clutter", 0, {
 	{ 377, HALL_Z - 4, 20 },
-	{ 104, 276, 10 },
 	{ 150, 6, -20 },
 })
-scatter("BatteryCandidate", 0, { { 360, HALL_Z + 5 }, { 112, 284 } })
+scatter("BatteryCandidate", 0, { { 360, HALL_Z + 5 } })
+
+--------------------------------------------------------------------------------
+-- Gus: his cot in the closet and his trail of mop carts
+--------------------------------------------------------------------------------
+
+-- The cot along the closet's west wall, its head to the north (the anchor: the cot's middle on the floor, facing into
+-- the closet); JanitorCotBuilder puts the "Wake him" prompt and the snore on the sleeper, the blanket, the signs and
+-- the empty key hook round it.
+anchor("JanitorCot", 100.9, 0, 276.5, FACE_E, "L1_JanitorCot")
+
+-- Six mop carts with their WET FLOOR signs across the west half, each against a side wall of a run (the anchor: the
+-- cart's middle on the floor, facing out into the run): two carry a key hook, four a flask spot (ExtraAnchors adds
+-- those below).
+local CART_OFF = MopCartBuilder.WallOffset
+local MOP_CARTS: { { any } } = {
+	{ 92, 48.5 + CART_OFF, FACE_S, "Keys" }, -- lane N1, on the north wall
+	{ 176, 128 - CART_OFF, FACE_N, "Flask" }, -- lane N2's east end, on the south wall
+	{ 92, 163.5 + CART_OFF, FACE_S, "Flask" }, -- the Collapsed Main Hall's gallery, on the north wall
+	{ 238, 194.5 - CART_OFF, FACE_N, "Keys" }, -- the Kitchen gallery past the hub, on the south wall
+	{ 70, 240.5 - CART_OFF, FACE_N, "Flask" }, -- lane S2's gallery, on the south wall
+	{ 34.5 - CART_OFF, 90, FACE_W, "Flask" }, -- the exit run, on the east wall
+}
+local cartFlasks: { ExtraAnchors.FlaskSpot } = {}
+for i, cart in MOP_CARTS do
+	local pos = Vector3.new(cart[1], 0, cart[2])
+	local id = anchor("MopCart", pos.X, 0, pos.Z, cart[3], string.format("%s_MopCart_%d", PREFIX, i))
+	if cart[4] == "Keys" then
+		local hook = MopCartBuilder.keySpot(pos, cart[3])
+		anchor("MasterKeyCandidate", hook.pos.X, hook.pos.Y, hook.pos.Z, hook.yaw, nil, id)
+	else
+		local spot = MopCartBuilder.flaskSpot(pos, cart[3])
+		table.insert(cartFlasks, { pos = spot.pos, yaw = spot.yaw, ref = id })
+	end
+end
 
 --------------------------------------------------------------------------------
 -- Triggers
@@ -915,6 +953,24 @@ local layout: LayoutSchema.LevelLayout = {
 	windows = windows,
 	tunnels = plan.tunnels,
 }
+
+-- The floor's 36 battery candidates and 8 flask spots (spec 4.3): the closet shelf twice, the four flask carts, two
+-- shelves over the drums of Kitchen Service niches
+local CLOSET_SHELF_Z = 284.6 + 1.2
+local flasks: { ExtraAnchors.FlaskSpot } = {
+	{ pos = Vector3.new(105.1, 4.2, CLOSET_SHELF_Z), yaw = FACE_N },
+	{ pos = Vector3.new(106.4, 4.2, CLOSET_SHELF_Z), yaw = FACE_N },
+}
+for _, spot in cartFlasks do
+	table.insert(flasks, spot)
+end
+ExtraAnchors.apply(layout, {
+	seed = SEED,
+	stations = { "ExitLock" },
+	flasks = flasks,
+	nicheFlasks = 2,
+	nicheAreas = { { 44, 180, GATE_X, 288 }, { 0, 0, 44, 288 } },
+})
 
 deepFreeze(layout)
 

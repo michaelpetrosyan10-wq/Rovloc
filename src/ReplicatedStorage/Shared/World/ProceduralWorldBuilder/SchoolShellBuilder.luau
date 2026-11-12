@@ -2128,6 +2128,213 @@ end
 -- Exterior: street-level ground around the school, sidewalks
 --------------------------------------------------------------------------------
 
+-- The Back Lot's side of the south facade (docs/design/game-spec-v2.md 4.1; the set itself is Props/BackLotBuilder):
+-- the staff doors (x 56..64), dressing on the facade with nothing behind them, their roll-down lockdown shutter down
+-- and the red LOCKDOWN strobe over them (light group Scripted:BL_Strobe); two rows of six window cards, the first on
+-- the street storey, the second on the one above (light groups Scripted:BL_Windows_1 and _2): each a pane that is a
+-- light fixture's glow surface, dark until a scene lights it (the opening's lit school, its windows dying floor by
+-- floor).
+SchoolShellBuilder.BackLotFacade = table.freeze({
+	face = 288 + WorldConfig.ExteriorWallThickness / 2,
+	doors = table.freeze({ x0 = 56, x1 = 64, height = 9 }),
+	strobeGroup = "Scripted:BL_Strobe",
+	windowRows = table.freeze({
+		table.freeze({
+			group = "Scripted:BL_Windows_1",
+			y0 = 4.5,
+			y1 = 9,
+			xs = table.freeze({ 6, 16, 26, 36, 46, 74 }),
+		}),
+		table.freeze({
+			group = "Scripted:BL_Windows_2",
+			y0 = 22,
+			y1 = 28,
+			xs = table.freeze({ 6, 19, 32, 45, 58, 71 }),
+		}),
+	}),
+	windowWidth = 3.6,
+})
+
+local FACADE_STEEL = Color3.fromRGB(58, 61, 63)
+local SHUTTER = Color3.fromRGB(96, 100, 102)
+local PANE_LIT = Color3.fromRGB(196, 204, 214)
+
+local function buildBackLotFacade(parent: Instance)
+	local spec = SchoolShellBuilder.BackLotFacade
+	local face = spec.face
+	local ground = WorldConfig.GroundY + SchoolShellBuilder.Exterior.sidewalkHeight
+	local model = Instance.new("Model")
+	model.Name = "BackLotFacade"
+	model.Parent = parent
+	-- the staff doors: a steel frame proud of the block, the shutter rolled down in its guides, the housing over it
+	local d = spec.doors
+	local top = ground + d.height
+	local mid = (d.x0 + d.x1) / 2
+	for i, x in { d.x0 - 0.3, d.x1 + 0.3 } do
+		Geometry.part(
+			model,
+			"DoorJamb" .. i,
+			CFrame.new(x, ground + d.height / 2, face + 0.25),
+			Vector3.new(0.6, d.height, 0.5),
+			"TrimMetal",
+			{
+				color = FACADE_STEEL,
+			}
+		)
+	end
+	Geometry.part(
+		model,
+		"DoorHead",
+		CFrame.new(mid, top + 0.3, face + 0.25),
+		Vector3.new(d.x1 - d.x0 + 1.2, 0.6, 0.5),
+		"TrimMetal",
+		{
+			color = FACADE_STEEL,
+		}
+	)
+	local shutter = Geometry.part(
+		model,
+		"Shutter",
+		CFrame.new(mid, ground + d.height / 2, face + 0.15),
+		Vector3.new(d.x1 - d.x0, d.height, 0.12),
+		"MetalGalvanized",
+		{ color = SHUTTER }
+	)
+	local slats = SurfaceArt.gui(shutter, Enum.NormalId.Back, { name = "Slats", pixelsPerStud = 10, maxDistance = 120 })
+	SurfaceArt.grid(slats, 1, 22, FACADE_STEEL, 0.2, 2)
+	SurfaceArt.grime(slats, Color3.fromRGB(30, 30, 30), 0.45, false, 3)
+	Geometry.part(
+		model,
+		"ShutterHousing",
+		CFrame.new(mid, top + 1.25, face + 0.65),
+		Vector3.new(d.x1 - d.x0 + 1.4, 1.3, 1.3),
+		"MetalGalvanized",
+		{
+			color = FACADE_STEEL,
+		}
+	)
+	local placard = Geometry.part(
+		model,
+		"LockdownPlate",
+		CFrame.new(mid, top + 2.55, face + 0.07),
+		Vector3.new(4, 1, 0.1),
+		"SignPlate"
+	)
+	local gui = SurfaceArt.gui(placard, Enum.NormalId.Back, { name = "Print", pixelsPerStud = 30, maxDistance = 120 })
+	SurfaceArt.text(
+		gui,
+		"Text",
+		Strings.get("Prop.BackLot.Lockdown"),
+		0.06,
+		0.12,
+		0.88,
+		0.76,
+		Color3.fromRGB(186, 40, 32),
+		Enum.Font.Oswald,
+		2
+	)
+	local staff = Geometry.part(
+		model,
+		"StaffPlate",
+		CFrame.new(d.x1 + 1.6, ground + 5.4, face + 0.05),
+		Vector3.new(1.8, 0.6, 0.06),
+		"SignPlate"
+	)
+	local staffGui = SurfaceArt.gui(staff, Enum.NormalId.Back, { name = "Print", pixelsPerStud = 40, maxDistance = 60 })
+	SurfaceArt.text(
+		staffGui,
+		"Text",
+		Strings.get("Prop.BackLot.StaffOnly"),
+		0.06,
+		0.12,
+		0.88,
+		0.76,
+		Color3.fromRGB(200, 202, 204),
+		Enum.Font.GothamBold,
+		2
+	)
+	SchoolShellBuilder.buildLight(model, {
+		id = "BL_Light_Strobe",
+		kind = "EmergencyRed",
+		position = Vector3.new(mid + 3.4, top + 1.25, face + 1.6),
+		brightness = 0.8,
+		range = 26,
+		flickerGroup = spec.strobeGroup,
+		levelId = "BackLot",
+		zoneId = "BL_Lot",
+		facing = Vector3.new(mid + 3.4, top, face + 30),
+	})
+	-- the window cards: a sill, a frame and the pane, the pane the glow surface of its own fixture
+	for r, row in spec.windowRows do
+		for i, x in row.xs do
+			local y0, y1 = ground + row.y0, ground + row.y1
+			local h = y1 - y0
+			local w = spec.windowWidth
+			Geometry.part(
+				model,
+				string.format("WindowSill_%d_%d", r, i),
+				CFrame.new(x, y0 - 0.15, face + 0.25),
+				Vector3.new(w + 0.6, 0.3, 0.5),
+				"SlabEdge"
+			)
+			local fixture = Geometry.part(
+				model,
+				string.format("BL_Window_%d_%d", r, i),
+				CFrame.lookAt(Vector3.new(x, (y0 + y1) / 2, face + 0.06), Vector3.new(x, (y0 + y1) / 2, face + 10)),
+				Vector3.new(w, h, 0.1),
+				"Fixture",
+				{ color = FACADE_STEEL, castShadow = false, canCollide = false }
+			)
+			Geometry.makeFixture(fixture)
+			local pane = Geometry.part(
+				fixture,
+				FixtureGlow.PartPrefix .. "Pane",
+				fixture.CFrame * CFrame.new(0, 0, -0.07),
+				Vector3.new(w - 0.3, h - 0.3, 0.04),
+				"Fixture",
+				{ castShadow = false, canCollide = false }
+			)
+			Geometry.makeFixture(pane)
+			FixtureGlow.apply(pane, PANE_LIT, 0)
+			local mullion = Geometry.part(
+				fixture,
+				"Mullion",
+				fixture.CFrame * CFrame.new(0, 0, -0.1),
+				Vector3.new(0.14, h - 0.3, 0.06),
+				"TrimMetal",
+				{
+					color = FACADE_STEEL,
+					castShadow = false,
+					canCollide = false,
+				}
+			)
+			Geometry.makeFixture(mullion)
+			local light = newLight("SurfaceLight", {
+				id = fixture.Name,
+				kind = "Bulb",
+				position = fixture.CFrame.Position,
+				brightness = 0.6,
+				range = 10,
+				color = PANE_LIT,
+				broken = true,
+				levelId = "BackLot",
+				zoneId = "BL_Lot",
+			}, "Light", 10) :: SurfaceLight
+			light.Face = Enum.NormalId.Front
+			light.Angle = 120
+			light.Parent = fixture
+			fixture:AddTag(Tags.LevelLight)
+			setAttributes(fixture, {
+				[W.LightKind] = "Bulb",
+				[W.LevelId] = "BackLot",
+				[W.ZoneId] = "BL_Lot",
+				[W.BaseBrightness] = 0,
+				[W.FlickerGroup] = row.group,
+			})
+		end
+	end
+end
+
 -- `street` is the part of the footprint the street-level storey covers (default: all of it): a legacy storey still
 -- drawn for the old footprint leaves the rest capped by the ground slab, so the street never opens onto the basement.
 function SchoolShellBuilder.buildExterior(parent: Instance, street: Vector2?): number
@@ -2174,10 +2381,19 @@ function SchoolShellBuilder.buildExterior(parent: Instance, street: Vector2?): n
 		)
 	end
 
-	-- Deterministic street debris and dead lamp posts (no lights: the storm is the only light outside).
+	-- Deterministic street debris and dead lamp posts (the storm is the only light outside, but for the Back Lot's).
 	local random = Rng.seeded(1, "Exterior")
+	local backLot = WorldConfig.Sets.BackLot
 	local function clearOfSchool(x: number, z: number, pad: number): boolean
 		if x > -walk - pad and x < size.X + walk + pad and z > -walk - pad and z < size.Y + walk + pad then
+			return false
+		end
+		if
+			x > backLot.min.X - pad
+			and x < backLot.max.X + pad
+			and z > backLot.min.Z - pad
+			and z < backLot.max.Z + pad
+		then
 			return false
 		end
 		return true
@@ -2223,6 +2439,8 @@ function SchoolShellBuilder.buildExterior(parent: Instance, street: Vector2?): n
 		Geometry.cylinder(parent, string.format("LampPost_%d", i), base, top, 0.6, "MetalRust")
 		Geometry.part(parent, string.format("LampHead_%d", i), CFrame.new(top), Vector3.new(1.4, 0.6, 2.4), "TrimMetal")
 	end
+
+	buildBackLotFacade(parent)
 
 	-- Invisible walls around the edge of the ground slab, so nobody walks off the end of the world (a fall past
 	-- FallenPartsDestroyHeight leaves a player with no character). Default group so characters and the Creature

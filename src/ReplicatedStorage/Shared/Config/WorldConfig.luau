@@ -43,6 +43,14 @@ export type StairwellSpec = {
 	toRoom: string, -- Airlock room id in the upper level's layout (its entry vestibule)
 }
 
+-- A set (Enums.SetId): a stage played as a scene, not a level (StageConfig). Its box (world, min / max corners) is
+-- what levelAt reads to tell the set a point is on.
+export type SetSpec = {
+	origin: Vector3, -- world point the set's cutscene marks are laid out from
+	min: Vector3,
+	max: Vector3,
+}
+
 export type LevelSpec = {
 	elevation: number, -- world Y of the floor surface
 	height: number, -- default ceiling height above the floor (0: open to the sky)
@@ -74,6 +82,34 @@ WorldConfig.Levels = table.freeze({
 } :: { [string]: LevelSpec })
 
 WorldConfig.LobbyOrigin = Vector3.new(-800, 0, 0)
+
+-- The sets built so far (spec 4.1, 4.2). The Back Lot is part of the school's exterior at street level, south of the
+-- south facade (z 288): the lot x 0..80, z 290..350, closed by its fence; its box starts at the facade's line.
+WorldConfig.Sets = table.freeze({
+	BackLot = table.freeze({
+		origin = Vector3.new(0, 18, 290),
+		min = Vector3.new(-1, 16, 288),
+		max = Vector3.new(81, 50, 351),
+	} :: SetSpec),
+} :: { [string]: SetSpec })
+
+-- The set whose box holds world point `p` (nil outside every set's box).
+function WorldConfig.setAt(p: Vector3): Enums.SetId?
+	for _, id: Enums.SetId in Enums.SetId do
+		local spec = WorldConfig.Sets[id]
+		local inside = spec ~= nil
+			and p.X >= spec.min.X
+			and p.X <= spec.max.X
+			and p.Y >= spec.min.Y
+			and p.Y <= spec.max.Y
+			and p.Z >= spec.min.Z
+			and p.Z <= spec.max.Z
+		if inside then
+			return id
+		end
+	end
+	return nil
+end
 
 -- A tower against the `side` wall spanning Z minZ..minZ + 32, its opening `opening` studs in from minZ.
 local function towerSpec(side: TowerSide, minZ: number, opening: number): TowerSpec

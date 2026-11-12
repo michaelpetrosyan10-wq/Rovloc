@@ -263,8 +263,15 @@ return {
 				local plan = planFor(seed, difficulty)
 				t.eq(plan.difficulty, difficulty, "plan difficulty")
 				t.eq(#RunDirector.propsOf(plan, "BearTrap"), spec.trapCount, difficulty .. " bear traps")
-				t.eq(#RunDirector.propsOf(plan, "ChemicalFlask"), 0, "no flask spots on the school's four levels")
 				for _, layout in layouts() do
+					-- the stun flasks: the stage's flasksPerStage of its flask spots, each a ChemicalFlask prop
+					local flasks =
+						math.min(spec.flasksPerStage[layout.id] or 0, countAnchors(layout, "FlaskCandidate", nil))
+					t.eq(
+						#RunDirector.propsOf(plan, "ChemicalFlask", layout.id),
+						flasks,
+						difficulty .. " flasks on " .. layout.id
+					)
 					local expected = if layout.id == "Lobby"
 						then 0
 						else math.min(spec.batteriesPerLevel, countAnchors(layout, "BatteryCandidate", nil))

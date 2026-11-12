@@ -9,8 +9,8 @@
 --   * WorldService.BeginRun: the director's plan (RunDirector.plan over ZoneGraph.build) -> BuildProp for every
 --     planned prop and BuildFixtures for every school level (grates in both looks, doors, gate, lockers, crate, the
 --     floor objectives' stations and locks) into Workspace.Runtime; plus a prop on every other candidate anchor a run
---     may pick (every floor objective's item candidates, every TrapCandidate and BatteryCandidate: attribute
---     Planned = false), so the web picks per run by showing the props on its picks;
+--     may pick (every floor objective's item candidates, every TrapCandidate, BatteryCandidate and FlaskCandidate:
+--     attribute Planned = false), so the web picks per run by showing the props on its picks;
 --   * the client's CosmeticWorldController: BuildCosmetic (skyline + anchor dressing);
 --   * the Creature rig (CreatureRigBuilder) at the origin, for the rig export;
 --   * the client LightingController's moonlight windows (Volumetrics.windowSpecs) for every layout.
@@ -394,7 +394,7 @@ end
 -- Plan props: one on every candidate anchor a run may pick
 --------------------------------------------------------------------------------
 
--- A run picks which TrapCandidate / BatteryCandidate anchors hold a prop, but a prop's look is its
+-- A run picks which TrapCandidate / BatteryCandidate / FlaskCandidate anchors hold a prop, but a prop's look is its
 -- anchor's own (RunDirector.plannedProp: the variant and Builder.propRandom take no run seed), so the web keeps one
 -- entity per candidate anchor, exactly the prop a live run builds there, and shows a run's picks
 -- (worldData.plan replays RunDirector's draws). Attribute Planned: this seed's Standard picks.
@@ -421,12 +421,24 @@ do
 			skip = {},
 			most = 0,
 		},
+		-- the stun flasks: RunDirector picks a stage's flasksPerStage of its FlaskCandidate spots (plan.flasks), each
+		-- a ChemicalFlask prop like the batteries
+		{
+			kind = RunDirector.PropKinds.ChemicalFlask,
+			candidate = "FlaskCandidate",
+			levels = WorldConfig.LevelOrder,
+			skip = {},
+			most = 0,
+		},
 	}
 	for _, name in Enums.Difficulty do
 		local spec = DifficultyConfig[name]
 		if spec then
 			sets[1].most = math.max(sets[1].most, spec.trapCount)
 			sets[2].most = math.max(sets[2].most, spec.batteriesPerLevel)
+			for _, count in spec.flasksPerStage do
+				sets[3].most = math.max(sets[3].most, count)
+			end
 		end
 	end
 	for _, set in sets do

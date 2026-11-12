@@ -12,7 +12,7 @@ export const PASSTHROUGH = {
       ],
     },
     "Exterior": {
-      vertexCount: 504, indexCount: 2664, fingerprint: 68495104,
+      vertexCount: 1874, indexCount: 10584, fingerprint: 1643009120,
       runs: [
       ],
     },
@@ -28,15 +28,15 @@ export const PASSTHROUGH = {
       ],
     },
     "Level1_Hallways": {
-      vertexCount: 24924, indexCount: 165036, fingerprint: 855522906,
+      vertexCount: 27166, indexCount: 176484, fingerprint: 331811778,
       runs: [
-        192, 7756, 14231, 2681,
+        192, 7756, 14231, 4923,
       ],
     },
     "Level0_Basement": {
-      vertexCount: 17841, indexCount: 110700, fingerprint: 852478847,
+      vertexCount: 17909, indexCount: 111024, fingerprint: 3151937179,
       runs: [
-        136, 6045, 10590, 1070,
+        136, 6045, 10590, 1138,
       ],
     },
     "Stairwells": {

@@ -22,7 +22,7 @@
 --                  walked apart, none in a dead end; a floor that cannot keep a rule degrades (fewest broken rules,
 --                  then the lowest id).
 --   flasks         spec v2's stun flasks (plan.flasks[level], pickFlasks): DifficultyConfig flasksPerStage
---                  FlaskCandidate anchors, stream "Flasks|<level>".
+--                  FlaskCandidate anchors, stream "Flasks|<level>"; each pick is also a ChemicalFlask prop.
 --   Stations       a floor whose objective picks its stations (ObjectiveConfig `stations`: the rooftops' feeders): 3
 --                  of 6 on both arcs (pickStations), stream "Objective|<level>", in plan.objectives[levelId].
 --   lockedGrates   round(lockedGrateFraction x lockable) of each level's Lockable grates (never CriticalPath ones).
@@ -1094,7 +1094,14 @@ function RunDirector.plan(
 			)
 		end
 		if (spec.flasksPerStage[layout.id] or 0) > 0 then
-			flasks[layout.id] = RunDirector.pickFlasks(runSeed, resolved, layout)
+			local picked = RunDirector.pickFlasks(runSeed, resolved, layout)
+			flasks[layout.id] = picked
+			-- each picked spot holds a stun flask, built like the batteries and traps (its anchor's variant)
+			local chosen: { Anchor } = {}
+			for _, id in picked do
+				table.insert(chosen, anchorById(layout, id) :: Anchor)
+			end
+			addProps(props, RunDirector.PropKinds.ChemicalFlask, layout, chosen)
 		end
 	end
 

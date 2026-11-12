@@ -325,6 +325,9 @@ export type AnchorKind =
 	| "WallPhone"
 	| "Billboard"
 	| "FlapBoard"
+	-- the Hallways' janitor (spec 4.3): his mop carts (a key hook or a flask spot rides each) and his cot
+	| "MopCart"
+	| "JanitorCot"
 
 -- GatherZone: where a squad gathers before a scene; Shutter: the bell tower's shutter line; FallZone: a fall that
 -- lands on a deck (never damage); ChuteHatch: the Back Lot's chute; JumpGate: the roof's jump.
@@ -757,6 +760,8 @@ Enums.AnchorKind = table.freeze({
 	"WallPhone",
 	"Billboard",
 	"FlapBoard",
+	"MopCart",
+	"JanitorCot",
 } :: { AnchorKind })
 
 Enums.TriggerKind = table.freeze({

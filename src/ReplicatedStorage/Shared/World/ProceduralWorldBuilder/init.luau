@@ -2,9 +2,9 @@
 -- ProceduralWorldBuilder: builds every piece of world geometry in code.
 --
 -- Server: BuildAuthoritative() makes Workspace.Lobby (boiler room + wrecked bus) and Workspace.School (one Model
--- per level, the stair towers and the street-level exterior, each level's static props in <level>.Props), then
--- ApplyLighting() sets the storm-night baseline. Per run, BuildProp() places the director's planned props and
--- BuildFixtures() rebuilds each level's stateful set pieces (grates, fire doors, lockers, ...) into
+-- per level, the stair towers and the street-level exterior with the Back Lot set, each level's static props in
+-- <level>.Props), then ApplyLighting() sets the storm-night baseline. Per run, BuildProp() places the director's
+-- planned props and BuildFixtures() rebuilds each level's stateful set pieces (grates, fire doors, lockers, ...) into
 -- Workspace.Runtime.<level>, so every run starts fresh.
 -- Client: BuildCosmetic(parent) adds the ruined skyline plus the cosmetic-anchor dressing.
 -- Everything built draws from Rng streams of WORLD_SEED and its own key, never from a run's seed: the school, its
@@ -27,6 +27,7 @@ local Rng = require(ReplicatedStorage.Shared.Util.Rng)
 local Types = require(ReplicatedStorage.Shared.Types)
 local WorldConfig = require(ReplicatedStorage.Shared.Config.WorldConfig)
 
+local BackLotBuilder = require(script.Props.BackLotBuilder)
 local CreatureRigBuilder = require(script.CreatureRigBuilder)
 local Geometry = require(script.Geometry)
 local LightingRig = require(script.LightingRig)
@@ -410,6 +411,10 @@ function Builder.BuildAuthoritative(options: BuildOptions?): BuildResult
 		local street = if streetLevel and streetLevel.legacy then WorldConfig.LegacyFootprint else nil
 		guarded("exterior", function()
 			SchoolShellBuilder.buildExterior(exterior, street)
+		end)
+		-- the Back Lot (a set on the street, south of the school): the opening's and the prologue's
+		guarded("back lot", function()
+			BackLotBuilder.build(exterior)
 		end)
 		exterior.Parent = school
 	end

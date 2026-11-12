@@ -28,7 +28,8 @@
 //    of RunDirector against RunDirector itself: for every seed and difficulty of the export's build/cache/run-plans.json,
 //    the same objective picks and guard traps, the same bear trap and flask prop anchors, every prop's variant
 //    (variantOf), the radar's battery picks of every sneaking stage (pickBatteries: anchors in pick order and the rules
-//    broken) and the stun flask picks of every stage (pickFlasks), the same locked grates and the same exit stairwells.
+//    broken) and the stun flask picks of every stage (pickFlasks: one exported ChemicalFlask on every picked spot, live
+//    in the plan's props, more than zero over the plans), the same locked grates and the same exit stairwells.
 // 5. The shared rules: every config the export lists (meta.exportedConfigs: each Shared/Config and Shared/Rules module
 //    with an exportMeta) is in meta under its name, the ones the website needs among them; the web's mirror of
 //    NoiseConfig's kinds (engine/config.js NoiseKinds) is the export's, kind for kind; build/cache/golden.json
@@ -462,9 +463,19 @@ for (const e of meta.entities) {
       }
     }
     const anchored = meta.anchors.filter((a) => a.kind === 'FlaskCandidate').length;
-    check(flasks === meta.entities.filter((x) => x.type === 'ChemicalFlask').length && flasks === anchored,
+    check(flasks > 0 && flasks === meta.entities.filter((x) => x.type === 'ChemicalFlask').length && flasks === anchored,
       `${flasks} chemical flasks exported and baked, one per FlaskCandidate anchor (${anchored})`);
-    if (anchored > 0) check(flasks > 0, `${flasks} chemical flasks with ${anchored} FlaskCandidate anchors`);
+    // one exported flask on every FlaskCandidate the export plan picked (plan.flasks), planned, as its prop
+    const flaskEntities = new Map(meta.entities.filter((x) => x.type === 'ChemicalFlask').map((x) => [x.attributes.AnchorId, x]));
+    let picked = 0;
+    for (const ids of Object.values((meta.plan && meta.plan.flasks) || {})) {
+      for (const id of Array.isArray(ids) ? ids : []) {
+        picked++;
+        const e = flaskEntities.get(id);
+        check(!!e && e.attributes.Planned === true && planned.has(id), `picked flask spot ${id}: its planned ChemicalFlask`);
+      }
+    }
+    check(picked > 0, `${picked} flask spots picked by the export's plan`);
   }
   if (failures === before) console.log(`  ok   ${flasks} chemical flasks (${cracked} cracked) look as flaskFx draws their variant`);
 }
@@ -1231,6 +1242,8 @@ console.log('== run plan (the web replays RunDirector)');
   const plansFile = path.join(buildDir, 'cache', 'run-plans.json');
   check(fs.existsSync(plansFile), `RunDirector's plans exported (${plansFile})`);
   let replayed = 0;
+  let flaskPicks = 0;
+  const flaskEntities = meta.entities.filter((e) => e.type === 'ChemicalFlask');
   if (fs.existsSync(plansFile)) {
     const plans = JSON.parse(fs.readFileSync(plansFile, 'utf8'));
     // RunDirector plans picks only on a floor with an item (the Auditorium's crossing has none), and so does the port
@@ -1271,6 +1284,14 @@ console.log('== run plan (the web replays RunDirector)');
         check(same(got.flasks[level] || [], arr(ids)), `${tag} ${level} stun flasks ${(got.flasks[level] || []).join(',')} (RunDirector: ${arr(ids).join(',')})`);
       }
       check(same(Object.keys(got.flasks).sort(), Object.keys(want.flasks || {}).sort()), `${tag} stun flasks on the same stages`);
+      // one exported ChemicalFlask on every picked flask spot, live in the website's plan
+      for (const [level, ids] of Object.entries(got.flasks)) {
+        for (const id of ids) {
+          const on = flaskEntities.filter((e) => e.level === level && (e.attributes.AnchorId ?? e.id) === id);
+          check(on.length === 1 && got.props.has(on[0].id), `${tag} ${level} flask spot ${id}: one exported ChemicalFlask, live (${on.length})`);
+          flaskPicks++;
+        }
+      }
       // every prop as RunDirector plans it: its anchor's own variant, and no objective item with a slot (no floor has
       // kinds), so the entity the export built on that anchor is the run's prop
       for (const p of arr(want.props)) {
@@ -1288,7 +1309,10 @@ console.log('== run plan (the web replays RunDirector)');
       replayed++;
     }
   }
-  if (failures === before) console.log(`  ok   Rng golden values; ${replayed} RunDirector plans replayed pick for pick`);
+  check(flaskPicks > 0, `${flaskPicks} stun flask spots picked over the replayed plans, each its exported flask`);
+  if (failures === before) {
+    console.log(`  ok   Rng golden values; ${replayed} RunDirector plans replayed pick for pick (${flaskPicks} flask spots)`);
+  }
 }
 
 // the shared rules: the configs in meta, the golden rows, the run plan's spec v2 picks, the CreatureBlocks
@@ -1447,6 +1471,77 @@ console.log('== stages, input, settings');
       `(${PendingActions.length} pending); ${list.length} settings (${PendingSettings.length} pending)`);
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// WP03b: the school's content and the Back Lot (docs/design/game-spec-v2.md 3.2, 4.1-4.3, 2.2)
+// ---------------------------------------------------------------------------------------------------------------
+function schoolContentAndBackLot() {
+  console.log('== school content and the Back Lot (WP03b)');
+  const before = failures;
+  const anchorsOf = (level, kind) => meta.anchors.filter((a) => a.level === level && a.kind === kind);
+  const entity = (type, level) => meta.entities.filter((e) => e.type === type && (!level || e.level === level));
+  // 36 battery candidates and 8 flask spots on the Basement and the Hallways, every flask spot holding a flask entity
+  for (const level of ['Level0_Basement', 'Level1_Hallways']) {
+    check(anchorsOf(level, 'BatteryCandidate').length === 36, `${level}: ${anchorsOf(level, 'BatteryCandidate').length} battery candidates (36)`);
+    const flasks = anchorsOf(level, 'FlaskCandidate');
+    check(flasks.length === 8, `${level}: ${flasks.length} flask spots (8)`);
+    const onLevel = new Set(entity('ChemicalFlask', level).map((e) => e.attributes.AnchorId));
+    check(flasks.every((a) => onLevel.has(a.id)), `${level}: a ChemicalFlask entity on every flask spot`);
+  }
+  // the flasks' label, the keys' fob
+  const raw = JSON.parse(fs.readFileSync(path.join(buildDir, 'cache', 'world-raw.json'), 'utf8'));
+  const texts = new Set();
+  const walk = (node) => {
+    if (!node) return;
+    if (typeof node.text === 'string') texts.add(node.text);
+    for (const c of node.children || []) walk(c);
+  };
+  for (const g of raw.guis || []) walk(g.root || g);
+  check(texts.has('G. PRUITT — DO NOT MIX'), 'the flasks read "G. PRUITT — DO NOT MIX"');
+  check(texts.has('GUS'), 'the master keys\' fob reads GUS');
+  for (const t of ['NIGHT SHIFT SLEEPING. KNOCK LOUD. — GUS', 'NIGHTS: G. PRUITT 11 PM – 7 AM', 'WET FLOOR', 'LOCKDOWN',
+    'DRAMA — PROP ROOM — DISCARD', 'MASQUE — DO NOT REMOVE — W.H.']) check(texts.has(t), `the world prints "${t}"`);
+  // Gus asleep: the cot entity with its "Wake him" prompt (1.5 s), the snore and the radio; the six mop carts; the keys
+  const cots = entity('JanitorCot', 'Level1_Hallways');
+  check(cots.length === 1, `one janitor's cot entity (${cots.length})`);
+  for (const cot of cots) {
+    const wake = cot.prompts.find((p) => p.name === 'WakeHim');
+    check(!!wake && Math.abs(wake.holdDuration - 1.5) < 1e-3, `${cot.id}: the WakeHim prompt holds 1.5 s`);
+    check(!!cot.attachments.Snore && !!cot.attachments.Radio, `${cot.id}: the snore's and the radio's emitters`);
+    check(cot.nodes.every((n) => Array.isArray(n.pivot)), `${cot.id}: every node of the entity has its pivot`);
+  }
+  check(anchorsOf('Level1_Hallways', 'MopCart').length === 6, 'six mop carts');
+  const keys = anchorsOf('Level1_Hallways', 'MasterKeyCandidate');
+  check(keys.length === 14 && keys.every((a) => a.room !== 'L1_JanitorCloset' && a.cframe[0] < 290),
+    `${keys.length} key hooks, none in the closet, all west of the gate`);
+  // the wall phone and the chute's mouth in the Basement
+  const phones = entity('WallPhone', 'Level0_Basement');
+  check(phones.length === 1 && phones[0].prompts.some((p) => p.name === 'AnswerPhone') && !!phones[0].attachments.Ringer,
+    'the workshop\'s wall phone: its AnswerPhone prompt and its ringer');
+  check(phones.every((e) => e.nodes.every((n) => Array.isArray(n.pivot))), 'the wall phone\'s nodes (the handset) have their pivots');
+  check(meta.anchors.some((a) => a.id === 'L0_Mark_ChuteMouth' && a.kind === 'CutsceneMark' && a.room === 'L0_DeliveryBay'),
+    'the chute\'s mouth mark in the delivery bay');
+  // the Back Lot: a set with its box, four bin starts (one per slot), its marks, the ChuteHatch trigger, the cast
+  const box = meta.worldConfig && meta.worldConfig.Sets && meta.worldConfig.Sets.BackLot;
+  check(!!box && Array.isArray(box.min) && Array.isArray(box.max), 'meta.worldConfig.Sets.BackLot: the set\'s box');
+  const inBox = (p) => !!box && p[0] >= box.min[0] && p[0] <= box.max[0] && p[1] >= box.min[1] && p[1] <= box.max[1] &&
+    p[2] >= box.min[2] && p[2] <= box.max[2];
+  const bins = anchorsOf('BackLot', 'BinStart');
+  check(bins.length === 4 && [1, 2, 3, 4].every((k) => bins.some((a) => a.attributes.Slot === k)), `four bin starts, one per slot (${bins.length})`);
+  check(bins.every((a) => inBox(a.cframe)), 'every bin start inside the set\'s box');
+  const marks = anchorsOf('BackLot', 'CutsceneMark');
+  check(marks.length >= 6 && marks.every((a) => inBox(a.cframe)), `${marks.length} cutscene marks on the set`);
+  const hatch = meta.triggers.filter((t) => t.kind === 'ChuteHatch');
+  check(hatch.length === 1 && hatch[0].level === 'BackLot' && inBox(hatch[0].cframe), 'one ChuteHatch trigger on the set');
+  const cast = meta.castConfig || {};
+  check(!!(cast.Actors && cast.Actors.Danny && cast.Actors.Gus && cast.Crawler && cast.Crawler.Legs === 8),
+    'meta.castConfig: Danny, Gus and the crawler');
+  if (failures === before) {
+    console.log(`  ok   36 batteries and 8 flasks a floor, Gus's cot and carts, the phone, the Back Lot's ${bins.length} bins, ` +
+      `${marks.length} marks and hatch`);
+  }
+}
+schoolContentAndBackLot();
 
 console.log(failures ? `FAILED: ${failures} of ${checks} checks` : `PASSED: ${checks} checks`);
 process.exit(failures ? 1 : 0);

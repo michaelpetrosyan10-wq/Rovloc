@@ -714,6 +714,12 @@ local ANCHOR_CLEAR: { [string]: AnchorClear } = {
 	FuseCandidate = { half = 1.2, y0 = -0.3, y1 = 1.5 },
 	MasterKeyCandidate = { half = 0.9, back = 0.6, front = 1.4, y0 = -1.8, y1 = 0.8 },
 	BreakerPanel = { half = 2.3, back = 0.5, front = 3.6, y0 = -0.3, y1 = 9 },
+	-- Gus's things (spec 4.3) and the Basement's wall phone: a cart with its bucket and sign, his cot, the phone
+	MopCart = { half = 6.8, back = 1.3, front = 2.4, y0 = -0.3, y1 = 6 },
+	JanitorCot = { half = 4.6, back = 1.6, front = 2.2, y0 = -0.3, y1 = 3.2 },
+	WallPhone = { half = 1.0, back = 0.6, front = 1.2, y0 = -2, y1 = 1.4 },
+	-- a cutscene mark: the chute's mouth on a wall (its hood and trough), where a scene stands its actors or camera
+	CutsceneMark = { half = 3, back = 1, front = 5.5, y0 = -0.3, y1 = 11 },
 }
 
 -- Statics are fixed; the client dressing (corpses, clutter) arranges itself around them, so statics ignore the
