@@ -320,6 +320,17 @@ try {
       const seen = await G((g) => g.profile.cutsceneSeen('Opening'));
       check('the Full cut played to its end marks the opening seen', seen === true);
 
+      // the lid's prompt answers whichever way the player looks: they are inside the bin, and its anchor is at their feet
+      for (const [yaw, pitch] of [[0, 0.9], [2.6, 0.4], [-1.5, -0.2]]) {
+        await G((g, look) => g.env.setLook(look[0], look[1]), [yaw, pitch]);
+        await ff(0.1);
+        s = await G(() => {
+          const p = window.__rovloc.engine.prompts.active.get('Interact');
+          return { text: p ? p.text : null, shown: !!p && p.shown };
+        });
+        check(`in the bin, looking ${yaw} / ${pitch}: "Push the lid" answers`, s.text === 'Push the lid' && s.shown, s);
+      }
+      await G((g) => g.env.setLook(0, -0.05));
       // the prologue: the automatic climb-out at 20 s (counted from the hand-over)
       const inBin = await G((g) => g.env.now() - g.prologue.handOver);
       await ff(19.9 - inBin);

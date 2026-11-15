@@ -136,7 +136,7 @@ export class Prologue {
     if (bin && !this.lidPrompt) {
       this.lidPrompt = this.env.addPrompt({ entity: bin.id, attachment: spec ? spec.host : 'PromptPoint',
         text: S('Prologue.PushLid'), objectText: S('Prompt.Bin'), holdSeconds: this.p.LidHold, distance: 8,
-        requiresLineOfSight: false, net: 'local', onTriggered: () => this.climbOut() });
+        requiresLineOfSight: false, anyFacing: true, net: 'local', onTriggered: () => this.climbOut() });
     }
     this.env.setHudVisible(true, 0.4);
   }

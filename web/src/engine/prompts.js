@@ -15,6 +15,9 @@ const FADE_IN = 9;
 const FADE_OUT = 7;
 const DRAIN = 5;
 const THROUGH_SLACK = 1.5;
+/** an anyFacing prompt whose anchor is past this share of the view (or behind it) shows its row here instead */
+const PIN_EDGE = 0.8;
+const PIN_Y = -0.25;
 
 /**
  * @typedef {Object} PromptSpec
@@ -27,6 +30,8 @@ const THROUGH_SLACK = 1.5;
  * @property {number} [holdSeconds]
  * @property {number} [distance] MaxActivationDistance (default 10)
  * @property {boolean} [requiresLineOfSight] default true
+ * @property {boolean} [anyFacing] answers whichever way the player looks (the prompt of the thing the player is
+ *   inside: a bin's lid); its row is pinned in the view when its anchor is out of sight
  * @property {string} [action] input action (default 'Interact'; e.g. 'Kick')
  * @property {(prompt: PromptHandle) => void} onTriggered
  * @property {(prompt: PromptHandle) => void} [onHoldBegan]
@@ -76,6 +81,7 @@ export class Prompts {
       hold: Math.max(0, spec.holdSeconds || 0),
       distance: spec.distance ?? 10,
       los: spec.requiresLineOfSight !== false,
+      anyFacing: spec.anyFacing === true,
       enabled: spec.enabled !== false,
       alpha: 0,
       progress: 0,
@@ -181,7 +187,7 @@ export class Prompts {
       _to.subVectors(p.world, eye);
       const dist = _to.length();
       const facing = dist > 1e-3 ? _to.dot(_fwd) / dist : 1;
-      if (facing < 0.2) continue;
+      if (!p.anyFacing && facing < 0.2) continue;
       if (dist > 0.5) {
         // RequiresLineOfSight false (every prompt the export carries) still never answers through a solid wall: a
         // flask or a battery on the far side of a lab wall could be picked up from the corridor. Only the world's
@@ -220,7 +226,9 @@ export class Prompts {
     for (const p of this.list.values()) {
       if (p.alpha <= 0.001) continue;
       _ndc.copy(p.world).project(camera);
-      if (_ndc.z > 1) continue;
+      if (p.anyFacing) {
+        if (_ndc.z > 1 || Math.abs(_ndc.x) > PIN_EDGE || Math.abs(_ndc.y) > PIN_EDGE) _ndc.set(0, PIN_Y, 0);
+      } else if (_ndc.z > 1) continue;
       rows.push({
         id: p.id,
         x: (_ndc.x * 0.5 + 0.5) * viewport.width,
