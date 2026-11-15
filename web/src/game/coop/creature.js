@@ -265,7 +265,7 @@ export class CreatureNet {
       lockerId: () => member.lockerId,
       hasLock: (reason) => reason === 'Jumpscare' && member.caught,
       controlLock: () => (member.caught ? 'Jumpscare' : 'None'),
-      canCatch: () => member.playing() && !member.caught && coop.game.live(),
+      canCatch: () => member.playing() && !member.caught && coop.game.live() && !coop.game.safeMoment(),
       setCaught: (on) => {
         member.caught = !!on;
       },

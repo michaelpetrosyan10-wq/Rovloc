@@ -4,7 +4,10 @@
 //   * Flicker. Fixtures sharing a flicker group flicker together: smooth value noise, sharp dropouts and seeded
 //     blackouts with a stuttering recovery, scheduled in fixed time slots; a pure function of (RunSeed, group, time).
 //     The factor of every group (ids are world-wide) is written into the shared flicker table and texture each frame,
-//     which scales each vertex's baked share of that group (and the Neon glow of its tubes).
+//     which scales each vertex's baked share of that group (and the Neon glow of its tubes). The circuits the dread
+//     dressing marks dying (meta.dyingGroups, DreadKit) flicker their own way instead (DreadConfig.Light): a bulb's
+//     slow failing pulse, a tube's bursts of struggling strikes. Only how an already-flickering group flickers: the
+//     baked light, which groups burn and their brightness never change.
 //   * Overrides, three layers per group, so none releases another's:
 //       - setOverride(lightId, brightness|null) pins a light (Timeline tracks, the boiler surge, the classroom
 //         glow): a baked light's group factor becomes brightness / base (above every
@@ -21,6 +24,8 @@
 //     dust show; the area grade tint eases at 1.2/s.
 //   * Lightning. lightning({intensity, stages}) flashes the sky (two-stage envelope), damped to 0.18 indoors; while the
 //     camera is outdoors an ambient storm throws seeded lightning with thunder unless setStormEnabled(false).
+//   * Air: on the floors DreadConfig.Air.HazeScale names the haze is a little thicker (the distance to any given
+//     opacity shrinks by at most DreadConfig.Air.SightLoss), easing in and out with the level like the film.
 //   * Graphics tiers (quality.js): the haze closes at the tier's view distance (exp^2 fog reaching 95 % there), and
 //     the extra haze darkens toward FOG_DARKEN of the film's colour, so far geometry sinks into the dark instead of a
 //     grey wall; shadowFixtures picks the fixtures that cast real-time shadows of moving things this frame.
@@ -123,6 +128,40 @@ export function flickerFactor(profile, blackout, t) {
   return clamp01(factor);
 }
 
+/**
+ * A dying circuit's character (DreadConfig.Light): `style` Pulse (a bulb sagging, holding low, fighting back with a
+ * stutter) or Tube (steady, then a burst of rapid strikes); seeded per group, a pure function of (seed, group).
+ */
+export function dyingProfile(seed, group, style, light) {
+  const r = seededRandom(seed, `dying:${group}`);
+  if (style === 'Tube') {
+    const c = light.Tube;
+    return {
+      style, period: r.nextNumber(c.Period[0], c.Period[1]), phase: r.nextNumber(0, 1),
+      burst: r.nextNumber(c.Burst[0], c.Burst[1]), hz: r.nextNumber(c.Hz[0], c.Hz[1]), low: c.Low,
+    };
+  }
+  const c = light.Pulse;
+  return {
+    style: 'Pulse', period: r.nextNumber(c.Period[0], c.Period[1]), phase: r.nextNumber(0, 1), sag: c.Sag,
+    hold: r.nextNumber(c.Hold[0], c.Hold[1]), floor: c.Floor, hz: c.StutterHz,
+  };
+}
+
+/** A dying circuit's factor 0..1 at time t (dyingProfile). */
+export function dyingFactor(p, t) {
+  const local = (((t / p.period + p.phase) % 1) + 1) % 1 * p.period;
+  if (p.style === 'Tube') {
+    if (local < p.burst) return Math.floor(local * p.hz) % 2 === 0 ? p.low : 1;
+    return 1;
+  }
+  if (local < p.sag) return lerp(1, p.floor, smoothstep(0, 1, local / p.sag));
+  if (local < p.sag + p.hold) return p.floor;
+  const back = local - p.sag - p.hold;
+  if (back < 0.6) return Math.floor(back * p.hz) % 2 === 0 ? p.floor : 0.92;
+  return 1;
+}
+
 /** Lightning envelope 0..1 at t seconds into a flash; null once over (two-stage or single). */
 export function lightningEnvelope(t, stages) {
   if (t < 0) return 0;
@@ -159,14 +198,20 @@ export class Lighting {
     this.seed = meta.seed || 1;
     /** @type {Map<number, {id: number, name: string, kind: string, initial: number, profile: any, blackout: any, override: number|null, hold: number|null, stutter: number|null, burstAt: number|null, dead: boolean}>} */
     this.groups = new Map();
+    const dread = meta.dreadConfig || null;
+    /** group name -> its dying style (only groups that already flicker die) */
+    const dying = new Map((meta.dyingGroups || []).map((d) => [d.group, d.style]));
     for (const g of meta.flickerGroups || []) {
       if (g.id === 0) continue;
+      const name = g.name || `G${g.id}`;
+      const dies = g.kind === 'flicker' && dread && dying.has(name);
       this.groups.set(g.id, {
         id: g.id,
-        name: g.name || `G${g.id}`,
+        name,
         kind: g.kind,
         initial: g.initial ?? 1,
-        profile: g.kind === 'flicker' ? flickerProfile(this.seed, g.name || `G${g.id}`) : null,
+        profile: g.kind === 'flicker' ? flickerProfile(this.seed, name) : null,
+        dying: dies ? dyingProfile(this.seed, name, dying.get(name), dread.Light) : null,
         blackout: { slot: -Infinity, startsAt: -1, endsAt: -1 },
         override: null,
         hold: null,
@@ -183,6 +228,10 @@ export class Lighting {
     this.film = { ...normalizeFilm(BASE_FILM), trim: 0 };
     this.filmTarget = { ...BASE_FILM, trim: 0 };
     this.filmLevel = undefined;
+    /** DreadConfig.Air.HazeScale per level, and the scale eased toward the camera level's */
+    this.hazeScale = (dread && dread.Air && dread.Air.HazeScale) || {};
+    this.haze = 1;
+    this.hazeSnap = true;
     this.grade = new THREE.Color(1, 1, 1);
     this.gradeTarget = new THREE.Color(1, 1, 1);
     this.flashes = [];
@@ -410,6 +459,7 @@ export class Lighting {
   /** Lands the film and grade on the camera's level at once (spawns, teleports, cuts). */
   snapFilm() {
     this.snap = true;
+    this.hazeSnap = true;
     this.filmLevel = undefined;
   }
 
@@ -466,7 +516,9 @@ export class Lighting {
       let f;
       if (g.dead) f = 0;
       else {
-        if (g.profile) {
+        if (g.dying) {
+          f = 1 - (1 - dyingFactor(g.dying, t)) * flashScale;
+        } else if (g.profile) {
           const slot = Math.floor(t / g.profile.slotLength);
           if (slot !== g.blackout.slot) g.blackout = blackoutSlot(this.seed, g.name, g.profile, slot);
           f = flickerFactor(g.profile, g.blackout, t);
@@ -517,7 +569,9 @@ export class Lighting {
 
     // shared uniforms: fog (closing at the tier's view distance, darkened), exposure, sky flash
     const film = this.film;
-    let density = film.density * FOG_SCALE;
+    this.haze = lerp(this.haze, this.hazeScale[level] || 1, this.hazeSnap ? 1 : 1 - Math.exp(-FILM_RATE * dt));
+    this.hazeSnap = false;
+    let density = film.density * FOG_SCALE * this.haze;
     let darken = 1;
     const view = this.engine.quality && this.engine.quality.budget ? this.engine.quality.budget.viewDistance : Infinity;
     if (Number.isFinite(view) && view > 0) {

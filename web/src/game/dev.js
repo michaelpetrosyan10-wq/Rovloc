@@ -2,7 +2,7 @@
 // for the headless checks and in the pause menu with ?dev. Any state-changing shortcut during a run makes it a dev
 // run (no credits, escapes or best time), as DevRun does.
 //
-//   skipTitle()            past the title screen (the walkthrough marked done) into the lobby
+//   skipTitle()            past the title screen (the name prompt and the walkthrough marked done) into the lobby
 //   deploy(difficulty?)    straight into a run
 //   gotoStage(stage)       go to a stage: enter it (a level: at its first spawn slot; a stand-in: its card)
 //   gotoLevel(level)       the level skip (gotoStage for a level of the school)
@@ -33,6 +33,7 @@ export class Dev {
   skipTitle() {
     const g = this.game;
     g.env.setSetting(TutorialConfig.TutorialSetting, true);
+    g.env.setSetting('NameAsked', true);
     if (g.onboarding.busy()) g.onboarding.pressPlay();
   }
 

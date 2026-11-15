@@ -17,10 +17,11 @@
 -- Everything the web build needs is written as plain JSON (CFrames as 12 numbers x,y,z,R00..R22, colours as 0..1
 -- floats, enums by name). web/tools/bake.mjs turns it into the packed runtime data (see web/DATA.md).
 --
--- The shared rules, generically: every module of ReplicatedStorage.Shared.Config and .Rules with an exportMeta() lands
--- in world-raw.json `configs` (the bake puts each in world.json meta) under its name with a lower-case first letter
--- (meta.stageConfig, meta.livesConfig, ...), and every golden() lands in build/cache/golden.json as
--- { [moduleName]: rows }. A new module is picked up by its own exportMeta / golden; nothing here names it.
+-- The shared rules, generically: every module of ReplicatedStorage.Shared.Config, .Rules and .Sequence with an
+-- exportMeta() lands in world-raw.json `configs` (the bake puts each in world.json meta) under its name with a
+-- lower-case first letter (meta.stageConfig, meta.livesConfig, ...), and every golden() lands in
+-- build/cache/golden.json as { [moduleName]: rows }. A new module is picked up by its own exportMeta / golden;
+-- nothing here names it.
 --
 -- The same world as a live Roblox server's: every seeded choice of the builders, the layouts and RunDirector draws from
 -- Shared/Util/Rng (pure Luau, the same numbers in Lune and on Roblox), and everything built is seeded from the
@@ -729,6 +730,29 @@ if lobby then
 				end
 			end
 		end
+	end
+end
+
+-- The Back Lot's moving pieces (docs/design/game-spec-v2.md 4.1, 2.4): each bin (its Lid leaf and PushLid prompt), the
+-- coal-chute hatch (DoorL / DoorR, ClimbIn) and the staff doors' lockdown shutter, which the opening and the prologue
+-- move. They stand on the street, so they are drawn with the exterior.
+do
+	local exteriorModel = if school then school:FindFirstChild("Exterior") else nil
+	local lot = if exteriorModel then exteriorModel:FindFirstChild("BackLot") else nil
+	local bins = if lot then lot:FindFirstChild("Bins") else nil
+	for _, child in (if bins then bins:GetChildren() else {}) do
+		if child:IsA("Model") and string.match(child.Name, "^Bin_") then
+			addEntityRoot(child, "Exterior")
+		end
+	end
+	local hatch = if lot then lot:FindFirstChild("ChuteHatch") else nil
+	if hatch then
+		addEntityRoot(hatch, "Exterior")
+	end
+	local facade = if exteriorModel then exteriorModel:FindFirstChild("BackLotFacade") else nil
+	local shutter = if facade then facade:FindFirstChild("Shutter") else nil
+	if shutter then
+		addEntityRoot(shutter, "Exterior")
 	end
 end
 
@@ -1471,7 +1495,8 @@ fs.writeFile(cacheDir .. "/run-plans.json", serde.encode("json", runPlans, true)
 print(string.format("RunDirector plans for %d seeds x 2 difficulties -> %s/run-plans.json", #PLAN_SEEDS, cacheDir))
 
 --------------------------------------------------------------------------------
--- The shared rules: every config's exportMeta() and every rule module's golden(), found by walking the folders
+-- The shared rules: every config's exportMeta() and every rule or sequence module's golden(), found by walking the
+-- folders
 --------------------------------------------------------------------------------
 
 local function lowerFirst(name: string): string
@@ -1481,7 +1506,7 @@ end
 local configs = {}
 local goldens = {}
 local goldenRows = 0
-for _, folderName in { "Config", "Rules" } do
+for _, folderName in { "Config", "Rules", "Sequence" } do
 	local folder = game:GetService("ReplicatedStorage").Shared:FindFirstChild(folderName)
 	local names = {}
 	for _, child in (if folder then folder:GetChildren() else {}) do

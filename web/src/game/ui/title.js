@@ -4,7 +4,8 @@
 //             SETTINGS, the saved credits and escapes; behind it the camera drifts through the boiler room (a
 //             Cutscene camera override along TutorialConfig.TitleDrift, Catmull-Rom, one loop per 64 s). While it is
 //             up the HUD is hidden, the cursor is free, the Menu input context is pushed; keyboard, gamepad and touch
-//             all drive it. PLAY goes into the lobby, the first time through the walkthrough. A stamped build (a
+//             all drive it. PLAY goes into the lobby, the first time through the name prompt (ui/namePrompt.js: what
+//             your friends call you, asked once) and the walkthrough. A stamped build (a
 //             beta: tools/build.mjs --stamp) names itself in the corner, small; any other build shows nothing there.
 //   Walkthrough  TutorialConfig.Pages on a taped sheet, a drawn illustration each, page count and dots, BACK / SKIP /
 //             NEXT (GOT IT on the last); arrows / bumpers page, Enter goes on, B / Escape skips. Finishing or
@@ -14,6 +15,7 @@ import * as THREE from 'three';
 import { TutorialConfig } from '../config.js';
 import { S } from '../strings/index.js';
 import { lookAtMatrix } from '../util.js';
+import { NamePrompt } from './namePrompt.js';
 import { FocusGroup, glyphFor } from './nav.js';
 import { C } from '../coop/strings.js';
 import { Fonts, Palette, el } from './style.js';
@@ -168,6 +170,7 @@ export class Onboarding {
     el('div', '', row).style.flex = '1';
     this.nextBtn = this._button(row, S('Tutorial.Next'), true, () => this.turn(1), this.walkGroup, 0);
     this.nextBtn.style.minWidth = '160px';
+    this.namePrompt = new NamePrompt(this.game, this.root);
   }
 
   _button(parent, label, primary, press, group = this.group, row) {
@@ -206,6 +209,15 @@ export class Onboarding {
   }
 
   pressPlay() {
+    if (this.namePrompt.isOpen()) return;
+    if (!this.namePrompt.asked()) {
+      this.game.nav.remove(this.group);
+      this.namePrompt.open(() => {
+        this.game.nav.push(this.group);
+        this.pressPlay();
+      });
+      return;
+    }
     if (!this.env.setting(TutorialConfig.TutorialSetting)) {
       this.openWalkthrough('Lobby');
       return;

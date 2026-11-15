@@ -9,10 +9,14 @@
 //   * Steam: meta.emitters (kind Steam, from the SteamVent nozzles' Mouth attachments; bake.mjs). Rate and spread from
 //     the Roblox emitter (TunnelDressingBuilder): about 13 puffs a second, 1.1-2.1 s, 3.2-5.2 studs/s, spread 14 deg,
 //     rising 1.6, drag 1.6.
-//   * Drips: the DripPipe anchors; drops fall to the floor below (one ray at boot) and splash.
+//   * Drips: the DripPipe anchors and the dread dressing's drips over its water stains (meta.emitters kind Drip);
+//     drops fall to the floor below (one ray at boot) and splash.
+//   * Sparks: the dread dressing's dead fixtures (meta.emitters kind Spark): now and then a short spit of sparks from
+//     the end of the hanging wire, falling and dying (self-lit, never a light).
 //   * Grit: a noise pulse (DoorSlam, FloorDebris, GrateKick, TrapSnap) within reach of the camera on its level drops a
 //     burst of grit and dust from the ceiling above it (one ray up).
-//   * Motes: a box of dust round the camera that only shows where the torch lights it.
+//   * Motes: a box of dust round the camera that only shows where the torch lights it, thicker on the floors
+//     DreadConfig.Air.MoteGain names (meta.dreadConfig).
 //
 // Tiers (quality.js): particleScale scales every system's count (Max / High 1, Medium 0.7, Low 0.4) and Potato draws
 // none. Purely visual: nothing here writes game state; noise pulses are only listened to, rays only cast.
@@ -29,6 +33,7 @@ const GRIT_LIFE = 2.2;
 const GRIT_REACH = 45;
 const GRIT_KINDS = new Set(['DoorSlam', 'FloorDebris', 'GrateKick', 'TrapSnap']);
 const MOTES = 700;
+const SPARKS_PER_WIRE = 14;
 const MOTE_BOX = 14;
 
 const COMMON = /* glsl */ `
@@ -186,9 +191,40 @@ void main() {
   vAlpha = alpha * mix(0.95, 0.16, dust);
 }`;
 
+// sparks: aEmit = wire end + seed; aDir.x = period, aDir.y = phase, aDir.z = particle index
+const SPARK_VERT = /* glsl */ `
+${COMMON}
+attribute vec4 aEmit;
+attribute vec4 aDir;
+varying vec3 vColor;
+varying float vAlpha;
+void main() {
+  float period = aDir.x;
+  float t = mod(uTime + aDir.y * period, period);
+  float s = aEmit.w * 31.0 + aDir.z * 7.3;
+  float start = 0.08 * hash1(s);
+  float age = t - start;
+  float life = 0.25 + 0.3 * hash1(s * 2.1);
+  float alpha = 0.0;
+  vec3 p = aEmit.xyz;
+  if (age > 0.0 && age < life) {
+    float a = hash1(s * 3.3) * 6.2831853;
+    float out_ = 1.5 + 3.5 * hash1(s * 5.7);
+    vec3 v = vec3(cos(a) * out_, 1.2 * hash1(s * 1.9) - 0.4, sin(a) * out_);
+    p += v * age + vec3(0.0, -18.0, 0.0) * age * age;
+    alpha = 1.0 - age / life;
+  }
+  vec4 mv = viewMatrix * vec4(p, 1.0);
+  gl_PointSize = alpha > 0.0 ? clamp(0.06 * uPxScale / max(0.3, -mv.z), 1.0, 12.0) : 0.0;
+  gl_Position = alpha > 0.0 ? projectionMatrix * mv : vec4(2.0, 2.0, 2.0, 1.0);
+  vColor = display(vec3(3.2, 1.7, 0.6) * alpha, p);
+  vAlpha = alpha;
+}`;
+
 // motes: a box of dust wrapping round the camera; only the torch shows them
 const MOTE_VERT = /* glsl */ `
 ${COMMON}
+uniform float uMoteGain;
 attribute vec4 aEmit;
 varying vec3 vColor;
 varying float vAlpha;
@@ -202,7 +238,7 @@ void main() {
   vec4 mv = viewMatrix * vec4(p, 1.0);
   float near = smoothstep(0.4, 1.4, -mv.z) * (1.0 - smoothstep(${(MOTE_BOX * 0.32).toFixed(1)}, ${(MOTE_BOX * 0.5).toFixed(1)}, length(local * ${MOTE_BOX.toFixed(1)})));
   float twinkle = 0.6 + 0.4 * sin(uTime * (1.5 + aEmit.w * 3.0) + aEmit.w * 40.0);
-  vAlpha = clamp(l * 0.9, 0.0, 1.0) * near * twinkle;
+  vAlpha = clamp(l * 0.9 * uMoteGain, 0.0, 1.0) * near * twinkle;
   gl_PointSize = vAlpha > 0.003 ? clamp(0.03 * uPxScale / max(0.3, -mv.z), 1.0, 8.0) : 0.0;
   gl_Position = vAlpha > 0.003 ? projectionMatrix * mv : vec4(2.0, 2.0, 2.0, 1.0);
   vColor = display(vec3(0.9, 0.86, 0.78) * light * 0.35, p);
@@ -232,6 +268,10 @@ export class Particles {
     };
     this.bursts = [];
     this.burstCursor = 0;
+    const air = engine.world.meta.dreadConfig ? engine.world.meta.dreadConfig.Air : null;
+    /** per level: how much more dust the torch shows there (DreadConfig.Air.MoteGain) */
+    this.moteGain = (air && air.MoteGain) || {};
+    this.moteUniforms = { uMoteGain: { value: 1 } };
     this.time = 0;
     this._built = false;
     // a listener only: it never throws into the bus the Creature hears through
@@ -270,7 +310,9 @@ export class Particles {
       this._system('Steam', level, STEAM_VERT, { aEmit: emit, aDir: dir, aAmb: amb }, n, THREE.NormalBlending);
     }
     // drips
-    const drips = (meta.anchors || []).filter((a) => a.kind === 'DripPipe');
+    const drips = (meta.anchors || []).filter((a) => a.kind === 'DripPipe')
+      .map((a) => ({ level: a.level, cframe: a.cframe }))
+      .concat((meta.emitters || []).filter((e) => e.kind === 'Drip').map((e) => ({ level: e.level, cframe: e.pos })));
     for (const [level, list] of groupBy(drips, (a) => a.level)) {
       const n = list.length * DRIPS_PER_PIPE;
       const emit = new Float32Array(n * 4);
@@ -292,6 +334,22 @@ export class Particles {
       }
       this._system('Drips', level, DRIP_VERT, { aEmit: emit, aDir: dir, aAmb: amb }, n, THREE.AdditiveBlending, true);
     }
+    // sparks
+    const wires = (meta.emitters || []).filter((e) => e.kind === 'Spark');
+    for (const [level, list] of groupBy(wires, (e) => e.level)) {
+      const n = list.length * SPARKS_PER_WIRE;
+      const emit = new Float32Array(n * 4);
+      const dir = new Float32Array(n * 4);
+      let i = 0;
+      for (let p = 0; p < SPARKS_PER_WIRE; p++) {
+        for (let k = 0; k < list.length; k++, i++) {
+          const e = list[k];
+          emit.set([e.pos[0], e.pos[1], e.pos[2], hash(k * 5.9 + 0.3)], i * 4);
+          dir.set([4.5 + hash(k * 3.1) * 7, hash(k * 8.3), p, 0], i * 4);
+        }
+      }
+      this._system('Sparks', level, SPARK_VERT, { aEmit: emit, aDir: dir }, n, THREE.AdditiveBlending, true);
+    }
     // grit bursts
     {
       const n = GRIT_BURSTS * GRIT_PER_BURST;
@@ -311,7 +369,7 @@ export class Particles {
     {
       const emit = new Float32Array(MOTES * 4);
       for (let i = 0; i < MOTES; i++) emit.set([hash(i * 1.3), hash(i * 2.7 + 1), hash(i * 4.1 + 2), hash(i * 7.7 + 3)], i * 4);
-      this._system('Motes', null, MOTE_VERT, { aEmit: emit }, MOTES, THREE.AdditiveBlending, true);
+      this._system('Motes', null, MOTE_VERT, { aEmit: emit }, MOTES, THREE.AdditiveBlending, true, this.moteUniforms);
     }
   }
 
@@ -383,6 +441,7 @@ export class Particles {
     this.uniforms.uPxScale.value = h / (2 * Math.tan((camera.fov * Math.PI) / 360));
     const focus = this.world.focus;
     const torch = this.shared.uFlInner.value.lengthSq() > 1e-6;
+    this.moteUniforms.uMoteGain.value = this.moteGain[this.engine.cameraLevel] || 1;
     for (const s of this.systems) {
       let visible = s.level ? focus.has(s.level) : true;
       if (s.name === 'Motes') visible = torch && film.dust > 0.01;

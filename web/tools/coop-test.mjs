@@ -20,8 +20,10 @@
 //
 //   lobby      host through the title's PLAY WITH FRIENDS (the code shown), two joins by code, the squad list on every
 //              page (link Direct / Relay and ping), the difficulty vote, ready on every page -> the countdown -> the
-//              Back Lot's stand-in on every page (Skip is a vote: one of three does not end it, two do) -> one run on
-//              Level 0 everywhere (same seed, own spawn slots)
+//              Back Lot on every page: the opening in the Prologue phase, each player in their own bin; its skip is a
+//              vote (one of three does not pass; two of three are held while the third, a first-timer, has not
+//              voted; all three pass), then the prologue (the lids, the hatch, the chute: tools/story-pass.mjs) -> one
+//              run on Level 0 everywhere (same seed, own spawn slots)
 //   Level 0    two players doing the fuses (the host one, a client two: each carries their own); a fourth player joins
 //              mid-run and spectates; the host's networking per tick measured with four players and its CPU slowed 4x;
 //              the fuses fitted by both, the breaker thrown: the progress, the carry and the exit door the same on
@@ -54,6 +56,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startRelay } from './coop-relay.mjs';
+import { passBackLotLive } from './story-pass.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -271,22 +274,29 @@ try {
     phases.push(await until(p, () => (window.__phases.includes('Countdown') ? window.__phases.slice() : null), null, 12));
   }
   check('every page counts down once the squad is ready', phases.every((list) => list && list.includes('Countdown')), phases);
-  // the run opens on the Back Lot's stand-in on every page (its first stage's activation, as recorded when it happened:
-  // in the run, the StandIn playing it); Skip is a vote: one of three does not end it, two do
+  // the run opens on the Back Lot on every page (its first stage's activation, as recorded when it happened: the
+  // Prologue phase, no stand-in), each player in their own bin; the opening's skip is a vote: one of three holds, two of
+  // three are held by the third's first time, all three pass
   const opened = [];
   for (const p of players) opened.push(await until(p, () => window.__stages[0] || null, null, 30));
-  check('every page opens the run on the Back Lot\'s stand-in', opened.every((st) => st && st.stage === 'BackLot' &&
-    st.phase === 'InRun' && st.standIn === 'BackLot'), opened);
-  await G(alice, (g) => g.standIn.pressSkip());
-  // read once the host has counted Alice's vote (or the stand-in is over: then the check says so)
-  const oneVote = await until(host, (g, dev, id) => {
-    const c = g.standIn.current;
-    return !c || c.votes.has(id) ? { stage: g.stage, votes: c ? c.votes.size : null, ends: c ? c.endsAt : 'over',
-      holdLeft: c ? +(c.holdUntil - g.env.now()).toFixed(2) : null } : null;
-  }, ids.alice, 10);
-  check('one Skip of three does not end the stand-in', !!oneVote && oneVote.stage === 'BackLot' && oneVote.votes === 1 &&
-    oneVote.ends === null, oneVote);
-  await G(host, (g) => g.standIn.pressSkip());
+  check('every page opens the run on the Back Lot in the Prologue phase', opened.every((st) => st && st.stage === 'BackLot' &&
+    st.phase === 'Prologue' && st.standIn === null), opened);
+  const bins = [];
+  for (const p of players) bins.push(await until(p, (g) => (g.cinematics.active() ? g.prologue.slot : null), null, 30));
+  check('the opening plays on every page, each player in their own bin', new Set(bins).size === 3 && bins.every((b) => b >= 1 &&
+    b <= 3), bins);
+  for (const p of players) await until(p, (g) => g.cinematics.time() > g.cinematics.story.Skip.From + 0.1, null, 30);
+  await G(alice, (g) => g.cinematics.skip.vote());
+  const oneVote = await until(host, (g, dev, id) => (g.cinematics.skip.votes.has(id) ? { votes: g.cinematics.skip.votes.size,
+    skipping: !!(g.cinematics.current && g.cinematics.current.skipping) } : null), ids.alice, 10);
+  check('one vote of three does not skip the opening', !!oneVote && oneVote.votes === 1 && !oneVote.skipping, oneVote);
+  await G(host, (g) => g.cinematics.skip.vote());
+  const twoVotes = await until(host, (g) => (g.cinematics.skip.votes.size === 2 ? { skipping: !!(g.cinematics.current &&
+    g.cinematics.current.skipping), tally: g.cinematics.skip.tally } : null), null, 10);
+  check('two of three are held while Bob, there for the first time, has not voted', !!twoVotes && !twoVotes.skipping &&
+    twoVotes.tally && twoVotes.tally.waits, twoVotes);
+  const pastLot = await passBackLotLive(players, G, until);
+  check('Bob\'s vote passes it; the prologue (the lids, the hatch, the chute) on every page', pastLot.every(Boolean), pastLot);
   const runs = [];
   for (const p of players) {
     runs.push(await until(p, (g) => (g.phase === 'InRun' && g.level === 'Level0_Basement' ? { seed: g.run.seed, id: g.run.runId,

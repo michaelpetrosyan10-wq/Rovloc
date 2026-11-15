@@ -47,6 +47,9 @@ local Tags = table.freeze({
 	AmbientEmitter = "AmbientEmitter", -- attrs: Preset, LevelId
 	DripPipe = "DripPipe",
 	SteamVent = "SteamVent", -- a tunnel's leaking relief valve (its nozzle part; a "Steam" ParticleEmitter under it)
+	DreadDrip = "DreadDrip", -- a drip over a water stain's puddle (DreadKit; a "Drip" ParticleEmitter under it)
+	DreadSpark = "DreadSpark", -- the end of a dead fixture's hanging wire (DreadKit; a "Sparks" ParticleEmitter under it)
+	DyingFixture = "DyingFixture", -- soot round a dying circuit's bulb (DreadKit; attrs: FlickerGroup, DyingStyle)
 	Corpse = "Corpse",
 
 	-- Actors

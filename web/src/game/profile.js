@@ -1,7 +1,9 @@
 // profile.js: saved progress (MatchAndDataService's PlayerData + DataMigration) in the browser's localStorage, through
 // the engine's save blob (key "profile"). Schema v2 (docs/design/game-spec-v2.md 4.10):
 //   { v = 2, Escapes = 0, SurvivalCredits = 0, EndingsSeen = { Sunrise?, Fall? }, BestTimeSunrise = { Standard?,
-//     Nightmare? }, PerkStock = {}, LastRunId = "" }
+//     Nightmare? }, PerkStock = {}, LastRunId = "", CutscenesSeen = { Opening?, OneBullet?, Twist?, Fall?, Sunrise? } }
+// CutscenesSeen (2.3) marks the cutscenes whose Full cut this player has seen (a replay plays the Short cut once the
+// whole squad has; a first-timer's veto holds a skip vote); an older record simply has none seen.
 // Escapes stays, the count of runs that saw the Sunrise (old saves' escapes count as having seen it). The migration
 // from v1: EndingsSeen.Sunrise from Escapes; v1's BestTime is not carried over (it timed the four-level school, the
 // Sunrise's time runs from the Basement to the wheels up). Reads are sanitized (lenient: every field coerced into
@@ -19,18 +21,21 @@ const MAX_ESCAPES = 1_000_000_000;
 const MAX_STOCK = 9_999;
 const MAX_RUN_ID_LENGTH = 64;
 const MAX_BEST_TIME = 7 * 24 * 3600;
+const MAX_CUTSCENES = 16;
+const CUTSCENE_ID = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
 const BEST_TIME_PRECISION = 100;
 const KEY = 'profile';
 
 /**
  * @typedef {{v: number, Escapes: number, SurvivalCredits: number, EndingsSeen: {Sunrise?: boolean, Fall?: boolean},
- *   BestTimeSunrise: {Standard?: number, Nightmare?: number}, PerkStock: Record<string, number>, LastRunId: string}}
- *   PlayerData
+ *   BestTimeSunrise: {Standard?: number, Nightmare?: number}, PerkStock: Record<string, number>, LastRunId: string,
+ *   CutscenesSeen: Record<string, true>}} PlayerData
  */
 
 /** @returns {PlayerData} */
 export function defaults() {
-  return { v: SCHEMA_VERSION, Escapes: 0, SurvivalCredits: 0, EndingsSeen: {}, BestTimeSunrise: {}, PerkStock: {}, LastRunId: '' };
+  return { v: SCHEMA_VERSION, Escapes: 0, SurvivalCredits: 0, EndingsSeen: {}, BestTimeSunrise: {}, PerkStock: {}, LastRunId: '',
+    CutscenesSeen: {} };
 }
 
 function whole(value, max) {
@@ -59,6 +64,11 @@ export function sanitize(raw) {
     }
   }
   out.LastRunId = typeof raw.LastRunId === 'string' ? raw.LastRunId.slice(0, MAX_RUN_ID_LENGTH) : '';
+  if (raw.CutscenesSeen && typeof raw.CutscenesSeen === 'object') {
+    for (const [id, v] of Object.entries(raw.CutscenesSeen).slice(0, MAX_CUTSCENES)) {
+      if (v === true && CUTSCENE_ID.test(id)) out.CutscenesSeen[id] = true;
+    }
+  }
   return out;
 }
 
@@ -141,6 +151,20 @@ export class Profile {
 
   stock(perk) {
     return this.data.PerkStock[perk] || 0;
+  }
+
+  /** Whether this player has seen cutscene `id`'s Full cut. */
+  cutsceneSeen(id) {
+    return this.data.CutscenesSeen[id] === true;
+  }
+
+  /** Marks cutscene `id` seen (its Full cut played to its end here, or this player voted it away). */
+  markCutsceneSeen(id) {
+    if (this.cutsceneSeen(id)) return;
+    this.update((d) => {
+      d.CutscenesSeen = { ...(d.CutscenesSeen || {}), [id]: true };
+      return true;
+    });
   }
 
   /** Whether saves reach the browser's storage. */
@@ -257,5 +281,7 @@ function valid(d) {
     if (!Difficulties.includes(k) || !(typeof v === 'number' && v > 0 && v <= MAX_BEST_TIME)) return false;
   }
   for (const [k, v] of Object.entries(d.EndingsSeen)) if (!ENDINGS.includes(k) || v !== true) return false;
+  const seen = Object.entries(d.CutscenesSeen || {});
+  if (seen.length > MAX_CUTSCENES || seen.some(([k, v]) => !CUTSCENE_ID.test(k) || v !== true)) return false;
   return typeof d.LastRunId === 'string' && d.LastRunId.length <= MAX_RUN_ID_LENGTH;
 }

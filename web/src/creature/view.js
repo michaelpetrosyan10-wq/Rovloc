@@ -329,12 +329,12 @@ export class CreatureView {
   }
 
   /** Plays action `name` from `startAt` (default now); the same action at the same moment plays once. */
-  playAction(name, startAt) {
+  playAction(name, startAt, rate = 1) {
     if (!Creature.isAction(name)) return false;
     const at = Number.isFinite(startAt) ? startAt : this.service.now();
     const running = Creature.actionStart(this.map, name);
     if (running !== null && Math.abs(running - at) <= DUPLICATE_WINDOW) return true;
-    const ok = Creature.playAction(this.map, name, at);
+    const ok = Creature.playAction(this.map, name, at, rate);
     if (ok) this._onActionStarted(name, at);
     return ok;
   }

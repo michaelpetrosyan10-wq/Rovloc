@@ -1321,7 +1321,7 @@ console.log('== shared rules (configs, goldens, picks)');
   const before = failures;
   const listed = Array.isArray(meta.exportedConfigs) ? meta.exportedConfigs : [];
   const NEEDED = ['stageConfig', 'worldConfig', 'objectiveConfig', 'difficultyConfig', 'gameConfig', 'noiseConfig',
-    'inputConfig', 'settingsSchema', 'tutorialConfig', 'livesConfig', 'radarConfig', 'parkourConfig'];
+    'inputConfig', 'settingsSchema', 'tutorialConfig', 'livesConfig', 'radarConfig', 'parkourConfig', 'storyConfig', 'castConfig'];
   for (const key of NEEDED) check(listed.includes(key), `meta.exportedConfigs lists ${key}`);
   for (const key of listed) {
     check(meta[key] && typeof meta[key] === 'object', `meta.${key} is the exported config`);
@@ -1349,7 +1349,8 @@ console.log('== shared rules (configs, goldens, picks)');
     fail(`golden rows at ${goldenRules}: ${err.message}`);
   }
   const names = Object.keys(modules).sort();
-  for (const module of ['ChaseRules', 'EndingRules', 'LivesRules', 'ParkourRules', 'RadarRules', 'TakeoffRules']) {
+  for (const module of ['ChaseRules', 'CinematicTracks', 'EndingRules', 'LivesRules', 'NameSanitizer', 'ParkourRules', 'RadarRules',
+    'TakeoffRules']) {
     check(names.includes(module), `golden.json has ${module}`);
   }
   let rows = 0;
@@ -1430,8 +1431,17 @@ console.log('== stages, input, settings');
   const stages = new Stages(meta);
   const ids = new Set(stages.order.map((st) => st.id));
   for (const id of Object.keys(StageScripts)) check(ids.has(id), `stage script ${id} names a stage of meta.stageConfig`);
-  for (const id of ids) check(['School', 'StandIn'].includes(stages.scriptOf(id)), `${id} is played by ${stages.scriptOf(id)}`);
-  for (const id of Object.keys(StageScripts)) check(meta.levels[id] && meta.layouts[id], `${id}: played by the school, a level of the world`);
+  for (const id of ids) check(['Prologue', 'School', 'StandIn'].includes(stages.scriptOf(id)), `${id} is played by ${stages.scriptOf(id)}`);
+  for (const [id, script] of Object.entries(StageScripts)) {
+    if (script === 'School') check(meta.levels[id] && meta.layouts[id], `${id}: played by the school, a level of the world`);
+  }
+  // the Prologue plays the Back Lot set (2.4, 4.1): its stage is a Set, with the opening's origin mark and a bin per slot
+  const prologue = Object.keys(StageScripts).filter((id) => StageScripts[id] === 'Prologue');
+  check(prologue.length === 1 && prologue[0] === 'BackLot', `the Prologue plays the Back Lot only (${prologue.join(', ')})`);
+  const backLot = stages.order.find((st) => st.id === 'BackLot');
+  const anchorIds = new Set((meta.anchors || []).map((a) => a.id));
+  check(!!backLot && backLot.kind === 'Set' && anchorIds.has('BL_Mark_Origin') && [1, 2, 3, 4].every((n) => anchorIds.has(`BL_BinStart_${n}`)),
+    'BackLot: a Set with the opening\'s origin mark and a bin start per slot');
   const standIns = stages.standIns();
   console.log(`  stages on the stand-in: ${standIns.length ? standIns.join(', ') : 'none'}`);
   if (release) check(standIns.length === 0, `--release: ${standIns.length} stages still on the stand-in (${standIns.join(', ')})`);
@@ -1542,6 +1552,96 @@ function schoolContentAndBackLot() {
   }
 }
 schoolContentAndBackLot();
+
+// The scary-surroundings pass (DreadKit; meta.dreadConfig): on each floor it dresses, the parts it adds (one Model
+// Dread_<level>, its parts named Dread<Kind>_<level>_<n>) keep to DreadConfig.Budget, most of them in Detail chunks and at most Budget.Signature
+// of them drawn on Potato; every one of them a decal or a plain cosmetic part: none collides, none is queried, none
+// casts a shadow (so no collider, nav or baked shadow came from it), none is an entity; its drips and sparks reach the
+// particles (meta.emitters) and its dying circuits are flickering groups of the floor (meta.dyingGroups).
+function dreadDressing() {
+  console.log('== the dread dressing');
+  const before = failures;
+  const dread = meta.dreadConfig;
+  check(!!dread && !!dread.Levels && !!dread.Budget, 'meta.dreadConfig: the levels and the budget');
+  const rawFile = path.join(buildDir, 'cache', 'world-raw.json');
+  if (!dread || !fs.existsSync(rawFile)) return;
+  const raw = JSON.parse(fs.readFileSync(rawFile, 'utf8'));
+  const groupsByName = new Map((meta.flickerGroups || []).map((g) => [g.name, g]));
+  const summary = [];
+  for (const level of Object.keys(dread.Levels)) {
+    const parts = raw.parts.filter((p) => p.level === level && p.name.startsWith('Dread'));
+    const signature = parts.filter((p) => !(p.attributes && p.attributes.Detail));
+    const decals = parts.filter((p) => p.transparency >= 0.999).length;
+    check(parts.length > 0, `${level}: the dread dressing is exported (${parts.length} parts)`);
+    check(parts.length <= dread.Budget.Parts, `${level}: ${parts.length} parts within ${dread.Budget.Parts}`);
+    check(signature.length <= dread.Budget.Signature, `${level}: ${signature.length} signature parts within ${dread.Budget.Signature}`);
+    const solid = parts.filter((p) => p.canCollide || p.canQuery || p.castShadow || p.entity !== undefined);
+    check(solid.length === 0, `${level}: no collider, query, shadow or entity among them (${solid.map((p) => p.name).slice(0, 4).join(', ')})`);
+    const dying = (meta.dyingGroups || []).filter((d) => d.level === level);
+    for (const d of dying) {
+      const g = groupsByName.get(d.group);
+      check(!!g && g.kind === 'flicker', `${level}: the dying circuit ${d.group} already flickers`);
+    }
+    const drips = (meta.emitters || []).filter((e) => e.level === level && e.kind === 'Drip').length;
+    const sparks = (meta.emitters || []).filter((e) => e.level === level && e.kind === 'Spark').length;
+    if (level !== 'Lobby') check(drips > 0 && sparks > 0 && dying.length > 0, `${level}: drips ${drips}, sparks ${sparks}, dying ${dying.length}`);
+    summary.push(`${level} ${parts.length} parts (${signature.length} signature, ${decals} decal hosts)`);
+  }
+  // their Detail geometry lands in Detail chunks: the floors' Detail chunks hold more than their signature
+  const detailChunks = (meta.chunks || []).filter((c) => c.detail && (c.level === 'Level0_Basement' || c.level === 'Level1_Hallways'));
+  check(detailChunks.length > 0, 'the dressed floors have Detail chunks');
+  if (failures === before) console.log(`  ok   ${summary.join('; ')}`);
+}
+dreadDressing();
+
+// The story and the dread dressing in one world (docs/design/game-spec-v2.md 2.4, 4.1): the Back Lot's moving pieces are
+// entities drawn with the exterior (the four bins with their Lid and PushLid, the chute's hatch with its two doors and
+// ClimbIn, the staff doors' shutter), all on the set; the dread kit dresses only its own floors: none of its parts, drips
+// or sparks is on the exterior or inside the Back Lot's box, and none of its dying circuits is a light group a cutscene
+// drives (the yard lamp and the strobe stay the opening's own).
+function backLotAndDread() {
+  console.log('== the Back Lot\'s pieces and the dread dressing');
+  const before = failures;
+  const box = meta.worldConfig && meta.worldConfig.Sets && meta.worldConfig.Sets.BackLot;
+  const inBox = (p) => !!box && p[0] >= box.min[0] && p[0] <= box.max[0] && p[1] >= box.min[1] && p[1] <= box.max[1] &&
+    p[2] >= box.min[2] && p[2] <= box.max[2];
+  const bins = meta.entities.filter((e) => e.type === 'Bin');
+  check(bins.length === 4 && [1, 2, 3, 4].every((k) => bins.filter((e) => e.attributes.Slot === k).length === 1),
+    `four bin entities, one per slot (${bins.map((e) => e.id).join(', ')})`);
+  for (const e of bins) {
+    const lid = e.prompts.find((p) => p.attributes && p.attributes.PromptKind === 'PushLid');
+    check(e.level === 'Exterior' && e.attributes.LevelId === 'BackLot' && inBox(e.pivot), `${e.id}: on the Back Lot, drawn with the exterior`);
+    check(e.nodes.some((n) => n.path === 'Lid') && !!lid && ['ClimbOut', 'PromptPoint', 'LidRest'].every((a) => !!e.attachments[a]),
+      `${e.id}: its Lid, its PushLid prompt and its ClimbOut, PromptPoint and LidRest`);
+  }
+  const hatch = meta.entities.filter((e) => e.id === 'ChuteHatch');
+  check(hatch.length === 1 && hatch[0].level === 'Exterior' && inBox(hatch[0].pivot) &&
+    ['DoorL', 'DoorR'].every((d) => hatch[0].nodes.some((n) => n.path === d)) &&
+    hatch[0].prompts.some((p) => p.attributes && p.attributes.PromptKind === 'ClimbIn') && !!hatch[0].attachments.ClimbIn,
+  'the chute\'s hatch: one entity on the set, its DoorL and DoorR, its ClimbIn prompt');
+  const shutter = meta.entities.filter((e) => e.id === 'Shutter');
+  check(shutter.length === 1 && shutter[0].level === 'Exterior' && inBox(shutter[0].pivot), 'the staff doors\' shutter: one entity on the set');
+  const dread = meta.dreadConfig;
+  const rawFile = path.join(buildDir, 'cache', 'world-raw.json');
+  if (dread && fs.existsSync(rawFile)) {
+    const levels = new Set(Object.keys(dread.Levels));
+    const raw = JSON.parse(fs.readFileSync(rawFile, 'utf8'));
+    const parts = raw.parts.filter((p) => p.name.startsWith('Dread'));
+    const stray = parts.filter((p) => !levels.has(p.level) || inBox(p.cf));
+    check(parts.length > 0 && stray.length === 0, `the dread kit's ${parts.length} parts are all on its floors, none on the Back Lot ` +
+      `(${stray.map((p) => `${p.name}@${p.level}`).slice(0, 4).join(', ')})`);
+    const emitters = (meta.emitters || []).filter((e) => e.kind === 'Drip' || e.kind === 'Spark');
+    check(emitters.every((e) => levels.has(e.level) && !inBox(e.pos)), `its ${emitters.length} drips and sparks are on its floors`);
+    const dying = meta.dyingGroups || [];
+    const timelines = Object.values((meta.storyConfig && meta.storyConfig.Timelines) || {});
+    const scripted = [...new Set(timelines.flatMap((t) => (t.events || []).filter((e) => e.kind === 'Light').map((e) => e.args.group)))];
+    const groupNames = new Set((meta.flickerGroups || []).map((g) => g.name));
+    check(scripted.length > 0 && scripted.every((g) => groupNames.has(g)) && dying.every((d) => levels.has(d.level) && !scripted.includes(d.group)),
+      `its ${dying.length} dying circuits are its floors', none of the cutscenes' light groups (${scripted.join(', ')})`);
+  }
+  if (failures === before) console.log(`  ok   ${bins.length} bins, the hatch and the shutter on the set; the dread kit on its floors only`);
+}
+backLotAndDread();
 
 console.log(failures ? `FAILED: ${failures} of ${checks} checks` : `PASSED: ${checks} checks`);
 process.exit(failures ? 1 : 0);

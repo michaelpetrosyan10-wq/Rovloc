@@ -4,8 +4,9 @@
 //   Deploy(difficulty)  from Lobby / Countdown: one stock unit of each equipped perk is consumed (perks without
 //                       stock are dropped), a fresh run seed is drawn (runSeed: random, or pinned by ?seed= / nextSeed),
 //                       the run's routes and plan come from it and are applied to the world (props and grate locks), every
-//                       system's beginRun runs, the run's first stage is entered (StageConfig's order: the stand-in of
-//                       the Back Lot, then the school from its entry), then InRun activates it.
+//                       system's beginRun runs, the run's first stage is entered (StageConfig's order: the Back Lot,
+//                       then the school from its entry), then its phase (Prologue on the Back Lot, InRun on a stage a
+//                       late joiner enters) activates it.
 //   The run             stage after stage (game.advance): the run clock runs from the first playable stage's activation
 //                       to the last one's end (the Basement to the wheels up). After the last stage the run ends:
 //                       everyone still playing escaped (finishRun).
@@ -96,7 +97,7 @@ export class Match {
     if (spec && Array.isArray(spec.cleared)) for (const s of spec.cleared) game.cleared.add(s);
     game.enterStage(stage, { spawn: true });
     run.startedAt = env.now();
-    game.setPhase('InRun');
+    game.setPhase(game.stages.phaseOf(stage));
     game.activateStage();
     this.deploying = false;
     env.fade(0, 1.2);
@@ -215,7 +216,7 @@ export class Match {
   resolveFromHost(verdict, squad) {
     const game = this.game;
     if (this.resolved || !game.run) return;
-    if (game.phase !== 'InRun' && game.phase !== 'Deploying') return;
+    if (game.phase !== 'InRun' && game.phase !== 'Deploying' && game.phase !== 'Prologue') return;
     if (squad && squad.escaped) this.outcome = 'Escaped';
     this._resolve(verdict, squad);
   }
@@ -302,7 +303,7 @@ export class Match {
       if (this._coop().isHost()) this._coop().runNet.resetAll();
       return;
     }
-    if (game.phase !== 'Results' && game.phase !== 'RunEnded' && game.phase !== 'InRun' && game.phase !== 'Deploying') {
+    if (!['Results', 'RunEnded', 'InRun', 'Deploying', 'Prologue'].includes(game.phase)) {
       return;
     }
     const ready = this.playAgain;

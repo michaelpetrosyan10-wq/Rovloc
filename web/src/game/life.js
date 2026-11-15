@@ -180,7 +180,7 @@ export class Life {
   }
 
   damage(amount, cause) {
-    if (!this.game.live() || !Number.isFinite(amount) || amount <= 0) return;
+    if (!this.game.live() || this.game.safeMoment() || !Number.isFinite(amount) || amount <= 0) return;
     if (this.state === 'Alive') {
       const remaining = this.health - amount;
       if (remaining <= 0) {
@@ -208,7 +208,7 @@ export class Life {
    * @param {'Catch'|'Damage'|'BleedOut'} hit
    */
   lethal(hit, cause) {
-    if (!this.game.live() || !this.playing()) return;
+    if (!this.game.live() || !this.playing() || this.game.safeMoment()) return;
     const coop = this._coop();
     if (coop && coop.isClient()) {
       coop.runNet.sendLethal(hit, cause);
@@ -231,7 +231,7 @@ export class Life {
 
   /** Killed outright, past any down (tests, the dev panel): the same death as the rules' Killed. */
   execute(cause) {
-    if (!this.game.live() || !this.playing()) return;
+    if (!this.game.live() || !this.playing() || this.game.safeMoment()) return;
     const coop = this._coop();
     if (coop && coop.isClient()) {
       coop.runNet.sendLethal('Execute', cause);

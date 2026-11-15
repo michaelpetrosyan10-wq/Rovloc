@@ -12,7 +12,7 @@ export const PASSTHROUGH = {
       ],
     },
     "Exterior": {
-      vertexCount: 1874, indexCount: 10584, fingerprint: 1643009120,
+      vertexCount: 1602, indexCount: 9252, fingerprint: 3842415184,
       runs: [
       ],
     },

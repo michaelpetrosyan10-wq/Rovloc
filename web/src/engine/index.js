@@ -322,6 +322,7 @@ export class Engine {
     this.volumetrics.update(dt, camera, film, this.world.focus, seen);
     this.particles.update(realDt, camera, film, seen);
     this.sky.update(camera, this.world.focus, film);
+    this.renderer.applyDay(this.sky.material.uniforms);
     this.textures.frame();
     this._viewport.width = this.renderer.width;
     this._viewport.height = this.renderer.height;

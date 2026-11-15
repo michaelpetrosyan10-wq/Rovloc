@@ -17,6 +17,9 @@
 //     bake's falloff x Lambert x cone, at the fixture's current flicker), so the Creature throws real shadows under the
 //     lamps it passes. Static shadows are already in the baked light.
 //   * Neon parts are emissive (x their flicker), glass / water blend.
+//   * Day (dayAmount, docs/design/game-spec-v2.md 5.3): one uniform for the sets lit by day (the opening's Back Lot, the
+//     Bahamas): uDay (dayAmount x the time of day's tint) x (ambient + sun x max(N.L, 0)), unshadowed, added to every
+//     material's light; zero (the night) unless a scene sets it (renderer.setDay).
 //   * Fog: exponential-squared haze in the level film's colour. Output is exposure-scaled, ACES-filmic tone mapped
 //     and gamma encoded, so the post pass works on display values (like Roblox's ColorCorrection).
 
@@ -77,6 +80,11 @@ export function createSharedUniforms(groupCount = FLICKER_ROW) {
     uExposure: { value: 1.3 },
     uAmbientBoost: { value: 0 },
     uFlash: { value: new THREE.Vector3() }, // lightning: additive sky light on surfaces open to the sky
+    // day (renderer.setDay): dayAmount x tint, and the day's ambient, sun colour and direction (toward the sun)
+    uDay: { value: new THREE.Vector3() },
+    uDayAmbient: { value: new THREE.Vector3() },
+    uDaySun: { value: new THREE.Vector3() },
+    uDaySunDir: { value: new THREE.Vector3(0, 1, 0) },
     uFalloffK: { value: 0.004 }, // meta.lighting.falloff.inverseSquareK
     uNodeTex: { value: null },
     uTime: { value: 0 },
@@ -233,6 +241,10 @@ uniform vec3 uFogColor;
 uniform float uFogDensity;
 uniform float uExposure;
 uniform vec3 uFlash;
+uniform vec3 uDay;
+uniform vec3 uDayAmbient;
+uniform vec3 uDaySun;
+uniform vec3 uDaySunDir;
 uniform float uFalloffK;
 
 // The bake's light falloff (meta.lighting.falloff): (1 - (d/R)^2)^2 / (1 + k d^2), k = 0.004.
@@ -441,6 +453,7 @@ void main() {
   light = fixtureShadows(light, vWorldPos, n);
 #endif
   light += uFlash * max(n.y, 0.25);
+  light += uDay * (uDayAmbient + uDaySun * max(dot(n, uDaySunDir), 0.0));
 #ifdef DECAL
   // SurfaceGui shading: LightInfluence of the scene's light, the rest self-lit at Brightness (flickering with its
   // fixture's group)

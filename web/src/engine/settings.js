@@ -43,6 +43,9 @@ export class Settings {
     if (!s) return undefined;
     if (s.kind === 'Bool') return typeof value === 'boolean' ? value : undefined;
     if (s.kind === 'Choice') return s.options.includes(value) ? value : undefined;
+    if (s.kind === 'Text') {
+      return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, s.maxLength || 24) : undefined;
+    }
     if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
     const snapped = Math.round(value / s.step) * s.step;
     return Math.min(s.max, Math.max(s.min, Number(snapped.toFixed(4))));

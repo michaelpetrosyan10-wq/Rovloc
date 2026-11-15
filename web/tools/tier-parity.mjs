@@ -13,15 +13,17 @@
 // one (a software rasterizer cannot draw 144 a second, and nothing gameplay reads comes back from the GPU).
 //
 // The page is the game test page (tools/game-build.mjs, unminified). The engine's requestAnimationFrame loop is held from
-// the first frame (an init script), so every frame of the run, the title and the deploy included, is stepped here with
-// a fixed frame time: two runs of one tier are identical by construction, and any difference between tiers is a leak
-// of a visual setting into gameplay. Exit code 1 on any difference (or a scenario that did not happen).
+// the first frame (an init script), so every frame of the run, the title, the deploy and the Back Lot (the opening
+// voted away, the prologue's lid and hatch) included, is stepped here with a fixed frame time: two runs of one tier
+// are identical by construction, and any difference between tiers is a leak of a visual setting into gameplay. Exit
+// code 1 on any difference (or a scenario that did not happen).
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AT_HATCH } from './story-pass.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -115,7 +117,7 @@ async function play(browser, tier, fps) {
   await tab.waitForFunction(() => window.__rovloc && (window.__rovloc.ready || window.__rovloc.error), null, { timeout: 240000 });
   const bootError = await tab.evaluate(() => window.__rovloc.error);
   if (bootError) throw new Error(`boot: ${bootError}`);
-  const log = await tab.evaluate(async ([script, dt, total, drawEvery]) => {
+  const log = await tab.evaluate(async ([script, dt, total, drawEvery, atHatch]) => {
     const e = window.__rovloc.engine;
     const { game: g, dev } = window.__rovlocGame;
     const loop = e.loop;
@@ -132,7 +134,16 @@ async function play(browser, tier, fps) {
     dev.skipTitle();
     await step(frames(0.5));
     dev.deploy();
+    // the Back Lot by the rules (as tools/story-pass.mjs): the opening voted away once the vote is offered (alone it
+    // passes at once), out of the bin, stood at the hatch and in: the chute's cut, the Basement
     let guard = frames(40);
+    while (!(g.cinematics.active() && g.cinematics.time() > g.cinematics.story.Skip.From) && guard-- > 0) await step(1);
+    g.cinematics.skip.vote();
+    while (!(g.prologue.state === 'Bin' && !g.cinematics.active()) && guard-- > 0) await step(1);
+    g.prologue.climbOut();
+    while (g.prologue.state !== 'Lot' && guard-- > 0) await step(1);
+    g.env.teleport(atHatch);
+    g.prologue.climbIn();
     while (!(g.phase === 'InRun' && g.level === 'Level0_Basement' && g.levelActive) && guard-- > 0) await step(1);
     if (guard <= 0) return { error: `no run: ${g.phase} ${g.level}` };
     // the per-tick record, after every system ticked
@@ -216,7 +227,7 @@ async function play(browser, tier, fps) {
       fixtureShadows,
       particles: [...particles],
     };
-  }, [SCRIPT, 1 / fps, seconds, DRAW_EVERY[fps] || Math.max(1, Math.round(fps / 24))]);
+  }, [SCRIPT, 1 / fps, seconds, DRAW_EVERY[fps] || Math.max(1, Math.round(fps / 24)), AT_HATCH]);
   await context.close();
   if (log.error) throw new Error(log.error);
   log.errors = errors;

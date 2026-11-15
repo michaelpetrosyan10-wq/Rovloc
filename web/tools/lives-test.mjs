@@ -8,8 +8,9 @@
 //         stage respawn set back at each playable stage and never banked; Nightmare's one respawn for the run; the
 //         syringe's spent last; out of respawns the run's end alone and spectating in a squad; the checkpoint return at
 //         50; levelAt by box (x, y and z) over the stages, a set's box included.
-// page    the game test page (game-build.mjs, unminified), one solo run per difficulty from the deploy: the Back Lot's
-//         stand-in (its card, skipped), the Basement's lives (Standard: one stage respawn; Nightmare: one for the run);
+// page    the game test page (game-build.mjs, unminified), one solo run per difficulty from the deploy: the Back Lot
+//         (the opening voted away, the prologue's lid and hatch: tools/story-pass.mjs), the Basement's lives (Standard:
+//         one stage respawn; Nightmare: one for the run);
 //         a down, the get-up offered from 3 s and up after 4 s [6 s] of holding Interact at 50 [35], its chevron spent;
 //         the next lethal hit kills; the respawn: 4 s of black with NOT YET., at this player's spawn at the stage's
 //         entry at 50 [35], the Creature (put beside that entry first) moved at least 70 studs walked from it and 45
@@ -32,6 +33,7 @@ import { EventRegistry } from '../src/game/coop/events.js';
 import { livesRules } from '../src/game/rules/lives.js';
 import { levelAt } from '../src/game/stages.js';
 import { S as S_, defineStrings } from '../src/game/strings/index.js';
+import { passBackLot } from './story-pass.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -265,14 +267,13 @@ async function pageRun(browser, page, difficulty) {
       dev.deploy(d);
     }, difficulty);
     await ff(1.5);
-    let s = await G((g) => ({ stage: g.stage, level: g.level, standIn: g.standIn.stage(), lock: g.controlLock(),
-      title: g.standIn.title.textContent, lives: g.life.lives }));
-    check(`${tag}: the run starts on the Back Lot's stand-in (its name, the controls held)`, s.stage === 'BackLot' &&
-      s.level === null && s.standIn === 'BackLot' && s.lock === 'Cutscene' && /BACK LOT/.test(s.title), s);
-    await tab.keyboard.press('Enter');
-    await ff(2.5);
+    let s = await G((g) => ({ stage: g.stage, level: g.level, phase: g.phase, opening: g.cinematics.active(),
+      lock: g.controlLock(), lives: g.life.lives }));
+    check(`${tag}: the run starts on the Back Lot with the opening (the Prologue phase, the controls held)`, s.stage === 'BackLot' &&
+      s.level === null && s.phase === 'Prologue' && s.opening && s.lock === 'Cutscene', s);
+    await passBackLot(tab, G, ff);
     s = await G((g) => ({ stage: g.stage, level: g.level, lives: g.life.lives, life: g.life.state, lock: g.controlLock() }));
-    check(`${tag}: Skip ends the stand-in; the Basement starts (${difficulty === N ? 'no stage respawn, one for the run' : 'one stage respawn'})`,
+    check(`${tag}: past the opening and the prologue the Basement starts (${difficulty === N ? 'no stage respawn, one for the run' : 'one stage respawn'})`,
       s.stage === 'Level0_Basement' && s.level === 'Level0_Basement' && s.life === 'Alive' &&
       (difficulty === N ? s.lives.stage === 0 && s.lives.run === 1 : s.lives.stage === 1 && s.lives.run === 0) && s.lives.syringe === 0, s);
     // the Creature let go of its start and told to leave the player alone while the test sets things up

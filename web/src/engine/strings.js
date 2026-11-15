@@ -225,6 +225,8 @@ export const STRINGS = Object.freeze({
  "Settings.PlayerVolume": "Players",
  "Settings.UIVolume": "Interface",
  "Settings.Captions": "Sound captions",
+ "Settings.PlayerName": "What your friends call you",
+ "Settings.ReplayCutscenes": "Cutscenes on replays",
  "Settings.ShowHints": "First-time hints",
  "Settings.LeapAssist": "Leap assist",
  "Settings.TutorialDone": "Walkthrough seen",

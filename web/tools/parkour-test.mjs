@@ -76,6 +76,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parkourRules } from '../src/game/rules/parkour.js';
+import { AT_HATCH } from './story-pass.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -1247,7 +1248,7 @@ try {
 async function gameRun(fps) {
   const { tab, context } = await open(gameHtml, '?dev&seed=1029', { Graphics: 'Low', TutorialDone: true, MotionScale: 0 });
   try {
-    return await tab.evaluate(async (rate) => {
+    return await tab.evaluate(async ([rate, atHatch]) => {
       const e = window.__rovloc.engine;
       const { game: g, dev } = window.__rovlocGame;
       const loop = e.loop;
@@ -1297,7 +1298,16 @@ async function gameRun(fps) {
       dev.skipTitle();
       await step30(15);
       dev.deploy();
+      // the Back Lot by the rules (as tools/story-pass.mjs): the opening voted away once the vote is offered (alone it
+      // passes at once), out of the bin, stood at the hatch and in: the chute's cut, the Basement
       let guard = 1200;
+      while (!(g.cinematics.active() && g.cinematics.time() > g.cinematics.story.Skip.From) && guard-- > 0) await step30(1);
+      g.cinematics.skip.vote();
+      while (!(g.prologue.state === 'Bin' && !g.cinematics.active()) && guard-- > 0) await step30(1);
+      g.prologue.climbOut();
+      while (g.prologue.state !== 'Lot' && guard-- > 0) await step30(1);
+      g.env.teleport(atHatch);
+      g.prologue.climbIn();
       while (!(g.phase === 'InRun' && g.level === 'Level0_Basement' && g.levelActive) && guard-- > 0) await step30(1);
       if (guard <= 0) return { error: `no run: ${g.phase} ${g.level}` };
       g.creature.devCommand('ignoreme');
@@ -1379,7 +1389,7 @@ async function gameRun(fps) {
       // where entering left the body against where the drive's first tick (no input yet) holds it
       const entryJump = Math.hypot(vent[0][0] - entered.x, vent[0][1] - entered.y, vent[0][2] - entered.z);
       return { walk, vent, entryJump, parachute, crawled, chute, landed: g.parachute.state, drop };
-    }, fps);
+    }, [fps, AT_HATCH]);
   } finally {
     await context.close();
   }

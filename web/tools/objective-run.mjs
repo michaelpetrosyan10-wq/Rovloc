@@ -7,7 +7,8 @@
 // to fuses to breaker to the exit unlocked and the airlock out).
 //
 // For every seed (a fresh page with ?dev&seed=N, so the run's picks, plan, routes and Creature start come from it):
-// the lobby's ready pad (real keys), the countdown, the deploy, the Back Lot's stand-in (Skip); then every floor's
+// the lobby's ready pad (real keys), the countdown, the deploy, the Back Lot (the opening voted away and the
+// prologue's lid, hatch and chute, by the rules: tools/story-pass.mjs); then every floor's
 // objective with real input and the prompts' real holds (E held for each hold, Space to pull the cord). The harness may teleport the player next to a step's spot within a floor (a clear spot within reach, facing
 // it, never on an armed trap); every gate is the game's own logic. The Creature is told to ignore the player
 // ("ignoreme") so a hunt cannot end the run; its start rule and grace are still checked:
@@ -43,6 +44,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { GameConfig } from '../src/engine/config.js';
+import { passBackLot } from './story-pass.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -418,13 +420,13 @@ for (const [si, seed] of SEEDS.entries()) {
     await tab.keyboard.up('KeyW');
     await ff(10);
     let p = null;
-    let s = await G((g) => ({ phase: g.phase, stage: g.stage, standIn: g.standIn.stage() }));
-    check('deployed: the run opens on the Back Lot\'s stand-in', s.phase === 'InRun' && s.stage === 'BackLot' &&
-      s.standIn === 'BackLot', s);
-    await tab.keyboard.press('Enter');
-    await ff(2.5);
+    let s = await G((g) => ({ phase: g.phase, stage: g.stage, opening: g.cinematics.active() }));
+    check('deployed: the run opens on the Back Lot with the opening (the Prologue phase)', s.phase === 'Prologue' &&
+      s.stage === 'BackLot' && s.opening, s);
+    await passBackLot(tab, G, ff);
     s = await G((g) => ({ phase: g.phase, level: g.level, seed: g.run && g.run.seed }));
-    check('Skip: on into Level 0 on the pinned seed', s.phase === 'InRun' && s.level === 'Level0_Basement' && s.seed === seed, s);
+    check('past the opening and the prologue: Level 0 on the pinned seed', s.phase === 'InRun' && s.level === 'Level0_Basement' &&
+      s.seed === seed, s);
     await G((g) => g.creature.devCommand('ignoreme'));
     await noiseLog();
     const picks = await G((g) => Object.fromEntries(Object.entries(g.run.plan.objectives).map(([k, v]) => [k, v.anchors])));

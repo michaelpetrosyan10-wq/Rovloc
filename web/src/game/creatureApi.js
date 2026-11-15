@@ -71,7 +71,9 @@ export function createCreatureApi(engine, creature) {
  * @property {(nextState?: string) => void} release
  * @property {(target: true|object|null) => void} setTarget its stare: true this page's player, a co-op roster handle
  *   (coop/creature.js handleOf) a teammate, null nobody
- * @property {(name: string) => void} action
+ * @property {(name: string, startAt?: number, rate?: number) => void} action a one-shot or held animation layer at
+ *   the animator clock `startAt` (now when absent), played at `rate`
+ * @property {(name: string) => void} stopAction ends that layer at once
  */
 
 export class CreatureApi {
@@ -329,10 +331,11 @@ export class CreatureApi {
       face: (position) => call('face', position),
       release: (nextState) => call('release', nextState),
       setTarget: (target) => call('setTarget', target === true ? true : target || null),
-      action: (name) => {
-        if (typeof raw.playAction === 'function') call('playAction', name);
-        else this._call('playAction', name);
+      action: (name, startAt, rate) => {
+        if (typeof raw.playAction === 'function') call('playAction', name, startAt, rate);
+        else this._call('playAction', name, startAt, rate);
       },
+      stopAction: (name) => call('stopAction', name),
     };
   }
 }

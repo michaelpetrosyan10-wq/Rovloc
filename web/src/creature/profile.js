@@ -471,7 +471,7 @@ function stepRuntime(runtime, ctx) {
     if (run.startAt === null) run.startAt = ctx.time;
     if (run.sign === 0) run.sign = ctx.lookYaw < -0.2 ? -1 : 1;
     const released = run.releaseAt !== null && run.releaseAt !== undefined && ctx.time - run.releaseAt > (HeldRelease[run.name] ?? 0);
-    if (ctx.time - run.startAt > DURATIONS[run.name] || released) runtime.actions.splice(i, 1);
+    if ((ctx.time - run.startAt) * (run.rate || 1) > DURATIONS[run.name] || released) runtime.actions.splice(i, 1);
   }
 }
 
@@ -1501,7 +1501,7 @@ const ACTIONS = {
 function applyActions(ctx, pose, m) {
   for (const run of runtimeOf(ctx.map).actions) {
     if (run.startAt === null) continue;
-    const elapsed = ctx.time - run.startAt;
+    const elapsed = (ctx.time - run.startAt) * (run.rate || 1);
     if (elapsed >= 0 && elapsed <= DURATIONS[run.name]) ACTIONS[run.name](ctx, pose, m, elapsed, run);
   }
 }
@@ -1588,14 +1588,18 @@ export function hunchFor(poseMode) {
   return poseMode === 'Hunched' ? 1 : 0;
 }
 
-/** Starts `name` at animator clock `startAt` (null: its next step); replaying restarts it. */
-export function playAction(map, name, startAt) {
+/**
+ * Starts `name` at animator clock `startAt` (null: its next step); replaying restarts it. `rate` plays it slower or
+ * faster (a cutscene's: the opening's unfold is FadeIn at 1 / 3.25); 1 by default.
+ */
+export function playAction(map, name, startAt, rate = 1) {
   if (DURATIONS[name] === undefined) return false;
   if (startAt !== null && startAt !== undefined && !Number.isFinite(startAt)) return false;
   const runtime = runtimeOf(map);
   runtime.actions = runtime.actions.filter((r) => r.name !== name);
   runtime.serial += 1;
-  runtime.actions.push({ name, startAt: startAt ?? null, sign: 0, seed: runtime.serial * 97 + name.length, releaseAt: null });
+  runtime.actions.push({ name, startAt: startAt ?? null, sign: 0, seed: runtime.serial * 97 + name.length, releaseAt: null,
+    rate: Number.isFinite(rate) && rate > 0 ? rate : 1 });
   return true;
 }
 

@@ -11,6 +11,9 @@
 //   5. bloom: a bright pass and a chain of blurred levels (3 at Max, 2 High, 1 Medium);
 //   6. post to the canvas: FXAA, a slight chromatic aberration, contrast, saturation, lift, tint (level grade x panic x
 //      lightning; Potato's flat grade keeps only its luminance), vignette, grain, the scares' tear.
+// Day (dayAmount, docs/design/game-spec-v2.md 5.3): setDay(amount, tint, light) lights every material by day (the
+// shared uDay uniforms, materials.js); applyDay(sky) then lifts the frame's haze and the sky's cloud deck toward an
+// overcast day by the same amount, each frame after the lighting and the sky have written their night values.
 // Materials already output tone-mapped display values, so the targets are 8-bit. The internal resolution follows
 // quality.internalSize (Max 100 %, Max+ 150 %, Potato 50-70 % of 720p, dynamic in between).
 
@@ -438,6 +441,10 @@ export class Renderer {
     this.canvas = canvas;
     this.quality = quality;
     this.shared = shared;
+    /** dayAmount and its tint (setDay); the sky's night deck, kept to ease from (applyDay) */
+    this.dayAmount = 0;
+    this.dayTint = new THREE.Color(1, 1, 1);
+    this.nightCloud = null;
     this.gl = new THREE.WebGLRenderer({
       canvas,
       antialias: false,
@@ -909,6 +916,45 @@ export class Renderer {
     return mat;
   }
 
+  /**
+   * dayAmount: 0 (the night, the default) .. 1. `tint` (linear RGB 0..1) colours the day (the time-lapse's grey, orange
+   * and deep blue); `light` is the set's day light: {ambient, sun, sunDirection}, each {x, y, z} (linear RGB; the
+   * direction toward the sun). Unshadowed, added to every material.
+   * @param {number} amount
+   * @param {{x: number, y: number, z: number}} [tint]
+   * @param {{ambient: {x: number, y: number, z: number}, sun: {x: number, y: number, z: number},
+   *   sunDirection: {x: number, y: number, z: number}}} [light]
+   */
+  setDay(amount, tint, light) {
+    const a = Math.max(0, Math.min(1, Number.isFinite(amount) ? amount : 0));
+    const t = tint || { x: 1, y: 1, z: 1 };
+    this.dayAmount = a;
+    this.dayTint.setRGB(t.x, t.y, t.z);
+    const s = this.shared;
+    s.uDay.value.set(t.x * a, t.y * a, t.z * a);
+    if (light) {
+      s.uDayAmbient.value.set(light.ambient.x, light.ambient.y, light.ambient.z);
+      s.uDaySun.value.set(light.sun.x, light.sun.y, light.sun.z);
+      s.uDaySunDir.value.set(light.sunDirection.x, light.sunDirection.y, light.sunDirection.z).normalize();
+    }
+  }
+
+  /**
+   * The day over this frame's haze and sky (after Lighting.update and Sky.update wrote the night's): the fog's colour
+   * and the cloud deck eased toward an overcast day, tinted, by dayAmount.
+   * @param {{uCloud: {value: THREE.Color}, uHaze: {value: THREE.Color}}} skyUniforms
+   */
+  applyDay(skyUniforms) {
+    const a = this.dayAmount;
+    if (!this.nightCloud) this.nightCloud = skyUniforms.uCloud.value.clone();
+    skyUniforms.uCloud.value.copy(this.nightCloud);
+    if (a <= 0) return;
+    const t = this.dayTint;
+    this.shared.uFogColor.value.lerp(_dayFog.set(DAY_FOG[0] * t.r, DAY_FOG[1] * t.g, DAY_FOG[2] * t.b), a);
+    skyUniforms.uCloud.value.lerp(_dayColor.setRGB(DAY_CLOUD[0] * t.r, DAY_CLOUD[1] * t.g, DAY_CLOUD[2] * t.b), a);
+    skyUniforms.uHaze.value.lerp(_dayColor.setRGB(DAY_HAZE[0] * t.r, DAY_HAZE[1] * t.g, DAY_HAZE[2] * t.b), a);
+  }
+
   /** The post uniforms (grade, vignette, grain, overlay) for the lighting / panic / game systems to drive. */
   get postUniforms() {
     return this.post.uniforms;
@@ -920,6 +966,12 @@ export class Renderer {
   }
 }
 
+/** An overcast day: the haze (linear, before exposure) and the sky's deck and horizon (display values). */
+const DAY_FOG = [0.2, 0.21, 0.225];
+const DAY_CLOUD = [0.56, 0.575, 0.6];
+const DAY_HAZE = [0.66, 0.67, 0.69];
+const _dayFog = new THREE.Vector3();
+const _dayColor = new THREE.Color();
 const _look = new THREE.Vector3();
 const _toC = new THREE.Vector3();
 const _dir = new THREE.Vector3();

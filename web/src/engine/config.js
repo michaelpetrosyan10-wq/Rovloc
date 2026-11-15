@@ -257,15 +257,19 @@ export const InputContexts = Object.freeze(['Menu', 'Cutscene', 'Locker', 'Trapp
 
 /**
  * SettingsSchema.luau, read from the world (meta.settingsSchema: every setting, keyed as there; a Choice's default is
- * its option's 1-based index there and its option here) at the engine's start (installSettings), plus the web's
- * Supersample (Max+: Max rendered at 150 % and scaled down; only shown and only used at Max). PendingSettings: the
- * settings whose feature the website does not have yet keep their stored value but are never shown; the package that
- * builds one takes it off the list.
+ * its option's 1-based index there and its option here) at the engine's start (installSettings), plus the web's own:
+ * Supersample (Max+: Max rendered at 150 % and scaled down; only shown and only used at Max), PlayerName (what your
+ * friends call you, docs/design/game-spec-v2.md 3.4: asked once on the title screen, a Text row in Settings; on Roblox
+ * the DisplayName) and NameAsked (whether the title screen has asked it). PendingSettings: the settings whose feature
+ * the website does not have yet keep their stored value but are never shown; the package that builds one takes it off
+ * the list.
  */
-export const PendingSettings = Object.freeze(['Brightness', 'MonsterVoice', 'SayNames', 'VoiceVolume', 'ReplayCutscenes']);
+export const PendingSettings = Object.freeze(['Brightness', 'MonsterVoice', 'SayNames', 'VoiceVolume']);
 
 const WEB_SETTINGS = Object.freeze([
   { key: 'Supersample', kind: 'Bool', label: 'Settings.Supersample', default: false },
+  { key: 'PlayerName', kind: 'Text', label: 'Settings.PlayerName', default: '', maxLength: 24 },
+  { key: 'NameAsked', kind: 'Bool', label: 'Settings.PlayerName', hidden: true, default: false },
 ]);
 
 /** The web's settings list for an exported SettingsSchema ({list: [{key, kind, label, default, ...}]}). */

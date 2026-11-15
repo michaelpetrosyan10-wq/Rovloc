@@ -48,7 +48,7 @@ export class Menu {
           this.dev.deploy();
         } });
       }
-      if (game.phase === 'InRun') {
+      if (game.running()) {
         for (const { id } of game.stages.order) {
           buttons.push({ label: `Dev: ${id.replace(/_/g, ' ')}`, onClick: () => {
             close();

@@ -14,6 +14,7 @@ interim tunnel floor, a short plain crossing, until its theatre is built; Level 
 | `Layouts/Level1_Hallways.luau` | The street-level hallways: the checkerboard hall with Classroom 108's scare, the HallwayGate and its vent bypass, the janitor's closet, the main office. |
 | `Layouts/Level2_Auditorium.luau` | The Auditorium storey (28 high), interim: three west entry and three east exit vestibules joined by a short ladder of service corridors, with its own thresholds. |
 | `Props/TunnelDressingBuilder.luau` | The tunnels' dressing: pipes, trays, steam vents, markers, grime, landmarks, floor clutter (all decor, `Detail` 1..3). |
+| `Props/DreadKit.luau`, `DreadArt.luau`, `DreadBuilder.luau` | The dread dressing (section 6): what the Tall Man and the people who ran left behind, a kit any stage calls with its level and a density; `Config/DreadConfig.luau` holds its numbers, lines, light, air and ambience. |
 | `Props/HideBuilder.luau` | Barrels and cabinets (hiding spots beside the lockers). |
 | `ExtraAnchors.luau` | The post-plan pass (its own `Rng` streams): 36 battery candidates and 8 flask spots on the Basement and the Hallways, without touching the plan (`ExtraAnchors.spec` holds both floors' plan hashes). |
 | `tests/Specs/TunnelPlanner.spec.luau` | The planner's specs: the rules on every tunnel floor, determinism, crawlways, plates, teleport points, hides. |
@@ -134,6 +135,16 @@ main, a `Steam` ParticleEmitter, tag `SteamVent`; every stretch of the steam reg
 runs down the walls, debris heaps (brick, block, cans, paper) off every doorway, anchor and trigger, puddles and drain
 grates in wet regions, coal in the chutes, rubble at dead ends. Every piece is non-colliding, never queried or
 touched.
+
+**The dread dressing.** `Props/DreadKit` (painted by `Props/DreadArt`, built by `Props/DreadBuilder` on the stages
+`DreadConfig.Levels` names) tells what happened without showing it: claw gouges high on the walls and ceilings of the
+patrol loops, forced door frames, a porcelain trail, things dropped running, knocked-over furniture, a barricade, coats
+on hooks, writing (DreadConfig.Writing, spec 2.8's lore lines first), clocks stopped at 3:31, the lockdown notice, a
+child's drawing, water stains with drips, mould, peeling paint, cobwebs, hanging wires that spark and soot round the
+bulbs of the circuits it marks dying. It gathers the signs at "stations" on the floor's longest runs, keeps every piece
+out of the Kit's clearances and its own (each hide's niche, every anchor's reach), and keeps to `DreadConfig.Budget` (at
+most 450 parts a floor, 60 of them signature parts drawn on Potato, the rest Detail). Another stage calls
+`DreadKit.plan(layout, { density = 0.8 })` and `DreadKit.build(folder, layout, plan)`. `DreadDressing.spec` holds it.
 
 **Detail.** Decorative parts carry the attribute `Detail` (1 shapes the look .. 3 small); a low graphics setting may
 hide `Detail >= n` and nothing else changes. Collision and navigation geometry never carries it. Junction plates,

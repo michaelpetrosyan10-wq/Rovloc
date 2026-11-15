@@ -80,7 +80,7 @@ export const CSS = `
 .rv-key-inline { position: relative; display: inline-flex; vertical-align: middle; margin: 0 4px; }
 .rv-key-inline .rv-key { position: relative; left: auto; top: auto; transform: none; }
 
-/* centre column: hint + captions */
+/* centre column: the hint, over the captions' own column (both placed by ui.js) */
 .rv-centre { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(640px, 92vw);
   display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .rv-hint { font-family: ${Fonts.Title}; font-size: 19px; text-align: center; padding: 6px 14px; opacity: 0;
@@ -90,7 +90,8 @@ export const CSS = `
   letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 14px; border-radius: 4px; background: rgba(8,8,9,0.6);
   opacity: 0; pointer-events: none; transition: opacity 0.4s linear; }
 .rv-lock.on { opacity: 0.9; }
-.rv-captions { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rv-captions { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(640px, 92vw);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
 .rv-caption { font-family: ${Fonts.Body}; font-size: 15px; padding: 3px 12px 3px 10px; border-radius: 4px;
   background: rgba(8,8,9,0.72); color: ${Palette.Bone}; border-left: 2px solid transparent; transition: opacity 0.7s linear; }
 .rv-caption.danger { border-left-color: ${Palette.Blood}; }

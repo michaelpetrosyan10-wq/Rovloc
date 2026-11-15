@@ -2812,6 +2812,269 @@ define("DistantGroan", {
 	},
 })
 
+---------------------------------------------------------------- the building at night (DreadConfig.Ambience)
+-- The dread ambience (web/src/game/ambience.js): a bed per floor under its drone, and sparse distant events, each
+-- placed far from the listener and out of sight. None of them is a NoiseKind and none imitates the Creature: no
+-- footfall rhythm, no breath (no slow swell on a hiss), no throat, no rattle of its own, no voice sample.
+
+-- The basement's building bed: the air handlers' steady roar down the ducts, a motor's 60 Hz under it, the storm a
+-- muffled weight through the foundations (no pulse in any of it: nothing here breathes).
+define("DreadBedBasement", {
+	bus = "Ambience",
+	priority = 9,
+	maxVoices = 2,
+	looped = true,
+	space = { reverb(3.5, -8) },
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.32,
+			speed = 0.9,
+			looped = true,
+			envelope = env(4, nil, 3),
+			effects = { eq(-30, -6, -4), flanger(0.03, 0.4, 0.25) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.06,
+			speed = 0.6,
+			region = r(0.02, 0.03),
+			looped = true,
+			envelope = env(5, nil, 3),
+			effects = { distortion(0.3), eq(-6, -6, -34) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.45,
+			speed = 0.18,
+			timePosition = 0.3,
+			looped = true,
+			envelope = env(5, nil, 3),
+			effects = { eq(8, -14, -44), chorus(0.05, 0.5, 0.4) },
+		},
+	},
+})
+
+-- The hallways' building bed: the storm outside the shutters (rain hiss and wind dragged slowly through the boards),
+-- the ventilation's thin whistle down a far duct.
+define("DreadBedHallways", {
+	bus = "Ambience",
+	priority = 9,
+	maxVoices = 2,
+	looped = true,
+	space = { reverb(4.5, -7) },
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.36,
+			speed = 1.35,
+			looped = true,
+			envelope = env(4, nil, 3),
+			effects = { eq(-24, -2, -10), flanger(0.02, 0.6, 0.3) },
+		},
+		{
+			sample = "Swim",
+			volume = 0.18,
+			speed = 0.5,
+			looped = true,
+			envelope = env(5, nil, 3),
+			effects = { eq(-12, -8, -18), chorus(0.04, 0.6, 0.5) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.025,
+			speed = 3.1,
+			region = r(0.02, 0.03),
+			looped = true,
+			envelope = env(6, nil, 3),
+			effects = { eq(-30, -6, -10), flanger(0.05, 0.5, 0.5) },
+		},
+	},
+})
+
+-- A heavy door slamming somewhere far off in the building: the slab hitting its frame, the frame's ring, the slam's
+-- weight rolling away down the halls.
+define("DreadDoorSlam", {
+	bus = "Ambience",
+	priority = 22,
+	maxVoices = 1,
+	rollOff = r(20, 180),
+	caption = "Caption.DreadDoorSlam",
+	space = { reverb(4.2, -3) },
+	layers = {
+		{
+			sample = "FootstepsPlastic",
+			volume = 1.4,
+			speed = r(0.34, 0.4),
+			region = r(0, 0.14),
+			effects = { distortion(0.3), eq(8, 0, -16), compressor(-18, 8, 0.001, 0.2, 6) },
+		},
+		{ sample = "JumpLand", volume = 1.1, speed = r(0.42, 0.48), effects = { eq(8, -6, -24) } },
+		{
+			sample = "VolumeSlider",
+			volume = 0.4,
+			speed = r(0.24, 0.28),
+			delay = 0.02,
+			effects = { echo(0.019, 0.6, -6), eq(-6, 4, -20) },
+		},
+	},
+})
+
+-- Old steel straining somewhere in the walls: a long, low groan sagging in pitch, the building's frame answering.
+define("DreadMetalGroan", {
+	bus = "Ambience",
+	priority = 20,
+	maxVoices = 1,
+	rollOff = r(20, 180),
+	caption = "Caption.DreadMetalGroan",
+	space = { reverb(5.5, -3) },
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.32,
+			speed = r(0.15, 0.19),
+			region = r(0.01, 0.05),
+			looped = true,
+			duration = 2.8,
+			glide = glide(0.55, 2.6),
+			envelope = env(0.6, nil, 1.2),
+			effects = { flanger(0.25, 0.85, 0.6), distortion(0.4), eq(4, 2, -18) },
+		},
+		{
+			sample = "Falling",
+			volume = 0.28,
+			speed = r(0.26, 0.3),
+			region = r(0.1, 1.1),
+			duration = 2.6,
+			envelope = env(0.8, nil, 1.2),
+			effects = { flanger(0.2, 0.7, 0.6), eq(2, 4, -20) },
+		},
+	},
+})
+
+-- A dead PA speaker crackling into a second of static, then nothing.
+define("DreadPACrackle", {
+	bus = "Ambience",
+	priority = 20,
+	maxVoices = 1,
+	rollOff = r(15, 150),
+	caption = "Caption.DreadPACrackle",
+	space = { reverb(2.6, -5) },
+	layers = {
+		{
+			sample = "Falling",
+			volume = 0.45,
+			speed = 2.8,
+			duration = 1.1,
+			envelope = env(0.03, 0.8, 0.2),
+			effects = { distortion(0.85), tremolo(13, 0.8, 0.35), eq(-30, 2, -2) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.5,
+			speed = r(2.6, 3.4),
+			region = r(0, 0.3),
+			regionJitter = 0.08,
+			grains = grains(4, 7, 0.06, 0.16),
+			volumeJitter = 0.5,
+			effects = { distortion(0.9), eq(-24, 4, 2), echo(0.012, 0.3, -10) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.08,
+			speed = 1.9,
+			region = r(0.02, 0.03),
+			looped = true,
+			duration = 1.1,
+			envelope = env(0.05, 0.8, 0.25),
+			effects = { distortion(0.7), eq(-24, 4, -8) },
+		},
+	},
+})
+
+-- A locker door somewhere rattling once in its frame, as if the air moved it.
+define("DreadLockerRattle", {
+	bus = "Ambience",
+	priority = 20,
+	maxVoices = 1,
+	rollOff = r(15, 150),
+	caption = "Caption.DreadLockerRattle",
+	space = { reverb(2.2, -5) },
+	layers = {
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.9,
+			speed = r(1.05, 1.25),
+			region = r(0, 0.12),
+			regionJitter = 0.04,
+			grains = grains(3, 4, 0.07, 0.1),
+			volumeJitter = 0.4,
+			effects = { flanger(1.2, 0.5, 0.4), eq(-8, 6, -4) },
+		},
+		{
+			sample = "VolumeSlider",
+			volume = 0.35,
+			speed = r(0.5, 0.58),
+			effects = { echo(0.011, 0.6, -6), eq(-12, 6, -8) },
+		},
+	},
+})
+
+-- One heavy thump through the ceiling from the floor above: something dropped, once, then quiet.
+define("DreadThumpAbove", {
+	bus = "Ambience",
+	priority = 20,
+	maxVoices = 1,
+	rollOff = r(15, 150),
+	caption = "Caption.DreadThumpAbove",
+	space = { reverb(1.8, -6) },
+	layers = {
+		{ sample = "JumpLand", volume = 1.4, speed = r(0.3, 0.36), effects = { eq(10, -10, -40) } },
+		{
+			sample = "Explosion",
+			volume = 0.35,
+			speed = 0.5,
+			region = r(0, 0.5),
+			duration = 0.6,
+			envelope = env(0.01, nil, 0.4),
+			effects = { eq(8, -12, -40) },
+		},
+		{
+			sample = "FootstepsPlastic",
+			volume = 0.2,
+			speed = r(1.6, 2.2),
+			region = r(0, 0.2),
+			delay = 0.25,
+			grains = grains(3, 5, 0.05, 0.12),
+			volumeJitter = 0.5,
+			effects = { eq(-20, -2, -10) },
+		},
+	},
+})
+
+-- A phone buzzing somewhere, face down on a hard floor: two long buzzes, then it gives up.
+define("DreadPhoneBuzz", {
+	bus = "Ambience",
+	priority = 20,
+	maxVoices = 1,
+	rollOff = r(10, 120),
+	caption = "Caption.DreadPhoneBuzz",
+	space = { reverb(2, -6) },
+	layers = {
+		{
+			sample = "VolumeSlider",
+			volume = 0.22,
+			speed = 1.6,
+			region = r(0.02, 0.03),
+			looped = true,
+			duration = 0.75,
+			grains = grains(2, 2, 1.2, 1.3),
+			envelope = env(0.02, nil, 0.05),
+			effects = { distortion(0.6), tremolo(19, 0.6, 0.5), eq(-18, 6, -6) },
+		},
+	},
+})
+
 ---------------------------------------------------------------- scripted level moments (Scenes)
 
 -- A bang somewhere in the overhead pipes: a hard knock, the pipe ringing down its length (a slowed slider tick through

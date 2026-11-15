@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 
 import { radarRules } from '../src/game/rules/radar.js';
 import { startRelay } from './coop-relay.mjs';
+import { passBackLot, passBackLotLive } from './story-pass.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -182,7 +183,7 @@ async function soloPage() {
   return { tab, logs, G, ff };
 }
 
-/** Into a run on `difficulty`, past the Back Lot's stand-in, on the Basement; the Creature held off and ignoring. */
+/** Into a run on `difficulty`, past the Back Lot (the opening, the prologue), on the Basement; the Creature held off and ignoring. */
 async function intoRun(p, difficulty) {
   await p.tab.goto(`file://${gamePage()}?dev&seed=1029`);
   await p.tab.waitForFunction(() => window.__rovloc && (window.__rovloc.ready || window.__rovloc.error), null, { timeout: 180000 });
@@ -196,8 +197,7 @@ async function intoRun(p, difficulty) {
     dev.deploy(d);
   }, difficulty);
   await p.ff(1.5);
-  await p.tab.keyboard.press('Enter');
-  await p.ff(2.5);
+  await passBackLot(p.tab, p.G, p.ff);
   await p.G((g) => {
     g.floors.spawns._letGo('Test');
     g.creature.c.service.ignored = true;
@@ -569,8 +569,7 @@ async function coopCase() {
     const two = await until(host, (g) => g.coop.squad.list().length === 2 && g.coop.squad.list().every((m) => m.id), null, 25);
     check('a host and a client in one room', !!two, code);
     for (const p of pages) await G(p, (g) => g.lobby.setReady(true));
-    for (const p of pages) await until(p, (g) => g.phase === 'InRun' && g.standIn.stage() === 'BackLot', null, 30);
-    for (const p of pages) await G(p, (g) => g.standIn.pressSkip());
+    await passBackLotLive(pages, G, until);
     const runs = [];
     for (const p of pages) runs.push(await until(p, (g) => (g.phase === 'InRun' && g.level === 'Level0_Basement' ? { players: g.run.players, charges: g.radar.charges } : null), null, 40));
     check('both pages on the Basement: a squad of two (7 batteries a stage), one charge each', runs.every((r) => r && r.players === 2 && r.charges === 1), runs);

@@ -73,6 +73,44 @@ function steamEmitters(raw) {
   return out;
 }
 
+/**
+ * The dread dressing's emitters (DreadKit): a drip over each water stain's puddle (tag DreadDrip, falling from the
+ * part) and the end of each dead fixture's hanging wire (tag DreadSpark, sparking from its lower end). Decorative only.
+ */
+function dreadEmitters(raw) {
+  const out = [];
+  for (const p of arr(raw.parts)) {
+    const tags = arr(p.tags);
+    const kind = tags.includes('DreadDrip') ? 'Drip' : tags.includes('DreadSpark') ? 'Spark' : null;
+    if (!kind) continue;
+    const cf = p.cf;
+    // a wire's end: the cylinder runs along its X axis; the lower of its two ends sparks
+    let pos = [cf[0], cf[1], cf[2]];
+    if (kind === 'Spark') {
+      const h = p.size[0] / 2;
+      const a = [cf[0] + cf[3] * h, cf[1] + cf[6] * h, cf[2] + cf[9] * h];
+      const b = [cf[0] - cf[3] * h, cf[1] - cf[6] * h, cf[2] - cf[9] * h];
+      pos = a[1] < b[1] ? a : b;
+    }
+    out.push({ id: p.name, kind, level: p.level, pos: pos.map(r3), dir: [0, -1, 0], detail: Number(obj(p.attributes).Detail) || 0 });
+  }
+  return out;
+}
+
+/**
+ * The circuits the dread dressing marks dying (DreadKit: parts tagged DyingFixture carry the circuit's FlickerGroup
+ * and a DyingStyle, Pulse or Tube): lighting.js gives these already-flickering groups their dying flicker.
+ */
+function dyingGroups(raw) {
+  const seen = new Map();
+  for (const p of arr(raw.parts)) {
+    if (!arr(p.tags).includes('DyingFixture')) continue;
+    const a = obj(p.attributes);
+    if (a.FlickerGroup && !seen.has(a.FlickerGroup)) seen.set(a.FlickerGroup, { group: a.FlickerGroup, style: a.DyingStyle === 'Tube' ? 'Tube' : 'Pulse', level: p.level });
+  }
+  return [...seen.values()].sort((x, y) => (x.group < y.group ? -1 : x.group > y.group ? 1 : 0));
+}
+
 export function buildMeta(raw, r) {
   const levelKeys = [...new Set([...raw.layoutIds, 'Stairwells', 'Exterior'])];
   const levels = {};
@@ -375,8 +413,11 @@ export function buildMeta(raw, r) {
     // neighbours through any opening included); pairs farther apart than pvs.MAX_DISTANCE are never listed
     visibility: r.visibility || {},
     visibilityInfo: { maxDistance: PVS_MAX_DISTANCE, method: 'rays between opening + floor samples through static colliding opaque non-Detail parts; doors and entities open, glass clear', levels: r.visibilityStats || {} },
-    // particle emitters the web draws (particles.js): the steam vents' nozzle mouths (pos, dir = the plume's way)
-    emitters: steamEmitters(raw),
+    // particle emitters the web draws (particles.js): the steam vents' nozzle mouths (pos, dir = the plume's way), the
+    // dread dressing's drips and sparks
+    emitters: [...steamEmitters(raw), ...dreadEmitters(raw)],
+    // the dread dressing's dying circuits ({group, style, level}): how lighting.js flickers them
+    dyingGroups: dyingGroups(raw),
     layouts: raw.layouts,
     creature,
     // the invisible walls across every opening into a Gap: the Creature clamps to them, players pass (CollisionGroups)

@@ -2102,7 +2102,10 @@ export class MonsterAI {
         this._releaseScripted(nextState);
       },
       setTarget: (target) => this.setScriptedTarget(token, target),
-      playAction: (name, startAt) => (this.view ? this.view.playAction(name, startAt) : false),
+      playAction: (name, startAt, rate) => (this.view ? this.view.playAction(name, startAt, rate) : false),
+      stopAction: (name) => {
+        if (this.view) this.view.stopAction(name);
+      },
     };
     return handle;
   }
@@ -2371,8 +2374,9 @@ export class MonsterAI {
  * @property {(position: {x: number, y: number, z: number}) => void} face
  * @property {(nextState?: string) => void} release
  * @property {(target: any) => boolean} setTarget turns the held Creature's stare on the player (null clears)
- * @property {(name: string, startAt?: number) => boolean} playAction a one-shot animation layer (NeckSnap, Lunge,
- *   LockerRip, DoorSmash, Vanish, Reveal)
+ * @property {(name: string, startAt?: number, rate?: number) => boolean} playAction a one-shot animation layer (NeckSnap,
+ *   Lunge, LockerRip, DoorSmash, Vanish, Reveal) or a held one (Stare, ReachIn), at `rate` (1 by default)
+ * @property {(name: string) => void} stopAction ends that layer at once
  */
 
 /** A CFrame from a CFrame, a THREE.Matrix4 or 12 Roblox components. */

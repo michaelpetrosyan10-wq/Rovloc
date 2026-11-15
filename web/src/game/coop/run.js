@@ -48,7 +48,7 @@ const REVIVE_CHECK_SLACK = 5;
 const ROOT_TO_FEET = 3;
 const LETHAL_HITS = ['Catch', 'Damage', 'BleedOut', 'Execute', 'Abandon'];
 const PLAYING = ['Alive', 'Downed'];
-const RUN_PHASES = ['Deploying', 'InRun'];
+const RUN_PHASES = ['Deploying', 'Prologue', 'InRun'];
 const EYE = { Standing: 1.5, Sprinting: 1.4, Crouching: 0, VentCrawling: -0.6, VentScurrying: -0.6, DownedCrawling: -0.8,
   Hiding: 1.3, Trapped: 1.1 };
 const SPECTATE_SMOOTH = 12;
@@ -335,7 +335,7 @@ export class RunNet {
       validate: (m) => typeof m.s === 'string', handle: (from, m) => this._onLanded(from, m) });
     ev.register('standInSkip', { to: 'host', phases: ['InRun'], rate: 2,
       validate: (m) => typeof m.s === 'string', handle: (from, m) => this.game.standIn.vote(from, m.s) });
-    ev.register('stageNext', { to: 'client', phases: ['InRun'],
+    ev.register('stageNext', { to: 'client', phases: ['Prologue', 'InRun'],
       validate: (m) => typeof m.from === 'string' && Array.isArray(m.resp), handle: (from, m) => this._onStageNext(m) });
   }
 
@@ -362,7 +362,7 @@ export class RunNet {
   hostLethal(member, hit, cause) {
     const rec = this.book.get(member.id);
     const game = this.game;
-    if (!rec || !game.run || !game.live() || !PLAYING.includes(member.life)) return;
+    if (!rec || !game.run || !game.live() || game.safeMoment() || !PLAYING.includes(member.life)) return;
     const rules = game.life.rules;
     const d = game.run.difficulty;
     if (hit === 'Abandon') rec.lives = { ...rec.lives, stage: 0, run: 0, syringe: 0 };
@@ -813,12 +813,13 @@ export class RunNet {
   /** Host: the welcome of a player joining during a run. */
   welcome(member, msg) {
     const game = this.game;
-    if (!game.run || (game.phase !== 'InRun' && game.phase !== 'Deploying')) return;
+    if (!game.run || !['InRun', 'Deploying', 'Prologue'].includes(game.phase)) return;
     member.participant = true;
     member.lateJoin = true;
     member.outcome = 'Pending';
     member.landed = false;
-    member.life = 'Spectating';
+    // a joiner during the prologue starts in their own bin (4.1); later they watch until the next stage
+    member.life = game.phase === 'Prologue' ? 'Alive' : 'Spectating';
     this._open(member, game.run.difficulty);
     msg.run = { seed: game.run.seed, d: game.run.difficulty, id: game.run.runId, stage: game.stage,
       cleared: [...game.cleared], n: game.run.players };
@@ -836,7 +837,7 @@ export class RunNet {
     this.lateJoin = true;
     const ok = await game.match.deploy(run.d, { seed: run.seed, runId: run.id, slot: this.coop.me ? this.coop.me.slot : 0,
       stage: run.stage, cleared: run.cleared, spectate: true, players: Number(run.n) || 1 });
-    if (ok) game.life.setSpectating();
+    if (ok && game.phase !== 'Prologue') game.life.setSpectating();
   }
 
   // ---------------------------------------------------------------------------------------------------- leaving

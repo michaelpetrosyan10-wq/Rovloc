@@ -21,7 +21,9 @@
 //   engine.entities   get, list, setPivot, setNodePivot, setNodeTransform, nodeWorld, attachmentWorld, setVisible,
 //                     setCollides, setAttribute, resetAll
 //   engine.lighting   setOverride(lightId, brightness), setGroupFactor(groupId, factor), setGroupStutter(groupId,
-//                     factor), burst(lightId), lightning({intensity, stages}), setStormEnabled, resetForRun, addLight
+//                     factor), groupId(name), burst(lightId), lightning({intensity, stages}), setStormEnabled,
+//                     resetForRun, addLight
+//   engine.renderer   setDay(amount, tint, light) (dayAmount)
 //   engine.save / engine.settings   localStorage blob (get / set / update / flush / persistent) and the settings
 //   engine            setCurrentLevel, setAmbienceEnabled, menuEnabled, renderer.camera / height, spawnPoints,
 //                     buildStamp
@@ -396,9 +398,14 @@ export class Env {
     return this.engine.ui.fade(alpha, seconds, color);
   }
 
-  /** Fades the HUD (cutscenes). */
-  setHudVisible(visible, seconds = 0.5) {
-    this.engine.ui.setVisible(visible, seconds);
+  /** Fades the HUD (cutscenes; `opts.captions`: the captions stay while it is hidden). */
+  setHudVisible(visible, seconds = 0.5, opts) {
+    this.engine.ui.setVisible(visible, seconds, opts);
+  }
+
+  /** The height (px from the bottom) a game screen keeps below the captions (the subtitles' rows; 0: none). */
+  setCaptionFloor(px) {
+    this.engine.ui.setCaptionFloor(px);
   }
 
   hudVisible() {
@@ -672,6 +679,19 @@ export class Env {
   /** Pins a light's brightness (Roblox Brightness units); null releases. */
   setLightOverride(lightId, brightness) {
     this.engine.lighting.setOverride(lightId, brightness);
+  }
+
+  /** A flicker group's id by its name ("Scripted:BL_Lamp"), or 0. */
+  lightGroupId(name) {
+    return this.engine.lighting.groupId(name);
+  }
+
+  /**
+   * dayAmount (docs/design/game-spec-v2.md 5.3): 0 the night .. 1, tinted, with the set's day light
+   * ({ambient, sun, sunDirection}); renderer.setDay.
+   */
+  setDay(amount, tint, light) {
+    this.engine.renderer.setDay(amount, tint, light);
   }
 
   /** Holds a flicker group (an id from meta.flickerGroups) at a factor: the power cut; null releases. */

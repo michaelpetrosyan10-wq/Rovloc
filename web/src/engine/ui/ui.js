@@ -8,9 +8,13 @@
 //   * Prompts: rows at their world anchor (projected each frame), a hold ring around the key glyph, the object text
 //     above the action; rows fade in and out, the ring fills while holding and drains when released. On touch the
 //     row is the button.
-//   * Toasts (top centre, max 3, repeats refresh), the hint line and captions (centre column; captions only with
+//   * Toasts (top centre, max 3, repeats refresh), the hint line and captions (bottom centre; captions only with
 //     the Captions setting; creature sounds carry a blood tick), floor cards, fades to black, the pause / settings
 //     menu (every visible SettingsSchema entry) and the loading screen.
+//   * Captions and subtitles share the bottom of the screen: the captions are their own column (the hint sits above
+//     them), lifted over whatever a game screen keeps below them (setCaptionFloor: the subtitles' rows, the
+//     letterbox's bar), so a caption never covers a subtitle nor hides under one. A cutscene hides the HUD but keeps
+//     the captions (setVisible(false, s, {captions: true})): its sounds are captioned like any other, over its black.
 //   * Graphics (the settings menu's first block, as Roblox's SettingsMenu draws it): the five tiers as a row of
 //     segments, Max to Potato, the picked tier's one-line description under them, Max+ (supersampling) while Max is
 //     picked, and the Auto hint's suggestion when the frame rate has stayed low. A pick applies at once (quality.js);
@@ -27,6 +31,11 @@ const TOAST_DEDUPE = 1.5;
 const CAPTION_DEDUPE = 1.5;
 const CAPTION_MAX = 3;
 const CAPTION_HOLD = 3.2;
+/** the captions column's lowest edge (px from the bottom) and its gap over a floor a game screen keeps */
+const CAPTION_BOTTOM = 96;
+const CAPTION_GAP = 8;
+/** over a cutscene's layers (the letterbox, its black and its subtitles) while a cutscene keeps the captions */
+const CAPTION_KEPT_Z = '42';
 const LOW = 0.2;
 const CRITICAL = 0.1;
 const LINGER = 2.5;
@@ -81,7 +90,7 @@ export class UI {
     this.status = el('div', 'rv-status', this.hud);
     this.centre = el('div', 'rv-centre', this.hud);
     this.hintEl = el('div', 'rv-hint rv-outline', this.centre);
-    this.captionsEl = el('div', 'rv-captions', this.centre);
+    this.captionsEl = el('div', 'rv-captions', root);
     this.toastsEl = el('div', 'rv-toasts', root);
     this.touch = el('div', 'rv-touch', root);
     this.cardLayer = el('div', 'rv-layer', root);
@@ -96,6 +105,9 @@ export class UI {
     this.hudAlpha = 1;
     this.hudTarget = 1;
     this.hudRate = 1;
+    /** whether a hidden HUD keeps the captions (a cutscene), and the floor they keep above (setCaptionFloor) */
+    this.captionsKept = false;
+    this.captionFloor = 0;
     this.toasts = [];
     this.captions = [];
     this.meterRows = new Map();
@@ -280,10 +292,21 @@ export class UI {
 
   // ------------------------------------------------------------------ HUD visibility
 
-  /** Fades the whole HUD (cutscenes). */
-  setVisible(visible, seconds = 2.5) {
+  /**
+   * Fades the whole HUD (cutscenes). `opts.captions`: a hidden HUD keeps the captions showing (a cutscene's sounds).
+   * @param {boolean} visible
+   * @param {number} [seconds]
+   * @param {{captions?: boolean}} [opts]
+   */
+  setVisible(visible, seconds = 2.5, opts = {}) {
     this.hudTarget = visible ? 1 : 0;
     this.hudRate = seconds > 0 ? 1 / seconds : 1000;
+    this.captionsKept = !visible && !!opts.captions;
+  }
+
+  /** The height (px from the bottom of the screen) a game screen keeps below the captions (0: none). */
+  setCaptionFloor(px) {
+    this.captionFloor = Number.isFinite(px) && px > 0 ? px : 0;
   }
 
   /** Shows / hides the centre dot. */
@@ -556,6 +579,19 @@ export class UI {
           this.settings.set(s.key, !this.settings.get(s.key));
           t.classList.toggle('on', !!this.settings.get(s.key));
         });
+      } else if (s.kind === 'Text') {
+        const input = el('input', '', row);
+        input.type = 'text';
+        input.maxLength = s.maxLength || 24;
+        input.value = this.settings.get(s.key) || '';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.addEventListener('keydown', (e) => e.stopPropagation());
+        input.addEventListener('change', () => {
+          this.settings.set(s.key, input.value);
+          input.value = this.settings.get(s.key) || '';
+        });
+        el('span', '', row);
       } else if (s.kind === 'Choice') {
         const sel = el('select', '', row);
         for (const o of s.options) {
@@ -661,6 +697,18 @@ export class UI {
 
   // ------------------------------------------------------------------ frame
 
+  /** The captions over the floor a game screen keeps, the hint over the captions; shown with the HUD or kept. */
+  _placeCaptions() {
+    const kept = this.captionsKept && !this.menuOpen;
+    const bottom = Math.max(CAPTION_BOTTOM, this.captionFloor > 0 ? this.captionFloor + CAPTION_GAP : 0);
+    const c = this.captionsEl.style;
+    c.bottom = `${bottom}px`;
+    c.opacity = String(kept ? 1 : this.hudAlpha);
+    c.zIndex = kept ? CAPTION_KEPT_Z : '';
+    const height = this.captions.length ? this.captionsEl.offsetHeight + 6 : 0;
+    this.centre.style.bottom = `${bottom + height}px`;
+  }
+
   update(dt) {
     const input = this.input;
     const ctx = input.getContext();
@@ -671,6 +719,7 @@ export class UI {
     const step = this.hudRate * dt;
     this.hudAlpha += Math.sign(this.hudTarget - this.hudAlpha) * Math.min(Math.abs(this.hudTarget - this.hudAlpha), step);
     this.hud.style.opacity = String(this.hudAlpha);
+    this._placeCaptions();
     this._stepFade(dt);
     const now = performance.now() / 1000;
     for (let i = this.toasts.length - 1; i >= 0; i--) {

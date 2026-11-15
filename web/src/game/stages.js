@@ -4,6 +4,8 @@
 // levels, Runway, Bahamas), from the lobby to the results, keyed by stage id everywhere. StageScripts names the script
 // that plays a stage; a stage with none yet is played by the StandIn below.
 //
+//   Prologue  the Back Lot (docs/design/game-spec-v2.md 2.4, 4.1): the opening cutscene (story/opening.js) and the
+//             prologue (story/prologue.js), in the match phase Prologue; it hands over to the Basement.
 //   School    a level of the school (game.level is the stage): its level scripts, objectives, airlocks and the
 //             Creature, as the four floors play today. Entered from a stand-in, the squad spawns at its entry.
 //   StandIn   build scaffolding for a stage still to be built: its card (the stage table's Card text, or its name when
@@ -25,6 +27,7 @@ import { approach } from './util.js';
 
 /** The script that plays each stage, by stage id (a stage not listed is played by the StandIn). */
 export const StageScripts = Object.freeze({
+  BackLot: 'Prologue',
   Level0_Basement: 'School',
   Level1_Hallways: 'School',
   Level2_Auditorium: 'School',
@@ -68,9 +71,14 @@ export class Stages {
     return i >= 0 && i + 1 < this.order.length ? this.order[i + 1].id : null;
   }
 
-  /** The script that plays stage `id`: 'School', or 'StandIn' while it has none. */
+  /** The script that plays stage `id`: 'Prologue', 'School', or 'StandIn' while it has none. */
   scriptOf(id) {
     return StageScripts[id] || 'StandIn';
+  }
+
+  /** The match phase stage `id` plays in: Prologue for the Back Lot's script, else InRun. */
+  phaseOf(id) {
+    return this.scriptOf(id) === 'Prologue' ? 'Prologue' : 'InRun';
   }
 
   /** Whether stage `id` is played on a level of the school (game.level is the stage). */

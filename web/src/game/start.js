@@ -26,10 +26,14 @@ import { Parachute } from './mechanics/parachute.js';
 import { Radar } from './mechanics/radar.js';
 import { Debris } from './mechanics/debris.js';
 import { MonsterFx } from './mechanics/monsterFx.js';
+import { Ambience } from './ambience.js';
 import { Level0 } from './levels/level0.js';
 import { Level1 } from './levels/level1.js';
 import { Level3 } from './levels/level3.js';
 import { FloorObjectives } from './objectives/index.js';
+import { Cinematics } from './story/cinematics.js';
+import { Opening } from './story/opening.js';
+import { Prologue } from './story/prologue.js';
 import { Hints } from './ui/hints.js';
 import { Nav } from './ui/nav.js';
 import { Objectives } from './ui/objectives.js';
@@ -68,9 +72,16 @@ export async function start(engine, opts = {}) {
   game.add(new Debris(game));
   game.airlock = game.add(new Airlock(game));
   game.standIn = game.add(new StandIn(game));
+  // the story: the cutscene player, the Back Lot's opening and prologue (docs/design/game-spec-v2.md 2.3, 2.4, 4.1)
+  game.cinematics = game.add(new Cinematics(game));
+  game.opening = game.add(new Opening(game));
+  game.prologue = game.add(new Prologue(game));
+  game.opening.bind(game.cinematics);
   game.add(new CreatureLevels(game));
   // the Tall Man's warnings, chase music, stings and the brain's game-state vetoes (Tunnels)
   game.monsterFx = game.add(new MonsterFx(game));
+  // the building at night: its bed and its distant events on the dressed floors (DreadConfig.Ambience)
+  game.ambience = game.add(new Ambience(game));
   game.level0 = game.add(new Level0(game));
   game.level1 = game.add(new Level1(game));
   game.level3 = game.add(new Level3(game));
@@ -86,6 +97,8 @@ export async function start(engine, opts = {}) {
   game.coop = new Coop(game);
   game.systems.unshift(game.coop);
   game.radar.bindCoop(game.coop);
+  game.cinematics.bindCoop(game.coop);
+  game.prologue.bindCoop(game.coop);
   const dev = new Dev(game);
   game.menu = game.add(new Menu(game, /[?&]dev\b/.test(location.search) ? dev : null));
   registerSceneTracks(game);
@@ -159,7 +172,7 @@ function wireCreature(game) {
     life.lethal('Catch', 'Creature');
   };
   creature.setCatchHooks({
-    canCatch: () => game.playing() && game.controlLock() !== 'Cutscene',
+    canCatch: () => game.playing() && game.controlLock() !== 'Cutscene' && !game.safeMoment(),
     outcome,
     apply,
   });

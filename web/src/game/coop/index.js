@@ -243,6 +243,15 @@ export class Coop {
     if (toTitle) this.runNet.backToTitle(reason);
   }
 
+  /**
+   * A feature's module joins the room's hooks (sessionStarted, sessionEnding, memberLeft, welcome, welcomed, tick,
+   * frame, beginRun, endRun, stageActivated, levelActivated, phaseChanged): the story's (story/cinematics.js,
+   * story/prologue.js) register their messages in events.js and their hooks here.
+   */
+  addModule(module) {
+    this.modules.push(module);
+  }
+
   // ---------------------------------------------------------------------------------------------------- sending
 
   /** A reliable message: to the host (client), or to one member / every client ('*') from the host. */

@@ -120,6 +120,8 @@ export class CoopUi {
     this.screen.classList.remove('rg-hidden');
     this.form.classList.remove('rg-hidden');
     this.room.classList.add('rg-hidden');
+    // the room's name: the last one used here, else what the title asked (ui/namePrompt.js; asked after this was built)
+    if (!this.nameInput.value) this.nameInput.value = this.env.setting('PlayerName') || '';
     this._setStatus('', false);
     this.game.nav.push(this.group);
     this.group.focus(0);
@@ -135,8 +137,15 @@ export class CoopUi {
   }
 
   _name() {
-    const name = (this.nameInput.value || '').trim().replace(/\s+/g, ' ').slice(0, 16) || 'Survivor';
+    const typed = (this.nameInput.value || '').trim().replace(/\s+/g, ' ').slice(0, 16);
+    const name = typed || 'Survivor';
     this.env.saveSet(NAME_KEY, name);
+    // the room's name answers the title's question when it was not asked yet (ui/namePrompt.js: asked once), so the
+    // lobby is not held behind it
+    if (!this.env.setting('NameAsked')) {
+      if (typed) this.env.setSetting('PlayerName', typed);
+      this.env.setSetting('NameAsked', true);
+    }
     return name;
   }
 

@@ -6,6 +6,9 @@
 // The run is the stage list: game.stage is the stage being played (a stage id); game.level is the level of the school
 // it plays on (the same id) for a stage the school's scripts play, null for one the StandIn plays. advance() leaves
 // the stage (cleared) for the next one; after the last the run ends (Match.finishRun).
+// Phases (docs/design/game-spec-v2.md 2.4): Deploying -> Prologue (the Back Lot: the opening, the bin, the walk, the
+// chute; not live: no damage, noise or catch) -> InRun (from the Basement's activation: advance() leaves the
+// Prologue for InRun as it enters the next stage). A run joined on a later stage goes straight to InRun.
 //
 // Systems implement any of: beginRun(run) (forward order), endRun() (reverse order), tick(dt, now), frame(dt, now),
 // stageActivated(stage), stageDeactivated(stage), levelActivated(level), levelDeactivated(level),
@@ -19,7 +22,7 @@ import { Sequencer } from './timeline.js';
 import { Signal } from './util.js';
 
 /**
- * @typedef {'Title'|'Lobby'|'Countdown'|'Deploying'|'InRun'|'RunEnded'|'Results'|'Resetting'} Phase
+ * @typedef {'Title'|'Lobby'|'Countdown'|'Deploying'|'Prologue'|'InRun'|'RunEnded'|'Results'|'Resetting'} Phase
  * @typedef {{runId: string, difficulty: string, plan: import('./worldData.js').Plan, routes: Record<string, import('./worldData.js').Route>,
  *   perks: string[], startedAt: number, seed: number, devRun: boolean, slot: number, players: number,
  *   clockFrom: number|null, clockTo: number|null}} Run
@@ -112,9 +115,23 @@ export class Game {
     this.phaseChanged.fire(phase, previous);
   }
 
-  /** Deploying / InRun: the run is live (damage, traps, airlocks act). */
+  /** Deploying / InRun: the run is live (damage, traps, airlocks act). The Prologue is not. */
   live() {
     return this.phase === 'Deploying' || this.phase === 'InRun';
+  }
+
+  /** Prologue / InRun: a stage plays (it activates, the run's systems tick). */
+  running() {
+    return this.phase === 'Prologue' || this.phase === 'InRun';
+  }
+
+  /**
+   * I13's safe moment: nobody can be caught, downed or killed while a cutscene plays or during the prologue (the
+   * aftermath, a respawn's grace and the seated plane are their own packages' moments).
+   */
+  safeMoment() {
+    return this.phase === 'Prologue' || !!(this.cinematics && this.cinematics.active()) ||
+      !!(this.prologue && this.prologue.active());
   }
 
   /** BeginRun on every system in order (RunLifecycleService.BeginRun). */
@@ -145,8 +162,8 @@ export class Game {
 
   /**
    * LevelDirector.EnterLevel over the stage list: switches to stage `stage` at once (its level when the school plays
-   * it) and activates it when the run is InRun. `spawn`: the player is put at their slot's spawn at its entry (entering
-   * the school from a stand-in or at the deploy; an airlock's stairs bring them there themselves).
+   * it) and activates it when the run is running (Prologue or InRun). `spawn`: the player is put at their slot's spawn
+   * at its entry (entering the school from a stand-in or at the deploy; an airlock's stairs bring them there themselves).
    * @param {string} stage
    * @param {{spawn?: boolean}} [opts]
    */
@@ -156,7 +173,7 @@ export class Game {
     this.level = this.stages.isLevel(stage) ? stage : null;
     this.env.setCurrentLevel(this.level);
     if (this.level && opts.spawn) this.match.spawnAt(this.level, this.match.slot());
-    if (this.phase === 'InRun') this.activateStage();
+    if (this.running()) this.activateStage();
   }
 
   /** The stage's activation (every system's stageActivated), then its level's. */
@@ -187,6 +204,8 @@ export class Game {
     this.cleared.add(from);
     this.match.stageCleared(from);
     const next = this.stages.next(from);
+    // InRun at the next stage's activation (the prologue's end: the Basement)
+    if (next && this.phase === 'Prologue') this.setPhase('InRun');
     if (next) this.enterStage(next, { spawn: !this.stages.isLevel(from) });
     else {
       this.deactivateStage();

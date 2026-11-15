@@ -3,8 +3,9 @@
 //   node tools/game-smoke.mjs [--html <page>] [--shots <dir>] [--no-build]
 //
 // Builds the game test page (tools/game-build.mjs, unless --html names one), opens it with ?dev and plays:
-//   title -> walkthrough -> lobby -> onto a ready pad -> countdown -> deploy -> the Back Lot's stand-in (its name and
-//   the honest line; Skip) -> Level 0: walk onto a bear trap ->
+//   title -> the name prompt (asked once: a name typed) -> walkthrough -> lobby -> onto a ready pad -> countdown ->
+//   deploy -> the Back Lot: the opening (the Prologue phase, the Cutscene lock, the letterbox; voted away by the rules:
+//   tools/story-pass.mjs) and the prologue (the lid, the hatch, the chute) -> Level 0: walk onto a bear trap ->
 //   look down and pry free -> take a stun flask from its spot (hold E) and throw it at the Creature: it is stunned ->
 //   walk into the stairwell airlock -> it seals -> Level 1 starts;
 // then each floor's signature moment:
@@ -17,7 +18,8 @@
 //   the roof (the door smash, the jump, the canopy, the Creature on the ledge, the landing: the roof done within one
 //   roof check); then every stage still on the stand-in (City1_Rooftops held to its own end, City2_Airport, Runway and
 //   Bahamas skipped, each its card or name), ESCAPED and the chapter strip 8 / 8 on the results. Play Again, and the
-//   same on Nightmare: the Back Lot, the four school levels (one respawn for the run), the roof's jump, the stand-ins,
+//   same on Nightmare: the Back Lot (the opening's Short cut now), the four school levels (one respawn for the run), the
+//   roof's jump, the stand-ins,
 //   the results. The stages still on the stand-in are printed at the end.
 // Every step asserts the game's state; each moment is screenshotted into the shots directory (default
 // build/cache/game-shots). Headless WebGL is SwiftShader (slow), so the game clock is fast-forwarded between shots by
@@ -30,6 +32,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { GameConfig } from '../src/engine/config.js';
+import { passBackLot } from './story-pass.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -203,7 +206,16 @@ try {
   shotsTaken.push(await shot('01-title.png'));
   await G((g) => g.env.setSetting('TutorialDone', false));
   await tab.keyboard.press('Enter');
+  await tab.waitForTimeout(400);
+  // the name prompt, asked once: a name typed, previewed as the sanitizer reads it, confirmed with Enter
+  check('PLAY asks the name first ("What do your friends call you?")', await G((g) => g.onboarding.namePrompt.isOpen()));
+  await tab.keyboard.type('MayaRivers');
+  const asked = await G((g) => g.onboarding.namePrompt.preview.textContent);
+  check('the name prompt previews the name the story will say (the sanitizer\'s first token)', /Maya\./.test(asked), asked);
+  await tab.keyboard.press('Enter');
   await tab.waitForTimeout(600);
+  const named = await G((g) => ({ name: g.env.setting('PlayerName'), asked: g.env.setting('NameAsked') }));
+  check('the name is saved (PlayerName) and not asked again', named.name === 'MayaRivers' && named.asked === true, named);
   check('walkthrough opens on PLAY', (await G((g) => g.onboarding.mode)) === 'Walkthrough');
   shotsTaken.push(await shot('02-walkthrough.png'));
   for (let i = 0; i < 6; i++) await tab.keyboard.press('ArrowRight');
@@ -229,17 +241,18 @@ try {
   shotsTaken.push(await shot('04-countdown.png'));
   await ff(9);
   await ff(1.5);
-  s = await G((g) => ({ phase: g.phase, stage: g.stage, level: g.level, standIn: g.standIn.stage(), lock: g.controlLock(),
-    title: g.standIn.title.textContent, line: g.standIn.line.textContent, lives: g.life.lives }));
-  check('deployed: the run starts on its first stage, the Back Lot, on the stand-in (its name, the honest line, held)',
-    s.phase === 'InRun' && s.stage === 'BackLot' && s.level === null && s.standIn === 'BackLot' && s.lock === 'Cutscene' &&
-    /BACK LOT/.test(s.title) && /still being built/.test(s.line), s);
-  shotsTaken.push(await shot('05a-standin.png'));
-  await tab.keyboard.press('Enter');
-  await ff(2.5);
+  s = await G((g) => ({ phase: g.phase, stage: g.stage, level: g.level, lock: g.controlLock(), cin: g.cinematics.current &&
+    { id: g.cinematics.current.id, cut: g.cinematics.current.cut }, standIns: g.stages.standIns() }));
+  check('deployed: the run starts on its first stage, the Back Lot: the Prologue phase, the opening (Full), held',
+    s.phase === 'Prologue' && s.stage === 'BackLot' && s.level === null && s.lock === 'Cutscene' && !!s.cin &&
+    s.cin.id === 'Opening' && s.cin.cut === 'Full' && !s.standIns.includes('BackLot'), s);
+  shotsTaken.push(await shot('05a-opening.png'));
+  s = await passBackLot(tab, G, ff);
+  check('the opening voted away (alone at once), the prologue (the lid, the hatch, the chute): the Basement', s.phase === 'InRun' &&
+    s.level === 'Level0_Basement', s);
   s = await state();
   const lives = await G((g) => g.life.lives);
-  check('Skip: on into Level 0 (Standard: one stage respawn, the get-up unused)', s.phase === 'InRun' &&
+  check('on into Level 0 (Standard: one stage respawn, the get-up unused)', s.phase === 'InRun' &&
     s.level === 'Level0_Basement' && s.life === 'Alive' && lives.stage === 1 && !lives.getUpUsed, { ...s, lives });
   await G((g) => g.env.setFlashlight(true));
   shotsTaken.push(await shot('05-level0.png'));
@@ -562,11 +575,10 @@ try {
     dev.deploy('Nightmare');
   });
   await ff(2);
-  s = await G((g) => ({ stage: g.stage, difficulty: g.run && g.run.difficulty, standIn: g.standIn.stage() }));
-  check('Nightmare: the run starts on the Back Lot\'s stand-in', s.stage === 'BackLot' && s.difficulty === 'Nightmare' &&
-    s.standIn === 'BackLot', s);
-  await tab.keyboard.press('Enter');
-  await ff(2.5);
+  s = await G((g) => ({ stage: g.stage, difficulty: g.run && g.run.difficulty, cut: g.cinematics.current && g.cinematics.current.cut }));
+  check('Nightmare: the run starts on the Back Lot with the opening\'s Short cut (seen, voted away before)', s.stage === 'BackLot' &&
+    s.difficulty === 'Nightmare' && s.cut === 'Short', s);
+  await passBackLot(tab, G, ff);
   await G((g) => g.creature.devCommand('ignoreme'));
   s = await G((g) => ({ stage: g.stage, lives: g.life.lives }));
   check('Nightmare: Level 0 with no stage respawn and one for the run', s.stage === 'Level0_Basement' && s.lives.stage === 0 &&

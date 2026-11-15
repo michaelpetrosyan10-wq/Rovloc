@@ -15,8 +15,9 @@
 //      shows the build's stamp (build.mjs --stamp) when it has one, and no stamp otherwise.
 //    * What a Chromebook on Potato downloads (the Graphics setting saved as Potato before the page loads) and what
 //      Max streams after boot are measured from the page's resource timings: Potato must not fetch a texture bigger
-//      than its 256 px set, nor any normal map. On Potato a solo run is then played: PLAY, the walkthrough skipped,
-//      onto a ready pad in the lobby, the countdown, deployed into Level 0; still nothing but light assets.
+//      than its 256 px set, nor any normal map. On Potato a solo run is then played: PLAY, the name prompt answered
+//      with no name, the walkthrough skipped, onto a ready pad in the lobby, the countdown, the deploy onto the Back
+//      Lot (the opening skipped, the lid, the hatch: the prologue), into Level 0; still nothing but light assets.
 //    * No dev control without ?dev: the pause menu lists no dev shortcut and F3 shows no stats (with ?dev both do).
 // 1b. The lite build (dist/Rovloc-lite.html) from file://: boots and renders with no request at all.
 // 1c. Co-op's network rule on the site: nothing but its own assets until the player presses HOST or JOIN, then only the
@@ -51,6 +52,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AT_HATCH } from './story-pass.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -290,23 +292,26 @@ async function devControls(page) {
 }
 
 /**
- * From the title into the lobby, as a player does: PLAY, and the walkthrough skipped if it opens (a first visit).
- * Entering writes the saved game (the walkthrough marked done), flushed here.
+ * From the title into the lobby, as a player does: PLAY, the name prompt answered with no name and the walkthrough
+ * skipped if they open (a first visit; the stable page at / has no name prompt). Entering writes the saved game (the
+ * name asked, the walkthrough marked done), flushed here.
  */
 const enterLobby = (page) => page.evaluate(() => {
   const g = window.__rovlocGame.game;
   const o = g.onboarding;
   const title = o.mode;
   o.playBtn.click();
+  const named = !!o.namePrompt && o.namePrompt.isOpen();
+  if (named) o.namePrompt.skipBtn.click();
   const walkthrough = o.mode === 'Walkthrough';
   if (walkthrough) o.skipBtn.click();
   window.__rovloc.engine.save.flush();
-  return { title, walkthrough, mode: o.mode, phase: g.phase, saved: (localStorage.getItem('rovloc.save') || '').length };
+  return { title, named, walkthrough, mode: o.mode, phase: g.phase, saved: (localStorage.getItem('rovloc.save') || '').length };
 });
 
 /**
  * A solo run on a held page standing in the lobby: up the bus's rear step onto the nearest ready pad, the countdown,
- * the deploy into Level 0.
+ * the deploy onto the Back Lot (passBackLot), into Level 0.
  */
 async function soloRun(page) {
   const distance = await page.evaluate(() => {
@@ -329,12 +334,57 @@ async function soloRun(page) {
     const g = window.__rovlocGame.game;
     return { phase: g.phase, level: g.level, active: !!g.levelActive, life: g.life.state, seed: g.run ? g.run.seed : null };
   });
+  const backLot = await passBackLot(page);
   let run = await playing();
   for (let i = 0; i < 40 && !(run.phase === 'InRun' && run.active); i++) {
     await advance(page, 1);
     run = await playing();
   }
-  return { pad, run };
+  return { pad, backLot, run };
+}
+
+/**
+ * The Back Lot as a player gets through it (docs/design/game-spec-v2.md 2.4, 4.1; tools/story-pass.mjs does the same
+ * on the game test page): the opening once it plays, Skip held (Enter) from the moment it is offered (alone the vote
+ * passes at once), the fade and the last shot; the lid pushed (hold E), the climb-out, at the hatch "Climb in" (hold
+ * E): the chute's cut. Returns what the opening showed: {phase, stage, opening}.
+ */
+async function passBackLot(page) {
+  const opening = () => page.evaluate(() => {
+    const g = window.__rovlocGame.game;
+    const c = g.cinematics;
+    return { phase: g.phase, stage: g.stage, opening: c.active(), t: c.time(), skip: c.story.Skip,
+      left: c.current ? c.current.length - c.time() : 0 };
+  });
+  let at = await opening();
+  for (let i = 0; i < 20 && !at.opening; i++) {
+    await advance(page, 0.5);
+    at = await opening();
+  }
+  const seen = { phase: at.phase, stage: at.stage, opening: at.opening };
+  if (!at.opening) return seen;
+  if (at.t < at.skip.From + 0.05) await advance(page, at.skip.From + 0.05 - at.t);
+  const hold = async (key, seconds) => {
+    await page.keyboard.down(key);
+    await advance(page, seconds);
+    await page.keyboard.up(key);
+  };
+  await hold('Enter', at.skip.Hold + 0.1);
+  await advance(page, at.skip.Fade + 0.1);
+  at = await opening();
+  await advance(page, at.left + 0.1);
+  const p = await page.evaluate(() => window.__rovlocGame.game.prologue.p);
+  await hold('KeyE', p.LidHold + 0.15);
+  await advance(page, p.ClimbOut + 0.2);
+  await page.evaluate((frame) => {
+    const g = window.__rovlocGame.game;
+    g.env.teleport(frame);
+    g.env.setLook(0, -0.6);
+  }, AT_HATCH);
+  await advance(page, 0.3);
+  await hold('KeyE', p.ClimbHold + 0.15);
+  await advance(page, p.ChuteCut + 0.4);
+  return seen;
 }
 
 const mb = (n) => (n / 1048576).toFixed(2);
@@ -597,13 +647,15 @@ async function main() {
     if (!perfOnly && !bootError) {
       // a solo run, as a first visit plays it: the title, PLAY, the walkthrough skipped, a ready pad, Level 0
       const lobby = await enterLobby(page);
-      report(lobby.title === 'Title' && lobby.walkthrough && lobby.mode === 'Hidden' && lobby.phase === 'Lobby',
-        'solo: PLAY on the title, the walkthrough skipped, into the lobby', JSON.stringify(lobby));
+      report(lobby.title === 'Title' && lobby.named && lobby.walkthrough && lobby.mode === 'Hidden' && lobby.phase === 'Lobby',
+        'solo: PLAY on the title, the name prompt (no name), the walkthrough skipped, into the lobby', JSON.stringify(lobby));
       const quiet = await devControls(page);
-      const { pad, run } = await soloRun(page);
+      const { pad, backLot, run } = await soloRun(page);
       report(pad.phase === 'Countdown' && pad.ready, 'solo: stepping onto a ready pad starts the countdown', JSON.stringify(pad));
+      report(backLot.phase === 'Prologue' && backLot.stage === 'BackLot' && backLot.opening,
+        'solo: the deploy opens on the Back Lot with the opening (the Prologue phase)', JSON.stringify(backLot));
       report(run.phase === 'InRun' && run.level === 'Level0_Basement' && run.active && run.life === 'Alive',
-        'solo: deployed into Level 0', JSON.stringify(run));
+        'solo: past the opening and the prologue, into Level 0', JSON.stringify(run));
       const inRun = await devControls(page);
       report(quiet.dev.length === 0 && inRun.dev.length === 0 && !quiet.stats && !inRun.stats && quiet.buttons.length > 0 && inRun.buttons.length > 0,
         'no dev control without ?dev: the pause menu lists no dev shortcut, F3 shows no stats',
