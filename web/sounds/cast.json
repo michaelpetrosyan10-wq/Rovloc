@@ -1,0 +1,2727 @@
+{
+ "about": "Every sound the game needs (docs/SOUND.md 2). group: who voices it (reference: the foundation; world: what a player or a machine does at a place; air: atmosphere, weather, distant events, scares, music, story, children). status: pending (not voiced yet), voiced (rendered and audited), dropped (with a note). sources: where the need comes from (preset = SynthPresets, inline = a recipe in web/src, worktree = another engineer's in-flight work, spec = docs/design/game-spec-v2.md, new = the redesign). family: the voice file it lives in (reference group: set; others: chosen by their engineer).",
+ "sounds": [
+  {
+   "name": "ChemHiss",
+   "group": "reference",
+   "family": "glass",
+   "status": "voiced",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1480"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/flasks.js"
+   ]
+  },
+  {
+   "name": "FlaskShatter",
+   "group": "reference",
+   "family": "glass",
+   "status": "voiced",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1445"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/flasks.js"
+   ]
+  },
+  {
+   "name": "FootstepGlass",
+   "group": "reference",
+   "family": "glass",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepSprintGlass",
+   "group": "reference",
+   "family": "glass",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "GlassBreak",
+   "group": "reference",
+   "family": "glass",
+   "status": "voiced",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:131"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "GlassCrunch",
+   "group": "reference",
+   "family": "glass",
+   "status": "voiced",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1408"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/scenes.js",
+    "web/src/game/mechanics/debris.js"
+   ]
+  },
+  {
+   "name": "LightBurst",
+   "group": "reference",
+   "family": "glass",
+   "status": "voiced",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1840"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/scenes.js"
+   ]
+  },
+  {
+   "name": "CreatureStepChaseConcrete",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepChaseGravel",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepChaseMetal",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepChaseTile",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepChaseWood",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepDuct",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): on all fours in a duct (creature/view.js footstepVoice QUADRUPED_STATES VentCrawl / VentRetreat)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepWalkConcrete",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepWalkGravel",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepWalkMetal",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepWalkTile",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CreatureStepWalkWood",
+   "group": "reference",
+   "family": "his-steps",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+    }
+   ]
+  },
+  {
+   "name": "CrawlerClick",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:49"
+    },
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: cutscenes: porcelain ticks at 3-7 kHz"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ],
+   "note": "his, in the opening cutscene (StoryConfig: the crate, the mask cracking, the breath before he stands): his signatures"
+  },
+  {
+   "name": "CreatureArrive",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "new",
+     "where": "the sound redesign brief (web/sounds, the reference set): the teleport's arrival (the FadeIn has no sound today; spec I1 \"at its planned teleport spot\")"
+    }
+   ]
+  },
+  {
+   "name": "CreatureGrowl",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:543"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js"
+   ]
+  },
+  {
+   "name": "CreatureGrunt",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:104"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/service.js",
+    "web/src/game/mechanics/monsterFx.js"
+   ]
+  },
+  {
+   "name": "CreatureRattle",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:112"
+    },
+    {
+     "kind": "worktree",
+     "where": "web/src/creature/sounds.js:113 (rollOff max 40 -> 55; docs/MONSTER.md 11, 19: every U(4.5, 8) s while it stalks within 45, heard to 55)"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/monsterFx.js"
+   ]
+  },
+  {
+   "name": "CreatureSniff",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1899"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/lockers.js"
+   ]
+  },
+  {
+   "name": "CreatureVanish",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:3108"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js",
+    "web/src/game/scenes.js",
+    "web/src/game/mechanics/monsterFx.js"
+   ]
+  },
+  {
+   "name": "JumpscareSting",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:609"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/jumpscareView.js",
+    "web/src/creature/service.js",
+    "web/src/creature/jumpscare.js",
+    "web/src/game/coop/creature.js"
+   ]
+  },
+  {
+   "name": "KeyJingle",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the Tall Janitor's hip, every footfall: 3-5 bright metal ticks, 2.4-6 kHz, 120 ms; 3D (his: spec I1 lists the key jingle with his footfalls)"
+    }
+   ]
+  },
+  {
+   "name": "Lunge",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:382"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/profile.js",
+    "web/src/creature/service.js",
+    "web/src/creature/view.js"
+   ]
+  },
+  {
+   "name": "MaskClatter",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the roof: two tumbling clacks (his mask: porcelain)"
+    }
+   ]
+  },
+  {
+   "name": "MaskCrack",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:68"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ],
+   "note": "his, in the opening cutscene (StoryConfig: the crate, the mask cracking, the breath before he stands): his signatures"
+  },
+  {
+   "name": "NeckSnap",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:581"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/profile.js",
+    "web/src/game/scenes.js"
+   ],
+   "note": "the catch (a death): spec I12: a dull, dry, abrupt sound, never wet or splattering; the name stays for the code."
+  },
+  {
+   "name": "RevealSting",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:42"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/index.js"
+   ]
+  },
+  {
+   "name": "Screech",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:318"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/jumpscareView.js",
+    "web/src/creature/service.js",
+    "web/src/creature/jumpscare.js",
+    "web/src/game/scenes.js",
+    "web/src/game/coop/creature.js"
+   ]
+  },
+  {
+   "name": "TeleportHiss",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:30"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/monsterFx.js"
+   ]
+  },
+  {
+   "name": "VentBreathing",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:500"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js"
+   ]
+  },
+  {
+   "name": "VentScrape",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:429"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js"
+   ]
+  },
+  {
+   "name": "VoiceThroat",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 3.4 \"What each platform plays\": the throat layer, a breathy growl bed under his spoken lines"
+    }
+   ]
+  },
+  {
+   "name": "VoiceWhisper",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "Monster",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 3.4: the whisper double of the throat layer"
+    }
+   ]
+  },
+  {
+   "name": "WetBreath",
+   "group": "reference",
+   "family": "monster",
+   "status": "voiced",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:77"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ],
+   "note": "his, in the opening cutscene (StoryConfig: the crate, the mask cracking, the breath before he stands): his signatures"
+  },
+  {
+   "name": "FootstepCarpet",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepConcrete",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepGrass",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepMetal",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepSprintCarpet",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepSprintConcrete",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepSprintGrass",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepSprintMetal",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepSprintTile",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepSprintWater",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepSprintWood",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepTile",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepWater",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "FootstepWood",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:null"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/player.js:726 (the players)",
+    "web/src/creature/view.js:677 (HIM, today: replaced by his own CreatureStep*)"
+   ]
+  },
+  {
+   "name": "HardLanding",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2300"
+    },
+    {
+     "kind": "inline",
+     "where": "web/src/engine/parkour.js:71"
+    },
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the player: a body thud and a grunt"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/parkour.js",
+    "web/src/game/rules/parkour.js",
+    "web/src/game/mechanics/parachute.js"
+   ],
+   "note": "two recipes today: the SynthPresets preset and web/src/engine/parkour.js ParkourPresets (parkour registers its own only when the preset is missing, so the preset plays): one sound."
+  },
+  {
+   "name": "LeapWhoosh",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/engine/parkour.js:63"
+    },
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the player: wind for 0.6 s"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/parkour.js"
+   ]
+  },
+  {
+   "name": "SlideScrape",
+   "group": "reference",
+   "family": "player-steps",
+   "status": "voiced",
+   "bus": "Player",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/engine/parkour.js:54"
+    },
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the player: grit noise for 0.7 s"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/parkour.js"
+   ]
+  },
+  {
+   "name": "ChasePulse",
+   "group": "reference",
+   "family": "scares",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:83"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/monsterFx.js"
+   ],
+   "note": "played 2D at the player, not at him: none of his signatures (spec I1)."
+  },
+  {
+   "name": "ChaseSting",
+   "group": "reference",
+   "family": "scares",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:74"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/monsterFx.js"
+   ],
+   "note": "played 2D at the player, not at him: none of his signatures (spec I1)."
+  },
+  {
+   "name": "FakeoutShriek",
+   "group": "reference",
+   "family": "scares",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:54"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/lockers.js"
+   ],
+   "note": "a fake-out (docs/MONSTER.md 8.3): he is NOT in the spot, so it carries none of his signatures (spec I1): a scream cluster, 2D."
+  },
+  {
+   "name": "GiveUpSwell",
+   "group": "reference",
+   "family": "scares",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:94"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/monsterFx.js"
+   ],
+   "note": "played 2D at the player, not at him: none of his signatures (spec I1)."
+  },
+  {
+   "name": "HideKick",
+   "group": "reference",
+   "family": "scares",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:129"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/lockers.js"
+   ],
+   "note": "played 2D at the player, not at him: none of his signatures (spec I1)."
+  },
+  {
+   "name": "HideWarn",
+   "group": "reference",
+   "family": "scares",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:119"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/lockers.js"
+   ],
+   "note": "played 2D at the player, not at him: none of his signatures (spec I1)."
+  },
+  {
+   "name": "StareSting",
+   "group": "reference",
+   "family": "scares",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:64"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/monsterFx.js"
+   ],
+   "note": "played 2D at the player, not at him: none of his signatures (spec I1)."
+  },
+  {
+   "name": "TorchStutter",
+   "group": "reference",
+   "family": "scares",
+   "status": "voiced",
+   "bus": "Monster",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/creature/sounds.js:136"
+    },
+    {
+     "kind": "worktree",
+     "where": "docs/MONSTER.md 11 (the cue table: when and where it plays)"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/index.js"
+   ],
+   "note": "played 2D at the player, not at him: none of his signatures (spec I1)."
+  },
+  {
+   "name": "BoilerHum",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2708"
+    }
+   ],
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)"
+  },
+  {
+   "name": "BoilerSurge",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2865"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/levels/level0.js",
+    "web/src/game/scenes.js"
+   ]
+  },
+  {
+   "name": "BoneCrunch",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1321"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/traps.js"
+   ],
+   "note": "a bear trap closing on a leg (web/src/game/mechanics/traps.js): spec I12 (no gore) applies: a dull, dry clamp, never a crunch of bone."
+  },
+  {
+   "name": "BreathExhale",
+   "group": "world",
+   "status": "pending",
+   "bus": "Body",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1952"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/lockers.js"
+   ]
+  },
+  {
+   "name": "Breathing",
+   "group": "world",
+   "status": "pending",
+   "bus": "Body",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1084"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/panic.js",
+    "web/src/game/mechanics/lockers.js"
+   ]
+  },
+  {
+   "name": "BreathingPanic",
+   "group": "world",
+   "status": "pending",
+   "bus": "Body",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1117"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/panic.js"
+   ]
+  },
+  {
+   "name": "CanopyDeploy",
+   "group": "world",
+   "status": "pending",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2197"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/parachute.js"
+   ]
+  },
+  {
+   "name": "CanopyFlutter",
+   "group": "world",
+   "status": "pending",
+   "bus": "Body",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2242"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/parachute.js"
+   ]
+  },
+  {
+   "name": "DoorCreak",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1720"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/doors.js"
+   ]
+  },
+  {
+   "name": "DoorSmash",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1562"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/profile.js",
+    "web/src/game/scenes.js",
+    "web/src/game/mechanics/doors.js"
+   ]
+  },
+  {
+   "name": "EmfStatic",
+   "group": "world",
+   "status": "pending",
+   "bus": "Body",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1191"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/flashlight.js"
+   ]
+  },
+  {
+   "name": "EngineLoop",
+   "group": "world",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the plane: the radials running"
+    }
+   ]
+  },
+  {
+   "name": "EngineStart",
+   "group": "world",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the plane: a starter, then two radials at 38 Hz"
+    }
+   ]
+  },
+  {
+   "name": "FireDoorLatch",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1670"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/doors.js"
+   ]
+  },
+  {
+   "name": "FireDoorSwing",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1619"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/doors.js"
+   ]
+  },
+  {
+   "name": "FluorescentBuzz",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2679"
+    }
+   ],
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)"
+  },
+  {
+   "name": "Gasp",
+   "group": "world",
+   "status": "pending",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1161"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/life.js",
+    "web/src/game/mechanics/lockers.js"
+   ]
+  },
+  {
+   "name": "GateSlam",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1519"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/doors.js"
+   ]
+  },
+  {
+   "name": "Heartbeat",
+   "group": "world",
+   "status": "pending",
+   "bus": "Body",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1012"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/panic.js"
+   ]
+  },
+  {
+   "name": "HeartbeatFast",
+   "group": "world",
+   "status": "pending",
+   "bus": "Body",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1048"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/panic.js"
+   ]
+  },
+  {
+   "name": "LampStrike",
+   "group": "world",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the projection booth: an arc crack"
+    }
+   ]
+  },
+  {
+   "name": "LockerDoor",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1876"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/lockers.js"
+   ]
+  },
+  {
+   "name": "LockerRip",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1981"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/profile.js",
+    "web/src/game/mechanics/lockers.js"
+   ]
+  },
+  {
+   "name": "LockerSlam",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2036"
+    }
+   ],
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table) only its caption key is referenced on the web."
+  },
+  {
+   "name": "MetalCrash",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1759"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/vents.js"
+   ]
+  },
+  {
+   "name": "MetalCreak",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2754"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/traps.js",
+    "web/src/game/mechanics/doors.js",
+    "web/src/game/mechanics/vents.js"
+   ]
+  },
+  {
+   "name": "MotorRun",
+   "group": "world",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the hangar: a chain rumble"
+    }
+   ]
+  },
+  {
+   "name": "MotorStart",
+   "group": "world",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the hangar: a relay and a rising whine"
+    }
+   ]
+  },
+  {
+   "name": "ObjBreakerThrow",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/objectives/sounds.js:33"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/floor0.js"
+   ]
+  },
+  {
+   "name": "ObjExitClunk",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/objectives/sounds.js:100"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/base.js"
+   ]
+  },
+  {
+   "name": "ObjFuseClick",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/objectives/sounds.js:25"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/floor0.js"
+   ]
+  },
+  {
+   "name": "ObjKeyJingle",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/objectives/sounds.js:47"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/floor1.js"
+   ]
+  },
+  {
+   "name": "ObjKeypadAccept",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/objectives/sounds.js:91"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/locks.js"
+   ]
+  },
+  {
+   "name": "ObjKeypadDenied",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/objectives/sounds.js:82"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/locks.js"
+   ]
+  },
+  {
+   "name": "ObjKeysWork",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/objectives/sounds.js:56"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/floor1.js"
+   ]
+  },
+  {
+   "name": "ObjLockRattle",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/objectives/sounds.js:73"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/floor0.js",
+    "web/src/game/objectives/locks.js"
+   ]
+  },
+  {
+   "name": "ObjPadlockClack",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/objectives/sounds.js:65"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/locks.js"
+   ]
+  },
+  {
+   "name": "PackBuckle",
+   "group": "world",
+   "status": "pending",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2326"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/parachute.js"
+   ]
+  },
+  {
+   "name": "ParachuteLanding",
+   "group": "world",
+   "status": "pending",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2278"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/parachute.js"
+   ]
+  },
+  {
+   "name": "Pickup",
+   "group": "world",
+   "status": "pending",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1254"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/objectives/base.js",
+    "web/src/game/mechanics/batteries.js",
+    "web/src/game/mechanics/flasks.js"
+   ]
+  },
+  {
+   "name": "PlaneKnock",
+   "group": "world",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the plane: a metal bang"
+    }
+   ]
+  },
+  {
+   "name": "ProjectorRun",
+   "group": "world",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the booth: a 24 Hz sprocket chatter"
+    }
+   ]
+  },
+  {
+   "name": "RadarEmpty",
+   "group": "world",
+   "status": "pending",
+   "bus": "Player",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/mechanics/radar.js:47"
+    },
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the player: a dry relay click"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/radar.js"
+   ]
+  },
+  {
+   "name": "RadarPing",
+   "group": "world",
+   "status": "pending",
+   "bus": "Player",
+   "sources": [
+    {
+     "kind": "inline",
+     "where": "web/src/game/mechanics/radar.js:38"
+    },
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the player: a soft two-tone ping at 1,320 and 1,760 Hz"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/radar.js"
+   ]
+  },
+  {
+   "name": "RevolverShot",
+   "group": "world",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the roof: a dry crack with a 0.3 s tail (spec I12: not gory)"
+    }
+   ]
+  },
+  {
+   "name": "TailTear",
+   "group": "world",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the plane: rending sheet metal"
+    }
+   ]
+  },
+  {
+   "name": "TrapSnap",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1271"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/particles.js",
+    "web/src/game/levels/level0.js",
+    "web/src/game/mechanics/traps.js"
+   ]
+  },
+  {
+   "name": "UiBack",
+   "group": "world",
+   "status": "pending",
+   "bus": "UI",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:3201"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/coop/lobby.js",
+    "web/src/game/lobby.js",
+    "web/src/game/mechanics/batteries.js"
+   ]
+  },
+  {
+   "name": "UiClick",
+   "group": "world",
+   "status": "pending",
+   "bus": "UI",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:3181"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/flashlight.js",
+    "web/src/game/ui/title.js",
+    "web/src/game/coop/ui.js",
+    "web/src/game/lobby.js"
+   ]
+  },
+  {
+   "name": "UiConfirm",
+   "group": "world",
+   "status": "pending",
+   "bus": "UI",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:3190"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/ui/results.js",
+    "web/src/game/coop/lobby.js",
+    "web/src/game/lobby.js"
+   ]
+  },
+  {
+   "name": "Unscrew",
+   "group": "world",
+   "status": "pending",
+   "bus": "World",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1804"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/prompts.js",
+    "web/src/game/mechanics/vents.js",
+    "web/src/game/config.js"
+   ]
+  },
+  {
+   "name": "VentCrawl",
+   "group": "world",
+   "status": "pending",
+   "bus": "Player",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1231"
+    }
+   ],
+   "playedBy": [
+    "web/src/creature/profile.js",
+    "web/src/creature/view.js",
+    "web/src/game/mechanics/vents.js"
+   ]
+  },
+  {
+   "name": "WindRush",
+   "group": "world",
+   "status": "pending",
+   "bus": "Body",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2161"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/mechanics/parachute.js"
+   ]
+  },
+  {
+   "name": "BellToll",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:154"
+    },
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the roof: a struck partial stack on 110 Hz with an 8 s tail"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "BoltDrop",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:175"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "CarAlarm",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: a set piece: a two-tone alarm"
+    }
+   ]
+  },
+  {
+   "name": "CeilingDrag",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2915"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/levels/level0.js",
+    "web/src/game/scenes.js"
+   ],
+   "note": "something dragged across the ceiling (a scare): must not use his signatures (I1)."
+  },
+  {
+   "name": "ChildLaugh",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:3018"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/scenes.js"
+   ]
+  },
+  {
+   "name": "ChildWhisper",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2972"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/scenes.js"
+   ]
+  },
+  {
+   "name": "ChuteSlide",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:184"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "DistantGroan",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2785"
+    }
+   ],
+   "note": "played by the ambience beds as a stinger (presets.js Beds)"
+  },
+  {
+   "name": "DistantScream",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:113"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "DistantThunder",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2397"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/lighting.js"
+   ]
+  },
+  {
+   "name": "DoorBang",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:39"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "DoorPound",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2120"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/scenes.js"
+   ]
+  },
+  {
+   "name": "DreadBedBasement",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2822"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/ambience.js"
+   ]
+  },
+  {
+   "name": "DreadBedHallways",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2860"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/ambience.js"
+   ]
+  },
+  {
+   "name": "DreadDoorSlam",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2897"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/ambience.js"
+   ]
+  },
+  {
+   "name": "DreadLockerRattle",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2996"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/ambience.js"
+   ]
+  },
+  {
+   "name": "DreadMetalGroan",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2924"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/ambience.js"
+   ]
+  },
+  {
+   "name": "DreadPACrackle",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2956"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/ambience.js"
+   ]
+  },
+  {
+   "name": "DreadPhoneBuzz",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:3056"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/ambience.js"
+   ]
+  },
+  {
+   "name": "DreadThumpAbove",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:3024"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/ambience.js"
+   ],
+   "note": "a thump on the floor above: must not read as his footfall (spec I1; his gait is his alone): a single dropped object, no heel-weight pair, no sub drop."
+  },
+  {
+   "name": "Drip",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1388"
+    }
+   ],
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)"
+  },
+  {
+   "name": "DripStinger",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1398"
+    }
+   ],
+   "note": "played by the ambience beds as a stinger (presets.js Beds)"
+  },
+  {
+   "name": "DroneBasement",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2468"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/index.js"
+   ]
+  },
+  {
+   "name": "DroneHallways",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2513"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/index.js"
+   ]
+  },
+  {
+   "name": "DroneLobby",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2607"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/index.js"
+   ]
+  },
+  {
+   "name": "DroneRoof",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2559"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/index.js"
+   ]
+  },
+  {
+   "name": "FarRumble",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2653"
+    }
+   ],
+   "note": "played by the ambience beds as a stinger (presets.js Beds)"
+  },
+  {
+   "name": "FilmScore",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the booth / the speaker point: a crackly, wobbling string loop"
+    }
+   ]
+  },
+  {
+   "name": "FireBell",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:122"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "FlapBoard",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: a set piece: a clatter of plastic flaps"
+    }
+   ]
+  },
+  {
+   "name": "Gulls",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the Bahamas: three cries"
+    }
+   ]
+  },
+  {
+   "name": "LidCreak",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:96"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "LidSlam",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:87"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "MusicBoxTick",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:59"
+    },
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: cutscenes: one plucked high note"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "NailsOnMetal",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:103"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "ObjectFall",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:3063"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/scenes.js"
+   ]
+  },
+  {
+   "name": "PhoneRing",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: a set piece: a mechanical bell at 20 Hz"
+    }
+   ]
+  },
+  {
+   "name": "PipeBang",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2819"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/scenes.js"
+   ]
+  },
+  {
+   "name": "RadioTune",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the city: five slow notes (A4, C5, E5, D5, A4), band-passed 400-3,000 Hz"
+    }
+   ]
+  },
+  {
+   "name": "Rain",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": true,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2422"
+    }
+   ],
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)"
+  },
+  {
+   "name": "RainOnLid",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:167"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "RoofDoorSlam",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2076"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/scenes.js"
+   ]
+  },
+  {
+   "name": "ScareHush",
+   "group": "air",
+   "status": "pending",
+   "bus": "Body",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:3141"
+    }
+   ],
+   "playedBy": [
+    "web/src/game/scenes.js"
+   ]
+  },
+  {
+   "name": "SchoolBell",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:29"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "ShutterSlam",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:142"
+    },
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the roof: a steel slam"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "Snore",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: Gus's closet: a 0.9 s filtered-noise inhale and a sag"
+    }
+   ]
+  },
+  {
+   "name": "SpeechMurmur",
+   "group": "air",
+   "status": "pending",
+   "bus": "World",
+   "sources": [
+    {
+     "kind": "worktree",
+     "where": "web/src/game/story/sounds.js:194"
+    }
+   ],
+   "playedBy": [
+    "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
+   ]
+  },
+  {
+   "name": "SunriseChord",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the Bahamas: a D major chord, the game's first"
+    }
+   ]
+  },
+  {
+   "name": "Surf",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: the Bahamas: slow filtered noise"
+    }
+   ]
+  },
+  {
+   "name": "Thunder",
+   "group": "air",
+   "status": "pending",
+   "bus": "Ambience",
+   "loop": false,
+   "sources": [
+    {
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2350"
+    }
+   ],
+   "playedBy": [
+    "web/src/engine/lighting.js"
+   ]
+  },
+  {
+   "name": "TinRoofImpact",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: a set piece: a boom on sheet metal"
+    }
+   ]
+  },
+  {
+   "name": "Whistle",
+   "group": "air",
+   "status": "pending",
+   "sources": [
+    {
+     "kind": "spec",
+     "where": "docs/design/game-spec-v2.md 5.5: Gus's whistle (5.5: \"and his whistle\", with RadioTune)"
+    }
+   ]
+  }
+ ]
+}

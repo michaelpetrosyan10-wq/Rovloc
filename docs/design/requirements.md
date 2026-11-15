@@ -118,3 +118,55 @@ plus the cutscenes, the roof chase and the takeoff).
   **P1** (polish if budget allows). Prefer fewer, stronger set pieces over long lists.
 - **Fairness.** A hiding spot within 25 studs of every objective step. No blind jumps. A clean run of any chase always
   escapes. The monster is never faster than a sprinting player outside scripted chases with their own fairness proof.
+
+## 6. Later player feedback (newest last; these win over sections 4 and 5 where they differ)
+- **Nov 11, the look:** "I liked the original Icl I just want it to have a more scary theme like I dont want only the monster
+  to be scary but the surroundings too". Done: the original look is restored (no checkerboard). In progress: the
+  scary-surroundings pass (traces of him, signs of what happened, writing, dying lights, distant sounds; no gore).
+- **Nov 15, the monster:** "i never really see the monster unless he like tp's behind me ... when he tps i can js run its not
+  really that good ... maybe keep him always in a certain radius with me or make the detection better ... find a good
+  solution". In progress: the presence director (he stays 35 to 90 studs away in waves), presence beats (Peek, Glimpse,
+  Shadow, Pass-by), wider detection (noise, the lit torch), persistent chases and cut-off teleports; still never faster
+  than a sprint, every teleport warned.
+- **Nov 15, fun:** "make sure its also fun and scary in the city do some cool stuff and same for in the school i dont wanna
+  be a boring game yk?" Lead's decision: every stage gets at least two signature moments and something new to do, and these
+  move from P1 to P0 inside the stage packages:
+  - Basement: the wall phone rings in the dark workshop; lights die one by one down the corridor behind you while he hunts.
+  - Hallways: the PA crackles and whispers a player's name; a row of lockers slams in a wave; the janitor's snore and "Wake him".
+  - Auditorium: the loud film you must survive; mannequins that are not where they were when the lights come back; his
+    curtain call in the spotlight; the brick wall flying up to show the hidden exit.
+  - Roof: the storm chase with lightning showing him behind you and hurdles smashing; the leaps; one bullet; the mask
+    crawling onto the janitor as you jump.
+  - Rooftops: he lands on the roof with his keys jingling; pigeons burst up when he is near; the dead billboard lights up
+    on his silhouette; he must run round by the gantries while you leap, so you watch him come.
+  - Airport: the departure board flips to spell a name; the baggage belt starts by itself; the 20-second hangar door.
+  - Takeoff and ending: dodge the rows while he runs you down, a flask thrown from the plane; the Bahamas at sunrise; a
+    key jingle after the credits.
+- **Nov 15, sound and voice:** "i want the sounds to actually be scary. Rn its like this vibecoded high pitched sound. I also
+  want his footsteps to be louder so people know when hes around, and i want him to talk remember i said that but hes not
+  talking like him say the name sometimes or like mock you or something but dont overdo it. Make the sounds of the monster be
+  scary and his footsteps be scary and other sounds be scary too like the glass its all lame sounds". Lead's decisions:
+  - A SOUND REDESIGN package (after the monster-presence and scary-surroundings jobs land, since all three touch the sound
+    presets): every sound rebuilt from noise, body resonance, sub-bass and room reverb instead of thin high tones: his
+    footfalls heavy and low and audible from far (the tell that he is around), breath, the mask's porcelain rattle, the
+    jumpscare, the teleport hiss, glass, doors, lockers, the breaker, stingers, the heartbeat. An audit tool renders every
+    preset offline and fails any sound that is a bare tone or sits mostly above 2 kHz without body; loudness targets per
+    kind. Agents cannot hear: the player is the final judge on the beta.
+  - THE TALKING MONSTER (spec 3.4, WP12) moves up: right after the cutscene package lands (it brings speech and subtitles).
+    He says a player's name sometimes and mocks them when they hide or run; rare (well under one line a minute on average),
+    never two lines close together.
+
+### Nov 15 (later): sound redesign, how it is built (lead decision; amends spec 5.5 "no sound files")
+- Every sound is still made only by our own code (no recording, no third-party sample), but by a real synthesis kit
+  (web/sounds/kit, plain JS DSP in Node, seeded and deterministic) rendered OFFLINE at build time into audio files that ship
+  with the site (web/build/audio -> site). At run time the game only plays files. The Roblox port uploads the same renders
+  (packed into a few sheets and sliced with PlaybackRegion, to stay inside the audio upload quota).
+- Phase A (workflow wf_bc53397b-3a3, task wzome3enb, launched Nov 15 17:25 UTC; adds files only: web/sounds/, docs/SOUND.md,
+  web/package.json scripts): kit, render pipeline, audit with numeric class rules and spectrogram sheets, sound board
+  (web/build/soundboard, to publish at /beta/sounds/ for the player's ear), the whole cast voiced (presets, inline recipes,
+  the three in-flight jobs' sounds, spec 5.5). Reference set: his footsteps (audible at 80 studs above the bed, through one
+  wall at 45; 10 dB above a player's), his throat/body, the players' footsteps, glass.
+- Phase B (after the three in-flight jobs land AND phase A is done): the run-time switch (the game plays the files; distance
+  model: gain, low-pass and reverb share by distance and walls; at most one shared convolver; his footsteps as presets with
+  the long roll-off; ambience and scary-surroundings events on the new sounds), shared metadata in SynthPresets, gates, beta.
+- The sound board goes on the beta as soon as phase A is done, before phase B, so the player can say which sounds are still lame.
