@@ -107,6 +107,7 @@ export class Batteries {
     g.radar.setCharges(r.charges);
     torch.set(r.torch);
     g.playAt('Pickup', b.point);
+    g.noise(b.point, 'Pickup');
     this._gone(b);
   }
 

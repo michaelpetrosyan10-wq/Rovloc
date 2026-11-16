@@ -54,6 +54,8 @@ NoiseConfig.Kinds = table.freeze({
 	MotorStart = { radius = 130, priority = "Critical", medium = "Air", interval = 0 },
 	MotorRun = { radius = 90, priority = "Normal", medium = "Air", interval = 4 },
 	EngineStart = { radius = 170, priority = "Critical", medium = "Air", interval = 0 },
+	-- What it investigates (docs/MONSTER.md 17.4): an item taken (a fuse, the keys, a battery, a flask)
+	Pickup = { radius = 20, priority = "Normal", medium = "Air", interval = 0 },
 } :: { [string]: NoiseSpec })
 
 -- Observed horizontal speed (studs/s) above which a moving character is at least this loud,

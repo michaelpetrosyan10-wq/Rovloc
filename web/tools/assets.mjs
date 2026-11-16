@@ -15,6 +15,12 @@
 // The texture sets come from build/textures/textures.json (tools/textures.py: `tiers[size].maps`); the atlases from
 // world.json (meta.textures entries with `atlas`). A build may carry a stamp (`stamp` in the manifest, build.mjs
 // --stamp "BETA 10 NOV"): the title screen shows it, so a player can tell which build is on screen.
+//
+// The sounds (soundPacks): every MP3 web/sounds rendered (build/audio, `npm run sounds`), end to end in two packs:
+// `first` (what a stage needs at once: him, the scares, footsteps, doors: fetched and decoded before the first frame)
+// and `rest` (fetched and decoded in the background), with the index the game's sound bank reads
+// (src/engine/audio/bank.js) in the manifest's `audio`. A site ships the packs as hashed assets, a single file as
+// base64. The build stops when a render is missing or stale.
 
 import { build } from 'esbuild';
 import crypto from 'node:crypto';
@@ -24,6 +30,9 @@ import zlib from 'node:zlib';
 
 export const TIER_SIZES = [2048, 1024, 512, 256];
 export const BOOT_SIZE = 256;
+/** The rate the game decodes a dark sound at (half the samples of 48 kHz; bank.js). */
+const DARK_RATE = 24000;
+const FULL_RATE = 48000;
 
 /** The esbuild bundle of src/main.js with "@rovloc/game" resolved to `entry`. */
 export async function bundle(web, entry, { minify = true } = {}) {
@@ -105,6 +114,49 @@ export function textureSets(buildDir, meta) {
   return { sets, atlases };
 }
 
+/**
+ * The rendered sounds, packed for the page: { packs: {first, rest} (the MP3s end to end), sounds: the bank's index
+ * (name -> {p, f, r, c, l, v}), files, bytes }. `keep` (a voice -> boolean) packs a part of them. Throws when a
+ * render is missing or older than its recipe.
+ * @param {string} buildDir
+ * @param {(voice: any) => boolean} [keep]
+ */
+export async function soundPacks(buildDir, keep = () => true) {
+  const { loadVoices } = await import('../sounds/lib/voices.mjs');
+  const { pendingRenders } = await import('../sounds/render.mjs');
+  const voices = await loadVoices();
+  const { jobs } = pendingRenders(voices);
+  if (jobs.length) {
+    const some = jobs.slice(0, 4).map((j) => `${j.name}-${j.variant}`).join(', ');
+    throw new Error(`${jobs.length} sound renders are missing or stale (${some}${jobs.length > 4 ? ', ...' : ''}): run \`npm run sounds\` first.`);
+  }
+  const manifestFile = path.join(buildDir, 'audio', 'manifest.json');
+  if (!fs.existsSync(manifestFile)) throw new Error('build/audio/manifest.json is missing: run `npm run sounds` first.');
+  const rendered = JSON.parse(fs.readFileSync(manifestFile, 'utf8')).sounds;
+  const parts = { first: [], rest: [] };
+  const sizes = { first: 0, rest: 0 };
+  const sounds = {};
+  let files = 0;
+  for (const voice of voices.filter(keep)) {
+    const r = rendered[voice.name];
+    if (!r || r.variants.length !== voice.variants) throw new Error(`build/audio/manifest.json does not have every render of ${voice.name}: run \`npm run sounds\` first.`);
+    const pack = voice.first ? 'first' : 'rest';
+    const entry = { p: pack, r: r.variants.every((v) => v.dark) ? DARK_RATE : FULL_RATE, c: voice.channels, v: [] };
+    if (voice.first) entry.f = 1;
+    // every variant of a loop has the same loop points (the pipeline's margins)
+    if (voice.loop) entry.l = [r.variants[0].loop.start, r.variants[0].loop.end];
+    for (const v of r.variants) {
+      const buf = fs.readFileSync(path.join(buildDir, 'audio', v.file));
+      entry.v.push([sizes[pack], buf.length, v.fileSeconds]);
+      parts[pack].push(buf);
+      sizes[pack] += buf.length;
+      files++;
+    }
+    sounds[voice.name] = entry;
+  }
+  return { packs: { first: Buffer.concat(parts.first), rest: Buffer.concat(parts.rest) }, sounds, files, bytes: sizes.first + sizes.rest };
+}
+
 /** The boot set: the smallest size there is (256 when the tiers are built). */
 export function bootSize(sets) {
   return Math.min(...Object.keys(sets).map(Number));
@@ -143,11 +195,17 @@ export function buildStamp(text) {
  * One self-contained page: world and the texture sets of `inlineSizes` inline.
  * @returns {{bytes: number, sets: Record<string, number>}}
  */
-export function writeSingleFile({ out, js, world, buildDir, textures, inlineSizes, realtimeHost = null, title = 'Rovloc', policy = true, defaultTier = null, stamp = null }) {
+export function writeSingleFile({ out, js, world, buildDir, textures, audio = null, inlineSizes, realtimeHost = null, title = 'Rovloc', policy = true, defaultTier = null, stamp = null }) {
   const tags = [];
   const tag = (id, content) => tags.push(`<script type="application/x-rovloc" id="${id}">${content}</script>`);
   tag('rv-world-json', world.jsonGz.toString('base64'));
   tag('rv-world-bin', world.binGz.toString('base64'));
+  const audioPacks = {};
+  for (const [id, buf] of Object.entries(audio ? audio.packs : {})) {
+    if (!buf.length) continue;
+    tag(`rv-audio-${id}`, buf.toString('base64'));
+    audioPacks[id] = `inline:rv-audio-${id}`;
+  }
   const inlined = new Map();
   const ref = (p) => {
     if (!inlined.has(p)) {
@@ -178,6 +236,8 @@ export function writeSingleFile({ out, js, world, buildDir, textures, inlineSize
     version: 2,
     world: { json: 'inline:rv-world-json', bin: 'inline:rv-world-bin' },
     textures: { boot: Math.min(...sizes.map(Number)), sets, atlases },
+    // the recorded sounds (a page without them plays every sound from its old recipe)
+    ...(audio ? { audio: { packs: audioPacks, sounds: audio.sounds } } : {}),
     // the Graphics tier a player without a saved choice starts on (the lite build: Potato, it is for Chromebooks)
     ...(defaultTier ? { defaultTier } : {}),
     // the build's stamp, shown small on the title screen (a beta names itself; nothing without one)
@@ -216,7 +276,7 @@ function hashed(buf, name) {
  * earlier builds that this one no longer names are removed from assets/.
  * @returns {{files: number, bytes: number, boot: Record<string, number>, sets: Record<string, number>, js: number, world: number}}
  */
-export function writeSite({ dir, js, world, buildDir, textures, realtimeHost = null, title = 'Rovloc', stamp = null }) {
+export function writeSite({ dir, js, world, buildDir, textures, audio, realtimeHost = null, title = 'Rovloc', stamp = null }) {
   const assetsDir = path.join(dir, 'assets');
   fs.mkdirSync(assetsDir, { recursive: true });
   const written = new Set();
@@ -252,12 +312,15 @@ export function writeSite({ dir, js, world, buildDir, textures, realtimeHost = n
     atlasBytes += buf.length;
     atlases[id] = { color: put(buf, path.basename(a.color)) };
   }
+  const audioPacks = {};
+  for (const [id, buf] of Object.entries(audio.packs)) if (buf.length) audioPacks[id] = put(buf, `audio-${id}.bin`);
   const boot = bootSize(textures.sets);
   const mark = buildStamp(stamp);
   const manifest = {
     version: 2,
     world: { json: worldJson, bin: worldBin, bytes: { json: world.jsonGz.length, bin: world.binGz.length } },
     textures: { boot, sets, atlases },
+    audio: { packs: audioPacks, sounds: audio.sounds },
     ...(mark ? { stamp: mark } : {}),
   };
   const html = `<!doctype html>
@@ -287,6 +350,8 @@ export function writeSite({ dir, js, world, buildDir, textures, realtimeHost = n
     js: js.length,
     world: world.jsonGz.length + world.binGz.length,
     atlases: atlasBytes,
+    audio: audio.bytes,
+    audioFirst: audio.packs.first.length,
     boot: { [boot]: setBytes[String(boot)] },
     sets: setBytes,
     manifest,

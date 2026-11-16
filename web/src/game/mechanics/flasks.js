@@ -255,6 +255,7 @@ export class Flasks {
     flask.state = 'Held';
     this._hold(flask);
     game.playAt('Pickup', at);
+    game.noise(at, 'Pickup');
   }
 
   _hold(flask) {

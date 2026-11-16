@@ -1560,7 +1560,8 @@ export function isAction(name) {
 }
 
 const STATE_ALIASES = Object.freeze({
-  Patrol: 'Patrol', Stalk: 'Patrol', Teleport: 'Patrol', HidingResponse: 'Patrol',
+  Patrol: 'Patrol', Stalk: 'Patrol', Teleport: 'Patrol', HidingResponse: 'Patrol', Peek: 'Patrol', Glimpse: 'Patrol',
+  Shadow: 'Patrol', PassBy: 'Patrol',
   InvestigateNoise: 'Investigate', Investigate: 'Investigate', Search: 'Investigate',
   WallChase: 'Chase', VentChase: 'Chase', Chase: 'Chase', Stunned: 'Stunned', Scripted: 'Scripted', Dormant: 'Dormant',
 });

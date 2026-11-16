@@ -289,6 +289,15 @@ export class FloorNav {
     return best;
   }
 
+  /** How many ways out (open portals) the room at `p` has: one or none is a dead end (the beats' cornered rule). */
+  waysOut(p) {
+    const room = this.roomAt(p) || this.nearestRoom(p);
+    if (!room) return 0;
+    let n = 0;
+    for (const portal of this.portalsOf.get(room.id) || []) if (this.open(portal)) n += 1;
+    return n;
+  }
+
   /** Whether a portal lets the Creature through now. @param {Portal} portal */
   open(portal) {
     return !portal.scripted || this.doorOpen(portal.id);

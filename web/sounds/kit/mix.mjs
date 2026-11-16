@@ -1,5 +1,5 @@
-// mix.mjs: buffers and the small operations every voice is made of: allocate, add at an offset, multiply by an
-// envelope, gain, level, raised-cosine fades, panning, a seamless loop by crossfade, reversal, trimming dead tails.
+// mix.mjs: buffers and the small operations every voice is made of: add at an offset, multiply by an envelope, gain,
+// level, raised-cosine fades, panning, a seamless loop by crossfade, reversal.
 
 /** dB to a gain factor. */
 export function db(decibels) {
@@ -9,15 +9,6 @@ export function db(decibels) {
 /** A gain factor to dB (-Infinity for 0). */
 export function toDb(gain) {
   return gain > 0 ? 20 * Math.log10(gain) : -Infinity;
-}
-
-/**
- * A silent buffer of `seconds`.
- * @param {number} seconds
- * @param {number} sr
- */
-export function alloc(seconds, sr) {
-  return new Float32Array(Math.max(1, Math.round(seconds * sr)));
 }
 
 /**
@@ -66,13 +57,6 @@ export function rms(buf, from = 0, to = buf.length) {
   return Math.sqrt(s / Math.max(1, to - from));
 }
 
-/** Scales `buf` so its peak is `peakDb` dBFS, in place. */
-export function normalize(buf, peakDb = -1) {
-  const p = peak(buf);
-  if (p > 0) gain(buf, db(peakDb) / p);
-  return buf;
-}
-
 /**
  * Raised-cosine fade-in and fade-out in place (no click at either end).
  * @param {Float32Array} buf
@@ -92,25 +76,6 @@ export function fade(buf, sr, fadeIn, fadeOut) {
 export function reverse(buf) {
   const out = new Float32Array(buf.length);
   for (let i = 0; i < buf.length; i++) out[i] = buf[buf.length - 1 - i];
-  return out;
-}
-
-/** A copy delayed by `seconds` (the buffer grows by the delay). */
-export function delayed(buf, sr, seconds) {
-  const n = Math.round(seconds * sr);
-  const out = new Float32Array(buf.length + n);
-  out.set(buf, n);
-  return out;
-}
-
-/** Joins buffers end to end. */
-export function concat(...parts) {
-  const out = new Float32Array(parts.reduce((s, p) => s + p.length, 0));
-  let at = 0;
-  for (const p of parts) {
-    out.set(p, at);
-    at += p.length;
-  }
   return out;
 }
 
@@ -164,22 +129,4 @@ export function addWrapped(dst, src, offset, g = 1) {
     if (at === n) at = 0;
   }
   return dst;
-}
-
-/**
- * Cuts the dead end of a one-shot: everything after the last sample above `floorDb` (re: the peak), plus `keep`
- * seconds, with a short fade so the cut is inaudible. Returns a copy.
- * @param {Float32Array} buf
- * @param {number} sr
- * @param {number} [floorDb]
- * @param {number} [keep]
- */
-export function trimTail(buf, sr, floorDb = -78, keep = 0.02) {
-  const limit = peak(buf) * db(floorDb);
-  let last = buf.length - 1;
-  while (last > 0 && Math.abs(buf[last]) < limit) last--;
-  const end = Math.min(buf.length, last + Math.round(keep * sr));
-  const out = buf.slice(0, Math.max(1, end));
-  fade(out, sr, 0, Math.min(keep, out.length / sr / 2));
-  return out;
 }

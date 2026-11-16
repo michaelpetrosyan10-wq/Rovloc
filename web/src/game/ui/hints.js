@@ -4,7 +4,8 @@
 // whose moment the website has; the get-up's is the downed screen's, ui/lives.js), highest priority first: the
 // stairwell airlock (near its vestibule, or its countdown), a downed teammate (never solo), the first bear trap, flask, vent grate or locker within the hint's radius on the current
 // level, a low battery with the light on, the radar the first time a scan can be made, the first leap strip within the
-// Leap hint's radius, and the stages' own hint spots (addSpot: the roof pen's slide bar is the Slide hint's). Each
+// Leap hint's radius, the Tall Man's presence (a teleport's warning within the Warning hint's radius, him within the
+// heartbeat's radius, him shadowing you: docs/MONSTER.md 17, 19), and the stages' own hint spots (addSpot: the roof pen's slide bar is the Slide hint's). Each
 // shows once ever: its hidden setting (Hint<Id>) is set the moment it
 // shows and saved with the settings. After the airlock come the floor objective's stations and locks
 // (FloorObjectives.hintSpots: a Hint.Obj.<what> line the first time one is within HintRadius of the eye with a clear
@@ -21,6 +22,7 @@ import '../strings/kit.js';
 import { cfPos } from '../util.js';
 import { glyphFor } from './nav.js';
 import { ObjectiveTuning } from '../objectives/config.js';
+import { presenceConfig } from '../../creature/presence.js';
 import { Palette, el } from './style.js';
 
 const T = TutorialConfig.Timing;
@@ -36,7 +38,9 @@ const AIRLOCK_HINT_RADIUS = 22;
 const OBJECTIVE_HINTS = 'ObjectiveHintsSeen';
 /** The hints this card shows (the rest have no moment on the website yet, or are shown elsewhere). */
 const WEB_HINTS = new Set(['Airlock', 'DownedTeammate', 'BearTrap', 'Flask', 'VentGrate', 'Locker', 'LowBattery', 'Radar',
-  'Slide', 'Leap']);
+  'Slide', 'Leap', 'Warning', 'CreatureNear', 'Followed']);
+const WARNING_FRESH = 6; // a teleport warning this recent is the Warning hint's moment
+const QUIET_STATES = new Set(['Dormant', 'Scripted']);
 /** A Luau list as JSON carries it (an empty one arrives as {}). */
 const list = (v) => (Array.isArray(v) ? v : []);
 
@@ -165,6 +169,19 @@ export class Hints {
       const f = b.max > 0 ? b.value / b.max : 0;
       if (this.env.flashlightOn() && f > 0 && f <= this.lowBattery) this.due.add('LowBattery');
     }
+    // the Tall Man's presence: a teleport's warning near you, him close by (heard, the heartbeat's radius), him
+    // following you (a Shadow played to you)
+    const warn = g.monsterFx ? g.monsterFx.lastWarning : null;
+    if (!seen.Warning && warn && this.env.now() - warn.at <= WARNING_FRESH && warn.spot.distanceTo(from) <= radius('Warning')) {
+      this.due.add('Warning');
+    }
+    const snap = g.creature.snapshot();
+    const shown = !!snap && snap.running && !snap.hidden && !QUIET_STATES.has(snap.state) && !!snap.eye;
+    if (!seen.CreatureNear && shown && snap.eye.distanceTo(this.env.eye(_eye)) <=
+      presenceConfig(g.world.meta, g.run ? g.run.difficulty : 'Standard').Audio.NearRadius) {
+      this.due.add('CreatureNear');
+    }
+    if (!seen.Followed && shown && g.creature.getState() === 'Shadow' && g.creature.hasTarget()) this.due.add('Followed');
     // the radar: the first time a scan can be made (a charge held where the radar works)
     if (!seen.Radar && g.radar && g.radar.rules.refusal(g.radar.asker()) === 'Ok') this.due.add('Radar');
     // the first leap strip in reach (the world's LeapStrip anchors), and the stages' own spots (a slide bar)

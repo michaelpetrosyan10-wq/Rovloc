@@ -156,6 +156,8 @@ export type NoiseKind =
 	| "MotorStart"
 	| "MotorRun"
 	| "EngineStart"
+	-- the Tall Man's ears (docs/MONSTER.md 17.4): an item picked up
+	| "Pickup"
 
 export type NoiseMedium = "Air" | "Vent"
 
@@ -596,6 +598,7 @@ Enums.NoiseKind = table.freeze({
 	"MotorStart",
 	"MotorRun",
 	"EngineStart",
+	"Pickup",
 } :: { NoiseKind })
 
 Enums.NoiseMedium = table.freeze({ "Air", "Vent" } :: { NoiseMedium })

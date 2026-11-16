@@ -11,7 +11,8 @@
 // the start / 30, so every pose is a function of the tick alone (I8: the same at 20 and 144 fps).
 // What a page does with it:
 //   * Control: a Cutscene lock and the Cutscene input context from the start (only Skip answers), the HUD hidden (its
-//     sound captions kept, above the subtitles); the Cinematic camera state (a camera override along the camera track)
+//     sound captions kept, above the subtitles), the ambient storm off (the timeline's own weather only: its Rain, its
+//     sounds); the Cinematic camera state (a camera override along the camera track)
 //     while a shot's view is Cinematic, the page's own eye while it is Own; letterbox bars of Letterbox each; nobody
 //     can be caught, downed or killed (I13: the catch hook and the lives refuse while one plays).
 //   * Actors (story/actors.js): the cast in costume, the squad as themselves, the crawler, props; the Creature as the
@@ -48,6 +49,7 @@ const CONTEXT = 'Story';
 const LOCK = 'Cutscene';
 const EAR_VOLUME = 0.8;
 const PA_VOLUME = 0.7;
+/** a card fades in and out over this, or over a quarter of its length when that is shorter (it always holds) */
 const CARD_FADE = 0.4;
 const STUTTER_HZ = 14;
 /** how often the host tells the squad where the timeline is (seconds) */
@@ -255,6 +257,7 @@ export class Cinematics {
     this.game.lock(LOCK);
     this.env.pushContext(CONTEXT, 'Cutscene');
     this.env.setHudVisible(false, 0.3, { captions: true });
+    this.env.setStormEnabled(false);
     if (coop) coop.avatars.hold(true);
     if (origin) this.actors.build(timeline, origin.cframe, castBy);
     const authority = !coop || coop.isHost();
@@ -457,7 +460,8 @@ export class Cinematics {
     const card = sample.card;
     if (card) {
       if (this.card.textContent !== card.text) this.card.textContent = card.text;
-      const a = Math.min(1, card.age / CARD_FADE, (card.seconds - card.age) / CARD_FADE);
+      const fade = Math.min(CARD_FADE, card.seconds / 4);
+      const a = Math.min(1, card.age / fade, (card.seconds - card.age) / fade);
       this.card.style.opacity = Math.max(0, a).toFixed(3);
     } else this.card.style.opacity = '0';
   }
@@ -498,6 +502,7 @@ export class Cinematics {
       if (id) this.env.setGroupFactor(id, null);
     }
     this.env.setDay(0);
+    this.env.setStormEnabled(true);
     this.actors.dispose();
     if (c.monster) {
       if (c.monsterRest) c.monster.teleport(c.monsterRest);

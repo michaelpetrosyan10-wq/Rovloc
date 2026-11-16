@@ -88,6 +88,25 @@ export class Prologue {
     Object.assign(this.line.style, { fontFamily: Fonts.Title, fontSize: 'clamp(18px, 2.6vw, 26px)', color: Palette.Bone });
     this.count = el('div', 'rg-caps', this.ui, '');
     this.count.style.color = Palette.Ash;
+    // the hand-over's first words: what to do, in the middle of the view, there at once (no fade in); above the HUD
+    // (13), under the pause menu (35) and the prologue's own black (39)
+    this.tell = el('div', 'rg-title rg-outline', this.env.uiRoot(), '');
+    Object.assign(this.tell.style, { position: 'absolute', left: '0', right: '0', top: '30%', textAlign: 'center',
+      fontFamily: Fonts.Title, fontSize: 'clamp(18px, 2.6vw, 26px)', color: Palette.Bone, zIndex: '30', pointerEvents: 'none',
+      display: 'none' });
+  }
+
+  /** The line that tells the player how to get out of the bin: up from the hand-over until the lid is pushed. */
+  _tell(on) {
+    this.tell.style.display = on ? '' : 'none';
+    if (!on) return;
+    this.tell.textContent = '';
+    if (this.env.device() === 'Touch') {
+      this.tell.textContent = S('Prologue.Out.Touch');
+      return;
+    }
+    const [before, after] = S('Prologue.Out').split('%s');
+    this.tell.append(before, this.env.inlineKey('Interact', 26), after || '');
   }
 
   coop() {
@@ -118,7 +137,7 @@ export class Prologue {
     this.climbAt = null;
   }
 
-  /** The hand-over: the prologue starts on this page (its bin's prompt, the 20 s, the rain). */
+  /** The hand-over: the prologue starts on this page (what to do, its bin's prompt, AutoClimbOut's count, the rain). */
   begin() {
     if (this.state === null) this.enterBin();
     const now = this.env.now();
@@ -139,11 +158,13 @@ export class Prologue {
         requiresLineOfSight: false, anyFacing: true, net: 'local', onTriggered: () => this.climbOut() });
     }
     this.env.setHudVisible(true, 0.4);
+    this._tell(true);
   }
 
   /** Out over the front rim (by the prompt, or by itself at AutoClimbOut). */
   climbOut() {
     if (this.state !== 'Bin' || this.handOver === null) return;
+    this._tell(false);
     this.state = 'Climbing';
     const now = this.env.now();
     this.climbStart = now;
@@ -276,6 +297,7 @@ export class Prologue {
       this._intoChute();
     }
     this.state = 'Cut';
+    this._tell(false);
     const now = this.env.now();
     this.cutAt = now;
     this.cutEnd = now + this.p.ChuteCut;
@@ -332,7 +354,7 @@ export class Prologue {
       this.env.setNodeTransform(this.hatch.id, 'DoorL', _m.makeRotationZ(a));
       this.env.setNodeTransform(this.hatch.id, 'DoorR', _m.makeRotationZ(-a));
     }
-    // a cutscene's own shots (the opening's S15: first person inside your bin) see from the bin too
+    // a cutscene's own shots (the opening's S16: first person inside your bin) see from the bin too
     if (cin.active() && !(s === 'Bin' && cin.view() === 'Own')) {
       this.env.setCameraOverride(CAMERA_TOKEN, null);
       return;
@@ -399,6 +421,7 @@ export class Prologue {
     this.lidCloses.length = 0;
     this.env.setCameraOverride(CAMERA_TOKEN, null);
     this.ui.style.display = 'none';
+    this._tell(false);
     this.hatchOpen = 0;
     this.hatchTarget = 0;
     if (this.hatch) {

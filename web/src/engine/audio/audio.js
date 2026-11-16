@@ -1,19 +1,24 @@
 // Audio: the WebAudio port of SoundSynthesizer + VoicePool + AudioBuses + AudioController.
 //
-// Mixer (AudioBuses). Master (safety compressor) <- Ambience (EQ) | Room (the environment chain: EQ -> Chorus ->
+// Mixer (AudioBuses). Master (safety compressor, then a ceiling under -1.1 dBFS) <- Ambience (EQ) | Room (the environment chain: EQ -> Chorus ->
 // Reverb -> Echo, gain) <- World / Monster / Player | Body (EQ) | UI. User volumes come from the settings (Body follows
 // Player); presets duck other buses while they play. setEnvironment(preset) eases every slot of the chain (and the
 // Ambience / Body EQs) to that AcousticPreset's values; the room the listener stands in picks it (a vent -> Vent,
 // outside every room -> Outdoor), setEnvironmentOverride wins over both.
 //
-// Voices (SoundSynthesizer). play(name, opts) builds a voice from the SynthPresets recipe: every layer trigger is a
-// grain (an AudioBufferSource on one of the 11 synthesized sources) with the recipe's speed / region slice / jitter /
-// envelope / glide / grains / chance; each layer's effect chain is a shared group per preset layer (and an optional
-// preset `space` group) that outlives its grains by the chain's tail, so reverbs and echoes ring out. Looped voices
-// keep their bed layers running and re-trigger the other layers every `repeat` interval. 3D voices pan with the
-// listener and attenuate InverseTapered between rollOff.min and rollOff.max (culled beyond it). Bus caps
-// (Monster 6, World 16, Ambience 8, Player 12, Body 6, UI 6) and each preset's maxVoices hold, with priority stealing.
-// Captioned presets fire `captioned` (the HUD shows it when captions are on).
+// Voices. play(name, opts) plays the preset `name`: its bus, roll-off, priority, voice limit, ducking and caption are
+// the preset's (SynthPresets); what sounds is
+//   * the name's recorded file when the sound bank has one (bank.js: web/sounds renders every sound from recordings):
+//     one of its variants (never the same twice in a row), looped between its loop points when the voice loops, at the
+//     voice's volume, straight into the bus; a file not decoded yet is decoded at once and starts when it is there;
+//   * else the preset's layer recipe (SoundSynthesizer): every layer trigger is a grain (an AudioBufferSource on one
+//     of the 11 synthesized sources) with the recipe's speed / region slice / jitter / envelope / glide / grains /
+//     chance; each layer's effect chain is a shared group per preset layer (and an optional preset `space` group)
+//     that outlives its grains by the chain's tail, so reverbs and echoes ring out. Looped voices keep their bed
+//     layers running and re-trigger the other layers every `repeat` interval. So no name is ever silent.
+// Either way 3D voices pan with the listener and attenuate InverseTapered between rollOff.min and rollOff.max (culled
+// beyond it). Bus caps (Monster 6, World 16, Ambience 8, Player 12, Body 6, UI 6) and each preset's maxVoices hold,
+// with priority stealing. Captioned presets fire `captioned` (the HUD shows it when captions are on).
 //
 // Ambience (AudioController). setAmbience(bed) crossfades the level drone and scatters its stingers (SynthPresets
 // Beds) around the listener at seeded random intervals.
@@ -21,6 +26,7 @@
 import { Presets, Beds, DefaultRollOff, Environments } from './presets.js';
 import { buildSamples, SampleLengths, Seamless } from './samples.js';
 import { buildChain, pitchOf, prewarmReverbs, ramp, dbToGain } from './effects.js';
+import { attenuation } from './rolloff.js';
 import { Signal } from '../signal.js';
 import { Vector3 } from 'three';
 import { Random } from '../math.js';
@@ -38,12 +44,24 @@ const ENV_FADE = 0.8;
 const BED_FADE = 3;
 const STINGER_HEIGHT = 4;
 const RELEASE_SLACK = 0.5;
+/** A one-shot whose file was still being decoded when it was asked for plays if it is there within this (seconds). */
+const LATE = 0.3;
+/** The output never peaks over this (-1.1 dBFS): the last stage after the safety compressor (never painful on earbuds). */
+const CEILING = 0.88;
+/** Under this the ceiling's curve is a straight line (the mix untouched); over it, it bends smoothly to CEILING. */
+const CEILING_KNEE = 0.6;
 
-/** InverseTapered attenuation (VoicePool.attenuation). */
-export function attenuation(distance, rollOff) {
-  if (distance <= rollOff.min) return 1;
-  if (distance >= rollOff.max) return 0;
-  return (rollOff.min / distance) * (1 - (distance - rollOff.min) / Math.max(rollOff.max - rollOff.min, 1e-3));
+/** The ceiling's transfer curve: unity under the knee, a tanh shoulder up to CEILING at full scale and beyond. */
+function ceilingCurve(points = 4097) {
+  const curve = new Float32Array(points);
+  const room = CEILING - CEILING_KNEE;
+  for (let i = 0; i < points; i++) {
+    const x = (2 * i) / (points - 1) - 1;
+    const a = Math.abs(x);
+    const y = a <= CEILING_KNEE ? a : CEILING_KNEE + room * Math.tanh((a - CEILING_KNEE) / room);
+    curve[i] = Math.sign(x) * y;
+  }
+  return curve;
 }
 
 function pick(rng, v) {
@@ -93,6 +111,12 @@ class Voice {
     this.fadeGain = 0;
     this.dist = 1;
     this._lastEnd = audio.ctx.currentTime;
+    /** the sound bank's entry when the voice plays its recorded file (null: the preset's recipe) */
+    this.file = null;
+    /** the variant every client picks (opts.seed), or null: any but the last */
+    this.pick = null;
+    /** whether the bank holds this voice's file while it plays */
+    this.held = false;
   }
 
   get time() {
@@ -156,6 +180,8 @@ class Voice {
       this.audio._releaseGroup(li.group);
     }
     this.layerIns.length = 0;
+    if (this.held) this.audio.bank.hold(this.name, -1);
+    this.held = false;
     this.audio._removeVoice(this);
     this.ended.fire();
   }
@@ -163,11 +189,14 @@ class Voice {
 
 export class Audio {
   /**
-   * @param {{settings: import('../settings.js').Settings, context?: BaseAudioContext}} deps `context` replaces the
-   *   live AudioContext (an OfflineAudioContext renders presets for verification)
+   * @param {{settings: import('../settings.js').Settings, context?: BaseAudioContext,
+   *   bank?: import('./bank.js').SoundBank}} deps `context` replaces the live AudioContext (an OfflineAudioContext
+   *   renders voices for verification); `bank`: the recorded sounds (without one every name plays its recipe)
    */
   constructor(deps) {
     this.settings = deps.settings;
+    /** @type {import('./bank.js').SoundBank|null} the recorded sounds (useBank) */
+    this.bank = deps.bank || null;
     /** @type {Signal<[string, string]>} (caption text, preset) */
     this.captioned = new Signal();
     this.ready = false;
@@ -207,6 +236,11 @@ export class Audio {
     }
   }
 
+  /** The recorded sounds: from now on a name the bank has plays its file. */
+  useBank(bank) {
+    this.bank = bank;
+  }
+
   /** Resumes the context (browsers start it suspended until a gesture). */
   resume() {
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
@@ -220,7 +254,12 @@ export class Audio {
     comp.ratio.value = 8;
     comp.attack.value = 0.003;
     comp.release.value = 0.15;
-    this.master.connect(comp).connect(ctx.destination);
+    // the compressor's automatic makeup gain can lift a peak over full scale: a waveshaper with a soft shoulder
+    // holds every sample under CEILING (it passes input clamped to +-1 as +-CEILING)
+    const ceiling = ctx.createWaveShaper();
+    ceiling.curve = ceilingCurve();
+    ceiling.oversample = 'none';
+    this.master.connect(comp).connect(ceiling).connect(ctx.destination);
     this.room = ctx.createGain();
     const env = Environments.Room;
     this.envChain = buildChain(ctx, env.effects);
@@ -380,41 +419,114 @@ export class Audio {
     if (opts.follow) voice.position = opts.follow().clone();
     if (voice.position) voice.dist = attenuation(this._distance(voice.position), rollOff);
     const busNode = this.buses[voice.bus] || this.buses.World;
-    const spaceDest = preset.space && preset.space.length
-      ? this._ensureGroup(`${name}#space`, preset.space, busNode)
-      : busNode;
     const fadeIn = opts.fadeIn || 0;
-    preset.layers.forEach((layer, index) => {
-      const group = this._ensureGroup(`${name}#${index}`, layer.effects, spaceDest);
-      this._useGroup(group);
-      const node = ctx.createGain();
-      let panner = null;
-      if (voice.position) {
-        panner = ctx.createPanner();
-        panner.panningModel = 'equalpower';
-        panner.distanceModel = 'linear';
-        panner.rolloffFactor = 0;
-        panner.positionX.value = voice.position.x;
-        panner.positionY.value = voice.position.y;
-        panner.positionZ.value = voice.position.z;
-        node.connect(panner).connect(group.input);
-      } else node.connect(group.input);
-      const g = voice._gain();
-      if (fadeIn > 0) {
-        node.gain.setValueAtTime(0, ctx.currentTime);
-        node.gain.linearRampToValueAtTime(g, ctx.currentTime + fadeIn);
-      } else node.gain.value = g;
-      voice.layerIns.push({ node, panner, group });
-    });
+    const file = this.bank ? this.bank.entry(name) : null;
+    if (file) {
+      // the recorded file, straight into the bus (its body and space are in the recording)
+      voice.file = file;
+      voice.pick = Number.isInteger(opts.seed) ? opts.seed : null;
+      this._input(voice, busNode, null, fadeIn);
+    } else {
+      const spaceDest = preset.space && preset.space.length
+        ? this._ensureGroup(`${name}#space`, preset.space, busNode)
+        : busNode;
+      preset.layers.forEach((layer, index) => {
+        const group = this._ensureGroup(`${name}#${index}`, layer.effects, spaceDest);
+        this._useGroup(group);
+        this._input(voice, group.input, group, fadeIn);
+      });
+    }
     this.voices.push(voice);
-    this._schedule(voice, 0, true);
+    if (file) this._startFile(voice);
+    else this._schedule(voice, 0, true);
     if (preset.duck) for (const d of preset.duck) this._duck(d);
     if (preset.captionText) this.captioned.fire(preset.captionText, name);
-    if (!looped) {
+    if (!looped && !file) {
       const end = Math.max(voice._lastEnd - ctx.currentTime, 0.05);
       setTimeout(() => voice._finish(), (end + 0.15) * 1000);
     }
     return voice;
+  }
+
+  /** One input of a voice (its gain, and its panner when it is placed) into `destination`. */
+  _input(voice, destination, group, fadeIn) {
+    const ctx = this.ctx;
+    const node = ctx.createGain();
+    let panner = null;
+    if (voice.position) {
+      panner = ctx.createPanner();
+      panner.panningModel = 'equalpower';
+      panner.distanceModel = 'linear';
+      panner.rolloffFactor = 0;
+      panner.positionX.value = voice.position.x;
+      panner.positionY.value = voice.position.y;
+      panner.positionZ.value = voice.position.z;
+      node.connect(panner).connect(destination);
+    } else node.connect(destination);
+    const g = voice._gain();
+    if (fadeIn > 0) {
+      node.gain.setValueAtTime(0, ctx.currentTime);
+      node.gain.linearRampToValueAtTime(g, ctx.currentTime + fadeIn);
+    } else node.gain.value = g;
+    voice.layerIns.push({ node, panner, group });
+  }
+
+  /** Starts a file voice now, or as soon as its file is decoded (a one-shot only if that is soon enough). */
+  _startFile(voice) {
+    const begin = () => {
+      if (!voice.playing || voice.stopping) return;
+      this.bank.hold(voice.name, 1);
+      voice.held = true;
+      this._fileGrain(voice, this.ctx.currentTime);
+    };
+    if (this.bank.decoded.has(voice.name)) {
+      begin();
+      return;
+    }
+    const asked = this.ctx.currentTime;
+    this.bank.load(voice.name).then((buffers) => {
+      if (buffers && (voice.looped || this.ctx.currentTime - asked <= LATE)) begin();
+      else voice._finish();
+    });
+  }
+
+  /**
+   * One play of a file voice's recording at context time `when`: a loop runs between its loop points; a looped voice
+   * of a one-shot recording plays it again every `repeat` interval (a pulse: a heartbeat, a drip), each time another
+   * variant; anything else plays once and ends the voice.
+   */
+  _fileGrain(voice, when) {
+    const buffer = this.bank.take(voice.name, voice.pick);
+    if (!buffer) {
+      voice._finish();
+      return;
+    }
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = Math.max(0.02, Math.min(20, voice.speed));
+    const loop = voice.file.l;
+    const repeat = voice.preset.repeat;
+    const t0 = Math.max(when, ctx.currentTime);
+    src.connect(voice.layerIns[0].node);
+    if (voice.looped && (loop || !repeat)) {
+      src.loop = true;
+      if (loop) {
+        src.loopStart = loop[0];
+        src.loopEnd = loop[1];
+      }
+      src.start(t0, loop ? loop[0] : 0);
+    } else if (loop) src.start(t0, loop[0], loop[1] - loop[0]);
+    else src.start(t0);
+    voice.sources.add(src);
+    src.onended = () => {
+      voice.sources.delete(src);
+      src.disconnect();
+      if (!voice.looped && voice.sources.size === 0) voice._finish();
+    };
+    if (voice.looped && !loop && repeat) {
+      voice.nextCycleAt = t0 - voice.startedAt + repeat.interval + (repeat.jitter ? voice.rng.nextNumber(-repeat.jitter, repeat.jitter) : 0);
+    }
   }
 
   _admit(name, preset, bus, looped) {
@@ -440,8 +552,12 @@ export class Audio {
     if (i >= 0) this.voices.splice(i, 1);
   }
 
-  /** Schedules a voice's layer triggers from voice time `from` (initial: beds too). */
+  /** Schedules a voice's layer triggers from voice time `from` (initial: beds too); a file voice's next pulse. */
   _schedule(voice, from, initial) {
+    if (voice.file) {
+      this._fileGrain(voice, voice.startedAt + from);
+      return;
+    }
     const preset = voice.preset;
     const base = voice.startedAt + from;
     preset.layers.forEach((layer, index) => {
@@ -651,6 +767,11 @@ export class Audio {
   get presetNames() {
     return Object.keys(Presets);
   }
+
+  /** Every name on the old path: a preset the sound bank has no recorded file for (it plays its recipe). */
+  get recipeNames() {
+    return Object.keys(Presets).filter((name) => !this.bank || !this.bank.has(name)).sort();
+  }
 }
 
-export { Presets, Beds, Environments, dbToGain };
+export { Presets, Beds, Environments, attenuation, dbToGain };

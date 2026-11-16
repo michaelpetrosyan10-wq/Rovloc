@@ -25,6 +25,7 @@
 
 import * as THREE from 'three';
 import { Audio } from './audio/audio.js';
+import { SoundBank } from './audio/bank.js';
 import { CameraConfig, GameConfig, InputBindings, NoiseConfig, PhysicsConfig, WorldConfig, installInputBindings,
   installSettings } from './config.js';
 import { decodeWorld } from './data.js';
@@ -62,9 +63,11 @@ const LEVEL_BEDS = {
  *   textures.boot                     the set the page boots with (256: the Potato colour maps)
  *   textures.sets[size].maps[id][kind] every surface texture per size (2048, 1024, 512, 256); `inline` sets came with the page
  *   textures.atlases[id].color        the decal and wear atlases (every tier)
+ *   audio.packs / audio.sounds        the recorded sounds: two packs of MP3s and their index (audio/bank.js)
  *   defaultTier                       the Graphics tier a player without a saved choice starts on (the lite build)
  *   stamp                             the build's stamp, shown on the title screen (a beta build)
- * @typedef {{version: number, world: {json: string, bin: string}, textures: any, defaultTier?: string, stamp?: string}} Manifest
+ * @typedef {{version: number, world: {json: string, bin: string}, textures: any, audio?: any, defaultTier?: string,
+ *   stamp?: string}} Manifest
  */
 
 /** Base64 -> bytes. */
@@ -218,6 +221,8 @@ export class Engine {
     progress(0.75, 'Building the doors');
     this.entities = new Entities(this);
     this.audio = new Audio({ settings: this.settings });
+    // the recorded sounds: a name the bank has plays its file, any other its old recipe
+    this.audio.useBank(new SoundBank(assets.manifest ? assets.manifest.audio : null, assetBytes, this.audio.ctx));
     this.noise = new NoiseBus({ loop: this.loop, world: this.world });
     this.lighting = new Lighting(this);
     this.player = new Player(this);
@@ -283,6 +288,8 @@ export class Engine {
     else gl.compile(this.world.scene, this.renderer.camera);
     progress(0.95, 'Waking the school');
     this.world.setFocus([]);
+    // what every stage needs at once (him, the scares, footsteps, doors) is decoded before the first frame
+    await this.audio.bank.boot((f) => progress(0.95 + 0.05 * f, 'Listening in the dark'));
   }
 
   /** Starts the loop and asks for the tier's texture set (it streams in the background). */

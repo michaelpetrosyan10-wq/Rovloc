@@ -1,5 +1,5 @@
-// filters.mjs: RBJ cookbook biquads, Simper's state-variable filter (stable under per-sample sweeps), one-poles, the
-// DC blocker, Butterworth cascades, and the "laptop" filter (a 12 dB/octave high-pass at 220 Hz: what a Chromebook
+// filters.mjs: RBJ cookbook biquads, Simper's state-variable filter (stable under per-sample sweeps), the DC blocker,
+// Butterworth cascades, and the "laptop" filter (a 12 dB/octave high-pass at 220 Hz: what a Chromebook
 // speaker leaves of a sound; docs/SOUND.md 2).
 
 /** @typedef {'lowpass'|'highpass'|'bandpass'|'notch'|'peak'|'lowshelf'|'highshelf'|'allpass'} BiquadType */
@@ -214,24 +214,6 @@ export function svf(input, sr, mode, freq, q = Math.SQRT1_2) {
       case 'bandpass': out[i] = f.bp * f.k; break;
       default: out[i] = input[i] - f.k * f.bp; break;
     }
-  }
-  return out;
-}
-
-/**
- * A one-pole low- or high-pass (6 dB/octave), a copy.
- * @param {Float32Array} input
- * @param {number} sr
- * @param {'lowpass'|'highpass'} type
- * @param {number} freq
- */
-export function onePole(input, sr, type, freq) {
-  const a = Math.exp((-2 * Math.PI * freq) / sr);
-  const out = new Float32Array(input.length);
-  let y = 0;
-  for (let i = 0; i < input.length; i++) {
-    y = (1 - a) * input[i] + a * y;
-    out[i] = type === 'lowpass' ? y : input[i] - y;
   }
   return out;
 }

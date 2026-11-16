@@ -6,7 +6,8 @@
 //    trailingSlash redirect and its header rules), with the build under test at /beta/ (site/beta/, where build.mjs
 //    writes the site) and the published stable page at /.
 //    * The files: the page names only relative assets (assets/<hashed name>), every one present and none left over,
-//      so it works from the path it is served at; vercel.json caches the assets forever and revalidates the page;
+//      in its markup and in its manifest (the world, the textures and the sound packs, each read where the game reads
+//      it), so it works from the path it is served at; vercel.json caches the assets forever and revalidates the page;
 //      /beta redirects to /beta/ (a page at /beta would resolve its assets against the root).
 //    * The two pages share an origin, so they share the saved game: the stable page boots, then the beta on the save
 //      it wrote, then the stable page on the save the beta wrote.
@@ -552,6 +553,9 @@ async function main() {
     };
     collect(manifest.world);
     collect(manifest.textures);
+    // the sound packs, by the chain the game reads them: the manifest's audio.packs is the SoundBank's packRefs
+    // (src/engine/index.js, src/engine/audio/bank.js), each fetched by its reference
+    collect(manifest.audio && manifest.audio.packs);
     const files = fs.readdirSync(path.join(siteDir, 'assets'));
     const wrong = refs.filter((r) => !/^assets\/[\w.-]+$/.test(r) || !files.includes(r.slice('assets/'.length)));
     const unused = files.filter((f) => !refs.includes(`assets/${f}`));

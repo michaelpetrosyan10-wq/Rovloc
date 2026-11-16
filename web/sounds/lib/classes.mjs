@@ -8,7 +8,8 @@
 //   of the first strong transient), rise (s: 10-90 % of the loudest 10 ms),
 //   crest (dB), dc, clipped (samples), lead and tail (s of silence), endLevel (dB of the last 5 ms re: the peak),
 //   edge (dB of the first / last sample re: the peak), seamRatio and seamLevel (loops), variantMin (dB, the closest
-//   two variants), rattle (his throat's 20-35 Hz rattle index), porcelain (ticks counted at 1.2-5 kHz).
+//   two variants), rattle (his throat: the 18-38 Hz pulsing of a slowed voice), click (the share of the first 12 ms'
+//   energy over 1.5 kHz: a dry click or a knock at the contact).
 
 /** @typedef {[string, '<='|'>='|'<'|'>', number, string]} Rule */
 /** @typedef {{title: string, looks: string, bright?: boolean, resonance?: boolean, maxSeconds?: number,
@@ -38,7 +39,7 @@ export const LOOPING = Object.freeze([
 
 /** The rules every class shares unless the class or the voice declares otherwise. */
 export const DEFAULTS = Object.freeze({
-  maxCentroid: 3000, // only glass, porcelain, sparks and keys are brighter
+  maxCentroid: 3000, // only glass, sparks and keys are brighter
   maxPurity: 0.45, // a beep is near 1
   minPeaksIfResonant: 5, // a declared inharmonic resonance shows at least 5 strong peaks
   minVariantDistance: 2, // dB: variants are not near-copies
@@ -56,6 +57,7 @@ export const CLASSES = Object.freeze({
       ['laptopLoss', '<', 9, 'loses under 9 dB through the laptop filter (its low-mid body carries it)'],
       ['attack', '<=', 0.005, 'attacks in under 5 ms'],
       ['centroid', '<=', 1500, 'dark'],
+      ['click', '<=', 0.03, 'a body landing, not a knock: under 3 % of its first 12 ms over 1.5 kHz'],
     ],
   },
   body: {
@@ -98,16 +100,6 @@ export const CLASSES = Object.freeze({
       ['seconds', '<=', 1.2, 'short'],
     ],
   },
-  porcelain: {
-    title: 'Porcelain (his mask)',
-    looks: 'a few short dots between 1.2 and 5 kHz, irregular in time',
-    bright: true,
-    resonance: true,
-    rules: [
-      ['porcelain', '>=', 2, 'at least two porcelain ticks'],
-      ['attack', '<=', 0.005, 'attacks in under 5 ms'],
-    ],
-  },
   keys: {
     title: 'Keys and small metal',
     looks: 'a handful of short high lines, scattered',
@@ -123,7 +115,21 @@ export const CLASSES = Object.freeze({
     title: 'Sparks and electric crackle',
     looks: 'scattered vertical ticks over a broken buzz',
     bright: true,
-    rules: [['attack', '<=', 0.005, 'attacks in under 5 ms']],
+    rules: [
+      ['attack', '<=', 0.005, 'attacks in under 5 ms'],
+      ['click', '<=', 0.4, 'a crackle over a buzz, never a train of dry clicks: under 40 % of its first 12 ms over 1.5 kHz'],
+      ['high', '<=', 0.5, 'the buzz carries it, not the treble: at most half its energy over 2.5 kHz'],
+    ],
+  },
+  bell: {
+    title: 'Bell (struck metal ringing)',
+    looks: 'a few strokes, each a stack of long inharmonic lines that ring on',
+    bright: true,
+    resonance: true,
+    rules: [
+      ['peaks', '>=', 5, 'a bell\'s inharmonic partials, never one whistle'],
+      ['attack', '<=', 0.005, 'struck: attacks in under 5 ms'],
+    ],
   },
   liquid: {
     title: 'Liquid (splash, fizz, bubbling, drips)',
@@ -213,5 +219,5 @@ export const CLASSES = Object.freeze({
 
 /** The rattle index at or above which a sound carries his throat's rattle. */
 export const RATTLE_SIGNATURE = 0.2;
-/** The porcelain ticks at or above which a sound carries his mask. */
-export const PORCELAIN_SIGNATURE = 2;
+/** The most of any sound of his that may lie over 2.5 kHz: nothing of his is bright (no dry ticking). */
+export const HIS_HIGH_SHARE = 0.05;

@@ -1,226 +1,179 @@
-// player-steps.mjs: the players' own bodies on the move: a kid's footsteps on the game's eight surfaces (walking and
-// sprinting, 5 variants each: small, dry, close, clearly lighter than his: no sub drop, a short sole slap and the
-// floor's quick answer), and the parkour sounds (web/src/engine/parkour.js): the hard landing, the slide, the leap.
-// FootstepGlass and FootstepSprintGlass live with the glass (glass.mjs) and share stepFor() from here.
+// player-steps.mjs: YOUR footsteps on the eight surfaces, walking and sprinting, and what your body does when it
+// lands, slides and leaps. Real footsteps on each surface (Kenney's RPG and impact sets, the leather-and-cloth and
+// wood-stone-gravel packs), small and dull: a shoe, never a knock or a click (everything over about 3 kHz is rolled
+// away), and far under his (the audit: at least 10 dB at every distance). Sprinting is the same foot landing harder
+// and faster, with a scuff.
+//
+// None of these recordings is in any of his sounds (spec I1: what sounds like him is him).
 
 import * as K from '../kit/index.mjs';
+import { recorded, withSub } from '../lib/recipe.mjs';
 
 const FAMILY = 'player-steps';
-/** How far a player's steps carry: a few rooms, never as far as his (docs/SOUND.md 6). */
-export const PLAYER_CARRY = Object.freeze({ ref: 4, max: 60, rolloff: 1, fade: 0.67 });
+const RPG = 'kenney/rpg-audio';
+const IMPACT = 'kenney/impact-sounds';
+const STEPS = 'oga/different-steps-on-wood-stone-leaves-gravel-and-mud';
+const ARMOR = 'oga/footsteps-leather-cloth-armor';
+const SPLASH = 'oga/40-cc0-water-splash-slime-sfx';
+
+/** The five stone-floor takes of Kenney's RPG set that his footsteps do not use. */
+const FLOOR = [2, 4, 5, 7, 8].map((n) => `${RPG}/footstep0${n}.ogg`);
 
 /**
- * A surface's answer to a light foot: [modes, contact cutoff Hz, extra texture builder or null].
+ * Each surface's layers for take `i` (0-4): `fast` is a sprint.
+ * @type {Record<string, (i: number, fast: boolean) => import('../lib/recipe.mjs').Layer[]>}
+ */
+const SURFACE = {
+  // the shoe on a slab
+  Concrete: (i, fast) => [
+    { src: FLOOR[i], rate: fast ? [1.0, 1.06] : [0.92, 0.98], lp: 2600, gain: 0 },
+    { src: `${STEPS}/stone01.ogg`, rate: [0.9, 1.0], hp: 200, lp: 2400, gain: -14, at: 0.004 },
+  ],
+  // glazed tile: harder and shorter, a little ring of the tile
+  Tile: (i, fast) => [
+    { src: FLOOR[(i + 2) % 5], rate: fast ? [1.1, 1.16] : [1.04, 1.1], lp: 3000, gain: 0 },
+    { src: `${STEPS}/stone01.ogg`, rate: [1.0, 1.1], hp: 400, lp: 2800, gain: -9, at: 0.002 },
+  ],
+  // boards: the hollow of the board under the shoe
+  Wood: (i, fast) => [
+    { src: `${IMPACT}/impactWood_light_00${i}.ogg`, rate: (fast ? 0.86 : 0.78) * (1 + 0.06 * (i - 2)), lp: 2200, gain: [-2, 0, -4, 1, -1][i] },
+    { src: `${STEPS}/wood0${1 + (i % 3)}.ogg`, rate: 0.9 + 0.05 * i, lp: 1800, gain: [0, -4, -1, -6, -2][i], at: 0.003 },
+    { src: FLOOR[i], rate: 0.9, hp: 250, lp: 2400, gain: -9, at: 0.006 },
+  ],
+  // steel grating
+  Metal: (i, fast) => [
+    // three steps on steel and two light blows on a plate, the plates darker (a sole, never a knock)
+    { src: [`${ARMOR}/step_metal.ogg`, `${ARMOR}/step_metal (2).ogg`, `${IMPACT}/impactPlate_light_002.ogg`, `${ARMOR}/step_metal (4).ogg`, `${IMPACT}/impactPlate_light_004.ogg`][i], rate: fast ? [0.92, 0.98] : [0.84, 0.9], lp: [2400, 2400, 1400, 2400, 1400][i], trim: true, gain: 0, at: 0.004 },
+    { src: FLOOR[(i + 1) % 5], rate: 0.95, lp: 1600, gain: -5 },
+  ],
+  // carpet: the weight and the pile
+  Carpet: (i, fast) => [
+    { src: [`${IMPACT}/footstep_carpet_002.ogg`, `${IMPACT}/footstep_snow_000.ogg`, `${IMPACT}/footstep_snow_004.ogg`, `${IMPACT}/footstep_snow_003.ogg`, `${ARMOR}/step_lth4.ogg`][i], rate: fast ? [0.95, 1.0] : [0.86, 0.92], lp: 1800, gain: 0 },
+    { src: `${ARMOR}/step_cloth${1 + (i % 4)}.ogg`, rate: 0.9, lp: 1400, gain: -8 },
+  ],
+  // grass and earth: the outdoor stretch
+  Grass: (i, fast) => [
+    { src: `${IMPACT}/footstep_grass_00${i}.ogg`, rate: (fast ? 1.02 : 0.93) * (1 + 0.07 * (i - 2)), lp: 2600, gain: 0 },
+    { src: [`${STEPS}/leaves01.ogg`, `${STEPS}/mud02.ogg`, `${STEPS}/leaves02.ogg`, `${STEPS}/gravel.ogg`, `${STEPS}/mud02.ogg`][i], from: 0, to: 0.35, rate: 0.8 + 0.05 * i, lp: 2200, gain: [-8, -6, -9, -12, -5][i] },
+  ],
+  // shallow water on the floor
+  Water: (i, fast) => [
+    { src: `${SPLASH}/splash_${['06', '09', '10', '14', '15'][i]}.ogg`, rate: fast ? [0.9, 0.96] : [0.8, 0.86], lp: 2400, trim: true, gain: -1, at: 0.012 },
+    { src: FLOOR[i], rate: 0.95, lp: 1800, trim: true, gain: 0 },
+  ],
+};
+
+const WORDS = {
+  Concrete: 'concrete',
+  Tile: 'tile',
+  Wood: 'wooden boards',
+  Metal: 'a steel grating',
+  Carpet: 'carpet',
+  Grass: 'grass and earth',
+  Water: 'shallow water',
+};
+
+/**
  * @param {string} surface
- * @param {K.Rng} r
- * @param {number} sr
- * @param {boolean} sprint
- * @returns {{modes: K.Mode[], cutoff: number, bodyGain: number, texture: null|{buffer: Float32Array, gain: number, offset?: number}}}
+ * @param {boolean} fast
  */
-function surfaceOf(surface, r, sr, sprint) {
-  switch (surface) {
-    case 'Concrete':
-      return { modes: K.scatterModes(r, 6, 220, 900, 0.025, 0.06, -2), cutoff: 2600, bodyGain: -4,
-        texture: { buffer: K.grit(sr, r.fork('sand'), { count: r.int(5, 12), spread: 0.05, freq: [1500, 5000] }), gain: -16 } };
-    case 'Tile':
-      return { modes: [...K.scatterModes(r, 5, 260, 900, 0.02, 0.05, -2), ...K.scatterModes(r, 4, 1400, 3200, 0.012, 0.03, -4)], cutoff: 3200, bodyGain: -3, texture: null };
-    case 'Wood': // classroom floor, boards on joists: a hollow knock
-      return { modes: [...K.scatterModes(r, 4, 140, 320, 0.06, 0.12, 0), ...K.scatterModes(r, 4, 400, 1100, 0.02, 0.05, -3)], cutoff: 2000, bodyGain: 0, texture: null };
-    case 'Metal': { // a grating or a steel stair: a short plate ring and a loose rattle
-      const gains = K.strikeGains(12, r.range(0.1, 0.9), r.range(0.1, 0.9));
-      const plate = K.modesFrom(r.range(380, 520), K.plateRatios(12, 1.41), { t60: 0.1, damp: 0.4, tilt: -2, gains, detune: 0.04, rng: r });
-      plate[0].gain = (plate[0].gain ?? 1) * 0.35; // pinned at its edges
-      return { modes: [...K.scatterModes(r, 4, 200, 500, 0.04, 0.08, 0), ...plate], cutoff: 3000, bodyGain: -3, texture: null };
-    }
-    case 'Carpet': // a muffled pat
-      return { modes: K.scatterModes(r, 4, 120, 380, 0.02, 0.04, -3), cutoff: 900, bodyGain: -6,
-        texture: { buffer: K.svf(K.burst(sr, r.fork('fibre'), { length: 0.03, cutoff: 3000, hp: 600 }), sr, 'bandpass', 1500, 0.6), gain: -18 } };
-    case 'Grass': // blades and soil: a soft swish and a little crunch
-      return { modes: K.scatterModes(r, 3, 90, 240, 0.02, 0.04, -2), cutoff: 700, bodyGain: -8,
-        texture: { buffer: K.butter(K.grit(sr, r.fork('blades'), { count: r.int(20, 34), spread: sprint ? 0.08 : 0.12, freq: [450, 2600], q: 0.8, length: [0.003, 0.009] }), sr, 'lowpass', 3000, 2), gain: -9 } };
-    default: { // Water: a puddle on the floor: a slap, a splash of droplets, a few bubbles
-      const n = Math.round(0.3 * sr);
-      const drops = K.shower(n, sr, K.poissonTimes(r.fork('t'), 0.22, (t) => 160 * Math.exp(-t / 0.06), 160), () => ({
-        grain: K.bubble(sr, r, { freq: r.range(900, 3200), t60: r.range(0.012, 0.03), rise: r.range(0.2, 0.8) }),
-        gain: r.range(0.2, 1),
-      }));
-      const spray = K.svf(K.burst(sr, r.fork('spray'), { length: 0.05, cutoff: 6000, hp: 900 }), sr, 'bandpass', 2400, 0.5);
-      K.addAt(drops, K.unit(spray), 0, 0.8);
-      return { modes: K.scatterModes(r, 3, 110, 300, 0.02, 0.04, -3), cutoff: 1400, bodyGain: -8, texture: { buffer: drops, gain: -3 } };
-    }
-  }
+function step(surface, fast) {
+  return recorded({
+    name: `Footstep${fast ? 'Sprint' : ''}${surface}`,
+    title: `Your footsteps, ${fast ? 'running' : 'walking'}, on ${WORDS[surface]}`,
+    description: fast ? `You running on ${WORDS[surface]}: quick, harder steps.` : `You walking on ${WORDS[surface]}: small, dull steps.`,
+    family: FAMILY,
+    group: 'reference',
+    class: 'light',
+    repeats: true,
+    variants: 5,
+    channels: 1,
+    loop: null,
+    space: 'dry',
+    first: true,
+    loudness: fast ? -27 : -30,
+    board: 'Your footsteps',
+    layers: (variant) => {
+      const i = variant - 1;
+      const layers = SURFACE[surface](i, fast);
+      // a sprint drags the sole off the floor after it lands
+      if (fast) layers.push({ src: `${ARMOR}/step_lth${[1, 2, 33, 4, 1][i]}.ogg`, rate: 1.1, hp: 300, lp: 2400, gain: -14, at: 0.05 });
+      return layers;
+    },
+    finish: (ctx, mix) => K.fade(mix, ctx.sr, 0, 0.04),
+  });
 }
-
-/**
- * One footstep of a player.
- * @param {string} surface
- * @param {boolean} sprint
- * @returns {import('../lib/voices.mjs').Voice['render']}
- */
-export function stepFor(surface, sprint) {
-  return ({ sr, rng }) => {
-    const r = rng.fork('floor');
-    const s = surfaceOf(surface, r, sr, sprint);
-    const g = rng.fork('gait');
-    const sound = K.footfall(sr, g, {
-      length: 0.6,
-      // a walking heel just before the ball of the foot; a sprint lands on the ball alone
-      heel: sprint ? undefined : { delay: g.range(0.025, 0.045), gain: -5, cutoff: 1200, length: 0.003 },
-      thump: { f0: g.range(95, 110), f1: g.range(70, 80), drop: 0.02, t60: 0.06, drive: 1.5, gain: -16 },
-      body: { modes: s.modes, gain: s.bodyGain, excite: 0.002, cutoff: s.cutoff },
-      contact: { length: sprint ? 0.004 : 0.006, cutoff: s.cutoff * g.range(0.8, 1.2), gain: 0, hp: 120 },
-      texture: s.texture ?? undefined,
-      after: sprint && g.chance(0.6) ? { buffer: scuff(sr, g.fork('scuff')), gain: -14, offset: g.range(0.01, 0.03) } : undefined,
-    });
-    return sound;
-  };
-}
-
-/**
- * A rubber sole scuffing as it pushes off: a short stick-slip squeak-grind, dark.
- * @param {number} sr
- * @param {K.Rng} r
- */
-function scuff(sr, r) {
-  const seconds = r.range(0.05, 0.1);
-  const n = Math.round(seconds * sr);
-  const push = K.segments(n, sr, [[0, 0], [seconds * 0.3, 1], [seconds, 0]]);
-  const slips = K.stickSlip(n, sr, { velocity: push, force: 0.5, stiffness: 300, muS: 1, muD: 0.6, irregularity: 0.6, roughness: 0.5, rng: r.fork('slips') });
-  const out = K.modal(slips, sr, K.scatterModes(r, 5, 600, 2200, 0.008, 0.02, -2), n + Math.round(0.02 * sr));
-  return K.fade(K.butter(out, sr, 'lowpass', 2500, 2), sr, 0.002, 0.01);
-}
-
-const SURFACES = [
-  ['Concrete', 'concrete'], ['Tile', 'tile'], ['Wood', 'wooden floor'], ['Metal', 'metal'], ['Carpet', 'carpet'],
-  ['Grass', 'grass and gravel'], ['Water', 'water'],
-];
 
 /** @type {import('../lib/voices.mjs').Voice[]} */
 export const voices = [];
-for (const [surface, words] of SURFACES) {
-  for (const sprint of [false, true]) {
-    voices.push({
-      name: `Footstep${sprint ? 'Sprint' : ''}${surface}`,
-      title: `Your footsteps, ${sprint ? 'sprinting' : 'walking'}, on ${words}`,
-      description: sprint ? `A kid running flat out on ${words}: quick, light, a scuff as the foot pushes off.` : `A kid walking on ${words}: small, dry, close. Nothing like his.`,
-      family: FAMILY,
-      group: 'reference',
-      class: 'light',
-      repeats: true,
-      variants: 5,
-      channels: 1,
-      loop: null,
-      space: 'dry',
-      loudness: sprint ? -28 : -30,
-      carry: PLAYER_CARRY,
-      board: 'Your footsteps',
-      render: stepFor(surface, sprint),
-    });
-  }
-}
+for (const surface of Object.keys(SURFACE)) for (const fast of [false, true]) voices.push(step(surface, fast));
 
-voices.push({
-  name: 'HardLanding',
-  title: 'You land hard',
-  description: 'A drop from a height: your whole body hitting the floor, your bag thumping, the wind knocked out of you.',
-  family: FAMILY,
-  group: 'reference',
-  class: 'body',
-  variants: 4,
-  channels: 1,
-  loop: null,
-  space: 'dry',
-  loudness: -23,
-  carry: Object.freeze({ ref: 6, max: 90, rolloff: 1, fade: 0.67 }),
-  board: 'Your footsteps',
-  render: ({ sr, rng }) => {
-    const r = rng.fork('land');
-    const both = K.footfall(sr, r.fork('feet'), {
-      length: 0.9,
-      heel: { delay: r.range(0.012, 0.025), gain: -3, cutoff: 1500, length: 0.004 },
-      thump: { f0: 85, f1: 58, drop: 0.03, t60: 0.18, drive: 2.5, gain: -6 },
-      body: { modes: K.scatterModes(r, 7, 140, 700, 0.04, 0.1, -1), gain: 0, excite: 0.006, cutoff: 1800 },
-      contact: { length: 0.012, cutoff: 1600, gain: -2 },
-    });
-    // the backpack and its contents a beat later
-    const bag = K.modal(K.burst(sr, r.fork('bag'), { length: 0.02, cutoff: 1200, hp: 100 }), sr, K.scatterModes(r, 5, 180, 900, 0.03, 0.07, -2), Math.round(0.25 * sr));
-    K.addAt(both, K.unit(bag), r.range(0.05, 0.08) * sr, 0.35);
-    // the breath knocked out: a short voiced "huh" through a small throat (a kid's)
-    const n = Math.round(0.28 * sr);
-    const oof = K.breath(n, sr, { rng: r.fork('oof'), vowel: 'uh', scale: 1.25, voiced: 0.5, f0: r.range(190, 240) });
-    K.mul(oof, K.segments(n, sr, [[0, 0], [0.02, 1, 2], [0.28, 0, 3]]));
-    K.addAt(both, K.unit(oof), r.range(0.06, 0.1) * sr, 0.3);
-    return K.densify(both, sr, 21);
-  },
-});
-
-voices.push({
-  name: 'SlideScrape',
-  title: 'You slide',
-  description: 'Sliding along the floor on your side: shoes and clothes grinding over grit for most of a second.',
-  family: FAMILY,
-  group: 'reference',
-  class: 'friction',
-  variants: 4,
-  channels: 1,
-  loop: null,
-  space: 'dry',
-  loudness: -24,
-  carry: PLAYER_CARRY,
-  board: 'Your footsteps',
-  render: ({ sr, rng }) => {
-    const seconds = rng.range(0.65, 0.8);
-    const n = Math.round(seconds * sr);
-    const r = rng.fork('slide');
-    // fast at the start, scrubbing off speed
-    const speed = K.segments(n, sr, [[0, 0], [0.03, 1, 3], [seconds * 0.7, 0.45], [seconds, 0, -2]]);
-    const rough = K.smoothRandom(n, sr, 25, r.fork('rough'), 0.3, 1);
-    const vel = new Float32Array(n);
-    for (let i = 0; i < n; i++) vel[i] = speed[i] * 3 * rough[i];
-    const slips = K.stickSlip(n, sr, { velocity: vel, force: 0.8, stiffness: 120, muS: 1, muD: 0.7, irregularity: 0.7, roughness: 0.8, grain: 120, rng: r.fork('slips') });
-    const grind = K.modal(slips, sr, [...K.scatterModes(r, 6, 180, 700, 0.02, 0.05, -1), ...K.scatterModes(r, 5, 900, 2600, 0.008, 0.02, -4)], n);
-    // cloth on the floor: a broad, dark hiss following the speed
-    const cloth = K.svf(K.pink(n, r.fork('cloth')), sr, 'bandpass', 900, 0.5);
-    K.mul(cloth, speed);
-    const grains = K.grit(sr, r.fork('grit'), { count: r.int(25, 40), spread: seconds * 0.8, freq: [800, 4000] });
-    const out = K.unit(grind);
-    K.addAt(out, K.unit(cloth), 0, 0.5);
-    K.addAt(out, grains, 0, 0.25);
-    // the body going down onto the floor at the start
-    K.addAt(out, K.unit(K.modal(K.burst(sr, r.fork('down'), { length: 0.01, cutoff: 900 }), sr, K.scatterModes(r, 4, 120, 400, 0.05, 0.1, 0), Math.round(0.2 * sr))), 0, 0.6);
-    return K.fade(K.butter(out, sr, 'lowpass', 3000, 2), sr, 0.001, 0.05);
-  },
-});
-
-voices.push({
-  name: 'LeapWhoosh',
-  title: 'You leap',
-  description: 'A running jump across a gap: the air rushing past your ears, rising and falling with the arc.',
-  family: FAMILY,
-  group: 'reference',
-  class: 'swell',
-  variants: 3,
-  channels: 1,
-  loop: null,
-  space: 'dry',
-  loudness: -26,
-  carry: PLAYER_CARRY,
-  board: 'Your footsteps',
-  render: ({ sr, rng }) => {
-    const seconds = rng.range(0.55, 0.65);
-    const n = Math.round(seconds * sr);
-    const r = rng.fork('air');
-    const arc = K.segments(n, sr, [[0, 0], [seconds * r.range(0.45, 0.55), 1, -3], [seconds, 0, 2]]);
-    // turbulence around the head: a band of noise whose centre rides the speed, buffeted
-    const buffet = K.smoothRandom(n, sr, 14, r.fork('buffet'), 0.5, 1);
-    const centre = new Float32Array(n);
-    for (let i = 0; i < n; i++) centre[i] = 250 + 900 * arc[i];
-    const rush = K.svf(K.pink(n, r.fork('rush')), sr, 'bandpass', centre, 0.9);
-    const low = K.svf(K.brown(n, sr, r.fork('low')), sr, 'lowpass', 220, 0.7);
-    const out = new Float32Array(n);
-    K.unit(rush);
-    K.unit(low);
-    for (let i = 0; i < n; i++) out[i] = (rush[i] + 0.5 * low[i]) * arc[i] * buffet[i];
-    return K.fade(out, sr, 0.03, 0.06);
-  },
-});
+voices.push(
+  recorded({
+    name: 'HardLanding',
+    title: 'A hard landing',
+    description: 'You drop from a height and land hard: both feet and your body taking it.',
+    family: FAMILY,
+    group: 'reference',
+    class: 'body',
+    variants: 4,
+    channels: 1,
+    loop: null,
+    space: 'dry',
+    loudness: -22,
+    board: 'Your footsteps',
+    layers: (variant) => {
+      const i = variant - 1;
+      return [
+        { src: [`oga/jump-landing/Jump 1.wav`, `oga/jump-landing/Jump 2.wav`, `oga/jump-landing/Jump 3.wav`, 'oga/75-cc0-breaking-falling-hit-sfx/bfh1_hit_06.ogg'][i], rate: [0.86, 0.92], hp: 100, lp: 2400, trim: true, gain: 0 },
+        { src: FLOOR[i], rate: 0.95, lp: 2400, trim: true, gain: [-2, -5, -3, -6][i] },
+        { src: `${IMPACT}/impactSoft_medium_00${i}.ogg`, rate: 0.75, hp: 90, lp: 1400, gain: -4, at: 0.003 },
+        { src: FLOOR[(i + 3) % 5], rate: 0.85, lp: 2000, gain: -6, at: 0.012 },
+        { src: `${ARMOR}/step_cloth${1 + i}.ogg`, rate: 0.8, lp: 1600, gain: -10, at: 0.03 },
+      ];
+    },
+    finish: (ctx, mix) => withSub(mix, ctx.sr, { f0: 72, f1: 52, t60: 0.18, gain: -14 }),
+  }),
+  recorded({
+    name: 'SlideScrape',
+    title: 'Your slide',
+    description: 'You slide along the floor: shoes and clothes dragging.',
+    family: FAMILY,
+    group: 'reference',
+    class: 'friction',
+    variants: 4,
+    channels: 1,
+    loop: null,
+    space: 'dry',
+    loudness: -25,
+    board: 'Your footsteps',
+    layers: (variant) => {
+      const i = variant - 1;
+      return [
+        { src: `oga/scrapes/scrape-${1 + i}.ogg`, from: 0, to: 0.9, rate: [0.8, 0.86], hp: 120, lp: 2200, gain: 0, fadeIn: 0.02, fadeOut: 0.25 },
+        { src: `${ARMOR}/step_cloth${4 - i}.ogg`, rate: 0.7, lp: 1500, gain: -6 },
+      ];
+    },
+  }),
+  recorded({
+    name: 'LeapWhoosh',
+    title: 'Your leap',
+    description: 'You leap a gap: air rushing past your ears.',
+    family: FAMILY,
+    group: 'reference',
+    class: 'swell',
+    variants: 3,
+    channels: 1,
+    loop: null,
+    space: 'dry',
+    loudness: -26,
+    board: 'Your footsteps',
+    layers: (variant) => {
+      const i = variant - 1;
+      return [
+        { src: `oga/18-random-video-game-sound-effects/${['whoosh.wav', 'whoosh2.wav', 'whoosh.wav'][i]}`, rate: [0.5, 0.56], lp: 2000, gain: 0, fadeIn: 0.12, fadeOut: 0.2 },
+        { src: `oga/swishes-sound-pack/swish-${[7, 9, 4][i]}.wav`, rate: 0.45, lp: 1800, gain: -6, at: 0.1, fadeIn: 0.08 },
+      ];
+    },
+  }),
+);

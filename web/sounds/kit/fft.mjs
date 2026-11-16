@@ -1,5 +1,5 @@
-// fft.mjs: an iterative radix-2 FFT, windows, averaged power spectra, the short-time spectrum the audit and the
-// pictures read, and FFT convolution (the convolver of reverb.mjs).
+// fft.mjs: an iterative radix-2 FFT, windows, averaged power spectra and frame powers (what the audit and the pictures
+// read), and FFT convolution (the convolver of reverb.mjs).
 
 /** @type {Map<number, {cos: Float64Array, sin: Float64Array, rev: Uint32Array}>} */
 const TABLES = new Map();
@@ -132,21 +132,6 @@ export function welch(x, size = 4096, from = 0, to = x.length) {
   if (frames === 0) frames = 1;
   for (let k = 0; k < sum.length; k++) sum[k] /= frames;
   return sum;
-}
-
-/**
- * The short-time power spectrum: one Float32Array of bins 0..size/2 per hop.
- * @param {Float32Array} x
- * @param {number} size
- * @param {number} hop
- */
-export function stft(x, size, hop) {
-  const window = hann(size);
-  const scratch = { re: new Float64Array(size), im: new Float64Array(size) };
-  /** @type {Float32Array[]} */
-  const frames = [];
-  for (let s = -size / 2; s < x.length - size / 2; s += hop) frames.push(Float32Array.from(framePower(x, s, size, window, scratch)));
-  return frames;
 }
 
 /**

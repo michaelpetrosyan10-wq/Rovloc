@@ -8,8 +8,10 @@
 //     warning (the lights near the spot flicker, the target's torch stutters, a static hiss rises), the spot checked
 //     again (in view now: another spot, another warning), FadeIn, and the Stare: StareSeconds standing still, staring.
 //     A target who turns and looks at it then gets the reveal scare (no damage).
-//   * Then it stalks the target at the Teleport pace for StalkSeconds; meanwhile sight alone does not start a chase,
-//     only a held stare or the target coming within StalkNear (the service's summary). Then it patrols.
+//   * Then it stalks the target at the Teleport pace for StalkSeconds; meanwhile sight of a player within the presence
+//     layer's Teleport.StalkSight (docs/MONSTER.md 18) starts a chase, as does a held stare (the service's summary):
+//     the answer to the warning is to turn, sidestep or hide. Then it patrols. The spot is ahead of the target's
+//     movement first (Teleport.CutOffShare of the time) when the floor offers one there.
 // Never during a chase, a search, a hiding response or a scripted beat; never within AfterCatch of a catch or of
 // someone going down; never once the roof's door smash has started (the game's teleportBlocked hook); the first on a
 // floor no sooner than its grace + FirstAfterGrace.

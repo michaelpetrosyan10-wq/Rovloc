@@ -13,8 +13,13 @@
 //   * Withdrawing: entered with ctx.reposition (after a catch or a stun) it first walks, at InvestigateNoise speed, to
 //     a waypoint out of every player's sight 35..140 studs from them, then patrols. (A chase that gives up fades out
 //     instead: the service's warp, before Patrol starts.)
+//   * The director (docs/MONSTER.md 15): with a focus player (ctx.patrolNear() gives where they stand) the next loop is
+//     the one passing closest to them (after Relax's and the heard pull's choices); a search hint (ctx.hint) breaks the
+//     lap: it walks to the hint at Director.HintPace, looks round there (into the room's far corner, then back the way
+//     it came) and picks its next loop from there.
 
 import * as THREE from 'three';
+import * as Brain from '../brain.js';
 import { CreatureConfig } from '../config.js';
 import { clamp, flat } from '../util.js';
 
@@ -112,7 +117,8 @@ function distanceTo(loop, position) {
  * @param {import('../brain.js').Loop[]} loops
  * @param {THREE.Vector3} from
  * @param {{current: string|null, heardZones: Record<string, any>, now: number, sweepChance: number, avoid: boolean,
- *   roll: () => number}} options
+ *   roll: () => number, near?: THREE.Vector3|null}} options `near`: the director's focus player (the loop passing
+ *   closest to them, when the heard pull does not choose)
  */
 export function chooseLoop(loops, from, options) {
   const candidates = loops.filter((l) => l.waypoints.length > 0 && (l.id !== options.current || loops.length === 1));
@@ -155,6 +161,18 @@ export function chooseLoop(loops, from, options) {
     }
     if (best) return best;
   }
+  if (options.near) {
+    let best = candidates[0];
+    let bestDistance = Infinity;
+    for (const loop of candidates) {
+      const d = distanceTo(loop, options.near);
+      if (d < bestDistance) {
+        best = loop;
+        bestDistance = d;
+      }
+    }
+    return best;
+  }
   const pick = Math.min(candidates.length, 1 + Math.floor(options.roll() * Math.min(3, candidates.length)));
   return candidates[pick - 1];
 }
@@ -162,7 +180,8 @@ export function chooseLoop(loops, from, options) {
 function runOf(ctx) {
   let run = runs.get(ctx);
   if (!run) {
-    run = { loop: null, index: 0, walked: 0, looks: [], arrived: false, withdrawTo: null, failures: 0, lastLoop: null };
+    run = { loop: null, index: 0, walked: 0, looks: [], arrived: false, withdrawTo: null, failures: 0, lastLoop: null,
+      hint: null, hintArrived: false };
     runs.set(ctx, run);
   }
   return run;
@@ -186,6 +205,7 @@ function pickLoop(ctx, run) {
     sweepChance: SweepChance[ctx.phase] || 0,
     avoid: ctx.phase === 'Relax',
     roll: () => ctx.random.nextNumber(),
+    near: ctx.patrolNear ? ctx.patrolNear() : null,
   });
   run.loop = loop;
   run.walked = 0;
@@ -234,6 +254,7 @@ export function enter(ctx) {
   run.loop = null;
   run.looks = [];
   run.withdrawTo = null;
+  run.hint = null;
   ctx.mover.setRepathInterval(CreatureConfig.Repath.PatrolInterval);
   ctx.body.setPose('Biped');
   if (ctx.reposition) {
@@ -254,8 +275,39 @@ export function enter(ctx) {
 export function update(ctx) {
   const run = runOf(ctx);
   const mover = ctx.mover;
+  if (ctx.hint && run.hint !== ctx.hint && !run.withdrawTo) {
+    // the director's search hint: there, now
+    run.hint = ctx.hint;
+    run.hintArrived = false;
+    run.looks = [];
+    const pace = ctx.paceOf(ctx.presence.Director.HintPace);
+    mover.setSpeed(pace);
+    ctx.body.setWalkSpeed(pace);
+    mover.goTo(run.hint.point, { arrive: ARRIVE });
+    return;
+  }
   if (mover.busy()) return;
   const status = mover.getStatus();
+  if (run.hint) {
+    if (status === 'Moving') return;
+    if (!run.hintArrived && status !== 'Failed' && status !== 'Stuck') {
+      run.hintArrived = true;
+      const here = ctx.body.getPosition();
+      const room = ctx.level ? Brain.roomAt(ctx.level, here) : null;
+      const back = ctx.body.getCFrame().lookVector.clone().negate();
+      run.looks = cornerLooks(room, here, ctx.body.getCFrame().lookVector.clone(), back);
+    }
+    const look = run.looks.shift();
+    if (look) {
+      mover.hold(ctx.random.nextNumber(LOOK_SECONDS.min, LOOK_SECONDS.max), look);
+      return;
+    }
+    if (ctx.hint === run.hint) ctx.hint = null;
+    run.hint = null;
+    setSpeed(ctx, Name);
+    pickLoop(ctx, run);
+    return;
+  }
   if (run.withdrawTo) {
     if (status === 'Moving') return;
     run.withdrawTo = null;
@@ -292,5 +344,6 @@ export function exit(ctx) {
   const run = runOf(ctx);
   run.withdrawTo = null;
   run.looks = [];
+  run.hint = null;
   ctx.body.face(null);
 }

@@ -2,9 +2,9 @@
 //
 //   node tools/creature-sim.mjs [--build <dir>] [--soak <seconds>] [--json <file>]
 //
-// The engine pieces that hold no GPU or DOM state are the real ones (World with its BVHs and probes, Entities with
-// their colliders and attributes, the NoiseBus); the loop, the player, audio, input and UI are stand-ins with the
-// engine's surface, driven tick by tick (30 Hz, the brain at 10 Hz, the rig animated every tick). Every tick of every
+// The engine pieces that hold no GPU or DOM state are the real ones (sim-engine.mjs: World with its BVHs and probes,
+// Entities with their colliders and attributes, the NoiseBus); the loop, the player, audio, input and UI are stand-ins
+// with the engine's surface, driven tick by tick (30 Hz, the brain at 10 Hz, the rig animated every tick). Every tick of every
 // scenario is watched: the speed (never faster than a sprinter, 19, outside Scripted), no NaN in the body or the
 // view contract, no catch through a wall, and every teleport's materialisation (out of every player's view, never
 // within 12 studs, after its 1.6 s warning).
@@ -16,38 +16,49 @@
 //   investigate   a FloorDebris noise in another room: it goes there (InvestigateNoise) and searches.
 //   catch         a lit player in sight down a corridor: WallChase, a Hallway catch that downs; a second executes.
 //   lose hidden   seen, then hidden (no spot): the chase ends in a Search, no catch.
-//   LOS rule      seen, then gone round a corner: the chase searches ChaseLost seconds after the last sight.
-//   22 s rule     a player kept in sight, out of reach: the chase gives up at MaxChase and fades away (also on
-//                 Nightmare, never past a sprinter's pace).
+//   LOS rule      seen, then gone round a corner: the chase searches the presence layer's LostSeconds (4 [6]) after
+//                 the last sight.
+//   the cap       a player kept in sight, out of reach: the chase gives up at its cap (12 [45] s) and fades away
+//                 (also on Nightmare, never past a sprinter's pace).
 //   vents         a crawler scurrying in a duct is never followed in: it never enters the ducts, nobody is caught.
 //   stare         a held stare (7 deg, 1 s, within 18 studs in the dark) from behind starts a chase; a glance does not.
 //   teleport      nobody seen for 25 s: grace + 45 s before the first; every one warned 1.6 s ahead, out of view,
 //                 never within 12 studs, 12-24 studs of walking from the target; the target looking back gets the
-//                 reveal; none while the game blocks them or within 25 s of a catch.
+//                 reveal; none while the game blocks them or within 25 s of a catch; a stalk whose mover sticks ends
+//                 there (never its warp and warning replayed).
 //   hiding        it sees a player climb into a locker: it stands facing it; the grunt then the LookAway; slipping
 //                 out during a LookAway and breaking the line escapes; stepping out under its nose is a catch; the
-//                 ReachIn at 30 s; a teammate's pull-out is no catch (co-op unit test, a remote handle).
+//                 ReachIn at 30 s; after a long walk to the spot (Nightmare) still one LookAway before the reach; a
+//                 teammate's pull-out is no catch (co-op unit test, a remote handle).
 //   fake-outs     the seeded fake-out spots: about 1 in 12, at most one per floor per player (hidespots.js); the
 //                 stay limit: the warning at 35 s, shoved out at 45 s (held while a breath check runs).
 //   soak          every level, a wandering, noisy player for --soak seconds each: never stuck past the stuck
 //                 window, no state held past its bound, no NaN, nothing throws.
 //   determinism   the patrol twice gives the same path.
+//   presence      (docs/MONSTER.md 15-18; the numbers asserted are the spec's, SPEC, and the config is held to them)
+//                 the director's search hints (30..55 walked, never in view, 8 s apart) bring
+//                 it into the leash; the approach teleport is warned, 45..80 walked, out of view, past the grace, 25 s
+//                 apart; each beat (Peek, Glimpse, PassBy, Shadow) keeps 25 walked off its player, never chases on
+//                 sight alone and ends (the Shadow freezes under a look); noticing (a glimpse far off starts no chase,
+//                 staying in sight does); the chase's wind-up (longer for a target met within SurpriseRange; no
+//                 catch during it) and
+//                 pursuit; a beat that never reached its player is no encounter; a pass-by is never planned for a
+//                 player on the run, a shadow never for a sprinter (and its player is the target it publishes); a
+//                 runner is approached only ahead, past their lead; the torch's glow; standing still in the dark;
+//                 co-op attention (a teammate left alone becomes the focus).
 // Exit code 1 on any failure.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
-import { decodeWorld } from '../src/engine/data.js';
-import { Entities } from '../src/engine/entities.js';
-import { createSharedUniforms } from '../src/engine/materials.js';
-import { NoiseBus } from '../src/engine/noise.js';
-import { World } from '../src/engine/world.js';
 import { WorldConfig } from '../src/engine/config.js';
 import { createCreature, PLAYER } from '../src/creature/index.js';
-import { CreatureConfig, ROOT_HEIGHT } from '../src/creature/config.js';
+import { CreatureConfig, ROOT_HEIGHT, difficultySpec } from '../src/creature/config.js';
 import { FloorNav } from '../src/creature/nav.js';
+import { presenceConfig } from '../src/creature/presence.js';
 import { fakeoutSpots, FakeoutBudget, StayClock } from '../src/game/mechanics/hidespots.js';
+import { PLAYER_ROOT, TICK, loadWorld, makeEngine } from './sim-engine.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -59,169 +70,52 @@ const buildDir = path.resolve(opt('--build', path.join(here, '..', 'build')));
 const SOAK = Number(opt('--soak', '240'));
 const jsonOut = opt('--json', null);
 
-const PLAYER_ROOT = 3; // R15 root centre above the floor (HipHeight 2 + half the root)
-const TICK = 1 / 30;
 const STUCK_WINDOW = 2 * CreatureConfig.Repath.StuckSeconds + 0.2; // stall, fresh route, stall, then reposition
 const SPRINT = 19;
 const T = CreatureConfig.Teleport;
 const H = CreatureConfig.Hiding;
 // the longest each state may run before the soak calls it stuck (Patrol and the levels' holds are open-ended)
-const STATE_BOUND = { InvestigateNoise: 70, Search: 40, HidingResponse: 45, Teleport: 40, WallChase: 30, Stunned: 15 };
+const STATE_BOUND = { InvestigateNoise: 70, Search: 40, HidingResponse: 45, Teleport: 40, WallChase: 50, Stunned: 15, Peek: 40,
+  Glimpse: 40, Shadow: 50, PassBy: 60 };
+// docs/MONSTER.md's numbers for the presence layer, written down here from the spec (never read from the code under
+// test): the cases assert these, and one check holds CreatureConfig.Presence to them, so a drifted number fails loudly.
+// [Standard, Nightmare] where the spec gives two.
+const SPEC = {
+  'Chase.CapSeconds': [12, 45], // 18.3
+  'Chase.LostSeconds': [4, 6], // 18.3
+  'Chase.Breather': [35, 15], // 18.3
+  'Chase.Pursuit': [30, 40], // 18.2
+  'Chase.Windup': [1.5, 0.7], // 18.1
+  'Chase.SurpriseWindup': [2.8, 2], // 18.1
+  'Chase.SurpriseRange': [20, 20], // 18.1
+  'Director.HintMin': [30, 30], // 15.3
+  'Director.HintMax': [55, 55],
+  'Director.HintEvery': [8, 8],
+  'Director.LeashWalk': [100, 100],
+  'Director.ApproachMin': [45, 45], // 15.3
+  'Director.ApproachMax': [80, 80],
+  'Director.ApproachCooldown': [25, 25],
+  'Director.AheadDot': [0.4, 0.4], // 15.3
+  'Director.BeatEvery': [35, 25], // 15.3
+  'Director.QuietSeconds': [40, 35], // 15.1
+  'Director.QuietAfterCatch': [45, 40],
+  'Director.StarveSeconds': [75, 75], // 15.2
+  'Beats.SafeWalk': [25, 25], // 16
+  'Beats.PassWalk': [20, 20], // 16.4
+  'Detection.NoticeSeconds': [2, 1.8], // 17.3
+  'Teleport.CutOffShare': [0.75, 1], // 7.2, 18.4
+  'Teleport.CutOffMin': [24, 24], // 18.4
+  'Teleport.CutOffMax': [70, 70],
+  'Teleport.StalkSight': [40, 50], // 18.4
+};
+/** MONSTER.md's number `key` for `difficulty`. */
+const spec = (key, difficulty = 'Standard') => SPEC[key][difficulty === 'Nightmare' ? 1 : 0];
 
 // ---------------------------------------------------------------------------------------------------------------
 // The engine stand-in
 // ---------------------------------------------------------------------------------------------------------------
 
-console.log(`[sim] decoding ${buildDir}`);
-const meta = JSON.parse(fs.readFileSync(path.join(buildDir, 'world.json'), 'utf8'));
-const binBuf = fs.readFileSync(path.join(buildDir, 'world.bin'));
-const decoded = decodeWorld(meta, binBuf.buffer.slice(binBuf.byteOffset, binBuf.byteOffset + binBuf.byteLength));
-
-class SimLoop {
-  /** @param {number|null} fps a render loop at this rate interleaved with the 30 Hz ticks (null: one frame per tick) */
-  constructor(fps = null) {
-    this.time = 0;
-    this.alpha = 0;
-    this.tickDt = TICK;
-    this.ticks = [];
-    this.frames = [];
-    this.fps = fps;
-    this.frameAt = 0;
-  }
-
-  onTick(fn) {
-    this.ticks.push(fn);
-    return () => this.ticks.splice(this.ticks.indexOf(fn), 1);
-  }
-
-  onFrame(fn) {
-    this.frames.push(fn);
-    return () => this.frames.splice(this.frames.indexOf(fn), 1);
-  }
-
-  /** One fixed tick; with a render rate, the frames that fall before it run first (alpha between the ticks). */
-  step() {
-    const next = this.time + TICK;
-    if (this.fps) {
-      while (this.frameAt < next - 1e-9) {
-        this.alpha = Math.max(0, (this.frameAt - this.time) / TICK);
-        for (const f of this.frames.slice()) f(1 / this.fps, this.alpha);
-        this.frameAt += 1 / this.fps;
-      }
-    }
-    this.time = next;
-    for (const f of this.ticks.slice()) f(TICK);
-    if (!this.fps) for (const f of this.frames.slice()) f(TICK, 1);
-  }
-}
-
-class SimPlayer {
-  constructor() {
-    this.body = { position: new THREE.Vector3(0, -1000, 0) };
-    this.moveState = 'Standing';
-    this.mode = 'OnFoot';
-    this.lifeState = 'Alive';
-    this.locks = new Map();
-    this.yaw = 0;
-    this.pitch = 0;
-    this.flashlight = { on: true, setEmfSource: (fn) => { this.emf = fn; } };
-    this.panic = { floors: new Map(), setFloor: (t, v) => { if (v == null) this.panic.floors.delete(t); else this.panic.floors.set(t, v); }, setCreatureSource: (fn) => { this.sense = fn; } };
-    this.cameraOverrides = new Map();
-  }
-
-  lock(reason) {
-    this.locks.set(reason, true);
-  }
-
-  unlock(reason) {
-    this.locks.delete(reason);
-  }
-
-  teleport(m) {
-    this.body.position.setFromMatrixPosition(m);
-    const d = new THREE.Vector3(-m.elements[8], 0, -m.elements[10]);
-    if (d.lengthSq() > 1e-6) this.yaw = Math.atan2(-d.x, -d.z);
-  }
-
-  eye(out = new THREE.Vector3()) {
-    const h = CreatureConfig && { VentCrawling: -0.6, DownedCrawling: -0.8, Hiding: 1.3, Crouching: 0 }[this.moveState];
-    return out.copy(this.body.position).add(new THREE.Vector3(0, h ?? 1.5, 0));
-  }
-
-  look() {
-    const cp = Math.cos(this.pitch);
-    return { yaw: this.yaw, pitch: this.pitch, direction: new THREE.Vector3(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp) };
-  }
-
-  setLook(yaw, pitch) {
-    this.yaw = yaw;
-    this.pitch = pitch;
-  }
-
-  /** Turns the view to look straight at `point` from the eye. */
-  lookAt(point) {
-    const eye = this.eye();
-    const d = point.clone().sub(eye);
-    this.yaw = Math.atan2(-d.x, -d.z);
-    this.pitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
-  }
-
-  setLifeState(state) {
-    this.lifeState = state;
-    this.moveState = state === 'Downed' ? 'DownedCrawling' : this.moveState;
-  }
-
-  setCameraOverride(token, fn) {
-    if (fn) this.cameraOverrides.set(token, fn);
-    else this.cameraOverrides.delete(token);
-  }
-
-  surfaceAt() {
-    return 'Concrete';
-  }
-
-  /** Stands the player on the floor at `floorPoint`. */
-  place(floorPoint, mode = 'OnFoot') {
-    this.mode = mode;
-    if (mode === 'Vent') {
-      this.body.position.copy(floorPoint);
-      this.moveState = 'VentCrawling';
-    } else {
-      this.body.position.set(floorPoint.x, floorPoint.y + PLAYER_ROOT, floorPoint.z);
-      if (this.moveState === 'VentCrawling') this.moveState = 'Standing';
-    }
-  }
-}
-
-function makeEngine(fps = null) {
-  const shared = createSharedUniforms((decoded.meta.flickerGroups || []).length);
-  const quality = { budget: { normalMaps: false, anisotropy: 1, flashlightShadow: false }, changed: { connect() {} } };
-  const world = new World(decoded, {}, { shared, quality });
-  const engine = { world, shared, loop: new SimLoop(fps), currentLevel: null };
-  engine.entities = new Entities(engine);
-  engine.noise = new NoiseBus({ loop: engine.loop, world });
-  engine.player = new SimPlayer();
-  const played = [];
-  engine.audio = {
-    played,
-    play(name, opts = {}) {
-      played.push({ name, at: engine.loop.time, position: opts.position ? opts.position.clone() : null });
-      return { playing: true, stop() { this.playing = false; }, setVolume() {} };
-    },
-  };
-  engine.lighting = { addLight: () => ({ set() {}, remove() {} }) };
-  engine.input = { stack: [], pushContext(token, ctx) { this.stack.push([token, ctx]); }, popContext(token) { this.stack = this.stack.filter((e) => e[0] !== token); } };
-  engine.ui = { hudTarget: 1, setVisible(v) { this.hudTarget = v ? 1 : 0; }, root: null };
-  engine.settings = { get: () => 1 };
-  const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.1, 1000);
-  engine.renderer = { camera };
-  engine.loop.onFrame(() => {
-    engine.player.eye(camera.position);
-    camera.lookAt(camera.position.clone().add(engine.player.look().direction));
-    camera.updateMatrixWorld();
-  });
-  return engine;
-}
+const { meta, decoded } = loadWorld(buildDir);
 
 // ---------------------------------------------------------------------------------------------------------------
 // Helpers and the per-tick watch
@@ -245,7 +139,7 @@ const navOf = (level) => {
 
 /** A run of the Creature on a fresh engine. */
 function session(opts = {}) {
-  const engine = makeEngine(opts.fps || null);
+  const engine = makeEngine(decoded, opts.fps || null);
   const creature = createCreature(engine);
   const s = {
     engine,
@@ -348,10 +242,17 @@ function watch(s) {
       const warning = s.events.warnings[s.events.warnings.length - 1];
       const lead = warning ? t - warning.at : null;
       const m = { at: t, level: svc.creatureLevel, seen, nearest: +nearest.toFixed(1), lead: lead !== null ? +lead.toFixed(2) : null,
-        walk: warning && warning.plan ? +warning.plan.walk.toFixed(1) : null, side: warning && warning.plan ? warning.plan.side : null };
+        walk: warning && warning.plan ? +warning.plan.walk.toFixed(1) : null, side: warning && warning.plan ? warning.plan.side : null,
+        lead: warning && warning.plan ? +(warning.plan.lead || 0).toFixed(1) : 0 };
       fairness.materialised.push(m);
+      // the walk band of its kind: the director's approach, the cut-off ahead of a moving target, else 12..24 (a
+      // moving target's bands lie past their lead: the way they cover before it may appear)
+      const d = svc.difficulty;
+      const band = m.side === 'Approach' ? [spec('Director.ApproachMin', d) + m.lead, spec('Director.ApproachMax', d) + m.lead]
+        : m.side === 'Ahead' && m.lead > 0 ? [spec('Teleport.CutOffMin', d) + m.lead, spec('Teleport.CutOffMax', d) + m.lead]
+          : [T.MinWalk, T.MaxWalk];
       if (seen || nearest < T.MinStraight - 0.05 || lead === null || lead < T.WarningSeconds - 0.05 ||
-        (m.walk !== null && (m.walk < T.MinWalk - 0.05 || m.walk > T.MaxWalk + 0.05))) fairness.badMaterial.push(m);
+        (m.walk !== null && (m.walk < band[0] - 0.05 || m.walk > band[1] + 0.05))) fairness.badMaterial.push(m);
     }
     s.warpPhase = phase;
   }
@@ -547,7 +448,7 @@ report(p1.reached >= 5 && p1.travelled >= 200 && p1.travelled <= 60 * CreatureCo
   const distance = ambush(s, 20, 60, 120);
   if (distance < 0) report(false, 'catch: the patrol route offers a sight line for the test');
   else {
-    const chased = advance(s, 1.5, () => s.creature.getState() === 'WallChase');
+    const chased = advance(s, 3, () => s.creature.getState() === 'WallChase');
     const caughtIn = advance(s, 15, () => s.events.caught.length > 0);
     const finishedIn = advance(s, 4, () => s.events.finished.length > 0);
     const first = s.events.finished[0];
@@ -569,7 +470,7 @@ report(p1.reached >= 5 && p1.travelled >= 200 && p1.travelled <= 60 * CreatureCo
 {
   const s = awakeOn(LEVEL);
   const distance = ambush(s, 35, 70, 180);
-  const chased = advance(s, 1.5, () => s.creature.getState() === 'WallChase');
+  const chased = advance(s, 3, () => s.creature.getState() === 'WallChase');
   advance(s, 0.4);
   s.player.moveState = 'Hiding';
   const gaveUp = advance(s, 40, () => s.creature.getState() !== 'WallChase');
@@ -586,7 +487,7 @@ report(p1.reached >= 5 && p1.travelled >= 200 && p1.travelled <= 60 * CreatureCo
   const s = awakeOn(LEVEL);
   const svc = s.creature.service;
   const distance = ambush(s, 30, 60, 180);
-  const chased = advance(s, 1.5, () => svc.state === 'WallChase');
+  const chased = advance(s, 3, () => svc.state === 'WallChase');
   advance(s, 0.3);
   // out of its sight, far off, torch off, standing still in the dark
   const eye = svc._creatureEye();
@@ -606,30 +507,30 @@ report(p1.reached >= 5 && p1.travelled >= 200 && p1.travelled <= 60 * CreatureCo
 }
 
 function difficultyLost(d) {
-  return d === 'Nightmare' ? 5 : 4;
+  return spec('Chase.LostSeconds', d);
 }
 
-// 7. the 22 s rule (and Nightmare's 28 s, never past a sprinter)
+// 7. the chase's cap (12 s, Nightmare's 45 s, never past a sprinter)
 for (const difficulty of ['Standard', 'Nightmare']) {
   const s = awakeOn(LEVEL, difficulty);
   const svc = s.creature.service;
   const distance = ambush(s, 25, 45, 180);
   // the game refuses every catch: it runs them down and stands over them, in plain sight, until it has to give up
   s.creature.setCatchHooks({ canCatch: () => false });
-  const chased = advance(s, 1.5, () => svc.state === 'WallChase');
+  const chased = advance(s, 3, () => svc.state === 'WallChase');
   const startedAt = svc.chaseStarted;
-  const ended = advance(s, 40, () => svc.state !== 'WallChase');
+  const ended = advance(s, 60, () => svc.state !== 'WallChase');
   s.creature.setCatchHooks(null);
   const length = s.engine.loop.time - (startedAt ?? 0);
-  const limit = difficulty === 'Nightmare' ? 28 : 22;
+  const limit = spec('Chase.CapSeconds', difficulty);
   const warp = svc.warp ? svc.warp.kind : null;
   report(distance > 0 && chased >= 0 && ended >= 0 && Math.abs(length - limit) <= 0.35 && warp === 'GiveUp' && s.events.gaveUp.length === 1 &&
-    s.events.caught.length === 0, `22 s rule (${difficulty}): a chase still in sight gives up at ${limit} s and fades away`,
+    s.events.caught.length === 0, `the cap (${difficulty}): a chase still in sight gives up at ${limit} s and fades away`,
   `chase ${length.toFixed(1)} s -> ${svc.state} (${warp || 'no'} warp), gaveUp ${s.events.gaveUp.length}, catches ${s.events.caught.length}`);
   advance(s, 4);
   const back = !svc.warp && !svc.body.hidden;
   const far = back ? s.player.body.position.distanceTo(svc.body.getPosition()) : 0;
-  report(back && far >= CreatureConfig.GiveUp.MinDistance - 1, `22 s rule (${difficulty}): it comes back out of sight, far away`, `${far.toFixed(0)} studs off`);
+  report(back && far >= CreatureConfig.GiveUp.MinDistance - 1, `the cap (${difficulty}): it comes back out of sight, far away`, `${far.toFixed(0)} studs off`);
   summary[`giveUp${difficulty}`] = { length: +length.toFixed(2), far: +far.toFixed(1) };
 }
 
@@ -731,7 +632,7 @@ for (const difficulty of ['Standard', 'Nightmare']) {
   const firstAt = advance(s, 240, () => {
     stroll();
     const w = svc.warp;
-    if (w && w.kind === 'Teleport' && w.phase === 'FadeIn') {
+    if (w && w.kind === 'Teleport' && w.stare && w.phase === 'FadeIn') {
       // the target turns round where they can see it (round the corner if it formed out of their line)
       const head = svc._creatureEye();
       const feet = svc.body.getPosition().clone().setY(svc.body.getPosition().y - ROOT_HEIGHT);
@@ -744,7 +645,8 @@ for (const difficulty of ['Standard', 'Nightmare']) {
     }
     return false;
   });
-  const warning = s.events.warnings[0];
+  const jumpscares = () => s.events.warnings.filter((w) => !w.plan || w.plan.side !== 'Approach');
+  const warning = jumpscares()[0];
   advance(s, 2);
   const first = warning ? warning.at - activatedAt : null;
   report(warning !== undefined && first >= CreatureConfig.FloorGrace.Standard + T.FirstAfterGrace - 0.05,
@@ -762,6 +664,7 @@ for (const difficulty of ['Standard', 'Nightmare']) {
     stroll();
     return false;
   });
+  // (every teleport, the approach too, waits while the game blocks them)
   const duringBlock = s.events.warnings.length - warningsBefore;
   s.blocked = false;
   advance(s, 300, () => {
@@ -771,7 +674,7 @@ for (const difficulty of ['Standard', 'Nightmare']) {
   report(duringBlock === 0, 'teleport: none while the game blocks them (survive countdown, finale)', `${duringBlock} during ${(s.engine.loop.time - blockedFrom).toFixed(0)} s blocked`);
   // one teleport per warp: its first warning, and how many times a watched spot made it warn again
   const teleports = [];
-  for (const w of s.events.warnings) {
+  for (const w of jumpscares()) {
     const last = teleports[teleports.length - 1];
     if (last && w.warp !== null && last.warp === w.warp) last.warnings += 1;
     else teleports.push({ at: w.at, warp: w.warp, warnings: 1 });
@@ -783,6 +686,52 @@ for (const difficulty of ['Standard', 'Nightmare']) {
     'teleport: they keep coming, a cooldown (and 25 s unseen) between them',
     `${total} teleports, gaps ${gaps.map((g) => g.toFixed(0)).join(', ')} s, warnings each ${rewarned.join(', ')} (at most ${T.Retries + 1})`);
   summary.teleport = { first, total, gaps, reveals: s.events.revealed.length, sides: s.events.warnings.map((w) => w.plan && w.plan.side) };
+}
+
+// 10c. a teleport's stalk whose mover sticks: moved unseen, the stalk is over (docs/MONSTER.md 10): never its warp
+// and warning replayed at the same spot, never Teleport held past its bound
+{
+  const s = session();
+  const svc = s.creature.service;
+  s.creature.beginRun({ difficulty: 'Standard' });
+  s.creature.activateLevel(LEVEL);
+  const start = hideFar(s, LEVEL);
+  s.player.moveState = 'Standing';
+  s.player.flashlight.on = false;
+  s.player.place(start);
+  s.creature.setCatchHooks({ canCatch: () => false });
+  const stalking = advance(s, 300, () => svc.state === 'Teleport' && !svc.warp && !svc.body.hidden);
+  const enteredAt = s.events.states.filter((e) => e.next === 'Teleport').map((e) => e.at).pop() ?? s.engine.loop.time;
+  const warningsBefore = s.events.warnings.length;
+  // the target off round a corner, out of its line (it is moved only while nobody could see it)
+  const feet = svc.body.getPosition().clone().setY(svc.body.getPosition().y - ROOT_HEIGHT);
+  const off = pointFrom(s, LEVEL, feet, svc._creatureEye(), 60, 150, false);
+  if (off) s.player.place(off);
+  // its mover reports Stuck once (a passable link the body cannot pass); the service moves it unseen
+  const status = svc.mover.getStatus.bind(svc.mover);
+  const relocate = svc._relocateUnseen.bind(svc);
+  let moved = null;
+  svc._relocateUnseen = () => {
+    moved = relocate();
+    return moved;
+  };
+  let stick = true;
+  svc.mover.getStatus = () => {
+    if (!stick) return status();
+    stick = false;
+    return 'Stuck';
+  };
+  const left = advance(s, 60, () => svc.state !== 'Teleport');
+  const held = s.engine.loop.time - enteredAt;
+  delete svc.mover.getStatus;
+  delete svc._relocateUnseen;
+  // a replay would warn again at once: none for this teleport in the seconds after
+  advance(s, 5);
+  const replayed = s.events.warnings.slice(warningsBefore).filter((w) => !w.plan || w.plan.side !== 'Approach').length;
+  s.creature.setCatchHooks(null);
+  report(stalking >= 0 && !stick && moved === true && left >= 0 && replayed === 0 && held <= STATE_BOUND.Teleport,
+    'teleport: a stalk whose mover sticks ends there (moved unseen): no warp or warning replayed, Teleport within its bound',
+    stalking < 0 ? 'no stalk' : `moved ${moved}, left Teleport ${left.toFixed(1)} s after the stick (${held.toFixed(1)} s in it), ${replayed} replayed warnings, now ${svc.state}`);
 }
 
 // 10b. no teleport within AfterCatch of a catch
@@ -912,6 +861,30 @@ function slipAway(s, locker) {
   summary.hidingEscape = { lookAway: sinceIn, gruntLead: lead, state: svc.state };
 }
 {
+  // a2. its way to the spot sticks (a passable link the body cannot pass): moved unseen, the watch is over (never a
+  // walk back into the same stall, held for as long as the hider stays in)
+  const s = awakeOn(HIDE_LEVEL);
+  const svc = s.creature.service;
+  const hid = seenHiding(s);
+  const approaching = hid ? advance(s, 1, () => svc.state === 'HidingResponse' && svc.mover.busy()) : -1;
+  const status = svc.mover.getStatus.bind(svc.mover);
+  const relocate = svc._relocateUnseen.bind(svc);
+  let moved = null;
+  // the player in the spot sees nothing outside it: the service moves it unseen
+  svc._relocateUnseen = () => {
+    moved = relocate();
+    return moved;
+  };
+  // Stuck until the service has acted on it (anything else reading the status meanwhile sees it too)
+  svc.mover.getStatus = () => (moved === null ? 'Stuck' : status());
+  const left = approaching >= 0 ? advance(s, 20, () => svc.state !== 'HidingResponse') : -1;
+  delete svc.mover.getStatus;
+  delete svc._relocateUnseen;
+  report(!!hid && approaching >= 0 && moved === true && left >= 0 && left <= 1,
+    'hiding: a watch whose way to the spot sticks is over once it is moved unseen (never a walk back into the stall)',
+    !hid ? 'no setup' : `moved ${moved}, left HidingResponse ${left >= 0 ? `${left.toFixed(1)} s after the stick` : 'never'}, now ${svc.state}`);
+}
+{
   // b. stepping out under its nose
   const s = awakeOn(HIDE_LEVEL);
   const svc = s.creature.service;
@@ -941,6 +914,36 @@ function slipAway(s, locker) {
   const after = hid && catchAt !== null ? catchAt - hid.enteredAt : null;
   report(!!hid && after !== null && s.events.caught[0].kind === 'Locker' && Math.abs(after - (H.ReachInSeconds + H.ReachInLead)) <= 0.7 && reachAt > 0,
     `hiding: it reaches in after ${H.ReachInSeconds} s (ReachIn, a Locker catch)`, after !== null ? `caught ${after.toFixed(2)} s after they got in` : 'no catch');
+}
+{
+  // c2. a long walk to the spot (Nightmare's sooner reach): the watch still has one LookAway, after its grunt, before
+  // the reach, and slipping out then escapes (the walk held until the scheduled first LookAway could no longer fit)
+  const s = awakeOn(HIDE_LEVEL, 'Nightmare');
+  const svc = s.creature.service;
+  const hid = seenHiding(s);
+  const reach = difficultySpec('Nightmare').reachInSeconds;
+  const holdUntil = hid ? hid.enteredAt + reach - H.ReachInLead - H.LookAwaySeconds - H.LookAwayMin + 0.5 : 0;
+  const busy = svc.mover.busy.bind(svc.mover);
+  svc.mover.busy = () => s.engine.loop.time < holdUntil || busy();
+  let reachAt = -1;
+  const lookAt = hid ? advance(s, reach + 6, () => {
+    if (svc.action === 'ReachIn' && reachAt < 0) reachAt = s.engine.loop.time;
+    return svc.action === 'LookAway' || s.events.caught.length > 0;
+  }) : -1;
+  delete svc.mover.busy;
+  const looked = lookAt >= 0 && svc.action === 'LookAway';
+  const grunt = s.events.grunts.length ? s.events.grunts[s.events.grunts.length - 1].at : null;
+  const lead = looked && grunt !== null ? svc.actionAt - grunt : null;
+  const sinceIn = looked ? svc.actionAt - hid.enteredAt : null;
+  let escaped = false;
+  if (looked) {
+    escaped = slipAway(s, hid.locker);
+    advance(s, 10);
+  }
+  report(!!hid && looked && reachAt < 0 && lead !== null && lead >= H.GruntLead - 0.15 && escaped && s.events.caught.length === 0,
+    `hiding: after a long walk to the spot it still looks away once before the reach (${reach} s on Nightmare), and slipping out then escapes`,
+    !hid ? 'no setup' : looked ? `LookAway ${sinceIn.toFixed(1)} s in, grunt ${lead !== null ? lead.toFixed(2) : '-'} s ahead, catches ${s.events.caught.length}` :
+      `no LookAway (${s.events.caught.length ? `caught ${s.events.caught[0].kind}` : svc.state})`);
 }
 {
   // d. a teammate pulls them out (co-op unit test: a remote hider)
@@ -1085,6 +1088,576 @@ function slipAway(s, locker) {
   report(over.length === 0, 'soak: no state or warp held past its bound', over.length ? JSON.stringify(over.slice(0, 3)) : 'none');
 }
 
+// 15. the presence layer (docs/MONSTER.md 15-18): the director's hint, its approach and caps, each beat, noticing, the
+// wind-up and the pursuit, the torch's glow, standing still in the dark, co-op attention
+
+// 15-. the config carries MONSTER.md's numbers (SPEC): the cases below assert the spec's numbers, so a drift fails here
+{
+  const off = [];
+  for (const [key, want] of Object.entries(SPEC)) {
+    const [table, name] = key.split('.');
+    ['Standard', 'Nightmare'].forEach((d, i) => {
+      const got = presenceConfig(meta, d)[table][name];
+      if (got !== want[i]) off.push(`${key} ${d} ${got} (spec ${want[i]})`);
+    });
+  }
+  report(off.length === 0, `presence: CreatureConfig.Presence carries docs/MONSTER.md's ${Object.keys(SPEC).length} numbers`, off.join(', ') || 'all match');
+}
+
+/** A fresh run on `level`, the player standing in plain view at `at` (torch on), facing `toward`. */
+function standing(level, at, toward, difficulty = 'Standard', opts = {}) {
+  const s = session(opts);
+  s.creature.beginRun({ difficulty });
+  s.creature.activateLevel(level);
+  s.player.place(at);
+  s.player.moveState = 'Standing';
+  s.player.flashlight.on = true;
+  if (toward) s.player.lookAt(toward.clone().setY(at.y + PLAYER_ROOT + 1.5));
+  return s;
+}
+
+/** Floor points of `level` whose room has two ways out or more and a hiding spot within 25 walked (a beat's place). */
+function beatPlaces(s, level) {
+  const svc = s.creature.service;
+  const nav = svc._nav(level);
+  const spots = svc.env.hideSpots(level).map((x) => x.front.position);
+  return samplesOf(level).map((p) => p.position).filter((p) => nav.waysOut(p) >= 2 &&
+    spots.some((h) => h.distanceTo(p) < 20 && nav.pathLength(p, h) <= 25));
+}
+
+// 15a. the director: a player far off and out of its way gets a search hint (30..55 walked from them, never in view,
+// never their own spot), the hints at least HintEvery apart; it comes into the leash
+{
+  const s = session();
+  const svc = s.creature.service;
+  s.creature.beginRun({ difficulty: 'Standard' });
+  s.creature.activateLevel(LEVEL);
+  advance(s, 1);
+  const nav = svc._nav(LEVEL);
+  // the player 160+ walked from where it starts, standing still in the dark (it neither sees nor hears them)
+  const from = svc._feet();
+  const far = samplesOf(LEVEL).map((p) => p.position).find((p) => Math.abs(p.y - from.y) < 3 && nav.pathLength(from, p) > 160);
+  s.player.place(far);
+  s.player.flashlight.on = false;
+  const hints = [];
+  let closest = Infinity;
+  advance(s, 120, () => {
+    const h = svc.ctx.hint;
+    if (h && (!hints.length || hints[hints.length - 1].at !== h.at)) {
+      hints.push({ at: h.at, walk: nav.pathLength(far, h.point), seen: svc._inViewOfAnyone(h.point.clone().setY(h.point.y + ROOT_HEIGHT)) });
+    }
+    closest = Math.min(closest, svc.walks.get(PLAYER) ?? Infinity);
+    return false;
+  });
+  const spaced = hints.slice(1).every((h, i) => h.at - hints[i].at >= spec('Director.HintEvery') - 0.05);
+  report(hints.length > 0 && hints.every((h) => h.walk >= spec('Director.HintMin') - 0.5 && h.walk <= spec('Director.HintMax') + 0.5 && !h.seen) &&
+    spaced && closest <= spec('Director.LeashWalk'),
+  'director: a far player gets search hints 30..55 walked from them (never in view, at least 8 s apart) and it comes within the leash',
+  `${hints.length} hints, walks ${hints.map((h) => h.walk.toFixed(0)).join('/')}, closest ${closest.toFixed(0)} walked`);
+  summary.directorHint = { hints: hints.length, closest };
+}
+
+// 15b. the approach teleport: warned, 45..80 walked from its player, out of view, never within 12 of anyone, not in
+// the floor's grace, at least ApproachCooldown apart
+{
+  const s = session();
+  const svc = s.creature.service;
+  s.creature.beginRun({ difficulty: 'Standard' });
+  s.creature.activateLevel(LEVEL);
+  const activated = s.engine.loop.time;
+  advance(s, 1);
+  const nav = svc._nav(LEVEL);
+  const from = svc._feet();
+  const pts = samplesOf(LEVEL).map((p) => p.position).filter((p) => Math.abs(p.y - from.y) < 3 && nav.pathLength(from, p) > 220);
+  let k = 0;
+  s.player.flashlight.on = false;
+  const approaches = [];
+  advance(s, 240, () => {
+    // the player keeps moving off (every 20 s a new far point), out of its reach on foot
+    if (Math.round(s.engine.loop.time * 30) % 600 === 0 && pts.length) {
+      const here = svc._feet();
+      const p = pts.filter((x) => nav.pathLength(here, x) > 200)[(k++ * 7) % 5] || pts[0];
+      s.player.place(p);
+    }
+    return false;
+  });
+  for (const w of s.events.warnings) if (w.plan && w.plan.side === 'Approach') approaches.push(w);
+  const bad = fairness.materialised.filter((m) => m.side === 'Approach' && (m.seen || m.nearest < T.MinStraight - 0.05));
+  const gaps = approaches.slice(1).map((w, i) => w.at - approaches[i].at);
+  const past = (w) => w.plan.walk - (w.plan.lead || 0);
+  report(approaches.length > 0 && approaches.every((w) => past(w) >= spec('Director.ApproachMin') - 0.5 && past(w) <= spec('Director.ApproachMax') + 0.5 &&
+    w.at - activated >= CreatureConfig.FloorGrace.Standard) && gaps.every((g) => g >= spec('Director.ApproachCooldown') - 0.05) && bad.length === 0,
+  'director: the approach teleport is warned, 45..80 walked from its player (past their lead), out of view, past the grace, 25 s apart',
+  `${approaches.length} approaches, walks ${approaches.map((w) => past(w).toFixed(0)).join('/')}, gaps ${gaps.map((g) => g.toFixed(0)).join('/')}, ${bad.length} bad`);
+}
+
+// 15c. the beats: each one, played to a player standing in a safe place, keeps 25 walked off them (a pass-by 20 all along its walk), never chases on
+// sight alone, is seen (Peek, Glimpse) and ends in Patrol; the Shadow follows, freezes under a look and a stare chases
+{
+  const probe = session();
+  probe.creature.beginRun({ difficulty: 'Standard' });
+  probe.creature.activateLevel(LEVEL);
+  const places = beatPlaces(probe, LEVEL);
+  // the Shadow's tries: a sprinter (faster than ShadowFast) is never shadowed; while it plays, the player it follows
+  // is the one it publishes (getTarget, the snapshot), its own target untouched
+  const shadow = { sprinterPlans: 0, planned: 0, published: 0, ticks: 0 };
+  /** One try of `kind` from the `first`th place on: {ok, detail} (null: no place fits). */
+  const tryBeat = (kind, first) => {
+    let s = null;
+    let plan = null;
+    for (let i = first; i < places.length && !plan; i += 23) {
+      const at = places[i];
+      const ahead = places.find((p) => p.distanceTo(at) > 35 && p.distanceTo(at) < 55 && Math.abs(p.y - at.y) < 2) || null;
+      s = standing(LEVEL, at, ahead);
+      const svc = s.creature.service;
+      // dark and still while it wakes (it is not to find them first), the torch on for the beat
+      s.player.flashlight.on = false;
+      advance(s, 25);
+      // found them anyway while waking (a patrol past their place): not a safe place for a beat, the next one
+      if (s.events.caught.length || s.events.states.some((e) => e.next === 'WallChase')) continue;
+      s.player.flashlight.on = true;
+      // the shadow needs a player on the move: a walk along the lattice away from it
+      if (kind === 'Shadow') s.walkTo = places.filter((p) => p.distanceTo(at) > 60 && p.distanceTo(at) < 90 && Math.abs(p.y - at.y) < 2);
+      const B = svc.presence.Beats;
+      const only = { ...B, Weights: Object.fromEntries(Object.keys(B.Weights).map((k) => [k, k === kind ? 1 : 0])) };
+      if (kind === 'Shadow') {
+        // stage it 45 walked behind a walking player
+        const nav = svc._nav(LEVEL);
+        const route = s.walkTo.length ? nav.computePath(at, s.walkTo[0]) : null;
+        if (!route) continue;
+        s.route = route.waypoints;
+        const behind = places.find((p) => Math.abs(p.y - at.y) < 2 && nav.pathLength(at, p) > 38 && nav.pathLength(at, p) < 50 &&
+          new THREE.Vector3(p.x - at.x, 0, p.z - at.z).dot(new THREE.Vector3(route.waypoints[0].x - at.x, 0, route.waypoints[0].z - at.z)) < 0 &&
+          !s.engine.world.lineClear(s.player.eye(), p.clone().setY(p.y + 9)));
+        if (!behind) continue;
+        stage(s, behind, at);
+        // a few steps along the way so it knows they are moving
+        for (let n = 0; n < 15; n++) {
+          const f = s.player.body.position.clone().setY(at.y);
+          const wp = s.route.find((w) => w.distanceTo(f) > 1) || s.route[s.route.length - 1];
+          const d = wp.clone().sub(f).setY(0).normalize().multiplyScalar(11 * 0.1);
+          s.player.place(f.add(d));
+          s.player.lookAt(s.player.body.position.clone().add(d.clone().multiplyScalar(20)).setY(s.player.body.position.y + 1.5));
+          advance(s, 0.1);
+        }
+      }
+      plan = svc._planBeat(PLAYER, svc.ctx.walkTo(PLAYER), only);
+      if (kind === 'Shadow' && plan) {
+        const rec = svc._record(PLAYER);
+        const speed = rec.speed;
+        rec.speed = B.ShadowRunning + 5;
+        if (svc._planBeat(PLAYER, svc.ctx.walkTo(PLAYER), only)) shadow.sprinterPlans += 1;
+        rec.speed = speed;
+        shadow.planned += 1;
+      }
+    }
+    if (!plan || !s) return null;
+    const svc = s.creature.service;
+    const nav = svc._nav(LEVEL);
+    const B = svc.presence.Beats;
+    const reply = s.creature.devCommand(`ai ${kind}`);
+    const began = svc.state === kind;
+    let nearest = Infinity;
+    let seenByPlayer = 0;
+    let frozen = 0;
+    let looks = 0;
+    let chased = false;
+    const end = advance(s, 60, () => {
+      if (svc.state === 'WallChase') chased = true;
+      if (kind === 'Shadow' && s.route) {
+        // the player walks on; every 4 s they look back at it for 1 s (a glance: no stare)
+        const t = s.engine.loop.time;
+        const lookBack = Math.floor(t) % 4 === 0;
+        const f = s.player.body.position.clone().setY(s.route[0].y);
+        const wp = s.route.find((w) => w.distanceTo(f) > 1);
+        if (wp && !lookBack) {
+          const d = wp.clone().sub(f).setY(0).normalize().multiplyScalar(11 * TICK);
+          s.player.place(f.add(d));
+          s.player.lookAt(s.player.body.position.clone().add(d.clone().multiplyScalar(100)).setY(s.player.body.position.y + 1.5));
+        } else if (lookBack) {
+          const head = svc._creatureEye();
+          const eye = s.player.eye();
+          const side = new THREE.Vector3(head.z - eye.z, 0, eye.x - head.x).normalize();
+          s.player.lookAt(head.clone().addScaledVector(side, Math.tan((12 * Math.PI) / 180) * head.distanceTo(eye)));
+          looks += 1;
+          if (svc.speedMeasured < 0.5) frozen += 1;
+        }
+      }
+      const root = s.player.body.position.clone().setY(s.player.body.position.y - PLAYER_ROOT);
+      if (svc.state === kind) nearest = Math.min(nearest, nav.pathLength(svc._feet(), root));
+      if (kind === 'Shadow' && svc.state === 'Shadow') {
+        shadow.ticks += 1;
+        if (svc.getTarget() === PLAYER && svc.snapshot().targetingPlayer && svc.ctx.target === null) shadow.published += 1;
+      }
+      if (viewers(s).some((v) => inViewOf(s, v, svc.body.getPosition())) && !svc.body.hidden) seenByPlayer += 1;
+      return svc.state !== kind;
+    });
+    const after = svc.state;
+    // a beat's stand points keep SafeWalk off them; a pass-by's whole walk keeps PassWalk off them (16.4)
+    const keepsOff = nearest >= (kind === 'PassBy' ? spec('Beats.PassWalk') - 2 : spec('Beats.SafeWalk') - 4);
+    const seen = kind === 'PassBy' || kind === 'Shadow' || seenByPlayer > 0;
+    let detail = `${reply}; ended ${end.toFixed(1)} s -> ${after}, nearest ${nearest.toFixed(0)} walked, seen ${seenByPlayer} ticks`;
+    let ok = began && end >= 0 && keepsOff && seen;
+    if (kind === 'PassBy') ok = ok && (after === 'Patrol' || after === 'WallChase');
+    else ok = ok && !chased && after === 'Patrol';
+    if (kind === 'Shadow') {
+      ok = ok && frozen > 0;
+      detail += `, frozen in ${frozen} of ${looks} look-back ticks`;
+    }
+    return { ok, detail, safe: keepsOff && (kind === 'PassBy' || !chased) };
+  };
+  for (const kind of ['Peek', 'Glimpse', 'PassBy', 'Shadow']) {
+    // a few places: the first that plays through counts; every try must be safe (a stand point it cannot reach ends
+    // the beat early, safely)
+    const tries = [];
+    for (let first = 0; first < 20 && !(tries.length && tries[tries.length - 1].ok); first += 5) {
+      const r = tryBeat(kind, first);
+      if (r) tries.push(r);
+    }
+    const last = tries[tries.length - 1];
+    report(!!last && last.ok && tries.every((r) => r.safe),
+      `beat ${kind}: plays safely (${kind === 'PassBy' ? `${spec('Beats.PassWalk')} walked off all along, its own senses` : `${spec('Beats.SafeWalk')} walked off, no chase on sight alone`}) and ends`,
+      last ? `${tries.length} tries; ${last.detail}${tries.some((r) => !r.safe) ? ` (unsafe: ${tries.filter((r) => !r.safe).map((r) => r.detail).join(' | ')})` : ''}`
+        : `no place on ${LEVEL} where it fits`);
+  }
+  report(shadow.planned > 0 && shadow.sprinterPlans === 0,
+    'beat Shadow: never planned for a sprinter (over ShadowRunning: they would leave it behind unseen)',
+    `${shadow.planned} plans for a walker; ${shadow.sprinterPlans} for the same player at a sprint`);
+  report(shadow.ticks > 0 && shadow.published === shadow.ticks,
+    'beat Shadow: the player it follows is the one it publishes (getTarget, the snapshot: the "Followed" hint), its own target untouched',
+    `${shadow.published} of ${shadow.ticks} Shadow ticks`);
+}
+
+// 15d. noticing: a glimpse across its cone far off starts no chase; staying in its sight does
+{
+  const s = awakeOn(LEVEL);
+  const svc = s.creature.service;
+  const distance = ambush(s, 50, 66, 180);
+  // half a second in sight, then out of its line
+  advance(s, 0.5);
+  const quick = svc.state;
+  const eye = svc._creatureEye();
+  const away = pointFrom(s, LEVEL, svc._feet(), eye, 45, 90, false);
+  s.player.place(away);
+  advance(s, 2);
+  const glanced = svc.state !== 'WallChase';
+  report(distance > 0 && quick !== 'WallChase' && glanced,
+    'noticing: half a second in its sight far off starts no chase', `${distance.toFixed(0)} studs, state ${svc.state}`);
+}
+{
+  const s = awakeOn(LEVEL);
+  const svc = s.creature.service;
+  const distance = ambush(s, 50, 66, 180);
+  const chased = advance(s, 4, () => svc.state === 'WallChase');
+  const want = spec('Detection.NoticeSeconds');
+  report(distance > 0 && chased >= 0.5 && chased <= want + 0.5,
+    `noticing: staying in its sight at ${Math.round(distance)} studs starts the chase within ${want} s`, `after ${chased.toFixed(2)} s`);
+}
+
+// 15e. the wind-up and the pursuit: a fresh chase holds a beat before it runs; losing them, it runs on along the way
+// they fled past the last place it saw them. Staged in a long straight tunnel: it 30 behind the player, both facing
+// along it; the player runs on 45 studs, then is gone (out of its line, still, torch off).
+{
+  const nav = navOf(LEVEL);
+  const probe = awakeOn(LEVEL);
+  const clear = (a, b) => probe.engine.world.lineClear(a.clone().setY(a.y + 2), b.clone().setY(b.y + 2));
+  const runOf = (from, d, max) => {
+    let n = 0;
+    let p = from.clone();
+    while (n < max) {
+      const q = p.clone().addScaledVector(d, 2);
+      if (!nav.roomAt(q) || !clear(p, q)) break;
+      p = q;
+      n += 2;
+    }
+    return n;
+  };
+  let lane = null;
+  const pts = samplesOf(LEVEL).map((p) => p.position);
+  for (let i = 0; i < pts.length && !lane; i += 11) {
+    for (let a = 0; a < 4 && !lane; a++) {
+      const d = new THREE.Vector3(Math.cos((a * Math.PI) / 2), 0, Math.sin((a * Math.PI) / 2));
+      if (runOf(pts[i], d, 100) >= 100 && runOf(pts[i], d.clone().negate(), 34) >= 34) lane = { at: pts[i], dir: d };
+    }
+  }
+  if (!lane) report(false, 'chase: a long straight tunnel for the wind-up and the pursuit', 'none');
+  else {
+    const s = awakeOn(LEVEL);
+    const svc = s.creature.service;
+    const { at, dir } = lane;
+    s.player.place(at);
+    s.player.moveState = 'Standing';
+    s.player.flashlight.on = true;
+    s.player.lookAt(at.clone().addScaledVector(dir, 20).setY(at.y + PLAYER_ROOT + 1.5));
+    stage(s, at.clone().addScaledVector(dir, -30), at);
+    const chased = advance(s, 4, () => svc.state === 'WallChase');
+    const from = svc.body.getPosition().clone();
+    let still = 0;
+    advance(s, spec('Chase.Windup') - 0.1, () => {
+      if (svc.body.getPosition().distanceTo(from) < 0.05) still += TICK;
+      return false;
+    });
+    report(chased >= 0 && still >= spec('Chase.Windup') - 0.25,
+      `chase: a fresh chase winds up ${spec('Chase.Windup')} s before it runs`, `still ${still.toFixed(2)} s`);
+    let fled = at.clone();
+    for (let n = 0; n < 24; n++) {
+      fled = fled.clone().addScaledVector(dir, 19 * 0.1);
+      s.player.place(fled);
+      s.player.lookAt(fled.clone().addScaledVector(dir, 10).setY(fled.y + PLAYER_ROOT + 1.5));
+      advance(s, 0.1);
+    }
+    const lastSeen = svc.ctx.memory ? svc.ctx.memory.position.clone() : null;
+    const hide = pointFrom(s, LEVEL, fled, svc._creatureEye(), 30, 80, false, fled, (p) => dir.dot(p.clone().sub(fled).setY(0)) < 0);
+    if (hide) {
+      s.player.place(hide);
+      s.player.flashlight.on = false;
+    }
+    let furthest = -Infinity;
+    advance(s, 12, () => {
+      if (lastSeen) furthest = Math.max(furthest, svc._feet().clone().sub(lastSeen).setY(0).dot(dir));
+      return svc.state !== 'WallChase';
+    });
+    report(!!lastSeen && !!hide && furthest >= 10,
+      'chase: losing them, it runs on past the last place it saw them along the way they fled (the pursuit)',
+      `${furthest.toFixed(1)} studs on past the last sight, then ${svc.state}`);
+    // met round a corner: a chase that starts with its target within SurpriseRange winds up SurpriseWindup
+    const near = awakeOn(LEVEL);
+    const nsvc = near.creature.service;
+    const C = { SurpriseRange: spec('Chase.SurpriseRange'), SurpriseWindup: spec('Chase.SurpriseWindup') };
+    near.player.place(at);
+    near.player.moveState = 'Standing';
+    near.player.flashlight.on = true;
+    near.player.lookAt(at.clone().addScaledVector(dir, 20).setY(at.y + PLAYER_ROOT + 1.5));
+    stage(near, at.clone().addScaledVector(dir, -(C.SurpriseRange - 6)), at);
+    const close = advance(near, 4, () => nsvc.state === 'WallChase');
+    const start = nsvc.body.getPosition().clone();
+    let held = 0;
+    advance(near, C.SurpriseWindup - 0.1, () => {
+      if (nsvc.body.getPosition().distanceTo(start) < 0.05) held += TICK;
+      return false;
+    });
+    report(close >= 0 && held >= C.SurpriseWindup - 0.25,
+      `chase: a chase that starts within ${C.SurpriseRange} of its target winds up ${C.SurpriseWindup} s (met round a corner)`,
+      `still ${held.toFixed(2)} s`);
+    // within its reach as the chase starts: the wind-up is a screech, not a grab; it catches once it is over
+    const grab = awakeOn(LEVEL);
+    const gsvc = grab.creature.service;
+    grab.player.place(at);
+    grab.player.moveState = 'Standing';
+    grab.player.flashlight.on = true;
+    grab.player.lookAt(at.clone().addScaledVector(dir, 20).setY(at.y + PLAYER_ROOT + 1.5));
+    stage(grab, at.clone().addScaledVector(dir, -3.5), at);
+    const begun = advance(grab, 4, () => gsvc.state === 'WallChase');
+    const caughtIn = begun >= 0 && grab.events.caught.length === 0 ?
+      advance(grab, spec('Chase.SurpriseWindup') + 3, () => grab.events.caught.length > 0) : -1;
+    report(begun >= 0 && caughtIn >= spec('Chase.SurpriseWindup') - 0.15,
+      `chase: a target within reach as it starts is not caught during the ${spec('Chase.SurpriseWindup')} s wind-up (it screeches, it does not reach), then is`,
+      begun < 0 ? 'no chase' : caughtIn < 0 ? `no catch after (caught ${grab.events.caught.length} at the start)` : `caught ${caughtIn.toFixed(2)} s after the chase began`);
+  }
+}
+
+// 15i. a beat that never reached its player is no encounter (their menace stands, no quiet spell); a pass-by is only
+// planned for a player who is not on the run
+{
+  const probe = session();
+  probe.creature.beginRun({ difficulty: 'Standard' });
+  probe.creature.activateLevel(LEVEL);
+  const places = beatPlaces(probe, LEVEL);
+  let passed = null;
+  for (let i = 0; i < places.length && !passed; i += 17) {
+    const at = places[i];
+    const s = standing(LEVEL, at, null);
+    const svc = s.creature.service;
+    s.player.flashlight.on = false;
+    advance(s, 25);
+    const B = svc.presence.Beats;
+    const only = { ...B, Weights: { PassBy: 1, Peek: 0, Glimpse: 0, Shadow: 0 } };
+    const still = svc._planBeat(PLAYER, svc.ctx.walkTo(PLAYER), only);
+    if (!still) continue;
+    const rec = svc._record(PLAYER);
+    const saved = { speed: rec.speed, travel: rec.travel };
+    rec.speed = 11;
+    rec.travel = new THREE.Vector3(1, 0, 0);
+    const running = svc._planBeat(PLAYER, svc.ctx.walkTo(PLAYER), only);
+    rec.speed = saved.speed;
+    rec.travel = saved.travel;
+    passed = { at, running };
+  }
+  report(!!passed && passed.running === null, 'beat PassBy: planned for a player standing, never for one on the run (they would run into it)',
+    passed ? `standing: a plan; at a run: ${passed.running ? passed.running.kind : 'none'}` : `no place on ${LEVEL} where it fits`);
+  // a Peek forced on a player who is at once far off and out of its sight: it never reaches them
+  let unreached = null;
+  for (let i = 0; i < places.length && !unreached; i += 19) {
+    const at = places[i];
+    const s = standing(LEVEL, at, places.find((p) => p.distanceTo(at) > 35 && p.distanceTo(at) < 55 && Math.abs(p.y - at.y) < 2) || null);
+    const svc = s.creature.service;
+    s.player.flashlight.on = false;
+    advance(s, 25);
+    if (!/Peek/.test(s.creature.devCommand('ai Peek'))) continue;
+    const nav = svc._nav(LEVEL);
+    // far off and out of its line (beyond the director's SeenRange straight too): they never see it
+    const D = svc.presence.Director;
+    const away = samplesOf(LEVEL).map((p) => p.position).find((p) => Math.abs(p.y - at.y) < 3 &&
+      nav.pathLength(svc._feet(), p) > 200 && p.distanceTo(svc._feet()) > D.SeenRange + 10);
+    if (!away) continue;
+    s.player.place(away);
+    s.player.flashlight.on = false;
+    s.player.lookAt(away.clone().add(new THREE.Vector3(0, PLAYER_ROOT + 1.5, -10)));
+    const from = s.engine.loop.time;
+    const before = svc.director.snapshot(from).players.find((x) => x.userId === PLAYER.userId);
+    let reached = false;
+    advance(s, 30, () => {
+      if (svc.ctx.beatReached) reached = true;
+      return svc.state !== 'Peek';
+    });
+    const elapsed = s.engine.loop.time - from;
+    const after = svc.director.snapshot(s.engine.loop.time).players.find((x) => x.userId === PLAYER.userId);
+    unreached = { before, after, elapsed, reached, state: svc.state };
+  }
+  // no encounter: the quiet spell it had (if any) only ran down, the menace only rose
+  report(!!unreached && !unreached.reached && unreached.after.quiet <= Math.max(0, unreached.before.quiet - unreached.elapsed) + 0.05 &&
+    unreached.after.menace >= unreached.before.menace,
+  'director: a beat that never reached its player (unseen, never within 30 walked) is no encounter: no quiet spell, the menace stands',
+  unreached ? `menace ${unreached.before.menace} -> ${unreached.after.menace}, quiet ${unreached.before.quiet.toFixed(1)} -> ` +
+    `${unreached.after.quiet.toFixed(1)} s over ${unreached.elapsed.toFixed(1)} s, then ${unreached.state}` : 'no Peek fitted');
+}
+
+/**
+ * A face-off on `level`: the Creature's floor point and the player's, `min..max` apart with a clear line eye to eye
+ * (and `accept` the player's point), or null.
+ */
+function faceOff(s, level, min, max, accept = null) {
+  const pts = samplesOf(level).map((p) => p.position);
+  const eyeOf = (p, h) => p.clone().setY(p.y + h);
+  for (let i = 0; i < pts.length; i += 7) {
+    const at = pts[i];
+    if (accept && !accept(at)) continue;
+    for (const m of pts) {
+      const d = m.distanceTo(at);
+      if (d < min || d > max || Math.abs(m.y - at.y) > 1) continue;
+      if (s.engine.world.lineClear(eyeOf(m, ROOT_HEIGHT + 5.64), eyeOf(at, PLAYER_ROOT + 1.5))) return { monster: m, player: at };
+    }
+  }
+  return null;
+}
+
+/** A run with the Creature staged at the face-off's point facing the player there, held facing them every tick. */
+function staredDown(off, torch, moving, seconds, until) {
+  const s = awakeOn(LEVEL);
+  const svc = s.creature.service;
+  s.player.place(off.player);
+  s.player.moveState = 'Standing';
+  s.player.flashlight.on = torch;
+  stage(s, off.monster, off.player);
+  return advance(s, seconds, () => {
+    svc.mover.stop();
+    svc.body.face(off.player.clone().sub(off.monster));
+    if (moving) s.player.place(off.player.clone().add(new THREE.Vector3(Math.sin(s.engine.loop.time * 8) * 0.4, 0, 0)));
+    return until(s, svc);
+  });
+}
+
+// 15j. the director's approach on a runner: only ahead of their way (behind them they are gone before it has formed),
+// 45..80 walked past their lead (the way they cover in the FadeOut and the Warning)
+{
+  const probe = session();
+  probe.creature.beginRun({ difficulty: 'Standard' });
+  probe.creature.activateLevel(LEVEL);
+  const places = beatPlaces(probe, LEVEL);
+  const ways = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 0, -1)];
+  const plans = [];
+  for (let i = 0; i < places.length && plans.length < 8; i += 29) {
+    const s = standing(LEVEL, places[i], null);
+    const svc = s.creature.service;
+    advance(s, 2);
+    const rec = svc._record(PLAYER);
+    const root = svc._rootOf(PLAYER);
+    for (const way of ways) {
+      rec.speed = SPRINT;
+      rec.travel = way.clone();
+      const plan = svc._planApproach(PLAYER);
+      if (!plan) continue;
+      const lead = SPRINT * (T.FadeOutSeconds + T.WarningSeconds);
+      plans.push({ ahead: svc._ahead(way, root, plan.spot.position), lead: plan.lead, past: plan.walk - plan.lead, want: lead });
+    }
+  }
+  const bad = plans.filter((p) => p.ahead < spec('Director.AheadDot') || Math.abs(p.lead - p.want) > 0.01 || p.past < spec('Director.ApproachMin') - 0.5 ||
+    p.past > spec('Director.ApproachMax') + 0.5);
+  report(plans.length > 0 && bad.length === 0,
+    'director: a runner is approached only ahead of their way, 45..80 walked past their lead',
+    `${plans.length} plans, ${bad.length} bad${bad.length ? ` ${JSON.stringify(bad.slice(0, 2))}` : ''}`);
+}
+
+// 15f. the torch's glow: a lit torch 75..85 off (beyond its 70), shone back toward it, lights a spot it sees: it goes to
+// look; the same player with the torch off does not
+{
+  const probe = awakeOn(LEVEL);
+  const off = faceOff(probe, LEVEL, 75, 85);
+  const glow = (torch) => staredDown(off, torch, false, 3, (s) => {
+    const eye = s.creature.service._creatureEye();
+    s.player.lookAt(eye.clone().lerp(s.player.eye(), 0.55));
+    return s.creature.service.state === 'InvestigateNoise' || s.creature.service.state === 'WallChase';
+  });
+  const lit = off ? glow(true) : null;
+  const dark = off ? glow(false) : null;
+  report(!!off && lit >= 0 && dark === -1, 'detection: a lit torch\'s glow seen from beyond its sight draws it to look; a dark one does not',
+    off ? `torch on ${lit.toFixed(2)} s, torch off ${dark}` : 'no face-off on the floor');
+}
+
+// 15g. standing still in the dark: 12..15 studs in front of it, torch off, unlit, still: unseen; moving there: seen
+{
+  const probe = awakeOn(LEVEL);
+  const env = probe.creature.service.env;
+  const off = faceOff(probe, LEVEL, 12, 15, (p) => !env.litAt(p.clone().setY(p.y + PLAYER_ROOT + 1), CreatureConfig.Senses.LitIrradiance));
+  const seen = (moving) => staredDown(off, false, moving, 1.5, (s, svc) => svc.ctx.sightings.length > 0) >= 0;
+  const still = off ? seen(false) : null;
+  const moving = off ? seen(true) : null;
+  report(!!off && still === false && moving === true, 'detection: standing still in the dark 12..15 studs off it is unseen; moving there it is seen',
+    `still ${still}, moving ${moving}`);
+}
+
+// 15h. co-op attention: the director does not tunnel one player; a teammate left alone for StarveSeconds becomes its
+// focus (two players: the local one near it, a remote handle far off)
+{
+  const s = session({ roster: true });
+  const svc = s.creature.service;
+  s.creature.beginRun({ difficulty: 'Standard' });
+  s.creature.activateLevel(LEVEL);
+  advance(s, 1);
+  const nav = svc._nav(LEVEL);
+  const from = svc._feet();
+  const pts = samplesOf(LEVEL).map((p) => p.position).filter((p) => Math.abs(p.y - from.y) < 3);
+  const near = pts.find((p) => nav.pathLength(from, p) > 40 && nav.pathLength(from, p) < 60);
+  const far = pts.find((p) => nav.pathLength(from, p) > 250);
+  s.player.place(near);
+  s.player.flashlight.on = false;
+  const state = { root: far.clone().setY(far.y + PLAYER_ROOT), look: new THREE.Vector3(0, 0, -1), life: 'Alive', moveState: 'Standing', torch: false, locker: null };
+  s.remotes.push({
+    userId: 2, name: 'Mate',
+    root: () => state.root.clone(), rootCFrame: () => null, look: () => state.look.clone(), lifeState: () => state.life,
+    downedCount: () => 0, moveState: () => state.moveState, mode: () => 'OnFoot', inVent: () => false, flashlightOn: () => state.torch,
+    lockerId: () => state.locker, hasLock: () => false, controlLock: () => 'None', canCatch: () => false, setCaught: () => {},
+    turn: () => {}, catchCue: () => {}, catchAbort: () => {}, catchOutcome: () => {},
+  });
+  s.creature.setCatchHooks({ canCatch: () => false });
+  const focus = [];
+  advance(s, spec('Director.StarveSeconds') + 40, () => {
+    const f = svc.director.focusPlayer;
+    if (f && (!focus.length || focus[focus.length - 1].who !== f.userId)) focus.push({ who: f.userId, at: s.engine.loop.time });
+    // the local player keeps close to it (pressured), out of its sight
+    const here = svc._feet();
+    if (Math.round(s.engine.loop.time * 30) % 150 === 0) {
+      const p = pts.find((x) => nav.pathLength(here, x) > 40 && nav.pathLength(here, x) < 60 &&
+        !s.engine.world.lineClear(svc._creatureEye(), x.clone().setY(x.y + PLAYER_ROOT + 1.5)));
+      if (p) s.player.place(p);
+    }
+    return false;
+  });
+  const mate = focus.find((f) => f.who === 2);
+  report(!!mate, `co-op: the director turns to a teammate left alone (within ${spec('Director.StarveSeconds')} s and a little more), never tunnels one player`,
+    `focus ${focus.map((f) => `${f.who}@${f.at.toFixed(0)}`).join(', ')}`);
+}
+
 // 13b. graphics never change gameplay: the same run with the render loop at 20 and at 144 fps (and one frame per tick)
 // makes the same decisions in the same places, tick for tick; the light it reads is the baked probe, never the flicker
 {
@@ -1143,7 +1716,7 @@ function slipAway(s, locker) {
 report(fairness.maxSpeed.v <= SPRINT, `fairness: never faster than a sprinting player (${SPRINT}) outside Scripted`,
   `max ${fairness.maxSpeed.v.toFixed(2)} studs/s ${JSON.stringify({ ...fairness.maxSpeed, v: undefined })}`);
 report(fairness.materialised.length > 0 && fairness.badMaterial.length === 0,
-  'fairness: it never teleports into view nor within 12 studs (every one warned 1.6 s ahead, 12-24 studs of walking)',
+  'fairness: it never teleports into view nor within 12 studs (every one warned 1.6 s ahead; 12-24 studs of walking, 24-70 past their lead cutting off a moving target, 45-80 for an approach)',
   `${fairness.materialised.length} materialisations, ${fairness.badMaterial.length} bad${fairness.badMaterial.length ? ` ${JSON.stringify(fairness.badMaterial.slice(0, 2))}` : ''}`);
 report(fairness.catches > 0 && fairness.wallCatches.length === 0, 'fairness: it never catches through a wall',
   `${fairness.catches} catches, ${fairness.wallCatches.length} through a wall`);

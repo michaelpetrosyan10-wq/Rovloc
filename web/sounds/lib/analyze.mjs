@@ -4,7 +4,7 @@
 import * as M from './measure.mjs';
 import { laptop } from '../kit/filters.mjs';
 import { momentaryMax, integrated, truePeak } from '../kit/loudness.mjs';
-import { CLASSES, UNIVERSAL, ONE_SHOT, LOOPING, DEFAULTS, RATTLE_SIGNATURE, PORCELAIN_SIGNATURE } from './classes.mjs';
+import { CLASSES, UNIVERSAL, ONE_SHOT, LOOPING, DEFAULTS, RATTLE_SIGNATURE, HIS_HIGH_SHARE } from './classes.mjs';
 
 /**
  * @param {Float32Array[]} channels the finished render (a loop: one period)
@@ -49,7 +49,7 @@ export function measure(channels, sr, voice) {
     seamRatio: seam.ratio,
     seamLevel: seam.level,
     rattle: M.rattleIndex(x, sr),
-    porcelain: M.porcelainClicks(x, sr),
+    click: M.onsetClick(x, sr),
   };
 }
 
@@ -75,12 +75,13 @@ export function rulesFor(voice) {
     const max = Math.min(voice.expect?.maxSeconds ?? Infinity, cls.maxSeconds ?? (voice.space === 'baked' ? 5 : DEFAULTS.maxSeconds));
     rules.push(['seconds', '<=', max, `a one-shot of this class is at most ${max} s`]);
   }
-  if (!bright) rules.push(['centroid', '<=', DEFAULTS.maxCentroid, 'only glass, porcelain, sparks and keys are brighter than 3 kHz']);
+  if (!bright) rules.push(['centroid', '<=', DEFAULTS.maxCentroid, 'only glass, sparks and keys are brighter than 3 kHz']);
   if (resonance) rules.push(['peaks', '>=', DEFAULTS.minPeaksIfResonant, 'a declared resonance shows at least 5 strong peaks']);
   else rules.push(['purity', '<=', DEFAULTS.maxPurity, 'not a beep: no single twelfth-octave band holds most of it']);
   rules.push(['loudness', '>=', voice.loudness - DEFAULTS.loudnessTolerance, 'at its reference loudness']);
   rules.push(['loudness', '<=', voice.loudness + DEFAULTS.loudnessTolerance, 'at its reference loudness']);
   if (!voice.him && (voice.class === 'breath' || voice.class === 'vocal')) rules.push(['rattle', '<', RATTLE_SIGNATURE, "only he has the throat's rattle (I1)"]);
+  if (voice.him) rules.push(['high', '<=', HIS_HIGH_SHARE, 'nothing of his is bright: no dry ticking']);
   return rules;
 }
 
@@ -98,11 +99,10 @@ export function check(m, voice) {
   }
   if (voice.him) {
     const has = {
-      porcelain: m.porcelain >= PORCELAIN_SIGNATURE,
       throat: m.rattle >= RATTLE_SIGNATURE,
       gait: m.low >= 0.3 && m.laptopLoss < 9,
     };
-    if (!voice.him.some((s) => has[s])) failures.push(`none of his declared signatures measured (${voice.him.join(', ')}: porcelain ${m.porcelain}, rattle ${fmt(m.rattle)}, low ${fmt(m.low)})`);
+    if (!voice.him.some((s) => has[s])) failures.push(`none of his declared signatures measured (${voice.him.join(', ')}: rattle ${fmt(m.rattle)}, low ${fmt(m.low)}, laptop loss ${fmt(m.laptopLoss)})`);
   }
   return failures;
 }

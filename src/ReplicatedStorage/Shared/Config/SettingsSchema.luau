@@ -218,6 +218,9 @@ SettingsSchema.List = table.freeze({
 	{ key = "HintGetUp", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
 	{ key = "HintRevolver", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
 	{ key = "HintTakeoff", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintCreatureNear", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintWarning", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
+	{ key = "HintFollowed", kind = "Bool", label = "Settings.HintSeen", hidden = true, default = false },
 } :: { Setting })
 
 local byKey: { [string]: Setting } = {}

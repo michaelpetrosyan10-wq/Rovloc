@@ -151,6 +151,8 @@ export const NoiseKinds = Object.freeze({
   // the parkour (spec v2 3.1): a slide once at its start, a fall of 8 or more on landing
   Slide: { radius: 60, priority: 'High', medium: 'Air', interval: 0 },
   HardLanding: { radius: 60, priority: 'High', medium: 'Air', interval: 0 },
+  // what the Tall Man investigates (docs/MONSTER.md 17.4): an item taken (a fuse, the keys, a battery, a flask)
+  Pickup: { radius: 20, priority: 'Normal', medium: 'Air', interval: 0 },
 });
 
 export const NoiseConfig = Object.freeze({

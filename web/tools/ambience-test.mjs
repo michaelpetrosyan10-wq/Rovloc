@@ -306,16 +306,18 @@ async function gameCase() {
       await ff(0.5);
     }
     const first = samples[0] || {};
-    check(first.phase === 'Prologue' && first.stage === 'BackLot' && first.cut === 'Full' && samples.length >= 150,
+    // (the Full opening is 61.0 s: two samples a second, the whole of it but its last second)
+    check(first.phase === 'Prologue' && first.stage === 'BackLot' && first.cut === 'Full' && samples.length >= 120,
       `the deploy opens on the Back Lot with the Full opening (${samples.length} samples of it)`, first);
     const lit = samples.filter((x) => x.director || x.bed || x.held !== true);
     check(lit.length === 0, 'the opening: no director and no bed on the Back Lot; the building would hold still under it', lit[0]);
     const dressedCam = samples.filter((x) => dressed.has(x.cameraLevel) || Math.abs(x.haze - 1) > 1e-9 || Math.abs(x.motes - 1) > 1e-9);
     check(dressedCam.length === 0, 'every camera of the opening outside the dressed floors: the haze and the dust at scale 1', dressedCam[0]);
-    const day = samples.filter((x) => x.t <= 60).map((x) => x.day);
-    const night = samples.filter((x) => x.t >= 74).map((x) => x.day);
+    // StoryConfig's day: 0.65 to the lockdown's cut in time (53.8), 0.58 when night starts to fall (56.4), 0 from 59.0
+    const day = samples.filter((x) => x.t <= 56).map((x) => x.day);
+    const night = samples.filter((x) => x.t >= 59.5).map((x) => x.day);
     check(day.length > 0 && Math.min(...day) > 0.5 && night.length > 0 && Math.max(...night) === 0,
-      `the day reads as the opening sets it: daylight to 60 s (least ${Math.min(...day).toFixed(2)}), night from 74 s`);
+      `the day reads as the opening sets it: daylight to 56 s (least ${Math.min(...day).toFixed(2)}), night from 59.5 s`);
     const both = samples.filter((x) => x.subs > 0 && x.caps > 0);
     check(both.length > 0 && both.every((x) => !x.overlap && x.capsAbove && x.capsOpacity === 1 && x.capsZ === '42'),
       `the opening's sound captions show over its black, above its subtitles (${both.length} moments with both)`,

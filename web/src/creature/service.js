@@ -40,6 +40,15 @@
 // pacing notes the catch (cooldown, Relax) and the Creature withdraws out of sight. A mover that stalls for good is put
 // back at the nearest standing spot nobody can see, and only while nobody can see the Creature either.
 //
+// The presence layer (docs/MONSTER.md 15-19, presence.js / beats.js): the Director above the brain keeps a menace per
+// player and, once a second while it patrols and may hunt, hands it a search hint near the focus player (walked there,
+// or an approach teleport first when the walk is long: warned like every teleport), a presence beat (Peek, Glimpse,
+// Shadow, PassBy: their own states) or nothing; the patrol's next loop is the one passing closest to the focus player.
+// The senses add the torch's glow (a lit torch's spot seen from GlowRange is looked into, like a heard noise) and
+// standing still in the dark (sight x StillDarkFactor); the chase runs on along the way its quarry fled (the pursuit),
+// to the website's cap (Presence.Chase); a teleport lands ahead of a moving target first and a sighting within
+// StalkSight after it starts a chase.
+//
 // Levels. activateLevel (every level, the basement too): Pacing.noteAirlock (grace), the Creature is moved hidden to that
 // level's CreatureSpawn if it is elsewhere, fades in once nobody can see it, and wakes into Patrol WakeDelay seconds
 // later; the first teleport waits FloorGrace + Teleport.FirstAfterGrace. A level controller that acquired it
@@ -58,20 +67,27 @@ import { Mover } from './locomotion.js';
 import { FloorNav } from './nav.js';
 import { Pacing, repositionPoint } from './pacing.js';
 import * as Perception from './perception.js';
+import { planBeat } from './beats.js';
+import { Director, presenceConfig } from './presence.js';
 import { Random, Signal, clamp, clamp01, flatDirection, horizontalDistance, isFiniteNumber, isFiniteVector } from './util.js';
 import { buildGraph, nearest as railNearest } from './ventgraph.js';
 import { WorldConfig } from '../engine/config.js';
 import * as Dormant from './states/dormant.js';
+import * as Glimpse from './states/glimpse.js';
 import * as HidingResponse from './states/hiding.js';
 import * as InvestigateNoise from './states/investigate.js';
+import * as PassBy from './states/passby.js';
 import * as Patrol from './states/patrol.js';
+import * as Peek from './states/peek.js';
 import * as Scripted from './states/scripted.js';
 import * as Search from './states/search.js';
+import * as Shadow from './states/shadow.js';
 import * as Stunned from './states/stunned.js';
 import * as Teleport from './states/teleport.js';
 import * as WallChase from './states/wallchase.js';
 
-const STATES = { Dormant, Patrol, InvestigateNoise, WallChase, Search, HidingResponse, Teleport, Stunned, Scripted };
+const STATES = { Dormant, Patrol, InvestigateNoise, WallChase, Search, HidingResponse, Teleport, Stunned, Scripted, Peek,
+  Glimpse, Shadow, PassBy };
 
 const TICK = 1 / GameConfig.ServerTickHz;
 const T = CreatureConfig.Teleport;
@@ -105,12 +121,17 @@ const PULL_MEMORY = 2.5;
 const TELEPORT_RETRY = 4;
 const SAMPLE_SPACING = 5;
 const TUNNEL_KINDS = new Set(['Corridor', 'Tunnel', 'Gallery', 'Hallway']); // not keep-rooms
+const FOLLOWING_BEATS = new Set(['Peek', 'Glimpse', 'Shadow']); // beats it plays watching its player (getTarget)
 const WARP_WAIT = 3; // a spot still in view this long after it was picked is swapped for another
 const WARP_GIVE_UP = 12; // hidden this long: any spot out of sight will do
 const STAGE_LIFTS = [-1, 0, 1]; // the walker's body (its root box) from the root: a catch's staging step clears it
 const SPEED_DAMP = 10;
 const LOUD_RANK = 3;
 const NEAR_EYE = 8; // a point this close to a player's eye counts as in their view
+const GLOW_LIFT = 0.3; // the torch's lit spot, pulled this far back off the surface toward the player
+const GLOW_RANK = Hearing.priorityRank('Normal');
+const FAR = 1e4; // a rank's offset: what is not ahead of a player sorts after everything that is
+const PURSUIT_TRIES = 8; // the pursuit's candidates walked (best first)
 
 /** The local participant (Roblox's Player); a co-op host's remote players are RemotePlayer handles (setRoster). */
 export const PLAYER = Object.freeze({ userId: 1, name: 'Player' });
@@ -199,6 +220,18 @@ export function levelIndex(levelId) {
  * @property {() => boolean} warping
  * @property {() => THREE.Vector3} creatureEye
  * @property {(player: any) => THREE.Vector3|null} playerEye
+ * @property {any} presence the presence layer's numbers for the run's difficulty (presence.js presenceConfig)
+ * @property {{point: THREE.Vector3, player: any, at: number}|null} hint the director's search hint (Patrol walks to it)
+ * @property {any} beatPlan the beat the director handed over (beats.js), while it plays
+ * @property {boolean} beatReached the beat's player has seen it or had it within Beats.ReachWalk walked
+ * @property {string|null} beatDue the beat to enter this tick
+ * @property {() => THREE.Vector3|null} patrolNear where the director's focus player stands (the next loop's pull)
+ * @property {(base: number) => number} paceOf a pace with the difficulty's multiplier and the level's scale, capped
+ * @property {(player: any, degrees: number) => boolean} lookedAt the player's view is on its head (a clear line)
+ * @property {(player: any) => number} walkTo its walking distance to the player
+ * @property {(player: any) => THREE.Vector3[]} trailOf where the player has been, oldest first
+ * @property {(player: any) => number} speedOfPlayer the player's measured speed
+ * @property {(memory: any) => THREE.Vector3|null} pursuitPoint where the pursuit runs on to from the last seen point
  */
 
 export class MonsterAI {
@@ -292,6 +325,21 @@ export class MonsterAI {
     this.teleports = 0;
     this.creatureLit = false;
     this.unsticks = 0;
+    // the presence layer (beginRun)
+    this.presence = null;
+    /** @type {Director|null} */
+    this.director = null;
+    this.directAt = 0;
+    this.approaches = 0;
+    this.beats = 0;
+    this.searchAfterChase = false;
+    this.graceEndsAt = 0;
+    /** @type {Map<any, number>} player -> its walking distance to them, read once a director Interval */
+    this.walks = new Map();
+    /** @type {Map<any, number>} player -> when their torch's glow was last looked for */
+    this.glowAt = new Map();
+    /** @type {Map<any, number>} player -> how far it has noticed them (0..1: 1 starts a chase) */
+    this.awareness = new Map();
 
     const local = (p) => p === PLAYER || p === null || p === undefined;
     this.jumpscare = new JumpscareHandler({
@@ -420,7 +468,11 @@ export class MonsterAI {
     if (this.hideWatch && this.hideWatch.player === player) this.hideWatch = null;
     if (this.lastTeleportTarget === player) this.lastTeleportTarget = null;
     if (this.pendingReach && this.pendingReach.player === player) this.pendingReach = null;
-    for (const map of [this.lastSeen, this.records, this.pulled, this.graceUntil]) map.delete(player);
+    for (const map of [this.lastSeen, this.records, this.pulled, this.graceUntil, this.walks, this.glowAt, this.awareness]) {
+      map.delete(player);
+    }
+    if (this.director) this.director.forget(player);
+    if (c && c.hint && c.hint.player === player) c.hint = null;
     if (this.jumpscare.getVictim() === player) this.jumpscare.abort('Left');
   }
 
@@ -489,6 +541,7 @@ export class MonsterAI {
   ignore(player, seconds) {
     if (!player || !(seconds > 0)) return;
     this.graceUntil.set(player, this.now() + seconds);
+    if (this.director) this.director.encounter(player, this.now());
     const c = this.ctx;
     if (!c) return;
     if (c.target === player) this._setTarget(null);
@@ -813,6 +866,10 @@ export class MonsterAI {
       c.sightings = [];
       c.reposition = false;
       c.stateDone = false;
+      c.hint = null;
+      c.beatPlan = null;
+      c.beatReached = false;
+      c.beatDue = null;
       for (const k of Object.keys(c.heardZones)) delete c.heardZones[k];
     }
     this.noiseQueue = [];
@@ -1003,6 +1060,14 @@ export class MonsterAI {
   _endWarp() {
     const w = this.warp;
     this.warp = null;
+    // the stare after a teleport: it has looked its target in the eye (a clear line within StalkSight)
+    if (w && w.kind === 'Teleport' && w.stare && w.plan && w.plan.target) {
+      const eye = this._playerEye(w.plan.target);
+      const head = this._creatureEye();
+      if (eye && eye.distanceTo(head) <= this.presence.Teleport.StalkSight && this._lineClear(head, eye)) {
+        this.awareness.set(w.plan.target, 1);
+      }
+    }
     if (this.action === 'FadeIn' || this.action === 'Stare' || this.action === 'FadeOut') this._setAction(null);
     this.body.setHidden(false);
     if (this.mover) this.mover.reset();
@@ -1126,26 +1191,37 @@ export class MonsterAI {
     const look = this._lookOf(target);
     const candidates = this._teleportCandidates(nav);
     const buckets = { Behind: [], Ahead: [], Side: [] };
+    // a target on the move is cut off ahead of where they will be when it may appear (they run on toward it through
+    // the warning): CutOffMin..CutOffMax walked past the way they cover meanwhile
+    const P = this.presence.Teleport;
+    const lead = this._lead(target);
+    const reach = lead > 0 ? Math.max(T.MaxWalk, P.CutOffMax + lead) : T.MaxWalk;
     for (const cand of candidates) {
       const p = cand.position;
       if (Math.abs(p.y - room.floorY) > 6) continue;
-      if (horizontalDistance(p, root) > T.MaxWalk + 0.5) continue;
+      if (horizontalDistance(p, root) > reach + 0.5) continue;
       if (keepRoom && cand.room === keepRoom) continue;
       const appear = new THREE.Vector3(p.x, p.y + ROOT_HEIGHT, p.z);
       if (this._nearestPlayerDistanceTo(appear) < T.MinStraight) continue;
       const walk = nav.pathLength(feet, p);
-      if (walk < T.MinWalk || walk > T.MaxWalk) continue;
+      if (walk < T.MinWalk || walk > reach) continue;
+      const side = Teleport.classify(p, root, trail, look, rec.travel);
+      if (lead > 0 && side === 'Ahead') {
+        if (walk < P.CutOffMin + lead) continue;
+      } else if (walk > T.MaxWalk) continue;
       if (this._inViewOfAnyone(appear)) continue;
-      buckets[Teleport.classify(p, root, trail, look, rec.travel)].push({ appear, walk });
+      buckets[side].push({ appear, walk, lead: lead > 0 && side === 'Ahead' ? lead : 0 });
     }
-    const behindFirst = c.random.nextNumber() < T.BehindShare;
-    const order = behindFirst ? ['Behind', 'Ahead', 'Side'] : ['Ahead', 'Behind', 'Side'];
+    // ahead of the way they go first (the cut-off: turn, sidestep or hide), else behind them
+    const cutOff = c.random.nextNumber() < this.presence.Teleport.CutOffShare;
+    const order = cutOff ? ['Ahead', 'Side', 'Behind'] : ['Behind', 'Ahead', 'Side'];
     for (const kind of order) {
       const list = buckets[kind];
       if (!list.length) continue;
       const chosen = list[Math.floor(c.random.nextNumber() * list.length)];
       const facing = flatDirection(root.clone().sub(chosen.appear)) || new THREE.Vector3(0, 0, -1);
-      return { spot: CFrame.lookAt(chosen.appear, chosen.appear.clone().add(facing)), side: kind, walk: chosen.walk };
+      return { spot: CFrame.lookAt(chosen.appear, chosen.appear.clone().add(facing)), side: kind, walk: chosen.walk,
+        lead: chosen.lead };
     }
     return null;
   }
@@ -1194,6 +1270,75 @@ export class MonsterAI {
       pick: () => {
         const nav = this._nav(this.creatureLevel);
         const again = nav && this._playing(plan.target) ? this._teleportSpot(plan.target, nav) : null;
+        return again ? again.spot : null;
+      },
+    });
+    return true;
+  }
+
+  /**
+   * The director's approach (docs/MONSTER.md 15.3): a spot ApproachMin..ApproachMax walked from `target` (past their
+   * lead, and only ahead, when they are on the move: _lead), at least Teleport.MinStraight from everyone and in nobody's
+   * view; {target, spot, walk, side: 'Approach', lead} or null.
+   */
+  _planApproach(target) {
+    const c = this.ctx;
+    const nav = this._nav(this.creatureLevel);
+    const root = target ? this._rootOf(target) : null;
+    if (!c || !nav || !root) return null;
+    const room = nav.roomAt(root);
+    if (!room) return null;
+    const D = this.presence.Director;
+    const feet = new THREE.Vector3(root.x, room.floorY, root.z);
+    // a target on the move is approached only ahead of their way (behind them they are gone before it has formed),
+    // the band lying past the way they cover before it may appear
+    const lead = this._lead(target);
+    const way = this._wayOf(target);
+    const leadOf = (p) => (lead > 0 && this._ahead(way, root, p) >= D.AheadDot ? lead : 0);
+    const pool = [];
+    for (const cand of this._teleportCandidates(nav)) {
+      const p = cand.position;
+      if (Math.abs(p.y - room.floorY) > 6) continue;
+      if (lead > 0 && leadOf(p) === 0) continue;
+      const flat = horizontalDistance(p, root);
+      if (flat > D.ApproachMax + leadOf(p) || flat < T.MinStraight) continue;
+      pool.push(p);
+    }
+    // ahead of the way they go first (they come upon it from afar), then nearest the band's middle; a seeded pick
+    // among the first few that pass
+    const mid = (D.ApproachMin + D.ApproachMax) / 2;
+    const rank = (p) => (this._ahead(way, root, p) >= D.AheadDot ? 0 : FAR) +
+      Math.abs(horizontalDistance(p, root) - mid - leadOf(p));
+    pool.sort((a, b) => rank(a) - rank(b));
+    const ok = [];
+    for (const p of pool.slice(0, D.ApproachTries)) {
+      const appear = new THREE.Vector3(p.x, p.y + ROOT_HEIGHT, p.z);
+      if (this._nearestPlayerDistanceTo(appear) < T.MinStraight) continue;
+      const walk = nav.pathLength(feet, p) - leadOf(p);
+      if (walk < D.ApproachMin || walk > D.ApproachMax) continue;
+      if (this._inViewOfAnyone(appear)) continue;
+      ok.push({ appear, walk: walk + leadOf(p), lead: leadOf(p) });
+    }
+    if (!ok.length) return null;
+    const chosen = ok[Math.floor(c.random.nextNumber() * Math.min(ok.length, 3))];
+    // it forms facing away from them: an approach is heard and glimpsed, never a stare
+    const facing = flatDirection(chosen.appear.clone().sub(root)) || new THREE.Vector3(0, 0, -1);
+    return { target, spot: CFrame.lookAt(chosen.appear, chosen.appear.clone().add(facing)), walk: chosen.walk, side: 'Approach',
+      lead: chosen.lead };
+  }
+
+  /** The approach teleport: the warp with the warning (lights, hiss, the target's torch), no stare; it patrols on. */
+  _startApproach(plan) {
+    if (!plan || this.warp) return false;
+    this.approaches += 1;
+    this._startWarp({
+      kind: 'Teleport',
+      to: plan.spot,
+      warning: true,
+      stare: false,
+      plan,
+      pick: () => {
+        const again = this._playing(plan.target) ? this._planApproach(plan.target) : null;
         return again ? again.spot : null;
       },
     });
@@ -1310,7 +1455,20 @@ export class MonsterAI {
     const c = this.ctx;
     const previous = this.state;
     if (!c || next === previous) return;
+    // the director's encounters: a chase on someone (as it starts and as it ends), a beat that reached its player
+    const played = Brain.BEATS.has(previous) && c.beatPlan && c.beatReached ? c.beatPlan.target : null;
     this.current.exit(c, next);
+    if (this.director) {
+      if (played) this.director.encounter(played, t);
+      if ((Brain.isChase(next) || Brain.isChase(previous)) && c.target) this.director.encounter(c.target, t);
+    }
+    if (Brain.BEATS.has(next)) this.beats += 1;
+    // the back-off after a chase: its search over, a breather (Relax) and a withdraw
+    if (previous === 'Search' && this.searchAfterChase && next === 'Patrol' && this.pacing) {
+      this.pacing.noteBreather(t);
+      c.reposition = true;
+    }
+    if (next === 'Search') this.searchAfterChase = Brain.isChase(previous) || previous === 'HidingResponse';
     if (Brain.isChase(next) && !Brain.isChase(previous)) {
       this.chaseStarted = t;
       this.chaseSeenAt = t;
@@ -1333,9 +1491,10 @@ export class MonsterAI {
     return c && c.sightings.length ? c.sightings[0].player : null;
   }
 
-  _remember(player, position, t) {
+  /** The target's last known place (and the way it saw them run, for the chase's pursuit). */
+  _remember(player, position, t, travel = null) {
     const c = this.ctx;
-    if (c && c.target === player) c.memory = { player, position: position.clone(), at: t };
+    if (c && c.target === player) c.memory = { player, position: position.clone(), at: t, travel };
   }
 
   _transition(decision, t) {
@@ -1492,7 +1651,30 @@ export class MonsterAI {
     this.hideWatch = { player, spot, front, since: t };
   }
 
-  _sense(t) {
+  /**
+   * Noticing (docs/MONSTER.md 17.3): a player in sight fills their awareness by dt / NoticeSeconds x how far they stand
+   * into its range past NoticeNear (at once within it); out of sight it drains at NoticeDecay a second.
+   */
+  _notice(sightings, dt) {
+    const X = this.presence.Detection;
+    const full = Perception.fullRange(this.difficulty);
+    for (const player of this._players()) {
+      const s = sightings.find((x) => x.player === player);
+      const a = this.awareness.get(player) || 0;
+      if (s) {
+        const share = clamp01((s.distance - X.NoticeNear) / Math.max(1e-6, full - X.NoticeNear));
+        const time = X.NoticeSeconds * share;
+        this.awareness.set(player, time > 1e-6 ? Math.min(1, a + dt / time) : 1);
+      } else if (a > 0) this.awareness.set(player, Math.max(0, a - X.NoticeDecay * dt));
+    }
+  }
+
+  /** Whether it has noticed `player` (their awareness full). */
+  _noticed(player) {
+    return (this.awareness.get(player) || 0) >= 1;
+  }
+
+  _sense(t, dt) {
     const c = this.ctx;
     const m = this.mover;
     const p = this.pacing;
@@ -1502,6 +1684,7 @@ export class MonsterAI {
       eye: this._creatureEye(),
       facing: this.lookAway || this.body.getCFrame().lookVector,
       blindPeripheral: this.lookAway !== null,
+      stillDark: this.presence.Detection.StillDarkFactor,
       difficulty: this.difficulty,
       targetUserId: c.target ? c.target.userId : null,
       raycast: (a, b) => this._lineClear(a, b),
@@ -1528,12 +1711,15 @@ export class MonsterAI {
     }
     const sightings = Perception.scan(viewer, observations);
     c.sightings = sightings;
+    this._notice(sightings, dt);
     if (sightings.length) this.lastSeenAny = t;
     for (const s of sightings) {
       this.lastSeen.set(s.player, t);
       if (s.player === c.target) this.chaseSeenAt = t;
       const position = this._rootOf(s.player);
-      if (position) this._remember(s.player, position, t);
+      const rec = this._record(s.player);
+      const running = rec.travel && rec.speed > CreatureConfig.Senses.MovingSpeed ? rec.travel.clone() : null;
+      if (position) this._remember(s.player, position, t, running);
     }
     const listener = {
       position: this._creatureEye(),
@@ -1570,6 +1756,15 @@ export class MonsterAI {
         at: t,
       }, best, t);
     }
+    if (!blind) {
+      for (const glow of this._torchGlow(t, viewer)) {
+        const room = c.level ? Brain.roomAt(c.level, glow.spot) : null;
+        best = this._noteHeard({
+          position: glow.spot, rank: GLOW_RANK, priority: 'Normal', medium: 'Air', kind: 'TorchGlow',
+          sourceUserId: glow.player.userId, zoneId: room ? room.id : null, strength: 1, at: t,
+        }, best, t);
+      }
+    }
     const pending = this.alerts;
     this.alerts = [];
     for (const alert of pending) best = this._noteHeard(alert, best, t);
@@ -1594,11 +1789,23 @@ export class MonsterAI {
   _summarize(t) {
     const c = this.ctx;
     const p = this.pacing;
-    const spec = difficultySpec(this.difficulty);
     const devHunt = t < this.devHuntUntil;
-    let sees = c.sightings.length > 0;
-    // the stalk after a teleport: sight alone starts no chase, only a stare or coming close
-    if (this.state === 'Teleport' && Teleport.stalking(c)) sees = c.sightings.some((s) => s.distance <= T.StalkNear);
+    // a sighting starts a chase once it has noticed them (always while it hunts them already)
+    const hunting = Brain.isChase(this.state) || this.state === 'HidingResponse';
+    let sees = c.sightings.some((s) => hunting || this._noticed(s.player));
+    // the stalk after a teleport: a player it has noticed within StalkSight is chased
+    if (this.state === 'Teleport' && Teleport.stalking(c)) {
+      sees = c.sightings.some((s) => s.distance <= this.presence.Teleport.StalkSight && this._noticed(s.player));
+    }
+    // a beat plays to be seen: only a player within Beats.Near (or a stare) starts a chase; a player who comes within
+    // Beats.BreakOff (straight) ends it, and it withdraws
+    if (Brain.BEATS.has(this.state) && this.state !== 'PassBy') {
+      sees = c.sightings.some((s) => s.distance <= this.presence.Beats.Near);
+      if (!c.stateDone && this._nearestPlayerDistanceTo(this.body.getPosition()) < this.presence.Beats.BreakOff) {
+        c.stateDone = true;
+        c.reposition = true;
+      }
+    }
     const chaseSeconds = this.chaseStarted !== null ? t - this.chaseStarted : 0;
     const canHunt = devHunt || p.canHunt(t);
     /** @type {import('./brain.js').Summary} */
@@ -1617,17 +1824,270 @@ export class MonsterAI {
       heard: c.heard ? c.heard.rank : 0,
       investigating: c.investigation && this.state === 'InvestigateNoise' ? c.investigation.rank : 0,
       chaseSeconds: devHunt ? 0 : chaseSeconds,
-      lostSeconds: this.state === 'WallChase' ? t - this.chaseSeenAt : 0,
-      maxChase: spec.maxChaseSeconds,
-      chaseLost: spec.chaseLostSeconds,
+      // the loss clock waits while it runs to the last place it saw them and on along their way
+      lostSeconds: this.state === 'WallChase' && !WallChase.running(c) ? t - this.chaseSeenAt : 0,
+      maxChase: this.presence.Chase.CapSeconds,
+      chaseLost: this.presence.Chase.LostSeconds,
       teleportDue: false,
+      beatDue: c.beatDue,
       stateDone: c.stateDone,
     };
+    c.beatDue = null;
     if (this.state === 'Patrol' && canHunt && this.awake && !summary.sees && !summary.stared && !summary.hidingWatch &&
       !summary.heard && !summary.catching && !summary.warping && !summary.stunned && !summary.scripted) {
       summary.teleportDue = this._teleportDue(t);
     }
     return summary;
+  }
+
+  // ------------------------------------------------------------------ the director (docs/MONSTER.md 15)
+
+  /** Its feet: the floor under its root. */
+  _feet() {
+    const p = this.body.getPosition();
+    return new THREE.Vector3(p.x, p.y - ROOT_HEIGHT, p.z);
+  }
+
+  /** A player's feet on its nav (their room's floor), or null. */
+  _playerFeet(player) {
+    const root = this._rootOf(player);
+    const nav = this._nav(this.creatureLevel);
+    if (!root || !nav) return null;
+    const room = nav.roomAt(root) || nav.nearestRoom(root);
+    return new THREE.Vector3(root.x, room ? room.floorY : root.y - PLAYER_FLOOR, root.z);
+  }
+
+  /** Whether `player` sees it now: shown, within Director.SeenRange, inside SeenHalfAngle of their look, a clear line. */
+  _seenBy(player) {
+    const D = this.presence.Director;
+    if (this.body.hidden || this._fade(this.now()) < 0.5) return false;
+    const eye = this._playerEye(player);
+    if (!eye || this._moveStateOf(player) === 'Hiding' || this._inVent(player)) return false;
+    const look = this._lookOf(player);
+    const cone = Math.cos((D.SeenHalfAngle * Math.PI) / 180);
+    for (const q of [this._creatureEye(), this.body.getPosition()]) {
+      const dx = q.x - eye.x;
+      const dz = q.z - eye.z;
+      if (Math.hypot(dx, q.y - eye.y, dz) > D.SeenRange) continue;
+      const fl = Math.hypot(look.x, look.z);
+      const d = Math.hypot(dx, dz);
+      if (fl < 1e-6 || d < 1e-6) continue;
+      if ((look.x * dx + look.z * dz) / (fl * d) < cone) continue;
+      if (this._lineClear(eye, q)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Once a Director.Interval: every player's walking distance and menace; then, while it patrols, may hunt and has
+   * nobody in sight or earshot, the focus player's order: a beat (ctx.beatDue, ctx.beatPlan), a search hint (ctx.hint,
+   * an approach teleport first when the walk there is longer than ApproachWalk) or nothing.
+   */
+  _direct(t) {
+    const c = this.ctx;
+    const d = this.director;
+    const nav = this._nav(this.creatureLevel);
+    if (!c || !d || !nav || !c.level || !this.awake || this.scripted || t < this.directAt) return;
+    const D = this.presence.Director;
+    this.directAt = t + D.Interval;
+    const feet = this._feet();
+    const readings = [];
+    const candidates = [];
+    for (const player of this._huntablePlayers()) {
+      if (!this._onLevel(player)) continue;
+      const at = this._playerFeet(player);
+      const walk = at ? nav.pathLength(feet, at) : Infinity;
+      this.walks.set(player, walk);
+      const sees = this._seenBy(player);
+      readings.push({ player, walk, sees, chased: this.state === 'WallChase' && c.target === player });
+      // a beat reaches its player once they see it or it comes within Beats.ReachWalk walked of them
+      if (Brain.BEATS.has(this.state) && c.beatPlan && c.beatPlan.target === player &&
+        (sees || walk <= this.presence.Beats.ReachWalk)) c.beatReached = true;
+      if (this._moveStateOf(player) !== 'Hiding' && !this._inVent(player)) candidates.push(player);
+    }
+    d.update(t, D.Interval, readings);
+    const focus = d.focus(t, candidates);
+    if (!focus || this.state !== 'Patrol' || this.warp || !this._canHuntNow() || c.sightings.length > 0 || c.heard) return;
+    const walk = this.walks.get(focus);
+    const order = d.order(t, focus, walk);
+    if (order === 'Beat') {
+      const plan = this._planBeat(focus, walk);
+      d.beat(t, plan !== null);
+      if (plan) {
+        c.beatPlan = plan;
+        c.beatReached = false;
+        c.beatDue = plan.kind;
+        c.hint = null;
+      }
+    } else if (order === 'Hint') this._hint(focus, t);
+  }
+
+  /** The director's search hint for `player` (and the approach teleport when the walk there is too long). */
+  _hint(player, t) {
+    const c = this.ctx;
+    const d = this.director;
+    const D = this.presence.Director;
+    const nav = this._nav(this.creatureLevel);
+    const at = this._playerFeet(player);
+    d.hinted(t);
+    if (!c || !nav || !at) return;
+    const here = this._feet();
+    const reachable = nav.reachable(here);
+    const way = this._wayOf(player);
+    const pool = nav.samplePoints(SAMPLE_SPACING).map((x) => x.position).filter((p) => Math.abs(p.y - at.y) < 6 &&
+      horizontalDistance(p, at) >= D.HintMin * 0.5 && horizontalDistance(p, at) <= D.HintMax);
+    const rank = (p) => (this._ahead(way, at, p) >= D.AheadDot ? 0 : FAR) + horizontalDistance(p, here);
+    pool.sort((a, b) => rank(a) - rank(b));
+    let point = null;
+    for (const p of pool.slice(0, D.HintTries)) {
+      const walk = nav.pathLength(at, p);
+      if (walk < D.HintMin || walk > D.HintMax || !reachable(p)) continue;
+      if (this._inViewOfAnyone(new THREE.Vector3(p.x, p.y + ROOT_HEIGHT, p.z))) continue;
+      point = p.clone();
+      break;
+    }
+    if (!point) return;
+    const far = nav.pathLength(here, point);
+    if (far > D.ApproachWalk && d.approachReady(t) && this._approachAllowed(t)) {
+      const plan = this._planApproach(player);
+      if (plan && this._startApproach(plan)) d.approached(t);
+    }
+    c.hint = { point, player, at: t };
+  }
+
+  /**
+   * How far a player on the move gets before a warp planned now may appear (its FadeOut and Warning): their speed x
+   * that time; 0 for one who is not moving.
+   */
+  _lead(player) {
+    const rec = this._record(player);
+    if (!rec.travel || rec.speed <= CreatureConfig.Senses.MovingSpeed) return 0;
+    return rec.speed * (T.FadeOutSeconds + T.WarningSeconds);
+  }
+
+  /** The way a player goes (their travel), else the way they look (flat, unit), or null. */
+  _wayOf(player) {
+    const rec = this._record(player);
+    return rec.travel ? rec.travel.clone() : flatDirection(this._lookOf(player));
+  }
+
+  /** The cosine between `way` and the flat way from `from` to `p` (0 without a way). */
+  _ahead(way, from, p) {
+    const d = horizontalDistance(p, from);
+    if (!way || d < 1e-6) return 0;
+    return ((p.x - from.x) * way.x + (p.z - from.z) * way.z) / d;
+  }
+
+  /** The teleport's gates for an approach: past the floor's grace, not right after a catch or a fall, not blocked. */
+  _approachAllowed(t) {
+    if (t < this.graceEndsAt) return false;
+    if (t < this.lastCatchAt + T.AfterCatch || t < this.lastDownAt + T.AfterCatch) return false;
+    return !this.env.teleportBlocked();
+  }
+
+  /** A presence beat for `player` (beats.js; `beats`: the Beats numbers, the dev's one-beat weights), or null. */
+  _planBeat(player, walk, beats = this.presence.Beats) {
+    const c = this.ctx;
+    const nav = this._nav(this.creatureLevel);
+    if (!c || !nav) return null;
+    const viewers = [];
+    for (const p of this._playingPlayers()) {
+      if (!this._onLevel(p)) continue;
+      const eye = this._playerEye(p);
+      const feet = this._playerFeet(p);
+      if (!eye || !feet) continue;
+      const rec = this._record(p);
+      const facing = flatDirection(this._lookOf(p)) || new THREE.Vector3(0, 0, -1);
+      viewers.push({ player: p, eye, feet, facing, travel: rec.travel ? rec.travel.clone() : null, speed: rec.speed });
+    }
+    const viewer = viewers.find((v) => v.player === player);
+    if (!viewer) return null;
+    const B = beats;
+    const D = this.presence.Director;
+    const level = this.creatureLevel;
+    const headAt = (floor) => {
+      const root = new THREE.Vector3(floor.x, floor.y + ROOT_HEIGHT, floor.z);
+      return root.setY(root.y + this._headLift(root));
+    };
+    const geo = {
+      samples: nav.samplePoints(SAMPLE_SPACING).map((x) => x.position),
+      from: this._feet(),
+      walk: (a, b) => nav.pathLength(a, b),
+      seen: (floor) => this._visible(new THREE.Vector3(floor.x, floor.y + ROOT_HEIGHT, floor.z)),
+      headSeenBy: (v, floor) => {
+        const head = headAt(floor);
+        return v.eye.distanceTo(head) <= D.SeenRange && this._lineClear(v.eye, head);
+      },
+      viewers,
+      hideWalk: (feet) => {
+        let best = Infinity;
+        for (const spot of this.env.hideSpots(level)) {
+          const front = spot.front.position;
+          if (horizontalDistance(front, feet) > B.HideWalk || Math.abs(front.y - feet.y) > 6) continue;
+          best = Math.min(best, nav.pathLength(feet, front));
+        }
+        return best;
+      },
+      cornered: (feet) => nav.waysOut(feet) < 2,
+      roll: () => c.random.nextNumber(),
+    };
+    return planBeat(geo, B, viewer, walk);
+  }
+
+  /**
+   * Where its pursuit runs on to: of the floor points within 0.6 x Chase.Pursuit of the point Chase.Pursuit along their
+   * travel from the last seen point, the farthest along it (less half its distance off that point) that it can walk to
+   * within 1.5 x Chase.Pursuit; null when none.
+   */
+  _pursuitPoint(memory) {
+    const nav = this._nav(this.creatureLevel);
+    if (!nav || !memory || !memory.travel) return null;
+    const from = memory.position;
+    const room = nav.roomAt(from) || nav.nearestRoom(from);
+    const start = new THREE.Vector3(from.x, room ? room.floorY : from.y, from.z);
+    const reach = this.presence.Chase.Pursuit;
+    const ahead = start.clone().addScaledVector(memory.travel, reach);
+    const ranked = [];
+    for (const x of nav.samplePoints(SAMPLE_SPACING)) {
+      const p = x.position;
+      if (Math.abs(p.y - start.y) > 6 || horizontalDistance(p, ahead) > reach * 0.6) continue;
+      const along = (p.x - start.x) * memory.travel.x + (p.z - start.z) * memory.travel.z;
+      if (along > SAMPLE_SPACING) ranked.push({ p, score: along - horizontalDistance(p, ahead) * 0.5 });
+    }
+    ranked.sort((a, b) => b.score - a.score);
+    for (const r of ranked.slice(0, PURSUIT_TRIES)) {
+      if (nav.pathLength(start, r.p) <= reach * 1.5) return r.p.clone();
+    }
+    return null;
+  }
+
+  /**
+   * The torch's glow (docs/MONSTER.md 17): every Detection.GlowEvery, each lit torch it does not see its holder by: the
+   * spot the beam lights (Detection.Beam ahead of their eye, or the first surface) seen from its eye inside its cone,
+   * within Detection.GlowRange (x the difficulty's sight multiplier), with a clear line: [{player, spot}].
+   */
+  _torchGlow(t, viewer) {
+    const c = this.ctx;
+    const X = this.presence.Detection;
+    const out = [];
+    for (const player of this._huntablePlayers()) {
+      if (!this._torchOf(player) || this._moveStateOf(player) === 'Hiding' || this._inVent(player)) continue;
+      if (c.sightings.some((s) => s.player === player)) continue;
+      if (t - (this.glowAt.get(player) ?? -Infinity) < X.GlowEvery) continue;
+      this.glowAt.set(player, t);
+      const eye = this._playerEye(player);
+      const look = this._lookOf(player);
+      if (!eye || look.lengthSq() < 1e-6) continue;
+      const dir = look.clone().normalize();
+      const hit = this.env.monsterRay(eye, dir, X.Beam);
+      const spot = eye.clone().addScaledVector(dir, Math.max(0, (hit ?? X.Beam) - GLOW_LIFT));
+      const range = X.GlowRange * difficultySpec(this.difficulty).sightRangeMultiplier;
+      if (spot.distanceTo(viewer.eye) > range) continue;
+      if (!Perception.inViewCone(viewer.eye, viewer.facing, spot, CreatureConfig.Senses.SightHalfAngle, 0)) continue;
+      if (!this._lineClear(viewer.eye, spot)) continue;
+      out.push({ player, spot });
+    }
+    return out;
   }
 
   // ------------------------------------------------------------------ upkeep
@@ -1638,8 +2098,13 @@ export class MonsterAI {
     const c = this.ctx;
     if (!m || !c) return;
     if (m.getStatus() !== 'Stuck') return;
-    if (this._relocateUnseen()) this.current.enter(c, this.state);
-    else m.reset();
+    // moved, a state starts over; a beat, a teleport's stalk or a hiding watch (its plan tied to where it stood:
+    // entered again, the teleport would replay its warp and warning at the same spot, the watch walk back into the
+    // same stall for as long as the hider stays in) is over
+    if (this._relocateUnseen()) {
+      if (Brain.BEATS.has(this.state) || this.state === 'Teleport' || this.state === 'HidingResponse') c.stateDone = true;
+      else this.current.enter(c, this.state);
+    } else m.reset();
   }
 
   _settleCatch(outcome) {
@@ -1656,6 +2121,7 @@ export class MonsterAI {
       p.noteCatch(t);
       this.lastCatchAt = t;
     }
+    if (this.director) this.director.encounter(active.player, t, outcome !== 'Aborted');
     this.devHuntUntil = 0;
     c.reposition = true;
     if (c.target === active.player) {
@@ -1689,7 +2155,7 @@ export class MonsterAI {
       return;
     }
     this._watchPlayers(t, dt);
-    this._sense(t);
+    this._sense(t, dt);
     const target = c.target;
     c.phase = p.tick(dt, {
       chasing: Brain.isChase(this.state),
@@ -1700,6 +2166,7 @@ export class MonsterAI {
       this.awake = true;
       this.wakeAt = null;
     }
+    this._direct(t);
     const summary = this._summarize(t);
     c.canHunt = summary.canHunt;
     this._transition(Brain.decide(summary), t);
@@ -1839,6 +2306,31 @@ export class MonsterAI {
       warping: () => this.warp !== null,
       creatureEye: () => this._creatureEye(),
       playerEye: (player) => this._playerEye(player),
+      presence: this.presence,
+      hint: null,
+      beatPlan: null,
+      beatReached: false,
+      beatDue: null,
+      patrolNear: () => {
+        const toward = this.director ? this.director.leaning() : null;
+        return toward && this._playing(toward) ? this._playerFeet(toward) : null;
+      },
+      paceOf: (base) => Math.min(CreatureConfig.SpeedCap,
+        base * difficultySpec(this.difficulty).creatureSpeedMultiplier * this.speedScale),
+      lookedAt: (player, degrees) => {
+        const eye = this._playerEye(player);
+        const head = this._creatureEye();
+        if (!eye || eye.distanceTo(head) > this.presence.Director.SeenRange) return false;
+        return Perception.stareAngle(eye, this._lookOf(player), head) <= degrees && this._lineClear(eye, head);
+      },
+      walkTo: (player) => {
+        const nav = this._nav(this.creatureLevel);
+        const at = this._playerFeet(player);
+        return nav && at ? nav.pathLength(this._feet(), at) : Infinity;
+      },
+      trailOf: (player) => this._record(player).trail.map((e) => e.p),
+      speedOfPlayer: (player) => this._record(player).speed,
+      pursuitPoint: (memory) => this._pursuitPoint(memory),
     };
     return ctx;
   }
@@ -1910,7 +2402,16 @@ export class MonsterAI {
   beginRun(opts = {}) {
     this.running = true;
     this.difficulty = (opts.difficulty ?? this.difficulty) === 'Nightmare' ? 'Nightmare' : 'Standard';
-    this.pacing = new Pacing(this.difficulty, this.now());
+    this.presence = presenceConfig(this.env.meta(), this.difficulty);
+    this.director = new Director(this.presence.Director);
+    this.director.reset(this.now());
+    this.directAt = 0;
+    this.approaches = 0;
+    this.beats = 0;
+    this.walks.clear();
+    this.glowAt.clear();
+    this.awareness.clear();
+    this.pacing = new Pacing(this.difficulty, this.now(), this.presence.Chase.CapSeconds, this.presence.Chase.Breather);
     this.paused = false;
     this.stunUntil = 0;
     this.devHuntUntil = 0;
@@ -1942,6 +2443,7 @@ export class MonsterAI {
     this.ctx = null;
     this.creatureLevel = null;
     this.pacing = null;
+    this.director = null;
     this.state = 'Dormant';
     this.current = STATES.Dormant;
     this.awake = false;
@@ -1969,8 +2471,12 @@ export class MonsterAI {
     this.awake = false;
     this.wakeAt = t + WAKE_DELAY;
     this.lastSeenAny = t;
-    this.teleportReadyAt = t + (CreatureConfig.FloorGrace[this.difficulty] ?? CreatureConfig.FloorGrace.Standard) + T.FirstAfterGrace;
+    this.graceEndsAt = t + (CreatureConfig.FloorGrace[this.difficulty] ?? CreatureConfig.FloorGrace.Standard);
+    this.teleportReadyAt = this.graceEndsAt + T.FirstAfterGrace;
     this.nextTeleportTry = 0;
+    this.director.reset(t);
+    this.directAt = 0;
+    this.walks.clear();
     this.lastReason = `level ${levelId} activated`;
     if (!this.scripted) this._enterState('Dormant', t);
   }
@@ -1982,7 +2488,18 @@ export class MonsterAI {
   }
 
   getTarget() {
-    return this.ctx ? this.ctx.target : null;
+    return this._publishedTarget();
+  }
+
+  /**
+   * The player it is after, as the game is told (getTarget, the snapshot): its target, else, while it peeks at,
+   * crosses before or follows someone (Peek, Glimpse, Shadow), that beat's player (the "Followed" hint, its look).
+   */
+  _publishedTarget() {
+    const c = this.ctx;
+    if (!c) return null;
+    if (c.target) return c.target;
+    return FOLLOWING_BEATS.has(this.state) && c.beatPlan ? c.beatPlan.target : null;
   }
 
   _applyStun(seconds, from) {
@@ -2187,12 +2704,15 @@ export class MonsterAI {
       segment: null,
       hidden: this.body.hidden,
       levelId: this.creatureLevel,
-      targetingPlayer: !!c && c.target === PLAYER,
-      targetUserId: c && c.target ? c.target.userId : null,
+      targetingPlayer: this._publishedTarget() === PLAYER,
+      targetUserId: this._publishedTarget() ? this._publishedTarget().userId : null,
       awake: this.awake,
       catching: this.catching !== null,
       warping: this.warp ? this.warp.phase : null,
       teleports: this.teleports,
+      approaches: this.approaches,
+      beats: this.beats,
+      director: this.director ? this.director.snapshot(this.now()) : null,
       pacing: this.pacing ? this.pacing.snapshot() : null,
       position: this.body.getPosition(),
       eye: this._creatureEye(),
@@ -2278,6 +2798,20 @@ export class MonsterAI {
       this.lastReason = 'ai Patrol';
       this._enterState('Patrol', t);
       return 'Creature patrolling';
+    }
+    if (Brain.BEATS.has(wanted)) {
+      if (this.state !== 'Patrol') this._enterState('Patrol', t);
+      const walk = this.ctx.walkTo(PLAYER);
+      const B = this.presence.Beats;
+      const only = { ...B, Weights: Object.fromEntries(Object.keys(B.Weights).map((k) => [k, k === wanted ? 1 : 0])) };
+      const chosen = this._planBeat(PLAYER, walk, only);
+      if (!chosen) return `no place for a ${wanted} near you right now`;
+      this.devHuntUntil = t + DEV_FORCE_SECONDS;
+      c.beatPlan = chosen;
+      c.beatReached = false;
+      this.lastReason = `ai ${wanted}`;
+      this._enterState(wanted, t);
+      return `Creature: ${wanted}`;
     }
     if (wanted === 'Teleport') {
       if (this.state !== 'Patrol') this._enterState('Patrol', t);

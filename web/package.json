@@ -9,6 +9,7 @@
     "textures": "python3 tools/textures.py",
     "bake": "node tools/bake.mjs",
     "data": "npm run export && npm run textures && npm run bake",
+    "presets": "lune run tools/export-presets.luau",
     "build": "node tools/build.mjs",
     "check": "node tools/build.mjs && node tools/check.mjs",
     "parity": "node tools/tier-parity.mjs",
@@ -16,7 +17,9 @@
     "sounds:test": "nice -n 10 node sounds/test.mjs",
     "sounds:audit": "nice -n 10 node sounds/audit.mjs",
     "sounds:format": "nice -n 10 node sounds/format-check.mjs",
-    "sounds:board": "nice -n 10 node sounds/board.mjs"
+    "sounds:board": "nice -n 10 node sounds/board.mjs",
+    "sounds:import": "node sounds/import.mjs",
+    "sounds:probe": "nice -n 10 node sounds/probe.mjs"
   },
   "dependencies": {
     "@supabase/realtime-js": "2.117.3",

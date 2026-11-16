@@ -1,5 +1,5 @@
 {
- "about": "Every sound the game needs (docs/SOUND.md 2). group: who voices it (reference: the foundation; world: what a player or a machine does at a place; air: atmosphere, weather, distant events, scares, music, story, children). status: pending (not voiced yet), voiced (rendered and audited), dropped (with a note). sources: where the need comes from (preset = SynthPresets, inline = a recipe in web/src, worktree = another engineer's in-flight work, spec = docs/design/game-spec-v2.md, new = the redesign). family: the voice file it lives in (reference group: set; others: chosen by their engineer).",
+ "about": "Every sound the game needs (docs/SOUND.md 2). group: who voices it (reference: the foundation; world: what a player or a machine does at a place; air: atmosphere, weather, distant events, scares, music, story, children). status: voiced (made from recordings, rendered and audited), waiting (not played by the current game: its stage or feature does not exist yet), dropped (with a note). sources: where the need comes from (preset = SynthPresets, inline = a recipe in web/src, worktree = another engineer's in-flight work, spec = docs/design/game-spec-v2.md, new = the redesign). family: the voice file it lives in (reference group: set; others: chosen by their engineer).",
  "sounds": [
   {
    "name": "ChemHiss",
@@ -130,22 +130,28 @@
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
-   "name": "CreatureStepChaseGravel",
+   "name": "CreatureStepChaseCarpet",
    "group": "reference",
    "family": "his-steps",
    "status": "voiced",
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
@@ -156,9 +162,12 @@
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
@@ -169,9 +178,12 @@
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
@@ -182,23 +194,27 @@
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
    "name": "CreatureStepDuct",
    "group": "reference",
    "family": "his-steps",
-   "status": "voiced",
+   "status": "dropped",
    "bus": "Monster",
    "sources": [
     {
      "kind": "new",
      "where": "the sound redesign brief (web/sounds, the reference set): on all fours in a duct (creature/view.js footstepVoice QUADRUPED_STATES VentCrawl / VentRetreat)"
     }
-   ]
+   ],
+   "note": "the duct crawl is legacy (the brain never sends him into a vent): on all fours he plays his steel step, quieter"
   },
   {
    "name": "CreatureStepWalkConcrete",
@@ -208,22 +224,28 @@
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
-   "name": "CreatureStepWalkGravel",
+   "name": "CreatureStepWalkCarpet",
    "group": "reference",
    "family": "his-steps",
    "status": "voiced",
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
@@ -234,9 +256,12 @@
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
@@ -247,9 +272,12 @@
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
@@ -260,15 +288,18 @@
    "bus": "Monster",
    "sources": [
     {
-     "kind": "new",
-     "where": "the sound redesign brief (web/sounds, the reference set): his own footsteps (creature/view.js:677 plays the players' Footstep* for him today; spec I1); heard to 70 today (docs/MONSTER.md 19)"
+     "kind": "preset",
+     "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau (the Creature's footsteps; roll-off CreatureConfig.Footfalls)"
     }
+   ],
+   "playedBy": [
+    "web/src/creature/view.js _onFootstep (SynthPresets CreatureStepSurface maps the eight surfaces onto his five)"
    ]
   },
   {
    "name": "CrawlerClick",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "World",
    "sources": [
@@ -289,8 +320,7 @@
   {
    "name": "CreatureArrive",
    "group": "reference",
-   "family": "monster",
-   "status": "voiced",
+   "status": "waiting",
    "bus": "Monster",
    "sources": [
     {
@@ -302,7 +332,7 @@
   {
    "name": "CreatureGrowl",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "loop": false,
@@ -323,7 +353,7 @@
   {
    "name": "CreatureGrunt",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "sources": [
@@ -344,7 +374,7 @@
   {
    "name": "CreatureRattle",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "sources": [
@@ -364,7 +394,7 @@
   {
    "name": "CreatureSniff",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "loop": true,
@@ -381,7 +411,7 @@
   {
    "name": "CreatureVanish",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "loop": false,
@@ -404,7 +434,7 @@
   {
    "name": "JumpscareSting",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "loop": false,
@@ -428,8 +458,7 @@
   {
    "name": "KeyJingle",
    "group": "reference",
-   "family": "monster",
-   "status": "voiced",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -440,7 +469,7 @@
   {
    "name": "Lunge",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "loop": false,
@@ -459,8 +488,7 @@
   {
    "name": "MaskClatter",
    "group": "reference",
-   "family": "monster",
-   "status": "voiced",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -471,7 +499,7 @@
   {
    "name": "MaskCrack",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "World",
    "sources": [
@@ -488,7 +516,7 @@
   {
    "name": "NeckSnap",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "loop": false,
@@ -507,7 +535,7 @@
   {
    "name": "RevealSting",
    "group": "reference",
-   "family": "monster",
+   "family": "scares",
    "status": "voiced",
    "bus": "Monster",
    "sources": [
@@ -527,7 +555,7 @@
   {
    "name": "Screech",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "loop": false,
@@ -552,7 +580,7 @@
   {
    "name": "TeleportHiss",
    "group": "reference",
-   "family": "monster",
+   "family": "scares",
    "status": "voiced",
    "bus": "Monster",
    "sources": [
@@ -572,7 +600,7 @@
   {
    "name": "VentBreathing",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "Monster",
    "loop": true,
@@ -589,7 +617,7 @@
   {
    "name": "VentScrape",
    "group": "reference",
-   "family": "monster",
+   "family": "world",
    "status": "voiced",
    "bus": "Monster",
    "loop": true,
@@ -606,8 +634,7 @@
   {
    "name": "VoiceThroat",
    "group": "reference",
-   "family": "monster",
-   "status": "voiced",
+   "status": "waiting",
    "bus": "Monster",
    "loop": true,
    "sources": [
@@ -620,8 +647,7 @@
   {
    "name": "VoiceWhisper",
    "group": "reference",
-   "family": "monster",
-   "status": "voiced",
+   "status": "waiting",
    "bus": "Monster",
    "loop": true,
    "sources": [
@@ -634,7 +660,7 @@
   {
    "name": "WetBreath",
    "group": "reference",
-   "family": "monster",
+   "family": "him",
    "status": "voiced",
    "bus": "World",
    "sources": [
@@ -1139,7 +1165,7 @@
   {
    "name": "BoilerHum",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": true,
    "sources": [
@@ -1148,12 +1174,13 @@
      "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2708"
     }
    ],
-   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)"
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)",
+   "family": "world"
   },
   {
    "name": "BoilerSurge",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1165,12 +1192,13 @@
    "playedBy": [
     "web/src/game/levels/level0.js",
     "web/src/game/scenes.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "BoneCrunch",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1182,12 +1210,13 @@
    "playedBy": [
     "web/src/game/mechanics/traps.js"
    ],
-   "note": "a bear trap closing on a leg (web/src/game/mechanics/traps.js): spec I12 (no gore) applies: a dull, dry clamp, never a crunch of bone."
+   "note": "a bear trap closing on a leg (web/src/game/mechanics/traps.js): spec I12 (no gore) applies: a dull, dry clamp, never a crunch of bone.",
+   "family": "world"
   },
   {
    "name": "BreathExhale",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Body",
    "loop": false,
    "sources": [
@@ -1198,12 +1227,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/lockers.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "Breathing",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Body",
    "loop": true,
    "sources": [
@@ -1215,12 +1245,13 @@
    "playedBy": [
     "web/src/engine/panic.js",
     "web/src/game/mechanics/lockers.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "BreathingPanic",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Body",
    "loop": true,
    "sources": [
@@ -1231,12 +1262,13 @@
    ],
    "playedBy": [
     "web/src/engine/panic.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "CanopyDeploy",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Player",
    "loop": false,
    "sources": [
@@ -1247,12 +1279,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/parachute.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "CanopyFlutter",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Body",
    "loop": true,
    "sources": [
@@ -1263,12 +1296,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/parachute.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "DoorCreak",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1279,12 +1313,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/doors.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "DoorSmash",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1297,12 +1332,13 @@
     "web/src/creature/profile.js",
     "web/src/game/scenes.js",
     "web/src/game/mechanics/doors.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "EmfStatic",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Body",
    "loop": true,
    "sources": [
@@ -1313,12 +1349,13 @@
    ],
    "playedBy": [
     "web/src/engine/flashlight.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "EngineLoop",
    "group": "world",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -1329,7 +1366,7 @@
   {
    "name": "EngineStart",
    "group": "world",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -1340,7 +1377,7 @@
   {
    "name": "FireDoorLatch",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1351,12 +1388,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/doors.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "FireDoorSwing",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1367,12 +1405,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/doors.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "FluorescentBuzz",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": true,
    "sources": [
@@ -1381,12 +1420,13 @@
      "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2679"
     }
    ],
-   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)"
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)",
+   "family": "world"
   },
   {
    "name": "Gasp",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Player",
    "loop": false,
    "sources": [
@@ -1398,12 +1438,13 @@
    "playedBy": [
     "web/src/game/life.js",
     "web/src/game/mechanics/lockers.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "GateSlam",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1414,12 +1455,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/doors.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "Heartbeat",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Body",
    "loop": true,
    "sources": [
@@ -1430,12 +1472,13 @@
    ],
    "playedBy": [
     "web/src/engine/panic.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "HeartbeatFast",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Body",
    "loop": true,
    "sources": [
@@ -1446,12 +1489,13 @@
    ],
    "playedBy": [
     "web/src/engine/panic.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "LampStrike",
    "group": "world",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -1462,7 +1506,7 @@
   {
    "name": "LockerDoor",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1473,12 +1517,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/lockers.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "LockerRip",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1490,12 +1535,13 @@
    "playedBy": [
     "web/src/creature/profile.js",
     "web/src/game/mechanics/lockers.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "LockerSlam",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1504,12 +1550,13 @@
      "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2036"
     }
    ],
-   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table) only its caption key is referenced on the web."
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table) only its caption key is referenced on the web.",
+   "family": "world"
   },
   {
    "name": "MetalCrash",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1520,12 +1567,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/vents.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "MetalCreak",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1538,12 +1586,13 @@
     "web/src/game/mechanics/traps.js",
     "web/src/game/mechanics/doors.js",
     "web/src/game/mechanics/vents.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "MotorRun",
    "group": "world",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -1554,7 +1603,7 @@
   {
    "name": "MotorStart",
    "group": "world",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -1565,7 +1614,7 @@
   {
    "name": "ObjBreakerThrow",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1575,12 +1624,13 @@
    ],
    "playedBy": [
     "web/src/game/objectives/floor0.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "ObjExitClunk",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1590,12 +1640,13 @@
    ],
    "playedBy": [
     "web/src/game/objectives/base.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "ObjFuseClick",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1605,12 +1656,13 @@
    ],
    "playedBy": [
     "web/src/game/objectives/floor0.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "ObjKeyJingle",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1620,12 +1672,13 @@
    ],
    "playedBy": [
     "web/src/game/objectives/floor1.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "ObjKeypadAccept",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1635,12 +1688,13 @@
    ],
    "playedBy": [
     "web/src/game/objectives/locks.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "ObjKeypadDenied",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1650,12 +1704,13 @@
    ],
    "playedBy": [
     "web/src/game/objectives/locks.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "ObjKeysWork",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1665,12 +1720,13 @@
    ],
    "playedBy": [
     "web/src/game/objectives/floor1.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "ObjLockRattle",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1681,12 +1737,13 @@
    "playedBy": [
     "web/src/game/objectives/floor0.js",
     "web/src/game/objectives/locks.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "ObjPadlockClack",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1696,12 +1753,13 @@
    ],
    "playedBy": [
     "web/src/game/objectives/locks.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "PackBuckle",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Player",
    "loop": false,
    "sources": [
@@ -1712,12 +1770,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/parachute.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "ParachuteLanding",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Player",
    "loop": false,
    "sources": [
@@ -1728,12 +1787,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/parachute.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "Pickup",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Player",
    "loop": false,
    "sources": [
@@ -1746,12 +1806,13 @@
     "web/src/game/objectives/base.js",
     "web/src/game/mechanics/batteries.js",
     "web/src/game/mechanics/flasks.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "PlaneKnock",
    "group": "world",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -1762,7 +1823,7 @@
   {
    "name": "ProjectorRun",
    "group": "world",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -1773,7 +1834,7 @@
   {
    "name": "RadarEmpty",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Player",
    "sources": [
     {
@@ -1787,12 +1848,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/radar.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "RadarPing",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Player",
    "sources": [
     {
@@ -1806,12 +1868,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/radar.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "RevolverShot",
    "group": "world",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -1822,7 +1885,7 @@
   {
    "name": "TailTear",
    "group": "world",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -1833,7 +1896,7 @@
   {
    "name": "TrapSnap",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -1846,12 +1909,13 @@
     "web/src/engine/particles.js",
     "web/src/game/levels/level0.js",
     "web/src/game/mechanics/traps.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "UiBack",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "UI",
    "loop": false,
    "sources": [
@@ -1864,12 +1928,13 @@
     "web/src/game/coop/lobby.js",
     "web/src/game/lobby.js",
     "web/src/game/mechanics/batteries.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "UiClick",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "UI",
    "loop": false,
    "sources": [
@@ -1883,12 +1948,13 @@
     "web/src/game/ui/title.js",
     "web/src/game/coop/ui.js",
     "web/src/game/lobby.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "UiConfirm",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "UI",
    "loop": false,
    "sources": [
@@ -1901,12 +1967,13 @@
     "web/src/game/ui/results.js",
     "web/src/game/coop/lobby.js",
     "web/src/game/lobby.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "Unscrew",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": true,
    "sources": [
@@ -1919,12 +1986,13 @@
     "web/src/engine/prompts.js",
     "web/src/game/mechanics/vents.js",
     "web/src/game/config.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "VentCrawl",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Player",
    "loop": false,
    "sources": [
@@ -1937,12 +2005,13 @@
     "web/src/creature/profile.js",
     "web/src/creature/view.js",
     "web/src/game/mechanics/vents.js"
-   ]
+   ],
+   "family": "world"
   },
   {
    "name": "WindRush",
    "group": "world",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Body",
    "loop": true,
    "sources": [
@@ -1953,12 +2022,13 @@
    ],
    "playedBy": [
     "web/src/game/mechanics/parachute.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "BellToll",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1972,12 +2042,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "BoltDrop",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -1987,12 +2058,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "CarAlarm",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2003,7 +2075,7 @@
   {
    "name": "CeilingDrag",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": true,
    "sources": [
@@ -2016,12 +2088,13 @@
     "web/src/game/levels/level0.js",
     "web/src/game/scenes.js"
    ],
-   "note": "something dragged across the ceiling (a scare): must not use his signatures (I1)."
+   "note": "something dragged across the ceiling (a scare): must not use his signatures (I1).",
+   "family": "building"
   },
   {
    "name": "ChildLaugh",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2032,12 +2105,13 @@
    ],
    "playedBy": [
     "web/src/game/scenes.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "ChildWhisper",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2048,12 +2122,13 @@
    ],
    "playedBy": [
     "web/src/game/scenes.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "ChuteSlide",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2063,12 +2138,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "DistantGroan",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2077,12 +2153,13 @@
      "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2785"
     }
    ],
-   "note": "played by the ambience beds as a stinger (presets.js Beds)"
+   "note": "played by the ambience beds as a stinger (presets.js Beds)",
+   "family": "building"
   },
   {
    "name": "DistantScream",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2092,12 +2169,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "DistantThunder",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": false,
    "sources": [
@@ -2108,12 +2186,13 @@
    ],
    "playedBy": [
     "web/src/engine/lighting.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DoorBang",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2123,12 +2202,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "DoorPound",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2139,12 +2219,13 @@
    ],
    "playedBy": [
     "web/src/game/scenes.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DreadBedBasement",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": true,
    "sources": [
@@ -2155,12 +2236,13 @@
    ],
    "playedBy": [
     "web/src/game/ambience.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DreadBedHallways",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": true,
    "sources": [
@@ -2171,12 +2253,13 @@
    ],
    "playedBy": [
     "web/src/game/ambience.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DreadDoorSlam",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2187,12 +2270,13 @@
    ],
    "playedBy": [
     "web/src/game/ambience.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DreadLockerRattle",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2203,12 +2287,13 @@
    ],
    "playedBy": [
     "web/src/game/ambience.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DreadMetalGroan",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2219,12 +2304,13 @@
    ],
    "playedBy": [
     "web/src/game/ambience.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DreadPACrackle",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2235,12 +2321,13 @@
    ],
    "playedBy": [
     "web/src/game/ambience.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DreadPhoneBuzz",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2251,12 +2338,13 @@
    ],
    "playedBy": [
     "web/src/game/ambience.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DreadThumpAbove",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2268,12 +2356,13 @@
    "playedBy": [
     "web/src/game/ambience.js"
    ],
-   "note": "a thump on the floor above: must not read as his footfall (spec I1; his gait is his alone): a single dropped object, no heel-weight pair, no sub drop."
+   "note": "a thump on the floor above: must not read as his footfall (spec I1; his gait is his alone): a single dropped object, no heel-weight pair, no sub drop.",
+   "family": "building"
   },
   {
    "name": "Drip",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2282,12 +2371,13 @@
      "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1388"
     }
    ],
-   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)"
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)",
+   "family": "building"
   },
   {
    "name": "DripStinger",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2296,12 +2386,13 @@
      "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:1398"
     }
    ],
-   "note": "played by the ambience beds as a stinger (presets.js Beds)"
+   "note": "played by the ambience beds as a stinger (presets.js Beds)",
+   "family": "building"
   },
   {
    "name": "DroneBasement",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": true,
    "sources": [
@@ -2312,12 +2403,13 @@
    ],
    "playedBy": [
     "web/src/engine/index.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DroneHallways",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": true,
    "sources": [
@@ -2328,12 +2420,13 @@
    ],
    "playedBy": [
     "web/src/engine/index.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DroneLobby",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": true,
    "sources": [
@@ -2344,12 +2437,13 @@
    ],
    "playedBy": [
     "web/src/engine/index.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "DroneRoof",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": true,
    "sources": [
@@ -2360,12 +2454,13 @@
    ],
    "playedBy": [
     "web/src/engine/index.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "FarRumble",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": false,
    "sources": [
@@ -2374,12 +2469,13 @@
      "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2653"
     }
    ],
-   "note": "played by the ambience beds as a stinger (presets.js Beds)"
+   "note": "played by the ambience beds as a stinger (presets.js Beds)",
+   "family": "building"
   },
   {
    "name": "FilmScore",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2390,7 +2486,7 @@
   {
    "name": "FireBell",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2400,12 +2496,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "FlapBoard",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2416,7 +2513,7 @@
   {
    "name": "Gulls",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2427,7 +2524,7 @@
   {
    "name": "LidCreak",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2437,12 +2534,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "LidSlam",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2452,12 +2550,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "MusicBoxTick",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2471,12 +2570,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "NailsOnMetal",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2486,12 +2586,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "ObjectFall",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2502,12 +2603,13 @@
    ],
    "playedBy": [
     "web/src/game/scenes.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "PhoneRing",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2518,7 +2620,7 @@
   {
    "name": "PipeBang",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2529,12 +2631,13 @@
    ],
    "playedBy": [
     "web/src/game/scenes.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "RadioTune",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2545,7 +2648,7 @@
   {
    "name": "Rain",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": true,
    "sources": [
@@ -2554,12 +2657,13 @@
      "where": "src/ReplicatedStorage/Shared/Audio/SynthPresets.luau:2422"
     }
    ],
-   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)"
+   "note": "no play call in web/src today (kept: the Roblox build and later stages use the preset table)",
+   "family": "building"
   },
   {
    "name": "RainOnLid",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2569,12 +2673,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "RoofDoorSlam",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "loop": false,
    "sources": [
@@ -2585,12 +2690,13 @@
    ],
    "playedBy": [
     "web/src/game/scenes.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "ScareHush",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Body",
    "loop": false,
    "sources": [
@@ -2601,12 +2707,13 @@
    ],
    "playedBy": [
     "web/src/game/scenes.js"
-   ]
+   ],
+   "family": "body"
   },
   {
    "name": "SchoolBell",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2616,12 +2723,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "ShutterSlam",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2635,12 +2743,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "Snore",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2651,7 +2760,7 @@
   {
    "name": "SpeechMurmur",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "World",
    "sources": [
     {
@@ -2661,12 +2770,13 @@
    ],
    "playedBy": [
     "src/ReplicatedStorage/Shared/Config/StoryConfig.luau (the opening cutscene's cues)"
-   ]
+   ],
+   "family": "story"
   },
   {
    "name": "SunriseChord",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2677,7 +2787,7 @@
   {
    "name": "Surf",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2688,7 +2798,7 @@
   {
    "name": "Thunder",
    "group": "air",
-   "status": "pending",
+   "status": "voiced",
    "bus": "Ambience",
    "loop": false,
    "sources": [
@@ -2699,12 +2809,13 @@
    ],
    "playedBy": [
     "web/src/engine/lighting.js"
-   ]
+   ],
+   "family": "building"
   },
   {
    "name": "TinRoofImpact",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",
@@ -2715,7 +2826,7 @@
   {
    "name": "Whistle",
    "group": "air",
-   "status": "pending",
+   "status": "waiting",
    "sources": [
     {
      "kind": "spec",

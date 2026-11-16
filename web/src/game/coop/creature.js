@@ -43,7 +43,8 @@ import { lerpAngle } from './squad.js';
 
 const DEDUPE_RADIUS = 4;
 // the states the world packet's codec carries for the Tall Man's new ones (the exact one rides on {t: 'cst'})
-const WIRE_STATE = { Search: 'InvestigateNoise', HidingResponse: 'InvestigateNoise', Teleport: 'Patrol' };
+const WIRE_STATE = { Search: 'InvestigateNoise', HidingResponse: 'InvestigateNoise', Teleport: 'Patrol', Peek: 'Patrol',
+  Glimpse: 'Patrol', Shadow: 'Patrol', PassBy: 'Patrol' };
 const FADE_OUT = 0.6;
 const FADE_IN = 0.8;
 const SPEED_DAMP = 10;

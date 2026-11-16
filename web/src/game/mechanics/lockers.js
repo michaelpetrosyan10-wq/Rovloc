@@ -13,7 +13,8 @@
 // run). The Hide prompt (0.25 s hold) serves every unsmashed locker.
 //
 // Getting in (canHide: the run is live, Alive, no control lock, on foot, not hiding already, the locker Free, the
-// Creature not chasing you; Hud.LockerOccupied / Hud.LockerSeen tell the refusals that matter). At once: the Locker
+// Creature not watching you: chasing you with a clear line from its eye to yours within its full sight range, docs/
+// MONSTER.md 8; Hud.LockerOccupied / Hud.LockerSeen tell the refusals that matter). At once: the Locker
 // lock and the Hiding MoveState, the torch off, the door swinging open (LockerMotion.enterSchedule from OneShotLead);
 // when it is open the body is moved inside (HideAnchor, facing out); then the door shuts and the occupant is settled
 // (LockersHidden + 1). The camera glides to the door, turns round as it backs in and settles behind the middle slit;
@@ -21,7 +22,9 @@
 // the slits; every prompt is suppressed (Interact steps out); the lungs meter and a leave hint show.
 //
 // Getting out (Interact, or LEAVE on touch): only while settled and not under a check, to a clear spot (the ExitAnchor,
-// else a step to either side, else one further out; none clear: Hud.LockerBlocked). The door opens, the camera leans
+// else a step to either side, else one further out; none clear: Hud.LockerBlocked). Clear means a line from the door
+// to the spot past everything but the spot's own shell (a barrel's or cabinet's ExitAnchor is beside it, docs/MAPS.md
+// 4) and nothing within a body's width of the spot. The door opens, the camera leans
 // to it and steps out, the body is put there facing away from the locker, the lock and override are released, the door
 // shuts. Going Downed releases the occupant outside; dying or the run ending drops them where they are.
 //
@@ -43,6 +46,7 @@
 
 import * as THREE from 'three';
 import { GameConfig } from '../config.js';
+import { fullRange } from '../../creature/perception.js';
 import { S } from '../strings/index.js';
 import { Palette, el, meter } from '../ui/style.js';
 import { cfMatrix, clamp01, frameAt, horizontalDistance, lerpFrame, seededRandom, smoothstep, wrapAngle, yawOf } from '../util.js';
@@ -160,7 +164,7 @@ export function canHide(check) {
   if (check.lockerState !== 'Free') return [false, 'Hud.LockerOccupied'];
   if (check.controlLock !== 'None') return [false, 'Locked'];
   if (!ON_FOOT.has(check.moveState)) return [false, 'Posture'];
-  if (check.chasedBy) return [false, 'Hud.LockerSeen'];
+  if (check.watched) return [false, 'Hud.LockerSeen'];
   return [true, null];
 }
 
@@ -297,11 +301,14 @@ export class Lockers {
     return out.set(0, -1.2, -SLIT_OUT).applyMatrix4(locker.peek);
   }
 
-  /** Whether a standing body fits at a floor frame: a clear line from the door and nothing within a body's width. */
+  /**
+   * Whether a standing body fits at a floor frame: a clear line from the door (the spot's own shell aside: the line from
+   * a barrel's or a cabinet's front to its side exit runs through it) and nothing within a body's width.
+   */
   _spotClear(locker, floor) {
     const env = this.env;
     const chest = _a.set(0, ROOT_HEIGHT, 0).applyMatrix4(floor);
-    if (!env.lineClear(this._doorPoint(locker, _b), chest, { ignoreEntities: false })) return false;
+    if (!env.lineClear(this._doorPoint(locker, _b), chest, { ignoreEntities: false, ignoreEntity: locker.id })) return false;
     for (const lift of [1.2, 3.6]) {
       _o.set(0, lift, 0).applyMatrix4(floor);
       for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -439,8 +446,21 @@ export class Lockers {
       moveState: this.env.moveState(),
       hiding: this.occupied !== null,
       lockerState: locker.state,
-      chasedBy: CHASES.has(g.creature.getState()) && g.creature.hasTarget(),
+      watched: this._watched(),
     };
+  }
+
+  /**
+   * Whether the Creature is watching this page's player (the refusal Hud.LockerSeen, "Lose it first"): it chases them
+   * (WallChase, they are its target) with a clear line from its eye to theirs within its full sight range.
+   */
+  _watched() {
+    const g = this.game;
+    if (!CHASES.has(g.creature.getState()) || !g.creature.hasTarget()) return false;
+    const from = g.creature.eye(_a);
+    if (!from) return false;
+    const to = this.env.eye(_b);
+    return from.distanceTo(to) <= fullRange(g.run ? g.run.difficulty : 'Standard') && this.env.lineClear(from, to);
   }
 
   /** The Hide prompt (and the dev `hide`): climbs into `locker` when the rules allow it. */
@@ -518,7 +538,8 @@ export class Lockers {
     if (this.session) {
       this.session.phase = 'Exiting';
       this.session.schedule = locker.schedule;
-      this.session.exitEye = spot.clone().multiply(_t.makeTranslation(0, EYE_ABOVE_ROOT, 0));
+      // let go with no clear spot to step out to (shoved, downed): no step-out view, they stay where they are
+      this.session.exitEye = spot ? spot.clone().multiply(_t.makeTranslation(0, EYE_ABOVE_ROOT, 0)) : null;
     }
   }
 
@@ -601,7 +622,8 @@ export class Lockers {
         if (this.session) this.session.phase = 'Hidden';
       } else if (locker.state === 'Exiting') {
         locker.state = 'Free';
-        this._endSession();
+        // its own session only: one let go at once (shoved, pulled) may be hiding in the next spot by now
+        if (this.session && this.session.locker === locker) this._endSession();
       }
     }
   }
@@ -954,6 +976,9 @@ export class Lockers {
 
   /** The camera this frame: in, behind the slits (the player's look kept facing out, the sway) or out. */
   _view(s) {
+    // the session over, its layer fading out: its last frame held; the player's look is theirs again (a frame drawn
+    // after the hider was let go never turns them back to the spot's front)
+    if (this.session !== s) return s.lastView;
     const env = this.env;
     const now = env.renderNow();
     const schedule = s.schedule;

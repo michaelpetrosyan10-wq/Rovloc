@@ -41,6 +41,8 @@
 //    The input actions, settings and hints the website reads from meta: every InputConfig action is bound with its
 //    keys, buttons, kind and contexts translated (PendingActions, the features not built yet, are not bound at all),
 //    the removed Syringe and Objective actions are gone, every SettingsSchema row is the web's (PendingSettings hidden).
+// 7. The recorded sounds: src/ReplicatedStorage/Shared/Audio/RecordedSounds.luau (the port's index of the renders) is the
+//    one web/build/audio/manifest.json gives.
 // Exits non-zero on the first category with failures (all failures are listed).
 
 import fs from 'node:fs';
@@ -74,6 +76,8 @@ import { NoiseKinds as WebNoiseKinds, PendingActions, PendingSettings, WorldConf
 import { StageScripts, Stages } from '../src/game/stages.js';
 import { LevelOrder as WebLevelOrder, TutorialConfig } from '../src/game/config.js';
 import { SpawnTuning } from '../src/game/objectives/config.js';
+import { CreatureConfig as WebCreatureConfig } from '../src/creature/config.js';
+import { presenceConfig } from '../src/creature/presence.js';
 import { Levels as NetLevels } from '../src/net/codec.js';
 import { WorldData, variantOf } from '../src/game/worldData.js';
 import { POWER_CIRCUIT, dominantGroup } from './bake/light.mjs';
@@ -1321,7 +1325,8 @@ console.log('== shared rules (configs, goldens, picks)');
   const before = failures;
   const listed = Array.isArray(meta.exportedConfigs) ? meta.exportedConfigs : [];
   const NEEDED = ['stageConfig', 'worldConfig', 'objectiveConfig', 'difficultyConfig', 'gameConfig', 'noiseConfig',
-    'inputConfig', 'settingsSchema', 'tutorialConfig', 'livesConfig', 'radarConfig', 'parkourConfig', 'storyConfig', 'castConfig'];
+    'inputConfig', 'settingsSchema', 'tutorialConfig', 'livesConfig', 'radarConfig', 'parkourConfig', 'storyConfig', 'castConfig',
+    'creatureConfig'];
   for (const key of NEEDED) check(listed.includes(key), `meta.exportedConfigs lists ${key}`);
   for (const key of listed) {
     check(meta[key] && typeof meta[key] === 'object', `meta.${key} is the exported config`);
@@ -1338,6 +1343,38 @@ console.log('== shared rules (configs, goldens, picks)');
     const want = kinds[kind];
     check(!!want && ['radius', 'priority', 'medium', 'interval'].every((f) => want[f] === spec[f]),
       `NoiseKinds.${kind} is NoiseConfig's (${JSON.stringify(spec)} vs ${JSON.stringify(want)})`);
+  }
+
+  // the web's mirror of CreatureConfig (creature/config.js): every number it keeps is the export's; the presence
+  // layer (meta.creatureConfig.Presence) is read from the world, both difficulties resolving to numbers
+  const cc = meta.creatureConfig || {};
+  const mirrored = (name, mine, theirs) => {
+    if (typeof mine === 'number') {
+      check(mine === theirs, `CreatureConfig.${name} is the export's (${mine} vs ${theirs})`);
+      return;
+    }
+    for (const [k, v] of Object.entries(mine)) {
+      if (typeof v === 'number' || (v && typeof v === 'object' && !Array.isArray(v))) mirrored(`${name}.${k}`, v, theirs ? theirs[k] : undefined);
+    }
+  };
+  for (const key of ['Speeds', 'SpeedCap', 'HunchBelow', 'Senses', 'Stare', 'Search', 'Investigate', 'Teleport', 'FloorGrace',
+    'FakeoutOneIn']) mirrored(key, WebCreatureConfig[key], cc[key]);
+  for (const d of ['Standard', 'Nightmare']) {
+    let presence = null;
+    try {
+      presence = presenceConfig(meta, d);
+    } catch (err) {
+      fail(`meta.creatureConfig.Presence (${d}): ${err.message}`);
+    }
+    const numbers = [];
+    const walk = (v, at) => {
+      if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, `${at}.${k}`);
+      else numbers.push([at, v]);
+    };
+    if (presence) walk(presence, 'Presence');
+    check(!!presence && ['Director', 'Beats', 'Detection', 'Chase', 'Teleport', 'Audio'].every((k) => presence[k]) &&
+      numbers.length > 0 && numbers.every(([, v]) => Number.isFinite(v)),
+    `meta.creatureConfig.Presence (${d}): every number resolves (${numbers.length} numbers)`);
   }
 
   // the golden rows (written by the export; the website's ports of the rule modules replay them)
@@ -1642,6 +1679,26 @@ function backLotAndDread() {
   if (failures === before) console.log(`  ok   ${bins.length} bins, the hatch and the shutter on the set; the dread kit on its floors only`);
 }
 backLotAndDread();
+
+// 7. The recorded sounds' index for the Roblox port: the committed RecordedSounds.luau is the one the website's renders
+// give (web/sounds/lib/recorded.mjs from build/audio/manifest.json; npm run sounds writes both).
+async function recordedSounds() {
+  console.log('== 7. the recorded sounds\' index (RecordedSounds.luau)');
+  const { RECORDED_SOUNDS, recordedSoundsLuau } = await import('../sounds/lib/recorded.mjs');
+  const manifestFile = path.join(buildDir, 'audio', 'manifest.json');
+  check(fs.existsSync(manifestFile), `${manifestFile}: no rendered sounds (npm run sounds)`);
+  if (!fs.existsSync(manifestFile)) return;
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  const committed = fs.existsSync(RECORDED_SOUNDS) ? fs.readFileSync(RECORDED_SOUNDS, 'utf8') : '';
+  const names = Object.keys(manifest.sounds).length;
+  const same = committed === recordedSoundsLuau(manifest);
+  check(same, `src/ReplicatedStorage/Shared/Audio/RecordedSounds.luau is not the index of the ${names} rendered sounds (npm run sounds writes it)`);
+  if (same) {
+    const files = Object.values(manifest.sounds).reduce((t, s) => t + s.variants.length, 0);
+    console.log(`  ok   RecordedSounds.luau indexes the ${names} rendered sounds (${files} files) as the website plays them`);
+  }
+}
+await recordedSounds();
 
 console.log(failures ? `FAILED: ${failures} of ${checks} checks` : `PASSED: ${checks} checks`);
 process.exit(failures ? 1 : 0);

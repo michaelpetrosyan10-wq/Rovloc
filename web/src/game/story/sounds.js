@@ -1,6 +1,9 @@
 // sounds.js: the story's synth presets (docs/design/game-spec-v2.md 5.5, 2.4), recipes in the SynthPresets format
 // (engine/audio/presets.js) built from the eleven synthesized sources, registered into the engine's preset table at
 // start-up. None is a noise the Creature hears (I3: a cutscene only shows and sounds); 3D ones are World voices.
+// Each preset's bus, roll-off, voice limit and caption are what the game uses; the sound itself is the recorded render
+// of the same name (docs/SOUND.md 11, web/sounds/voices/story.mjs and him.mjs), and the recipe below plays only for a
+// name that has no file. The recipes:
 //
 //   SchoolBell     the final bell's long electric ring                 DoorBang      the staff doors' push bars and slam
 //   CrawlerClick   porcelain ticks at 3-7 kHz (the mask crawler)       MusicBoxTick  one plucked high note
@@ -152,7 +155,8 @@ export const StoryPresets = Object.freeze({
     space: [VERB(2.4, -6), ECHO(0.18, 0.25, -12)],
   },
   BellToll: {
-    bus: 'World', maxVoices: 4, priority: 75, caption: 'Caption.BellToll', captionText: '[the bell tolls]',
+    // the opening's twelve tolls 0.3 s apart (game-spec-v2 2.4): six ring at once, each let go 1.8 s into its ring
+    bus: 'World', maxVoices: 6, priority: 75, caption: 'Caption.BellToll', captionText: '[the bell tolls]',
     layers: [
       { duration: 8, looped: true, region: { min: 0.02, max: 0.03 }, sample: 'VolumeSlider', speed: 0.36, volume: 0.5,
         envelope: { attack: 0.004, hold: 0.1, release: 7.8 }, effects: [EQ(6, 0, -18)] },

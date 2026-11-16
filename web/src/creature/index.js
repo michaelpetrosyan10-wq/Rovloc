@@ -24,13 +24,14 @@
 //     notePulled(player), reveal(kind) (the reveal scare on this page: R's jumpscareView.reveal, else a flash),
 //     warnLocal(spot, seconds, targetsMe) (a teleport warning's torch stutter on this page)
 //
-// The player's feel (§3): the heartbeat and breathing rise when it is within Senses.NearRadius whether or not it is
-// seen (a panic floor), the torch crackles with static within Senses.EmfRadius and stutters through a teleport warning
+// The player's feel (§3): the heartbeat and breathing rise when it is within the presence layer's Audio.NearRadius
+// (docs/MONSTER.md 19) whether or not it is seen (a panic floor, following its real distance), the torch crackles with static within Senses.EmfRadius and stutters through a teleport warning
 // aimed at you.
 
 import { CreatureConfig } from './config.js';
 import { CreatureEnv } from './env.js';
 import { JumpscareView } from './jumpscareView.js';
+import { presenceConfig } from './presence.js';
 import { PLAYER, MonsterAI, levelIndex } from './service.js';
 import { registerMonsterSounds } from './sounds.js';
 import { CreatureView } from './view.js';
@@ -54,9 +55,8 @@ export function emfIntensity(distance, radius) {
   return clamp01(level);
 }
 
-/** The panic floor for a Creature `distance` studs away (null beyond NearRadius): the heartbeat, seen or not. */
-export function nearFloor(distance) {
-  const radius = CreatureConfig.Senses.NearRadius;
+/** The panic floor for a Creature `distance` studs away (null beyond `radius`): the heartbeat, seen or not. */
+export function nearFloor(distance, radius) {
   if (!(distance < radius)) return null;
   return NEAR_FLOOR_FAR + (NEAR_FLOOR_CLOSE - NEAR_FLOOR_FAR) * smoothstep(radius, NEAR_CLOSE, distance);
 }
@@ -82,17 +82,21 @@ export function createCreature(engine, opts = {}) {
   service.view = view;
   service.jumpscareView = jumpscareView;
 
-  // the heartbeat within NearRadius (seen or not), sensed at 10 Hz from the published state (a co-op client's puppet
-  // publishes the host's)
+  // the heartbeat within Audio.NearRadius (seen or not), sensed at 10 Hz from the published state (a co-op client's
+  // puppet publishes the host's)
   let nearClock = 0;
   let nearOn = false;
+  let nearRadius = null;
   const senseNear = (dt) => {
     nearClock += dt;
     if (nearClock < NEAR_EVERY) return;
     nearClock = 0;
     const s = service.snapshot();
     const eye = s.running && !s.hidden && s.state !== 'Dormant' && s.state !== 'Scripted' ? env.playerEye() : null;
-    const floor = eye && s.eye ? nearFloor(s.eye.distanceTo(eye)) : null;
+    if (!nearRadius || nearRadius.difficulty !== service.difficulty) {
+      nearRadius = { difficulty: service.difficulty, radius: presenceConfig(env.meta(), service.difficulty).Audio.NearRadius };
+    }
+    const floor = eye && s.eye ? nearFloor(s.eye.distanceTo(eye), nearRadius.radius) : null;
     if (floor === null && !nearOn) return;
     nearOn = floor !== null;
     env.setPanicFloor(NEAR_TOKEN, floor);

@@ -7,7 +7,8 @@
 //   roughness     the envelope's modulation depth at 30-150 Hz (rms of that band of the envelope / its mean)
 //   attack        10 % -> 90 % of the 1 ms RMS envelope's peak
 //   crest, dc, clipped samples, silence at either end, a cut tail, the loop seam, variant difference,
-//   and the signature detectors (his throat's 20-35 Hz rattle; porcelain clicks at 1.2-5 kHz)
+//   his throat's rattle (the 18-38 Hz pulsing of a slowed voice), and the click at a contact (how much of the first
+//   12 ms lies over 1.5 kHz: a dry click or a knock is bright there, a body landing is not)
 
 import { welch, fft, nextPow2, hann } from '../kit/fft.mjs';
 import { butter } from '../kit/filters.mjs';
@@ -245,31 +246,33 @@ export function rattleIndex(x, sr) {
   return modulationDepth(env, rate, 18, 38);
 }
 
-/** Porcelain: the count of short clicks in the 1.2-5 kHz band (a sharp rise over the 30 ms background). */
-export function porcelainClicks(x, sr) {
-  const band = butter(butter(x, sr, 'highpass', 1200, 4), sr, 'lowpass', 5000, 4);
-  const env = rmsEnvelope(band, sr, 0.001);
-  const bgWin = Math.round(0.03 * sr);
-  let s = 0;
-  let count = 0;
-  let lastAt = -Infinity;
-  let max = 0;
-  for (const v of env) max = Math.max(max, v);
-  const gap = Math.round(0.008 * sr);
-  const look = Math.round(0.002 * sr);
-  for (let i = 0; i < env.length; i++) {
-    s += env[i];
-    if (i >= bgWin) s -= env[i - bgWin];
-    const bg = s / Math.min(i + 1, bgWin);
-    if (env[i] < max * 0.05 || env[i] < bg * 3 || i - lastAt < gap) continue;
-    let isMax = true;
-    for (let k = Math.max(0, i - look); k < Math.min(env.length, i + look); k++) if (env[k] > env[i]) isMax = false;
-    if (isMax) {
-      count++;
-      lastAt = i;
-    }
+/**
+ * The click at the contact: the share of the first 12 ms' energy (from the onset) that lies over 1.5 kHz. A dry
+ * click, a tick or a knock puts most of its first milliseconds there; a body landing or a breath does not.
+ * @param {Float32Array} x
+ * @param {number} sr
+ */
+export function onsetClick(x, sr) {
+  const { onset } = attack(x, sr);
+  const len = Math.min(x.length - onset, Math.round(0.012 * sr));
+  if (len < 16) return 0;
+  const size = nextPow2(Math.max(2048, len));
+  const re = new Float64Array(size);
+  const im = new Float64Array(size);
+  // the start is kept whole (the click is there); the end tapers
+  const taper = Math.round(len / 3);
+  for (let i = 0; i < len; i++) re[i] = x[onset + i] * (i < len - taper ? 1 : 0.5 + 0.5 * Math.cos((Math.PI * (i - (len - taper))) / taper));
+  fft(re, im);
+  let high = 0;
+  let total = 0;
+  for (let k = 1; k <= size / 2; k++) {
+    const f = (k * sr) / size;
+    if (f < 20) continue;
+    const p = re[k] * re[k] + im[k] * im[k];
+    total += p;
+    if (f >= 1500) high += p;
   }
-  return count;
+  return total > 0 ? high / total : 0;
 }
 
 /** Crest factor (dB): the peak over the RMS of the part above -40 dB. */

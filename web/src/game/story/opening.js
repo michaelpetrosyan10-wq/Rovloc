@@ -2,12 +2,12 @@
 //
 // Deploying places the squad at the bin marks: each page's player in its slot's bin (BinStart, slot + 1), hidden in it
 // and held (the prologue's bin state). Then the authority plays the Opening timeline (story/cinematics.js: Full the
-// first time, 78.0 s; Short, 26.0 s, once every member has seen it and nobody asked for Full): the overcast day on the
+// first time, 61.0 s; Short, 24.0 s, once every member has seen it and nobody asked for Full): the overcast day on the
 // lot, the party walking out of the staff doors with Danny, the crawler, the latch at his face, the dark and the
 // Tall Man unfolding where he stood, the run to the bins, the bin, the school going dark, the time cut to night, and
 // first person inside your bin. At its end every page hands over to the prologue (story/prologue.js).
 //
-// The set pieces it moves (Prop events): the staff doors' lockdown Shutter (up by day, crashing down in S13), the
+// The set pieces it moves (Prop events): the staff doors' lockdown Shutter (up by day, crashing down in S14), the
 // school's two rows of windows (Windows1, Windows2: lit by day, dark floor by floor), each bin's Lid (opened and
 // slammed as its actor dives in). The Creature (the Monster actor) is held by the authority while it plays and left
 // hidden and Dormant at its Basement spawn at the end (4.1: no monster in the lot).

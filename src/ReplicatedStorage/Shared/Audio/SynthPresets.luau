@@ -38,6 +38,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Enums = require(ReplicatedStorage.Shared.Enums)
+local CreatureConfig = require(ReplicatedStorage.Shared.Config.CreatureConfig)
 local SoundLibrary = require(ReplicatedStorage.Shared.Audio.SoundLibrary)
 local Strings = require(ReplicatedStorage.Shared.Strings)
 
@@ -3705,6 +3706,55 @@ for _, surface: Enums.SurfaceKind in Enums.SurfaceKind do
 	})
 end
 
+---------------------------------------------------------------- the Creature's footsteps (generated per surface)
+
+-- Its own footfalls, never a player's Footstep* (spec I1: what sounds like it is it). It has five: each of the game's
+-- surfaces plays one of them. They carry as far as CreatureConfig.Footfalls says. The website plays their recorded
+-- renders (web/sounds: a body landing, slowed, on that surface); the layers here are the recipe a client without the
+-- renders builds: the players' footstep on that surface, slow, low and loud.
+local CREATURE_STEP_SURFACE: { [Enums.SurfaceKind]: string } = {
+	Concrete = "Concrete",
+	Tile = "Tile",
+	Wood = "Wood",
+	Metal = "Metal",
+	Carpet = "Carpet",
+	Glass = "Tile",
+	Water = "Tile",
+	Grass = "Carpet",
+}
+local CREATURE_STEPS = { "Concrete", "Tile", "Wood", "Metal", "Carpet" }
+local CREATURE_STEP_VOLUME = 1.9
+local CREATURE_WALK_SPEED = 0.52
+local CREATURE_CHASE_SPEED = 0.6
+
+local function creatureStepName(character: string, chasing: boolean): string
+	return (if chasing then "CreatureStepChase" else "CreatureStepWalk") .. character
+end
+
+local function creatureStepLayers(recipe: FootstepRecipe, speed: number): { Layer }
+	local layers: { Layer } = {}
+	for _, layer in { recipe.main, table.unpack(recipe.extras) } do
+		local copy = table.clone(layer)
+		copy.volume = math.min(layer.volume * CREATURE_STEP_VOLUME, VOLUME_RANGE.max)
+		copy.speed = scaledSpeed(layer.speed, speed)
+		table.insert(layers, copy)
+	end
+	return layers
+end
+
+for _, character in CREATURE_STEPS do
+	local recipe = FOOTSTEPS[character :: Enums.SurfaceKind]
+	for _, chasing in { false, true } do
+		define(creatureStepName(character, chasing), {
+			bus = "Monster",
+			priority = if chasing then 66 else 60,
+			maxVoices = 4,
+			rollOff = r(CreatureConfig.Footfalls.RollOffMin, CreatureConfig.Footfalls.RollOffMax),
+			layers = creatureStepLayers(recipe, if chasing then CREATURE_CHASE_SPEED else CREATURE_WALK_SPEED),
+		})
+	end
+end
+
 --------------------------------------------------------------------------------
 -- Ambience stingers per bed
 --------------------------------------------------------------------------------
@@ -4063,6 +4113,10 @@ for _, surface: Enums.SurfaceKind in Enums.SurfaceKind do
 	table.insert(REQUIRED, footstepName(surface, false))
 	table.insert(REQUIRED, footstepName(surface, true))
 end
+for _, character in CREATURE_STEPS do
+	table.insert(REQUIRED, creatureStepName(character, false))
+	table.insert(REQUIRED, creatureStepName(character, true))
+end
 
 --------------------------------------------------------------------------------
 -- Freeze everything: presets are shared, read-only data.
@@ -4086,6 +4140,7 @@ table.freeze(order)
 table.freeze(REQUIRED)
 table.freeze(EFFECT_KINDS)
 table.freeze(DEFAULT_ROLLOFF)
+table.freeze(CREATURE_STEP_SURFACE)
 
 --------------------------------------------------------------------------------
 -- API
@@ -4099,6 +4154,7 @@ SynthPresets.EffectKinds = EFFECT_KINDS
 SynthPresets.Beds = BEDS
 SynthPresets.Required = REQUIRED
 SynthPresets.DefaultRollOff = DEFAULT_ROLLOFF
+SynthPresets.CreatureStepSurface = CREATURE_STEP_SURFACE
 SynthPresets.SpeedRange = table.freeze(SPEED_RANGE)
 SynthPresets.VolumeRange = table.freeze(VOLUME_RANGE)
 SynthPresets.MinGrainSpacing = MIN_GRAIN_SPACING
@@ -4126,6 +4182,14 @@ function SynthPresets.footstep(surface: string, sprinting: boolean?): string
 		then (surface :: any) :: Enums.SurfaceKind
 		else "Concrete"
 	return footstepName(known, sprinting == true)
+end
+
+-- The Creature's own footstep preset on a surface; unknown surfaces fall back to Concrete.
+function SynthPresets.creatureStep(surface: string, chasing: boolean?): string
+	local known: Enums.SurfaceKind = if Enums.has(Enums.SurfaceKind, surface)
+		then (surface :: any) :: Enums.SurfaceKind
+		else "Concrete"
+	return creatureStepName(CREATURE_STEP_SURFACE[known], chasing == true)
 end
 
 -- A layer is a bed layer (runs for the voice's whole life) when it loops without a duration.

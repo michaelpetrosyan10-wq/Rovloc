@@ -1,265 +1,163 @@
-// glass.mjs: GLASS (named by the player: "other sounds be scary too like the glass"). Glass is a spray of many short,
-// high, inharmonic pings over a low thump, never one long whistle: a thin shell cracks (a sharp broadband snap and its
-// few shell partials), shatters into 30-60 shards that each ring a few tens of milliseconds while they fall and
-// bounce (a Poisson shower whose density dies away), and whatever it hit thuds under it. The flask carries a chemical
-// that splashes and fizzes; a tube light fails with a pop of pressure and a buzz cut short; shards underfoot are a
-// gritty crunch, not pings.
+// glass.mjs: glass SMASHING (the player: "change glass i dont like it right now"; the candidates they heard were
+// glass being tapped). Every glass sound here is a real break: a bottle or a pane shattering (75-cc0-breaking, the
+// ice-breaking pack, 100-cc0-sfx), its pieces falling and skittering after it, a low thump of the body that hit
+// the floor under it, and for the flask the chemical splashing out and fizzing. Glass is the one bright thing in the
+// game (its class allows it), but every break is played a little slower than recorded, so it sounds bigger and lower.
+//
+//   FlaskShatter  the thrown flask: smash, splash, falling shards
+//   ChemHiss      the spilled chemical fizzing on the floor (a loop while the puddle lasts)
+//   LightBurst    a bulb or a light tube failing: a pop, a spit of electricity, glass falling out of the fitting
+//   GlassBreak    a window breaking somewhere inside (the opening cutscene)
+//   GlassCrunch   broken glass underfoot
+//   FootstepGlass, FootstepSprintGlass   your step on broken glass
 
 import * as K from '../kit/index.mjs';
-import { PLAYER_CARRY } from './player-steps.mjs';
+import { recorded, withSub } from '../lib/recipe.mjs';
 
 const FAMILY = 'glass';
+const BFH = 'oga/75-cc0-breaking-falling-hit-sfx';
+const ICE = 'oga/ice-breakingshattering';
+const SFX = 'oga/100-cc0-sfx';
+const SPLASH = 'oga/40-cc0-water-splash-slime-sfx';
+const RPG = 'kenney/rpg-audio';
 
-/**
- * Shards falling and bouncing: `count` pings (2.5-11 kHz unless given), their rate dying away over `spread` s.
- * @param {number} sr
- * @param {K.Rng} r
- * @param {{count: number, spread: number, lo?: number, hi?: number, t60?: [number, number]}} spec
- */
-function shards(sr, r, { count, spread, lo = 2500, hi = 11000, t60 = [0.015, 0.06] }) {
-  const n = Math.round((spread + 0.15) * sr);
-  const tau = spread / 3;
-  const peakRate = count / tau;
-  const times = K.poissonTimes(r.fork('times'), spread, (t) => peakRate * Math.exp(-t / tau), peakRate);
-  const g = r.fork('pings');
-  return K.shower(n, sr, times, (t) => ({
-    grain: K.ping(sr, g, { freq: lo * (hi / lo) ** g.next(), t60: g.range(t60[0], t60[1]), ratios: [1, g.range(2.1, 2.5), g.range(3.9, 4.6)], spread: 0.05 }),
-    // later shards are smaller bounces: quieter
-    gain: g.range(0.25, 1) * (0.35 + 0.65 * Math.exp(-t / tau)),
-  }));
-}
+/** The big breaks: a bottle or a pane shattering. */
+const SMASH = [`${BFH}/bfh1_glass_breaking_06.ogg`, `${ICE}/LedasLuzta33.ogg`, `${SFX}/glass_04.ogg`, `${BFH}/bfh1_glass_breaking_04.ogg`];
+/** The pieces falling after it. */
+const PIECES = [`${BFH}/bfh1_glass_falling_02.ogg`, `${BFH}/bfh1_glass_falling_04.ogg`, `${BFH}/bfh1_glass_falling_01.ogg`, `${BFH}/bfh1_glass_falling_03.ogg`];
+/** Small breaks (a bulb). */
+const SHARDS = [`${BFH}/bfh1_glass_breaking_05.ogg`, `${ICE}/LedasLuzta2.ogg`, `${SFX}/glass_03.ogg`];
+/** Crushed glass and grit: [file, from, to] (gritty, not ringing). */
+const CRUSH = [
+  [`${ICE}/LedasLuzta4.ogg`, 0, 0.42],
+  [`${BFH}/bfh1_rock_falling_08.ogg`, 0, 0.3],
+  [`${ICE}/LedasLuzta4.ogg`, 0.36, 0.8],
+  [`${BFH}/bfh1_rock_breaking_02.ogg`, 0, 0.5],
+  [`${BFH}/bfh1_rock_falling_02.ogg`, 0, 0.3],
+];
+/** Grit under it. */
+const GRIT = [`${BFH}/bfh1_glass_falling_04.ogg`, `${BFH}/bfh1_rock_falling_02.ogg`, `${BFH}/bfh1_rock_falling_06.ogg`, `${BFH}/bfh1_glass_falling_04.ogg`, `${BFH}/bfh1_rock_falling_08.ogg`];
+const crush = (i, layer) => {
+  const [src, from, to] = at(CRUSH, i);
+  return { src, from, to, trim: true, ...layer };
+};
+/** A dull body hitting the floor (the weight under a break). */
+const THUD = [`${BFH}/bfh1_hit_01.ogg`, `${BFH}/bfh1_hit_02.ogg`, `${BFH}/bfh1_hit_06.ogg`, `${BFH}/bfh1_hit_12.ogg`];
 
-/**
- * The crack: a sub-millisecond broadband snap into a thin glass shell's partials.
- * @param {number} sr
- * @param {K.Rng} r
- * @param {number} base the shell's lowest partial (Hz)
- */
-function crack(sr, r, base) {
-  const snap = K.burst(sr, r.fork('snap'), { length: 0.0006, attack: 0.00005, cutoff: 16000, hp: 300 });
-  const shell = K.modal(snap, sr, K.modesFrom(base, K.GLASS, { t60: 0.05, damp: 0.6, tilt: -1, detune: 0.04, rng: r }), Math.round(0.12 * sr));
-  const out = K.unit(shell);
-  K.addAt(out, K.unit(snap), 0, 0.9);
-  return out;
-}
+const at = (list, i) => list[((i % list.length) + list.length) % list.length];
 
-/**
- * What it hit: a low-mid thud (the floor or a wall answering a small hard mass).
- * @param {number} sr
- * @param {K.Rng} r
- */
-function thud(sr, r) {
-  return K.footfall(sr, r, {
-    length: 0.4,
-    thump: { f0: 95, f1: 65, drop: 0.02, t60: 0.1, drive: 2, gain: -6 },
-    body: { modes: K.scatterModes(r, 6, 150, 520, 0.05, 0.12, -1), gain: 0, excite: 0.002, cutoff: 2500 },
-    contact: { length: 0.003, cutoff: 3000, gain: -4 },
-  });
+function glass(v) {
+  return recorded({ family: FAMILY, group: 'reference', channels: 1, loop: null, space: 'dry', board: 'Glass', ...v });
 }
 
 /** @type {import('../lib/voices.mjs').Voice[]} */
 export const voices = [
-  {
+  glass({
     name: 'FlaskShatter',
-    title: 'A flask smashing',
-    description: 'A thin lab flask thrown hard: the crack, a shower of glass dying away, the chemical splashing out and fizzing.',
-    family: FAMILY,
-    group: 'reference',
+    title: 'The flask shattering',
+    description: 'The flask you threw smashes: glass bursting, the chemical splashing out, shards skittering away.',
     class: 'glass',
-    repeats: true,
     variants: 4,
-    channels: 1,
-    loop: null,
-    space: 'dry',
-    loudness: -20.5,
-    carry: Object.freeze({ ref: 8, max: 180, rolloff: 0.9, fade: 0.7 }),
-    board: 'Glass',
-    render: ({ sr, rng }) => {
-      const r = rng.fork('flask');
-      const out = new Float32Array(Math.round(2.0 * sr));
-      K.addAt(out, crack(sr, r.fork('crack'), r.range(1700, 2600)), 0, 0.8);
-      // thrown hard: the flask and its load hit the floor with weight (the low-mid that anchors the spray)
-      K.addAt(out, K.unit(thud(sr, r.fork('thud'))), r.range(0.001, 0.004) * sr, 1.5);
-      K.addAt(out, K.unit(shards(sr, r.fork('shards'), { count: r.int(35, 60), spread: r.range(0.3, 0.5) })), r.range(0.003, 0.008) * sr, 0.6);
-      // the chemical: a slap of liquid, then droplets and bubbles fizzing for a second
-      const liquid = r.fork('liquid');
-      const splash = K.svf(K.burst(sr, liquid.fork('slap'), { length: 0.05, cutoff: 3000, hp: 200, colour: 'pink' }), sr, 'bandpass', 900, 0.5);
-      K.addAt(out, K.unit(splash), 0.012 * sr, 0.35);
-      const fizzLen = 1.4;
-      const fizz = K.shower(Math.round(fizzLen * sr), sr, K.poissonTimes(liquid.fork('t'), fizzLen, (t) => 220 * Math.exp(-t / 0.45), 220), () => ({
-        grain: K.bubble(sr, liquid, { freq: liquid.range(1200, 4500), t60: liquid.range(0.006, 0.02), rise: liquid.range(0.3, 1) }),
-        gain: liquid.range(0.2, 1),
-      }));
-      K.addAt(out, K.unit(fizz), 0.03 * sr, 0.18);
-      return out;
+    first: true,
+    loudness: -17,
+    layers: (variant) => {
+      const i = variant - 1;
+      return [
+        { src: at(SMASH, i), rate: [0.84, 0.9], lp: 9000, gain: 0 },
+        { src: at(THUD, i), rate: 0.62, lp: 900, gain: -6, at: 0.006 },
+        { src: `${SPLASH}/splash_0${[2, 8, 3, 5][i]}.ogg`, rate: [0.78, 0.84], lp: 5000, gain: -5, at: 0.02 },
+        { src: at(PIECES, i), rate: [0.88, 0.95], lp: 9000, gain: -7, at: [0.22, 0.3] },
+        { src: at(PIECES, i + 2), rate: [0.8, 0.86], lp: 7000, gain: -12, at: [0.5, 0.6] },
+      ];
     },
-  },
-  {
+    finish: (ctx, mix) => withSub(mix, ctx.sr, { f0: 72, f1: 50, t60: 0.2, gain: -12 }),
+  }),
+  glass({
     name: 'ChemHiss',
-    title: 'The chemical cloud hissing',
-    description: 'The spilled chemical reacting where the flask broke: bubbling, spitting and hissing while the cloud hangs there.',
-    family: FAMILY,
-    group: 'reference',
+    title: 'The chemical fizzing',
+    description: 'The spilled chemical eating into the floor: fizzing, bubbling, a thin hiss of fumes.',
     class: 'liquid',
     variants: 1,
-    channels: 1,
     loop: { seconds: 8, crossfade: 0.6 },
-    space: 'dry',
-    loudness: -30,
-    carry: Object.freeze({ ref: 4, max: 70, rolloff: 1, fade: 0.67 }),
-    board: 'Glass',
-    render: ({ sr, rng, seconds }) => {
-      const n = Math.round(seconds * sr);
-      const r = rng.fork('react');
-      // bubbles of every size, surging in slow waves
-      const surge = K.smoothRandom(n, sr, 1.5, r.fork('surge'), 0.4, 1);
-      const bubbles = K.shower(n, sr, K.poissonTimes(r.fork('t'), seconds, 260), (t) => ({
-        grain: K.bubble(sr, r, { freq: 500 * 8 ** r.next(), t60: r.range(0.006, 0.035), rise: r.range(0.2, 1.2) }),
-        gain: r.range(0.15, 1) * surge[Math.min(n - 1, Math.round(t * sr))],
-      }));
-      // spitting: tiny droplets flicked off the surface
-      const spits = K.shower(n, sr, K.poissonTimes(r.fork('s'), seconds, 30), () => ({ grain: K.click(sr, r, { freq: r.range(2000, 5000), q: 2, length: 0.002 }), gain: r.range(0.2, 0.8) }));
-      // the hiss of the gas coming off, dark and breathing with the surges
-      const hiss = K.svf(K.pink(n, r.fork('hiss')), sr, 'bandpass', 1600, 0.7);
-      const out = K.unit(bubbles);
-      K.addAt(out, K.unit(spits), 0, 0.3);
-      K.mul(K.unit(hiss), surge);
-      K.addAt(out, hiss, 0, 0.35);
-      return K.butter(out, sr, 'lowpass', 6000, 2);
-    },
-  },
-  {
-    name: 'GlassCrunch',
-    title: 'Broken glass underfoot',
-    description: 'Stepping onto a patch of shards: a gritty crunch as they break up and grind under a shoe.',
-    family: FAMILY,
-    group: 'reference',
-    class: 'crunch',
-    repeats: true,
-    variants: 5,
-    channels: 1,
-    loop: null,
-    space: 'dry',
-    loudness: -22,
-    carry: Object.freeze({ ref: 6, max: 170, rolloff: 0.9, fade: 0.7 }),
-    board: 'Glass',
-    render: ({ sr, rng }) => crunch(sr, rng.fork('crunch'), { count: rng.int(70, 110), spread: rng.range(0.25, 0.4), step: true }),
-  },
-  ...[false, true].map((sprint) => ({
-    name: `Footstep${sprint ? 'Sprint' : ''}Glass`,
-    title: `Your footsteps, ${sprint ? 'sprinting' : 'walking'}, on broken glass`,
-    description: `A kid ${sprint ? 'running' : 'walking'} over shards: each step crunches and grinds.`,
-    family: FAMILY,
-    group: /** @type {const} */ ('reference'),
-    class: 'crunch',
-    repeats: true,
-    variants: 5,
-    channels: /** @type {const} */ (1),
-    loop: null,
-    space: /** @type {const} */ ('dry'),
-    loudness: sprint ? -25 : -28,
-    carry: PLAYER_CARRY,
-    board: 'Glass',
-    render: (/** @type {{sr: number, rng: K.Rng}} */ { sr, rng }) => crunch(sr, rng.fork('step'), { count: rng.int(sprint ? 30 : 40, sprint ? 45 : 60), spread: sprint ? rng.range(0.08, 0.12) : rng.range(0.14, 0.2), step: true }),
-  })),
-  {
+    loudness: -27,
+    layers: () => [
+      { src: `${SPLASH}/loop_bubbles_02.ogg`, from: 0, to: 7.3, rate: 0.85, lp: 4000, gain: 0 },
+      { src: `${SPLASH}/loop_bubbles_1.ogg`, from: 0, to: 4.4, rate: 0.9, hp: 300, lp: 5000, gain: -6, at: 4.0 },
+      // the fizz: the same bubbling played faster and thinned to its top, like acid working into the tiles
+      { src: `${SPLASH}/loop_bubbles_02.ogg`, from: 0.5, to: 7.3, rate: 1.25, hp: 2000, lp: 6000, gain: -10, at: 0.3 },
+    ],
+  }),
+  glass({
     name: 'LightBurst',
-    title: 'A light tube bursting',
-    description: 'A fluorescent tube failing overhead: a pop of pressure, thin glass raining down, the buzz cut off dead.',
-    family: FAMILY,
-    group: 'reference',
+    title: 'A light bursting',
+    description: 'A bulb gives out: a pop, a spit of electricity, glass falling out of the fitting.',
     class: 'glass',
     variants: 3,
-    channels: 1,
-    loop: null,
-    space: 'dry',
-    loudness: -19.5,
-    carry: Object.freeze({ ref: 8, max: 150, rolloff: 0.9, fade: 0.7 }),
-    board: 'Glass',
-    render: ({ sr, rng }) => {
-      const r = rng.fork('tube');
-      const out = new Float32Array(Math.round(1.8 * sr));
-      // the ballast buzzing as it fails: a rough 100 Hz pulse train through the fitting, surging, then cut dead
-      const buzzLen = r.range(0.18, 0.3);
-      const nb = Math.round(buzzLen * sr);
-      const pulses = new Float32Array(nb);
-      const period = sr / 100;
-      for (let t = 0; t < nb; t += period * (1 + r.range(-0.02, 0.02))) pulses[Math.round(t)] = r.range(0.6, 1);
-      const buzz = K.modal(pulses, sr, K.scatterModes(r, 8, 200, 2400, 0.004, 0.012, -2), nb);
-      // it arcs on at once (an arc has no fade-in), surging, and is cut dead
-      K.mul(buzz, K.segments(nb, sr, [[0, 0.7], [buzzLen * 0.8, 1, 2], [buzzLen, 1]]));
-      K.fade(buzz, sr, 0.0005, 0.003);
-      K.addAt(out, K.unit(buzz), 0, 0.8);
-      // the arc striking: an electrical snap at the start of the buzz
-      K.addAt(out, K.unit(K.burst(sr, r.fork('arc'), { length: 0.0012, attack: 0.0001, cutoff: 9000, hp: 500 })), 0, 0.7);
-      const at = Math.round(buzzLen * sr);
-      // the pop: the vacuum of the tube giving way, a pressure thump with a sharp edge
-      const pop = K.thump(sr, { f0: 120, f1: 60, drop: 0.012, t60: 0.08, drive: 3 });
-      K.addAt(out, K.unit(pop), at, 0.8);
-      K.addAt(out, crack(sr, r.fork('crack'), r.range(2600, 3400)), at, 0.9);
-      // thin tube glass: many small high shards raining from the ceiling, landing a beat later
-      K.addAt(out, K.unit(shards(sr, r.fork('shards'), { count: r.int(30, 45), spread: r.range(0.35, 0.5), lo: 3000, hi: 11000, t60: [0.01, 0.04] })), at + r.range(0.12, 0.2) * sr, 0.6);
-      // and the fitting's low rattle as the end caps drop
-      K.addAt(out, K.unit(thud(sr, r.fork('cap'))), at + r.range(0.25, 0.35) * sr, 0.35);
-      return out;
+    loudness: -19,
+    layers: (variant) => {
+      const i = variant - 1;
+      return [
+        { src: at(SHARDS, i), rate: [0.8, 0.86], gain: 0 },
+        { src: 'oga/electricity-sound-effects-0/spark.wav', rate: [0.7, 0.8], lp: 6000, gain: -8, at: 0.01 },
+        // the bulb's dying buzz: a coil's hum driven hard, only its upper harmonics
+        { src: 'oga/electricity-game-sound-pack/shieldloop.wav', from: 0.1 * i, to: 0.5 + 0.1 * i, rate: 1.0, hp: 1500, lp: 4000, drive: 14, gain: -22, at: 0.03, fadeOut: 0.2 },
+        { src: at(PIECES, i + 1), rate: [0.95, 1.0], gain: -10, at: [0.28, 0.4] },
+      ];
     },
-  },
-  {
+    finish: (ctx, mix) => withSub(mix, ctx.sr, { f0: 80, f1: 55, t60: 0.12, gain: -14 }),
+  }),
+  glass({
     name: 'GlassBreak',
-    title: 'A window breaking far away',
-    description: 'Somewhere far inside the school a window gives way: a dark crash and glass raining down a long corridor.',
-    family: FAMILY,
-    group: 'reference',
-    class: 'far',
+    title: 'Glass breaking inside',
+    description: 'A window breaking somewhere inside the school: a crash and its pieces raining down.',
+    class: 'glass',
     variants: 2,
-    channels: 2,
-    loop: null,
-    space: 'baked',
-    loudness: -26,
-    board: 'Glass',
-    render: ({ sr, rng }) => {
-      const r = rng.fork('window');
-      const dry = new Float32Array(Math.round(1.6 * sr));
-      // a big pane: a lower shell, a heavier thud, more and bigger shards over a longer fall
-      K.addAt(dry, crack(sr, r.fork('crack'), r.range(900, 1400)), 0, 1);
-      K.addAt(dry, K.unit(thud(sr, r.fork('frame'))), 0.002 * sr, 1);
-      K.addAt(dry, K.unit(shards(sr, r.fork('shards'), { count: r.int(80, 120), spread: r.range(0.7, 0.9), lo: 1500, hi: 8000, t60: [0.02, 0.08] })), 0.01 * sr, 0.8);
-      // heard from far down the building: dark (air and walls), mostly reverberation
-      return K.place(dry, sr, K.SPACES.corridor, { wet: 0.8, darken: 1800, rng: r.fork('space') });
+    loudness: -18,
+    layers: (variant) => {
+      const i = variant - 1;
+      return [
+        { src: at(SMASH, i + 1), rate: 0.8, lp: 8000, trim: true, gain: 0 },
+        { src: at(SMASH, i + 2), rate: 0.88, lp: 7000, gain: -5, at: 0.04 },
+        { src: at(THUD, i + 2), rate: 0.55, lp: 800, gain: -6, at: 0.008 },
+        { src: at(PIECES, i), rate: 0.85, gain: -8, at: 0.35 },
+        { src: at(PIECES, i + 3), rate: 0.8, gain: -11, at: 0.65 },
+      ];
     },
-  },
+  }),
+  glass({
+    name: 'GlassCrunch',
+    title: 'Glass underfoot',
+    description: 'Broken glass crunching under a shoe.',
+    class: 'crunch',
+    repeats: true,
+    variants: 5,
+    loudness: -22,
+    layers: (variant) => {
+      const i = variant - 1;
+      return [
+        crush(i, { rate: [0.78, 0.84], lp: 7000, drive: 6, gain: 0 }),
+        { src: at(GRIT, i), rate: 0.9, lp: 5000, gain: -7, at: 0.004 },
+      ];
+    },
+    finish: (ctx, mix) => K.fade(mix, ctx.sr, 0, 0.05),
+  }),
+  ...[false, true].map((fast) => glass({
+    name: `Footstep${fast ? 'Sprint' : ''}Glass`,
+    title: `Your footsteps, ${fast ? 'running' : 'walking'}, on broken glass`,
+    description: `You ${fast ? 'running' : 'walking'} over broken glass: the shoe and the shards crunching under it.`,
+    class: 'crunch',
+    repeats: true,
+    variants: 5,
+    first: true,
+    loudness: fast ? -26 : -29,
+    layers: (variant) => {
+      const i = variant - 1;
+      return [
+        { src: `${RPG}/footstep0${[2, 4, 7, 8, 2][i]}.ogg`, rate: fast ? 1.06 : 1.0, lp: 2600, trim: true, gain: -6 },
+        crush(i + 2, { rate: fast ? [0.86, 0.92] : [0.8, 0.86], hp: 500, lp: 6000, drive: 4, gain: 0 }),
+        { src: `${BFH}/bfh1_rock_falling_0${[6, 2, 8, 6, 2][i]}.ogg`, rate: 0.85, lp: 4000, gain: -10, at: 0.01 },
+      ];
+    },
+    finish: (ctx, mix) => K.fade(mix, ctx.sr, 0, 0.04),
+  })),
 ];
-
-/**
- * Shards breaking up and grinding under a shoe: a dense cloud of short noise clicks and tiny pings, with the
- * step's dull contact under it.
- * @param {number} sr
- * @param {K.Rng} r
- * @param {{count: number, spread: number, step: boolean}} spec
- */
-function crunch(sr, r, { count, spread, step }) {
-  const n = Math.round((spread + 0.25) * sr);
-  const out = new Float32Array(n);
-  // the grinding: clusters of clicks (a shard snapping is two or three cracks)
-  const g = r.fork('grind');
-  const times = K.poissonTimes(g.fork('t'), spread, (t) => (count / spread) * 2 * Math.exp(-t / (spread * 0.6)), (count / spread) * 2);
-  for (const t of times) {
-    const cluster = g.int(1, 3);
-    for (let k = 0; k < cluster; k++) {
-      const c = K.click(sr, g, { freq: g.range(1500, 7000), q: g.range(0.8, 2), length: g.range(0.0008, 0.003) });
-      K.addAt(out, c, (t + k * g.range(0.001, 0.004)) * sr, g.range(0.3, 1));
-    }
-    if (g.chance(0.15)) K.addAt(out, K.ping(sr, g, { freq: g.range(3000, 9000), t60: g.range(0.005, 0.015) }), t * sr, g.range(0.05, 0.15));
-  }
-  K.unit(out);
-  if (step) {
-    const sole = K.footfall(sr, r.fork('sole'), {
-      length: 0.4,
-      thump: { f0: 100, f1: 75, drop: 0.02, t60: 0.05, drive: 1.5, gain: -14 },
-      body: { modes: K.scatterModes(r, 5, 200, 800, 0.02, 0.05, -2), gain: -2, excite: 0.002, cutoff: 2000 },
-      contact: { length: 0.005, cutoff: 1800, gain: 0, hp: 120 },
-    });
-    K.addAt(out, K.unit(sole), 0, 0.7);
-  }
-  return out;
-}

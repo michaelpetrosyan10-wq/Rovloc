@@ -110,7 +110,7 @@ export const MonsterPresets = Object.freeze({
     ],
   },
   CreatureRattle: {
-    bus: 'Monster', maxVoices: 2, priority: 55, rollOff: { min: 5, max: 40 },
+    bus: 'Monster', maxVoices: 2, priority: 55, rollOff: { min: 5, max: 55 },
     layers: [
       { duration: 1.1, looped: true, region: { min: 0.04, max: 0.3 }, sample: 'Oof', speed: { min: 0.26, max: 0.3 }, volume: 0.8,
         envelope: { attack: 0.2, hold: 0.5, release: 0.4 }, effects: [TREM(0.8, 22, 0.4), DIST(0.45), EQ(6, 0, -14)] },

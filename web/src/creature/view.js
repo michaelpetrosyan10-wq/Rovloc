@@ -16,7 +16,9 @@
 //   * The look target: the player's eye (the camera) while it targets them, measured from its eye point; with no
 //     target the head scans by itself.
 //   * LOD (ProceduralAnimator: DefaultNear 60, DefaultFar 180): within Near of the camera, or while it hunts the
-//     player and is in view, the rig steps every frame; in view up to Far, every third frame; otherwise it is frozen.
+//     player and is in view, the rig steps every frame; in view up to Far, or out of sight within earshot (its
+//     footfalls' roll-off, CreatureConfig.Footfalls), every third frame with the time of all three (LodClock: he
+//     walks and plants his footfalls at the same pace at any frame rate); otherwise it is frozen.
 //   * Actions: playAction(name, startAt) layers a one-shot (NeckSnap, Lunge, LockerRip, DoorSmash, Vanish, Reveal and
 //     the contract's). Vanish dissolves it into static over its glitch; Reveal forms it out of static.
 //   * Hidden / gone: fade 0 hides the whole rig; its loops are silenced.
@@ -27,14 +29,16 @@
 //     as it tears (shards.js). Outside it, the hinge parting tears the slit a little (the stun's flail, the rip).
 //   * Pinpricks: the painted pupils glow only within Look.glowFar of the camera, brighter in the dark (the additive
 //     halos are off on every tier: no cute glowing dots).
-//   * Audio: while in a duct (legacy), looped VentScrape + VentBreathing; footsteps at the feet from the animator's
-//     plants (heavy and slow: low-pitched and loud); an occasional CreatureGrowl at the head while it chases, on fixed
-//     time slots; CreatureVanish as it dissolves.
+//   * Audio: while in a duct (legacy), looped VentScrape + VentBreathing; its own footsteps at the feet from the
+//     animator's plants (CreatureStepWalk / CreatureStepChase on the surface under them: never a player's Footstep,
+//     spec I1); an occasional CreatureGrowl at the head while it chases, on fixed time slots; CreatureVanish as it
+//     dissolves.
 
 import * as THREE from 'three';
 import { Animator, yawOf } from './animator.js';
 import { CFrame } from './cframe.js';
 import { CreatureConfig } from './config.js';
+import { CreatureFootfalls, CreatureStepSurface } from '../engine/audio/presets.js';
 import { Look, applyCreatureLook } from './look.js';
 import { maskFx } from './mask.js';
 import * as Creature from './profile.js';
@@ -60,15 +64,13 @@ const SCRAPE_QUIET = 0.3;
 const BREATH_QUIET = 0.65;
 const GROWL_SLOT = 4.5;
 const GROWL_CHANCE = 0.65;
-const HEAVY_SPEED = 0.52;
-const HEAVY_SPRINT_SPEED = 0.6;
-const HEAVY_VOLUME = 1.9;
-const SKITTER_SPEED = 1.45;
 const SKITTER_VOLUME = 0.6;
 const DUPLICATE_WINDOW = 0.05;
 const ANIM_NEAR = 60;
 const ANIM_FAR = 180;
 const REDUCED_EVERY = 3;
+/** The most time one animator step takes (the loop's own frame clamp, MAX_FRAME_DT): longer spans step in slices. */
+const STEP_SLICE = 0.1;
 const HALO_SIZE = 0.16;
 const HALO_OPACITY = 0.5;
 const BURST_PUFFS = 34;
@@ -132,10 +134,13 @@ export function growlAt(slot, seed) {
   return (slot + roll.nextNumber(0.05, 0.85)) * GROWL_SLOT;
 }
 
-/** Footstep playback [speed, volume] for an animator plant: heavy and slow on two legs. */
-export function footstepVoice(state, sprint, volume) {
-  if (QUADRUPED_STATES.has(state)) return [SKITTER_SPEED, volume * SKITTER_VOLUME];
-  return [sprint ? HEAVY_SPRINT_SPEED : HEAVY_SPEED, volume * HEAVY_VOLUME];
+/**
+ * Its own footstep for an animator plant, [preset, volume]: the step of the surface under the foot (the game's eight
+ * surfaces play its five), chasing when it runs; on all fours a palm or a knee lands lighter.
+ */
+export function footstepVoice(state, sprint, volume, surface) {
+  const preset = `CreatureStep${sprint ? 'Chase' : 'Walk'}${CreatureStepSurface[surface] || CreatureStepSurface.Concrete}`;
+  return [preset, QUADRUPED_STATES.has(state) ? volume * SKITTER_VOLUME : volume];
 }
 
 /**
@@ -199,6 +204,47 @@ function haloTexture() {
   return tex;
 }
 
+/**
+ * The rig's level-of-detail clock: the animation time each frame steps. A Reduced rig (out of sight, in earshot)
+ * steps every REDUCED_EVERY frames with all the time since its last step, so out of sight he walks, and plants his
+ * footfalls, at the same pace at any frame rate (every frame's dt is already at most the loop's 0.1 s, so the time
+ * held is at most REDUCED_EVERY of them). A Frozen rig drops its time.
+ */
+export class LodClock {
+  constructor() {
+    this.frame = 0;
+    this.pending = 0;
+  }
+
+  /**
+   * @param {number} dt the frame's seconds
+   * @param {'Full'|'Reduced'|'Frozen'} tier
+   * @returns {number|null} the seconds to step the rig now, or null (not this frame)
+   */
+  tick(dt, tier) {
+    this.frame++;
+    if (tier === 'Frozen') {
+      this.pending = 0;
+      return null;
+    }
+    this.pending = Math.min(this.pending + dt, STEP_SLICE * REDUCED_EVERY);
+    if (tier === 'Reduced' && this.frame % REDUCED_EVERY !== 0) return null;
+    const seconds = this.pending;
+    this.pending = 0;
+    return seconds;
+  }
+}
+
+/** Steps an animator `seconds` in slices of at most STEP_SLICE, each the way one frame of the loop would. */
+export function stepAnimator(animator, seconds, root) {
+  if (seconds <= STEP_SLICE) {
+    animator.step(seconds, root);
+    return;
+  }
+  const slices = Math.ceil(seconds / STEP_SLICE - 1e-9);
+  for (let k = 0; k < slices; k++) animator.step(seconds / slices, root);
+}
+
 export class CreatureView {
   /**
    * @param {import('./env.js').CreatureEnv} env
@@ -240,8 +286,7 @@ export class CreatureView {
     this.glow = 0;
     this.reach = 0;
     this.extrasClock = 0;
-    this.lodFrame = 0;
-    this.pendingDt = 0;
+    this.lod = new LodClock();
     this.scrape = null;
     this.breathing = null;
     this.growlSlot = Math.floor(env.renderTime() / GROWL_SLOT);
@@ -383,23 +428,21 @@ export class CreatureView {
     this.smoke.step(Math.min(dt, 0.1));
     this.shards.step(Math.min(dt, 0.1));
     if (!shown) return;
-    // LOD: animation only when near, or in view within Far (every frame while it hunts the player in view)
+    // LOD: animation only when near, or in view within Far (every frame while it hunts the player in view), or within
+    // earshot: out of sight it still walks, every third frame, so its footfalls sound as far as they carry
     const visible = this.env.inView(this.root.position, 7);
     let tier = 'Frozen';
     if (distance <= ANIM_NEAR) tier = 'Full';
     else if (visible && distance <= ANIM_FAR) tier = snap.targetingPlayer ? 'Full' : 'Reduced';
-    this.pendingDt = Math.min(this.pendingDt + dt, 0.1);
-    this.lodFrame++;
+    else if (distance <= CreatureFootfalls.RollOffMax) tier = 'Reduced';
+    const stepDt = this.lod.tick(dt, tier);
     if (tier === 'Frozen') {
-      this.pendingDt = 0;
       if (!this.stepped) this._writeBones(this.root);
       return;
     }
-    if (tier === 'Reduced' && this.lodFrame % REDUCED_EVERY !== 0) return;
-    const stepDt = this.pendingDt;
-    this.pendingDt = 0;
+    if (stepDt === null) return;
     this._feed(snap, contract, stepDt, now, camera);
-    this.animator.step(stepDt, this.root);
+    stepAnimator(this.animator, stepDt, this.root);
     this.stepped = true;
     this._writeBones(this.root);
     if (visible || distance < 30) this._emitSmoke(stepDt, contract, fade);
@@ -672,9 +715,8 @@ export class CreatureView {
 
   _onFootstep(event) {
     if (this.hidden || this.fade < 0.5) return;
-    const surface = this.env.surfaceAt(event.position);
-    const [speed, volume] = footstepVoice(event.state, event.sprint, event.volume);
-    this.env.play(`Footstep${event.sprint ? 'Sprint' : ''}${surface}`, { position: event.position, volume, speed });
+    const [preset, volume] = footstepVoice(event.state, event.sprint, event.volume, this.env.surfaceAt(event.position));
+    this.env.play(preset, { position: event.position, volume });
   }
 
   dispose() {

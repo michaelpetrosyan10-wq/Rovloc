@@ -6,7 +6,7 @@
 //   * Hidden: a hidden Creature's hitbox stops answering queries; the view hides the rig.
 //   * Kinematic modes (the vent rail, scripted holds, dormancy) anchor the root and place it by CFrame; the
 //     floor mode leaves it unanchored and the walker (the Humanoid) walks it at WalkSpeed toward its MoveTo target,
-//     turning with AutoRotate.
+//     turning with AutoRotate; sliding along a wall never carries a step farther than WalkSpeed x dt.
 //   * Facing on the floor: Face(direction) turns the root toward a direction with AutoRotate off (the
 //     AlignOrientation, responsiveness 14); Face(null) hands rotation back. Anchored, the root is turned directly.
 //   * The walker collides like the Humanoid: only its root box (HipHeight above the floor, RootSize tall) meets the
@@ -229,6 +229,13 @@ export class CreatureBody {
       }
       x = pushed.x;
       z = pushed.z;
+    }
+    // a wall it slides along never carries it farther than its walk: the step is at most WalkSpeed x dt
+    const moved = Math.hypot(x - p.x, z - p.z);
+    const most = Math.hypot(vx, vz) * dt;
+    if (most > 0 && moved > most) {
+      x = p.x + ((x - p.x) * most) / moved;
+      z = p.z + ((z - p.z) * most) / moved;
     }
     // floor: stand HipHeight over the floor below, step up small ledges, fall when there is none in reach
     const feet = y - ROOT_HEIGHT;

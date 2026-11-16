@@ -219,6 +219,7 @@ export class FloorObjective {
       onTriggered: () => {
         if (!this.game.alive() || !this.picked(entity.id) || this.taken.has(entity.id)) return;
         if (take(entity, p) === false) return;
+        this.game.noise(this.env.feetPosition(_feet), 'Pickup');
         this.carry.noteEntity(entity.id);
         this.taken.add(entity.id);
         this.dropped.delete(entity.id);
@@ -353,3 +354,4 @@ export class FloorObjective {
 }
 
 const _m = new THREE.Matrix4();
+const _feet = new THREE.Vector3();

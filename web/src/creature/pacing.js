@@ -9,7 +9,9 @@
 // Relax rises count RelaxRiseScale and tension decays at RelaxDecay. A catch pins tension at 1 and goes to Relax; an
 // airlock starts a fresh BuildUp at most AirlockTension.
 // CanHunt is false during the catch cooldown, the airlock grace and all of Relax. ShouldBreakChase: maxChaseSeconds
-// (RelaxChaseSeconds while relaxing). HearingScale: 0.8 Relax, 1 BuildUp, 1.15 Peak.
+// (RelaxChaseSeconds while relaxing). HearingScale: 0.8 Relax, 1 BuildUp, 1.15 Peak. The website passes its own chase
+// cap (CreatureConfig.Presence.Chase.CapSeconds) for maxChaseSeconds and its own breather
+// (CreatureConfig.Presence.Chase.Breather) for RelaxSeconds.
 
 import { difficultySpec } from './config.js';
 import { clamp } from './util.js';
@@ -17,7 +19,7 @@ import { clamp } from './util.js';
 /** @typedef {'BuildUp'|'Peak'|'Relax'} PacingPhase */
 /** @typedef {{chasing: boolean, seesTarget: boolean, nearestPlayerDistance: number|null}} PacingInput */
 
-function tuningFor(difficulty) {
+function tuningFor(difficulty, maxChaseSeconds, relaxSeconds) {
   const spec = difficultySpec(difficulty);
   const nightmare = difficulty === 'Nightmare';
   return Object.freeze({
@@ -32,13 +34,13 @@ function tuningFor(difficulty) {
     PeakProximity: nightmare ? 50 : 40,
     PeakExit: 0.3,
     PeakMaxSeconds: nightmare ? 80 : 55,
-    RelaxSeconds: nightmare ? 15 : 25,
+    RelaxSeconds: Number.isFinite(relaxSeconds) ? relaxSeconds : nightmare ? 15 : 25,
     RelaxChaseSeconds: 3,
     RelaxExitTension: 0.35,
     AirlockTension: 0.15,
     HearingScale: Object.freeze({ BuildUp: 1, Peak: 1.15, Relax: 0.8 }),
     CatchCooldownSeconds: spec.catchCooldownSeconds,
-    MaxChaseSeconds: spec.maxChaseSeconds,
+    MaxChaseSeconds: Number.isFinite(maxChaseSeconds) ? maxChaseSeconds : spec.maxChaseSeconds,
     AirlockGraceSeconds: spec.postAirlockGraceSeconds,
   });
 }
@@ -51,10 +53,16 @@ export function nearMissRise(tuning, distance) {
 }
 
 export class Pacing {
-  /** @param {string} difficulty @param {number} now */
-  constructor(difficulty, now) {
+  /**
+   * @param {string} difficulty @param {number} now
+   * @param {number} [maxChaseSeconds] the chase's cap (the website's: CreatureConfig.Presence.Chase.CapSeconds);
+   *   DifficultyConfig.maxChaseSeconds without one
+   * @param {number} [relaxSeconds] how long Relax lasts at least (the website's: CreatureConfig.Presence.Chase.Breather);
+   *   PacingDirector's 25 [15] without one
+   */
+  constructor(difficulty, now, maxChaseSeconds, relaxSeconds) {
     const start = Number.isFinite(now) ? now : 0;
-    this.tuning = tuningFor(difficulty);
+    this.tuning = tuningFor(difficulty, maxChaseSeconds, relaxSeconds);
     /** @type {PacingPhase} */
     this.phase = 'BuildUp';
     this.tension = 0;
@@ -115,6 +123,15 @@ export class Pacing {
     if (Number.isFinite(now)) this.cooldownUntil = Math.max(this.cooldownUntil, now + this.tuning.CatchCooldownSeconds);
     this.tension = 1;
     this._enter('Relax');
+  }
+
+  /**
+   * A breather (the presence layer's back-off, docs/MONSTER.md 15.4): the search after a chase is over, so the hunt
+   * eases off: Relax, as after the leash.
+   */
+  noteBreather(now) {
+    this._sync(now);
+    if (this.phase !== 'Relax') this._enter('Relax');
   }
 
   noteAirlock(now) {

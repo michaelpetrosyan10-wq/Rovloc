@@ -70,6 +70,7 @@ export class Session {
     this.pingTimer = null;
     this.flushTimer = null;
     this.hostSeen = false;
+    /** a client: the round trip (ms) to the host, as the host measured it and told it in its last ping; null before */
     this.rttToHost = null;
   }
 
@@ -165,7 +166,8 @@ export class Session {
     }, 1000 / NetConfig.RelayHz);
     if (this.role === 'host') {
       this.pingTimer = setInterval(() => {
-        for (const p of this.peerMap.values()) this.sendEvent(p.id, { t: 'ping', s: performance.now() });
+        // each ping carries the round trip the host last measured to that client: the client's own rttToHost
+        for (const p of this.peerMap.values()) this.sendEvent(p.id, { t: 'ping', s: performance.now(), r: p.rtt });
       }, NetConfig.PingSeconds * 1000);
     }
   }
@@ -223,6 +225,7 @@ export class Session {
     }
     if (!msg || typeof msg.t !== 'string') return;
     if (msg.t === 'ping' && this.role === 'client') {
+      if (Number.isFinite(msg.r)) this.rttToHost = msg.r;
       this.sendEvent(from, { t: 'pong', s: msg.s });
       return;
     }

@@ -233,10 +233,11 @@ export const WorldDefaults = Object.freeze({
 
 /**
  * The MonsterState names. Patrol is the Stalk, WallChase the Chase. VentChase is gone (it never enters a duct);
- * Search, HidingResponse and Teleport are new.
+ * Search, HidingResponse and Teleport are new, and the presence beats Peek, Glimpse, Shadow and PassBy.
  */
 export const MonsterStates = Object.freeze([
   'Dormant', 'Patrol', 'InvestigateNoise', 'WallChase', 'Search', 'HidingResponse', 'Teleport', 'Stunned', 'Scripted',
+  'Peek', 'Glimpse', 'Shadow', 'PassBy',
 ]);
 
 /** Enums.PoseMode (the body's; the view contract's poseMode adds 'Stunned' and never says 'Quadruped'). */

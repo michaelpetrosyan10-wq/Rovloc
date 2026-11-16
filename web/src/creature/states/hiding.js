@@ -5,7 +5,8 @@
 //     for LookAwaySeconds its head turns down the tunnel (the open side) and it neither sees toward the spot nor feels
 //     anything close (the service's perception uses the look-away facing, no peripheral sense). Slipping out then and
 //     breaking the line of sight escapes.
-//   * ReachInSeconds after they got in it reaches in: the ReachIn action, then a Locker catch.
+//   * ReachInSeconds after they got in it reaches in: the ReachIn action, then a Locker catch. Every watch has one
+//     LookAway before it: after a long walk to the spot the first comes as late as still fits (or the reach waits).
 //   * Stepping out while it is not looking away, within CatchRange, is a catch (Hallway).
 //   * A teammate pulling them out (the THRESHOLD throw, hidespots.js) is no catch: the pull startles it for a moment
 //     (the service) and the brain moves on (WallChase on whoever it sees, else Search).
@@ -44,6 +45,11 @@ function scheduleLook(ctx, run, now) {
   run.nextLookAt = now + ctx.random.nextNumber(H.LookAwayMin, H.LookAwayMax);
   run.gruntAt = run.nextLookAt - H.GruntLead;
   run.grunted = false;
+}
+
+/** The latest a LookAway may start: it ends ReachInLead before the reach. */
+function latestLook(run) {
+  return run.reachAt - H.ReachInLead - H.LookAwaySeconds;
 }
 
 /** Whether it is looking away right now. @param {any} ctx */
@@ -124,6 +130,13 @@ export function update(ctx) {
     mover.stop();
     mover.face(watch.front.lookVector.clone().negate());
     scheduleLook(ctx, run, now);
+    // the fair outplay: one LookAway (after its grunt) before the reach, however late it arrived (a long walk to the
+    // spot): the first comes as late as still fits, and the reach waits for it when even that is past
+    if (run.nextLookAt > latestLook(run)) {
+      run.nextLookAt = Math.max(latestLook(run), now + H.GruntLead);
+      run.gruntAt = run.nextLookAt - H.GruntLead;
+      run.reachAt = Math.max(run.reachAt, run.nextLookAt + H.LookAwaySeconds + H.ReachInLead);
+    }
     return;
   }
   // the reach: ReachInSeconds after they got in
@@ -146,7 +159,7 @@ export function update(ctx) {
     return;
   }
   // a LookAway that would still run when it reaches in is skipped
-  if (run.nextLookAt + H.LookAwaySeconds > run.reachAt - H.ReachInLead) {
+  if (run.nextLookAt > latestLook(run)) {
     run.nextLookAt = Infinity;
     run.gruntAt = Infinity;
   }

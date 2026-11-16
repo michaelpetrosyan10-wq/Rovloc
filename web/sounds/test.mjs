@@ -9,7 +9,7 @@ import * as M from './lib/measure.mjs';
 
 const SR = 48000;
 const here = path.dirname(fileURLToPath(import.meta.url));
-/** @type {Array<[string, () => void]>} */
+/** @type {Array<[string, () => void|Promise<void>]>} */
 const cases = [];
 const test = (name, fn) => cases.push([name, fn]);
 
@@ -34,27 +34,6 @@ function peakFreq(x, size = 65536) {
   const c = Math.log(p[k + 1] + 1e-30);
   const d = (0.5 * (a - c)) / (a - 2 * b + c);
   return ((k + d) * SR) / size;
-}
-/** The pitch from the autocorrelation's strongest lag in 40..1200 samples (over 0.04-0.4 s), interpolated. */
-function lagPitch(x) {
-  const ac = (L) => {
-    let s = 0;
-    for (let i = 2000; i < 20000; i++) s += x[i] * x[i + L];
-    return s;
-  };
-  let best = -Infinity;
-  let lag = 40;
-  for (let L = 40; L < 1200; L++) {
-    const v = ac(L);
-    if (v > best) {
-      best = v;
-      lag = L;
-    }
-  }
-  const a = ac(lag - 1);
-  const c = ac(lag + 1);
-  const d = (0.5 * (a - c)) / (a - 2 * best + c);
-  return SR / (lag + d);
 }
 /** Measured T60 of a decaying signal from its 10 ms envelope (fit between -5 and -35 dB). */
 function t60Of(x) {
@@ -219,97 +198,16 @@ test('mix: a crossfaded loop is seamless; fades start and end at 0', () => {
   ok(f[0] === 0 && Math.abs(f[f.length - 1]) < 1e-6, 'fade ends');
 });
 
-// ------------------------------------------------------------------ bodies
-test('modal: a mode rings at its frequency with its T60', () => {
-  const imp = new Float32Array(1);
-  imp[0] = 1;
-  const y = K.modal(imp, SR, [{ f: 440, t60: 0.8, gain: 1 }], SR * 2);
-  near(peakFreq(y), 440, 0.5, 'frequency');
-  near(t60Of(y), 0.8, 0.06, 'T60');
-  near(K.peak(y), 1, 0.05, 'unit impulse amplitude');
-});
-test('modal: plate ratios are inharmonic and sorted; strike position changes the mode gains', () => {
-  const p = K.plateRatios(12);
-  ok(p[0] === 1 && p.every((v, i) => i === 0 || v >= p[i - 1]), 'sorted from 1');
-  ok(p.some((v) => Math.abs(v - Math.round(v)) > 0.1), 'all harmonic');
-  const mid = K.strikeGains(6, 0.5);
-  ok(mid[1] < 0.2 && mid[0] > 0.9, 'a centre strike excites mode 2');
-});
-test('comb and Karplus-Strong: pitch from the delay', () => {
-  const r = new K.Rng(10);
-  const burst = K.white(200, r);
-  const ks = K.karplus(SR, SR, { freq: 220, t60: 1.5, brightness: 0.5, exciter: burst });
-  near(lagPitch(ks), 220, 1, 'string pitch');
-  const dull = K.karplus(SR, SR, { freq: 110, t60: 1.5, brightness: 0, exciter: burst });
-  near(lagPitch(dull), 110, 0.5, 'dull string pitch');
-  const imp = new Float32Array(1);
-  imp[0] = 1;
-  const c = K.comb(imp, SR, { delay: 0.005, feedback: 0.9, length: SR });
-  near(lagPitch(c), 200, 1, 'comb fundamental');
-  const ap = K.allpass(K.white(SR, r), SR, 0.0137, 0.6);
-  ok(Number.isFinite(K.rms(ap)), 'allpass');
-});
-test('friction: the slip rate follows stiffness * v / ((muS - muD) * force)', () => {
-  const r = new K.Rng(11);
-  const count = (v, f) => K.stickSlip(SR, SR, { velocity: v, force: f, stiffness: 40, irregularity: 0, rng: r }).reduce((s, x) => s + (x > 0 ? 1 : 0), 0);
-  near(count(1, 1), 100, 3, 'slips at v 1, force 1');
-  near(count(0.5, 1), 50, 3, 'half the speed');
-  near(count(1, 2), 50, 3, 'twice the force');
-  const b = K.bowed(SR, SR, { modes: [{ f: 700, t60: 0.6 }, { f: 1810, t60: 0.4 }], velocity: 1, force: 0.5, rng: r });
-  ok(Number.isFinite(K.rms(b)) && K.rms(b) > 0, 'the bowed body is silent or unstable');
-});
-
 // ------------------------------------------------------------------ voice
-test('glottal: the pulse rate is f0; period doubling puts energy at f0 / 2', () => {
-  const r = new K.Rng(12);
-  const g = K.glottal(SR, SR, { f0: 120, rng: r, jitter: 0, shimmer: 0, aspiration: 0 });
-  const lp = K.butter(g, SR, 'lowpass', 160, 4);
-  near(peakFreq(lp), 120, 1, 'f0');
-  const s = K.glottal(SR, SR, { f0: 120, rng: r, jitter: 0, shimmer: 0, aspiration: 0, sub: 0.8 });
-  ok(bandEnergy(s, 50, 70) > 30 * bandEnergy(g, 50, 70), 'no subharmonic at 60 Hz');
-});
-test('formants: a vowel puts its peaks at its formants', () => {
-  const r = new K.Rng(13);
-  const src = K.white(SR, r);
-  const y = K.formants(src, SR, K.vowelTracks(SR, SR, [[0, 'a']], { rng: r }));
-  const e1 = bandEnergy(y, 650, 820);
-  const gap = bandEnergy(y, 1500, 1670);
-  ok(e1 > 8 * gap, 'F1 is not a peak');
-  const big = K.formants(src, SR, K.vowelTracks(SR, SR, [[0, 'a']], { rng: r, scale: 0.6 }));
-  ok(bandEnergy(big, 390, 490) > bandEnergy(big, 650, 820), 'scale 0.6 did not move F1 down');
-});
-test('voice: roughen and flutter modulate at their rate; the voices render finite', () => {
+test('voice: the flutter pulses at its rate (the rattle detector finds it)', () => {
   const r = new K.Rng(14);
-  const x = K.svf(K.white(SR, r), SR, 'lowpass', 3000, 0.7);
-  const before = M.roughness(x, SR);
-  K.roughen(x, SR, { rate: 60, depth: 0.8, rng: r, jitter: 0 });
-  ok(M.roughness(x, SR) > before + 0.2, 'roughness did not rise');
   const fl = K.flutter(SR, SR, { rate: 28, depth: 0.8, rng: r, irregularity: 0 });
   const noise = K.svf(K.white(SR, r), SR, 'bandpass', 400, 0.8);
   const rattled = K.mul(Float32Array.from(noise), fl);
   ok(M.rattleIndex(rattled, SR) > 0.25 && M.rattleIndex(noise, SR) < 0.15, 'the rattle detector misses a 28 Hz flutter');
-  for (const v of [
-    K.breath(SR / 2, SR, { rng: r, rattle: 0.5, voiced: 0.2 }),
-    K.growl(SR / 2, SR, { rng: r, f0: 60 }),
-    K.scream(SR / 2, SR, { rng: r, f0: 500, breaks: [{ at: 0.2, length: 0.1, ratio: 1.5 }] }),
-    K.babble(SR / 2, SR, { rng: r }),
-    K.child(SR / 2, SR, { rng: r, f0: 300 }),
-  ]) ok(v.every(Number.isFinite) && K.rms(v) > 0, 'a voice is silent or not finite');
 });
 
-// ------------------------------------------------------------------ grains, thump, saturation
-test('grains: a Poisson process gives about rate x duration events, and follows a falling rate', () => {
-  const r = new K.Rng(15);
-  near(K.poissonTimes(r, 100, 50).length, 5000, 250, 'constant rate');
-  const t = K.poissonTimes(r, 1, (x) => 200 * Math.exp(-x * 5), 200);
-  const early = t.filter((x) => x < 0.2).length;
-  const late = t.filter((x) => x >= 0.6).length;
-  ok(early > 5 * late, 'the density does not fall');
-  const p = K.ping(SR, r, { freq: 5000, t60: 0.05 });
-  near(peakFreq(p, 8192), 5000, 300, 'ping pitch');
-  const bub = K.bubble(SR, r, { freq: 1500, t60: 0.02, rise: 0 });
-  near(peakFreq(bub, 8192), 1500, 60, 'bubble pitch');
-});
+// ------------------------------------------------------------------ thump, saturation
 test('thump: the pitch falls from f0 to f1; saturation adds the harmonics a laptop plays', () => {
   const clean = K.thump(SR, { f0: 60, f1: 42, drop: 0.05, t60: 1.2, drive: 0 });
   near(peakFreq(clean.subarray(Math.round(0.4 * SR)), 32768), 42, 1, 'settled pitch');
@@ -429,39 +327,55 @@ test('measure: attack, crest, silences, cut tail, clipping, variant distance', (
   ok(M.variantDistance(x, other, SR) > 3, 'different sounds read as copies');
   ok(M.crest(sine(100, 0.5)) > 2.9 && M.crest(sine(100, 0.5)) < 3.2, 'sine crest');
 });
-test('measure: porcelain clicks are counted', () => {
+test('measure: the rattle index finds an 18-38 Hz pulsing; the onset click finds a bright contact', () => {
   const r = new K.Rng(21);
-  const x = new Float32Array(SR);
-  for (const t of [0.1, 0.23, 0.31, 0.5, 0.72]) K.addAt(x, K.ping(SR, r, { freq: 2600, t60: 0.02 }), t * SR);
-  near(M.porcelainClicks(x, SR), 5, 0, 'clicks');
-  ok(M.porcelainClicks(K.svf(K.white(SR, r), SR, 'lowpass', 800, 0.7), SR) < 3, 'smooth low noise has clicks');
+  const body = K.svf(K.white(SR, r), SR, 'lowpass', 900, 0.7);
+  const pulsed = K.mul(Float32Array.from(body), K.flutter(body.length, SR, { rate: 26, depth: 0.7, rng: new K.Rng(22) }));
+  ok(M.rattleIndex(pulsed, SR) >= 0.2, `a throat pulsing at 26 Hz reads ${M.rattleIndex(pulsed, SR).toFixed(3)}`);
+  ok(M.rattleIndex(body, SR) < M.rattleIndex(pulsed, SR) / 2, 'steady noise reads as a rattle');
+  const thud = K.mul(K.svf(K.white(SR / 2, r), SR, 'lowpass', 300, 0.7), K.decayEnv(SR / 2, SR, { attack: 0.002, t60: 0.2 }));
+  const click = K.mul(K.svf(K.white(SR / 2, r), SR, 'highpass', 3000, 0.7), K.decayEnv(SR / 2, SR, { attack: 0.0005, t60: 0.02 }));
+  ok(M.onsetClick(thud, SR) < 0.03, 'a low thud reads as a click');
+  ok(M.onsetClick(click, SR) > 0.5, 'a bright tick does not read as a click');
 });
 
-// ------------------------------------------------------------------ his signatures, impacts, density, seams
-test('porcelain: a tick is short, its strong partials sit in 1.2-5 kHz; chatter makes clusters the detector counts', () => {
-  const tick = K.porcelainTick(SR, new K.Rng(30), { freq: 2000, t60: 0.03 });
-  ok(tick.length / SR < 0.06, 'a tick is long');
-  const share = bandEnergy(tick, 1200, 5000) / bandEnergy(tick, 20, 24000);
-  ok(share > 0.8, `only ${(share * 100).toFixed(0)} % of a tick is in 1.2-5 kHz`);
-  ok(t60Of(tick) < 0.05, 'a tick rings too long');
-  const c = K.chatter(SR, SR, new K.Rng(31), { rate: 4, from: 0, to: 0.9 });
-  ok(M.porcelainClicks(c, SR) >= 4, 'chatter is not counted as porcelain');
+// ------------------------------------------------------------------ recordings, density, seams
+test('sample: played at half speed a recording is an octave down and twice as long; regions fade; takes are found', () => {
+  const x = sine(440, 0.5);
+  const slow = K.resample(x, 0.5);
+  near(slow.length / x.length, 2, 0.01, 'length at half speed');
+  near(peakFreq(slow), 220, 2, 'pitch at half speed');
+  near(peakFreq(K.resample(sine(300, 1), 1.5)), 450, 3, 'pitch at 1.5');
+  const cut = K.region(x, SR, 0.1, 0.3, 0.01, 0.02);
+  near(cut.length / SR, 0.2, 0.001, 'region length');
+  ok(cut[0] === 0 && Math.abs(cut[cut.length - 1]) < 1e-3, 'a region starts and ends at silence');
+  const takes = new Float32Array(2 * SR);
+  takes.set(sine(200, 0.3), 0.2 * SR);
+  takes.set(sine(200, 0.4), 1.1 * SR);
+  const found = K.events(takes, SR);
+  ok(found.length === 2, `${found.length} takes found, not 2`);
+  const [a, b] = K.active(takes, SR);
+  ok(a > 0.15 && a < 0.21 && b > 1.49 && b < 1.56, `active ${a.toFixed(3)}-${b.toFixed(3)}`);
 });
-test('impact: a footfall attacks in under 5 ms, carries its low body, and a heel comes before the weight', () => {
-  const r = new K.Rng(32);
-  const f = K.footfall(SR, r, {
-    length: 0.8,
-    heel: { delay: 0.07, gain: -5 },
-    thump: { f0: 60, f1: 42, drop: 0.06, t60: 0.4, gain: -8 },
-    body: { modes: K.scatterModes(r, 6, 130, 420, 0.1, 0.2), gain: 0 },
-    contact: { length: 0.012, cutoff: 1400, gain: -3 },
-  });
-  const a = M.attack(f, SR);
-  ok(a.attack < 0.005, `attack ${a.attack}`);
-  ok(a.peakAt / SR > 0.06, 'the weight does not land after the heel');
-  ok(bandEnergy(f, 20, 250) / bandEnergy(f, 20, 24000) > 0.3, 'no low body');
-  const g = K.grit(SR, new K.Rng(33), { count: 30, spread: 0.2, freq: [500, 4000] });
-  ok(M.tonality(g, SR).purity < 0.2, 'grit is tonal');
+test('recipe: a layer is cut at its transient, pulsed by the throat\'s flutter, and every draw is the same on every run', async () => {
+  const { renderLayer } = await import('./lib/recipe.mjs');
+  const { indexedIds } = await import('./lib/sources.mjs');
+  const id = indexedIds()[0];
+  ok(id, 'no recording in sources/SOURCES.json');
+  const plain = renderLayer({ src: id }, SR, new K.Rng(40));
+  const trimmed = renderLayer({ src: id, trim: true }, SR, new K.Rng(40));
+  ok(trimmed.length <= plain.length, 'trimming lengthened the layer');
+  const first = trimmed.findIndex((v) => Math.abs(v) >= 0.2);
+  ok(first >= 0 && first < 0.002 * SR, `the transient comes ${(first / SR * 1000).toFixed(1)} ms in`);
+  const again = renderLayer({ src: id, rate: [0.5, 0.6], flutter: [26, 0.5] }, SR, new K.Rng(41));
+  const twice = renderLayer({ src: id, rate: [0.5, 0.6], flutter: [26, 0.5] }, SR, new K.Rng(41));
+  ok(again.length === twice.length && again.every((v, i) => v === twice[i]), 'the same seed rendered differently');
+});
+test('sources: every recording in SOURCES.json is stored unmodified, from a CC0 pack with a page and an author', async () => {
+  const { verifyStore, loadIndex } = await import('./lib/sources.mjs');
+  const problems = verifyStore();
+  ok(!problems.length, problems.slice(0, 4).join('; '));
+  for (const [pack, p] of Object.entries(loadIndex().packs)) ok(p.licences.includes('CC0'), `${pack} is not CC0`);
 });
 test('densify: drives a peaky sound until its peak-to-loudness ratio fits', () => {
   const r = new K.Rng(34);
@@ -490,7 +404,7 @@ test('seam: a crossfaded loop has no seam; a cut one has; a loop of bursts is no
 let failed = 0;
 for (const [name, fn] of cases) {
   try {
-    fn();
+    await fn();
     console.log(`PASS ${name}`);
   } catch (err) {
     failed++;

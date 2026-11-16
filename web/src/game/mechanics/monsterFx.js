@@ -10,8 +10,9 @@
 //     (ChaseSting); a held stare that started it stings (StareSting).
 //   * A chase that gives up: the reverse swell for the one it chased (GiveUpSwell); every FadeOut, the rush of air
 //     where it stood (CreatureVanish).
-//   * The rattle: a low rattle in its throat while it stalks within RATTLE_RANGE (CreatureRattle), the grunt before a
-//     LookAway on the co-op clients (the host's own plays from the brain).
+//   * The rattle: a low rattle in its throat while it stalks (or plays a presence beat) within the presence layer's
+//     Audio.RattleRadius (CreatureRattle, docs/MONSTER.md 19), the grunt before a LookAway on the co-op clients (the
+//     host's own plays from the brain).
 //   * The jump landing noise (JumpLand, 26 studs) after any fall of LAND_AIRTIME or more.
 //   * The brain's vetoes and reads (bindGame): no teleport during an objective's survive countdown or once the roof's
 //     finale chase has started; the hiding spot this page's player is in.
@@ -20,14 +21,15 @@
 
 import * as THREE from 'three';
 import { CreatureConfig } from '../../creature/config.js';
+import { presenceConfig } from '../../creature/presence.js';
 import { seededRandom } from '../util.js';
 
 const T = CreatureConfig.Teleport;
 const LAND_AIRTIME = 0.32;
-const RATTLE_RANGE = 22;
 const RATTLE_MIN = 4.5;
 const RATTLE_MAX = 8;
-const RATTLE_STATES = new Set(['Patrol', 'Teleport', 'Search', 'HidingResponse', 'InvestigateNoise']);
+const RATTLE_STATES = new Set(['Patrol', 'Teleport', 'Search', 'HidingResponse', 'InvestigateNoise', 'Peek', 'Glimpse',
+  'Shadow', 'PassBy']);
 // the roof's phases in which the Creature never teleports (Level3_RoofController NO_TELEPORT): the door, the chase,
 // the ledge
 const ROOF_NO_TELEPORT = new Set(['Smash', 'Chase', 'Ledge']);
@@ -46,6 +48,8 @@ export class MonsterFx {
     this.wasChased = false;
     this.airborneAt = null;
     this.nextRattleAt = 0;
+    /** @type {{spot: THREE.Vector3, at: number}|null} the latest teleport warning (its first-time hint) */
+    this.lastWarning = null;
     this.random = seededRandom(1, 'MonsterFx');
     this.lastAction = null;
     this.lastActionAt = 0;
@@ -95,6 +99,7 @@ export class MonsterFx {
       this.flickers.push({ group, from: now, until: now + seconds, seed: this.random.number(0, 100) });
     }
     env.play('TeleportHiss', { position: spot.clone().add(new THREE.Vector3(0, 4, 0)), volume: 1 });
+    this.lastWarning = { spot: spot.clone(), at: now };
   }
 
   /** A held stare caught its attention (this page's player). */
@@ -188,7 +193,8 @@ export class MonsterFx {
       // the rattle while it stalks close by
       if (now >= this.nextRattleAt && !snap.hidden && RATTLE_STATES.has(snap.state) && snap.eye) {
         const eye = this.env.eye(_eye);
-        if (eye.distanceTo(snap.eye) <= RATTLE_RANGE) {
+        const radius = presenceConfig(g.world.meta, g.run ? g.run.difficulty : 'Standard').Audio.RattleRadius;
+        if (eye.distanceTo(snap.eye) <= radius) {
           this.env.play('CreatureRattle', { position: snap.eye.clone(), volume: 0.9 });
           this.nextRattleAt = now + this.random.number(RATTLE_MIN, RATTLE_MAX);
         }

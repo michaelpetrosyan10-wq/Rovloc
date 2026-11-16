@@ -6,9 +6,13 @@
 //   web/build/audio/space/<space>.mp3              the shared convolver's impulse responses (kit/reverb.mjs SPACES)
 //   web/build/audio/manifest-<family>.json         one per family (so two engineers can render different families
 //   web/build/audio/manifest.json                  into the same directory at once), merged into this one
+//   src/ReplicatedStorage/Shared/Audio/RecordedSounds.luau   the port's committed index of the renders (lib/recorded.mjs)
 //
-// A content-hash cache skips a variant whose inputs (the kit, the pipeline, its family file, its name and variant)
-// are unchanged. At most two worker threads (the machine is shared); run it under "nice -n 10" (the npm script does).
+// The site's build (tools/assets.mjs) packs the MP3s of manifest.json into the page and refuses to when a render is
+// missing or stale (pendingRenders below).
+//
+// A content-hash cache skips a variant whose inputs (the kit, the pipeline, the recipe and recording layer, the
+// recordings' index, its family file, its name and variant) are unchanged. At most two worker threads (the machine is shared); run it under "nice -n 10" (the npm script does).
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -16,6 +20,8 @@ import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { ROOT, SR, loadVoices, stem } from './lib/voices.mjs';
 import { readInfo } from './lib/raw.mjs';
+import { INDEX_FILE } from './lib/sources.mjs';
+import { RECORDED_SOUNDS, recordedSoundsLuau } from './lib/recorded.mjs';
 import { encodeMp3 } from './lib/encode.mjs';
 import { SPACES, impulse } from './kit/reverb.mjs';
 import { Rng, hashString } from './kit/rng.mjs';
@@ -36,7 +42,9 @@ const jobs = Math.max(1, Math.min(2, Number(option('--jobs') ?? 2)));
 function engineText() {
   const dirs = [path.join(ROOT, 'kit')];
   const files = dirs.flatMap((d) => fs.readdirSync(d).filter((f) => f.endsWith('.mjs')).sort().map((f) => path.join(d, f)));
-  files.push(path.join(ROOT, 'lib', 'pipeline.mjs'), path.join(ROOT, 'lib', 'encode.mjs'), path.join(ROOT, 'lib', 'worker.mjs'));
+  for (const f of ['pipeline.mjs', 'encode.mjs', 'worker.mjs', 'recipe.mjs', 'sources.mjs']) files.push(path.join(ROOT, 'lib', f));
+  // the recordings' index carries every recording's hash: a changed recording re-renders what is made from it
+  files.push(INDEX_FILE);
   return files.map((f) => fs.readFileSync(f, 'utf8')).join('\n');
 }
 
@@ -100,10 +108,13 @@ export function mergeManifests(spaces) {
   return manifest;
 }
 
-async function main() {
-  const voices = await loadVoices(only);
-  const engine = engineText();
-  const engineHash = sha(engine);
+/**
+ * The variants of `voices` whose render is missing or was made from other inputs (all of them with `all`).
+ * @param {import('./lib/voices.mjs').Voice[]} voices
+ * @param {boolean} [all]
+ */
+export function pendingRenders(voices, all = false) {
+  const engineHash = sha(engineText());
   const jobsList = [];
   const familyText = new Map();
   for (const v of voices) {
@@ -114,10 +125,16 @@ async function main() {
       const raw = path.join(BUILD, 'raw', v.family, `${stem(v.name, variant)}.f32`);
       const mp3 = path.join(BUILD, v.family, `${stem(v.name, variant)}.mp3`);
       const info = readInfo(raw);
-      if (!force && info && info.key === key && fs.existsSync(mp3)) continue;
+      if (!all && info && info.key === key && fs.existsSync(mp3)) continue;
       jobsList.push({ file, family: v.family, name: v.name, variant, key, raw, mp3 });
     }
   }
+  return { jobs: jobsList, engineHash };
+}
+
+async function main() {
+  const voices = await loadVoices(only);
+  const { jobs: jobsList, engineHash } = pendingRenders(voices, force);
   console.log(`${voices.length} sounds, ${jobsList.length} variants to render (${jobs} workers)`);
   const results = await runPool(jobsList, jobs);
   const failed = results.filter((r) => !r.ok).length;
@@ -136,20 +153,22 @@ async function main() {
         variants.push({
           file: `${family}/${stem(v.name, variant)}.mp3`, bytes: fs.statSync(mp3).size, seconds: +info.seconds.toFixed(4),
           fileSeconds: +info.fileSeconds.toFixed(4), loop: info.loop, truePeak: +info.truePeak.toFixed(2),
-          loudness: +info.loudness.toFixed(2), tail: +info.tail.toFixed(3),
+          loudness: +info.loudness.toFixed(2), tail: +info.tail.toFixed(3), dark: !!info.dark,
         });
       }
       sounds.push({
         name: v.name, family, group: v.group, title: v.title, description: v.description, class: v.class, board: v.board,
         him: v.him ?? null, channels: v.channels, space: v.space, loop: !!v.loop, reference: v.loudness,
-        carry: v.carry ?? null, variants,
+        first: !!v.first, sources: v.sources, variants,
       });
     }
     fs.writeFileSync(path.join(BUILD, `manifest-${family}.json`), JSON.stringify({ family, sounds }, null, 1));
   }
   const spaces = renderSpaces(engineHash);
   const manifest = mergeManifests(spaces);
-  console.log(`manifest: ${Object.keys(manifest.sounds).length} sounds, ${(manifest.bytes / 1048576).toFixed(2)} MB shipped`);
+  // the port's committed index of the renders (data-test compares it with the manifest)
+  fs.writeFileSync(RECORDED_SOUNDS, recordedSoundsLuau(manifest));
+  console.log(`manifest: ${Object.keys(manifest.sounds).length} sounds, ${(manifest.bytes / 1048576).toFixed(2)} MB shipped; ${path.relative(path.resolve(ROOT, '..', '..'), RECORDED_SOUNDS)} written`);
   if (failed) {
     console.log(`${failed} variants FAILED`);
     process.exit(1);

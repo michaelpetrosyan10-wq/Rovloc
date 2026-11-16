@@ -20,6 +20,21 @@ import { pathToFileURL } from 'node:url';
 import { ROOT, BOARD } from './lib/voices.mjs';
 import { heard, WALL_CUTOFFS, CRITICAL_DISTANCE, MAX_REVERB } from './kit/distance.mjs';
 import { loadPlaywright } from './lib/browser.mjs';
+import { Presets } from '../src/engine/audio/presets.js';
+import { MonsterPresets } from '../src/creature/sounds.js';
+import { ObjectivePresets } from '../src/game/objectives/sounds.js';
+import { ParkourPresets } from '../src/engine/parkour.js';
+import { StoryPresets } from '../src/game/story/sounds.js';
+
+/** Every preset the game registers that has a roll-off (how far a positional sound carries is the game's, not a file's). */
+const ROLL_OFFS = Object.fromEntries(Object.entries({ ...StoryPresets, ...ParkourPresets, ...ObjectivePresets, ...MonsterPresets, ...Presets })
+  .filter(([, p]) => p.rollOff).map(([name, p]) => [name, p.rollOff]));
+
+/** The distance model's carry for a sound from its preset's roll-off (heard() with no fade: the game's taper). */
+function carryOf(name) {
+  const r = ROLL_OFFS[name];
+  return r ? { ref: r.min, max: r.max, rolloff: 1, fade: 0 } : null;
+}
 
 const BUILD = path.resolve(ROOT, '..', 'build');
 const AUDIO = path.join(BUILD, 'audio');
@@ -49,7 +64,7 @@ function build() {
   }
   const list = sounds.map((s) => ({
     name: s.name, family: s.family, title: s.title, description: s.description, board: s.board, him: !!s.him,
-    loop: s.loop, space: s.space, carry: s.carry, files: s.variants.map((v) => v.file), loopPoints: s.variants.map((v) => v.loop),
+    loop: s.loop, space: s.space, carry: carryOf(s.name), files: s.variants.map((v) => v.file), loopPoints: s.variants.map((v) => v.loop),
   }));
   const groups = BOARD.filter((b) => list.some((s) => s.board === b));
   const bytes = Object.values(manifest.sounds).reduce((t, s) => t + s.variants.reduce((u, v) => u + v.bytes, 0), 0);

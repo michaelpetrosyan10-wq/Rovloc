@@ -39,8 +39,9 @@ local OPENING_LINES: { { any } } = {
 	{ 23.6, 2.6, "Ha! Look at this thing." },
 	{ 26.4, 1.8, "Booo. I'm the Phantom." },
 	{ 32.0, 2.0, "Get it— GET IT OFF!" },
-	{ 54.5, 2.5, "I know you're close, {you}." },
-	{ 74.5, 1.5, "{you}…" },
+	{ 50.1, 2.5, "I know you're close, {you}." },
+	{ 54.0, 2.2, "LOCKDOWN. LOCKDOWN." },
+	{ 59.2, 1.5, "{you}…" },
 }
 
 return {
@@ -54,11 +55,11 @@ return {
 		RuleGolden.checkPure(t, ReplicatedStorage.Shared.Config.StoryConfig)
 	end,
 
-	["the spec's lengths: the opening 78.0 [Short 26.0], the twist 21.0 [Short 8.0], 23.0, 20.0, 44.0"] = function(
+	["the spec's lengths: the opening 61.0 [Short 24.0], the twist 21.0 [Short 8.0], 23.0, 20.0, 44.0"] = function(
 		t: Expect
 	)
-		t.near(CinematicTracks.length("Opening", "Full"), 78.0, 1e-9)
-		t.near(CinematicTracks.length("Opening", "Short"), 26.0, 1e-9)
+		t.near(CinematicTracks.length("Opening", "Full"), 61.0, 1e-9)
+		t.near(CinematicTracks.length("Opening", "Short"), 24.0, 1e-9)
 		t.near(CinematicTracks.length("Twist", "Full"), 21.0, 1e-9)
 		t.near(CinematicTracks.length("Twist", "Short"), 8.0, 1e-9)
 		t.near(CinematicTracks.length("OneBullet", "Full"), 23.0, 1e-9)
@@ -69,29 +70,76 @@ return {
 		t.near(CinematicTracks.length("OneBullet", "Full") + CinematicTracks.length("Twist", "Short"), 31.0, 1e-9)
 	end,
 
-	["the opening's Short cut: S1 0-3, Booo 3-6.5, S8 6.5-9, S9 and S10 9-15.5, S11, S13's windows, S15"] = function(
+	["the opening's Short cut: S1 0-3, Booo 3-6.5, S8 6.5-9, S9 and S10 9-15.5, S11, the lockdown, midnight"] = function(
 		t: Expect
 	)
 		local short = StoryConfig.Timelines.Opening.cuts.Short
-		local ats = { 0, 3.0, 6.5, 9.0, 15.5, 18.5, 22.5 }
+		local ats = { 0, 3.0, 6.5, 9.0, 15.5, 18.5, 21.2 }
 		t.eq(#short, #ats, "seven pieces")
 		for i, at in ats do
 			t.near(short[i].at, at, 1e-9, "piece " .. i)
 		end
-		-- each piece starts in its shot: S1, S6 at "Booo.", S8, S9, S11, S13, S15
+		-- each piece starts in its shot: S1, S6 at "Booo.", S8, S9, S11, S14 (the lockdown), S15's last card into S16
 		t.near(short[1].from, 0, 1e-9)
 		t.near(short[2].from, 26.4, 1e-9, "from Booo.")
 		t.near(short[3].from, 31.5, 1e-9)
 		t.truthy(short[4].from >= 34.0 and short[4].to == 43.0, "S9 and S10")
 		t.truthy(short[5].from >= 43.0 and short[5].to <= 47.5, "S11")
-		t.truthy(short[6].from >= 58.0 and short[6].to <= 65.0, "S13")
-		t.truthy(short[7].from >= 73.0 and short[7].to == 78.0, "S15")
-		-- the Short cut keeps "Booo." and the latch's scream
+		t.truthy(short[6].from == 53.8 and short[6].to == 56.5, "S14, whole, to the 5:47 card's start")
+		t.truthy(short[7].from == 58.2 and short[7].to == 61.0, "from the 11:52 card's start through S16")
+		-- a seam never shows a card's tail: each piece starts where no card is up, or at a card's own start
+		for i, piece in short do
+			local up = CinematicTracks.sample("Opening", "Full", piece.from, { P1 = 1 }).card
+			t.truthy(up == nil or math.abs(up.age) < 1e-9, "piece " .. i .. " opens on a card's tail")
+		end
+		-- the Short cut keeps "Booo.", the latch's scream, the lockdown and the last whisper
 		local kept: { [string]: boolean } = {}
-		for _, line in CinematicTracks.lines("Opening", "Short", -1, 26, 1) do
+		for _, line in CinematicTracks.lines("Opening", "Short", -1, 24, 1) do
 			kept[line.id] = true
 		end
 		t.truthy(kept["Opening.Phantom"] and kept["Opening.GetItOff"], "Booo. and the latch")
+		t.truthy(kept["Opening.Lockdown"] and kept["Opening.You"], "the lockdown and the last line")
+	end,
+
+	["the opening's tail: the lids shut by 47, the hand-over 14 s on, something on screen at least every 3 s"] = function(
+		t: Expect
+	)
+		local opening = StoryConfig.Timelines.Opening
+		local lidsShut = 0
+		for _, e in opening.events do
+			if e.kind == "Prop" and e.args.id == "Lid" and e.args.state == "Shut" then
+				lidsShut = math.max(lidsShut, e.t)
+			end
+		end
+		t.truthy(lidsShut > 46 and lidsShut < 47, "the last lid shuts at " .. lidsShut)
+		t.truthy(opening.length - lidsShut <= 14.5, "from the lids to the hand-over")
+		-- what changes the picture from the lids on: a shot's start, an actor's clip, a prop, a light, the rain, a
+		-- card, a fade, a subtitle; never 3 s without one
+		local beats: { number } = { lidsShut, opening.length }
+		for _, shot in opening.shots do
+			table.insert(beats, shot.t0)
+		end
+		for _, track in opening.actors do
+			for _, clip in track.clips do
+				table.insert(beats, clip.t0)
+			end
+		end
+		for _, e in opening.events do
+			if e.kind ~= "Sound" and e.kind ~= "Shake" then
+				table.insert(beats, e.t)
+			end
+		end
+		for _, line in opening.lines do
+			table.insert(beats, line.t)
+		end
+		table.sort(beats)
+		local last = lidsShut
+		for _, at in beats do
+			if at >= lidsShut then
+				t.truthy(at - last <= 3.0 + 1e-9, string.format("nothing from %.2f to %.2f", last, at))
+				last = at
+			end
+		end
 	end,
 
 	["the opening's lines: each at its start in its slot, as 2.4's table writes it"] = function(t: Expect)
@@ -150,10 +198,10 @@ return {
 
 	["solo skips the lines that need P2"] = function(t: Expect)
 		local solo, duo = {}, {}
-		for _, line in CinematicTracks.lines("Opening", "Full", -1, 78, 1) do
+		for _, line in CinematicTracks.lines("Opening", "Full", -1, 61, 1) do
 			solo[line.id] = true
 		end
-		for _, line in CinematicTracks.lines("Opening", "Full", -1, 78, 2) do
+		for _, line in CinematicTracks.lines("Opening", "Full", -1, 61, 2) do
 			duo[line.id] = true
 		end
 		t.truthy(not solo["Opening.Paying"] and duo["Opening.Paying"], "{P2}, you're paying.")
@@ -181,8 +229,9 @@ return {
 				case[1] .. "/" .. case[2] .. " with a first-timer"
 			)
 		end
-		t.near(CinematicTracks.skipTarget("Opening", "Full"), 73.0, 1e-9, "Full: to S15")
-		t.near(CinematicTracks.skipTarget("Opening", "Short"), 22.5, 1e-9, "Short: to S15")
+		t.falsy(CinematicTracks.skipOffered("Opening", "Full", 59.0), "never in the last shot")
+		t.near(CinematicTracks.skipTarget("Opening", "Full"), 59.0, 1e-9, "Full: to S16")
+		t.near(CinematicTracks.skipTarget("Opening", "Short"), 22.0, 1e-9, "Short: to S16")
 		t.falsy(CinematicTracks.skipPasses("Fall", 2, { "a", "b" }, { "b" }), "the fall: not before all have seen it")
 	end,
 
@@ -195,7 +244,7 @@ return {
 		t.eq(CinematicTracks.cutFor("Fall", { seen }), "Full", "no Short cut")
 	end,
 
-	["the prologue's timers: a 0.6 s lid, 1.2 s out, by itself at 20 s; the chute's 30 s, a 1.6 s cut; 50 s at most"] = function(
+	["the prologue's timers: a 0.6 s lid, 1.2 s out, by itself at 8 s; the chute's 30 s, a 1.6 s cut; 50 s at most"] = function(
 		t: Expect
 	)
 		local p = StoryConfig.Prologue
@@ -203,10 +252,11 @@ return {
 		t.near(p.ClimbOut, 1.2, 1e-9)
 		t.near(p.ClimbHold, 0.6, 1e-9)
 		t.near(p.ChuteCut, 1.6, 1e-9)
-		t.near(CinematicTracks.climbOutAt(78), 98, 1e-9)
-		t.near(CinematicTracks.chuteCutAt(78, 90, -1), 120, 1e-9, "30 s after the first")
-		t.near(CinematicTracks.chuteCutAt(78, 90, 95), 95, 1e-9, "everyone in")
-		t.near(CinematicTracks.chuteCutAt(78, -1, -1), 128, 1e-9, "at most 50 s")
+		t.near(p.AutoClimbOut, 8, 1e-9)
+		t.near(CinematicTracks.climbOutAt(61), 69, 1e-9)
+		t.near(CinematicTracks.chuteCutAt(61, 73, -1), 103, 1e-9, "30 s after the first")
+		t.near(CinematicTracks.chuteCutAt(61, 73, 78), 78, 1e-9, "everyone in")
+		t.near(CinematicTracks.chuteCutAt(61, -1, -1), 111, 1e-9, "at most 50 s")
 		t.eq(p.LidHold, BackLotBuilder.LidHold, "the lid's prompt holds as long")
 		t.eq(p.ClimbHold, BackLotBuilder.ClimbHold, "the hatch's prompt holds as long")
 	end,

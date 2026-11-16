@@ -113,18 +113,3 @@ export function smoothRandomLoop(n, sr, rate, rng, lo = -1, hi = 1) {
   }
   return out;
 }
-
-/**
- * A raised-cosine bump: 0 outside [start, start + length], rising and falling smoothly to 1 in its middle.
- * @param {number} n
- * @param {number} sr
- * @param {number} start seconds
- * @param {number} length seconds
- */
-export function bump(n, sr, start, length) {
-  const out = new Float32Array(n);
-  const a = Math.round(start * sr);
-  const b = Math.round((start + length) * sr);
-  for (let i = Math.max(0, a); i < Math.min(n, b); i++) out[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * (i - a)) / (b - a));
-  return out;
-}

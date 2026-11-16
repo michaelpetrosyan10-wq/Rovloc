@@ -55,6 +55,10 @@ export type HintId =
 	| "GetUp"
 	| "Revolver"
 	| "Takeoff"
+	-- the Tall Man's presence (docs/MONSTER.md 17, 19): it is near, a teleport's warning near you, it follows you
+	| "Warning"
+	| "CreatureNear"
+	| "Followed"
 
 -- A floor objective's station or lock (FirstTimeHints finds it by ObjectiveId on `level` while its step is undone).
 export type HintSpot = {
@@ -176,6 +180,29 @@ local HINTS: { Hint } = {
 		text = "Hint.GetUp",
 		inputs = { { action = "Interact", label = "Hint.Input.GetUp" } },
 		setting = "HintGetUp",
+	},
+	-- the Tall Man's presence (docs/MONSTER.md 17, 19): it is near (heard), a teleport's warning near you, it follows you
+	{
+		id = "Warning",
+		text = "Hint.Warning",
+		inputs = {},
+		setting = "HintWarning",
+		radius = 40,
+	},
+	{
+		id = "CreatureNear",
+		text = "Hint.CreatureNear",
+		inputs = {
+			{ action = "Flashlight", label = "Hint.Input.Light" },
+			{ action = "Crouch", label = "Hint.Input.Crouch" },
+		},
+		setting = "HintCreatureNear",
+	},
+	{
+		id = "Followed",
+		text = "Hint.Followed",
+		inputs = { { action = "LookBack", label = "Hint.Input.LookBack" } },
+		setting = "HintFollowed",
 	},
 	{
 		id = "BearTrap",

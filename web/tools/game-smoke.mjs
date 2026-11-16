@@ -12,7 +12,9 @@
 //   Level 1 the classroom scare (walking into Classroom 108), the gate slamming, and the bypass vent (kick the grate:
 //   its panel and screws land in both looks; crouch in, crawl the duct, kick the far grate, out beyond the gate),
 //   Escape pausing the clock and closing again, a locker check (hiding, HOLD YOUR BREATH, held through the peek,
-//   stepping out);
+//   stepping out; let out with no clear spot to step out to: out where they are, the fading view leaving the look
+//   alone, straight into a barrel without the first spot's closing door ending that hide; every hiding spot of the
+//   floor with a clear spot to step out to; out of a barrel and a cabinet with E);
 //   then, by the dev level skip with the Creature told to ignore the player (so a hunt cannot end the run before every
 //   moment is checked): Level 2 the Auditorium (its exit open from the start, the Creature held at its start), Level 3
 //   the roof (the door smash, the jump, the canopy, the Creature on the ledge, the landing: the roof done within one
@@ -505,6 +507,123 @@ try {
   await ff(2);
   s = await G((g) => ({ hiding: g.lockers.occupiedId(), ms: g.env.moveState(), ctx: g.env.context() }));
   check('stepping out of the locker', !s.hiding && s.ms !== 'Hiding' && s.ctx === 'OnFoot', s);
+  // let go with no clear spot to step out to (the stay limit's shove, or downed, in a cramped corner): out where they
+  // are, the game running on
+  await G((g) => g.lockers.devCheck());
+  await ff(2.2);
+  s = await G((g) => {
+    const l = g.lockers;
+    const exitSpot = l._exitSpot;
+    l._exitSpot = () => null;
+    let error = null;
+    try {
+      l._release(l.occupied, true);
+    } catch (err) {
+      error = String(err);
+    } finally {
+      l._exitSpot = exitSpot;
+    }
+    return { error };
+  });
+  await ff(1.5);
+  s = { ...s, ...(await G((g) => ({ hiding: g.lockers.occupiedId(), ms: g.env.moveState(), ctx: g.env.context() }))) };
+  check('let out of a locker with no clear spot to step out to: out where they are, no error', s.error === null &&
+    !s.hiding && s.ms !== 'Hiding' && s.ctx === 'OnFoot', s);
+  // let go like that, the frames of its view fading out leave the player's look alone (they once turned it back to the
+  // spot's front: a walk started at once went the wrong way); then straight into the nearest barrel: the first spot's
+  // door closing behind them does not end the new hide (it once dropped the hider's view and controls, leaving them
+  // stuck inside until the stay limit). Stepped in the page, no real frame in between.
+  s = await tab.evaluate(() => {
+    const e = window.__rovloc.engine;
+    const g = window.__rovlocGame.game;
+    const T = g.env.THREE;
+    const l = g.lockers;
+    const step = (n) => {
+      for (let i = 0; i < n; i++) e.loop._run(1 / 30, 1 / 30);
+    };
+    e.loop.stop();
+    const render = e.renderer.render;
+    e.renderer.render = () => {};
+    try {
+      l.devCheck();
+      step(66);
+      const first = l.occupied;
+      const hidden = !!first && first.state === 'Hidden';
+      const facing = l.session ? l.session.outYaw : 0;
+      const exitSpot = l._exitSpot;
+      l._exitSpot = () => null;
+      try {
+        l._release(first, true);
+      } finally {
+        l._exitSpot = exitSpot;
+      }
+      const yaw = facing + Math.PI;
+      g.env.setLook(yaw, 0);
+      step(9);
+      const turned = { set: yaw, after: g.env.look().yaw, session: !!l.session };
+      const root = g.env.rootPosition();
+      const barrel = [...l.lockers.values()].filter((x) => x.level === g.level && x.state === 'Free' &&
+        x.id.split('_')[1] === 'Barrel').sort((a, b) => new T.Vector3().setFromMatrixPosition(a.exit).distanceTo(root) -
+        new T.Vector3().setFromMatrixPosition(b.exit).distanceTo(root))[0];
+      const front = new T.Vector3().setFromMatrixPosition(barrel.exit);
+      g.env.teleport({ position: front.clone().add(new T.Vector3(0, 3, 0)), yaw: Math.atan2(barrel.exit.elements[8], barrel.exit.elements[10]) });
+      g.traps.noteTeleport();
+      const hid = l.hide(barrel);
+      step(75);
+      return { hidden, turned, first: first.id, firstState: first.state, barrel: barrel.id, hid, exit: front.toArray(),
+        occupied: l.occupiedId(), settled: !!l.occupied && l.occupied.state === 'Hidden', session: l.session ? l.session.phase : null,
+        ctx: g.env.context() };
+    } finally {
+      e.renderer.render = render;
+      e.loop.start();
+    }
+  });
+  const rehide = s;
+  const t = rehide.turned;
+  check('let go with no clear spot, then turned round: the fading locker view does not turn them back', rehide.hidden &&
+    !t.session && Math.abs(Math.atan2(Math.sin(t.after - t.set), Math.cos(t.after - t.set))) < 1e-6, t);
+  check('let go, then straight into a barrel: the first spot\'s door closing does not end the new hide', rehide.hid &&
+    rehide.firstState === 'Free' && rehide.occupied === rehide.barrel && rehide.settled && rehide.session === 'Hidden' &&
+    rehide.ctx === 'Locker', rehide);
+  // every hiding spot of the floor (lockers, and the barrels and cabinets whose exit is beside them) has a clear spot to
+  // step out to: the spot's own shell never blocks its exit (it once kept every hider in until the stay limit)
+  s = await G((g) => {
+    const spots = [...g.lockers.lockers.values()].filter((l) => l.level === g.level);
+    const kinds = {};
+    for (const l of spots) kinds[l.id.split('_')[1]] = (kinds[l.id.split('_')[1]] || 0) + 1;
+    return { level: g.level, kinds, blocked: spots.filter((l) => !g.lockers._exitSpot(l)).map((l) => l.id) };
+  });
+  check('every hiding spot on Level 1 (barrels, cabinets, lockers) has a clear spot to step out to', s.blocked.length === 0 &&
+    ['Barrel', 'Cabinet', 'Locker'].every((k) => s.kinds[k] > 0), s);
+  for (const kind of ['Barrel', 'Cabinet']) {
+    // out with E (the barrel is the one just hidden in; the nearest free cabinet is entered from its exit side and
+    // settled first): standing at its exit, on foot
+    let spot = { id: rehide.barrel, hid: rehide.hid, exit: rehide.exit };
+    if (kind === 'Cabinet') {
+      spot = await G((g, dev, k) => {
+        const T = g.env.THREE;
+        const root = g.env.rootPosition();
+        const l = [...g.lockers.lockers.values()].filter((x) => x.level === g.level && x.state === 'Free' &&
+          x.id.split('_')[1] === k).sort((a, b) => new T.Vector3().setFromMatrixPosition(a.exit).distanceTo(root) -
+          new T.Vector3().setFromMatrixPosition(b.exit).distanceTo(root))[0];
+        const front = new T.Vector3().setFromMatrixPosition(l.exit);
+        g.env.teleport({ position: front.clone().add(new T.Vector3(0, 3, 0)), yaw: Math.atan2(l.exit.elements[8], l.exit.elements[10]) });
+        g.traps.noteTeleport();
+        return { id: l.id, hid: g.lockers.hide(l), exit: front.toArray() };
+      }, kind);
+      await ff(2.5);
+    }
+    const inside = await G((g, dev, id) => ({ settled: g.lockers.occupiedId() === id && g.lockers.occupied.state === 'Hidden' }), spot.id);
+    await tab.keyboard.press('KeyE');
+    await ff(2.5);
+    s = await G((g, dev, at) => {
+      const root = g.env.rootPosition();
+      return { hiding: g.lockers.occupiedId(), session: !!g.lockers.session, ms: g.env.moveState(), ctx: g.env.context(),
+        fromExit: Math.hypot(root.x - at[0], root.z - at[2]) };
+    }, spot.exit);
+    check(`stepping out of a ${kind.toLowerCase()} with E: out at its exit, on foot`, spot.hid && inside.settled && !s.hiding &&
+      !s.session && s.ms !== 'Hiding' && s.ctx === 'OnFoot' && s.fromExit < 0.5, { ...spot, ...inside, ...s });
+  }
 
   // ------------------------------------------------------------------------------------------- Level 2: the Auditorium
   await G((g, dev) => dev.gotoLevel('Level2_Auditorium'));

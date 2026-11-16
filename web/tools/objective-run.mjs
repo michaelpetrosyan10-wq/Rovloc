@@ -10,8 +10,16 @@
 // the lobby's ready pad (real keys), the countdown, the deploy, the Back Lot (the opening voted away and the
 // prologue's lid, hatch and chute, by the rules: tools/story-pass.mjs); then every floor's
 // objective with real input and the prompts' real holds (E held for each hold, Space to pull the cord). The harness may teleport the player next to a step's spot within a floor (a clear spot within reach, facing
-// it, never on an armed trap); every gate is the game's own logic. The Creature is told to ignore the player
-// ("ignoreme") so a hunt cannot end the run; its start rule and grace are still checked:
+// it, never on an armed trap); every gate is the game's own logic. The Creature hunts the player throughout (its
+// presence director, beats and chases): before every step the bot plays it safe (safeAt: while it hunts the player or
+// is shown near them or the step, the harness moves the bot to the door of a free hiding spot out of its sight, as it
+// moves it to a step, and the bot hides there with real input, holds its breath through a check, waits until it has
+// gone and steps out; downed, it gets up); before its exit every school floor gets a forced encounter (meet: a warned
+// teleport onto the bot, looking round between tries; never the Creature merely brought near) the bot must meet, and
+// every floor must be finished alive. That proves the floor's flow with the Creature hunting (hiding, the breath
+// check, the step out, the lives), not that a chase can be escaped on foot: the harness moves the bot into cover, and
+// how often a player on foot is caught is tools/presence-sim.mjs's measure (docs/MONSTER.md 20). Its start rule and
+// grace are still checked:
 //   floors 0-1   the exit is locked before (its door Locked, the airlock idle) and open after; walking at the locked
 //                basement door does not get you through; the tracker shows the title and steps, then the stairwell.
 //   Level 0      three fuses taken, fitted one slot at a time, the breaker thrown (loud), the basement lights back.
@@ -34,6 +42,8 @@
 //   Radar        every floor of every seed is finished without a single radar scan (I14), but the last of several
 //                seeds plays the basement by radar: Tab shows the three fuses (the run's picks: it never reads them),
 //                a battery (its LED blinks) gives the spent charge back, the next scan shows the breaker panel.
+// The game clock moves only in the bot's own steps (the page's loop is held from the boot on), so a run is the same on
+// a busy machine as on a quiet one.
 // Screenshots (the first seed only): the tracker on each floor, the breaker panel before and after power, the results.
 // Exit code 1 on any failure.
 
@@ -86,6 +96,20 @@ function loadPlaywright() {
 const { chromium } = loadPlaywright();
 const failures = [];
 const IGNORED_CONSOLE = /useProgram|Shader Error|WebGL|GPU stall|AudioContext/;
+// the bot's caution while the Creature hunts (safeAt): straight studs and game seconds
+const SAFE_NEAR = 45; // it shown this close to the player or the step: take cover
+const SAFE_WARNED = 6; // a teleport's warning this recent within SAFE_NEAR of the player or the step: take cover
+const SAFE_FAR = 30; // a hiding spot this far from it at least, out of its sight
+const SAFE_CLEAR = 60; // out again once it is this far off the player and the step, not after them
+const SAFE_STAY = 38; // out before the stay limit's shove (45 s)
+const SAFE_WAIT = 150; // the longest the bot waits for a step
+const SAFE_REMOVE = 8; // chased: out of its sight again at most this often
+const EXIT_WAIT = 6; // a climb-out (the door, the step out, the view back) is over within this
+const GET_UP_HOLD = 4.5; // LivesConfig.Standard GetUpHold 4, held a little longer
+// every floor's forced encounter (meet): game seconds
+const MEET_HOLD = 45; // the longest wait for its spawn hold (the floor's grace) to end
+const MEET_TRIES = 12; // a warned teleport onto the bot asked once a second, at most this often (it looks round between)
+const MEET_WARNING = 3; // its warning (after the FadeOut) comes within this
 const shotsTaken = [];
 const routeLog = [];
 let seedTag = '';
@@ -122,6 +146,9 @@ for (const [si, seed] of SEEDS.entries()) {
     // eslint-disable-next-line no-new-func
     return new Function('game', 'dev', 'arg', `return (${src})(game, dev, arg);`)(w.game, w.dev, a);
   }, [fn.toString(), arg]);
+  // steps the game `seconds` at 30 Hz inside the page, without rendering; the loop is held from the boot on, so
+  // game time moves only here, never across the real time between two calls (a machine under load once let a frame of
+  // its own land between the bot's teleport and its walk)
   const ff = (seconds) => tab.evaluate((s) => {
     const e = window.__rovloc.engine;
     const loop = e.loop;
@@ -132,11 +159,11 @@ for (const [si, seed] of SEEDS.entries()) {
       for (let i = 0; i < Math.round(s * 30); i++) loop._run(1 / 30, 1 / 30);
     } finally {
       e.renderer.render = render;
-      loop.start();
     }
   }, seconds);
   const shot = async (name) => {
     if (!first) return;
+    // one frame drawn at no game time (the loop stays held)
     await tab.evaluate(() => {
       const loop = window.__rovloc.engine.loop;
       loop.stop();
@@ -144,11 +171,7 @@ for (const [si, seed] of SEEDS.entries()) {
     });
     await tab.waitForTimeout(250);
     const file = path.join(shots, name);
-    try {
-      await tab.screenshot({ path: file, timeout: 180000 });
-    } finally {
-      await tab.evaluate(() => window.__rovloc.engine.loop.start());
-    }
+    await tab.screenshot({ path: file, timeout: 180000 });
     shotsTaken.push(file);
   };
   /** Holds a key for `seconds` of game time. */
@@ -159,12 +182,163 @@ for (const [si, seed] of SEEDS.entries()) {
     await ff(0.1);
   };
   /**
+   * What the bot reads of the Creature and of itself (the step at `point`, straight distances; a teleport's warning
+   * near it or the step, as a player hears the hiss and sees the lights stutter).
+   */
+  const threat = (point) => G((g, dev, a) => {
+    const T = g.env.THREE;
+    const q = a.point;
+    const snap = g.creature.c.service.snapshot();
+    const root = g.env.rootPosition();
+    const at = g.creature.position();
+    const shown = !!at && !snap.hidden;
+    const occupied = g.lockers.occupied;
+    const w = g.monsterFx.lastWarning;
+    const warned = !!w && g.env.now() - w.at <= a.fresh &&
+      (w.spot.distanceTo(root) < a.near || (!!q && w.spot.distanceTo(new T.Vector3(...q)) < a.near));
+    return {
+      level: g.level, life: g.life.state, state: snap.state, mine: snap.targetingPlayer, shown, warned,
+      near: shown ? at.distanceTo(root) : Infinity, toStep: shown && q ? at.distanceTo(new T.Vector3(...q)) : Infinity,
+      hidden: !!occupied, settled: !!occupied && occupied.state === 'Hidden', checked: !!occupied && !!occupied.check,
+      stay: g.lockers.stay ? g.env.now() - g.lockers.stay.since : 0, spots: [...g.lockers.lockers.values()].some((l) => l.level === g.level),
+    };
+  }, { point: point || null, fresh: SAFE_WARNED, near: SAFE_NEAR });
+  /**
+   * The free hiding spot on this floor to run for: SAFE_FAR or more from the Creature and out of its sight, not in the
+   * floor's exit vestibule (the airlock would take a hider there on to the next floor), no armed trap within 2.5 studs
+   * of its front (the harness never puts the bot on one), nearest the player first; the bot is put at its door (the
+   * harness's move within a floor): {ok, id}.
+   */
+  const takeCover = () => G((g, dev, a) => {
+    const T = g.env.THREE;
+    const root = g.env.rootPosition();
+    const eye = g.creature.eye();
+    const at = g.creature.position();
+    const spots = [...g.lockers.lockers.values()].filter((l) => l.level === g.level && l.state === 'Free').map((l) => {
+      const front = new T.Vector3().setFromMatrixPosition(l.exit);
+      return { l, front, d: front.distanceTo(root) };
+    }).filter((x) => !g.traps.traps.some((t) => t.state === 'Armed' && t.level === g.level &&
+      Math.hypot(t.floor.x - x.front.x, t.floor.z - x.front.z) < 2.5)).filter((x) => !g.airlock.isInside(x.front.clone().add(new T.Vector3(0, 3, 0))) &&
+      !g.airlock.isInside(new T.Vector3().setFromMatrixPosition(x.l.base))).filter((x) => !at || (x.front.distanceTo(at) >= a.far &&
+      !g.env.lineClear(eye, x.front.clone().add(new T.Vector3(0, 3, 0)), { ignoreEntities: true })))
+      .sort((x, y) => x.d - y.d);
+    const pick = spots[0];
+    if (!pick) return { ok: false, spots: 0 };
+    g.env.teleport({ position: pick.front.clone().add(new T.Vector3(0, 3, 0)), yaw: Math.atan2(pick.l.exit.elements[8], pick.l.exit.elements[10]) });
+    g.traps.noteTeleport();
+    return { ok: true, id: pick.l.id };
+  }, { far: SAFE_FAR });
+  const cover = { hides: 0, hidden: 0, waits: 0 };
+  /**
+   * The bot plays it safe before a step (the Creature hunts this run): while the Creature hunts the player (a chase, a
+   * watched hiding spot, a teleport on them), a teleport's warning came within SAFE_NEAR of them or of the step at
+   * `point` in the last SAFE_WARNED seconds, or it is shown that close, it takes cover in a free hiding spot out of its
+   * sight (chased, it waits out of its sight first: a spot refuses a hider it chases in its sight), holds its breath through a check, and stays until the Creature is SAFE_CLEAR or more off and not after it
+   * (out before the stay limit's shove), at most SAFE_WAIT seconds; downed, it gets up. Floors without hiding spots
+   * (the roof) are played as they come.
+   */
+  const safeAt = async (point) => {
+    let waited = 0;
+    let movedAt = -Infinity;
+    for (;;) {
+      const s = await threat(point);
+      if (s.life === 'Downed') {
+        await ff(3.2);
+        await hold(GET_UP_HOLD);
+        waited += 3.2 + GET_UP_HOLD;
+        if (waited > SAFE_WAIT) return;
+        continue;
+      }
+      if (s.life !== 'Alive') {
+        await ff(1);
+        waited += 1;
+        if (waited > SAFE_WAIT) return;
+        continue;
+      }
+      if (!s.spots) return;
+      const hunting = s.mine && ['WallChase', 'HidingResponse', 'Teleport'].includes(s.state);
+      const danger = hunting || s.warned || s.near < SAFE_NEAR || s.toStep < SAFE_NEAR;
+      const clear = !s.mine && !s.warned && s.near >= SAFE_CLEAR && s.toStep >= SAFE_CLEAR;
+      if (s.hidden) {
+        if (s.checked) await G((g) => g.lockers._onHoldBreath(true));
+        else await G((g) => g.lockers._onHoldBreath(false));
+        if (s.settled && !s.checked && (clear || s.stay >= SAFE_STAY || waited > SAFE_WAIT)) {
+          // out, and on until the climb-out is over (the spot let go of them, the locker view ended), in game time
+          if (await G((g) => g.lockers.requestExit())) {
+            for (let k = 0; k < EXIT_WAIT * 4; k++) {
+              await ff(0.25);
+              if (await G((g) => !g.lockers.occupied && !g.lockers.session)) break;
+            }
+            continue;
+          }
+        }
+      } else if (!danger) {
+        return;
+      } else if (waited > SAFE_WAIT) {
+        return;
+      } else if (s.mine && s.state === 'WallChase') {
+        // chased: a spot refuses a hider it chases in its sight, so the bot waits out of its sight at one's door
+        if (waited - movedAt >= SAFE_REMOVE) {
+          await takeCover();
+          movedAt = waited;
+        }
+      } else {
+        const r = await takeCover();
+        await ff(0.3);
+        if (r.ok && (await G((g, dev, id) => g.lockers.hide(g.lockers.lockers.get(id)), r.id))) {
+          cover.hides += 1;
+          await ff(2);
+          waited += 2;
+          cover.hidden += 2;
+          continue;
+        }
+      }
+      await ff(1);
+      waited += 1;
+      if (s.hidden) cover.hidden += 1;
+      else cover.waits += 1;
+    }
+  };
+  /**
+   * Every floor's forced encounter (a floor's few steps can all be done before it ever comes near): once its spawn
+   * hold is over, a real teleport onto the bot is asked (the dev "ai teleport": the warning, the stare, the stalk);
+   * with no spot out of its view (an open hall in front of it), the bot looks round a quarter turn and it is asked
+   * again. The bot then plays it safe as before any step. {how: 'Teleport' or null, reply}.
+   */
+  const meet = async () => {
+    for (let i = 0; i < MEET_HOLD && (await G((g) => g.creature.getState())) === 'Scripted'; i++) await ff(1);
+    let reply = '';
+    for (let i = 0; i < MEET_TRIES; i++) {
+      if (i > 0) await G((g, dev, yaw) => g.env.setLook(yaw, 0), (i * Math.PI) / 2 + (i >= 4 ? Math.PI / 4 : 0));
+      const asked = await G((g) => g.env.now());
+      reply = await G((g) => g.creature.devCommand('ai teleport'));
+      if (/^Creature teleporting/.test(reply)) {
+        // on through its FadeOut to the warning (the hiss, the lights, the torch): the bot's cue
+        for (let k = 0; k < MEET_WARNING * 5; k++) {
+          if (await G((g, dev, at) => !!g.monsterFx.lastWarning && g.monsterFx.lastWarning.at >= at, asked)) break;
+          await ff(0.2);
+        }
+        // and on until it has formed and stalks the bot (a cut-off ahead of it forms farther than the warning's
+        // reach: the bot plays it safe from the stalk)
+        for (let k = 0; k < MEET_WARNING * 5; k++) {
+          if (await G((g) => g.creature.getState() !== 'Teleport' || !g.creature.c.service.snapshot().hidden && !g.creature.c.service.warp)) break;
+          await ff(0.2);
+        }
+        return { how: 'Teleport', reply };
+      }
+      await ff(1);
+    }
+    return { how: null, reply };
+  };
+  /**
    * Stands the player within reach of a world point, facing it: spots `reach` studs off it on sixteen bearings, on the
    * surface found under them, with headroom, no wall within a body's width, a clear line to
    * the point and no armed trap within 2.5 studs. Each spot is tried in turn (teleport, settle, aim again) until the
-   * prompt answering `action` matches `expect`; without `expect` the first spot that settles is kept.
+   * prompt answering `action` matches `expect`; without `expect` the first spot that settles is kept. The bot plays
+   * it safe first (safeAt).
    */
   const standAt = async (point, opts = {}) => {
+    await safeAt(point);
     const spots = await G((g, dev, a) => {
       const T = g.env.THREE;
       const p = new T.Vector3(...a.point);
@@ -233,6 +407,17 @@ for (const [si, seed] of SEEDS.entries()) {
   const tracker = () => G((g) => ({ title: g.objectives.scan.title, steps: (g.objectives.scan.steps || []).map((s) => s.text) }));
   /** Walks into the floor's exit vestibule from the floor side and waits for the next level. */
   const leave = async (next) => {
+    const met = await meet();
+    check(`${await G((g) => g.level)}: the forced encounter: a warned teleport onto the bot`, met.how === 'Teleport', met);
+    await safeAt(await G((g) => g.doors.get(g.route(g.level).exitDoorIds[0]).centre.toArray()));
+    check(`${await G((g) => g.level)}: the bot met it (moved by the harness to a hiding spot's door out of its sight: hid there, or waited)`,
+      cover.hides + cover.waits > 0, { ...met, ...cover });
+    const floor = await G((g) => ({ level: g.level, downs: g.life.lives.downs, life: g.life.state }));
+    console.log(`  ${floor.level}: the Creature hunting, the harness moved the bot into cover ${cover.hides} times (${cover.hidden} s ` +
+      `hidden, ${cover.waits} s waiting out of its sight), downed ${floor.downs} times`);
+    check(`${floor.level}: finished alive with the Creature hunting (the harness moving the bot into cover)`,
+      floor.life === 'Alive', { ...floor, ...cover });
+    Object.assign(cover, { hides: 0, hidden: 0, waits: 0 });
     const scans = await G((g) => ({ level: g.level, scans: g.radar.scans }));
     if (!scanned) check(`${scans.level}: finished without a single radar scan (I14)`, scans.scans === 0, scans);
     await jamCheck(`leaving ${await G((g) => g.level)}`);
@@ -257,7 +442,9 @@ for (const [si, seed] of SEEDS.entries()) {
     await tab.keyboard.up('KeyW');
     await ff(6);
     const s = await G((g) => ({ level: g.level, phase: g.phase, root: g.env.rootPosition().toArray().map(Math.round),
-      airlock: g.airlock.phase, inside: g.airlock.isInside(), creature: (g.creature.position() || { toArray: () => [] }).toArray().map(Math.round) }));
+      airlock: g.airlock.phase, inside: g.airlock.isInside(), creature: (g.creature.position() || { toArray: () => [] }).toArray().map(Math.round),
+      lock: g.controlLock(), move: g.env.moveState(), hiding: !!g.lockers.session, input: g.env.engine.input.getContext(),
+      trapped: !!g.traps.caught }));
     check(`left by the airlock into ${next}`, s.level === next && s.phase === 'InRun', s);
     // the climb is not walked: the player is put at the level's first spawn slot (CharacterService.SpawnCFrame)
     const arrived = await G((g, dev, room) => {
@@ -404,6 +591,8 @@ for (const [si, seed] of SEEDS.entries()) {
     await tab.waitForFunction(() => window.__rovloc && (window.__rovloc.ready || window.__rovloc.error), null, { timeout: 180000 });
     check('boot', await tab.evaluate(() => !window.__rovloc.error));
     await tab.waitForTimeout(1200);
+    // the loop held from here on: only ff moves the game
+    await tab.evaluate(() => window.__rovloc.engine.loop.stop());
     await G((g, dev) => dev.skipTitle());
     await ff(0.5);
     // ------------------------------------------------------------------ the lobby: onto a ready pad, the countdown
@@ -427,7 +616,6 @@ for (const [si, seed] of SEEDS.entries()) {
     s = await G((g) => ({ phase: g.phase, level: g.level, seed: g.run && g.run.seed }));
     check('past the opening and the prologue: Level 0 on the pinned seed', s.phase === 'InRun' && s.level === 'Level0_Basement' &&
       s.seed === seed, s);
-    await G((g) => g.creature.devCommand('ignoreme'));
     await noiseLog();
     const picks = await G((g) => Object.fromEntries(Object.entries(g.run.plan.objectives).map(([k, v]) => [k, v.anchors])));
     console.log(`  picks: ${JSON.stringify(picks)}`);
@@ -759,7 +947,6 @@ for (const [si, seed] of SEEDS.entries()) {
       } finally {
         off();
         e.renderer.render = render;
-        loop.start();
       }
     }, { tick: 1 / GameConfig.ServerTickHz, limit: 15 });
     // (the roof is done in the touchdown's own tick on some seeds, so it may have let the Creature go by then)

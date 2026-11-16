@@ -1,6 +1,7 @@
 // strings/kit.js: the lines of the player kit (docs/design/game-spec-v2.md 3.1, 3.2): the radar (its touch button,
 // markers, the empty press, the battery's Full prompt), the look-back's button, the Leap assist setting and the
-// first-time hints of the slide, the leap and the radar; Shared/Strings.luau's keys, value for value.
+// first-time hints of the slide, the leap, the radar and the Tall Man's presence (docs/MONSTER.md 17, 19);
+// Shared/Strings.luau's keys, value for value.
 
 import { defineStrings } from './index.js';
 
@@ -29,6 +30,11 @@ defineStrings({
   'Hint.Slide': 'A bar across the way. Crouch while you sprint to slide under it.',
   'Hint.Leap': 'A leap strip. Sprint straight at the gap and jump on the stripes.',
   'Hint.Radar': 'A scan shows what you need, through the walls. It never shows him.',
+  // the Tall Man's presence (docs/MONSTER.md 17, 19): what to do when he is near, about to appear or behind you
+  'Hint.CreatureNear': 'It is close: you can hear it. Your torch gives you away from far off. Switch it off and crouch, or hide until it passes.',
+  'Hint.Warning': 'Lights stutter and something hisses: it is about to appear there. Do not run on into it. Turn back, step aside or hide.',
+  'Hint.Followed': 'Footsteps behind you. Look back: it stops while you watch it. Do not stare too long.',
+  'Hint.Input.LookBack': 'Look back',
   'Hint.Input.Slide': 'Slide',
   'Hint.Input.Sprint': 'Sprint',
   'Hint.Input.Radar': 'Scan',

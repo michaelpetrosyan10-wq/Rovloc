@@ -39,7 +39,8 @@
 //              gets up there at half health, the checkpoint return (then leaves)
 //   Level 1    the classroom scare set off by a client (the scene on the host, the gate slam everywhere); the Creature
 //              hunts and chases a client (not the host): its state, its target and its position agree on that page,
-//              and its pose (the host's hunch rule) and its eye (the rig's height for that pose)
+//              and its pose (the host's hunch rule) and its eye (the rig's height for that pose); the host's director
+//              reads all three members from their pages and turns to one it has left alone, not the client beside it
 //   leaving    a client carrying the master keys closes their page: the keys drop where they stood on the other pages
 //   the end    the last client dies and comes back (his Level 1 respawn), dies again and, out of respawns, spectates the
 //              host; the host dies, comes back, dies again: a wipe, results on both pages, Play Again
@@ -741,6 +742,45 @@ try {
   check(`Alice's page: the Creature's eye at the rig's height for its pose, the host's pose (${puppet.pose}, ${puppet.lift} up)`,
     Math.abs(puppet.lift - puppet.rig) < 0.01 && Math.abs(puppet.forward - 0.6) < 0.01 && puppet.pose === brain.pose &&
     Math.abs(brain.lift - puppet.lift) < 0.01, { puppet, brain });
+  // the director shares its attention (docs/MONSTER.md 15.2): on the host it reads every member from their own page
+  // (each one's walking distance and menace) and turns to the ones it has left alone, not the one it is near. Alice
+  // stands 40..60 walked from it, out of its sight; the host and Bob are far off at the spawn; the hunt is held off (a
+  // breather) so nobody is caught meanwhile
+  const beside = await G(host, (g) => {
+    const s = g.creature.c.service;
+    s.ignored = false;
+    s.pacing.noteBreather(s.now());
+    const nav = s._nav(s.creatureLevel);
+    const from = s._feet();
+    const eye = s._creatureEye();
+    for (const x of nav.samplePoints(5)) {
+      const p = x.position;
+      const walk = nav.pathLength(from, p);
+      if (Math.abs(p.y - from.y) > 3 || walk < 40 || walk > 60) continue;
+      if (g.env.lineClear(eye, p.clone().setY(p.y + 4.5), { ignoreEntities: true })) continue;
+      return [p.x, p.y + 3.05, p.z];
+    }
+    return null;
+  });
+  if (beside) {
+    await G(alice, (g, dev, a) => {
+      g.env.teleport({ position: { x: a[0], y: a[1], z: a[2] }, yaw: 0 });
+      g.traps.noteTeleport();
+    }, beside);
+  }
+  const aliceId = (await G(alice, (g) => g.coop.me.slot)) + 1;
+  const attention = await until(host, (g, dev, a) => {
+    const s = g.creature.c.service;
+    s.pacing.noteBreather(s.now());
+    const d = s.director.snapshot(s.now());
+    const read = d.players.filter((p) => Number.isFinite(p.menace));
+    return read.length === 3 && d.focus !== null && d.focus !== a.aliceId ? d : null;
+  }, { aliceId }, 20);
+  check('the host\'s director reads all three members and turns to one it has left alone, not Alice beside it',
+    !!beside && !!attention, { beside, attention });
+  await G(host, (g) => {
+    g.creature.c.service.ignored = true;
+  });
   await G(alice, (g, dev, a) => {
     g.env.teleport({ position: { x: a[0] + 3, y: a[1], z: a[2] }, yaw: 0 });
     g.traps.noteTeleport();

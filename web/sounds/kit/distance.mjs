@@ -43,29 +43,3 @@ export function heard(distance, walls, carry) {
   const reverb = Math.min(MAX_REVERB, d / (d + CRITICAL_DISTANCE) + 0.12 * w);
   return { gain, cutoff, reverb, direct: gain * Math.sqrt(1 - reverb), send: gain * Math.sqrt(reverb) };
 }
-
-/**
- * A dry mono sound as heard through the model (what the game will do at run time): low-passed at the cutoff
- * (12 dB/octave), the direct part plus the send through the shared IR. Without an IR the direct part plays at the
- * full gain. Returns [left, right].
- * @param {Float32Array} dry
- * @param {number} sr
- * @param {Heard} h
- * @param {[Float32Array, Float32Array]|null} ir
- * @returns {[Float32Array, Float32Array]}
- */
-export function hear(dry, sr, h, ir) {
-  const dark = h.cutoff < 19000 ? butter(dry, sr, 'lowpass', h.cutoff, 2) : Float32Array.from(dry);
-  if (!ir) {
-    const l = Float32Array.from(dark);
-    for (let i = 0; i < l.length; i++) l[i] *= h.gain;
-    return [l, Float32Array.from(l)];
-  }
-  const [wl, wr] = convolveStereo(dark, ir);
-  for (let i = 0; i < wl.length; i++) {
-    const d = i < dark.length ? dark[i] * h.direct : 0;
-    wl[i] = d + wl[i] * h.send;
-    wr[i] = d + wr[i] * h.send;
-  }
-  return [wl, wr];
-}

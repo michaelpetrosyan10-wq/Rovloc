@@ -5,16 +5,16 @@
 //
 // rules  rules/tracks.js and rules/names.js (the ports of CinematicTracks and NameSanitizer) replay every golden row of
 //        build/cache/golden.json (numbers within 1e-9); then the spec's numbers, written here from the spec's text
-//        (never read back from meta.storyConfig): the opening 78.0 s Full and 26.0 s Short; every line of 2.4's table
+//        (never read back from meta.storyConfig): the opening 61.0 s Full and 24.0 s Short; every line of 2.4's table
 //        at its start in its slot, words / (2.6 x rate) within it and none overlapping (1 to 4 players); the vote
-//        matrix 1/1, 1/2, 2/3, 2/4, 3/4 with and without a first-timer; the automatic climb-out at 20 s; the chute's
+//        matrix 1/1, 1/2, 2/3, 2/4, 3/4 with and without a first-timer; the automatic climb-out at 8 s; the chute's
 //        30 s rule and the prologue's 50 s; a bin per slot.
 // solo   one page (the game test page, unminified), a solo run from the deploy: the squad placed in its bin (slot 1:
 //        Dumpster A), the Full opening watched through (the Cutscene lock, the letterbox, every line heard at its start
 //        with the page's own name in {you}, P2's line skipped alone), nobody hurt or caught while it plays (I13), the
-//        hand-over at 78.0 s; the prologue: still in the bin at 19.9 s, out by itself at 20 s, I13 (no damage, no
+//        hand-over at 61.0 s; the prologue: still in the bin at 7.9 s, out by itself at 8 s, I13 (no damage, no
 //        noise), the walk to the hatch (real keys), "Climb in", the cut, the Basement: the phase InRun and the run
-//        clock from its activation; a replay: the Short cut, the hand-over at 26.0 s, the skip vote (alone at once:
+//        clock from its activation; a replay: the Short cut, the hand-over at 24.0 s, the skip vote (alone at once:
 //        the fade to the last shot).
 // fps    the same page: the Creature (the Monster actor, placed on the tick) at every tick of 43..47 s of the opening
 //        played at 20 fps, then at 144 fps: identical positions (I8).
@@ -92,13 +92,13 @@ if (only.has('rules')) {
   }
 
   // the spec's numbers, from its text
-  check('the opening: Full 78.0 s, Short 26.0 s', Math.abs(T.length('Opening', 'Full') - 78.0) < 1e-9 &&
-    Math.abs(T.length('Opening', 'Short') - 26.0) < 1e-9);
-  check('the Short cut opens with S1 and closes with S15 (the hand-over at its end)', T.toSource('Opening', 'Short', 0).t === 0 &&
-    Math.abs(T.toSource('Opening', 'Short', 25.99).t - 77.99) < 1e-6);
-  // 2.4's lines: start, slot, speaker's web rate (Danny 1.05, the Tall Man 0.82)
+  check('the opening: Full 61.0 s, Short 24.0 s', Math.abs(T.length('Opening', 'Full') - 61.0) < 1e-9 &&
+    Math.abs(T.length('Opening', 'Short') - 24.0) < 1e-9);
+  check('the Short cut opens with S1 and closes with S16 (the hand-over at its end)', T.toSource('Opening', 'Short', 0).t === 0 &&
+    Math.abs(T.toSource('Opening', 'Short', 23.99).t - 60.99) < 1e-6);
+  // 2.4's lines: start, slot, speaker's web rate (Danny 1.05, the Tall Man 0.82, the PA 0.95)
   const TABLE = [[4.6, 4.0, 1.05], [9.3, 3.4, 1.05], [12.9, 1.6, 1.05], [14.8, 3.2, 1.05], [18.0, 1.5, 1.05], [21.0, 1.6, 1.05],
-    [23.6, 2.6, 1.05], [26.4, 1.8, 1.05], [32.0, 2.0, 1.05], [54.5, 2.5, 0.82], [74.5, 1.5, 0.82]];
+    [23.6, 2.6, 1.05], [26.4, 1.8, 1.05], [32.0, 2.0, 1.05], [50.1, 2.5, 0.82], [54.0, 2.2, 0.95], [59.2, 1.5, 0.82]];
   const lines = T.story.Timelines.Opening.lines;
   for (const [start, slot, rate] of TABLE) {
     const line = lines.find((l) => Math.abs(l.t - start) < 1e-9);
@@ -139,10 +139,10 @@ if (only.has('rules')) {
       `${passes && firstTimerVoted ? 'passes' : 'holds'}`, T.skipPasses('Opening', players, voters, [outsider]) === (passes && firstTimerVoted));
   }
   check('the vote is offered from 5 s in, never in the last shot', !T.skipOffered('Opening', 'Full', 4.99) &&
-    T.skipOffered('Opening', 'Full', 5) && !T.skipOffered('Opening', 'Full', 73.5));
-  check('the prologue: out of the bin by itself at 20 s', T.climbOutAt(100) === 120);
-  check('the chute: 30 s after the first in, at once when everyone is in, 50 s at most', T.chuteCutAt(78, 90, -1) === 120 &&
-    T.chuteCutAt(78, 90, 95) === 95 && T.chuteCutAt(78, -1, -1) === 128 && T.chuteCutAt(78, 110, -1) === 128);
+    T.skipOffered('Opening', 'Full', 5) && !T.skipOffered('Opening', 'Full', 59.5));
+  check('the prologue: out of the bin by itself at 8 s', T.climbOutAt(100) === 108);
+  check('the chute: 30 s after the first in, at once when everyone is in, 50 s at most', T.chuteCutAt(61, 73, -1) === 103 &&
+    T.chuteCutAt(61, 73, 78) === 78 && T.chuteCutAt(61, -1, -1) === 111 && T.chuteCutAt(61, 93, -1) === 111);
   // a bin per slot: four BinStart marks, slots 1..4, and the opening's bins at them
   const starts = (meta.anchors || []).filter((a) => a.kind === 'BinStart');
   const slots = new Set(starts.map((a) => a.attributes.Slot));
@@ -253,10 +253,12 @@ async function soloDeploy(p, name) {
       return show(line);
     };
     window.__ends = [];
-    // the hand-overs as they happen (then the opening's own: on to the prologue)
+    // the hand-overs as they happen (then the opening's own: on to the prologue, and what it puts on screen at once)
     g.cinematics.onEnded('Opening', (reason) => {
-      window.__ends.push({ reason, now: g.env.now() });
+      const end = { reason, now: g.env.now() };
+      window.__ends.push(end);
       g.opening._ended(reason);
+      end.tell = g.prologue.tell.style.display !== 'none' ? g.prologue.tell.textContent : null;
     });
     window.__activations = [];
     g.stageActivated.connect((stage) => window.__activations.push({ stage, phase: g.phase, at: g.env.now() }));
@@ -280,13 +282,15 @@ try {
         const bin = g.world.meta.anchors.find((a) => a.id === 'BL_BinStart_1');
         return { phase: g.phase, stage: g.stage, lock: g.controlLock(), id: c && c.id, cut: c && c.cut, t: g.cinematics.time(),
           startAt: c && c.startAt, bars: g.cinematics.barTop.style.height, ui: g.cinematics.ui.style.display,
-          inBin: Math.hypot(root.x - bin.cframe[0], root.z - bin.cframe[2]) < 0.5, hidden: g.env.moveState() };
+          inBin: Math.hypot(root.x - bin.cframe[0], root.z - bin.cframe[2]) < 0.5, hidden: g.env.moveState(),
+          storm: window.__rovloc.engine.lighting.stormEnabled };
       });
       check('the deploy: the match phase Prologue on the Back Lot, the Opening (Full the first time) under the Cutscene lock',
         s.phase === 'Prologue' && s.stage === 'BackLot' && s.lock === 'Cutscene' && s.id === 'Opening' && s.cut === 'Full', s);
       check('the squad placed at the bin marks: alone, slot 1, Dumpster A, hidden in it', s.inBin && s.hidden === 'Hiding', s);
       check('the letterbox: bars of 12 % each', parseFloat(s.bars) === 12 && /vh$/.test(s.bars) && s.ui !== 'none', s.bars);
       check('a timeline\'s start is on a tick (I8)', Math.abs(s.startAt / TICK - Math.round(s.startAt / TICK)) < 1e-6, s.startAt);
+      check('the ambient storm is off while the cutscene plays (2.3: its weather is the timeline\'s)', s.storm === false, s.storm);
       const startAt0 = s.startAt;
       // I13 while it plays: no lethal hit, no damage, no catch
       s = await G((g) => {
@@ -298,19 +302,19 @@ try {
         s.health === 100 && s.safe && !s.catchable, s);
       // to the end, a tick at a time near it
       s = await G((g) => g.cinematics.time());
-      await ff(77.9 - s);
+      await ff(60.9 - s);
       s = await G((g) => ({ active: g.cinematics.active(), t: g.cinematics.time() }));
-      check('77.9 s: the opening still plays', s.active, s);
+      check('60.9 s: the opening still plays', s.active, s);
       await ff(0.2);
       s = await G((g) => ({ active: g.cinematics.active(), ends: window.__ends, pro: g.prologue.state, handOver: g.prologue.handOver,
         lock: g.controlLock(), phase: g.phase }));
-      check('the hand-over at 78.0 s (Full): the prologue starts in the bin, still the Prologue phase', !s.active &&
-        s.ends.length === 1 && s.ends[0].reason === 'End' && Math.abs(s.ends[0].now - startAt0 - 78) <= TICK + 1e-6 &&
+      check('the hand-over at 61.0 s (Full): the prologue starts in the bin, still the Prologue phase', !s.active &&
+        s.ends.length === 1 && s.ends[0].reason === 'End' && Math.abs(s.ends[0].now - startAt0 - 61) <= TICK + 1e-6 &&
         s.pro === 'Bin' && s.phase === 'Prologue', s);
       const subs = await G(() => window.__subs);
       const wanted = [[4.6, 'Did you SEE Kessler'], [9.3, 'Maya, back me up'], [12.9, 'Worth the detention'], [14.8, 'Sal\'s?'],
-        [21.0, 'Wait. Guys.'], [23.6, 'Ha! Look'], [26.4, 'Booo.'], [32.0, 'GET IT OFF'], [54.5, 'I know you\'re close, Maya.'],
-        [61.5, 'LOCKDOWN'], [74.5, 'Maya…']];
+        [21.0, 'Wait. Guys.'], [23.6, 'Ha! Look'], [26.4, 'Booo.'], [32.0, 'GET IT OFF'], [50.1, 'I know you\'re close, Maya.'],
+        [54.0, 'LOCKDOWN'], [59.2, 'Maya…']];
       const missing = wanted.filter(([at, text]) => !subs.some((x) => Math.abs(x.at - at) <= TICK + 1e-6 && x.text.includes(text)));
       check('every line at its start (within a tick), with this page\'s name for {P1} and {you}', missing.length === 0, missing);
       check('alone, P2\'s line ("…you\'re paying") is skipped', !subs.some((x) => /paying/.test(x.text)), subs.length);
@@ -319,6 +323,15 @@ try {
       check('each subtitle stays up for its line\'s slot', subs.every((x) => x.seconds > 0 && x.seconds <= 4.0), subs.map((x) => x.seconds));
       const seen = await G((g) => g.profile.cutsceneSeen('Opening'));
       check('the Full cut played to its end marks the opening seen', seen === true);
+      // the hand-over's first words say what to do, there at once (in the hand-over's own tick: nothing to wait for)
+      s = await G((g) => ({ atHandOver: window.__ends[0].tell, shown: g.prologue.tell.style.display !== 'none',
+        text: g.prologue.tell.textContent, z: Number(getComputedStyle(g.prologue.tell).zIndex),
+        menuZ: Number(getComputedStyle(document.querySelector('.rv-menu')).zIndex),
+        storm: window.__rovloc.engine.lighting.stormEnabled }));
+      check('the hand-over: "Hold E to push the lid" is on screen in its own tick, and stays', s.atHandOver ===
+        'Hold E to push the lid' && s.shown && s.text === 'Hold E to push the lid', s);
+      check('the hint sits under the pause menu', s.z > 0 && s.menuZ > s.z, s);
+      check('the ambient storm is back at the hand-over', s.storm === true, s.storm);
 
       // the lid's prompt answers whichever way the player looks: they are inside the bin, and its anchor is at their feet
       for (const [yaw, pitch] of [[0, 0.9], [2.6, 0.4], [-1.5, -0.2]]) {
@@ -330,15 +343,21 @@ try {
         });
         check(`in the bin, looking ${yaw} / ${pitch}: "Push the lid" answers`, s.text === 'Push the lid' && s.shown, s);
       }
+      s = await G(() => {
+        const p = window.__rovloc.engine.prompts.active.get('Interact');
+        return p ? p.objectText : null;
+      });
+      check('the lid\'s prompt names its object in words ("Bin", not a string key)', s === 'Bin', s);
       await G((g) => g.env.setLook(0, -0.05));
-      // the prologue: the automatic climb-out at 20 s (counted from the hand-over)
+      // the prologue: the automatic climb-out at 8 s (counted from the hand-over)
       const inBin = await G((g) => g.env.now() - g.prologue.handOver);
-      await ff(19.9 - inBin);
+      await ff(7.9 - inBin);
       s = await G((g) => ({ pro: g.prologue.state, since: g.env.now() - g.prologue.handOver }));
-      check('the prologue: still in the bin at 19.9 s', s.pro === 'Bin', s);
+      check('the prologue: still in the bin at 7.9 s', s.pro === 'Bin', s);
       await ff(0.2);
-      s = await G((g) => ({ pro: g.prologue.state }));
-      check('20 s in the bin: the climb-out happens by itself', s.pro === 'Climbing', s);
+      s = await G((g) => ({ pro: g.prologue.state, tell: g.prologue.tell.style.display !== 'none' }));
+      check('8 s in the bin: the climb-out happens by itself (and "Hold E to push the lid" goes)', s.pro === 'Climbing' &&
+        !s.tell, s);
       await ff(1.3);
       s = await G((g) => {
         const before = g.life.health;
@@ -388,7 +407,7 @@ try {
       const backLot = s.acts.find((a) => a.stage === 'BackLot');
       check('the Back Lot activated in the Prologue phase; no run clock before the Basement', !!backLot && backLot.phase === 'Prologue');
 
-      // a replay: the Short cut, the hand-over at 26.0 s; the skip vote alone passes at once
+      // a replay: the Short cut, the hand-over at 24.0 s; the skip vote alone passes at once
       console.log('== solo: a replay (Short), the skip');
       await G((g) => {
         g.match.reset();
@@ -401,13 +420,13 @@ try {
       await ff(0.6);
       s = await G((g) => ({ cut: g.cinematics.current && g.cinematics.current.cut, len: g.cinematics.current && g.cinematics.current.length }));
       check('a replay plays the Short cut (every member has seen the Full one; nobody asked for Full)', s.cut === 'Short' &&
-        Math.abs(s.len - 26) < 1e-9, s);
-      await toTime(25.9);
+        Math.abs(s.len - 24) < 1e-9, s);
+      await toTime(23.9);
       s = await G((g) => g.cinematics.active());
-      check('25.9 s: the Short cut still plays', s === true);
+      check('23.9 s: the Short cut still plays', s === true);
       await ff(0.2);
       s = await G((g) => ({ active: g.cinematics.active(), ends: window.__ends, pro: g.prologue.state }));
-      check('the hand-over at 26.0 s (Short)', !s.active && s.ends.length === 1 && s.pro === 'Bin', s);
+      check('the hand-over at 24.0 s (Short)', !s.active && s.ends.length === 1 && s.pro === 'Bin', s);
       await G((g) => {
         g.match.reset();
         window.__ends = [];
@@ -432,7 +451,7 @@ try {
       await ff(0.7);
       s = await G((g) => ({ t: g.cinematics.time(), shot: g.cinematics.tracks.sample('Opening', 'Full', g.cinematics.time(),
         g.cinematics.current.binding).shot }));
-      check('alone the vote passes at once: the fade, then the last shot (S15 from 73.0 s)', s.shot === 'S15' && s.t >= 73 && s.t < 74, s);
+      check('alone the vote passes at once: the fade, then the last shot (S16 from 59.0 s)', s.shot === 'S16' && s.t >= 59 && s.t < 60, s);
       await G((g) => g.env.setSetting('ReplayCutscenes', 'Short'));
       await G((g) => g.match.reset());
     }
@@ -508,7 +527,7 @@ try {
     });
     await ff(0.5);
     const FRAMES = [[6.5, '1-walk-out'], [20.5, '2-the-bin'], [29.6, '3-the-crawler'], [31.9, '4-the-jump'],
-      [41.2, '5-the-transformation'], [77.6, '6-the-bins-at-night']];
+      [41.2, '5-the-transformation'], [60.8, '6-the-bins-at-night']];
     for (const [t, name] of FRAMES) {
       await toTime(t);
       await tab.evaluate(() => {
@@ -603,7 +622,7 @@ try {
         skipping: !!g.cinematics.current.skipping } : null), null, 10);
       check('coop: one vote of two does not pass', !!one && !one.skipping, one);
       await host.G((g) => g.cinematics.skip.vote());
-      const passed = await until(client, (g) => (g.cinematics.current && g.cinematics.current.skipping) || g.cinematics.time() >= 73, null, 10);
+      const passed = await until(client, (g) => (g.cinematics.current && g.cinematics.current.skipping) || g.cinematics.time() >= 59, null, 10);
       check('coop: both vote, the cut to the last shot on both pages', !!passed);
       const last = [];
       for (const p of pages) last.push(await until(p, (g) => (g.prologue.state === 'Bin' && !g.cinematics.active() ? true : null), null, 20));

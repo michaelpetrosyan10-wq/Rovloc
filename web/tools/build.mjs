@@ -35,7 +35,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SupabaseProject } from '../src/net/config.js';
-import { buildStamp, bundle, readWorld, textureSets, writeSingleFile, writeSite } from './assets.mjs';
+import { buildStamp, bundle, readWorld, soundPacks, textureSets, writeSingleFile, writeSite } from './assets.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const realtimeHost = new URL(SupabaseProject.url).host;
@@ -80,9 +80,11 @@ const entry = useGame ? gameEntry : path.join(web, 'src/engine/sandbox.js');
 
 let world;
 let textures;
+let audio;
 try {
   world = readWorld(buildDir);
   textures = textureSets(buildDir, world.meta);
+  audio = await soundPacks(buildDir);
 } catch (err) {
   fail(err.message);
 }
@@ -91,19 +93,19 @@ const mb = (n) => (n / 1048576).toFixed(2);
 const what = useGame ? path.relative(web, entry).startsWith('src/game') ? 'src/game' : path.relative(web, entry) : 'sandbox';
 
 if (siteDir) {
-  const r = writeSite({ dir: siteDir, js, world, buildDir, textures, realtimeHost, stamp });
+  const r = writeSite({ dir: siteDir, js, world, buildDir, textures, audio, realtimeHost, stamp });
   const sets = Object.entries(r.sets).sort((a, b) => Number(b[0]) - Number(a[0])).map(([s, b]) => `${s}: ${mb(b)}`).join(', ');
   const boot = Object.values(r.boot)[0];
   console.log(`build: site ${path.relative(process.cwd(), siteDir) || '.'}/ ${r.files} files, ${mb(r.bytes)} MB ` +
-    `(js ${mb(r.js)}, world ${mb(r.world)}, atlases ${mb(r.atlases)}, texture sets MB ${sets}); ` +
-    `Potato boots on ${mb(r.js + r.world + r.atlases + boot)} MB; game: ${what}${stamp ? `; stamp "${stamp}"` : ''}`);
+    `(js ${mb(r.js)}, world ${mb(r.world)}, atlases ${mb(r.atlases)}, sounds ${mb(r.audio)} in ${audio.files} files, texture sets MB ${sets}); ` +
+    `Potato boots on ${mb(r.js + r.world + r.atlases + r.audioFirst + boot)} MB; game: ${what}${stamp ? `; stamp "${stamp}"` : ''}`);
 }
 if (lite) {
-  const r = writeSingleFile({ out: lite, js, world, buildDir, textures, inlineSizes: [256, 512], realtimeHost, defaultTier: 'Potato', stamp });
-  console.log(`build: ${path.relative(web, lite)} ${mb(r.bytes)} MB single file (lite: the Low and Potato sets inline, Potato by default; game: ${what})`);
+  const r = writeSingleFile({ out: lite, js, world, buildDir, textures, audio, inlineSizes: [256, 512], realtimeHost, defaultTier: 'Potato', stamp });
+  console.log(`build: ${path.relative(web, lite)} ${mb(r.bytes)} MB single file (lite: the Low and Potato sets and every sound (${mb(audio.bytes)} MB) inline, Potato by default; game: ${what})`);
 }
 if (out) {
-  const r = writeSingleFile({ out, js, world, buildDir, textures, inlineSizes, realtimeHost, defaultTier: testTier, stamp });
+  const r = writeSingleFile({ out, js, world, buildDir, textures, audio, inlineSizes, realtimeHost, defaultTier: testTier, stamp });
   console.log(`build: ${path.relative(web, out)} ${mb(r.bytes)} MB single file (sets ${Object.keys(r.sets).join(', ')}, starts on ${testTier}; game: ${what})`);
 }
 console.log(`build: done in ${Date.now() - t0} ms`);

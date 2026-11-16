@@ -1,6 +1,6 @@
 // game-build.mjs: builds a test page of the whole game for the game's smoke checks (W4), the same way build.mjs
-// builds its single-file pages (tools/assets.mjs: the esbuild bundle of src/main.js, the world data and the Low and
-// Potato texture sets inline), with "@rovloc/game" resolved to a chosen entry.
+// builds its single-file pages (tools/assets.mjs: the esbuild bundle of src/main.js, the world data, the sounds and
+// the Low and Potato texture sets inline), with "@rovloc/game" resolved to a chosen entry.
 //
 //   node tools/game-build.mjs [--entry src/game/index.js] [--out dist/Rovloc-game-test.html] [--no-minify]
 //                             [--textures 256,512]   the texture sets to inline (add 1024 / 2048 for higher tiers)
@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bundle, readWorld, textureSets, writeSingleFile } from './assets.mjs';
+import { bundle, readWorld, soundPacks, textureSets, writeSingleFile } from './assets.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const web = path.resolve(here, '..');
@@ -34,5 +34,12 @@ if (!fs.existsSync(entry)) {
 const js = await bundle(web, entry, { minify });
 const world = readWorld(buildDir, 6);
 const textures = textureSets(buildDir, world.meta);
-const r = writeSingleFile({ out, js, world, buildDir, textures, inlineSizes, policy: false, defaultTier });
+let audio;
+try {
+  audio = await soundPacks(buildDir);
+} catch (err) {
+  console.error(`game-build: ${err.message}`);
+  process.exit(1);
+}
+const r = writeSingleFile({ out, js, world, buildDir, textures, audio, inlineSizes, policy: false, defaultTier });
 console.log(`game-build: ${path.relative(web, out)} ${(r.bytes / 1048576).toFixed(1)} MB (entry ${path.relative(web, entry)}, texture sets ${Object.keys(r.sets).join(', ')}, starts on ${defaultTier})`);

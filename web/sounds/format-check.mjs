@@ -2,7 +2,8 @@
 // by headless Chromium's decodeAudioData (an OfflineAudioContext at 48 kHz: what the game will do) and compared with
 // the raw render it came from:
 //
-//   offset    the lag (samples) that best aligns the decode with the render (0: the encoder's priming was trimmed)
+//   offset    the lag (samples) that best aligns the decode with the render over the whole file (0: the encoder's
+//             priming was trimmed)
 //   length    decoded samples minus rendered samples (0: the padding was trimmed too)
 //   snr       render energy over the residual's after alignment (dB): how much the codec changed the waveform (for
 //             bright noise, like crunching glass, a perceptual codec keeps the spectrum, not the waveform: low here
@@ -44,19 +45,28 @@ function expected(raw, loop) {
   });
 }
 
+/**
+ * The lag (samples) that best aligns `b` with `a`. A coarse search over the first half second finds it within `range`;
+ * the whole file then settles it within a few samples, because over half a second a sound that is nearly all low
+ * rumble has a correlation peak too broad to place to the sample (the codec's slight phase change under 200 Hz moves
+ * it), while a real offset shifts every part of the file alike and stays where the coarse search put it.
+ */
 function bestLag(a, b, range) {
-  const n = Math.min(a.length, b.length, 24000);
-  let best = -Infinity;
-  let lag = 0;
-  for (let d = -range; d <= range; d++) {
-    let s = 0;
-    for (let i = Math.max(0, -d); i < n && i + d < b.length; i++) s += a[i] * b[i + d];
-    if (s > best) {
-      best = s;
-      lag = d;
+  const search = (from, to, n) => {
+    let best = -Infinity;
+    let lag = 0;
+    for (let d = from; d <= to; d++) {
+      let s = 0;
+      for (let i = Math.max(0, -d); i < n && i + d < b.length; i++) s += a[i] * b[i + d];
+      if (s > best) {
+        best = s;
+        lag = d;
+      }
     }
-  }
-  return lag;
+    return lag;
+  };
+  const coarse = search(-range, range, Math.min(a.length, b.length, 24000));
+  return search(coarse - 8, coarse + 8, Math.min(a.length, b.length));
 }
 
 /** Third-octave band levels (dB) from 40 Hz to 15 kHz of a mono buffer. */

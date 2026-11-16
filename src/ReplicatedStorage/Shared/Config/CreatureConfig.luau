@@ -76,9 +76,18 @@ CreatureConfig.Senses = table.freeze({
 	CatchDistance = 4, -- catch reach (Rig.Reach)
 	CatchVertical = 5,
 	EmfRadius = 15, -- torch static within this
-	NearRadius = 25, -- heartbeat and breathing within this, seen or not
-	RattleRadius = 22, -- the low rattle while it stalks this close
+	NearRadius = 25, -- heartbeat and breathing within this, seen or not (superseded by Presence.Audio.NearRadius,
+	-- docs/MONSTER.md 19: the website's; the Roblox runtime until its port)
+	RattleRadius = 22, -- the low rattle while it stalks this close (superseded by Presence.Audio.RattleRadius,
+	-- docs/MONSTER.md 19: the website's; the Roblox runtime until its port)
 })
+
+-- Its footsteps (SynthPresets CreatureStepWalk* / CreatureStepChase*: its own sounds, never a player's). RollOffMin and
+-- RollOffMax are their 3D distances (full level within Min, silent from Max); HeardTo is how far away its quietest
+-- footfall must still stand at least 6 dB over the floor's ambience (the sound audit and web/tools/audio-test.mjs
+-- measure it, every variant): his footsteps are loud so that everyone knows when he is around. RollOffMin 28 puts
+-- him 6.9 dB louder at HeardTo than 14 did (InverseTapered: -13.5 dB there, not -20.4).
+CreatureConfig.Footfalls = table.freeze({ RollOffMin = 28, RollOffMax = 160, HeardTo = 80 })
 
 -- Looking straight at it: a player whose view centre stays within HalfAngle of its head for Seconds, within LitRange
 -- (it stands lit, or their torch is on) or DarkRange, with a clear line, starts a chase. RevealHalfAngle: the target
@@ -125,7 +134,8 @@ CreatureConfig.Teleport = table.freeze({
 	FadeInSeconds = 0.8,
 	StareSeconds = 1.2,
 	StalkSeconds = 10, -- after the stare it stalks the target; sight alone does not start a chase meanwhile...
-	StalkNear = 7, -- ...unless they come this close
+	StalkNear = 7, -- ...unless they come this close (superseded by Presence.Teleport.StalkSight, docs/MONSTER.md 18.4:
+	-- the website's; the Roblox runtime until its port)
 	ViewHalfAngle = 80, -- a player "sees" a point inside this cone of their look with a clear line
 	Retries = 2,
 })
@@ -168,5 +178,151 @@ CreatureConfig.Jumpscare = table.freeze({
 -- DOORS-Jack fake-outs: about one hiding spot in FakeoutOneIn holds one (seeded per run), at most one per floor per
 -- player.
 CreatureConfig.FakeoutOneIn = 12
+
+-- A number per difficulty.
+local function pair(standard: number, nightmare: number): { [string]: number }
+	return table.freeze({ Standard = standard, Nightmare = nightmare })
+end
+
+-- The presence layer (docs/MONSTER.md 15-19): the director that keeps the Tall Man near the players, the presence
+-- beats, the senses' additions, the chase's wind-up, pursuit and cap, the cut-off teleport and how far its sounds
+-- carry. The website runs it (meta.creatureConfig.Presence); the Roblox port follows from the spec. A {Standard,
+-- Nightmare} pair is a number per difficulty. Where it differs from the tables above (the chase's cap and the time it
+-- loses its quarry in, DifficultyConfig.maxChaseSeconds / chaseLostSeconds; the breather after a chase or a catch,
+-- PacingDirector's RelaxSeconds; the teleport's stalk, Teleport.StalkNear; the rattle and the heartbeat,
+-- Senses.RattleRadius / NearRadius), the website takes these; each superseded entry names its replacement.
+CreatureConfig.Presence = table.freeze({
+	Director = table.freeze({
+		Interval = 1, -- it reads the players and re-plans once a second
+		FarWalk = 70, -- a player's menace rises while it is farther than this walked from them, unseen, not after them
+		MenaceSeconds = pair(55, 40), -- far this long: menace full (0..1)
+		StartMenace = 0.5, -- every player's menace as a level activates
+		HintMenace = 0.2, -- a search hint once the focus player's menace reaches this...
+		LeashWalk = 100, -- ...and it is farther than this walked from them
+		HintMin = 30, -- the hint: a point this far walked from them (never where they stand)...
+		HintMax = 55, -- ...out of everyone's view, ahead of the way they go first
+		HintTries = 14, -- floor points asked (nearest it first)
+		HintEvery = 8, -- no new hint sooner than this
+		HintPace = 9, -- it walks to a hint (and to a beat's start) at this pace
+		PatrolPace = 7, -- the Stalk's pace (a pass-by, a peek's step out, a shadow at the least)
+		AheadDot = 0.4, -- "ahead of the way they go": the cosine with their travel at least this
+		ApproachWalk = 90, -- the walk to a hint longer than this: the approach teleport first
+		ApproachMin = 45, -- it lands this far walked from them...
+		ApproachMax = 80,
+		ApproachTries = 60,
+		ApproachCooldown = 25,
+		QuietSeconds = pair(40, 35), -- after an encounter with a player (a chase, a beat, them seeing it)
+		QuietAfterCatch = pair(45, 40), -- after a catch of a player
+		StarveSeconds = 75, -- co-op: a player left alone this long goes first
+		BeatMenace = 0.5, -- a beat once the focus player's menace reaches this...
+		BeatWalkMin = 30, -- ...and it is this far walked from them
+		BeatWalkMax = 140,
+		BeatEvery = pair(35, 25), -- between two beats
+		BeatRetry = 6, -- no beat fitted the floor: the next try
+		FirstBeat = 20, -- the first beat on a floor no sooner than this after its activation
+		SeenRange = 80, -- a player sees it: within this...
+		SeenHalfAngle = 50, -- ...inside this of their look (the screen's half width), with a clear line
+	}),
+	Beats = table.freeze({
+		Near = 12, -- while a beat plays only a player this close (or a stare) starts a chase (not a pass-by)
+		ReachWalk = 30, -- a beat reached its player (an encounter) once they saw it or it came this close walked
+		BreakOff = 18, -- a player this close (straight) ends a beat (not a pass-by): it withdraws
+		SafeWalk = 25, -- every stand point of a beat this far walked from every player at least
+		HideWalk = 25, -- a hiding spot within this walked of the player a beat plays to
+		ApproachWalk = 100, -- it can walk to the beat's start within this
+		ApproachSeconds = 20, -- and gets there within this, or the beat is off
+		PeekMin = 30, -- Peek: the stand point this far from the player...
+		PeekMax = 70,
+		PeekCone = 45, -- ...within this of the way they face or go
+		CornerMin = 5, -- the corner it steps out from, this far from the stand point, out of everyone's sight
+		CornerMax = 14,
+		PeekHoldMin = 1.5, -- it stands in view this long
+		PeekHoldMax = 3,
+		GlimpseMin = 30, -- Glimpse: the crossing this far ahead...
+		GlimpseMax = 70,
+		GlimpseCone = 35, -- ...within this of the way they face or go
+		CrossMin = 6, -- its two ends this far from the crossing, out of everyone's sight
+		CrossMax = 16,
+		GlimpsePace = 12,
+		ShadowMin = 30, -- Shadow: it stops closer than this walked...
+		ShadowMax = 50, -- ...and hurries farther than this
+		ShadowStart = 70, -- it starts within this walked behind them
+		ShadowGap = 40, -- how far back along their trail it walks to
+		ShadowBehind = 0.3, -- "behind": the cosine of their travel with the way to it under minus this
+		ShadowMoving = 3, -- only a player moving faster than this is shadowed
+		ShadowFast = 11, -- its pace catching up (and the most it ever walks shadowing)
+		ShadowRunning = 14, -- a player moving faster than this (a sprint) is not shadowed: they would leave it behind
+		ShadowMinSeconds = 15,
+		ShadowMaxSeconds = 25,
+		FreezeAngle = 25, -- their view within this of its head (a clear line): it freezes
+		PassMoving = 6, -- Pass-by: only for a player moving no faster than this (one on the run would run into it)
+		PassNear = 18, -- the point it passes through, this far from the player...
+		PassFar = 28,
+		PassWalk = 20, -- ...and this far walked at least
+		PassOn = 20, -- it walks on this far past that point...
+		PassOnMax = 40,
+		PassClear = 30, -- ...to a point this far from the player at least
+		Weights = table.freeze({ PassBy = 0.2, Peek = 0.3, Glimpse = 0.3, Shadow = 0.2 }),
+	}),
+	Detection = table.freeze({
+		GlowEvery = 0.5, -- a lit torch's glow is looked for this often
+		Beam = 30, -- the spot a torch lights: this far along the look, or the first surface
+		GlowRange = 90, -- it sees that spot from this far (x the difficulty's sight multiplier), inside its cone
+		StillDarkFactor = 0.5, -- standing still in the dark (torch off, unlit): its sight range x this
+		NoticeNear = 8, -- noticing: within this a player in sight is noticed at once...
+		NoticeSeconds = pair(2, 1.8), -- ...at its full sight range after this; in between, in proportion
+		NoticeDecay = 0.6, -- out of sight the noticing drains this much a second
+	}),
+	Chase = table.freeze({
+		CapSeconds = pair(12, 45), -- a chase gives up after this, whatever happens (it fades away)
+		LostSeconds = pair(4, 6), -- its quarry unseen this long: it searches
+		Pursuit = pair(30, 40), -- from the last place it saw them it runs on this far the way they fled
+		Windup = pair(1.5, 0.7), -- a fresh chase screeches and holds this long before it runs (no catch meanwhile)...
+		SurpriseRange = 20, -- ...and this long when its target stands this close as it starts (met round a corner)
+		SurpriseWindup = pair(2.8, 2),
+		Breather = pair(35, 15), -- after a chase or a catch the hunt eases off (the pacing's Relax) at least this long
+	}),
+	Teleport = table.freeze({
+		CutOffShare = pair(0.75, 1), -- a teleport tries ahead of the target's way first this share of the time (Nightmare:
+		-- always; formed behind a sprinter it is left behind before it can stalk, and a floor can open with no presence)
+		CutOffMin = 24, -- a moving target is cut off this far walked ahead...
+		CutOffMax = 70, -- ...at most (else Teleport.MinWalk..MaxWalk)
+		StalkSight = pair(40, 50), -- after its stare a player it has noticed within this is chased
+	}),
+	Audio = table.freeze({
+		RattleRadius = 45, -- the rattle in its throat while it stalks this close
+		NearRadius = 45, -- the heartbeat and breathing within this, seen or not
+	}),
+})
+
+-- A frozen table as plain, unfrozen data.
+local function plain(value: any): any
+	if type(value) ~= "table" then
+		return value
+	end
+	local out = {}
+	for k, v in value do
+		out[k] = plain(v)
+	end
+	return out
+end
+
+-- The numbers the website reads or mirrors, as plain data (world.json meta.creatureConfig): the presence layer
+-- (presence.js reads it) and the tables web/src/creature/config.js mirrors (the data test compares them).
+function CreatureConfig.exportMeta(): { [string]: any }
+	return {
+		Presence = plain(CreatureConfig.Presence),
+		Speeds = plain(CreatureConfig.Speeds),
+		SpeedCap = CreatureConfig.SpeedCap,
+		HunchBelow = CreatureConfig.HunchBelow,
+		Senses = plain(CreatureConfig.Senses),
+		Stare = plain(CreatureConfig.Stare),
+		Search = plain(CreatureConfig.Search),
+		Investigate = plain(CreatureConfig.Investigate),
+		Teleport = plain(CreatureConfig.Teleport),
+		FloorGrace = plain(CreatureConfig.FloorGrace),
+		FakeoutOneIn = CreatureConfig.FakeoutOneIn,
+	}
+end
 
 return table.freeze(CreatureConfig)

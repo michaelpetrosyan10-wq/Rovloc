@@ -620,8 +620,8 @@ local EXPECT: { [string]: any } = {
 	},
 	["quantise: between ticks"] = 10.033333333333333,
 	["quantise: on a tick"] = 2,
-	["length: the opening, Full"] = 78,
-	["length: the opening, Short"] = 26,
+	["length: the opening, Full"] = 61,
+	["length: the opening, Short"] = 24,
 	["length: the twist, Short"] = 8,
 	["length: Sunrise has no Short"] = 44,
 	["toSource: Full"] = {
@@ -634,7 +634,7 @@ local EXPECT: { [string]: any } = {
 	},
 	["toSource: Short, the last segment"] = {
 		segment = 7,
-		t = 77,
+		t = 60,
 	},
 	["sample: the opening at S3, solo"] = {
 		actors = {
@@ -1136,13 +1136,13 @@ local EXPECT: { [string]: any } = {
 				clip = "Walk",
 				clipTime = 1.6000000000000014,
 				pos = {
-					x = -20.366781756969015,
+					x = -20.123013330661951,
 					y = 0,
-					z = -29.009390115076467,
+					z = -28.926750614147227,
 				},
 				rate = 1,
 				visible = true,
-				yaw = 93.971736000000007,
+				yaw = 91.574799113702625,
 			},
 		},
 		camera = {
@@ -1190,7 +1190,7 @@ local EXPECT: { [string]: any } = {
 		actors = {
 			Crawler = {
 				clip = "Hidden",
-				clipTime = 30.899999999999999,
+				clipTime = 19,
 				pos = {
 					x = -14.097002357817217,
 					y = 5.7999999999999998,
@@ -1202,7 +1202,7 @@ local EXPECT: { [string]: any } = {
 			},
 			Danny = {
 				clip = "Lifted",
-				clipTime = 33.700000000000003,
+				clipTime = 21.800000000000004,
 				pos = {
 					x = -13.6,
 					y = 0.80000000000000004,
@@ -1214,7 +1214,7 @@ local EXPECT: { [string]: any } = {
 			},
 			P1 = {
 				clip = "Hidden",
-				clipTime = 23.049999999999997,
+				clipTime = 11.149999999999999,
 				pos = {
 					x = -9.4000000000000004,
 					y = 0.5,
@@ -1226,7 +1226,7 @@ local EXPECT: { [string]: any } = {
 			},
 			P2 = {
 				clip = "Hidden",
-				clipTime = 22.899999999999999,
+				clipTime = 11,
 				pos = {
 					x = -27.192060000000001,
 					y = 0,
@@ -1238,7 +1238,7 @@ local EXPECT: { [string]: any } = {
 			},
 			P3 = {
 				clip = "Hidden",
-				clipTime = 22.75,
+				clipTime = 10.850000000000001,
 				pos = {
 					x = -23.735932999999999,
 					y = 0,
@@ -1250,7 +1250,7 @@ local EXPECT: { [string]: any } = {
 			},
 			P4 = {
 				clip = "Hidden",
-				clipTime = 22.599999999999994,
+				clipTime = 10.699999999999996,
 				pos = {
 					x = -28.303668999999999,
 					y = 0,
@@ -1262,7 +1262,7 @@ local EXPECT: { [string]: any } = {
 			},
 			Sneakers = {
 				clip = "Sneakers",
-				clipTime = 30.899999999999999,
+				clipTime = 19,
 				pos = {
 					x = -13.6,
 					y = 0,
@@ -1274,15 +1274,15 @@ local EXPECT: { [string]: any } = {
 			},
 			TallMan = {
 				clip = "Hidden",
-				clipTime = 8,
+				clipTime = 3.8000000000000043,
 				pos = {
-					x = -60,
-					y = 0.34999999999999998,
-					z = -0.59999999999999998,
+					x = -25.199999999999999,
+					y = 0,
+					z = -17.800000000000001,
 				},
 				rate = 1,
 				visible = false,
-				yaw = 114.06872300000001,
+				yaw = 128.36748499999999,
 			},
 		},
 		camera = {
@@ -1293,22 +1293,22 @@ local EXPECT: { [string]: any } = {
 			},
 			fov = 66,
 			target = {
-				x = -30.766666666666666,
-				y = 7.3066666666666666,
+				x = -30.73076923076923,
+				y = 7.292307692307693,
 				z = -12,
 			},
 		},
 		card = {
-			age = 0.29999999999999716,
-			seconds = 1.8,
+			age = 0.25,
+			seconds = 0.80000000000000004,
 			text = "9:03 PM",
 		},
 		day = {
-			amount = 0.315,
+			amount = 0.30444444444444463,
 			tint = {
-				x = 0.70999999999999996,
-				y = 0.59000000000000008,
-				z = 0.66000000000000003,
+				x = 0.74222222222222267,
+				y = 0.5755555555555556,
+				z = 0.61111111111111072,
 			},
 		},
 		fade = 0,
@@ -1325,19 +1325,19 @@ local EXPECT: { [string]: any } = {
 			Windows1 = "Dark",
 			Windows2 = "Dark",
 		},
-		rain = false,
+		rain = true,
 		rigs = {
 			Danny = "TallMan",
 		},
-		shot = "S14",
-		source = 69.5,
+		shot = "S15",
+		source = 57.600000000000001,
 		view = "Cinematic",
 	},
-	["sample: Short, S13's windows"] = {
+	["sample: Short, the lockdown's windows"] = {
 		actors = {
 			Crawler = {
 				clip = "Hidden",
-				clipTime = 23.899999999999999,
+				clipTime = 16.599999999999994,
 				pos = {
 					x = -14.097002357817217,
 					y = 5.7999999999999998,
@@ -1349,7 +1349,7 @@ local EXPECT: { [string]: any } = {
 			},
 			Danny = {
 				clip = "Lifted",
-				clipTime = 26.700000000000003,
+				clipTime = 19.399999999999999,
 				pos = {
 					x = -13.6,
 					y = 0.80000000000000004,
@@ -1361,7 +1361,7 @@ local EXPECT: { [string]: any } = {
 			},
 			P1 = {
 				clip = "Hidden",
-				clipTime = 16.049999999999997,
+				clipTime = 8.7499999999999929,
 				pos = {
 					x = -9.4000000000000004,
 					y = 0.5,
@@ -1373,7 +1373,7 @@ local EXPECT: { [string]: any } = {
 			},
 			P2 = {
 				clip = "Hidden",
-				clipTime = 15.899999999999999,
+				clipTime = 8.5999999999999943,
 				pos = {
 					x = -27.192060000000001,
 					y = 0,
@@ -1385,7 +1385,7 @@ local EXPECT: { [string]: any } = {
 			},
 			P3 = {
 				clip = "Hidden",
-				clipTime = 15.75,
+				clipTime = 8.4499999999999957,
 				pos = {
 					x = -23.735932999999999,
 					y = 0,
@@ -1397,7 +1397,7 @@ local EXPECT: { [string]: any } = {
 			},
 			P4 = {
 				clip = "Hidden",
-				clipTime = 15.599999999999994,
+				clipTime = 8.2999999999999901,
 				pos = {
 					x = -28.303668999999999,
 					y = 0,
@@ -1409,7 +1409,7 @@ local EXPECT: { [string]: any } = {
 			},
 			Sneakers = {
 				clip = "Sneakers",
-				clipTime = 23.899999999999999,
+				clipTime = 16.599999999999994,
 				pos = {
 					x = -13.6,
 					y = 0,
@@ -1421,15 +1421,15 @@ local EXPECT: { [string]: any } = {
 			},
 			TallMan = {
 				clip = "Hidden",
-				clipTime = 1,
+				clipTime = 1.3999999999999986,
 				pos = {
-					x = -60,
-					y = 0.34999999999999998,
-					z = -0.59999999999999998,
+					x = -25.199999999999999,
+					y = 0,
+					z = -17.800000000000001,
 				},
 				rate = 1,
 				visible = false,
-				yaw = 114.06872300000001,
+				yaw = 128.36748499999999,
 			},
 		},
 		camera = {
@@ -1440,17 +1440,22 @@ local EXPECT: { [string]: any } = {
 			},
 			fov = 66,
 			target = {
-				x = -30.300000000000001,
-				y = 7.1200000000000001,
+				x = -30.26923076923077,
+				y = 7.1076923076923073,
 				z = -12,
 			},
 		},
+		card = {
+			age = 1.3999999999999986,
+			seconds = 1.7,
+			text = "3:31 PM",
+		},
 		day = {
-			amount = 0.65000000000000002,
+			amount = 0.58923076923076922,
 			tint = {
 				x = 1,
-				y = 1,
-				z = 1,
+				y = 0.91384615384615386,
+				z = 0.81846153846153846,
 			},
 		},
 		fade = 0,
@@ -1471,8 +1476,8 @@ local EXPECT: { [string]: any } = {
 		rigs = {
 			Danny = "TallMan",
 		},
-		shot = "S13",
-		source = 62.5,
+		shot = "S14",
+		source = 55.199999999999996,
 		view = "Cinematic",
 	},
 	["events: the opening's first seconds"] = {
@@ -1606,12 +1611,12 @@ local EXPECT: { [string]: any } = {
 			slot = 2,
 		},
 		{
-			at = 19,
+			at = 18.700000000000003,
 			id = "Opening.Lockdown",
 			slot = 2.2000000000000002,
 		},
 		{
-			at = 22.5,
+			at = 22.199999999999999,
 			id = "Opening.You",
 			slot = 1.5,
 		},
@@ -1651,16 +1656,16 @@ local EXPECT: { [string]: any } = {
 	["skipPasses: a first-timer who did not vote"] = false,
 	["skipPasses: a first-timer who voted"] = true,
 	["skipPasses: the fall, someone unseen"] = false,
-	["skipTarget: Full"] = 73,
-	["skipTarget: Short"] = 22.5,
+	["skipTarget: Full"] = 59,
+	["skipTarget: Short"] = 21.999999999999996,
 	["words: a name slot is a word"] = 7,
 	["lineFits: the frog line"] = true,
 	["lineFits: too long for its slot"] = false,
-	["climbOutAt"] = 98,
-	["chuteCutAt: nobody in"] = 128,
-	["chuteCutAt: 30 s after the first"] = 120,
-	["chuteCutAt: everyone in"] = 101,
-	["chuteCutAt: the prologue's limit"] = 128,
+	["climbOutAt"] = 69,
+	["chuteCutAt: nobody in"] = 111,
+	["chuteCutAt: 30 s after the first"] = 103,
+	["chuteCutAt: everyone in"] = 84,
+	["chuteCutAt: the prologue's limit"] = 111,
 }
 
 function CinematicTracks.golden(): { GoldenRow }
@@ -1690,20 +1695,20 @@ function CinematicTracks.golden(): { GoldenRow }
 	row("length: Sunrise has no Short", "length", { "Sunrise", "Short" })
 	row("toSource: Full", "toSource", { "Opening", "Full", 40 })
 	row("toSource: Short, S6 from Booo", "toSource", { "Opening", "Short", 3.5 })
-	row("toSource: Short, the last segment", "toSource", { "Opening", "Short", 25 })
+	row("toSource: Short, the last segment", "toSource", { "Opening", "Short", 23 })
 	row("sample: the opening at S3, solo", "sample", { "Opening", "Full", 11.25, solo })
 	row("sample: the latch, four players", "sample", { "Opening", "Full", 31.6, four })
 	row("sample: the swap in the dark", "sample", { "Opening", "Full", 38.7, four })
 	row("sample: the dive, four players", "sample", { "Opening", "Full", 46.2, four })
-	row("sample: the time-lapse", "sample", { "Opening", "Full", 69.5, solo })
-	row("sample: Short, S13's windows", "sample", { "Opening", "Short", 20.0, solo })
+	row("sample: the time-lapse", "sample", { "Opening", "Full", 57.6, solo })
+	row("sample: Short, the lockdown's windows", "sample", { "Opening", "Short", 19.9, solo })
 	row("events: the opening's first seconds", "events", { "Opening", "Full", -1, 4.5, 1 })
 	row("events: the lids, two players", "events", { "Opening", "Full", 46.4, 46.7, 2 })
 	row("events: the Short cut's S8", "events", { "Opening", "Short", 6.4, 9.0, 1 })
 	row("events: the fall's toll, co-op only", "events", { "Fall", "Full", 10, 14, 1 })
 	row("lines: solo skips P2's line", "lines", { "Opening", "Full", 14, 22, 1 })
 	row("lines: two players hear it", "lines", { "Opening", "Full", 14, 22, 2 })
-	row("lines: the Short cut", "lines", { "Opening", "Short", -1, 26, 1 })
+	row("lines: the Short cut", "lines", { "Opening", "Short", -1, 24, 1 })
 	row("lines: the fall, solo", "lines", { "Fall", "Full", 10, 12, 1 })
 	row("cast: four slots", "cast", { 1029, { 0, 1, 2, 3 } })
 	row("cast: two slots", "cast", { 4242, { 2, 0 } })
@@ -1728,7 +1733,7 @@ function CinematicTracks.golden(): { GoldenRow }
 	row("cutFor: no Short cut", "cutFor", { "Fall", { { seenFull = true, wantsFull = false } } })
 	row("skipOffered: before 5 s", "skipOffered", { "Opening", "Full", 4.9 })
 	row("skipOffered: from 5 s", "skipOffered", { "Opening", "Full", 5 })
-	row("skipOffered: in the last shot", "skipOffered", { "Opening", "Full", 74 })
+	row("skipOffered: in the last shot", "skipOffered", { "Opening", "Full", 60 })
 	row("skipPasses: alone", "skipPasses", { "Opening", 1, { "a" }, {} })
 	row("skipPasses: one of two", "skipPasses", { "Opening", 2, { "a" }, {} })
 	row("skipPasses: two of three", "skipPasses", { "Opening", 3, { "a", "b" }, {} })
@@ -1742,11 +1747,11 @@ function CinematicTracks.golden(): { GoldenRow }
 	row("words: a name slot is a word", "words", { "{P1}, back me up. Funniest thing ever." })
 	row("lineFits: the frog line", "lineFits", { "Did you SEE Kessler's face when the frog got loose?", 1.05, 4.0 })
 	row("lineFits: too long for its slot", "lineFits", { "Get it— GET IT OFF—", 0.9, 2.0 })
-	row("climbOutAt", "climbOutAt", { 78 })
-	row("chuteCutAt: nobody in", "chuteCutAt", { 78, -1, -1 })
-	row("chuteCutAt: 30 s after the first", "chuteCutAt", { 78, 90, -1 })
-	row("chuteCutAt: everyone in", "chuteCutAt", { 78, 90, 101 })
-	row("chuteCutAt: the prologue's limit", "chuteCutAt", { 78, 105, -1 })
+	row("climbOutAt", "climbOutAt", { 61 })
+	row("chuteCutAt: nobody in", "chuteCutAt", { 61, -1, -1 })
+	row("chuteCutAt: 30 s after the first", "chuteCutAt", { 61, 73, -1 })
+	row("chuteCutAt: everyone in", "chuteCutAt", { 61, 73, 84 })
+	row("chuteCutAt: the prologue's limit", "chuteCutAt", { 61, 88, -1 })
 	return rows
 end
 

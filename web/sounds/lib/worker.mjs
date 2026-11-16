@@ -10,7 +10,23 @@ import { encodeMp3 } from './encode.mjs';
 import { writeRaw } from './raw.mjs';
 import { SR } from './voices.mjs';
 import { truePeak, momentaryMax, integrated } from '../kit/loudness.mjs';
-import { rmsEnvelope, mono } from './measure.mjs';
+import { rmsEnvelope, mono, spectrumOf } from './measure.mjs';
+
+/** A sound is dark when at most this share of its energy lies over DARK_ABOVE Hz: the game decodes it at 24 kHz. */
+const DARK_SHARE = 2e-4;
+const DARK_ABOVE = 9000;
+
+/** Whether nothing of a sound is lost at a 24 kHz sample rate (docs/SOUND.md 11: half the decoded memory). */
+function isDark(channels) {
+  const { power, size } = spectrumOf(mono(channels), SR);
+  let high = 0;
+  let total = 0;
+  for (let k = 1; k < power.length; k++) {
+    total += power[k];
+    if ((k * SR) / size >= DARK_ABOVE) high += power[k];
+  }
+  return total > 0 && high / total <= DARK_SHARE;
+}
 
 /** Seconds from the loudest 10 ms to where the sound stays 60 dB under it. */
 function tailSeconds(channels) {
@@ -43,6 +59,7 @@ parentPort?.on('message', async (job) => {
       loudness: voice.loop ? integrated(r.render, SR) : momentaryMax(r.render, SR),
       tail: voice.loop ? 0 : tailSeconds(r.render),
       loop: r.loop,
+      dark: isDark(r.render),
       renderMs: Math.round(performance.now() - started),
     };
     writeRaw(job.raw, r.render, SR, stats);

@@ -12,8 +12,10 @@ export type DifficultySpec = {
 	flasksPerStage: { [string]: number },
 	lockedGrateFraction: number, -- share of Lockable grates the RunDirector locks
 	catchCooldownSeconds: number, -- after a catch the Creature retreats this long
-	maxChaseSeconds: number, -- a chase gives up (FadeOut) after this, whatever happens
-	chaseLostSeconds: number, -- line of sight lost this long: it searches the last seen point
+	maxChaseSeconds: number, -- a chase gives up (FadeOut) after this, whatever happens (superseded by
+	-- CreatureConfig.Presence.Chase.CapSeconds, docs/MONSTER.md 18.3: the website's; the Roblox runtime until its port)
+	chaseLostSeconds: number, -- line of sight lost this long: it searches the last seen point (superseded by
+	-- CreatureConfig.Presence.Chase.LostSeconds, docs/MONSTER.md 18.3: the website's; the Roblox runtime until its port)
 	teleportCooldown: { number }, -- seconds between teleports: {low, high}
 	reachInSeconds: number, -- it reaches into a hiding spot it saw someone climb into this long after
 	postAirlockGraceSeconds: number,

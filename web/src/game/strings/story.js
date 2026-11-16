@@ -11,8 +11,12 @@ defineStrings({
   'Story.SkipVotes': '%d / %d WANT TO SKIP',
   'Story.SkipWaits': 'SOMEONE IS SEEING THIS FOR THE FIRST TIME',
   'Story.SkipFirstTime': 'EVERYONE HAS TO HAVE SEEN THIS FIRST',
-  // The prologue (4.1)
+  // The prologue (4.1); the prompts' objects are Shared/Strings.luau's
+  'Prompt.Bin': 'Bin',
+  'Prompt.Chute': 'Chute',
   'Prologue.PushLid': 'Push the lid',
+  'Prologue.Out': 'Hold %s to push the lid',
+  'Prologue.Out.Touch': 'Hold the prompt to push the lid',
   'Prologue.ClimbIn': 'Climb in',
   'Prologue.Dark': 'You slide into the dark…',
   'Prologue.Waiting': '%d / %d IN THE CHUTE',

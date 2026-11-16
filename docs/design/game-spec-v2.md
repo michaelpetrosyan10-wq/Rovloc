@@ -161,6 +161,10 @@ HandsToFace, Sit, Point.
   or "The monster says names" is Off. Solo: lines that need P2 or more are skipped.
 - **Control.** A `Cutscene` lock holds every player from the timeline's start (own point of view unless a shot says
   cinematic). I13 holds throughout.
+- **Cards.** A card fades in and out over 0.4 s, or over a quarter of its length when that is shorter, so it always
+  holds at full opacity for at least half its length (a 0.8 s card: 0.2 s in, 0.4 s held, 0.2 s out).
+- **Weather.** The ambient storm (the random lightning and its thunder outdoors) is off while a cutscene plays and back
+  at its end: the picture's weather is the timeline's own (its Rain events, its sounds, a scene's own lightning).
 - **Skip vote.** Hold Skip 1.0 s: Enter, gamepad Start, or the SKIP button (never Space or B). It passes when more
   than half the players have voted and every player who has not seen this cutscene has voted. Solo: at once. Offered
   from 5 s in. A pass cuts everyone to the timeline's last shot with a 0.6 s fade.
@@ -171,7 +175,7 @@ HandsToFace, Sit, Point.
 - **Flash and motion.** `FlashScale` scales every lightning flash and strobe; `MotionScale` scales shake and
   cinematic point-of-view moves.
 
-### 2.4 The opening (Full 78.0 s; Short 26.0 s) on the Back Lot (§4.1)
+### 2.4 The opening (Full 61.0 s; Short 24.0 s) on the Back Lot (§4.1)
 Match phases: `Deploying` (the squad is placed at the bin marks; the composed lines are preloaded) →
 `Prologue` {opening → bin → walk → chute} → `InRun` at Basement activation.
 
@@ -188,13 +192,17 @@ Match phases: `Deploying` (the squad is placed at the bin marks; the composed li
 | S9 | 34.0–39.0 | Wide: the party recoils. The yard lamp flickers. His sneakers lift off the ground and fall, empty. At 38.6 the lamp dies for 0.4 s: the Danny actor is swapped for the Creature rig, folded | cracking, a wet breath (no gore) |
 | S10 | 39.0–43.0 | Low angle: the Tall Man unfolds to 11 studs where Danny stood (the FadeIn pose, slowed 3.25×). Its head cocks | 0.8 s of silence, then the Screech |
 | S11 | 43.0–47.5 | The party runs. Each avatar dives into its slot's bin. Lids slam | lids, breathing |
-| S12 | 47.5–58.0 | **Inside a bin**, one shared shot through the lid gap. 47.5–51 its legs pass. 52 it stops. 52–54 fingertips drag along the lid. 54–57 the mask lowers into the gap, inches away, head cocked. 57.2 its head snaps toward the school | nails on metal · whisper, Ear, each page its own name (54.5, 2.5): "I know you're close, {you}." · 57.0 a scream inside the school |
-| S13 | 58.0–65.0 | Through the gap: it ducks through the staff doors. The windows go dark floor by floor. Lockdown shutters crash down | fire bell, glass, brief distant screams · PA: "LOCKDOWN. LOCKDOWN." |
-| S14 | 65.0–73.0 | Time-lapse through the gap: grey, orange, deep blue (`dayAmount` 0.65 → 0). Clock cards: 3:14 PM, 5:47, 9:03, 11:52. Rain from 70 | rain on the lid |
-| S15 | 73.0–78.0 | Black. The bell tolls twelve. Fade into first person inside your bin. Prompt: "Push the lid" | whisper, Ear (74.5, 1.5): "{you}…" |
+| S12 | 47.5–52.6 | **Inside a bin**, one shared shot through the lid gap. 47.5–49 its legs pass. 49.0 it stops. 49.1–50 fingertips drag along the lid. 50–52.4 the mask lowers into the gap, inches away, head cocked. 52.4 its head snaps toward the school | nails on metal · whisper, Ear, each page its own name (50.1, 2.5): "I know you're close, {you}." · 52.2 a scream inside the school |
+| S13 | 52.6–53.8 | Through the gap: it lopes for the staff doors; the cut in time takes it mid-stride | the fire bell |
+| S14 | 53.8–56.4 | A cut in time, the same view. Card: "3:31 PM". The windows go dark floor by floor (54.8, 55.3). Lockdown shutters crash down (55.7); the red strobe starts | PA (54.0, 2.2): "LOCKDOWN. LOCKDOWN." · glass, brief distant screams, the shutter |
+| S15 | 56.4–59.0 | Night falls through the gap: orange, deep blue, dark (`dayAmount` 0.58 → 0). Clock cards: 5:47 PM, 9:03 PM, 11:52 PM. Rain from 57.35. The bell begins to toll twelve (57.4) | rain on the lid, the bell |
+| S16 | 59.0–61.0 | Black. The bell tolls on. Fade into first person inside your bin. Prompt: "Push the lid" | whisper, Ear (59.2, 1.5): "{you}…" |
 
-**Short cut:** S1 (0–3), S6 from "Booo." (3–6.5), S8 (6.5–9), S9 and S10 (9–15.5), S11 (15.5–18.5), S13 from the
-windows (18.5–22.5), S15 (22.5–26).
+From the last lid slamming (46.95) to the hand-over is 14 s, and never 3 s pass without a change on screen (a new shot,
+a move of the Tall Man, a prop, a light, a card, a subtitle); `Story.spec` asserts both.
+
+**Short cut:** S1 (0–3), S6 from "Booo." (3–6.5), S8 (6.5–9), S9 and S10 (9–15.5), S11 (15.5–18.5), S14, the
+lockdown (18.5–21.2), S15 from its last card and S16 (21.2–24).
 
 The Creature in S9 to S13 is Scripted and uses only existing actions (FadeIn, Stare, ReachIn for the fingertips).
 
@@ -546,8 +554,9 @@ World coordinates; street level is y 18. The lot lies south of the school's sout
 | Bike rack, basketball hoop, pallets, puddles (`Detail` 2–3) | — |
 | The bell tower over the roofline, its clock faces lit | — |
 
-**Prologue (after S15; at most 50 s; the Creature is hidden and Dormant at its Basement spawn; I13).**
-1. **Out of the bin.** "Push the lid" (hold 0.6 s) plays a 1.2 s climb-out. After 20 s in the bin it happens by itself.
+**Prologue (after S16; at most 50 s; the Creature is hidden and Dormant at its Basement spawn; I13).**
+1. **Out of the bin.** The hand-over's first words on screen say what to do ("Hold E to push the lid": the prompt's
+   own key). "Push the lid" (hold 0.6 s) plays a 1.2 s climb-out. After 8 s in the bin it happens by itself.
 2. **The lot at night.** Rain, the strobe, the gate chained, the staff doors shuttered. The only way on is the hatch,
    25–45 studs away.
 3. **The chute.** "Climb in" (0.6 s) puts that player into a black wait ("You slide into the dark…"). When every Alive
@@ -1538,11 +1547,11 @@ Ending B, start the takeoff, trigger a scare id, add radar charges, set respawns
 - *Delivers:* the cutscene player (§2.3) with letterbox, cuts, actor tracks, events, rig swaps, skip votes and
   Short cuts; costumed actors and the mask crawler; the title-screen name prompt and the sanitizer; speech and
   subtitles as primitives; the opening's two cuts (§2.4); the prologue (§4.1) into the Basement.
-- *Tests:* `story-test.mjs` (hand-over at 78.0 s Full and 26.0 s Short; every line fits its slot and none
+- *Tests:* `story-test.mjs` (hand-over at 61.0 s Full and 24.0 s Short; every line fits its slot and none
   overlap; the vote matrix 1/1, 1/2, 2/3, 2/4, 3/4 with and without first-timers; a bin per slot; per-page
-  `{you}`; the auto climb-out at 20 s; the chute's 30 s rule; the run clock starts at Basement activation; I13
-  throughout; `CinematicTracks` and `NameSanitizer` goldens; actor positions identical at 20 and 144 fps; two
-  pages within one tick).
+  `{you}`; the hand-over's "Hold E to push the lid"; the auto climb-out at 8 s; the chute's 30 s rule; the run clock
+  starts at Basement activation; I13 throughout; `CinematicTracks` and `NameSanitizer` goldens; actor positions
+  identical at 20 and 144 fps; two pages within one tick).
 
 **WP12 · Web · The talking monster** · depends on: WP11 · L · P0
 - *Owns:* `game/story/voice.js`; `game/rules/voice.js`; `Shared/Rules/VoiceRules.luau`;
@@ -1797,10 +1806,11 @@ Numbers are positions in `finale-critiques.json`, counted from 1 (1–37 are cri
 - 5.1 / 5.2 (look restored): the player, after the all-gray pass: "By gray feel i didn't mean everything look gray, I meant like look at threshold its like dark gray theme, that doesnt mean all colors are actually gray ... a spooky theme like a school after hours dark and ruined but not all gray." and "So somewhat like the original i guess I liked the original Icl I just want it to have a more scary theme like I dont want only the monster to be scary but the surroundings too". The original look is back, without the checkerboard and with the Basement's amber a third short of full; the scarier surroundings are a separate package.
 - 2.3 (WP11): StoryConfig exports as `meta.storyConfig` (the generic export's name), not `meta.story`; its tick is `TickRate` 30 (the export keeps six decimals, so 1/30 would not reach the web exactly), and every position and yaw StoryConfig works out is rounded to six decimals at the source, so the web's port replays the goldens to 1e-9.
 - 2.3 (WP11): a cutscene is "seen" by a player when its Full cut played to its end on their page, or they voted it away (profile `CutscenesSeen`); the first-timer's veto and Full or Short read that.
-- 2.4 (WP11): the PA line "LOCKDOWN. LOCKDOWN." starts at 61.5 s with a 2.2 s slot (the table gives none), inside the Short cut's S13 piece.
-- 2.4 (WP11): the Short cut's pieces are one-for-one spans of the Full timeline: S1 0-3, S6 from "Booo." 26.4-29.9 (S6 has only 2.1 s after it, so the piece runs into S7's insert), S8 31.5-34, S9's end and S10 36.5-43, S11 44.5-47.5, S13 from the windows 61-65, S15 74.5-78.
+- 2.4 (WP11): the PA line "LOCKDOWN. LOCKDOWN." starts at 54.0 s with a 2.2 s slot (the table gives none), inside the Short cut's S14 piece.
+- 2.4 (WP11): the Short cut's pieces are one-for-one spans of the Full timeline: S1 0-3, S6 from "Booo." 26.4-29.9 (S6 has only 2.1 s after it, so the piece runs into S7's insert), S8 31.5-34, S9's end and S10 36.5-43, S11 44.5-47.5, S14 53.8-56.5 (to the 5:47 card's start), S15 from the 11:52 card and S16 58.2-61 (a piece never opens on a card's tail).
 - 2.4 (WP11): S12's one shared shot is through Dumpster A's gap (slot 1's bin, the one whose lid rests ajar); the Tall Man reaches for, and hunches over, the gap of the bin the host's (alone: your) player hides in. Its head comes down hunched (the Quadruped pose cannot be held: a scripted teleport stands it up), so the mask fills the gap's top, not the gap itself.
-- 2.4 (WP11): the opening's set events are data in StoryConfig: the lamp off by day, flickering 34-38.6, dead 38.6-39, on after; the strobe off until the shutter crashes (63.6); the shutter up by day; the two window rows lit by day and dark at 61.8 and 62.8; S14's time-lapse a tint on `dayAmount` (grey, orange, deep blue). The Back Lot's day light (ambient, sun and its direction) is `StoryConfig.Sets.BackLot.day`; no shared day config existed.
+- 2.4 (pace): the bell's twelve tolls in S15 and S16 come 0.3 s apart and each rings 4.6 s, so `BellToll` holds 6 voices on the web: a toll is let go 1.8 s into its ring, about 17 dB under its strike and under the next one's.
+- 2.4 (WP11): the opening's set events are data in StoryConfig: the lamp off by day, flickering 34-38.6, dead 38.6-39, on after; the strobe off until the shutter crashes (on from 55.9; the shutter comes down at 55.7); the shutter up by day; the two window rows lit by day and dark at 54.8 and 55.3; S15's night fall a tint on `dayAmount` (grey, orange, deep blue). The Back Lot's day light (ambient, sun and its direction) is `StoryConfig.Sets.BackLot.day`; no shared day config existed.
 - 2.2 (WP11): clips added for the opening: Reach, HoldUp, Lifted (avatars); the crawler's Folded, Held, Unfold, Wrap; the Monster's Hunch (hunched over a gap, staring). Clip `slow` replaces a rate (S10's unfold: FadeIn `slow` 3.25).
 - 2.5 (WP11): Gus's muffled "Get it— GET IT OFF—" plays at rate 1.0 (panic): at his 0.9 its five words need 2.14 s of its 2.0 s slot.
 - 2.6 / 2.7 (WP11): lines the tables give no time: the Fall's co-op "Your turn." 11.5 s (slot 1.5), its solo whisper "{you}…" 11.0 s (1.5); Sunrise's P2 subtitle 33.0 s with a 3.0 s slot. The Fall's toll is co-op only and its lid creak solo only (events carry minPlayers / maxPlayers).

@@ -1,0 +1,3120 @@
+{
+ "about": "The recordings ROVLOC's sounds are made from (docs/SOUND.md 2), unmodified, each from a pack whose page states CC0. packs: \"<lib>/<pack>\" (kenney = kenney.nl, oga = opengameart.org) -> its page, its author as the page names them (submitter: who uploaded it, when the page names someone else), links: the links its description gives (a work it was derived from, the author's site or game), its licences, the archive(s) the files came out of (name and SHA-256 of the download), and files: name -> SHA-256 and size of the stored file and its path inside the pack (original: the WAV a FLAC was losslessly made from). Written by web/sounds/import.mjs; never edited by hand.",
+ "packs": {
+  "kenney/impact-sounds": {
+   "page": "https://kenney.nl/assets/impact-sounds",
+   "author": "Kenney (kenney.nl)",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "footstep_carpet_000.ogg": {
+     "sha256": "b9524658b52a99a20590f8feefc103088637fd13ea8ec35811aee785e1f2f330",
+     "bytes": 6353,
+     "from": "unpacked/Audio/footstep_carpet_000.ogg"
+    },
+    "footstep_carpet_001.ogg": {
+     "sha256": "9af3c3f76705107339e72036e4053bdca3eaa50ad31c8c929f42ce8d40e5d781",
+     "bytes": 6411,
+     "from": "unpacked/Audio/footstep_carpet_001.ogg"
+    },
+    "footstep_carpet_002.ogg": {
+     "sha256": "9af3c3f76705107339e72036e4053bdca3eaa50ad31c8c929f42ce8d40e5d781",
+     "bytes": 6411,
+     "from": "unpacked/Audio/footstep_carpet_002.ogg"
+    },
+    "footstep_carpet_003.ogg": {
+     "sha256": "4ae7454338d57c7d102145919ae653c7d010eb542797c4f25a1c7470be3a7e4c",
+     "bytes": 6301,
+     "from": "unpacked/Audio/footstep_carpet_003.ogg"
+    },
+    "footstep_concrete_000.ogg": {
+     "sha256": "d7267e183067757c92c169de2a379abea592cfca6b39bb2e8feea15221ad79fe",
+     "bytes": 5808,
+     "from": "unpacked/Audio/footstep_concrete_000.ogg"
+    },
+    "footstep_concrete_001.ogg": {
+     "sha256": "507a75eb19b897087855a3be3cf11a12d7fa37d143ad535eeebe0b8031c7325d",
+     "bytes": 6308,
+     "from": "unpacked/Audio/footstep_concrete_001.ogg"
+    },
+    "footstep_concrete_002.ogg": {
+     "sha256": "b21fa546d74941196b25da8a20b7010abd8c05c4fcf93545d1f344e66a664e13",
+     "bytes": 6255,
+     "from": "unpacked/Audio/footstep_concrete_002.ogg"
+    },
+    "footstep_concrete_003.ogg": {
+     "sha256": "8b513c2f0316324060b9174b8f28df6c2147418c506e6a53b77f18e149a5547b",
+     "bytes": 5805,
+     "from": "unpacked/Audio/footstep_concrete_003.ogg"
+    },
+    "footstep_concrete_004.ogg": {
+     "sha256": "24dd8db2413e5b81ad181e1205c12a1c7801da5f85715d471b92a4b2f632e45e",
+     "bytes": 5912,
+     "from": "unpacked/Audio/footstep_concrete_004.ogg"
+    },
+    "footstep_grass_000.ogg": {
+     "sha256": "9d49497777405d78d7cf7f2888e28277f3a23192300cfd1d79d54876b20f479f",
+     "bytes": 8290,
+     "from": "unpacked/Audio/footstep_grass_000.ogg"
+    },
+    "footstep_grass_001.ogg": {
+     "sha256": "fb28781bd22b2eefdc14077f1adf5c94d7fe9c3a130194633b55f3e0d39d9f04",
+     "bytes": 8313,
+     "from": "unpacked/Audio/footstep_grass_001.ogg"
+    },
+    "footstep_grass_002.ogg": {
+     "sha256": "73a520139f5be716a403bfe9c80e0e94d1e61d8e9de04a354b336392164b53dc",
+     "bytes": 8278,
+     "from": "unpacked/Audio/footstep_grass_002.ogg"
+    },
+    "footstep_grass_003.ogg": {
+     "sha256": "0546e1d8ab2def714425701a18bd34c5ee2794b12e858e5b595aabcf38a34137",
+     "bytes": 8129,
+     "from": "unpacked/Audio/footstep_grass_003.ogg"
+    },
+    "footstep_grass_004.ogg": {
+     "sha256": "086fd4ab3546a507ea5f5c759a9a10e535c95ade13705c238bc0eeffd7d4e8ba",
+     "bytes": 7800,
+     "from": "unpacked/Audio/footstep_grass_004.ogg"
+    },
+    "footstep_snow_000.ogg": {
+     "sha256": "c05fa4a9dc9a7aabc04996466fb589537e49af76de9998d8f9e6270ec92dcef7",
+     "bytes": 7880,
+     "from": "unpacked/Audio/footstep_snow_000.ogg"
+    },
+    "footstep_snow_001.ogg": {
+     "sha256": "980fb9a1c9227aed7995067b0357f373053337f2416316db8ea0438418542fb4",
+     "bytes": 7794,
+     "from": "unpacked/Audio/footstep_snow_001.ogg"
+    },
+    "footstep_snow_002.ogg": {
+     "sha256": "db52bafdc66304f3b999f2c29227826c65993916e630ac2ffbca17d07b263178",
+     "bytes": 7694,
+     "from": "unpacked/Audio/footstep_snow_002.ogg"
+    },
+    "footstep_snow_003.ogg": {
+     "sha256": "68272e3f1cabcabd02d328fd344454d7c04cb58b5a86972fcdd858f845e3d007",
+     "bytes": 7860,
+     "from": "unpacked/Audio/footstep_snow_003.ogg"
+    },
+    "footstep_snow_004.ogg": {
+     "sha256": "7fe9ce5f5732aaa0a50ef02bb1ac162c27f6bd85214e86aaea6e13e7a41dbc00",
+     "bytes": 7630,
+     "from": "unpacked/Audio/footstep_snow_004.ogg"
+    },
+    "footstep_wood_000.ogg": {
+     "sha256": "5f1c252942a220d658121bd9417448cd19649ded9fff2ff15f6e50899373ce8e",
+     "bytes": 5949,
+     "from": "unpacked/Audio/footstep_wood_000.ogg"
+    },
+    "footstep_wood_001.ogg": {
+     "sha256": "e4f68e1c9fd55b4dc8ca89ed2bbab6f200171bc54bdc18aa96b80d8e7336f462",
+     "bytes": 5929,
+     "from": "unpacked/Audio/footstep_wood_001.ogg"
+    },
+    "footstep_wood_002.ogg": {
+     "sha256": "9ff095b05cee5eec40b081defe3f0eef7232bb16d4865ce03b9f6dbab875cfdd",
+     "bytes": 5895,
+     "from": "unpacked/Audio/footstep_wood_002.ogg"
+    },
+    "footstep_wood_003.ogg": {
+     "sha256": "2a68a083daa9eda08fed0ea5da5280dfbe0de226196c576be02f95259dd139d9",
+     "bytes": 6207,
+     "from": "unpacked/Audio/footstep_wood_003.ogg"
+    },
+    "footstep_wood_004.ogg": {
+     "sha256": "b33e0854e2b3f6b6492e25c25ef8f90447a332f7c6bb25dd02edced9581d3441",
+     "bytes": 5799,
+     "from": "unpacked/Audio/footstep_wood_004.ogg"
+    },
+    "impactBell_heavy_000.ogg": {
+     "sha256": "94b8bb5f2d43ab65e4bcc32b28562416e9bc2c51d9fd4be1e333660ee52f977f",
+     "bytes": 13915,
+     "from": "unpacked/Audio/impactBell_heavy_000.ogg"
+    },
+    "impactBell_heavy_001.ogg": {
+     "sha256": "9df61e3ae9a83dc65e5a1fd3ed19d480876f3b22b963a1b9ef6fa293592dcec4",
+     "bytes": 15577,
+     "from": "unpacked/Audio/impactBell_heavy_001.ogg"
+    },
+    "impactGeneric_light_000.ogg": {
+     "sha256": "f0e982611e97512fee5f777986b67e8b435434b601f94992ec044f7e89fb5acb",
+     "bytes": 5827,
+     "from": "unpacked/Audio/impactGeneric_light_000.ogg"
+    },
+    "impactGeneric_light_001.ogg": {
+     "sha256": "c3cd1c073d186ae8fa35788ba94de581f1826e7427a7bb26490b2695fac18efa",
+     "bytes": 5636,
+     "from": "unpacked/Audio/impactGeneric_light_001.ogg"
+    },
+    "impactGeneric_light_002.ogg": {
+     "sha256": "d0bf60905b59ff630ffe01eb0edeeacd2504eaa8fb6523aeef7d2458b78264d3",
+     "bytes": 5795,
+     "from": "unpacked/Audio/impactGeneric_light_002.ogg"
+    },
+    "impactGeneric_light_003.ogg": {
+     "sha256": "0e8896706130f6bc88cdf1f0157aaacdbe88dce86cf0330f9136e44eb1209e81",
+     "bytes": 5792,
+     "from": "unpacked/Audio/impactGeneric_light_003.ogg"
+    },
+    "impactGeneric_light_004.ogg": {
+     "sha256": "f906fa3a37acc4372787b496efcedefa2856045d5ec9456a3bd6c303c0eabb41",
+     "bytes": 5747,
+     "from": "unpacked/Audio/impactGeneric_light_004.ogg"
+    },
+    "impactMetal_heavy_000.ogg": {
+     "sha256": "e07045693e4a2b3d165c424e3dab4c781d9ff8880a386880ac89a51315d7f831",
+     "bytes": 6110,
+     "from": "unpacked/Audio/impactMetal_heavy_000.ogg"
+    },
+    "impactMetal_heavy_001.ogg": {
+     "sha256": "83554049f81f4db9209379e103c30bfa63f65c42189a03f300b045c2c82e23ae",
+     "bytes": 7279,
+     "from": "unpacked/Audio/impactMetal_heavy_001.ogg"
+    },
+    "impactMetal_heavy_002.ogg": {
+     "sha256": "b914c8f1eb7c0f34bb165d7c77f4be0351f6be0660c13c53e65424e262e2c093",
+     "bytes": 5634,
+     "from": "unpacked/Audio/impactMetal_heavy_002.ogg"
+    },
+    "impactMetal_heavy_003.ogg": {
+     "sha256": "b0f2ba4dabde9a87eb9c188a19d31e0c2300fd321adeba08d3b9b8aa011d7037",
+     "bytes": 6209,
+     "from": "unpacked/Audio/impactMetal_heavy_003.ogg"
+    },
+    "impactMetal_heavy_004.ogg": {
+     "sha256": "6d65b463c0555dd5be16b8db6d2cbe23a94e07a4637779b8ad17d0db3e500a87",
+     "bytes": 5788,
+     "from": "unpacked/Audio/impactMetal_heavy_004.ogg"
+    },
+    "impactMetal_light_000.ogg": {
+     "sha256": "33b5e6e37c6e9d54e07bf5a89b12c76e879f40c1ea83cdd82714df1d6f9fec6d",
+     "bytes": 7651,
+     "from": "unpacked/Audio/impactMetal_light_000.ogg"
+    },
+    "impactMetal_light_001.ogg": {
+     "sha256": "fba69c467ddd85da7b1d82e259f936b876d9ba6a3d6f1b24bdd10468e46bfe08",
+     "bytes": 6967,
+     "from": "unpacked/Audio/impactMetal_light_001.ogg"
+    },
+    "impactMetal_light_002.ogg": {
+     "sha256": "25a96f90a9a1f88a531e824e126f0519504625e5635e65a72e4f31611428db29",
+     "bytes": 6804,
+     "from": "unpacked/Audio/impactMetal_light_002.ogg"
+    },
+    "impactMetal_medium_000.ogg": {
+     "sha256": "a96f879fec0864a8938e0c745b6996a6c5679c16a234ce31a01cc995e8401003",
+     "bytes": 7117,
+     "from": "unpacked/Audio/impactMetal_medium_000.ogg"
+    },
+    "impactMetal_medium_001.ogg": {
+     "sha256": "e8a9eaba7c4d27422e4eeb3e6c7100d5d7dc0f83e005efc98c960adcc5265337",
+     "bytes": 6151,
+     "from": "unpacked/Audio/impactMetal_medium_001.ogg"
+    },
+    "impactMetal_medium_002.ogg": {
+     "sha256": "7e89ce2ca0dbda95ea2b78d4b50791cab35c10d20e9f5ccd45dd0b00e99ff548",
+     "bytes": 5857,
+     "from": "unpacked/Audio/impactMetal_medium_002.ogg"
+    },
+    "impactMetal_medium_003.ogg": {
+     "sha256": "2a185e2e57211d02c1bdd33b872d6b6a2fe83e6c14f4e56f426a95e717acf08e",
+     "bytes": 6964,
+     "from": "unpacked/Audio/impactMetal_medium_003.ogg"
+    },
+    "impactMetal_medium_004.ogg": {
+     "sha256": "03e10f800199c7166208e41c11cf4acfac6cc265467f02357da71972bc967295",
+     "bytes": 5744,
+     "from": "unpacked/Audio/impactMetal_medium_004.ogg"
+    },
+    "impactMining_000.ogg": {
+     "sha256": "36b4ea107222d073c67ca64dde26944975609202d5090b2f2021213c1a7e35cd",
+     "bytes": 12035,
+     "from": "unpacked/Audio/impactMining_000.ogg"
+    },
+    "impactMining_001.ogg": {
+     "sha256": "61235a18de3f3d92118235398222dbf51d448f1be70b1c8bc962b10b86f2d9c6",
+     "bytes": 11481,
+     "from": "unpacked/Audio/impactMining_001.ogg"
+    },
+    "impactMining_002.ogg": {
+     "sha256": "059558ec751115ca6b1441e00f0adc837c1a3eeb0a066b109e0fd879fc5d0b0c",
+     "bytes": 11235,
+     "from": "unpacked/Audio/impactMining_002.ogg"
+    },
+    "impactMining_003.ogg": {
+     "sha256": "4237fa2cd80364ad81cd0af44f67d7497f1c5edcc7bdb02cd22be2ba4580c83d",
+     "bytes": 12160,
+     "from": "unpacked/Audio/impactMining_003.ogg"
+    },
+    "impactMining_004.ogg": {
+     "sha256": "8ca3a99d85d845751ad8ce7b40509da58263a62e48cde70e5a30b5ccef4c9a3b",
+     "bytes": 11668,
+     "from": "unpacked/Audio/impactMining_004.ogg"
+    },
+    "impactPlank_medium_000.ogg": {
+     "sha256": "8403cd7a043f0391574c88c55dd205743725b5363d2407f6de145f201690b68f",
+     "bytes": 12016,
+     "from": "unpacked/Audio/impactPlank_medium_000.ogg"
+    },
+    "impactPlank_medium_001.ogg": {
+     "sha256": "d7c304319f8beac616231b62041fa8da74045b62d7155965516efb9b19303df4",
+     "bytes": 12082,
+     "from": "unpacked/Audio/impactPlank_medium_001.ogg"
+    },
+    "impactPlank_medium_002.ogg": {
+     "sha256": "f6a14da45994229676b4f29e6a35f504b5c2ec2b8166fb1a3b1aa004bc6911ef",
+     "bytes": 12313,
+     "from": "unpacked/Audio/impactPlank_medium_002.ogg"
+    },
+    "impactPlank_medium_003.ogg": {
+     "sha256": "0602a7b3eab5f53484f10fe775ee4204e7a2ba9703c886b302e012f7f6fab8de",
+     "bytes": 12138,
+     "from": "unpacked/Audio/impactPlank_medium_003.ogg"
+    },
+    "impactPlank_medium_004.ogg": {
+     "sha256": "6a51318c1c63821ea757622b57fafbf44c16c28129f6d39406a784260d87c447",
+     "bytes": 12084,
+     "from": "unpacked/Audio/impactPlank_medium_004.ogg"
+    },
+    "impactPlate_heavy_000.ogg": {
+     "sha256": "112d4f93ddcc370b410630f971c0f5d991856102da9c76bc5c5540d388e75aaa",
+     "bytes": 10032,
+     "from": "unpacked/Audio/impactPlate_heavy_000.ogg"
+    },
+    "impactPlate_heavy_001.ogg": {
+     "sha256": "142fd6c77f13d25f318265901163f70f8dfe12f87829169a570025be43de7011",
+     "bytes": 8713,
+     "from": "unpacked/Audio/impactPlate_heavy_001.ogg"
+    },
+    "impactPlate_heavy_002.ogg": {
+     "sha256": "b0cab75d1befa32b4cf215d8ee7e1c400a39182e8b105963b8e310f825b198a1",
+     "bytes": 10188,
+     "from": "unpacked/Audio/impactPlate_heavy_002.ogg"
+    },
+    "impactPlate_heavy_003.ogg": {
+     "sha256": "59775f8979a396c8a793b0a1db206d5bdc651eae808d858e9acaee8ebda5bc6d",
+     "bytes": 8490,
+     "from": "unpacked/Audio/impactPlate_heavy_003.ogg"
+    },
+    "impactPlate_heavy_004.ogg": {
+     "sha256": "e31bfec90630155bcc6af541d1d14ae8202c435c52b42e6b6183fdb6ffb248b0",
+     "bytes": 11092,
+     "from": "unpacked/Audio/impactPlate_heavy_004.ogg"
+    },
+    "impactPlate_light_002.ogg": {
+     "sha256": "8ac5869ea434cf0d364872774efe70b2d666a4f02ba35ddfc1e051d336721be8",
+     "bytes": 9932,
+     "from": "unpacked/Audio/impactPlate_light_002.ogg"
+    },
+    "impactPlate_light_004.ogg": {
+     "sha256": "9cb33b0c0cce948313f078b60769d2f8e4075472494fc8f8129aa4a23c951897",
+     "bytes": 11928,
+     "from": "unpacked/Audio/impactPlate_light_004.ogg"
+    },
+    "impactPlate_medium_000.ogg": {
+     "sha256": "b670d30452983369771081319c268475edaaafe782bf4e8d70bd7eef09d8823c",
+     "bytes": 10921,
+     "from": "unpacked/Audio/impactPlate_medium_000.ogg"
+    },
+    "impactPlate_medium_001.ogg": {
+     "sha256": "68ba7701b71ef620f498f3038e832157d71ac8db7ad59424545890b250ceb24e",
+     "bytes": 11491,
+     "from": "unpacked/Audio/impactPlate_medium_001.ogg"
+    },
+    "impactPlate_medium_002.ogg": {
+     "sha256": "68762e1ed49bb59ae6602fad6ce2ebac61958478ddb2668de9106f010cd4b6b0",
+     "bytes": 10250,
+     "from": "unpacked/Audio/impactPlate_medium_002.ogg"
+    },
+    "impactPlate_medium_003.ogg": {
+     "sha256": "964c5fcfb91e7710e2af25c2243c8b7160756b223b0984bacc9eb25bfeea057b",
+     "bytes": 11616,
+     "from": "unpacked/Audio/impactPlate_medium_003.ogg"
+    },
+    "impactPunch_heavy_000.ogg": {
+     "sha256": "b33a8f14068aec24ec69ba85e5e87fdc41228975f6a1a3e44a6e7d6fc3d9f8d8",
+     "bytes": 11617,
+     "from": "unpacked/Audio/impactPunch_heavy_000.ogg"
+    },
+    "impactPunch_heavy_001.ogg": {
+     "sha256": "f92f5cb6ba4ff2766497292ffd90865654317eeca976f5652e0708dbdcdc0dd9",
+     "bytes": 10861,
+     "from": "unpacked/Audio/impactPunch_heavy_001.ogg"
+    },
+    "impactPunch_heavy_002.ogg": {
+     "sha256": "7993dd4c156b9979ad69f17be5ebe31850b16039a3857f8477141be54dfee1b3",
+     "bytes": 9025,
+     "from": "unpacked/Audio/impactPunch_heavy_002.ogg"
+    },
+    "impactPunch_heavy_003.ogg": {
+     "sha256": "4ab53b26f4ea575120dcc1348526c9e0db2afc6af7a442aa0489bdead2ca80b6",
+     "bytes": 10029,
+     "from": "unpacked/Audio/impactPunch_heavy_003.ogg"
+    },
+    "impactPunch_heavy_004.ogg": {
+     "sha256": "f4c0c3eb8ab6517583b8218ed03f28923d1b687379aab4c1d5a6d4c10cf8e500",
+     "bytes": 10452,
+     "from": "unpacked/Audio/impactPunch_heavy_004.ogg"
+    },
+    "impactPunch_medium_000.ogg": {
+     "sha256": "486988aa2d6440ffc4c62a0e8ccf3c23673ba84424bd4723378d451b7255eb5c",
+     "bytes": 8800,
+     "from": "unpacked/Audio/impactPunch_medium_000.ogg"
+    },
+    "impactPunch_medium_001.ogg": {
+     "sha256": "e71d23abcc3f10d9d6bc9615b2a431fff70b12333a5fcdd9964457564ace4349",
+     "bytes": 8701,
+     "from": "unpacked/Audio/impactPunch_medium_001.ogg"
+    },
+    "impactPunch_medium_002.ogg": {
+     "sha256": "6492f9ccbc8d24dcef607bb1b48790b7870961474561f7fe5601e1c73a3018ef",
+     "bytes": 10399,
+     "from": "unpacked/Audio/impactPunch_medium_002.ogg"
+    },
+    "impactPunch_medium_003.ogg": {
+     "sha256": "2d7c719c05999e0532f4384e1018e04cd916db715140bf16dee2dff3f820e908",
+     "bytes": 9509,
+     "from": "unpacked/Audio/impactPunch_medium_003.ogg"
+    },
+    "impactPunch_medium_004.ogg": {
+     "sha256": "4a256878a3afb994ec9a4399336687748e68c7c136872c08c9c797d8c4e2464a",
+     "bytes": 10032,
+     "from": "unpacked/Audio/impactPunch_medium_004.ogg"
+    },
+    "impactSoft_heavy_000.ogg": {
+     "sha256": "49e7ca88743fca974bb8676ea138b751cfd8f9033b5e7af8736c2a215d6edbc1",
+     "bytes": 6570,
+     "from": "unpacked/Audio/impactSoft_heavy_000.ogg"
+    },
+    "impactSoft_heavy_001.ogg": {
+     "sha256": "4d0096364ba9e46119d2ff6df493fdc101bd2e1efae061da5e5f77a53b3fdcb6",
+     "bytes": 6689,
+     "from": "unpacked/Audio/impactSoft_heavy_001.ogg"
+    },
+    "impactSoft_heavy_002.ogg": {
+     "sha256": "d130ae541951243d3f6ed963d0057450a445ffe117fbf9a084d34eb1635cb563",
+     "bytes": 6749,
+     "from": "unpacked/Audio/impactSoft_heavy_002.ogg"
+    },
+    "impactSoft_heavy_003.ogg": {
+     "sha256": "d00286a2dc62ee5cb4d42bf56120e7050a855f69e655fc1294410aadd337eba3",
+     "bytes": 6665,
+     "from": "unpacked/Audio/impactSoft_heavy_003.ogg"
+    },
+    "impactSoft_heavy_004.ogg": {
+     "sha256": "e008f0b6b14f62339c8fe9f9b45cbd6317ba4f66604c4899053b8017020a36f0",
+     "bytes": 6478,
+     "from": "unpacked/Audio/impactSoft_heavy_004.ogg"
+    },
+    "impactSoft_medium_000.ogg": {
+     "sha256": "7d3ba0bb5e60a11b5d3e558c141303dcf494256675fbf753c0d252d2cf0481e3",
+     "bytes": 5351,
+     "from": "unpacked/Audio/impactSoft_medium_000.ogg"
+    },
+    "impactSoft_medium_001.ogg": {
+     "sha256": "7642a4fd43e547afe4f7adfadb3dabb681c0ff512f52c1674bae30a726841faf",
+     "bytes": 5506,
+     "from": "unpacked/Audio/impactSoft_medium_001.ogg"
+    },
+    "impactSoft_medium_002.ogg": {
+     "sha256": "5069e3571a77d7f7aae9ef71d0364aa245fb7d64a7c8cc9956f221d03088c089",
+     "bytes": 5358,
+     "from": "unpacked/Audio/impactSoft_medium_002.ogg"
+    },
+    "impactSoft_medium_003.ogg": {
+     "sha256": "5c4a1f35fde7e14046931da7bc3d1b23736541b7190ba107e08a379c4ca43cd6",
+     "bytes": 5392,
+     "from": "unpacked/Audio/impactSoft_medium_003.ogg"
+    },
+    "impactSoft_medium_004.ogg": {
+     "sha256": "b0a4dea90eed47accf50b768beff1166f2f1486fb139e4d025b2427637624bca",
+     "bytes": 5438,
+     "from": "unpacked/Audio/impactSoft_medium_004.ogg"
+    },
+    "impactTin_medium_001.ogg": {
+     "sha256": "84253095543c094d83cd749f42ecfbc96e356b60385f18a192c18eafb25b3cc6",
+     "bytes": 6603,
+     "from": "unpacked/Audio/impactTin_medium_001.ogg"
+    },
+    "impactTin_medium_002.ogg": {
+     "sha256": "c1d2c4f9910d4529581ae56a9a9a01454c4619fbb7d6da7616221d8ec58cc0c4",
+     "bytes": 6156,
+     "from": "unpacked/Audio/impactTin_medium_002.ogg"
+    },
+    "impactTin_medium_003.ogg": {
+     "sha256": "0d18737d93ba7aa0669f751094cbc1671bbebac4fe207783922938ce75e24334",
+     "bytes": 6541,
+     "from": "unpacked/Audio/impactTin_medium_003.ogg"
+    },
+    "impactTin_medium_004.ogg": {
+     "sha256": "fd53e24efec3d5c1cee5a46fee70f97efd4bd01e53ac5d9b5f3b6719dfe9f5aa",
+     "bytes": 6362,
+     "from": "unpacked/Audio/impactTin_medium_004.ogg"
+    },
+    "impactWood_heavy_000.ogg": {
+     "sha256": "15ff82332f342c30e469215539e1cc57e11b221aa2cf7e11e811d313a9927f3d",
+     "bytes": 6233,
+     "from": "unpacked/Audio/impactWood_heavy_000.ogg"
+    },
+    "impactWood_heavy_001.ogg": {
+     "sha256": "f1b07a53ac10c615fff9ba470511fdeb722b5902e1a8520759fc20ad6f546015",
+     "bytes": 6239,
+     "from": "unpacked/Audio/impactWood_heavy_001.ogg"
+    },
+    "impactWood_heavy_002.ogg": {
+     "sha256": "ce1e06f2a05f2634c645cb72f6a1623e64bc2d92be34917430a61031fb6597d4",
+     "bytes": 6146,
+     "from": "unpacked/Audio/impactWood_heavy_002.ogg"
+    },
+    "impactWood_heavy_003.ogg": {
+     "sha256": "af07511902b309b3f6d8f0e1fafbe93869127fb88099ebdc0aa6a00a98dc3cb0",
+     "bytes": 6181,
+     "from": "unpacked/Audio/impactWood_heavy_003.ogg"
+    },
+    "impactWood_heavy_004.ogg": {
+     "sha256": "2c647ae6bd29c72ae2523f7e16e325d8d331b75cc99ab4f637c48a0e11c34677",
+     "bytes": 6253,
+     "from": "unpacked/Audio/impactWood_heavy_004.ogg"
+    },
+    "impactWood_light_000.ogg": {
+     "sha256": "eb45e35b4bed784d3f120de4afec4b0d6ac09d9e143cce8cfcb7d739e1b1f3c3",
+     "bytes": 6343,
+     "from": "unpacked/Audio/impactWood_light_000.ogg"
+    },
+    "impactWood_light_001.ogg": {
+     "sha256": "4b76bf3ccc8e60d19188f3165b778a7817786faa6887c55d9049bcbeef3b425f",
+     "bytes": 6373,
+     "from": "unpacked/Audio/impactWood_light_001.ogg"
+    },
+    "impactWood_light_002.ogg": {
+     "sha256": "b183cf7a5bd783817e0e4b82af34ac6658fa1927049089dadc8b15c2ecc771dc",
+     "bytes": 6366,
+     "from": "unpacked/Audio/impactWood_light_002.ogg"
+    },
+    "impactWood_light_003.ogg": {
+     "sha256": "cdfbe8af2fe7ff9ee28f337a0a989deee0f327620da456c8413644880e9d0004",
+     "bytes": 6381,
+     "from": "unpacked/Audio/impactWood_light_003.ogg"
+    },
+    "impactWood_light_004.ogg": {
+     "sha256": "e10009f67ddaeb3a59a3e1129cfc1615d84ba60ab578eae07e7092ac223f099c",
+     "bytes": 6395,
+     "from": "unpacked/Audio/impactWood_light_004.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "impact-sounds.zip",
+     "sha256": "029d734af1582474edf3a694d1b0cebc97c1c152f2f39fa34d4c2bafc5de77f8"
+    }
+   ]
+  },
+  "kenney/interface-sounds": {
+   "page": "https://kenney.nl/assets/interface-sounds",
+   "author": "Kenney (kenney.nl)",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "back_001.ogg": {
+     "sha256": "07db973f79f6ae0f2edc34561e7592e24d0577455919fb602cb8ecc0da991dcf",
+     "bytes": 6997,
+     "from": "unpacked/Audio/back_001.ogg"
+    },
+    "back_003.ogg": {
+     "sha256": "ff5e87de1230b1a5f1fa83e5a4ba9d7eb1c07154267ac34b510a17d4caa03cef",
+     "bytes": 7208,
+     "from": "unpacked/Audio/back_003.ogg"
+    },
+    "close_002.ogg": {
+     "sha256": "bc4279d2bb2bf86592473eab6a8eab55e51b54a8619315000dbd780a83b102d8",
+     "bytes": 14752,
+     "from": "unpacked/Audio/close_002.ogg"
+    },
+    "select_002.ogg": {
+     "sha256": "4cc6ac5341b9b2c86fef80c347de028e9ab9f2e037586ac7d9fa59a403a1c012",
+     "bytes": 5463,
+     "from": "unpacked/Audio/select_002.ogg"
+    },
+    "switch_001.ogg": {
+     "sha256": "3b74efad87f1e69dbd1d05c5ad952ab90859b5a3d11da6ec5bd79b4f03b42afa",
+     "bytes": 6753,
+     "from": "unpacked/Audio/switch_001.ogg"
+    },
+    "switch_002.ogg": {
+     "sha256": "6fc395be2ad1f99ce318a5d28f98fb76dbeb676d83a0b28239d8c1fb90736180",
+     "bytes": 7097,
+     "from": "unpacked/Audio/switch_002.ogg"
+    },
+    "switch_005.ogg": {
+     "sha256": "e94dfab6fd6558068ab3ea97e22e4b4f16b83ee440e6abf33ec4c4e9fbe8a70e",
+     "bytes": 7814,
+     "from": "unpacked/Audio/switch_005.ogg"
+    },
+    "switch_007.ogg": {
+     "sha256": "eeaf60c2abc7e1b715e2b032401bcbf6b3753b77f96b238f861a034a75515967",
+     "bytes": 7921,
+     "from": "unpacked/Audio/switch_007.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "interface-sounds.zip",
+     "sha256": "f2193d072726d6758a5f7871b2dcc54dcce0d5c35c6f0a62f92549b327c81232"
+    }
+   ]
+  },
+  "kenney/rpg-audio": {
+   "page": "https://kenney.nl/assets/rpg-audio",
+   "author": "Kenney (kenney.nl)",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "beltHandle1.ogg": {
+     "sha256": "2ef665bd8b65dbe669f4560be38a6d8f04a162e618b15a49e3e71b58e558aab0",
+     "bytes": 10820,
+     "from": "unpacked/Audio/beltHandle1.ogg"
+    },
+    "beltHandle2.ogg": {
+     "sha256": "f3b692d5c83263c25bce779805b212dbab515d18a603c695fc6a1e8650cf5366",
+     "bytes": 15410,
+     "from": "unpacked/Audio/beltHandle2.ogg"
+    },
+    "bookPlace1.ogg": {
+     "sha256": "26f3ce60fbde85b678b0ad7f6624d80535fe540d88232ad1e38e47a96662d977",
+     "bytes": 9901,
+     "from": "unpacked/Audio/bookPlace1.ogg"
+    },
+    "cloth1.ogg": {
+     "sha256": "ddb93a3671233f95da0e0b10367f082f7eb42fa6caaddcf776410aa8833c747d",
+     "bytes": 16508,
+     "from": "unpacked/Audio/cloth1.ogg"
+    },
+    "cloth2.ogg": {
+     "sha256": "8a7451193c38bc05483aec25dd193e163a15d44cf7fff04ac7912573231b0201",
+     "bytes": 11787,
+     "from": "unpacked/Audio/cloth2.ogg"
+    },
+    "cloth3.ogg": {
+     "sha256": "a48632d17a4f1416541d261a32a31612e01267144c407fa3ecab3ff410f0085b",
+     "bytes": 12432,
+     "from": "unpacked/Audio/cloth3.ogg"
+    },
+    "cloth4.ogg": {
+     "sha256": "e7ab9a6c4466dea874196c61f59bf1da05cfe58748f42fadd695d441a154a99b",
+     "bytes": 11043,
+     "from": "unpacked/Audio/cloth4.ogg"
+    },
+    "clothBelt.ogg": {
+     "sha256": "f29560a2aea95bbfeb643e1e8f56ec2b6f7e32f32ce4e140645a36db81de3253",
+     "bytes": 21491,
+     "from": "unpacked/Audio/clothBelt.ogg"
+    },
+    "clothBelt2.ogg": {
+     "sha256": "d545b1d9f20e6188140aaf551a96f1e82fe0d15f7ca066fac8b065e1231e0038",
+     "bytes": 20013,
+     "from": "unpacked/Audio/clothBelt2.ogg"
+    },
+    "creak1.ogg": {
+     "sha256": "8a346186fd297254248cab8e8117060a52a5cf2a84f603153a762108550ea95e",
+     "bytes": 15761,
+     "from": "unpacked/Audio/creak1.ogg"
+    },
+    "creak2.ogg": {
+     "sha256": "8a990afdc03aebb91d528f5385e2f95582dbfa8e2c12c71098ab01be9142294a",
+     "bytes": 19012,
+     "from": "unpacked/Audio/creak2.ogg"
+    },
+    "creak3.ogg": {
+     "sha256": "f9638787f95004b9d2d06f8eff8e99d4e594c21b51947daf562856fbcec905d1",
+     "bytes": 10408,
+     "from": "unpacked/Audio/creak3.ogg"
+    },
+    "doorClose_1.ogg": {
+     "sha256": "834d29c60a8a8bfb50b158cdb6b7dfa8f02812a408a1ee9703d038dfab0b1aeb",
+     "bytes": 18564,
+     "from": "unpacked/Audio/doorClose_1.ogg"
+    },
+    "doorClose_3.ogg": {
+     "sha256": "d0a2540e5e1639bc2fbeef34e76f28e9f9cb8a151736a0ac4c13859994328d0e",
+     "bytes": 20889,
+     "from": "unpacked/Audio/doorClose_3.ogg"
+    },
+    "doorClose_4.ogg": {
+     "sha256": "fd21c0e7a9d0317375d2561590f0770dd3380ee35507d064862cb44d6f71595b",
+     "bytes": 16902,
+     "from": "unpacked/Audio/doorClose_4.ogg"
+    },
+    "doorOpen_1.ogg": {
+     "sha256": "4ab93bab96522d8eb109ff96dc57cb6765deb02448fe14c10472084be5bb2a0b",
+     "bytes": 22848,
+     "from": "unpacked/Audio/doorOpen_1.ogg"
+    },
+    "doorOpen_2.ogg": {
+     "sha256": "68962fb0458c9bac59dec3adefa9849703c7c89d34712de03dd0075d095e79e9",
+     "bytes": 30280,
+     "from": "unpacked/Audio/doorOpen_2.ogg"
+    },
+    "footstep00.ogg": {
+     "sha256": "6fe61ef1fc3bcf0e253bf2eb64759db6cb69e2fe452f4d88cc597ecf78a3d601",
+     "bytes": 9475,
+     "from": "unpacked/Audio/footstep00.ogg"
+    },
+    "footstep01.ogg": {
+     "sha256": "313472dba31fd0c855376069fa368bb5a198c27251cc8398ef464578b7047a4c",
+     "bytes": 9900,
+     "from": "unpacked/Audio/footstep01.ogg"
+    },
+    "footstep02.ogg": {
+     "sha256": "2d9575b7dead6e1217ca113991fc5229e9b6d998ea0726ebbb277e7398ab888f",
+     "bytes": 9528,
+     "from": "unpacked/Audio/footstep02.ogg"
+    },
+    "footstep03.ogg": {
+     "sha256": "a86756b9af9f370455ab47844239bb07fd1bee7a113068c91f0fcd9b72703fae",
+     "bytes": 10559,
+     "from": "unpacked/Audio/footstep03.ogg"
+    },
+    "footstep04.ogg": {
+     "sha256": "fd264d72a7cd622b82abde202f4ed09fa7de95d34c36473ee938ce66cdf39830",
+     "bytes": 11303,
+     "from": "unpacked/Audio/footstep04.ogg"
+    },
+    "footstep05.ogg": {
+     "sha256": "817957e1f95d97fd36870064c41673895575cde17bccb245f50364c86ed10198",
+     "bytes": 10288,
+     "from": "unpacked/Audio/footstep05.ogg"
+    },
+    "footstep06.ogg": {
+     "sha256": "6cabfe7ae95d227a84066c6e17014ac31cc7c89b14ef51d7877e98352d4a64fb",
+     "bytes": 9885,
+     "from": "unpacked/Audio/footstep06.ogg"
+    },
+    "footstep07.ogg": {
+     "sha256": "42924cdbf998d5b3db180a339fd74afc94c570d594a536687e337ef1bdfdb346",
+     "bytes": 10264,
+     "from": "unpacked/Audio/footstep07.ogg"
+    },
+    "footstep08.ogg": {
+     "sha256": "668f14dc1254d0d0f33025e9c7dbcdf2c2f00462ed0e07fb8f099c1d711c1337",
+     "bytes": 9242,
+     "from": "unpacked/Audio/footstep08.ogg"
+    },
+    "footstep09.ogg": {
+     "sha256": "9324ebb9b2c5bcd078dcb523c6518d38a9f34081069d511602c2efb14ce06ce2",
+     "bytes": 9356,
+     "from": "unpacked/Audio/footstep09.ogg"
+    },
+    "handleSmallLeather.ogg": {
+     "sha256": "ae3cbf695aa0a8b98b5a80a835be5a3ccbd5446a24db2235cd4c3cd6fc92ed96",
+     "bytes": 10492,
+     "from": "unpacked/Audio/handleSmallLeather.ogg"
+    },
+    "handleSmallLeather2.ogg": {
+     "sha256": "a66f6db5918ad016c28a9f2768f127a7f39b5fa04481e5a3b4e78ebe2a1c282d",
+     "bytes": 10028,
+     "from": "unpacked/Audio/handleSmallLeather2.ogg"
+    },
+    "metalClick.ogg": {
+     "sha256": "9851a69d0c613e13bceef08060ecc4148f098ef487927cbebe270d642398a3b3",
+     "bytes": 13615,
+     "from": "unpacked/Audio/metalClick.ogg"
+    },
+    "metalLatch.ogg": {
+     "sha256": "ba9ba60b172b3ebc131a940f25793cd2e207aca7af73dc80d637277f060f1708",
+     "bytes": 10208,
+     "from": "unpacked/Audio/metalLatch.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "rpg-audio.zip",
+     "sha256": "6dbeaf8544da958d8f2adcb4a4a4b76c1ade34a05f8ab9edccd327da7375f38b"
+    }
+   ]
+  },
+  "oga/10-impactshield-blocks": {
+   "page": "https://opengameart.org/content/10-impactshield-blocks",
+   "author": "StarNinjas",
+   "links": [
+    "https://www.youtube.com/channel/UCxLPx862bQqxGUOkfZOtvZA",
+    "https://discord.gg/nKUAtJmtKj"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "impact.3.ogg": {
+     "sha256": "0323ef813b34fcf63f0d9f63b6d5318029305e95a44f7ce88cdff17210f83dc9",
+     "bytes": 15263,
+     "from": "unpacked/impact.3.ogg"
+    },
+    "impact.5.ogg": {
+     "sha256": "bac64ab205fe6700d579ba3dbe6424826cb92e580cf655b50da516afd8f1a040",
+     "bytes": 18509,
+     "from": "unpacked/impact.5.ogg"
+    },
+    "impact.9.ogg": {
+     "sha256": "aff85e62c0ab2f0bcb702150ddbb82bcdcdf60b96780547d911275e38a2cbc45",
+     "bytes": 14885,
+     "from": "unpacked/impact.9.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "impact_-_starninjas.zip",
+     "sha256": "4592764795344ae010561b0191b059a0e7ed8c2d2e6c0e96171debaa346cf311"
+    }
+   ]
+  },
+  "oga/100-cc0-metal-and-wood-sfx": {
+   "page": "https://opengameart.org/content/100-cc0-metal-and-wood-sfx",
+   "author": "rubberduck",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "keys_01.ogg": {
+     "sha256": "8bc33b2545a8bd9c1b0e2c47665c6bb9ca981ab972415f66a2d468d0b4921a5a",
+     "bytes": 18061,
+     "from": "unpacked/keys_01.ogg"
+    },
+    "keys_02.ogg": {
+     "sha256": "ce802cc346ef49a71fcae75ec2a45bbf8c7a1cfe365d3d5b6755b902ce4b9523",
+     "bytes": 21599,
+     "from": "unpacked/keys_02.ogg"
+    },
+    "keys_03.ogg": {
+     "sha256": "7feae62edb5f00bff8f798aca958413a058a3ec3c341677235834903291e6fe4",
+     "bytes": 20971,
+     "from": "unpacked/keys_03.ogg"
+    },
+    "keys_04.ogg": {
+     "sha256": "22f7c1475af93208149c1219b1fc7fdfd746a5fed1b95a7fe60b130c0c27ee2d",
+     "bytes": 17603,
+     "from": "unpacked/keys_04.ogg"
+    },
+    "keys_05.ogg": {
+     "sha256": "d31aef529ad99479417b4968fa239cf4841f0ae7eba23933b19a476c7c3d2f07",
+     "bytes": 26933,
+     "from": "unpacked/keys_05.ogg"
+    },
+    "keys_07.ogg": {
+     "sha256": "6c759cbd2dd2d1ea7f11a84d1b40f9e9ac62d49faf260100760e2dc9c77c4a28",
+     "bytes": 30494,
+     "from": "unpacked/keys_07.ogg"
+    },
+    "metal_close_01.ogg": {
+     "sha256": "f504b912782760ff3ec25814db6c27bd2d884a94cda2a94d0ffbec921ab478b6",
+     "bytes": 29099,
+     "from": "unpacked/metal_close_01.ogg"
+    },
+    "metal_falling_01.ogg": {
+     "sha256": "84f68de4298918630f328087486619e4b80892f7655724f9d391af730b37cea0",
+     "bytes": 64014,
+     "from": "unpacked/metal_falling_01.ogg"
+    },
+    "metal_falling_02.ogg": {
+     "sha256": "df317939deadccb4c1b4c83f7b18d549cb0b4d46ed996607d703f1a6122fea6f",
+     "bytes": 40266,
+     "from": "unpacked/metal_falling_02.ogg"
+    },
+    "metal_hit_01.ogg": {
+     "sha256": "f5fd185fce454947c1d91ce6757e219c4d7c6c139d4aa9d419cd7a79c7f6df3b",
+     "bytes": 12422,
+     "from": "unpacked/metal_hit_01.ogg"
+    },
+    "metal_hit_02.ogg": {
+     "sha256": "9074c0828727bd00834cabcaaf5b8cbff2cfad7b45676b95d86c0919e444f8b1",
+     "bytes": 17378,
+     "from": "unpacked/metal_hit_02.ogg"
+    },
+    "metal_hit_03.ogg": {
+     "sha256": "9daf6e7e1fc1871acfb063cb25ce050faab559ee6c42fed84bf18a4067f26a4d",
+     "bytes": 17431,
+     "from": "unpacked/metal_hit_03.ogg"
+    },
+    "metal_hit_04.ogg": {
+     "sha256": "dfc5ebc2cafcf2670f3937882c5040abe5c8855885c886023592d9a0779dde48",
+     "bytes": 15532,
+     "from": "unpacked/metal_hit_04.ogg"
+    },
+    "metal_hit_05.ogg": {
+     "sha256": "04e4d0926afd4bcd7d451884e0a74cea7c9661f56e211aeb8a4ee07bbccf4715",
+     "bytes": 13937,
+     "from": "unpacked/metal_hit_05.ogg"
+    },
+    "metal_open_01.ogg": {
+     "sha256": "b68844e779fd0d4234bd2511d91db1c72cbf10fa9bc0bbd49f3be6bdb311eb6d",
+     "bytes": 47159,
+     "from": "unpacked/metal_open_01.ogg"
+    },
+    "metal_sheet_01.ogg": {
+     "sha256": "114002a50404928b5e257d1d188d1da5f197c251868ef37182e9aba15bca7a72",
+     "bytes": 18428,
+     "from": "unpacked/metal_sheet_01.ogg"
+    },
+    "metal_sheet_02.ogg": {
+     "sha256": "152604697b4a7e36f7b0644bb4ffc9fbb96831c2387313e9e14c732068420606",
+     "bytes": 20927,
+     "from": "unpacked/metal_sheet_02.ogg"
+    },
+    "metal_sheet_03.ogg": {
+     "sha256": "f7938996a1271dcd4e54e0b3fcbbbaa9960ec93dcc745dd4d0dbd7d300b0a9bc",
+     "bytes": 25381,
+     "from": "unpacked/metal_sheet_03.ogg"
+    },
+    "metal_sheet_04.ogg": {
+     "sha256": "4c3a2db2940ce846d745fea57407dd8644e60dc15ecc203dee2d02713ebb2fd4",
+     "bytes": 18350,
+     "from": "unpacked/metal_sheet_04.ogg"
+    },
+    "metal_sheet_05.ogg": {
+     "sha256": "cea32d672ee3bbc4098cdfc9c5984858071b2a8255ff2abd30e4c900822dfd7f",
+     "bytes": 15069,
+     "from": "unpacked/metal_sheet_05.ogg"
+    },
+    "metal_sheet_06.ogg": {
+     "sha256": "d420000a04be527a1cbd6ddf9f9d4a77e7929c8941364b2dc575c1254204a8c2",
+     "bytes": 26995,
+     "from": "unpacked/metal_sheet_06.ogg"
+    },
+    "metal_slam_01.ogg": {
+     "sha256": "a335ccf202578bd740f930f0648a4dcbbbce3ebb2519335be023532578f56176",
+     "bytes": 24256,
+     "from": "unpacked/metal_slam_01.ogg"
+    },
+    "metal_spring_01.ogg": {
+     "sha256": "bc7d84bf0353ef884c62dc0a9ef29e05864d452ac8509a40e125fb9d7507f98f",
+     "bytes": 30914,
+     "from": "unpacked/metal_spring_01.ogg"
+    },
+    "metal_spring_02.ogg": {
+     "sha256": "373fb40c3f895e04623633057160a217005b04816a957094ae3c3d66fe21dca0",
+     "bytes": 27119,
+     "from": "unpacked/metal_spring_02.ogg"
+    },
+    "tools_01.ogg": {
+     "sha256": "a679ab1a1d3fafcddf408e3f39fa55c23f5725ff84d8c9aff6e04511805616cc",
+     "bytes": 23580,
+     "from": "unpacked/tools_01.ogg"
+    },
+    "tools_03.ogg": {
+     "sha256": "2e3e006dc02d0ddd462b7a961e86712922849862379ac4f9524bff876cac92e3",
+     "bytes": 22921,
+     "from": "unpacked/tools_03.ogg"
+    },
+    "tools_05.ogg": {
+     "sha256": "32e51e074cfbf11c1bef75ad827ffd07be6215ced153d6a7eda7954703c193ce",
+     "bytes": 22526,
+     "from": "unpacked/tools_05.ogg"
+    },
+    "tools_07.ogg": {
+     "sha256": "bd0b8f1b7438bf1a2e69cfda7e760ba98ca8dbe37195a1fc8e922fadfc291138",
+     "bytes": 18065,
+     "from": "unpacked/tools_07.ogg"
+    },
+    "wood_breaking_01.ogg": {
+     "sha256": "83a0e17e536a17897d5915e88c9e70d0be06d0a43bb3a38f44314ada46b06a3e",
+     "bytes": 28031,
+     "from": "unpacked/wood_breaking_01.ogg"
+    },
+    "wood_breaking_02.ogg": {
+     "sha256": "042e97ceaa551dd3fcccba0e9bdf1e8145133ac4d2ee0b0cbcd0ee698b7cb229",
+     "bytes": 24126,
+     "from": "unpacked/wood_breaking_02.ogg"
+    },
+    "wood_cracking_01.ogg": {
+     "sha256": "ee00fa26ec72a2bd05adc71a4edf6627db2adedc6f0416ef6788c4790c1d2724",
+     "bytes": 11910,
+     "from": "unpacked/wood_cracking_01.ogg"
+    },
+    "wood_cracking_02.ogg": {
+     "sha256": "128a798ebb92958c9bee5a71c420c3f61f59c241ecaca75f0bbde780bb086abd",
+     "bytes": 15144,
+     "from": "unpacked/wood_cracking_02.ogg"
+    },
+    "wood_cracking_03.ogg": {
+     "sha256": "9d0a3e8ee99fbf4e83472fcc26a48f834a6ac01c60769b9712e93f1e2a7f3116",
+     "bytes": 14747,
+     "from": "unpacked/wood_cracking_03.ogg"
+    },
+    "wood_cracking_04.ogg": {
+     "sha256": "9ac6d1ab3bce4a872bbde85fc1dc73f8243c1cfed95b0d135f3632be8b632e38",
+     "bytes": 13788,
+     "from": "unpacked/wood_cracking_04.ogg"
+    },
+    "wood_falling_05.ogg": {
+     "sha256": "b3ed00cd0113912a28b65f56488ecf66002ab7f3dba68a675eca81684f9b10d5",
+     "bytes": 32966,
+     "from": "unpacked/wood_falling_05.ogg"
+    },
+    "wood_squeak_01.ogg": {
+     "sha256": "c6c90e02993b2e044937f344351b417aeff6841aa4cd683f208d85ececf23392",
+     "bytes": 21785,
+     "from": "unpacked/wood_squeak_01.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "100-CC0-wood-metal-SFX.zip",
+     "sha256": "be6eba63b03409ac0c77787a956b1503a7c186403d04aef9725c52644a4b7878"
+    }
+   ]
+  },
+  "oga/100-cc0-sfx": {
+   "page": "https://opengameart.org/content/100-cc0-sfx",
+   "author": "rubberduck",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "dishes_01.ogg": {
+     "sha256": "9c37a0fd53d0e0c6349df181973a4c7deab40fc37c27e291dfc54830faa1e42c",
+     "bytes": 35324,
+     "from": "unpacked/dishes_01.ogg"
+    },
+    "dishes_03.ogg": {
+     "sha256": "f81cb8ecac99890d166f5700d4bd447539c9988f96c481f4dd1cd651f55017e9",
+     "bytes": 33915,
+     "from": "unpacked/dishes_03.ogg"
+    },
+    "dishes_04.ogg": {
+     "sha256": "d8513896043521f0cecdc624028de7bb56205390cd2e003a2814b01f4dea53fe",
+     "bytes": 27675,
+     "from": "unpacked/dishes_04.ogg"
+    },
+    "door_close_01.ogg": {
+     "sha256": "9c779ae637542e5b9cdfdd62a93e611e116e60205ef68b5b244aaf69fbfaeba8",
+     "bytes": 24225,
+     "from": "unpacked/door_close_01.ogg"
+    },
+    "door_close_02.ogg": {
+     "sha256": "3f4ce43f7a676d8907258908c90e88caecffd4526fce43e40df6726bf67ed91b",
+     "bytes": 38319,
+     "from": "unpacked/door_close_02.ogg"
+    },
+    "door_close_03.ogg": {
+     "sha256": "36f3e2337d7e606c431049f12704f42b9f2582a5b9149b7f682fcd2ee42fe4b4",
+     "bytes": 20918,
+     "from": "unpacked/door_close_03.ogg"
+    },
+    "door_close_04.ogg": {
+     "sha256": "db9247416558f6758aef358342ae5f96eb2be6ad3b9e39a230e7c46174ed733a",
+     "bytes": 24912,
+     "from": "unpacked/door_close_04.ogg"
+    },
+    "glass_03.ogg": {
+     "sha256": "b35c3ac4cc7d665bed2a37f54fce4528c7a048daf46c1e4db0a371092bf333e8",
+     "bytes": 20324,
+     "from": "unpacked/glass_03.ogg"
+    },
+    "glass_04.ogg": {
+     "sha256": "4bd640a2bd50919f78076b4f204a63dabf76915e74e9e6e8457444a40fee737f",
+     "bytes": 37277,
+     "from": "unpacked/glass_04.ogg"
+    },
+    "plop_01.ogg": {
+     "sha256": "bd996051cd5de630329ba4b026d52e9452e34a54c40e87e3fbdede68c88ec185",
+     "bytes": 14327,
+     "from": "unpacked/plop_01.ogg"
+    },
+    "plop_02.ogg": {
+     "sha256": "b4cbe7e0c49ad1caf2dc02dc218897bdf9b5bce2e5d11b3b87861dd5269c1749",
+     "bytes": 17177,
+     "from": "unpacked/plop_02.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "100-CC0-SFX_0.zip",
+     "sha256": "a5c135878c132f1c59cca54e60061c296cd0ac27ad031ca2c41b8cd5cab3c706"
+    }
+   ]
+  },
+  "oga/100-cc0-sfx-2": {
+   "page": "https://opengameart.org/content/100-cc0-sfx-2",
+   "author": "rubberduck",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "sfx100v2_air_02.ogg": {
+     "sha256": "c2d5d5f73b70c155797c1655bdd1850145a47606803e1d9b6dd9c59d35a6909a",
+     "bytes": 18127,
+     "from": "unpacked/sfx100v2_air_02.ogg"
+    },
+    "sfx100v2_loop_machine_01.ogg": {
+     "sha256": "18aa96bda8feb81ffa4158545749a4fddbd419124025832d0014bb0ddfaecc8a",
+     "bytes": 83979,
+     "from": "unpacked/sfx100v2_loop_machine_01.ogg"
+    },
+    "sfx100v2_loop_machine_02.ogg": {
+     "sha256": "098f3c6ea71eef9ccd1667f36e9bd8cfd51857603ff56f649ab742dd75d8fe98",
+     "bytes": 123685,
+     "from": "unpacked/sfx100v2_loop_machine_02.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "sfx_100_v2.zip",
+     "sha256": "0fc61b4494e2e893c0c015ced4877b3f689c7d84a48cb61daecd7ddb52db797b"
+    }
+   ]
+  },
+  "oga/18-random-video-game-sound-effects": {
+   "page": "https://opengameart.org/content/18-random-video-game-sound-effects",
+   "author": "bart",
+   "links": [
+    "http://www.superflashbros.net/as3sfxr/"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "whoosh.wav": {
+     "sha256": "44a12138997f5c5ae2610a25c6080c27abb3ecb4fdc5b41156b1e36a82c05558",
+     "bytes": 35198,
+     "from": "unpacked/sound_effects/whoosh.wav"
+    },
+    "whoosh2.wav": {
+     "sha256": "1d8dfe03ed0e760f3102e7285cb09804301afaabff3959ebff781d236e08ff4d",
+     "bytes": 37568,
+     "from": "unpacked/sound_effects/whoosh2.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "sound_effects.zip",
+     "sha256": "4b5e71b3378a5b46359e0099d0cf52b7e16c56fb7254aabdc9f7592f86b4a8cd"
+    }
+   ]
+  },
+  "oga/202-more-sound-effects": {
+   "page": "https://opengameart.org/content/202-more-sound-effects",
+   "author": "OwlishMedia",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "Cloth_03.wav": {
+     "sha256": "0852458e2e59541e3d759436c7a6cf8931f50ce6218d7cdecf2527422fc4d7bc",
+     "bytes": 164960,
+     "from": "unpacked/Cloth/Cloth_03.wav"
+    },
+    "Phone1.wav": {
+     "sha256": "5c562a456a5ca41137731230fbd2d47f6303f228784c95460416dc2cf1104cb9",
+     "bytes": 115834,
+     "from": "unpacked/Phone/Phone1.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "MoreSounds.zip",
+     "sha256": "9428c1437137d9ea06ba94e13da12488d4c57990a1c32d83db9e7707e69fb3af"
+    }
+   ]
+  },
+  "oga/4-metal-dingsrings": {
+   "page": "https://opengameart.org/content/4-metal-dingsrings",
+   "author": "StarNinjas",
+   "links": [
+    "https://www.youtube.com/channel/UCxLPx862bQqxGUOkfZOtvZA",
+    "https://discord.gg/nKUAtJmtKj"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "ding.1.ogg": {
+     "sha256": "a865b07cd027ca894a4340c53d47706e3d09040d42fb86725e8a085da1226c46",
+     "bytes": 27529,
+     "from": "unpacked/ding.1.ogg"
+    },
+    "ding.2.ogg": {
+     "sha256": "4438e488a40f5827cadbd2538b390cb4f0cf1506e70e810ddade679dee253ac0",
+     "bytes": 21492,
+     "from": "unpacked/ding.2.ogg"
+    },
+    "ding.3.ogg": {
+     "sha256": "f1ad032bdeba2e9b358ce72c3b47aee727030a30b96afbdea8f7fc0c5d4a93b3",
+     "bytes": 19494,
+     "from": "unpacked/ding.3.ogg"
+    },
+    "ding.4.ogg": {
+     "sha256": "8cd7b35ceb7da89dc6a35b407529c5f6c3834a61e69213d04e55edb4fd40d3bf",
+     "bytes": 9273,
+     "from": "unpacked/ding.4.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "ding_-_starninjas.zip",
+     "sha256": "2da62025a7eb90c91a62f68b6b25a7c54e632ccb82bca9446f6eda7110a6ebe2"
+    }
+   ]
+  },
+  "oga/40-cc0-water-splash-slime-sfx": {
+   "page": "https://opengameart.org/content/40-cc0-water-splash-slime-sfx",
+   "author": "rubberduck",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "bubble_02.ogg": {
+     "sha256": "7992a1a4637ea727b177b3edbc086ec280167d67a8fad010bb8fb58893b2e2f2",
+     "bytes": 16017,
+     "from": "unpacked/bubble_02.ogg"
+    },
+    "bubble_03.ogg": {
+     "sha256": "6189106305ab917f1a260b66a74380ed7d6e5be0fb4f5eba3ac93aeb89d9b7ca",
+     "bytes": 34871,
+     "from": "unpacked/bubble_03.ogg"
+    },
+    "loop_bubbles_02.ogg": {
+     "sha256": "e1b572a7a0ed264313b1ed3e66c3ee9839bcc04fd0bea913ff68158208623166",
+     "bytes": 316960,
+     "from": "unpacked/loop_bubbles_02.ogg"
+    },
+    "loop_bubbles_1.ogg": {
+     "sha256": "5ae25a9734a05f60e57a1b1db2fa9afaddf972c1a2927c1e743e720fcdaaccfe",
+     "bytes": 187538,
+     "from": "unpacked/loop_bubbles_1.ogg"
+    },
+    "splash_02.ogg": {
+     "sha256": "eab0bb4bc01386528ba1e6244c6fd8940ee8d3c91ddb9e9cfea186e8560e04de",
+     "bytes": 37895,
+     "from": "unpacked/splash_02.ogg"
+    },
+    "splash_03.ogg": {
+     "sha256": "ae2cff9a47934ece590dda45ff18acf89c5c98cb5497ce71c50b3a315b225a94",
+     "bytes": 32013,
+     "from": "unpacked/splash_03.ogg"
+    },
+    "splash_05.ogg": {
+     "sha256": "7aeaf4ac236629cf71042f56592ffc50e36f552df12c8442600839ce10156ca3",
+     "bytes": 49582,
+     "from": "unpacked/splash_05.ogg"
+    },
+    "splash_06.ogg": {
+     "sha256": "3581e5bee7307cbe6be17715714029259685ba283cb3423938378506b386afb4",
+     "bytes": 25975,
+     "from": "unpacked/splash_06.ogg"
+    },
+    "splash_08.ogg": {
+     "sha256": "fd4c9c8fbfe4ac7348644918a73b1d004b037bac3ef24a1303549b705624828a",
+     "bytes": 36747,
+     "from": "unpacked/splash_08.ogg"
+    },
+    "splash_09.ogg": {
+     "sha256": "123f78e6bef82b5dfb24f0a93f759b309bd12b21d05905ab401756fc588a31dc",
+     "bytes": 14795,
+     "from": "unpacked/splash_09.ogg"
+    },
+    "splash_10.ogg": {
+     "sha256": "69ec352dc6c0ea4691435e692063f903c98e5292579ba71297d4fbdb51c33649",
+     "bytes": 18959,
+     "from": "unpacked/splash_10.ogg"
+    },
+    "splash_12.ogg": {
+     "sha256": "59d425f60046afd9c4ea15e85037bcc4e4a0172b5d267852ab1b0571d06d5604",
+     "bytes": 36732,
+     "from": "unpacked/splash_12.ogg"
+    },
+    "splash_14.ogg": {
+     "sha256": "018984c8e03488b65d4c2dd6e08a9c2115b395ded80cf7209f893e7e664c5d0e",
+     "bytes": 27752,
+     "from": "unpacked/splash_14.ogg"
+    },
+    "splash_15.ogg": {
+     "sha256": "9b0ef483f0d8939199c10ecf26d952fda92637cb7e1f323decb9388a07a79b03",
+     "bytes": 25671,
+     "from": "unpacked/splash_15.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "water-splash-slime-sfx.zip",
+     "sha256": "7cd39abb49d4362a37ba18dc0e454c7dc1d08029d4e5b683149046bc237b2eba"
+    }
+   ]
+  },
+  "oga/58-random-sound-effects": {
+   "page": "https://opengameart.org/content/58-random-sound-effects",
+   "author": "TokyoGeisha",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "Keys_01.wav": {
+     "sha256": "25d3561da0520f33493c4f0cc98e384020cbf65dd36feb092da224d7438e6bb5",
+     "bytes": 51368,
+     "from": "unpacked/Keys_01.wav"
+    },
+    "Keys_02.wav": {
+     "sha256": "18749777e45031c5bee286ba0e6fa5f807d53a1e611acf684683ce8f44cf89c0",
+     "bytes": 87304,
+     "from": "unpacked/Keys_02.wav"
+    },
+    "Keys_03.wav": {
+     "sha256": "a79074b36bcf73fc9ec0be9394c70c237184fc9b0a27c5ffcc64dc5c3d08a233",
+     "bytes": 72392,
+     "from": "unpacked/Keys_03.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "Sound Effects.zip",
+     "sha256": "ab3e404ff218e983f1a7564e39073e254a1052d075cfb667b5206c3ff8a031c0"
+    }
+   ]
+  },
+  "oga/7-ghast-sounds": {
+   "page": "https://opengameart.org/content/7-ghast-sounds",
+   "author": "StarNinjas",
+   "links": [
+    "https://www.youtube.com/channel/UCxLPx862bQqxGUOkfZOtvZA",
+    "https://discord.gg/nKUAtJmtKj"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "ghast_cries.2.ogg": {
+     "sha256": "d57fbbba638dea959b0d9ddb242443cdf6b13d671b23beafc2ddefa6d2ada184",
+     "bytes": 18689,
+     "from": "unpacked/ghast - StarNinjas/ghast_cries.2.ogg"
+    },
+    "ghast_cries.3.ogg": {
+     "sha256": "73d0791866843036088d3973f9f8f1fbbb77ae834d0a57d1a3efcd7f0d9156ae",
+     "bytes": 31322,
+     "from": "unpacked/ghast - StarNinjas/ghast_cries.3.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "ghast_-_starninjas.zip",
+     "sha256": "49d051dd4415a3d6d2ddc8a582b4878ecdd4d7624d1fb53c97910e6dc4f1b10e"
+    }
+   ]
+  },
+  "oga/75-cc0-breaking-falling-hit-sfx": {
+   "page": "https://opengameart.org/content/75-cc0-breaking-falling-hit-sfx",
+   "author": "rubberduck",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "bfh1_falling_04.ogg": {
+     "sha256": "e6b64465a5f48147dfa9b0ce1d25b8401799acfced320c167c9438790d436048",
+     "bytes": 49591,
+     "from": "unpacked/bfh1_falling_04.ogg"
+    },
+    "bfh1_glass_breaking_04.ogg": {
+     "sha256": "b5038806325fa2f336a70cfb72c643d6eaa6e69df084988d4c63d65a0123000c",
+     "bytes": 32779,
+     "from": "unpacked/bfh1_glass_breaking_04.ogg"
+    },
+    "bfh1_glass_breaking_05.ogg": {
+     "sha256": "9e788240282b05f4fd70414b133ab43f9f0c82e36f4879f7eefc9ed062850574",
+     "bytes": 21425,
+     "from": "unpacked/bfh1_glass_breaking_05.ogg"
+    },
+    "bfh1_glass_breaking_06.ogg": {
+     "sha256": "5dad395c21e85d0750be4b1f9c110aeba366ee5da0dadae8c307497e0a4b4c0d",
+     "bytes": 36433,
+     "from": "unpacked/bfh1_glass_breaking_06.ogg"
+    },
+    "bfh1_glass_falling_01.ogg": {
+     "sha256": "444d1d351eada5c0b8849420dd09fcd95024e28fc7423b3f41effd0df1729337",
+     "bytes": 20124,
+     "from": "unpacked/bfh1_glass_falling_01.ogg"
+    },
+    "bfh1_glass_falling_02.ogg": {
+     "sha256": "27d1c4f6ded6aab19ce3c573139c65ed756719d6e200ca08bd387d499e27e6e0",
+     "bytes": 39114,
+     "from": "unpacked/bfh1_glass_falling_02.ogg"
+    },
+    "bfh1_glass_falling_03.ogg": {
+     "sha256": "60311be4cc96c38de5d79377a5506977528f6c5830557ea5454003e558fc53f1",
+     "bytes": 25853,
+     "from": "unpacked/bfh1_glass_falling_03.ogg"
+    },
+    "bfh1_glass_falling_04.ogg": {
+     "sha256": "09c9e3e4b6b3ca5641a820a8709916f7d8ccc66611ac8c2b12f706409a1c2e29",
+     "bytes": 29033,
+     "from": "unpacked/bfh1_glass_falling_04.ogg"
+    },
+    "bfh1_hit_01.ogg": {
+     "sha256": "56c627582671ee7f7910d87dee7a0a77814143e06b430cd10cd9e674ec1990d5",
+     "bytes": 28246,
+     "from": "unpacked/bfh1_hit_01.ogg"
+    },
+    "bfh1_hit_02.ogg": {
+     "sha256": "a3bd154c391e65947dcd700dfa64b927676253a2e1d229e63443f0ef5f955474",
+     "bytes": 30619,
+     "from": "unpacked/bfh1_hit_02.ogg"
+    },
+    "bfh1_hit_06.ogg": {
+     "sha256": "25d4a1eb98a413a15618f5d4ea0dcc3358b7ceae90c609c34c6e56c5ab962c58",
+     "bytes": 16231,
+     "from": "unpacked/bfh1_hit_06.ogg"
+    },
+    "bfh1_hit_12.ogg": {
+     "sha256": "ce5718e387153d651b8b54c92fdd281bd67a8136b3fad87d7d3bd2b403267969",
+     "bytes": 24811,
+     "from": "unpacked/bfh1_hit_12.ogg"
+    },
+    "bfh1_metal_falling_01.ogg": {
+     "sha256": "7071a56807c7ccf3aa4becba09abd08df0f3e1c844b1ce47d6975dcdfe49562d",
+     "bytes": 42021,
+     "from": "unpacked/bfh1_metal_falling_01.ogg"
+    },
+    "bfh1_metal_falling_02.ogg": {
+     "sha256": "e40e73a05a9b1ae7d45e24aa898bf610b32334dae80a5c00abe3e2ce0f7d207a",
+     "bytes": 31167,
+     "from": "unpacked/bfh1_metal_falling_02.ogg"
+    },
+    "bfh1_metal_falling_03.ogg": {
+     "sha256": "968284eeb6838bd6f41ec721a763d12eab5130b541f120aa1887008b0b1c73ae",
+     "bytes": 13766,
+     "from": "unpacked/bfh1_metal_falling_03.ogg"
+    },
+    "bfh1_metal_hit_02.ogg": {
+     "sha256": "e368991507cfb1ad84743fa64289bd8731acd1b8fa256db1612a30cd0c7d2725",
+     "bytes": 23524,
+     "from": "unpacked/bfh1_metal_hit_02.ogg"
+    },
+    "bfh1_metal_hit_03.ogg": {
+     "sha256": "9ae472059557118675f843f5a0a16eea20331d1d1ee2a60a1b4757580579f00f",
+     "bytes": 16778,
+     "from": "unpacked/bfh1_metal_hit_03.ogg"
+    },
+    "bfh1_metal_hit_06.ogg": {
+     "sha256": "f571aff29262c66954900922cd70d1de25e0acd924c5d71c4536137d3659993b",
+     "bytes": 18001,
+     "from": "unpacked/bfh1_metal_hit_06.ogg"
+    },
+    "bfh1_rock_breaking_02.ogg": {
+     "sha256": "3e06b794511f693b6aaca5eee1d47491bab74d814746a68de6c8bf4eec744ccc",
+     "bytes": 45809,
+     "from": "unpacked/bfh1_rock_breaking_02.ogg"
+    },
+    "bfh1_rock_falling_02.ogg": {
+     "sha256": "c8421825c5e08e4bf4ed290232963aeffcf4e179c28d33a6714c5fb9704f799f",
+     "bytes": 18412,
+     "from": "unpacked/bfh1_rock_falling_02.ogg"
+    },
+    "bfh1_rock_falling_06.ogg": {
+     "sha256": "73142e5b167bc8c3660f13e1282926139b52647af0305d0934f7c96aef7d8e75",
+     "bytes": 12935,
+     "from": "unpacked/bfh1_rock_falling_06.ogg"
+    },
+    "bfh1_rock_falling_08.ogg": {
+     "sha256": "bb0f1bc082d00921eb08418eb7db4ce20ecadc4b0e4b58421e51f12b9dcbc2cb",
+     "bytes": 19708,
+     "from": "unpacked/bfh1_rock_falling_08.ogg"
+    },
+    "bfh1_wood_breaking_01.ogg": {
+     "sha256": "24e84b95c0fc94a1a5fb9e04edcdabbbfed987e787fcbd9c55c4651ced5c37f8",
+     "bytes": 13577,
+     "from": "unpacked/bfh1_wood_breaking_01.ogg"
+    },
+    "bfh1_wood_breaking_03.ogg": {
+     "sha256": "0d230f703fe558b61e93cbd4d7cc6ebb5b73e752bcdd13f5c4347c013b405ca7",
+     "bytes": 17119,
+     "from": "unpacked/bfh1_wood_breaking_03.ogg"
+    },
+    "bfh1_wood_falling_01.ogg": {
+     "sha256": "36e5d8905268c641c3d391c10f0297b9c46ba30d3b551e24d59eafcf33643a10",
+     "bytes": 33543,
+     "from": "unpacked/bfh1_wood_falling_01.ogg"
+    },
+    "bfh1_wood_falling_02.ogg": {
+     "sha256": "8f72d144e2cd9058ee8e81ff6f27f936e5d33008b3580d6b6c02d58fa4268a59",
+     "bytes": 19812,
+     "from": "unpacked/bfh1_wood_falling_02.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "sfx_breaking_and_falling.zip",
+     "sha256": "e6ee04d91c5f4d30cfda1260d2c9d1faf96fda36319287215fbd07bcb1a80451"
+    }
+   ]
+  },
+  "oga/80-cc0-creature-sfx": {
+   "page": "https://opengameart.org/content/80-cc0-creature-sfx",
+   "author": "rubberduck",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "breath.ogg": {
+     "sha256": "d6ecfd092c261059701fe81581957ce6e67c1737978449bbd98ec6d4f30abb7f",
+     "bytes": 28273,
+     "from": "unpacked/breath.ogg"
+    },
+    "burble_01.ogg": {
+     "sha256": "f4c27a1839ef9e82d29e1bb175c0ebf73c65b6839b2914108d0c219fc1f42445",
+     "bytes": 48655,
+     "from": "unpacked/burble_01.ogg"
+    },
+    "burble_02.ogg": {
+     "sha256": "7cc51b6cf28a5d0ac13f34e54cb18ebb8d2b66aa144281d321d0af826f56a85b",
+     "bytes": 43100,
+     "from": "unpacked/burble_02.ogg"
+    },
+    "grunt_01.ogg": {
+     "sha256": "73ee84f2bb3e1b371a72dd66a09f150c98c9000bcb735c3bdd7f607e59385206",
+     "bytes": 24912,
+     "from": "unpacked/grunt_01.ogg"
+    },
+    "grunt_03.ogg": {
+     "sha256": "f2a23b32fcf9cbdabf059339d346ce7eead018fda778067827e71b96936989f1",
+     "bytes": 26099,
+     "from": "unpacked/grunt_03.ogg"
+    },
+    "grunt_04.ogg": {
+     "sha256": "4fbc2b361ce055a3b94d43489108582313dd999e5761d4e69d59c9c7abcec295",
+     "bytes": 25479,
+     "from": "unpacked/grunt_04.ogg"
+    },
+    "grunt_05.ogg": {
+     "sha256": "164059a171a8a7d8f1a2fcfdb195a9d50da3ab67bed0b52f4c2c3409fe5df049",
+     "bytes": 24809,
+     "from": "unpacked/grunt_05.ogg"
+    },
+    "nose.ogg": {
+     "sha256": "c54f2937d705bda30a9618531d62752356ba9e1cae258687131e1582b36e53ce",
+     "bytes": 17972,
+     "from": "unpacked/nose.ogg"
+    },
+    "roar_02.ogg": {
+     "sha256": "ceb532ee0fe775d6f86a821099b75f1790ab8022b963cb837c8c1fa4fffee5c2",
+     "bytes": 28522,
+     "from": "unpacked/roar_02.ogg"
+    },
+    "scream_01.ogg": {
+     "sha256": "54da7bba4c4272b0b77dc3fe26a91d0a26d9280797fecb8197d716b47745eb85",
+     "bytes": 38406,
+     "from": "unpacked/scream_01.ogg"
+    },
+    "scream_02.ogg": {
+     "sha256": "73aedfbcc7e5b3004507d5a79e95ae53954026036bf8d6f65aa0a4ca298dd372",
+     "bytes": 37049,
+     "from": "unpacked/scream_02.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "80-CC0-creature-SFX_0.zip",
+     "sha256": "5d4002eea42f278e76543bb36e8ddd2cb978588a13271984191d8228f5d26768"
+    }
+   ]
+  },
+  "oga/80-cc0-creture-sfx-2": {
+   "page": "https://opengameart.org/content/80-cc0-creture-sfx-2",
+   "author": "rubberduck",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "attack_02.ogg": {
+     "sha256": "a309384ee58556a16f0ca7990ae1521dfd4cd71fdaad2fc64e28258ad278a493",
+     "bytes": 41908,
+     "from": "unpacked/attack_02.ogg"
+    },
+    "attack_03.ogg": {
+     "sha256": "53ef2f7e7c6660b35bc5cdec20fedcaac614c796abdce05c0c2599ad54af88fa",
+     "bytes": 27446,
+     "from": "unpacked/attack_03.ogg"
+    },
+    "breath_02.ogg": {
+     "sha256": "5b32729394cc36667bb8052508115941f21d85804f84ecda4c492d19883cd15e",
+     "bytes": 15575,
+     "from": "unpacked/breath_02.ogg"
+    },
+    "roar_04.ogg": {
+     "sha256": "4bd8be77b058410e1af9a3a5aa5c62b8ec9ac214672be4ab84180e156e8c0a20",
+     "bytes": 30871,
+     "from": "unpacked/roar_04.ogg"
+    },
+    "roar_05.ogg": {
+     "sha256": "26614607c1683d8bbb82993f285a0d11b6e5ca1ebd5176e6ea552c3e833479f1",
+     "bytes": 53819,
+     "from": "unpacked/roar_05.ogg"
+    },
+    "roar_06.ogg": {
+     "sha256": "87c2c2658788e287c3f05f81605c7f343b56fc8197fe251bca0811c7520eeb7c",
+     "bytes": 25550,
+     "from": "unpacked/roar_06.ogg"
+    },
+    "snore_02.ogg": {
+     "sha256": "e698d3da0896172ec75034ec9886e40f9ed9519780119e31e4031b8fc9948c29",
+     "bytes": 41849,
+     "from": "unpacked/snore_02.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "80-CC0-creature-sfx-2.zip",
+     "sha256": "6d251aeaaaa9c2fffed8fc2f64bab3104725ceabf9259a8441994e7a20cfe22f"
+    }
+   ]
+  },
+  "oga/80-cc0-rpg-sfx": {
+   "page": "https://opengameart.org/content/80-cc0-rpg-sfx",
+   "author": "rubberduck",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "chain_01.ogg": {
+     "sha256": "d376caf0f61384b1d2e0b447f64f06be56d0ee0622ba70dd01cfdd78b3a10687",
+     "bytes": 23007,
+     "from": "unpacked/chain_01.ogg"
+    },
+    "chain_02.ogg": {
+     "sha256": "dd3b753e54fd4e6ed94c36231d1950fafd681ff4a93462cfa3980099a6454ecb",
+     "bytes": 18783,
+     "from": "unpacked/chain_02.ogg"
+    },
+    "lock_01.ogg": {
+     "sha256": "e828ad2a936e34a0212f3309c5ac706c0ded412b9b383a87f10bcfa1d1445271",
+     "bytes": 17452,
+     "from": "unpacked/lock_01.ogg"
+    },
+    "lock_02.ogg": {
+     "sha256": "e183464a4e28c1764c70e980465faaf6ea8c33c8ea4a2b636a3ae2c58e8740f5",
+     "bytes": 15553,
+     "from": "unpacked/lock_02.ogg"
+    },
+    "lock_03.ogg": {
+     "sha256": "5fdb74f95dc42dfd06eb89c548c2ab6a3c008a3c9ce3badcdb0e51409e0a4f44",
+     "bytes": 18168,
+     "from": "unpacked/lock_03.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "80-CC0-RPG-SFX_0.zip",
+     "sha256": "1c2f06ff4e8563b5b8b745b23cf213c1474142a69bb82bd8f5e10d9b3f7a7bbd"
+    }
+   ]
+  },
+  "oga/air-whoosh": {
+   "page": "https://opengameart.org/content/air-whoosh",
+   "author": "pyranostudios",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "whoosh2_0.wav": {
+     "sha256": "d3fbff5bb78b289af16b2dfa29083f07ef83b0cbaff4514c48dfda16d082b468",
+     "bytes": 925662,
+     "from": "whoosh2_0.wav"
+    }
+   }
+  },
+  "oga/alarm-2": {
+   "page": "https://opengameart.org/content/alarm-2",
+   "author": "Frenchyboy",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "alarm_0.wav": {
+     "sha256": "bd4c4654688af6e1f8f1c6bad9f9e97e62a0422104d849cbb6192f3e38a5e2bc",
+     "bytes": 384044,
+     "from": "alarm_0.wav"
+    }
+   }
+  },
+  "oga/ambient-horror": {
+   "page": "https://opengameart.org/content/ambient-horror",
+   "author": "techiew",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "ambient_horror_0.ogg": {
+     "sha256": "70943868cd7df14310bf0613da1c0c8858e0fb82ce554cb45bfd5a268d6f44d4",
+     "bytes": 776232,
+     "from": "ambient_horror_0.ogg"
+    }
+   }
+  },
+  "oga/bell-arpeggio-24": {
+   "page": "https://opengameart.org/content/bell-arpeggio-24",
+   "author": "cynicmusic",
+   "links": [
+    "http://pixelsphere.org/"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "24.wav": {
+     "sha256": "130ccfeca4cea5edd7998fa1124a28ec0d03e3e3a985e745118e67bde47d90f1",
+     "bytes": 454512,
+     "from": "24.wav"
+    }
+   }
+  },
+  "oga/big-scary-troll-sounds": {
+   "page": "https://opengameart.org/content/big-scary-troll-sounds",
+   "author": "Darsycho",
+   "links": [
+    "https://forum.zdoom.org/viewtopic.php?f=19&t=34872"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "troll-idle-noises_0.ogg": {
+     "sha256": "67d1e35bca545c9c17618333265deb90ed506d14e5b45ea730ef012695bd682a",
+     "bytes": 291562,
+     "from": "troll-idle-noises_0.ogg"
+    }
+   }
+  },
+  "oga/breathing-tired": {
+   "page": "https://opengameart.org/content/breathing-tired",
+   "author": "mikeask",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "breathing tired.wav": {
+     "sha256": "08d9c9e15426f0cd889b63867a3bc68bafd985e8d39fd57f805d4372b23aeeca",
+     "bytes": 559292,
+     "from": "breathing tired.wav"
+    }
+   }
+  },
+  "oga/cave-in": {
+   "page": "https://opengameart.org/content/cave-in",
+   "author": "StarNinjas",
+   "links": [
+    "https://www.youtube.com/channel/UCxLPx862bQqxGUOkfZOtvZA",
+    "https://discord.gg/nKUAtJmtKj"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "cave_in_-_starninjas_0.ogg": {
+     "sha256": "345472d1ebf1517018463b9e314b9d99290881d587e543e7bb08219eb3a007b8",
+     "bytes": 33161,
+     "from": "cave_in_-_starninjas_0.ogg"
+    }
+   }
+  },
+  "oga/cc0-deep-monster-roar": {
+   "page": "https://opengameart.org/content/cc0-deep-monster-roar",
+   "author": "trazzz123",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "monster_roar.flac": {
+     "sha256": "b98e028152f20494d181418a49c2b25ad9bb4289ea7e0b882e6737b2939c0c59",
+     "bytes": 250930,
+     "from": "monster_roar.wav",
+     "original": {
+      "name": "monster_roar.wav",
+      "sha256": "040d2841619c732098c30a638731317d13d7647e5ce1a75a3246219ce4b162ff",
+      "bytes": 1273958
+     }
+    }
+   }
+  },
+  "oga/chain-winch-sounds": {
+   "page": "https://opengameart.org/content/chain-winch-sounds",
+   "author": "bart",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "winch - Marker #2.wav": {
+     "sha256": "68e4bd28997874cc088c043cfb3b365523be6d669253ca63f2e5de2215e1713e",
+     "bytes": 637464,
+     "from": "unpacked/winch - Marker #2.wav"
+    },
+    "winch - Marker #3.wav": {
+     "sha256": "68e4bd28997874cc088c043cfb3b365523be6d669253ca63f2e5de2215e1713e",
+     "bytes": 637464,
+     "from": "unpacked/winch - Marker #3.wav"
+    },
+    "winch - Marker #5.wav": {
+     "sha256": "081144e8801e1bf9516813bcdc6bda488338b9042fd71bf2f3f75c5581baa667",
+     "bytes": 645012,
+     "from": "unpacked/winch - Marker #5.wav"
+    },
+    "winch - Marker #6.wav": {
+     "sha256": "91125d5fb316dc195d8dd59e1dab973d9d54e360cc2779ff9273f30819991818",
+     "bytes": 687228,
+     "from": "unpacked/winch - Marker #6.wav"
+    },
+    "winch - Marker #7.wav": {
+     "sha256": "1c7ae30f8fbf0bde91e21abd474589ad5658ea9a62d0e8f907298c637298bef6",
+     "bytes": 645012,
+     "from": "unpacked/winch - Marker #7.wav"
+    },
+    "winch - Marker #8.wav": {
+     "sha256": "c4b71e1fc97c878f01144c6ac99353eee54f6d19e7c1c6c484f1025282928411",
+     "bytes": 1262860,
+     "from": "unpacked/winch - Marker #8.wav"
+    },
+    "winch - Marker #9.wav": {
+     "sha256": "85277a66cf95ba97a13c289226dcac14e5c7c824e7a5b1108fae86818dde6bb6",
+     "bytes": 1353748,
+     "from": "unpacked/winch - Marker #9.wav"
+    },
+    "winch - Marker 2.wav": {
+     "sha256": "5d4479f9759a6fc8651778deda5314d3ec1106c768c4aa0137433cf072a01182",
+     "bytes": 1285906,
+     "from": "unpacked/winch - Marker 2.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "winch.zip",
+     "sha256": "276c46982e4ea7bd1cc1b90e2bcef8b460c967788be7668b83b1a235d198368a"
+    }
+   ]
+  },
+  "oga/creaky-door-hinge-spooky": {
+   "page": "https://opengameart.org/content/creaky-door-hinge-spooky",
+   "author": "w.forster.1@gmail.com",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "creaky_door_hinge.wav": {
+     "sha256": "8322ae01dd97c6cbb96fe3536a38ba736205b0bf3e6aa3c714236bf9fdb1db81",
+     "bytes": 761900,
+     "from": "creaky_door_hinge.wav"
+    }
+   }
+  },
+  "oga/crowd-shoutingspeaking-ambience": {
+   "page": "https://opengameart.org/content/crowd-shoutingspeaking-ambience",
+   "author": "StarNinjas",
+   "links": [
+    "https://www.youtube.com/channel/UCxLPx862bQqxGUOkfZOtvZA",
+    "https://discord.gg/nKUAtJmtKj"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "crowd_shouting_0.ogg": {
+     "sha256": "a2c23a64c127c77717cbe4abb21f138bac9d9aa6cb3cc89d62bab5d0d96dd7ca",
+     "bytes": 335526,
+     "from": "crowd_shouting_0.ogg"
+    }
+   }
+  },
+  "oga/dark-ambiences": {
+   "page": "https://opengameart.org/content/dark-ambiences",
+   "author": "Ogrebane",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "ambience-1.flac": {
+     "sha256": "db551d7af9f0bdfe71863c219b212d1ce9c795f5d1f170c9b7298765616a0d88",
+     "bytes": 593163,
+     "from": "unpacked/dark_ambiences/ambience-1.wav",
+     "original": {
+      "name": "ambience-1.wav",
+      "sha256": "23c9438b65835f8e493a00de244387be33e0303e774e15022692cabb1b707df0",
+      "bytes": 1226118
+     }
+    },
+    "ambience-2.wav": {
+     "sha256": "b03d50aa11df1fd7d859a5776299d73f9d9444565ac6501720d0035df0ab3424",
+     "bytes": 480958,
+     "from": "unpacked/dark_ambiences/ambience-2.wav"
+    },
+    "ambience-3.wav": {
+     "sha256": "ceefb1041a70357f8d5a9d4a22c200992c38e34468d5717663402435290d8aa6",
+     "bytes": 447842,
+     "from": "unpacked/dark_ambiences/ambience-3.wav"
+    },
+    "ambience-4.wav": {
+     "sha256": "c5aa2e32b681654dbf510ee4a5e85c5a7968a9a8d3c329cf78108542381d2d2d",
+     "bytes": 370564,
+     "from": "unpacked/dark_ambiences/ambience-4.wav"
+    },
+    "ambience-5.wav": {
+     "sha256": "2a07090eb244e42445f7286dc68811bcb79d2f236825f770058b02669a11828f",
+     "bytes": 911496,
+     "from": "unpacked/dark_ambiences/ambience-5.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "dark_ambiences.zip",
+     "sha256": "4e95c28a468cbde21d6300aa0bb9a5aedbee01b393e712418c49d6b4b8a758bb"
+    }
+   ]
+  },
+  "oga/dialog-vocal-samples": {
+   "page": "https://opengameart.org/content/dialog-vocal-samples",
+   "author": "MirceaKitsune",
+   "links": [
+    "http://rpg.hamsterrepublic.com/ohrrpgce"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "whisper_1.ogg": {
+     "sha256": "ebd92816cf33f38548cee5b5dd37e26e55eab62a05916684a50b6b33995bc7c6",
+     "bytes": 6867,
+     "from": "unpacked/whisper_1.ogg"
+    },
+    "whisper_2.ogg": {
+     "sha256": "fd2b55d0340f65bb9f9b600e2115a2f0264201b8dfaa2b2baf9c04b76333beef",
+     "bytes": 6417,
+     "from": "unpacked/whisper_2.ogg"
+    },
+    "whisper_3.ogg": {
+     "sha256": "d2e335483c910a7ea974155907c3f8ed8ae5cd33082cf119c2f03b83da2e1903",
+     "bytes": 6251,
+     "from": "unpacked/whisper_3.ogg"
+    },
+    "whisper_4.ogg": {
+     "sha256": "e6c1afcb7d1958531176624f871273301440d4a57accd6e43f2b8671c7496bc4",
+     "bytes": 4960,
+     "from": "unpacked/whisper_4.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "vocal_samples.zip",
+     "sha256": "89ec34705f4e583dc6f9d98f99b39ed385ba60cd037a9a0531b829fbc811942f"
+    }
+   ]
+  },
+  "oga/different-steps-on-wood-stone-leaves-gravel-and-mud": {
+   "page": "https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud",
+   "author": "TinyWorlds",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "gravel.ogg": {
+     "sha256": "34e6057ec1581b5cb8802e4942952b00b1dac235bfcb0ed8cff0ceb15a3ebbbf",
+     "bytes": 21087,
+     "from": "unpacked/gravel.ogg"
+    },
+    "leaves01.ogg": {
+     "sha256": "93b3bbcd06380eec54335d1869924db6ff2cc6c1cb103502133d78484c5ca836",
+     "bytes": 11761,
+     "from": "unpacked/leaves01.ogg"
+    },
+    "leaves02.ogg": {
+     "sha256": "477c35bfd3f740915b24f93cb66364523217692d2749057f9b8be162eb8209f4",
+     "bytes": 11823,
+     "from": "unpacked/leaves02.ogg"
+    },
+    "mud02.ogg": {
+     "sha256": "354682c2cb340cd787d892d31beb87c45dda94ca6e8363b16828ab2f1d129b82",
+     "bytes": 9925,
+     "from": "unpacked/mud02.ogg"
+    },
+    "stone01.ogg": {
+     "sha256": "99b04d784eb6b531777a64fb0e319f104eb7cdd6b625c1fac68f511605930a2c",
+     "bytes": 9329,
+     "from": "unpacked/stone01.ogg"
+    },
+    "wood01.ogg": {
+     "sha256": "482d97c5e1e6eb7b239be46f25d093ebebb94cefb56eedb04807b6a5dc68e972",
+     "bytes": 8569,
+     "from": "unpacked/wood01.ogg"
+    },
+    "wood02.ogg": {
+     "sha256": "588bb121bd3db005b4c2a5b55c1cf39b8ec620f820c2123ac1f62748d132dac2",
+     "bytes": 8672,
+     "from": "unpacked/wood02.ogg"
+    },
+    "wood03.ogg": {
+     "sha256": "9b677c284389163f132b94e1323ea713a4c7ac9d5fba849cf7cbf8b53a1627e2",
+     "bytes": 9832,
+     "from": "unpacked/wood03.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "[kdd]DifferentSteps_0.zip",
+     "sha256": "987d072b7deaa65177e005ddd8185f2351be7c9a76cd7575dea560549c39b33b"
+    }
+   ]
+  },
+  "oga/door-lock-sounds": {
+   "page": "https://opengameart.org/content/door-lock-sounds",
+   "author": "Cough-E",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "DoorLock.wav": {
+     "sha256": "cde18b4c8c31518b3dcc3908f2034fe36bb4c3fad7fdc6751f68eb421594e4e9",
+     "bytes": 55066,
+     "from": "unpacked/DoorLockSounds/DoorLock.wav"
+    },
+    "LockedDoorHandleJiggle.wav": {
+     "sha256": "11241599a6a6d47b706043449cc654daf3a26eedd9f606786f0f1a5fb935e669",
+     "bytes": 179482,
+     "from": "unpacked/DoorLockSounds/LockedDoorHandleJiggle.wav"
+    },
+    "UnlockDoor.wav": {
+     "sha256": "d4a542f0d84f08b7093839608158d74225b63771475283e7fa34f1eef0a3a19a",
+     "bytes": 109210,
+     "from": "unpacked/DoorLockSounds/UnlockDoor.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "DoorLockSounds.zip",
+     "sha256": "c23d31653224d70edfcd086d82f2c3d463756b5a66f576e63ed5b819058ea443"
+    }
+   ]
+  },
+  "oga/dragon-flap-0": {
+   "page": "https://opengameart.org/content/dragon-flap-0",
+   "author": "VishwaJai",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "dragonflap.wav": {
+     "sha256": "0ace0026de57aa592558e8f40970edc640c53a68cc1cf1a8f45676b502339605",
+     "bytes": 833482,
+     "from": "dragonflap.wav"
+    }
+   }
+  },
+  "oga/dripping-water-loop": {
+   "page": "https://opengameart.org/content/dripping-water-loop",
+   "author": "Independent.nu",
+   "submitter": "qubodup",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "atmosbasement.mp3_.flac": {
+     "sha256": "247c0ef181c8ba8d190a6194f6ea02d9defb23b70194c52c7f9187b5b7b1cc61",
+     "bytes": 1309638,
+     "from": "atmosbasement.mp3_.flac"
+    }
+   }
+  },
+  "oga/electricity-game-sound-pack": {
+   "page": "https://opengameart.org/content/electricity-game-sound-pack",
+   "author": "faxcorp",
+   "links": [
+    "https://f4x.gumroad.com/l/ElectricitySounds",
+    "https://store.steampowered.com/app/1819240/Short_Circuit/"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "charge.wav": {
+     "sha256": "397e4a4da793558cc541d9fce3da5791cb21dddadf31c02442e67f3a58cbe1c8",
+     "bytes": 729164,
+     "from": "charge.wav"
+    },
+    "crackleelectricityloop.wav": {
+     "sha256": "c872ff9719f9bdf503e5d87fe9b1b128255fe2f9506e3a380ff022b83e0b7be8",
+     "bytes": 88300,
+     "from": "crackleelectricityloop.wav"
+    },
+    "powerup.wav": {
+     "sha256": "83995e33a847656ec6120e111de27293be962437ff79b7d85ca061ba374bfb4c",
+     "bytes": 372180,
+     "from": "powerup.wav"
+    },
+    "shieldloop.wav": {
+     "sha256": "bb5fdba1fdbbd44a00143af7da8b86bf9581c3f2a8e22445c8601f51539dc801",
+     "bytes": 90224,
+     "from": "shieldloop.wav"
+    },
+    "snaploop.wav": {
+     "sha256": "350f26e58c47d2f061b0aa6681c245357258cb3084bcb0c48d34ddc8fca28cde",
+     "bytes": 435524,
+     "from": "snaploop.wav"
+    }
+   }
+  },
+  "oga/electricity-sound-effects-0": {
+   "page": "https://opengameart.org/content/electricity-sound-effects-0",
+   "author": "BMacZero",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "spark.wav": {
+     "sha256": "9a3d987bdf7f405570aa015f6da42596ce84c5073c18c0561be7cd3ae401bc97",
+     "bytes": 29740,
+     "from": "spark.wav"
+    }
+   }
+  },
+  "oga/explosion-somewhere-far": {
+   "page": "https://opengameart.org/content/explosion-somewhere-far",
+   "author": "pauliuw",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "explosion_somewhere_far.mp3": {
+     "sha256": "43ad87bd003fb82d1b5b822e4689a6529e61ffe9842b0e9e390ba6fb3a168a9c",
+     "bytes": 122304,
+     "from": "explosion_somewhere_far.mp3"
+    }
+   }
+  },
+  "oga/fantasy-sound-effects-tinysized-sfx": {
+   "page": "https://opengameart.org/content/fantasy-sound-effects-tinysized-sfx",
+   "author": "Vehicle",
+   "links": [
+    "http://www.vehiclemusic.eu"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "bottle-plastic-lid-unscrew-01.wav": {
+     "sha256": "6147270674f9fe3597daa6cefeb4136c06df79a29317bfe857fa63894eb08083",
+     "bytes": 221860,
+     "from": "unpacked/sfx-cc0/bottle-plastic-lid-unscrew-01.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "tinysized.zip",
+     "sha256": "7f00e2b1dae15e68db0e1d6096767f03755e9e7c247128afc3e935e63774d7db"
+    }
+   ]
+  },
+  "oga/female-high-pitched-scream-sfx": {
+   "page": "https://opengameart.org/content/female-high-pitched-scream-sfx",
+   "author": "WuxiaScrub",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "screams_0.ogg": {
+     "sha256": "9f9b64086cba7873adb20ef9e3bc14596f8041cc62ece191a1afb6d0b8d5a209",
+     "bytes": 143566,
+     "from": "screams_0.ogg"
+    }
+   }
+  },
+  "oga/footsteps-leather-cloth-armor": {
+   "page": "https://opengameart.org/content/footsteps-leather-cloth-armor",
+   "author": "HaelDB",
+   "licences": [
+    "CC0",
+    "OGA-BY 3.0"
+   ],
+   "files": {
+    "step_cloth1.ogg": {
+     "sha256": "ac461649be5e323da29227df7633d1076a905af983e0e587905216dbf85cdb91",
+     "bytes": 8748,
+     "from": "unpacked/footsteps/step_cloth1.ogg"
+    },
+    "step_cloth2.ogg": {
+     "sha256": "32b40b43e45c7ac2eb68340f0ca39a40618aae82747ffd7457a23243a5c6d290",
+     "bytes": 8843,
+     "from": "unpacked/footsteps/step_cloth2.ogg"
+    },
+    "step_cloth3.ogg": {
+     "sha256": "8dcc5540225edb7509d84b4ca4c5289e171dc55d6ad4d1e6b5948997fef88296",
+     "bytes": 8890,
+     "from": "unpacked/footsteps/step_cloth3.ogg"
+    },
+    "step_cloth4.ogg": {
+     "sha256": "afefb124b4059a2324a921694b26ac0baefb83d157707766bd2fa5649b7c0a78",
+     "bytes": 7532,
+     "from": "unpacked/footsteps/step_cloth4.ogg"
+    },
+    "step_lth1.ogg": {
+     "sha256": "8abf47391e53218a4826a1419e4861ae7dae14df55c51a322f2fa2d4fab2005f",
+     "bytes": 9267,
+     "from": "unpacked/footsteps/step_lth1.ogg"
+    },
+    "step_lth2.ogg": {
+     "sha256": "35214722297cda533de2158e3a4754c5639990760b213101fe097ab34bab1b86",
+     "bytes": 8761,
+     "from": "unpacked/footsteps/step_lth2.ogg"
+    },
+    "step_lth33.ogg": {
+     "sha256": "a9b08f5e1b9baad2dabaee57a0f33942cee42844805e2f8e5ce84449f0500bda",
+     "bytes": 9447,
+     "from": "unpacked/footsteps/step_lth33.ogg"
+    },
+    "step_lth4.ogg": {
+     "sha256": "cef53154dc37d57a4c1d2548f23daa25d5bbdecc5cd21f807ada5a1078e12513",
+     "bytes": 9374,
+     "from": "unpacked/footsteps/step_lth4.ogg"
+    },
+    "step_metal (2).ogg": {
+     "sha256": "68afff8c71620628b0ebf894599de06bc3b80d87222d6cc85abec91fc3337b55",
+     "bytes": 7171,
+     "from": "unpacked/footsteps/step_metal (2).ogg"
+    },
+    "step_metal (4).ogg": {
+     "sha256": "25db2a8e024ab51cd23dc66ef881b7f0c2d898c081e6feb105693e1dd5e2817f",
+     "bytes": 7224,
+     "from": "unpacked/footsteps/step_metal (4).ogg"
+    },
+    "step_metal.ogg": {
+     "sha256": "74fb327096d53e30caf5954df38bc6666bb20679a62438ed014b1beeb67dd251",
+     "bytes": 7253,
+     "from": "unpacked/footsteps/step_metal.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "footsteps.zip",
+     "sha256": "94b5155d119d9378315c2b4457c00098d78a36f2a2c436d5145687d1d3bad257"
+    }
+   ]
+  },
+  "oga/frog-croaks": {
+   "page": "https://opengameart.org/content/frog-croaks",
+   "author": "EZduzziteh",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "croak_01_0.mp3": {
+     "sha256": "a514e4d52a99efcd4ae2af9ccdedd4293ebb2f63d033697907c379c2a3eefaa5",
+     "bytes": 13246,
+     "from": "croak_01_0.mp3"
+    },
+    "croak_03.mp3": {
+     "sha256": "4d3c72d1f1736966847d9ae435b59e7fcec60eac41082853a561c1911efda0c2",
+     "bytes": 16532,
+     "from": "croak_03.mp3"
+    }
+   }
+  },
+  "oga/generator-loop": {
+   "page": "https://opengameart.org/content/generator-loop",
+   "author": "YCbCr",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "loop_generator_1.mp3": {
+     "sha256": "c5989e33550cefb84e7e224c531662d02530e0484caa814a7fa7e7bed39f2062",
+     "bytes": 60664,
+     "from": "loop_generator_1.mp3"
+    }
+   }
+  },
+  "oga/ghost-breath": {
+   "page": "https://opengameart.org/content/ghost-breath",
+   "author": "qubodup",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "ghostbreath.flac": {
+     "sha256": "f371839853a5dff7dbd5a8c81368f5cfab587f567df5ba962e981d4392c530bc",
+     "bytes": 749279,
+     "from": "ghostbreath.flac"
+    }
+   }
+  },
+  "oga/girly-scream": {
+   "page": "https://opengameart.org/content/girly-scream",
+   "author": "Ferk",
+   "licences": [
+    "CC-BY 3.0",
+    "CC-BY-SA 3.0",
+    "CC0",
+    "GPL 2.0",
+    "GPL 3.0"
+   ],
+   "files": {
+    "wscream_2_0.wav": {
+     "sha256": "a0bf899dce4ae36325f04bb394eb39e359bbe9b1188454384e8d51b0acc45a8f",
+     "bytes": 33418,
+     "from": "wscream_2_0.wav"
+    }
+   }
+  },
+  "oga/heartbeat-single-sound": {
+   "page": "https://opengameart.org/content/heartbeat-single-sound",
+   "author": "Independent.nu",
+   "submitter": "qubodup",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "heartbeat.mp3_.flac": {
+     "sha256": "7fe0850daa5c92c6a204fbb0a719ee8f8d2979e3416033d796abd6e30f3c118a",
+     "bytes": 68646,
+     "from": "heartbeat.mp3_.flac"
+    }
+   }
+  },
+  "oga/heartbeat-sounds": {
+   "page": "https://opengameart.org/content/heartbeat-sounds",
+   "author": "bart",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "heartbeat_fast_0.wav": {
+     "sha256": "cda9235df232a5a06724a02798f7240e3e6eca96a992fa5560edd5b4b24823ce",
+     "bytes": 397080,
+     "from": "heartbeat_fast_0.wav"
+    },
+    "heartbeat_slow_0.wav": {
+     "sha256": "ce5d2bbe4c9e2a8843fc76419070b9e88f71b2aa4ba7226a5f50a6b45d13be60",
+     "bytes": 635216,
+     "from": "heartbeat_slow_0.wav"
+    },
+    "heartbeat_slow_reverb.wav": {
+     "sha256": "91c6d6a0be7bbeff048b8f8a3175a4eac973b7caebf260a797ef6327945878f5",
+     "bytes": 635216,
+     "from": "heartbeat_slow_reverb.wav"
+    }
+   }
+  },
+  "oga/horror-scream1": {
+   "page": "https://opengameart.org/content/horror-scream1",
+   "author": "Vinrax",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "scream_horror1_0.mp3": {
+     "sha256": "68a0ad4a8f147f3a895ed17549132b31294a8185822d3d4d5c240053bef9cf14",
+     "bytes": 178885,
+     "from": "scream_horror1_0.mp3"
+    }
+   }
+  },
+  "oga/horror-sfx": {
+   "page": "https://opengameart.org/content/horror-sfx",
+   "author": "TinyWorlds",
+   "links": [
+    "http://www.tinyworlds.org/resources.html"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "horror_effect1.flac": {
+     "sha256": "7baa18db7d39bd5a7e432c4b0f5ce639776d5a76cf7040e35996e0b685841abc",
+     "bytes": 1278022,
+     "from": "unpacked/horror_effect1.wav",
+     "original": {
+      "name": "horror_effect1.wav",
+      "sha256": "3e8686db6867eec60ef1385a7b8daf547813106a65ec479a2eb4b3e5803ca6e8",
+      "bytes": 4132026
+     }
+    },
+    "horror_effect2.flac": {
+     "sha256": "dac600725de2e3cd995439f20ef177d6a17cbc2c106cbffe77e189df10184147",
+     "bytes": 838763,
+     "from": "unpacked/horror_effect2.wav",
+     "original": {
+      "name": "horror_effect2.wav",
+      "sha256": "334f1e80dc9bb4d0f10c42e39aa049feb1e2ef070d4ecd2842b4ab0283a41e9a",
+      "bytes": 2785482
+     }
+    }
+   },
+   "archives": [
+    {
+     "name": "horror_sfx.zip",
+     "sha256": "b0310ec2b611043daaddd26f88cd4962b4318c16b4a7c339fcf07cdcd214af3f"
+    }
+   ]
+  },
+  "oga/huh": {
+   "page": "https://opengameart.org/content/huh",
+   "author": "TinyWorlds",
+   "links": [
+    "http://www.tinyworlds.org/resources.html"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "huh.wav": {
+     "sha256": "70f7e9f7207d3cadb3c078647beda09a49bf97aa85486335cd1c2cc498b91172",
+     "bytes": 16928,
+     "from": "huh.wav"
+    }
+   }
+  },
+  "oga/ice-breakingshattering": {
+   "page": "https://opengameart.org/content/ice-breakingshattering",
+   "author": "IgnasD",
+   "links": [
+    "https://www.crystalgames.space/"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "LedasLuzta2.ogg": {
+     "sha256": "92a20369f866c852f841ffaef31676cb70f542592504b040327c60f5101f9c47",
+     "bytes": 10448,
+     "from": "unpacked/IceShatters/LedasLuzta2.ogg"
+    },
+    "LedasLuzta33.ogg": {
+     "sha256": "fedcd280ffaea38c365647f131eaae71cf2b9e1721c2fce1b539884c9199074a",
+     "bytes": 20079,
+     "from": "unpacked/IceShatters/LedasLuzta33.ogg"
+    },
+    "LedasLuzta4.ogg": {
+     "sha256": "81558c035953d4e595640be7ba1a645c47c6f4b72f38de43a44d36fa70d52b8c",
+     "bytes": 18326,
+     "from": "unpacked/IceShatters/LedasLuzta4.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "IceShatters_0.zip",
+     "sha256": "b84ea396fac1af183dd2cb205a01edaa94b493ffb36965eafe59912e41cf9eb7"
+    }
+   ]
+  },
+  "oga/ingame-samples-audio": {
+   "page": "https://opengameart.org/content/ingame-samples-audio",
+   "author": "natlapse",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "DoorPunch_0.wav": {
+     "sha256": "0bbb350f0224bcd1b9e1a54ae585a075d379b69bb6d0ce6f88ad183ad7a7567c",
+     "bytes": 99100,
+     "from": "DoorPunch_0.wav"
+    }
+   }
+  },
+  "oga/jump-landing": {
+   "page": "https://opengameart.org/content/jump-landing",
+   "author": "Macro",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "Jump 1.wav": {
+     "sha256": "19a56499a8b46bdea815eb9aa7554e7aa5f4d3cd1f7f49f403c327d77fecc6c4",
+     "bytes": 103368,
+     "from": "Jump 1.wav"
+    },
+    "Jump 2.wav": {
+     "sha256": "e7de86bd7f37918832849c1d4e8cff5e1db447e9e89949b0d9031cae67d6272f",
+     "bytes": 98696,
+     "from": "Jump 2.wav"
+    },
+    "Jump 3.wav": {
+     "sha256": "ad900417a3c91c030acf369f60dfb9a8ea50830f66e23b9bed627f7658b08d5d",
+     "bytes": 119860,
+     "from": "Jump 3.wav"
+    }
+   }
+  },
+  "oga/light-switch-turn-on-and-off-sfx-0": {
+   "page": "https://opengameart.org/content/light-switch-turn-on-and-off-sfx-0",
+   "author": "FunnyDude",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "light_switch_turn_off.mp3": {
+     "sha256": "047f920381e74942bdc94979d3d3e5e9f54ad40e48f7391f9ed7d20177b7e73c",
+     "bytes": 11122,
+     "from": "unpacked/light_switch_turn_off.mp3"
+    },
+    "light_switch_turn_on.mp3": {
+     "sha256": "e3ae95399ccc927509df086741eab834a88e80349a06d12ce4b42f0f85247cbb",
+     "bytes": 9393,
+     "from": "unpacked/light_switch_turn_on.mp3"
+    }
+   },
+   "archives": [
+    {
+     "name": "lightswitch_1.zip",
+     "sha256": "2fccfdf18abab82af7ac2cd0e8bf3406f39eab290a442882d42232543ebbee2e"
+    }
+   ]
+  },
+  "oga/loopable-dungeon-ambience": {
+   "page": "https://opengameart.org/content/loopable-dungeon-ambience",
+   "author": "JaggedStone",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "dungeon_ambient_1_0.ogg": {
+     "sha256": "df491823e4877371c34dbda4e9321cd83a4a14fa7573cee0ebca1ae423b70e6e",
+     "bytes": 1626352,
+     "from": "dungeon_ambient_1_0.ogg"
+    }
+   }
+  },
+  "oga/low-rumbling": {
+   "page": "https://opengameart.org/content/low-rumbling",
+   "author": "Musheran",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "low-rumbling-176033.mp3": {
+     "sha256": "4fcd7b4a73ecdd1f8f1b84ff90300f1894ec1b5e1b6f196c4748ddd8f6d5c456",
+     "bytes": 453120,
+     "from": "low-rumbling-176033.mp3"
+    }
+   }
+  },
+  "oga/miscmenu-sci-fi-sounds": {
+   "page": "https://opengameart.org/content/miscmenu-sci-fi-sounds",
+   "author": "Brandon Morris",
+   "submitter": "HaelDB",
+   "licences": [
+    "CC0",
+    "OGA-BY 3.0"
+   ],
+   "files": {
+    "walkie static.wav": {
+     "sha256": "72cf1b87451d50bae8715802acb83b5dcbfed67e6684d95fd3d1863055c22c53",
+     "bytes": 65536,
+     "from": "unpacked/walkie static.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "hio.zip",
+     "sha256": "29adf68bc00b83d2235e142a6f2fedce4a3000ccf814b889a4658694858a5aa9"
+    }
+   ]
+  },
+  "oga/monster-snarls": {
+   "page": "https://opengameart.org/content/monster-snarls",
+   "author": "Darsycho",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "monster-snarl-5.ogg": {
+     "sha256": "aeaf9ab0f25cb8b035a3257913206afd8ba33d47876106291d38dfac7e5c07aa",
+     "bytes": 201559,
+     "from": "monster-snarl-5.ogg"
+    },
+    "monster-snarl-attack.ogg": {
+     "sha256": "34bf1ceef265725abf00ab3263bbbb492792e126bb1619addd4a5d3ad123347f",
+     "bytes": 185872,
+     "from": "monster-snarl-attack.ogg"
+    },
+    "monster-snarls-2_0.ogg": {
+     "sha256": "dbc7b5e621892b5dbc27ee25230b57daaddbc83daadfb20131988b7367f967e1",
+     "bytes": 75510,
+     "from": "monster-snarls-2_0.ogg"
+    },
+    "monster-snarls_0.ogg": {
+     "sha256": "7401193d0cc5eb193379cf326c8868d6823a284ebc32ffaa298c1a94d2e25994",
+     "bytes": 195986,
+     "from": "monster-snarls_0.ogg"
+    },
+    "monsters-snarls-3_0.ogg": {
+     "sha256": "5917d2697b8688b2c59e592d448d473ae0eeaed83802541ebd19bc87f97fe8a7",
+     "bytes": 203942,
+     "from": "monsters-snarls-3_0.ogg"
+    }
+   }
+  },
+  "oga/muffled-distant-explosion": {
+   "page": "https://opengameart.org/content/muffled-distant-explosion",
+   "author": "NenadSimic",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "NenadSimic - Muffled Distant Explosion.wav": {
+     "sha256": "13a0bf75af94ec6d332bc71cba489b573466e05c4b17288158b3d683b41de39f",
+     "bytes": 907518,
+     "from": "NenadSimic - Muffled Distant Explosion.wav"
+    }
+   }
+  },
+  "oga/mutant-frog": {
+   "page": "https://opengameart.org/content/mutant-frog",
+   "author": "AntumDeluge",
+   "links": [
+    "https://stendhalgame.org/",
+    "https://www.audacityteam.org/"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "mutant_frog-1.ogg": {
+     "sha256": "5182abf964e14186d249e4642b0749167bdfaf9a4580c91316b7c3102b1f512e",
+     "bytes": 12842,
+     "from": "unpacked/mutant_frog-1.ogg"
+    },
+    "mutant_frog-2.ogg": {
+     "sha256": "06e2752ba6a02d9465384341b536836c2524090e09d7c884f8a5c7254747acc6",
+     "bytes": 8024,
+     "from": "unpacked/mutant_frog-2.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "mutant_frog.zip",
+     "sha256": "6adc4e13766b8958ebacbeeca78c78510bdee8302e8066e1b733fb02d1059344"
+    }
+   ]
+  },
+  "oga/radio-death-sound": {
+   "page": "https://opengameart.org/content/radio-death-sound",
+   "author": "Vinrax",
+   "licences": [
+    "CC-BY 3.0",
+    "CC0"
+   ],
+   "files": {
+    "radio_death.flac": {
+     "sha256": "1df0e6a78053473165a45a3ff879629d7cca419b3d1791143aaade60a690154a",
+     "bytes": 459455,
+     "from": "radio_death.flac"
+    }
+   }
+  },
+  "oga/rain-long-thunder": {
+   "page": "https://opengameart.org/content/rain-long-thunder",
+   "author": "WuxiaScrub",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "rain-thunder.ogg": {
+     "sha256": "9499fd1aefa3b5d8ba3764ea46d15c00ab449be7e19c029290a1f52228f1434c",
+     "bytes": 875624,
+     "from": "rain-thunder.ogg"
+    }
+   }
+  },
+  "oga/rain-loopable": {
+   "page": "https://opengameart.org/content/rain-loopable",
+   "author": "Ylmir",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "1.ogg": {
+     "sha256": "4f659f68cf5219007d0bb0969a1862491ceee4057fda4c491c6001e8608fa2cb",
+     "bytes": 550049,
+     "from": "unpacked/1.ogg"
+    },
+    "2.ogg": {
+     "sha256": "204bbdba67bd69f744bbb07d81155d0ee775960b979abd0a9b662b23dbc124fd",
+     "bytes": 529890,
+     "from": "unpacked/2.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "Rain MP3.zip",
+     "sha256": "89c275fda7759584b471985af370386eff25a87ee7babfccd4e9d0ac2210c6df"
+    },
+    {
+     "name": "Rain OGG.zip",
+     "sha256": "e68f3e1c77493cf43bec84cebff5043bff6be9ce16d59b24caa988cd460aa75b"
+    }
+   ]
+  },
+  "oga/rumble-fx": {
+   "page": "https://opengameart.org/content/rumble-fx",
+   "author": "cinameng",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "rumble.flac": {
+     "sha256": "4b56a60185bfbaebf656623d5976305e81b744e49cd7bda41b27ff4be450d2b9",
+     "bytes": 1322374,
+     "from": "rumble.wav",
+     "original": {
+      "name": "rumble.wav",
+      "sha256": "c20cd36c670fe8291bc38271f47135599c00f8d88bc25af48abf2c5e58774e4a",
+      "bytes": 5051498
+     }
+    }
+   }
+  },
+  "oga/scrapes": {
+   "page": "https://opengameart.org/content/scrapes",
+   "author": "AntumDeluge",
+   "links": [
+    "https://stendhalgame.org/",
+    "https://www.audacityteam.org/"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "scrape-1.ogg": {
+     "sha256": "096ff47122bae2837ec8a8522a4465d894977f31e4eba5875dba73647d7ef0b5",
+     "bytes": 15506,
+     "from": "unpacked/scrape-1.ogg"
+    },
+    "scrape-2.ogg": {
+     "sha256": "2df277396cc671f55a7699c9a346415a46086b27ebdc603c489160e63af75af0",
+     "bytes": 17019,
+     "from": "unpacked/scrape-2.ogg"
+    },
+    "scrape-3.ogg": {
+     "sha256": "8d372bd1b158f06ec7c22c3da698a7ab21d719502c9743cd1ade8542111e30f6",
+     "bytes": 20930,
+     "from": "unpacked/scrape-3.ogg"
+    },
+    "scrape-4.ogg": {
+     "sha256": "b2a059e0ed3442de337c6986d424fa1891beafc6ca4781cd364bf4c068174724",
+     "bytes": 19144,
+     "from": "unpacked/scrape-4.ogg"
+    },
+    "scrape-5.ogg": {
+     "sha256": "6cc02fbf7055f572b4dc3f40ae469b26b3468fa938adc5db5169a96c55c98c02",
+     "bytes": 20736,
+     "from": "unpacked/scrape-5.ogg"
+    },
+    "scrape-6.ogg": {
+     "sha256": "2b622cf09717e90f40a42374240071c4dbcd176394429be7feab6c8b58dee591",
+     "bytes": 22124,
+     "from": "unpacked/scrape-6.ogg"
+    },
+    "scrape-7.ogg": {
+     "sha256": "b0fa95940ea4cdfd66f0b3aca49c642848650d92d4bab16ea2bf711e9180a7c5",
+     "bytes": 19321,
+     "from": "unpacked/scrape-7.ogg"
+    },
+    "scrape-8.ogg": {
+     "sha256": "fd32b950e1c08b818964090b24d1864b74523aa1acd22f2f9d3b47dcc5c2897d",
+     "bytes": 20787,
+     "from": "unpacked/scrape-8.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "scrapes.zip",
+     "sha256": "9598070ddd77ed99e922df1d4472a249624adcd945794d1b6eba88ac77f6a014"
+    }
+   ]
+  },
+  "oga/sfx-circuit-breaker": {
+   "page": "https://opengameart.org/content/sfx-circuit-breaker",
+   "author": "CleytonKauffman",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "switch off.wav": {
+     "sha256": "42c6be41a0082d602b0af647bac7c2009b4ff2b6228d6a1ed3c21d76290bd1a8",
+     "bytes": 163010,
+     "from": "unpacked/switch off.wav"
+    },
+    "switch on.wav": {
+     "sha256": "023585f7cc913a746e8aa59dbc6a14e56bf1658d2a3c3f9b8438794c4c9757e8",
+     "bytes": 165554,
+     "from": "unpacked/switch on.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "Circuit Breaker.zip",
+     "sha256": "d8b0b2b008ce4d1b5286d76ce15974fed69c41fa4746bdeadcfcb8f7a2053bd6"
+    }
+   ]
+  },
+  "oga/short-alarm": {
+   "page": "https://opengameart.org/content/short-alarm",
+   "author": "yd",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "alarm_0.ogg": {
+     "sha256": "dc76a67748c9cef0b91913fafbe47cf8ee4499c4f813dbe12e028d2806f1eab8",
+     "bytes": 27529,
+     "from": "alarm_0.ogg"
+    }
+   }
+  },
+  "oga/short-wind-sound": {
+   "page": "https://opengameart.org/content/short-wind-sound",
+   "author": "remaxim",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "short wind sound.wav": {
+     "sha256": "4435f5ad1baf171f21f876f778d0a8a7447becea0c4955bb2566e0c63ab20f41",
+     "bytes": 747196,
+     "from": "short wind sound.wav"
+    }
+   }
+  },
+  "oga/silent-beast-growls4": {
+   "page": "https://opengameart.org/content/silent-beast-growls4",
+   "author": "pauliuw",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "silent_beast_growl.mp3": {
+     "sha256": "1bc5f5bb6e2b6d9db2a18eeb7d1d794a9445151be0d43b0aa09d900a3fd955e2",
+     "bytes": 109758,
+     "from": "silent_beast_growl.mp3"
+    },
+    "silent_beast_growl_1.mp3": {
+     "sha256": "adcb4ac105e2e4be373092f4dd27e030b22d20dfea65e84cdd0d4e75f798ed55",
+     "bytes": 44544,
+     "from": "silent_beast_growl_1.mp3"
+    },
+    "silent_beast_growl_2.mp3": {
+     "sha256": "ef62c1647a2c2d7b80390e45932b8772006f31a491b91584fa0cbcfa7618aff0",
+     "bytes": 78144,
+     "from": "silent_beast_growl_2.mp3"
+    },
+    "silent_beast_growl_3.mp3": {
+     "sha256": "4cbde8827f5cccdc435bbb90c2d1110695b21820d11273eb40755e9d80755159",
+     "bytes": 55104,
+     "from": "silent_beast_growl_3.mp3"
+    }
+   }
+  },
+  "oga/small-dino-raspy-calls": {
+   "page": "https://opengameart.org/content/small-dino-raspy-calls",
+   "author": "CaveboyTup",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "small_dino_raspy_calls.mp3": {
+     "sha256": "344b1aa510e52c282ef7e0fbac1531fddcb2d8d03f700310cc4d4cab48cde74e",
+     "bytes": 14400,
+     "from": "small_dino_raspy_calls.mp3"
+    }
+   }
+  },
+  "oga/small-metal-clasp-open-close-switching": {
+   "page": "https://opengameart.org/content/small-metal-clasp-open-close-switching",
+   "author": "sinny",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "small_metal_clasp.mp3": {
+     "sha256": "662dde97f54101e0f3e9b302e35e02d74dde98a935bc788648197729adf3b19f",
+     "bytes": 9054,
+     "from": "small_metal_clasp.mp3"
+    }
+   }
+  },
+  "oga/sonar-ping": {
+   "page": "https://opengameart.org/content/sonar-ping",
+   "author": "Spiceman",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "sonar_ping_0.mp3": {
+     "sha256": "607b2e238deaa50e71da98ae17fbdf193953adc26523d7855ff196ea4f56d45f",
+     "bytes": 65201,
+     "from": "sonar_ping_0.mp3"
+    }
+   }
+  },
+  "oga/space-winds": {
+   "page": "https://opengameart.org/content/space-winds",
+   "author": "aquinn",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "space-wind_0.mp3": {
+     "sha256": "3bdabe35e510365c38bef3c47f140c05efb2ba677350e67390298dda001058dd",
+     "bytes": 778240,
+     "from": "space-wind_0.mp3"
+    }
+   }
+  },
+  "oga/static": {
+   "page": "https://opengameart.org/content/static",
+   "author": "xhunterko",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "ScatterNoise1.mp3": {
+     "sha256": "712bc6b549d189e112433f609dc0d3a6f07f2d7458f73a08a915c50a1903f124",
+     "bytes": 481070,
+     "from": "ScatterNoise1.mp3"
+    }
+   }
+  },
+  "oga/steam-release-sounds": {
+   "page": "https://opengameart.org/content/steam-release-sounds",
+   "author": "bart",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "steam hisses - Marker #1.wav": {
+     "sha256": "1dd3462e1320c9a620c35328fee71d4ca30a5284dd9948b24da0faecb476817c",
+     "bytes": 325956,
+     "from": "unpacked/steam hisses - Marker #1.wav"
+    },
+    "steam hisses - Marker #4.wav": {
+     "sha256": "f3e7573a11cc6403974eaba2467b19fd10c14bf712f879db84ee597934048398",
+     "bytes": 325960,
+     "from": "unpacked/steam hisses - Marker #4.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "steam_hisses.zip",
+     "sha256": "7dc5ae6f43ef0e9a47b8333e1e1508463cb64877ab06baa0259c643a9ab4677f"
+    }
+   ]
+  },
+  "oga/swishes-sound-pack": {
+   "page": "https://opengameart.org/content/swishes-sound-pack",
+   "author": "artisticdude",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "swish-4.wav": {
+     "sha256": "0060f4a7040edce4cc50d1daa10a9cb76764128a942e4688339e69cd1d5d784c",
+     "bytes": 39384,
+     "from": "unpacked/swishes/swish-4.wav"
+    },
+    "swish-7.wav": {
+     "sha256": "e6de737a34de16afed094d6170d7679149022f149e0a8356d2f029b0e8f4a4d7",
+     "bytes": 50420,
+     "from": "unpacked/swishes/swish-7.wav"
+    },
+    "swish-9.wav": {
+     "sha256": "123883f006ce55feecbff11eea5f87c4493df4399989983037144570a23723c1",
+     "bytes": 52906,
+     "from": "unpacked/swishes/swish-9.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "swishes.zip",
+     "sha256": "7980215241b739a787dcf26f660ce510bb237900968789395a86911619795693"
+    }
+   ]
+  },
+  "oga/tiny-creatures-sounds": {
+   "page": "https://opengameart.org/content/tiny-creatures-sounds",
+   "author": "fvcalderan",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "laugh.ogg": {
+     "sha256": "8b74bc75568a431ebabf639525e1ad7acb4cbe07ae1d36434c61a2975219d985",
+     "bytes": 22271,
+     "from": "laugh.ogg"
+    }
+   }
+  },
+  "oga/ui-sounds-0": {
+   "page": "https://opengameart.org/content/ui-sounds-0",
+   "author": "HaelDB",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "Wrong Error.wav": {
+     "sha256": "cfc4489969ca2b60572f5b4835b1bf44f7410df63fe357847f471bee42818959",
+     "bytes": 144044,
+     "from": "unpacked/New folder/Wrong Error.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "ui_sounds.zip",
+     "sha256": "441a5e0200a879a38ef53596252670522f2ad761528e3fa28a2a6d92be93634d"
+    }
+   ]
+  },
+  "oga/underwater-or-space-engine-rumble": {
+   "page": "https://opengameart.org/content/underwater-or-space-engine-rumble",
+   "author": "gmason",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "underwater_or_space_engine_0.ogg": {
+     "sha256": "cfb74a2ae95a9c8119c06e32ddae0ae1e111d4d8ad5e776bf668df14e55909ea",
+     "bytes": 511853,
+     "from": "underwater_or_space_engine_0.ogg"
+    }
+   }
+  },
+  "oga/various-sound-effects": {
+   "page": "https://opengameart.org/content/various-sound-effects",
+   "author": "laleksic",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "door_creak_open.wav": {
+     "sha256": "67ec6952f3de32852ea5a188e6118546107e4d2ca15b3fd4cab64d8993877227",
+     "bytes": 148382,
+     "from": "unpacked/door_creak_open.wav"
+    },
+    "floor_creak1.wav": {
+     "sha256": "8b0ec4c1e4b91096e859c6030330b8663b6f893c294161466c94d9234c8f96d1",
+     "bytes": 171560,
+     "from": "unpacked/floor_creak1.wav"
+    },
+    "floor_creak2.wav": {
+     "sha256": "2bc23c58294516521cca1eab608ba794e55822c8eb2ddbf61f3743fcb1ce5c6c",
+     "bytes": 190618,
+     "from": "unpacked/floor_creak2.wav"
+    },
+    "floor_creak3.wav": {
+     "sha256": "fb83e33147cc536095c0d25937eb1195bf1ba66c819ea313b03b0a4f92198e79",
+     "bytes": 250724,
+     "from": "unpacked/floor_creak3.wav"
+    },
+    "grind_metal.wav": {
+     "sha256": "f2cfa9dd0e1172884f4f6e5c09b1a3a4d38e083cc3b81c6875e03cbd31b5d948",
+     "bytes": 142302,
+     "from": "unpacked/grind_metal.wav"
+    },
+    "lock_pick.wav": {
+     "sha256": "a5ecf924aa84c656b53d72c40f8ba6500f62293d55635edd3a70d08185144853",
+     "bytes": 160810,
+     "from": "unpacked/lock_pick.wav"
+    },
+    "switch_off.wav": {
+     "sha256": "c4fc5ff1157a1fc0e74900107f559f1c80118ad86dca398cdb88c1dd6124bdb7",
+     "bytes": 54964,
+     "from": "unpacked/switch_off.wav"
+    },
+    "switch_on.wav": {
+     "sha256": "7fef89ebd553d8bdd51d62f3b794e1ca75d0bab39c008cb35ef5c9bdc3850891",
+     "bytes": 55468,
+     "from": "unpacked/switch_on.wav"
+    }
+   },
+   "archives": [
+    {
+     "name": "sounds_8.zip",
+     "sha256": "82c945e5f3c97e4d38dbf18fa27bcea78dbed73b4078c5bbafc04ad89b4096db"
+    }
+   ]
+  },
+  "oga/various-sound-effects-0": {
+   "page": "https://opengameart.org/content/various-sound-effects-0",
+   "author": "Spring Spring",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "snd_batwings.wav": {
+     "sha256": "1d7a132a1466eaae7969262b744125918c7676026d0269bfdfec95598290bbe4",
+     "bytes": 149038,
+     "from": "snd_batwings.wav"
+    },
+    "snd_flap.wav": {
+     "sha256": "2d57819560d4eb6e2e2578422964acf9248f641732e9ccb9d332a16edb01b434",
+     "bytes": 476226,
+     "from": "snd_flap.wav"
+    }
+   }
+  },
+  "oga/wierd-whooshes": {
+   "page": "https://opengameart.org/content/wierd-whooshes",
+   "author": "bosslevelaudio",
+   "licences": [
+    "CC-BY 3.0",
+    "CC-BY 4.0",
+    "CC-BY-SA 3.0",
+    "CC-BY-SA 4.0",
+    "CC0",
+    "GPL 2.0",
+    "GPL 3.0",
+    "OGA-BY 3.0",
+    "OGA-BY 4.0"
+   ],
+   "files": {
+    "weird_whoosh_sounds_-_whoosh_12_0.mp3": {
+     "sha256": "39c992a1d0ec8a9b2b42ccaf92aae4574dc48024a0cb0427b03b3d195d46b1e8",
+     "bytes": 601962,
+     "from": "weird_whoosh_sounds_-_whoosh_12_0.mp3"
+    }
+   }
+  },
+  "oga/wind": {
+   "page": "https://opengameart.org/content/wind",
+   "author": "IgnasD",
+   "links": [
+    "https://www.crystalgames.space/"
+   ],
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "Wind.ogg": {
+     "sha256": "ff4f8a48b824e88ef3a53c5bc726e1da2b9593d84ac1bd6048b4ed6ddd4bad69",
+     "bytes": 59861,
+     "from": "unpacked/wind/Wind.ogg"
+    },
+    "Wind2.ogg": {
+     "sha256": "28a3eeea0a0d76f88ec686b8ff658ce1524e13ee835746cc9bca98ed9972d89b",
+     "bytes": 57568,
+     "from": "unpacked/wind/Wind2.ogg"
+    }
+   },
+   "archives": [
+    {
+     "name": "wind.zip",
+     "sha256": "8f6185f6eb836a5c35c492e8dabd276e507ba3e4dca0e7d551d04c689d0c0d63"
+    }
+   ]
+  },
+  "oga/wind-whoosh-loop": {
+   "page": "https://opengameart.org/content/wind-whoosh-loop",
+   "author": "SketchMan3",
+   "licences": [
+    "CC0"
+   ],
+   "files": {
+    "wind woosh loop.ogg": {
+     "sha256": "0cfdbd3f21ed449689a9024264edf267d0037a6495813a7010827672ec191dac",
+     "bytes": 251584,
+     "from": "wind woosh loop.ogg"
+    }
+   }
+  }
+ }
+}

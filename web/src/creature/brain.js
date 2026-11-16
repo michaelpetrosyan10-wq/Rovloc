@@ -8,8 +8,10 @@
 //       point reached: Search >
 //     HidingResponse holds until its hider is out or taken (then WallChase on whoever it sees, else Search) > it saw
 //     someone hide: HidingResponse > a 1 s stare: WallChase > someone in sight: WallChase > a teleport runs to its end
-//     (warning, FadeIn, stare, stalk) > a noise at least as loud as the one being investigated (a High one breaks a Search): InvestigateNoise >
-//     an investigation or a search that is over: Patrol > a teleport that is due: Teleport > Patrol (the Stalk).
+//     (warning, FadeIn, stare, stalk) > a presence beat runs to its end (Peek, Glimpse, Shadow, PassBy) > a noise at
+//     least as loud as the one being investigated (a High one breaks a Search): InvestigateNoise > an investigation or
+//     a search that is over: Patrol > a beat the director hands over: that beat > a teleport that is due: Teleport >
+//     Patrol (the Stalk).
 //   * catchKind(check): whether a catch may happen now (reach, the same floor, a clear line eye to eye AND chest to
 //     chest: never through a wall).
 //   * levelInfo(levelId, meta): patrol loops (world.json `patrolLoops`, else the PatrolWaypoint anchors by loop /
@@ -26,6 +28,8 @@ const WAYPOINT_PATTERN = /_WP_(.+)_(\d+)$/;
 const PASSABLE_DOORS = new Set(['Doorway', 'Door', 'Ajar']);
 const WALKABLE_DOORS = new Set(['Doorway', 'Door', 'Ajar', 'RoofDoor', 'Gate', 'Airlock']);
 const CHASES = new Set(['WallChase']);
+/** The presence beats (docs/MONSTER.md 16): the director's, played out by their own states. */
+export const BEATS = new Set(['Peek', 'Glimpse', 'Shadow', 'PassBy']);
 const SEARCHES = new Set(['InvestigateNoise', 'Search']);
 const EXACT_RANK = 3;
 // rooms the derived patrol never walks into (the stair vestibules, ducts, the stairwells, crawlways)
@@ -58,6 +62,7 @@ export const CatchVertical = SENSES.CatchVertical;
  * @property {number} maxChase
  * @property {number} chaseLost
  * @property {boolean} teleportDue
+ * @property {string|null} beatDue the beat the director hands over now (BEATS), or null
  * @property {boolean} stateDone
  *
  * @typedef {{state: string, reason: string, reposition: boolean, giveUp: boolean}} Decision
@@ -110,6 +115,7 @@ export function decide(s) {
   if (s.stared) return go('WallChase', 'stared at');
   if (s.sees) return go('WallChase', 'seen');
   if (state === 'Teleport' && !s.stateDone) return go('Teleport', 'teleporting');
+  if (BEATS.has(state) && !s.stateDone) return go(state, 'beat');
   if (s.heard > 0 && !SEARCHES.has(state)) return go('InvestigateNoise', 'heard');
   if (state === 'InvestigateNoise') {
     if (s.heard >= s.investigating && s.heard > 0) return go('InvestigateNoise', 'heard');
@@ -121,6 +127,7 @@ export function decide(s) {
     if (s.stateDone) return go('Patrol', 'search over');
     return go('Search', 'searching');
   }
+  if (s.beatDue && BEATS.has(s.beatDue)) return go(s.beatDue, 'beat');
   if (s.teleportDue) return go('Teleport', 'teleport');
   return go('Patrol', 'patrolling');
 }

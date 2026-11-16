@@ -121,12 +121,13 @@ StoryConfig.Skip = freezeDeep({ Hold = 1.0, From = 5.0, Fade = 0.6 })
 StoryConfig.Speech = freezeDeep({ WordsPerSecond = 2.6, MaxWords = 12 })
 
 -- The prologue (4.1): push the lid (hold LidHold) for a ClimbOut-second climb-out, by itself AutoClimbOut seconds
--- after the hand-over; "Climb in" (hold ClimbHold) at the hatch; the ChuteCut-second cut when every Alive player is in,
--- ChuteWait seconds after the first, or MaxSeconds after the hand-over.
+-- after the hand-over (8: the player has sat in the bin since the lids shut, a quarter of a minute before it); "Climb
+-- in" (hold ClimbHold) at the hatch; the ChuteCut-second cut when every Alive player is in, ChuteWait seconds after the
+-- first, or MaxSeconds after the hand-over.
 StoryConfig.Prologue = freezeDeep({
 	LidHold = 0.6,
 	ClimbOut = 1.2,
-	AutoClimbOut = 20,
+	AutoClimbOut = 8,
 	ClimbHold = 0.6,
 	ChuteWait = 30,
 	ChuteCut = 1.6,
@@ -424,17 +425,19 @@ local tallManKeys: { ActorKey } = {
 	key(0, SPOT[1], WALK, SPOT[2], facing(SPOT[1], SPOT[2], PARTY_AT[1], PARTY_AT[2])),
 	key(44.6, SPOT[1], WALK, SPOT[2], facing(SPOT[1], SPOT[2], PARTY_AT[1], PARTY_AT[2])),
 	key(45.2, 15.4, WALK, 319.8, facing(15.4, 319.8, 24.0, 318.6)),
-	key(47.2, 24.0, WALK, 318.6, facing(24.0, 318.6, 30.0, 318.6)),
-	key(47.6, 24.0, WALK, 318.6, facing(24.0, 318.6, 14.0, 318.4)),
-	key(50.6, 14.0, WALK, 318.4, facing(14.0, 318.4, 10.0, 319.4)),
-	key(51.8, 10.0, WALK, 319.4, facing(10.0, 319.4, 10.0, 324.0)),
-	key(54.0, 10.0, WALK, 319.6, facing(10.0, 319.6, 10.0, 324.0)),
-	key(55.0, 10.0, WALK, 320.0, facing(10.0, 320.0, 10.0, 324.0)),
-	key(57.15, 10.0, WALK, 320.0, facing(10.0, 320.0, 10.0, 324.0)),
-	key(57.4, 10.0, WALK, 320.0, facing(10.0, 320.0, DOOR_X, DOOR_Z)),
-	key(58.0, 10.6, WALK, 319.4, facing(10.6, 319.4, 30.0, 304.0)),
-	key(59.6, 30.0, WALK, 304.0, facing(30.0, 304.0, DOOR_X, DOOR_Z)),
-	key(61.4, DOOR_X, KERB, DOOR_Z, facing(30.0, 304.0, DOOR_X, DOOR_Z)),
+	-- after them along the bins' fronts; the lids are shut: it turns back to the first one
+	key(46.6, 21.0, WALK, 318.8, facing(21.0, 318.8, 26.0, 318.8)),
+	key(47.0, 21.0, WALK, 318.8, facing(21.0, 318.8, 12.0, 318.8)),
+	key(48.5, 12.4, WALK, 319.0, facing(12.4, 319.0, 10.0, 319.4)),
+	key(49.0, 10.0, WALK, 319.6, facing(10.0, 319.6, 10.0, 324.0)),
+	key(49.9, 10.0, WALK, 319.6, facing(10.0, 319.6, 10.0, 324.0)),
+	key(50.4, 10.0, WALK, 320.0, facing(10.0, 320.0, 10.0, 324.0)),
+	key(52.35, 10.0, WALK, 320.0, facing(10.0, 320.0, 10.0, 324.0)),
+	-- a scream inside the school: it turns and lopes for the staff doors; the cut in time to 3:31 PM (S14, 53.8)
+	-- takes it mid-stride (by then it is long inside)
+	key(52.55, 10.0, WALK, 320.0, facing(10.0, 320.0, DOOR_X, DOOR_Z)),
+	key(52.75, 10.6, WALK, 319.4, facing(10.6, 319.4, 30.0, 304.0)),
+	key(53.8, 25.2, WALK, 307.8, facing(25.2, 307.8, 30.0, 304.0)),
 }
 
 local sneakerKeys: { ActorKey } = {
@@ -487,12 +490,12 @@ local openingActors: { Track } = {
 			{ t0 = 38.6, name = "Unfold", slow = 3.25 },
 			{ t0 = 41.4, name = "Stare" },
 			{ t0 = 44.6, name = "Walk" },
-			{ t0 = 51.8, name = "Idle" },
-			{ t0 = 52.0, name = "ReachIn" },
-			{ t0 = 54.0, name = "Hunch" },
-			{ t0 = 57.2, name = "Stare" },
-			{ t0 = 58.0, name = "Walk" },
-			{ t0 = 61.5, name = "Hidden" },
+			{ t0 = 49.0, name = "Idle" },
+			{ t0 = 49.1, name = "ReachIn" },
+			{ t0 = 50.0, name = "Hunch" },
+			{ t0 = 52.4, name = "Stare" },
+			{ t0 = 52.6, name = "Walk" },
+			{ t0 = 53.8, name = "Hidden" },
 		},
 	},
 	{
@@ -544,12 +547,15 @@ local openingCamera: { CameraKey } = {
 	cam(47.5, { 17.6, 30.4, 308.6 }, { 25.0, 18.0, 327.0 }, 62, "linear"),
 	-- S12: inside Dumpster A, the eye at the lid's gap: its legs pass; it stops; the mask comes down to the gap
 	cam(47.5, { 10.0, 22.55, 322.6 }, { 10.6, 23.6, 315.0 }, 74, "cut"),
-	cam(53.6, { 10.0, 22.55, 322.6 }, { 10.4, 23.8, 315.0 }, 74, "linear"),
-	cam(55.2, { 10.0, 22.5, 322.7 }, { 10.2, 23.2, 316.0 }, 70, "smooth"),
-	cam(57.2, { 10.0, 22.5, 322.7 }, { 10.2, 23.3, 316.0 }, 70, "linear"),
-	-- S13: through the gap, toward the staff doors; S14 the time-lapse from the same place
-	cam(58.0, { 10.0, 22.55, 322.6 }, { 30.0, 25.0, 302.0 }, 66, "cut"),
-	cam(73.0, { 10.0, 22.55, 322.6 }, { 31.0, 25.4, 302.0 }, 66, "linear"),
+	cam(49.9, { 10.0, 22.55, 322.6 }, { 10.4, 23.8, 315.0 }, 74, "linear"),
+	cam(50.8, { 10.0, 22.5, 322.7 }, { 10.2, 23.2, 316.0 }, 70, "smooth"),
+	cam(52.6, { 10.0, 22.5, 322.7 }, { 10.2, 23.3, 316.0 }, 70, "linear"),
+	-- S13: through the gap, after it as it lopes for the staff doors
+	cam(52.6, { 10.0, 22.55, 322.6 }, { 16.0, 23.8, 314.0 }, 68, "cut"),
+	cam(53.8, { 10.0, 22.55, 322.6 }, { 30.0, 25.0, 302.0 }, 66, "smooth"),
+	-- S14: 3:31 PM, the lockdown, and S15, night falling, from the same place
+	cam(53.8, { 10.0, 22.55, 322.6 }, { 30.0, 25.0, 302.0 }, 66, "cut"),
+	cam(59.0, { 10.0, 22.55, 322.6 }, { 31.0, 25.4, 302.0 }, 66, "linear"),
 }
 
 local openingEvents: { Event } = {
@@ -603,32 +609,33 @@ local openingEvents: { Event } = {
 	{ t = 46.8, kind = "Sound", args = { preset = "LidSlam", actor = "P3", volume = 1 } },
 	{ t = 46.95, kind = "Sound", args = { preset = "LidSlam", actor = "P4", volume = 1 } },
 	-- S12: inside a bin
-	sound(47.7, "Breathing", nil, 0.8, 9.6),
-	sound(52.1, "NailsOnMetal", { 10, 22.6, 322.2 }),
-	sound(57.0, "DistantScream", { 40, 40, 270 }, 0.8),
-	-- S13: the school goes dark floor by floor, the shutters crash down
-	sound(59.4, "FireBell", { 40, 30, 286 }, 0.7),
-	sound(60.1, "GlassBreak", { 30, 40, 287 }, 0.7),
-	sound(60.8, "DistantScream", { 52, 42, 280 }, 0.6),
-	{ t = 61.8, kind = "Prop", args = { id = "Windows2", state = "Dark" } },
-	sound(62.2, "DistantScream", { 20, 24, 280 }, 0.5),
-	{ t = 62.8, kind = "Prop", args = { id = "Windows1", state = "Dark" } },
-	{ t = 63.4, kind = "Prop", args = { id = "Shutter", state = "Down" } },
-	sound(63.6, "ShutterSlam", { 60, 22, 289.4 }),
-	{ t = 63.6, kind = "Light", args = { group = "Scripted:BL_Strobe", mode = "Flicker" } },
-	-- S14: the time-lapse; rain from 70
-	{ t = 65.2, kind = "Card", args = { text = "3:14 PM", seconds = 1.8 } },
-	{ t = 67.2, kind = "Card", args = { text = "5:47 PM", seconds = 1.8 } },
-	{ t = 69.2, kind = "Card", args = { text = "9:03 PM", seconds = 1.8 } },
-	{ t = 71.2, kind = "Card", args = { text = "11:52 PM", seconds = 1.8 } },
-	{ t = 70.0, kind = "Rain", args = { on = true } },
-	sound(70.0, "RainOnLid", nil, 0.8, 8.0),
-	-- S15: black; the bell tolls twelve; into first person inside your bin
-	{ t = 73.0, kind = "Fade", args = { to = 1, seconds = 0.3 } },
-	{ t = 77.0, kind = "Fade", args = { to = 0, seconds = 1.0 } },
+	sound(47.7, "Breathing", nil, 0.8, 5.4),
+	sound(49.1, "NailsOnMetal", { 10, 22.6, 322.2 }),
+	sound(52.2, "DistantScream", { 40, 40, 270 }, 0.8),
+	-- S13: it goes for the school
+	sound(52.9, "FireBell", { 40, 30, 286 }, 0.7),
+	-- S14: 3:31 PM, the lockdown: the school goes dark floor by floor, the shutters crash down
+	{ t = 53.8, kind = "Card", args = { text = "3:31 PM", seconds = 1.7 } },
+	sound(54.3, "GlassBreak", { 30, 40, 287 }, 0.7),
+	{ t = 54.8, kind = "Prop", args = { id = "Windows2", state = "Dark" } },
+	sound(54.9, "DistantScream", { 52, 42, 280 }, 0.6),
+	{ t = 55.3, kind = "Prop", args = { id = "Windows1", state = "Dark" } },
+	sound(55.4, "DistantScream", { 20, 24, 280 }, 0.5),
+	{ t = 55.7, kind = "Prop", args = { id = "Shutter", state = "Down" } },
+	sound(55.9, "ShutterSlam", { 60, 22, 289.4 }),
+	{ t = 55.9, kind = "Light", args = { group = "Scripted:BL_Strobe", mode = "Flicker" } },
+	-- S15: night falls; rain from 9:03; the bell tolls twelve as it does
+	{ t = 56.5, kind = "Card", args = { text = "5:47 PM", seconds = 0.8 } },
+	{ t = 57.35, kind = "Card", args = { text = "9:03 PM", seconds = 0.8 } },
+	{ t = 57.35, kind = "Rain", args = { on = true } },
+	sound(57.35, "RainOnLid", nil, 0.8, 3.65),
+	{ t = 58.2, kind = "Card", args = { text = "11:52 PM", seconds = 0.8 } },
+	-- S16: black as the view becomes each page's own; into first person inside your bin
+	{ t = 58.75, kind = "Fade", args = { to = 1, seconds = 0.25 } },
+	{ t = 60.2, kind = "Fade", args = { to = 0, seconds = 0.8 } },
 }
 for i = 0, 11 do
-	table.insert(openingEvents, sound(73.2 + i * 0.38, "BellToll", nil, 0.8))
+	table.insert(openingEvents, sound(57.4 + i * 0.3, "BellToll", nil, 0.8))
 end
 table.sort(openingEvents, function(a: Event, b: Event): boolean
 	return a.t < b.t
@@ -706,17 +713,17 @@ local openingLines: { Line } = {
 	},
 	{
 		id = "Opening.Close",
-		t = 54.5,
+		t = 50.1,
 		slot = 2.5,
 		speaker = "TallMan",
 		channel = "Ear",
 		text = "I know you're close, {you}.",
 		twin = "I know you're close.",
 	},
-	{ id = "Opening.Lockdown", t = 61.5, slot = 2.2, speaker = "PA", channel = "PA", text = "LOCKDOWN. LOCKDOWN." },
+	{ id = "Opening.Lockdown", t = 54.0, slot = 2.2, speaker = "PA", channel = "PA", text = "LOCKDOWN. LOCKDOWN." },
 	{
 		id = "Opening.You",
-		t = 74.5,
+		t = 59.2,
 		slot = 1.5,
 		speaker = "TallMan",
 		channel = "Ear",
@@ -729,21 +736,21 @@ local Opening: Timeline = {
 	id = "Opening",
 	set = "BackLot",
 	origin = "BL_Mark_Origin",
-	length = 78.0,
+	length = 61.0,
 	staged = true,
 	skip = "Vote",
 	cuts = {
-		Full = { { at = 0, from = 0, to = 78.0 } },
-		-- S1 (0-3), S6 from "Booo." (3-6.5), S8 (6.5-9), S9 and S10 (9-15.5), S11 (15.5-18.5), S13 from the windows
-		-- (18.5-22.5), S15 (22.5-26)
+		Full = { { at = 0, from = 0, to = 61.0 } },
+		-- S1 (0-3), S6 from "Booo." (3-6.5), S8 (6.5-9), S9 and S10 (9-15.5), S11 (15.5-18.5), S14: the lockdown
+		-- (18.5-21.2), S15 from its last card ("11:52 PM", so no other card shows at the seam) and S16 (21.2-24)
 		Short = {
 			{ at = 0, from = 0, to = 3.0 },
 			{ at = 3.0, from = 26.4, to = 29.9 },
 			{ at = 6.5, from = 31.5, to = 34.0 },
 			{ at = 9.0, from = 36.5, to = 43.0 },
 			{ at = 15.5, from = 44.5, to = 47.5 },
-			{ at = 18.5, from = 61.0, to = 65.0 },
-			{ at = 22.5, from = 74.5, to = 78.0 },
+			{ at = 18.5, from = 53.8, to = 56.5 },
+			{ at = 21.2, from = 58.2, to = 61.0 },
 		},
 	},
 	shots = {
@@ -758,22 +765,26 @@ local Opening: Timeline = {
 		{ id = "S9", t0 = 34.0, t1 = 39.0, view = "Cinematic" },
 		{ id = "S10", t0 = 39.0, t1 = 43.0, view = "Cinematic" },
 		{ id = "S11", t0 = 43.0, t1 = 47.5, view = "Cinematic" },
-		{ id = "S12", t0 = 47.5, t1 = 58.0, view = "Cinematic" },
-		{ id = "S13", t0 = 58.0, t1 = 65.0, view = "Cinematic" },
-		{ id = "S14", t0 = 65.0, t1 = 73.0, view = "Cinematic" },
-		{ id = "S15", t0 = 73.0, t1 = 78.0, view = "Own" },
+		{ id = "S12", t0 = 47.5, t1 = 52.6, view = "Cinematic" },
+		{ id = "S13", t0 = 52.6, t1 = 53.8, view = "Cinematic" },
+		{ id = "S14", t0 = 53.8, t1 = 56.4, view = "Cinematic" },
+		{ id = "S15", t0 = 56.4, t1 = 59.0, view = "Cinematic" },
+		{ id = "S16", t0 = 59.0, t1 = 61.0, view = "Own" },
 	},
 	camera = openingCamera,
 	actors = openingActors,
 	events = openingEvents,
 	lines = openingLines,
-	-- S1 to S13 by overcast day (5.2: dayAmount 0.65); S14's time-lapse grey, orange, deep blue to the night
+	-- S1 to S13 by overcast day (5.2: dayAmount 0.65); S14 is seventeen minutes on (a cut in the light too); S15's time-lapse
+	-- orange, deep blue, the night
 	day = {
 		{ t = 0, amount = 0.65, tint = { x = 1, y = 1, z = 1 } },
-		{ t = 65.0, amount = 0.65, tint = { x = 1, y = 1, z = 1 } },
-		{ t = 68.0, amount = 0.45, tint = { x = 1, y = 0.66, z = 0.42 } },
-		{ t = 71.0, amount = 0.18, tint = { x = 0.42, y = 0.52, z = 0.9 } },
-		{ t = 73.0, amount = 0, tint = { x = 0.42, y = 0.52, z = 0.9 } },
+		{ t = 53.8, amount = 0.65, tint = { x = 1, y = 1, z = 1 } },
+		{ t = 53.8, amount = 0.6, tint = { x = 1, y = 0.93, z = 0.84 } },
+		{ t = 56.4, amount = 0.58, tint = { x = 1, y = 0.9, z = 0.8 } },
+		{ t = 57.2, amount = 0.42, tint = { x = 1, y = 0.62, z = 0.38 } },
+		{ t = 58.1, amount = 0.16, tint = { x = 0.42, y = 0.52, z = 0.9 } },
+		{ t = 59.0, amount = 0, tint = { x = 0.42, y = 0.52, z = 0.9 } },
 	},
 	points = { Bins = BINS },
 }

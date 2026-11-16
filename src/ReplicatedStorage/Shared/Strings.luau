@@ -626,6 +626,9 @@ local STRINGS: { [string]: string } = {
 	["Hint.GetUp"] = "You can get up once on each floor. Hold on, then hold to stand.",
 	["Hint.Revolver"] = "One bullet. Fire, or lower the gun.",
 	["Hint.Takeoff"] = "Steer through the gaps. When it shouts PULL UP, hold it.",
+	["Hint.CreatureNear"] = "It is close: you can hear it. Your torch gives you away from far off. Switch it off and crouch, or hide until it passes.",
+	["Hint.Warning"] = "Lights stutter and something hisses: it is about to appear there. Do not run on into it. Turn back, step aside or hide.",
+	["Hint.Followed"] = "Footsteps behind you. Look back: it stops while you watch it. Do not stare too long.",
 	["Hint.Input.Revive"] = "Revive (hold)",
 	["Hint.Input.Crouch"] = "Crouch",
 	["Hint.Input.Pry"] = "Pry free (hold)",
@@ -643,6 +646,7 @@ local STRINGS: { [string]: string } = {
 	["Hint.Input.Fire"] = "Fire",
 	["Hint.Input.Lower"] = "Lower (hold)",
 	["Hint.Input.PullUp"] = "Pull up (hold)",
+	["Hint.Input.LookBack"] = "Look back",
 
 	-- Network (Net kicks a client that floods or sends malformed messages)
 	["Net.Kicked"] = "Disconnected: your game sent too many invalid requests. Please rejoin.",

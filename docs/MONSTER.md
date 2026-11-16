@@ -4,11 +4,21 @@ The complete behaviour of the monster ("the Creature" in game text) as the websi
 reproduce on Roblox without reading the JavaScript. Studs and seconds throughout. Every number is **Standard**; the
 **Nightmare** value follows in brackets where it differs.
 
+The numbers are `CreatureConfig.luau`'s (and `DifficultyConfig`'s, `NoiseConfig`'s). The presence layer (sections 15 to
+19: the director, the presence beats, the senses' additions, the chase's wind-up, pursuit and cap, the cut-off and
+approach teleports, how far its sounds carry) is `CreatureConfig.Presence`, exported into `world.json`
+`meta.creatureConfig` and read from there by the website. Where it differs from an older number (the chase's cap and
+loss time, `DifficultyConfig.maxChaseSeconds` / `chaseLostSeconds`; the teleport's stalk rule, `Teleport.StalkNear`;
+the rattle's and the heartbeat's radii, `Senses.RattleRadius` / `NearRadius`), this text and the website follow
+`Presence`; the Roblox runtime keeps the older numbers until it is ported from this text.
+
 Where the code lives (web): `web/src/creature/` (`service.js` is the brain, `brain.js` the transition table, `states/*`
-the states, `perception.js`, `hearing.js`, `pacing.js`, `locomotion.js`, `nav.js`, `config.js`), and the game's side in
+the states, `presence.js` the director, `beats.js` the beats' geometry, `perception.js`, `hearing.js`, `pacing.js`,
+`locomotion.js`, `nav.js`, `config.js`), and the game's side in
 `web/src/game/` (`mechanics/lockers.js` and `mechanics/hidespots.js` for the hiding spots, `mechanics/monsterFx.js` for the
-warnings and the music, `coop/creature.js` for co-op, `objectives/spawns.js` for the start rule). The fairness rules are
-asserted by `web/tools/creature-sim.mjs`.
+warnings and the music, `coop/creature.js` for co-op, `objectives/spawns.js` for the start rule, `ui/hints.js` for the first-time hints). The
+fairness rules are asserted by `web/tools/creature-sim.mjs`; the presence targets (section 20) by
+`web/tools/presence-sim.mjs`.
 
 ---
 
@@ -46,12 +56,16 @@ Every state's pace is `min(18.5, base × difficulty multiplier (1 [1.2]) × leve
 
 | State | Base pace |
 |---|---|
-| Patrol (the Stalk) | 7 |
+| Patrol (the Stalk) | 7; to a director's search hint 9 |
 | InvestigateNoise | 9 |
 | WallChase (the Chase) | 16.5 → 16.5 [18.5 capped] |
 | Search | 8 |
 | HidingResponse (approach) | min(chase, 9) |
 | Teleport (the stalk after it) | 7 |
+| Peek | 9 to its corner, 7 stepping out and back |
+| Glimpse | 9 to its start, 12 across |
+| Shadow | the player's pace, never under 7 nor over 11; 11 catching up |
+| PassBy | 7 |
 | Stunned | 3 |
 | AquaticStalk / lunge | 6.5 / min(18.5, 18 × mult) |
 | Scripted | whatever the script asks (16 by default) |
@@ -79,6 +93,7 @@ Every noise is a pulse `{position, kind, radius, priority, medium, level, ventNo
 | FallingObject | 24 | Low | Air |
 | ChatMessage (co-op text chat, if one exists) | 25 | Normal | Air |
 | JumpLand (any landing after ≥ 0.32 s airborne, on foot) | 26 | Normal | Air |
+| Pickup (an item taken: a fuse, the keys, a battery, a flask) | 20 | Normal | Air |
 | ObjectiveWork (a working hold, once a second) | 34 | Normal | Air |
 | Gasp | 40 | High | Air |
 | FlaskShatter | 50 | High | Air |
@@ -110,6 +125,7 @@ A pulse is heard only on the Creature's level, with radius > 0.
   - marks its source "loud" (High or Critical);
   - marks a swimmer (a Water noise of a swimming player).
 - Scripted alerts (`alert(position, priority)`) are heard the next tick with strength 1, no falloff and no walls.
+- A lit torch's glow seen (section 17.1) is heard like a Normal noise of its holder at the lit spot.
 
 ### 3.2 Sight
 
@@ -121,6 +137,7 @@ Evaluated every brain tick unless it is **blind**: hidden, fading (any warp), or
   - Underwater, unless the Creature swims (PoseMode Swim or AquaticStalk).
 - **Range:** torch on **70**; torch off in a lit pool **38**; torch off in the dark **20**.
   - Crouching or crawling downed: × 0.75.
+  - Standing still in the dark (torch off, not lit, not moving): × **0.5** (section 17.2).
   - Times the difficulty (1 [1.15]).
   - **Lit** means the baked probe irradiance at the player's root + 1 has luminance (0.2126 R + 0.7152 G + 0.0722 B)
     above **0.2**.
@@ -136,8 +153,10 @@ Evaluated every brain tick unless it is **blind**: hidden, fading (any warp), or
   current target − 0.25 downed, then by distance, then by user id.
 - **Every sighting:**
   - refreshes `lastSeen[player]` and `lastSeenAny`;
-  - refreshes the target's memory;
+  - refreshes the target's memory (the place, and the way they were running when they moved faster than 2: the
+    chase's pursuit, section 18.2);
   - refreshes the chase's `seenAt` (when it is the target);
+  - fills the player's noticing (section 17.3);
   - marks a swimmer on a pool level.
 
 ### 3.3 The stare (looking straight at it starts a chase)
@@ -167,9 +186,11 @@ catching, and may hunt.
   - It decays 0.025 [0.02] per second, or 0.06 in Relax.
 - **Phases:**
   - BuildUp → Peak: tension ≥ 0.7 [0.62] with a player within 40 [50].
-  - BuildUp → Relax: a chase lasting the max chase (22 [28]).
-  - Peak → Relax: a catch; the max chase; 55 [80] s in Peak; or tension ≤ 0.3 with no chase.
-  - Relax → BuildUp: after 25 [15] s and once the catch cooldown is over; tension is cut to ≤ 0.35.
+  - BuildUp → Relax: a chase lasting the max chase (the chase's cap, **12 [45]**, section 18.3); the breather (the
+    search after a chase is over, section 15.4).
+  - Peak → Relax: a catch; the max chase; the breather; 55 [80] s in Peak; or tension ≤ 0.3 with no chase.
+  - Relax → BuildUp: after the breather's **35 [15]** s (`CreatureConfig.Presence.Chase.Breather`, section 18.3) and
+    once the catch cooldown is over; tension is cut to ≤ 0.35.
 - **A catch:** tension 1, Relax, and a catch cooldown of **14.4 [8.8]** s.
 - **A level's activation:** a fresh BuildUp, tension ≤ 0.15, and an airlock grace of **12 [6]** s.
 - **May hunt** only outside the cooldown, the grace and Relax. Hunting gates chases, catches, stares, the
@@ -226,11 +247,11 @@ catching, and may hunt.
 | 5 | a warp is running | stays |
 | 6 | it was Stunned (the stun ended) | Patrol, withdrawing |
 | 7 | retreating in the water after a grab | AquaticStalk |
-| 8 | in WallChase and (chase time ≥ **22 [28]** or may not hunt) | **gives up**: Patrol, fading out (section 7) |
+| 8 | in WallChase and (chase time ≥ **12 [45]** or may not hunt) | **gives up**: Patrol, fading out (section 7) |
 | 9 | may not hunt | Patrol (withdrawing when it was in HidingResponse) |
 | 10 | WallChase and it saw its quarry hide | HidingResponse |
 | 11 | WallChase and someone in sight, or a stare trigger | WallChase |
-| 12 | WallChase and (no sight of its target for **4 [5]** s, or the chase is done) | Search |
+| 12 | WallChase and (no sight of its target for **4 [6]** s, counted only while it is not running to the last place it saw or heard them or on along their way; or the chase is done: its pursuit run, section 18.2) | Search |
 | 13 | WallChase otherwise | WallChase |
 | 14 | HidingResponse not done | HidingResponse |
 | 15 | HidingResponse done | WallChase if someone is in sight (or stares), else Search |
@@ -240,19 +261,25 @@ catching, and may hunt.
 | 19 | a swimmer on the pool level (seen or heard within 6 s) | AquaticStalk |
 | 20 | AquaticStalk | Patrol |
 | 21 | Teleport not done | Teleport |
-| 22 | heard a noise, outside InvestigateNoise and Search | InvestigateNoise |
-| 23 | InvestigateNoise | stays; Patrol when done |
-| 24 | Search: a High or Critical noise | InvestigateNoise |
-| 25 | Search | stays; Patrol when done |
-| 26 | a teleport is due (section 7.2) | Teleport |
-| 27 | otherwise | Patrol |
+| 22 | a presence beat (Peek, Glimpse, Shadow, PassBy) not done | stays |
+| 23 | heard a noise, outside InvestigateNoise and Search | InvestigateNoise |
+| 24 | InvestigateNoise | stays; Patrol when done |
+| 25 | Search: a High or Critical noise | InvestigateNoise |
+| 26 | Search | stays; Patrol when done (withdrawing, and a breather, when it followed a chase: section 15.4) |
+| 27 | the director hands over a beat (section 15.3) | that beat |
+| 28 | a teleport is due (section 7.2) | Teleport |
+| 29 | otherwise | Patrol |
 
-**"In sight"** is any sighting. During the Teleport state's stalk, only sightings within **7** studs count.
+**"In sight"** is a sighting of a player it has **noticed** (section 17.3; while it chases, or watches a hiding spot,
+any sighting). During the Teleport state's stalk, a noticed player within **40 [50]** (section 18.4). While a beat
+plays (not a pass-by), only a sighting within **12** (section 16).
 
 On entering WallChase:
 - The target is the stare trigger if any, else the target if seen, else the best sighting.
 - The chase timer starts.
 - A Screech plays at its eye (3D, volume 0.75).
+- The wind-up (section 18.1): out of anything but HidingResponse it holds **1.5 [0.7]** s facing them first (**2.8
+  [2]** s when they stand within **20**), and catches nobody meanwhile.
 
 On entering InvestigateNoise, the goal is the heard noise's believed position (its rank), or the memory.
 
@@ -278,7 +305,11 @@ Still, anchored, nobody targeted. In the water it keeps PoseMode Swim.
     heard).
   - **Otherwise, the heard pull:** with probability **0.75** (BuildUp) / **0.6** (Peak), the loop with the largest pull,
     where pull = Σ over heard rooms on the loop (within 60 s) of `rank × (1 − age/60)`.
+  - **Otherwise, the director's lean:** with a player to lean toward (section 15.2), the loop passing closest to them
+    (its nearest waypoint).
   - **Otherwise:** a uniform pick among the nearest min(3, n).
+- **The director's search hint** (section 15.3) breaks the lap: it walks to the hint at **9** (arrive 2), there looks
+  into the room's far corner not behind it, then back the way it came (U(0.6, 1.1) s each), and picks its next loop.
 - **Withdrawal:** entered "withdrawing", it first walks at 9 to the nearest patrol waypoint whose nearest player's eye
   is 35..140 studs away and which no player can see, then patrols.
 - **Three failed legs** pick a new loop.
@@ -301,11 +332,14 @@ Still, anchored, nobody targeted. In the water it keeps PoseMode Swim.
 - **Catches:** every brain tick, every sighted player (the target first) is tested (section 10); the first that passes
   is caught (Hallway).
 - **Target switch:** when the target is not seen and someone else is, it switches to the best sighting.
-- **Done:** when the memory point is reached (within 4) with nobody seen; or when the route fails while the target
-  is unseen. While seen, a failed route is retried after 1 s.
+- **The pursuit** (section 18.2): the memory point reached with nobody seen, when it saw them running it runs on along
+  their way, once, and the end of that run becomes the memory.
+- **Done:** when the memory point is reached (within 4) with nobody seen and the pursuit run (or there was none); or
+  when the route fails while the target is unseen. While seen, a failed route is retried after 1 s.
 - **Ends:**
-  - **4 [5] s** without a sight of the target → Search.
-  - **22 [28] s** after it started (or a pacing breather) → it gives up.
+  - **4 [6] s** without a sight of the target, the clock waiting while it runs to the memory point and on along their
+    way → Search.
+  - **12 [45] s** after it started (or a pacing breather) → it gives up.
 
 ### 6.6 Search
 
@@ -339,6 +373,9 @@ The watch `{player, spot, front, since}` lasts 1.5 s for the brain to take it.
 
 **LookAways:**
 - The first comes U(**7, 10**) s after it arrives; each next one U(7, 10) s after the last ended.
+- **Every watch has one (the fair outplay):** a first LookAway that would be skipped (below), after a long walk to
+  the spot, comes instead as late as it still ends 0.6 s before the reach, and never sooner than its tell allows
+  (0.7 s after it arrives).
 - The tell: **0.7 s** before each, a low grunt (CreatureGrunt, 3D at its eye).
 - The LookAway lasts **2.5 s**: action `LookAway`, sight facing the look-away direction, no peripheral sense.
 - The look-away direction: perpendicular to the spot's facing, toward the more open side.
@@ -346,7 +383,8 @@ The watch `{player, spot, front, since}` lasts 1.5 s for the brain to take it.
   - The direction is tilted 0.35 back away from the spot, then normalized.
 - A LookAway that would still run within 0.6 s of the reach is skipped.
 
-**The ReachIn:** at `since + **30** [24]` s (since = when they got in), on arrival if later.
+**The ReachIn:** at `since + **30** [24]` s (since = when they got in); when it arrived too late for its first
+LookAway to end 0.6 s before that, 0.6 s after that LookAway ends.
 - Action `ReachIn`.
 - **0.6 s** later, a **Locker** catch on the hider (section 10).
 
@@ -364,8 +402,9 @@ It is also done when the hider stops playing or the hider's spot changes.
 ### 6.8 Teleport
 
 See section 7.2. After the warp it **stalks** the target for **10 s** at 7 studs/s, re-aiming at their position
-every 1 s. Meanwhile only a sighting within **7** studs, or a stare, starts a chase; noises do not interrupt it. It
-is done after 10 s, or when the target stops playing, hides or enters a duct. Then Patrol.
+every 1 s. Its stare counts as noticing the target when it ends with a clear line to their eye within **40 [50]**.
+Meanwhile a sighting of a noticed player within **40 [50]**, or a stare, starts a chase (with its wind-up); noises do
+not interrupt it. It is done after 10 s, or when the target stops playing, hides or enters a duct. Then Patrol.
 
 ### 6.9 Stunned
 
@@ -476,10 +515,13 @@ weighted with the seeded stream; the weight starts at 1 and is multiplied:
    lattice.
 2. Keep the candidates:
    - within 6 of the target's room floor;
-   - within **24.5** horizontally of the target;
+   - within **24.5** horizontally of the target (**70.5** + their **lead** for a target on the move: their speed above
+     2 and a travel direction; the lead is the way they cover before it may appear, their speed × (the 0.6 s FadeOut +
+     the 1.6 s Warning), about 42 for a sprinter);
    - not in the target's room when that room is a **keep-room** (any kind but Corridor / Tunnel / Gallery / Hallway);
    - with the appear point (floor + 4.7) at least **12** from every player's root;
-   - with a walking distance (the nav route from the target's feet) of **12..24**;
+   - with a walking distance (the nav route from the target's feet) of **12..24**; or, for a target on the move, an
+     Ahead candidate (below) **24..70** walked past their lead (24 + lead .. 70 + lead: the cut-off, section 18.4);
    - in no player's view (above).
 3. **Classify** each kept candidate with the target's **trail**: their root sampled every 0.5 s over the last 15 s,
    leaving out the last 1 s.
@@ -489,11 +531,12 @@ weighted with the seeded stream; the weight starts at 1 and is multiplied:
      direction to it is over 0.25.
    - **Behind** also when that look dot is under −0.25.
    - **Side:** otherwise.
-4. **Choose:** roll the stream. Under **0.6** try Behind, Ahead, Side, in that order; else Ahead, Behind, Side. The
-   first non-empty class wins; pick uniformly within it.
+4. **Choose:** roll the stream. Under **0.75 [1]** (the cut-off share) try Ahead, Side, Behind, in that order; else
+   Behind, Ahead, Side. The first non-empty class wins; pick uniformly within it.
 5. The root faces the target.
 
-**Then:** the warp (7.1) with the warning and the stare.
+**Then:** the warp (7.1) with the warning and the stare. (The director's approach teleport, section 15.3, is the same
+warp with the same warning, no stare, landing 45..80 walked from its player.)
 - **The reveal:** during FadeIn and Stare, the moment the target's view centre comes within **22°** of its eye (clear
   line, within 48), the `revealed` event fires once, the reveal scare on their screen (no damage).
 - **After the warp:** the 10 s stalk (6.8).
@@ -525,6 +568,12 @@ are tagged `HideableLocker`. All kinds share the interaction:
 **Getting in** is heard: HideEnter (8), or HideEnterHurried (14) after sprinting within the last 1 s. The noise is at
 the door.
 
+**Refused while it is watching you** ("It's watching you. Lose it first."): it chases you (WallChase, you its
+target) **and** has a clear line from its eye to yours within its full sight range (the torch range × the
+difficulty's sight multiplier, section 3). A chased player who has broken the line (round a corner, behind a door
+frame) may get in: seen within the last 1.5 s, HidingResponse (section 6.7); else only the sniff can find them (8.1).
+Co-op: each player's own Creature line decides for them.
+
 ### 8.1 The sniff (it did not see you get in)
 
 Search and InvestigateNoise stand at a spot's front, hunched, and ask the game's inspector.
@@ -546,7 +595,7 @@ Search and InvestigateNoise stand at a spot's front, hunched, and ask the game's
 
 From getting in:
 - **35 s:** the warning knock (HideWarn) and a hint.
-- **45 s:** shoved out to the spot's exit, unhurt (HideKick).
+- **45 s:** shoved out to the spot's exit, unhurt (HideKick); with no clear spot to step out to, let go where they are.
 - A running breath check holds the shove until it ends.
 
 ### 8.3 Fake-outs (DOORS' Jack)
@@ -613,15 +662,20 @@ The game may veto a catch (a cutscene, a player not playing).
 - **Waypoints:** a waypoint every 4 studs, reached within 2.5. Re-routed every 2 s (Patrol), 1 s (Investigate,
   Search) or 0.35 s (chases), when the goal has moved 2+ studs.
 - **Stalls:** no progress of 1.2 studs for 2.5 s forces a fresh route. A second stall within 12 s reports Stuck.
+- **Walls:** sliding along a wall never carries a step farther than its pace × the step's time (the push out of the
+  wall can turn a step, never lengthen it).
 - **Stuck:** only while nobody sees it, it is moved to the nearest patrol waypoint that is 6+ studs away and unseen,
-  and the state restarts.
+  and the state restarts (a presence beat, a teleport's stalk or a hiding watch ends instead: its plan belonged to
+  where it stood; a teleport entered again would replay its warp and warning at the same spot, a watch walk back into
+  the same stall for as long as the hider stays in).
 
 ---
 
 ## 11. The player's feel (outputs)
 
-- **Heartbeat and breathing:** within **25** of its eye (seen or not, when it is not hidden, Dormant or Scripted), a
-  panic floor of `0.27 + 0.43 × smoothstep(25 → 6, distance)`. Heartbeat starts at panic 0.25 and races at 0.62.
+- **Heartbeat and breathing:** within **45** of its eye (seen or not, when it is not hidden, Dormant or Scripted), a
+  panic floor of `0.27 + 0.43 × smoothstep(45 → 6, distance)`: its real distance (section 19). Heartbeat starts at
+  panic 0.25 and races at 0.62.
 - **Torch static:** within **15**, the flashlight's EMF is `smoothstep(15 → 2.25, distance)`.
 - **The chase music:** while the Creature chases this player (WallChase, they are its target):
   - the ChasePulse loop, fading in over 0.4 s;
@@ -629,8 +683,11 @@ The game may veto a catch (a cutscene, a player not playing).
   - a 1.4 s fade-out when it ends.
 - **The stare:** StareSting for the starer.
 - **The give-up:** GiveUpSwell for the one it chased; CreatureVanish where it vanished for the others.
-- **The rattle:** while it stalks (Patrol, Teleport, Search, HidingResponse, InvestigateNoise) within 22 of the
-  player's eye, CreatureRattle at its eye every U(4.5, 8) s.
+- **The rattle:** while it stalks (Patrol, Teleport, Search, HidingResponse, InvestigateNoise, and the beats Peek,
+  Glimpse, Shadow, PassBy) within **45** of the player's eye, CreatureRattle at its eye every U(4.5, 8) s (heard to 55).
+- **First-time hints** (`ui/hints.js`, TutorialConfig): it within the heartbeat's radius (switch the torch off,
+  crouch, hide), a teleport's warning within 40 (turn back, step aside, hide), it shadowing you (look back: a Shadow
+  whose player is you, read from the target it publishes, section 12).
 - **Footfalls:** heavy, about 2 s apart when stalking (the animator).
 
 | Sound | When | Where |
@@ -645,7 +702,7 @@ The game may veto a catch (a cutscene, a player not playing).
 | RevealSting | a reveal (until the rig's own reveal scare plays it) | you |
 | FakeoutShriek | a fake-out | you |
 | CreatureGrunt | 0.7 s before a LookAway | its eye |
-| CreatureRattle | stalking within 22 | its eye |
+| CreatureRattle | stalking within 45 | its eye |
 | HideWarn / HideKick | 35 s in a spot / shoved out or pulled | you |
 | CreatureGrowl | a pool lunge's telegraph | the lunge origin |
 | JumpscareSting + Screech | a catch | the victim / its face |
@@ -665,6 +722,10 @@ Published every frame (`snapshot()` / `viewState()`):
 | `actionStartedAt` | game time the action began |
 | `fade` | 0..1 visible |
 
+The snapshot also names the player it is after (`getTarget()`, the co-op packet's target): its target, else, while it
+plays a Peek, a Glimpse or a Shadow, that beat's player (it watches them: the rig's head follows them, and the
+"Followed" hint reads it). The brain's own target (chases, sightings, the pacing) is not changed by it.
+
 ---
 
 ## 13. Co-op
@@ -682,6 +743,9 @@ Published every frame (`snapshot()` / `viewState()`):
   the one drawn, then along its heading; its eye is the rig's for that pose, 0.6 forward.
 - **Events to everyone:** a teleport's warning (the flicker and the hiss on every page; the torch stutter only on the
   target's page), the grunt, a give-up.
+- **The beats** travel as Patrol in the world packet and exactly (Peek, Glimpse, Shadow, PassBy) on the state message.
+- **The director** reads every player (each one's menace, quiet spell and time left alone); in co-op its attention
+  goes to a player left alone for 75 s first (section 15.2).
 - **Events to their target only:** a reveal scare, a stare's sting.
 - **Fake-outs** play only for the one who opened the spot; the spot is then safe on every page.
 - **A pull-out** goes from the puller to the host, then to the hider's page, which throws them out; the host's brain
@@ -693,12 +757,16 @@ Published every frame (`snapshot()` / `viewState()`):
 ## 14. Fairness rules (asserted by `web/tools/creature-sim.mjs`)
 
 1. Never faster than a sprinting player (19) outside Scripted, on Standard and Nightmare.
-2. Never teleports into anyone's view, nor within 12 studs of anyone. Every teleport:
+2. Never teleports into anyone's view, nor within 12 studs of anyone. Every teleport (the approach too):
    - is warned 1.6 s ahead;
-   - is 12..24 studs of walking from its target at planning.
+   - is 12..24 studs of walking from its target at planning (Behind, Side); 24..70 past their lead Ahead of a target
+     on the move (the cut-off); 45..80 for the director's approach (past their lead, and only ahead, for a target on
+     the move).
 3. Never catches through a wall: every catch has a clear chest-to-chest line (a ReachIn's own hiding spot aside).
 4. The first teleport on a floor comes no sooner than the floor's grace + 45 s.
-5. A chase ends after 4 s without a sight (Search), or at 22 [28] s whatever happens (it fades away).
+5. A chase ends after 4 [6] s without a sight once it has run to the last place it saw them and on (its pursuit; then
+   Search), or at 12 [45] s whatever happens (it fades away); every fresh chase winds up 1.5 [0.7] s first and catches
+   nobody while it does.
 6. A LookAway lets a hider slip out and escape by breaking the line; stepping out under its nose is a catch; the
    ReachIn comes at 30 s; a teammate's pull-out is no catch.
 7. The pool: the 20 s grace, a freestyle swimmer outswims it, every lunge is telegraphed, the 15 s retreat after a
@@ -707,10 +775,296 @@ Published every frame (`snapshot()` / `viewState()`):
    - the same run gives the same path;
    - 20 and 144 fps render loops give identical decisions and positions;
    - no NaN, no stuck state, no state or warp held past its bound in a soak of every level.
+9. The presence layer:
+   - every beat starts with every player 25 or more walked from its stand points, a hiding spot within 25 walked of the
+     player it plays to and that player not cornered (two ways out of their room); a beat is never a chase on its own
+     (only a player within 12, or a stare);
+   - a hint is never a player's own position (25..55 walked from them), never in anyone's view;
+   - the director's caps: a hint no sooner than 8 s after the last, a beat no sooner than 35 [25] s, an approach no
+     sooner than 25 s, a quiet spell of 40 [35] s on a player after an encounter and 45 [40] s after a catch, the first
+     beat no sooner than 20 s into a floor; in co-op a player left alone 75 s goes first.
 
 ---
 
-## 15. Map data it reads (the tunnel maps)
+## 15. The director (a second brain above its own)
+
+The director knows where the players are; the Creature itself still knows only what its senses tell it. The director
+acts only through honest means: where its patrol goes, a search hint, the warned approach teleport, a presence beat,
+and backing off. Numbers: `CreatureConfig.Presence.Director`.
+
+### 15.1 Menace
+
+Once a second (Interval **1**), for every hunted player on its level (not ignored), it reads:
+- **walk:** the walking distance (its nav) from its feet to theirs;
+- **sees:** the player sees it: it is shown (fade ≥ 0.5), within **80** of their eye, inside **50°** of their look
+  (flat bearing; the screen's half width), with a clear line to its eye or its root;
+- **chased:** it chases them now (WallChase, they are its target).
+
+Each player keeps a **menace** (0..1), a **quiet spell** (until when) and the time they were last **pressured**:
+- at a level's activation (and a run's start) everyone starts at **0.5**, pressured now, no quiet spell;
+- **sees** or **chased**: an encounter (below);
+- else **walk ≤ 70**: pressured now (menace held);
+- else menace rises by `1 / 55 [40]` a second (full after 55 [40] s far).
+
+**An encounter** with a player: menace 0, pressured now, and a quiet spell to at least now + **40 [35]** s (**45 [40]**
+after a catch of them). Encounters: sees or chased (above); a chase on them starting or ending (its target); a catch
+of them; a beat played to them ending once it **reached** them (they saw it, or it came within **30** walked of them,
+read once a second with the menace; a beat that never reached them is no encounter: their menace stands); a
+respawn's grace given to them.
+
+### 15.2 Focus and lean
+
+Of the players it may turn to (hunted, on its level, not hiding, not in a duct), out of their quiet spell:
+- with two or more such players, one left alone (not pressured) for **75** s or more goes first (the longest alone);
+- else the highest menace; ties: the one left alone longest.
+
+That player is the **focus** (none when everyone is in a quiet spell). The patrol **leans** toward the focus, or, with
+no focus, toward the highest menace among the players it may turn to (section 6.3).
+
+### 15.3 Orders
+
+Once a second, after the menace update, only while it patrols (state Patrol, no warp), may hunt, sees nobody and heard
+nothing this tick, the focus player gets an order:
+1. **A beat** when their menace is **0.5** or more, they are **30..140** walked away and the beats' cooldown is over
+   (the first **20** s after an activation, then **35 [25]** s after a beat started, or **6** s after no beat fitted):
+   the beat plan (section 16); none fitting, nothing this second.
+2. **Else a search hint** when their menace is **0.2** or more, they are more than **100** walked away and the hints'
+   cooldown is over (**8** s after the last try):
+   - the hint: of the floor points (the 5-stud lattice) within 6 of their floor and **15..55** horizontally from their
+     feet, ahead of their way first (the cosine of their travel, else their look, with the way to the point ≥ **0.4**),
+     then nearest the Creature: the first of the first **14** that is **30..55** walked from them, reachable for it now,
+     and in nobody's view (section 7.1's rule);
+   - when the walk from it to the hint is over **90**, the **approach teleport** comes first, if its cooldown (**25** s)
+     is over, the floor's grace (20 [12] s from its activation) is over, it is not within 25 s of a catch or a fall
+     and the game does not block teleports: of the teleport
+     candidates within 6 of their floor, 12..80 horizontally from them, ahead of their way first then nearest the
+     middle of 45..80, the first **60** are asked; those **45..80** walked from them, 12 or more from everyone and in
+     nobody's view pass; a seeded pick among the first three. For a target on the move (their speed above 2) only
+     candidates **ahead** of their way count (behind a runner it would form where they have already gone), and both
+     bands lie past their lead (section 7.2: 12..80 + lead horizontally, 45..80 + lead walked). It forms **facing
+     away** from them. The warp is the
+     teleport's (section 7.1: FadeOut, Hidden, the 1.6 s Warning with the lights, the hiss and the target's torch,
+     FadeIn), with no stare; it patrols on, to the hint.
+   - Patrol walks to the hint (section 6.3).
+
+### 15.4 Backing off
+
+After an encounter (a chase, a catch, a long stare, a beat) it backs off:
+- **the quiet spell** on that player (15.1): no hint, no beat on them;
+- **the breather:** a Search that followed a chase (or a watched hiding spot) is over → the pacing's Relax (section 4)
+  and Patrol **withdrawing** (section 6.3);
+- a catch: the pacing's catch cooldown and Relax (section 9), and the withdraw.
+
+The result is a leash: most of the time it is 35 to 90 studs walked from the nearest player, close enough to be heard
+and glimpsed, and the tension goes in waves (build, peak, release).
+
+---
+
+## 16. Presence beats
+
+Choreography so the player **sees** it without a fight starting: Peek, Glimpse, Shadow, PassBy, each its own state.
+The director plans one for its focus player (`beats.js`), in a seeded order by weight (PassBy **0.2**, Peek **0.3**,
+Glimpse **0.3**, Shadow **0.2**; drawn without putting back); the first whose geometry fits plays. Numbers:
+`CreatureConfig.Presence.Beats`.
+
+**Safe and readable, every beat:**
+- the player is not **cornered**: their room has two or more open ways out;
+- a hiding spot's front within **25** walked of them;
+- every stand point of the beat **25** or more walked from every player;
+- it can walk to the beat's start within **100** walked, and it gets there within **20** s or the beat is off.
+
+**While a beat plays** (not a pass-by) only a sighting within **12**, or a stare (section 3.3), starts a chase; noises
+do not interrupt it. A player who comes within **18** of it (straight, root to root) ends the beat and it
+**withdraws** (Patrol, withdrawing: section 6.3), so a player walking on toward a peek or a crossing
+is not run into catch reach. A beat ends when its player stops playing, hides or enters a duct. It ends in Patrol.
+
+The candidate points are the floor lattice (every 5 studs, within 6 of the player's floor), nearest the Creature
+first; only the first **10** are walked (pathfinding asked).
+
+### 16.1 Peek
+
+- **The stand point S:** **30..70** horizontally from the player, within **45°** of their way (their travel, else their
+  look), with a clear line from their eye to its head there (within 80).
+- **The corner W:** **5..14** from S, at least as far from the player as S less 2, where nobody sees its head or chest
+  (any facing), at most **20** walked from S.
+- **It plays:** walks to W at **9**; steps out to S at **7** (within 2, or as far as it got in 6 s); holds **U(1.5, 3)** s
+  facing the player; walks back to W; done.
+
+### 16.2 Glimpse
+
+- **The crossing J:** **30..70** horizontally ahead (within **35°** of their way), its head in their view (a clear line
+  within 80).
+- **Its ends:** A and B, **6..16** from J, out of everyone's sight; A on the player's left of the line from them to J,
+  B on their right (each more than 3 off it); A and B on opposite sides of J (the cosine of the two ways from J under
+  −0.5); each at most **20** walked from J.
+- **It plays:** walks to A at **9**; crosses A → J → B at **12**; done.
+
+### 16.3 Shadow
+
+- **When:** the player is moving faster than **3** and no faster than **14** (a sprinter, 19, would leave its 11
+  behind, never seeing it; for them the beats ahead fit), it is **30..70** walked from them, behind them (the
+  cosine of their travel with the way to it under −0.3), and not in their view facing them.
+- **It plays** for **U(15, 25)** s, re-planned every 0.5 s:
+  - their look within **25°** of its head with a clear line (within 80): it **freezes**, facing them (a long look is
+    the stare, section 3.3, that starts a chase);
+  - closer than **30** walked: it stands, facing them;
+  - else it walks to the point **40** back along their trail (their root every 0.5 s over 15 s) at their pace, never
+    under 7 nor over **11**; farther than **50** walked, at 11.
+- **Then:** Patrol, withdrawing.
+
+### 16.4 Pass-by
+
+- **Only for a player moving no faster than 6** (working an objective, crouching, standing, hidden): a player on the run
+  would run into it; for them the director's other beats (ahead of them, in view) fit.
+- **The way through:** a point P **18..28** horizontally from the player and **20** or more walked from them, at most
+  **128** walked from it; then a point E **20..40** from P (at most 50 walked), on the far side from where it comes
+  (the cosine of the way P → E with the way it comes to P over 0.2), **30** or more from the player; its whole walk
+  (to P, then to E) keeps **20** walked off them (held by the bound (walk(player, X) + walk(player, Y) − walk(X, Y)) / 2
+  for each leg X → Y).
+- **It plays:** walks to P, then to E, at **7**, with its own senses throughout (a sighting of a noticed player starts a
+  chase): hiding, or keeping out of its cone in the dark, and watching it go past is the answer.
+
+---
+
+## 17. Detection
+
+Numbers: `CreatureConfig.Presence.Detection` (and NoiseConfig for the noises).
+
+### 17.1 The torch's glow
+
+Every **0.5** s, for each hunted player with their torch on, not hiding, not in a duct, whom it does not see this tick:
+- **the lit spot:** along their look from their eye, the first surface within **30** (its collision), else 30 along;
+  pulled 0.3 back toward them;
+- seen when the spot is within **90** of its eye (× the difficulty's sight multiplier), inside its view cone (55°,
+  flat bearing) and the line is clear;
+- seen, it is heard like a **Normal** noise of that player at the spot (strength 1): it goes to look (InvestigateNoise).
+
+### 17.2 Standing still in the dark
+
+A player with their torch off, not in a lit pool and not moving (speed 2 or less) is seen at **0.5 ×** the range
+(section 3.2): 20 → 10 (crouched 7.5).
+
+### 17.3 Noticing
+
+Every brain tick, each player's **noticing** (0..1):
+- in sight: + `dt / (2 [1.8] × share)` where `share = clamp01((distance − 8) / (70 × sight multiplier − 8))`; within
+  **8** at once (1);
+- out of sight: − **0.6** a second.
+
+A sighting starts a chase (rows 11, 15, 18 of the table) only of a player it has **noticed** (noticing 1), except while
+it chases or watches a hiding spot already. A glimpse across its cone far off does not start a chase; staying in its
+sight does. Its stare after a teleport notices its target (section 6.8).
+
+### 17.4 Noises
+
+Sprinting (60, High) and landings (26, 60 after a hard fall) carry farther than walking (22); hiding-spot doors (8 /
+14), **items taken** (Pickup, 20, Normal: a fuse, the keys, a battery, a flask) and the breaker (110) are noises it
+investigates (section 3.1).
+
+---
+
+## 18. Chases with teeth
+
+The pace stays 16.5 [18.5 capped]: a sprinting player (19) is faster. Numbers: `CreatureConfig.Presence.Chase` and
+`.Teleport`.
+
+### 18.1 The wind-up
+
+A chase entered from anything but HidingResponse: the Screech, and it holds **1.5 [0.7]** s facing the target before
+it runs; **2.8 [2]** s when the target stands within **20** (straight) as it starts: a player met round a corner gets
+the time to turn. It screeches, it does not reach: no catch until the wind-up is over (a player who bolts past it is
+still in its path, a few steps ahead); from then on catches are tried every tick.
+
+### 18.2 The pursuit
+
+Each sighting of the target while they move faster than 2 remembers their travel (flat, unit). Unseen, it runs to the
+last place it saw them; there, once per sighting, when it remembers their travel, it runs on: of the floor lattice
+within 6 of that place's floor and within **18 [24]** (0.6 × the pursuit) of the point **30 [40]** along their travel,
+the best (score: along − 0.5 × the distance off the point; along more than 5) of the first 8 by score that it can walk
+to within 45 [60]; that point becomes the memory. Reached with nobody seen, the chase is done (Search there).
+
+### 18.3 The cap
+
+It loses its quarry after **4 [6]** s without a sight (not counting its run to the last place it saw them and its
+pursuit) and gives up at **12 [45]** s whatever happens; then the hunt eases off for the breather, **35 [15]** s at
+least (the pacing's Relax, section 4; also after a catch). On Standard a chase is a short, sharp scare a player with
+stamina can outrun (a sprint lasts about 14 s) and a spent one survives by breaking its line of sight or hiding; on
+Nightmare it lasts 45 s, so a player must break its line of sight **and** get out of its path or hide, not only outrun
+it down a straight corridor.
+
+### 18.4 The cut-off teleport
+
+- **Ahead first:** a teleport tries Ahead of its target's way first **0.75 [1]** of the time (section 7.2; on Nightmare
+  always: formed behind a sprinter it is left behind before its stalk can see them), and a target on
+  the move may be cut off **24..70** walked ahead of where they will be when it may appear (past their lead, section
+  7.2; out of their view, with the full 1.6 s warning): they run on toward
+  the flicker and the hiss. The answer to the warning is to turn, sidestep or hide.
+- **After its stare** it has noticed its target when it can see their eye within **40 [50]**; in the stalk a sighting
+  of a noticed player within **40 [50]** starts the chase.
+- The catch, the downed state and the lives rules are unchanged.
+
+---
+
+## 19. Being heard
+
+Its footfalls (the animator's plants, heard to 70), its breath and the mask's rattle (CreatureRattle while it stalks or
+plays a beat within **45**, heard to 55) always play from where it really is; the heartbeat and breathing's panic floor
+follows its real distance within **45** (section 11). Numbers: `CreatureConfig.Presence.Audio`.
+
+---
+
+## 20. The presence report (`web/tools/presence-sim.mjs`)
+
+Scripted players on the real floors (the Basement, the Hallways, the interim Auditorium), 12 seeds each (the objective
+player's downs on 36: on 12 a floor's mean moves by about 0.25 between seed sets), Standard and Nightmare, alone and in
+pairs (each player catchable), 8 minutes per floor, each floor started as the game starts it (the start hold):
+- **the objective player:** the floor's objective targets at a sprint whenever it has stamina, torch always on, never
+  hides; chased it runs (a point 30..60 off, far from it and round a corner from it where there is one, whose way does
+  not run back toward it over its first 25 studs; a new one every 3 s, never one that runs back toward it more than the
+  way it is on); seeing it within 45 it turns away; hearing it within 25 it looks;
+- **the careful player:** the same targets at a walk with looks back; crouched with the torch off when it hears it near;
+  hides (out of its sight, by a way that keeps 12 off it; with no spot it runs, upright, to break the line, or, only
+  heard close and unseen, keeps still in the dark) when warned, chased, seen or closed in on; slips out of a watched
+  spot during a LookAway; a spot refuses it as the game does (section 8: chased with a clear line from its eye), so it
+  runs on to break the line first;
+- **both** notice a teleport's warning aimed at them or within 40 (the torch, the hiss, the lights): as it forms
+  (1.8 s after the cue began) they look at the warned spot for up to 1.5 s, still going their way.
+
+It measures sightings (it shown, within 80, inside 50° of their look, a clear line; each player's longest stretch
+without one is reported, not a target: the careful player's own play keeps it from seeing it), the walking distance once a
+second, pass-bys (within 30 walked with no chase), chases (one taken up again out of its search or hiding watch within
+20 s is the same chase) and how they ended, presence events (a sighting, a pass-by or a chase) and downs; and a
+teleport test: a straight-line sprinter and a hider who breaks the line and hides within 8 s.
+
+**Targets (asserted on the Basement and the Hallways):**
+
+| | Standard solo | Standard pair | Nightmare solo | Nightmare pair |
+|---|---|---|---|---|
+| first presence event within | 75 s | 75 s | 75 s | 75 s |
+| presence events: median gap / longest | 75 / 150 s | 75 / 150 s | 75 / 150 s | 75 / 150 s |
+| within 90 walked of the nearest player | ≥ 50 % | ≥ 50 % | ≥ 50 % | ≥ 50 % |
+| within 20 walked, no chase, no beat | < 5 % | < 5 % | < 6 % | < 6 % |
+| chases per 8-minute floor | 2..5 | 2..7 | 2..8 | 2..9 |
+| objective player's downs per floor (each, 36 seeds) | 0.3..0.8 | 0.15..0.8 | 0.7..5 | 0.5..4 |
+| objective player: floors with 2 or more downs (each) | ≤ 20 % | ≤ 20 % | | |
+| careful player: floors with a down | < 25 % | < 35 % | < 40 % | < 40 % |
+
+Standard solo is the measure of the game: "not too hard" for a careless player (one who sprints everywhere with the
+torch on and never hides) is caught 0.3 to 0.8 times a floor, and spends both the get-up and the respawn on at most
+one floor in five. The others differ only where it cannot apply as it is: a pair has two quarries (1..3.5
+chases a player), each careless player of a pair is caught no more often than alone (measured lower: the two share its
+chases), and a pair's floor counts a down of either player for the careful one; Nightmare keeps Standard's presence (it adds danger, not frequency),
+closes in and starts more chases (faster, keener senses; a chased player hides only once out of its sight, section 8), and its chase runs at the cap (18.5), only just slower than a sprint (19), with one get-up
+a floor, so a player who never hides is meant to lose a Nightmare floor: its fairness is the careful player's and the
+hider's.
+
+And on both difficulties: a straight-line sprinter is caught after a teleport (the one asked for: the director's
+approaches, which form facing away with no stare, are not it) at least once; a player who breaks the
+line and hides within 8 s is never caught by the teleport's encounter; never faster than a sprinting player.
+
+---
+
+## 21. Map data it reads (the tunnel maps)
 
 | Data | Use |
 |---|---|
