@@ -394,3 +394,24 @@ Decisions (lead):
   pastes each recipe into the Higgsfield app himself and the lead collects the results through show_generations.
 - The opening v3 is ALSO built in the game engine (real-time, the new script, real voices) so that the game does
   not depend on credits; a Higgsfield video replaces it later through the video-cutscene player if one is made.
+
+### Nov 16 ~21:45 UTC, the player (verbatim)
+"okay so now continue with higgsfield then. make sure the story line cutscenes graphics and sounds is good and models
+of monster charcter go. once done with whole website lmk dont start roblox game automatically"
+What changed: the second connector ("Higg") is connected and has the generation tools (pictures, video, audio, 3D,
+uploads). The account still holds the free plan's 10 credits.
+Prices read by preflight (credits): a cinematic 2k picture 0.12; a spoken line 0.2; a textured 3D model 9 (rigged
+44); ONE 5-second 720p video clip 35. The default picture model needs the Basic plan; the cinematic one works on free.
+Decisions (lead):
+- STANDING: when the whole website is finished (after the final test and bug-sweep phase), tell the player. The
+  Roblox port does NOT start until he says so.
+- The player's go covers spending the credits he has on this game; nothing is bought, rented or published; every new
+  kind of generation is priced first; a ledger is kept (scratchpad higg/ledger.md).
+- WITH THE FREE CREDITS: design pictures (the monster's body as Danny grown wrong, Danny, the classmates, the thing,
+  the stages of the change, flat art). Pictures made on the free plan are used as design references until their
+  licence for a shipped game is confirmed.
+- WITHOUT MORE CREDITS there is no video (a 70 s opening is about 14 clips: roughly 500 credits before retries) and
+  no generated 3D models: the opening v3 is built in the game engine with the new script, the real voices and the new
+  models; the monster's and the kids' models are built in our own pipeline to match the chosen design pictures.
+  If the player adds credits, video and generated 3D come back into play.
+- ART PRODUCTION IS NO LONGER ON HOLD: people v2, the monster's body and the school's look proceed.
