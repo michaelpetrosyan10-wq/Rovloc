@@ -375,3 +375,22 @@ Decisions (lead):
   light and camera (bounced light in the bake, the HDR film response, the torch), which no image generator supplies.
 - WHEN THE PLAYER SAYS IT IS CONNECTED: ask once for a credit cap, start a helper session (connectors load only at a
   session's start), check that it has the Higgsfield tools, then generate in the order of the shot list.
+
+### Nov 16 ~21:30 UTC, the player (verbatim)
+"Higgsfield is connected take a look see if u can use it"
+What the lead found (read through the connector, nothing generated, no credit spent):
+- The connector "Higgsfield AI" IS loaded in the lead's own session (no helper session needed). Its tools:
+  list_workspaces, workspace_select, balance, models_list, models_get, show_generations and
+  import-claude-motion-from-url. Its own instructions say: "This connector cannot generate media, upload arbitrary
+  files, or make purchases." So the lead can read the account, the model catalogue and finished generations (with
+  their result links), but cannot start a generation or upload a reference picture.
+- A second connector named "Higg" is in the player's list with its sign-in not finished (connect_incomplete); it
+  may be the custom one (mcp.higgsfield.ai) with the generation tools. Only the player can finish it.
+- Balance: 10 credits, free plan. Not enough for a video cutscene; some video models need a paid plan.
+- The catalogue (models and their settings) is digested in the story folder: higgsfield-live.md.
+Decisions (lead):
+- No credit is spent and nothing is bought without the player's own word and a cap.
+- The prompt pack is written so that EITHER the lead runs it (if generation tools and credits appear) OR the player
+  pastes each recipe into the Higgsfield app himself and the lead collects the results through show_generations.
+- The opening v3 is ALSO built in the game engine (real-time, the new script, real voices) so that the game does
+  not depend on credits; a Higgsfield video replaces it later through the video-cutscene player if one is made.
