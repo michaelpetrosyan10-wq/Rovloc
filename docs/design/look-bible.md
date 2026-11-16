@@ -31,7 +31,9 @@ Also: the realistic people put Potato over its 16.7 ms frame budget (cause not f
    motion from motion capture, retargeted correctly (a relaxed stand is a relaxed stand).
 4. THE MONSTER IS A HUMAN BODY GONE WRONG, not a costume and not a cartoon: far too tall and thin, arms to the knees,
    long fingers, ribs and spine under the skin, joints that sit and bend slightly wrong, a head that turns first;
-   too still, then too fast. The cracked porcelain mask stays as the player accepted it. No blood, no gore.
+   too still, then too fast. The cracked porcelain mask stays as the player accepted it, and the head and mask are
+   slim like the body (the player, 16 Nov: "the face is supposed to be slim like body"): a small, narrow, long head,
+   never a big round one on a stick body. No blood, no gore.
 5. THE TIERS. Max and High carry the look. Medium, Low and Potato show the same picture made cheaper. Tiers are
    visual only: nothing gameplay reads may change (hitboxes, heights, speeds, sight lines, what is dark enough to
    hide in). Potato holds 60 FPS on a school Chromebook: the frame-time gate (npm run check) decides.

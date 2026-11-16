@@ -415,3 +415,15 @@ Decisions (lead):
   models; the monster's and the kids' models are built in our own pipeline to match the chosen design pictures.
   If the player adds credits, video and generated 3D come back into play.
 - ART PRODUCTION IS NO LONGER ON HOLD: people v2, the monster's body and the school's look proceed.
+
+### Nov 16 ~21:50 UTC, the player on the first Higgsfield test picture of the monster (verbatim)
+"This is not scary the face is supposed to be slim like body"
+(The picture: a big round mask on a bare-bone body in a sleeveless sack, lit evenly.)
+Decisions (lead):
+- THE MONSTER'S HEAD AND MASK ARE SLIM LIKE THE BODY: a small, narrow, long head high on a long neck, in proportion
+  with a body about four metres tall (the head about one twelfth of his height); the mask narrow (about half as wide
+  as long), hollow cheeks, pointed chin; never a big round head on a stick body. This binds the design pictures and
+  the 3D model (task 46).
+- SCARY BEFORE ODD: no friendly smile, black eye holes with a pinprick of light, skin over bone (never bare bones),
+  darkness and backlight, a low camera, nearness.
+- The design-picture job was stopped before it spent anything and restarted with these words in its instructions.
