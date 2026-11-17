@@ -442,3 +442,27 @@ Decisions (lead):
   Chromebook holds 60 fps) and get what is free. Tiers stay visual only; the monster is as visible on Potato as on Max.
 - Built by Fable agents (the craft the reference shows), in worktree look1; proof is before/after pictures judged by
   fresh eyes as the player, 7 of 10 or better, before it lands.
+
+### Nov 17 ~02:30-07:00 UTC, the player (verbatim)
+"Yeah so 1 more check up make sure the graphics are amazing, all the sounds are realisitc, all the speech is real
+voices for the humans and for the monster more eerie voice. Make sure the gameplay is fun eerie and scary and make
+sure all the graphics are amazing use higgsfield."
+The standing quality bar, as a checklist for the final check: (1) graphics amazing (the live picture: task LOOK-1;
+Higgsfield for designs and, with credits, video and models); (2) every sound a real recording (landed Nov 16);
+(3) every human line spoken by a human-sounding voice; (4) the monster's voice more eerie than the humans'; (5) play
+that is fun, eerie and scary (monster v3).
+
+### Nov 17 ~07:15 UTC, the player, sending back monster test B3 (verbatim)
+"this image is my favorite"
+(B3: a very long, very narrow pale face tapering to a point, huge black slanted eye holes with a pinprick of light in
+each, two dark streaks under the eyes, a wrinkled brow; a big old veined hand with long fingers on the lockers; he
+leans in out of the dark. File: higg/dl/M-B3/M-B3-v1.png, Higgsfield job 94848c30-3ae8-4d4f-b3cd-a26aa38e7d0b.)
+Decisions (lead):
+- THE MONSTER'S FACE IS B3'S. It replaces the earlier oval mask in the design pictures and in the 3D model (task
+  46): the long narrow tapering face, the black eye holes with pinpricks, the streaks, the big veined hands. The body
+  stays a living human body grown wrong, about four metres tall, as thin as the face is narrow, in what is left of
+  Danny's hoodie and jeans.
+- Round 2 of the design pictures is built on B3 as the reference (cap 2.0 credits), with design sheets of head, hand
+  and whole figure for the modellers.
+- The opening's script keeps its beats; where it says the doll face becomes the mask, the mask grows into this long
+  face as he changes (story editor to adjust the wording of the change's last stage).
