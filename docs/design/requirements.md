@@ -496,3 +496,12 @@ Decisions (lead):
   bounce, anti-aliasing over time, depth of field and motion blur where they help, micro-detail on every surface.
 - Told the player plainly: it runs in a web browser, so Max will use everything a browser can do; a few things that
   only native PC games have (hardware ray tracing) are outside what a browser offers.
+
+### Nov 17 ~17:20 UTC, the player, after the second voice page (verbatim)
+"Voices good just make the monsters deeper send ss and beta when ready whens next beta?"
+Decisions (lead):
+- THE HUMAN VOICES ARE ACCEPTED (round 2's kind: lively reference voices, no vocoder, no stretching). He named no
+  numbers: Danny 1, Kayla 1 and Marcus 1 are used; the opening's lines are rendered with them.
+- THE MONSTER'S VOICE IS DEEPER: three deeper versions (slowed-tape drop, a deeper drop with an octave layer, a deep
+  second voice in Danny's rhythm), none through a vocoder; he picks one, then the monster's lines are rendered.
+- Screenshots and the beta are sent as soon as they are ready.
