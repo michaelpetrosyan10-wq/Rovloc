@@ -427,3 +427,18 @@ Decisions (lead):
 - SCARY BEFORE ODD: no friendly smile, black eye holes with a pinprick of light, skin over bone (never bare bones),
   darkness and backlight, a low camera, nearness.
 - The design-picture job was stopped before it spent anything and restarted with these words in its instructions.
+
+### Nov 17 ~02:00 UTC, the player, with a picture (verbatim)
+(The picture: a social-media post, "... used Claude Fable to build an underwater world in 97 KB, running at 180 fps":
+shafts of light through blue water, kelp, fish and bubbles, a whale in the haze.)
+"Like u see this i wanna be like this crazy looking yk"
+Decisions (lead):
+- THE REAL-TIME PICTURE IS THE PRIORITY OF THE LOOK: light you can see in the air (the torch, the ceiling lights,
+  moonlight through windows as volumes in drifting haze, dust in the beams), surfaces that answer it (reflecting
+  floors, fine procedural detail, moving highlights), shadows that move (the torch casts real shadows), a film camera
+  (HDR, a film curve, eyes that adapt, bloom, grain) and small life (swaying lamps, drips, moths, branch shadows,
+  lightning), with a colour script per floor. All from shader mathematics, no big downloads.
+- Tiers: the full look on Max, close on High, cheaper forms on Medium; Low and Potato keep their frame cost (a
+  Chromebook holds 60 fps) and get what is free. Tiers stay visual only; the monster is as visible on Potato as on Max.
+- Built by Fable agents (the craft the reference shows), in worktree look1; proof is before/after pictures judged by
+  fresh eyes as the player, 7 of 10 or better, before it lands.
