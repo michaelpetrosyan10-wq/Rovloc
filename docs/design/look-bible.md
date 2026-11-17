@@ -34,7 +34,10 @@ Also: the realistic people put Potato over its 16.7 ms frame budget (cause not f
    too still, then too fast. The cracked porcelain mask stays as the player accepted it, and the head and mask are
    slim like the body (the player, 16 Nov: "the face is supposed to be slim like body"): a small, narrow, long head,
    never a big round one on a stick body. No blood, no gore.
-5. THE TIERS. Max and High carry the look. Medium, Low and Potato show the same picture made cheaper. Tiers are
+5. THE TIERS. MAX HAS NO PERFORMANCE OR MEMORY BUDGET (the player, 17 Nov: "for max mode pretend you have like the
+   most ram and graphics card in universe create the best graphics ever known to man, but for potato we need to
+   remember we are on school chromebook"): everything is authored at Max quality first, with the best technique
+   whatever it costs, and the lower tiers are derived from it. Medium, Low and Potato show the same picture made cheaper. Tiers are
    visual only: nothing gameplay reads may change (hitboxes, heights, speeds, sight lines, what is dark enough to
    hide in). Potato holds 60 FPS on a school Chromebook: the frame-time gate (npm run check) decides.
 6. SOURCES. CC0 or public domain only, traced (page, author, licence, sha256), never from another game:

@@ -475,3 +475,24 @@ Decisions (lead):
   one more engine tried; plus a few lines voiced through Higgsfield's stock voices (cap 1.0 credit) to compare; the
   monster's voice eerier but still a human voice saying words. A second audition page follows.
 - Pictures are sent as each set is ready.
+
+### Nov 17 ~13:00 UTC, the player (verbatim): MAX HAS NO LIMITS, POTATO RUNS ON A CHROMEBOOK
+"Okay just a reminder make these graphhics like SUPERHHUMAN like best graphics they should look like real life. Like
+dont hold back no jooke. Just remember, for the potato mode, this shouldnt change anythhing with max mode max mode
+should still givei nsane graphhics like i just said, but for potato mode it should be able to run on a school
+chromebook. This doesnt mean make the characters less realisitc or anything for max mode, for max mode pretend you
+have like tthe most ram and graphics card in universe create the best rgaphics ever known to man, but for potato we
+need to remember we are on school chromebook."
+Decisions (lead):
+- THE TIER LAW, restated: MAX HAS NO PERFORMANCE OR MEMORY BUDGET. It is authored as if for the strongest computer
+  there is: the best technique for every effect whatever it costs, full resolution, the densest models, the largest
+  textures, the best shading of skin, eyes, hair and cloth. POTATO is authored for a school Chromebook at 60 fps.
+  Neither holds the other back: assets and effects are made at Max quality first and the lower tiers are derived
+  from them. High, Medium and Low step down between the two. Tiers still change the picture only.
+- Applied now: the monster's model is rebuilt from a no-budget master (200 thousand triangles or more, 4k maps, real
+  modelled detail, skin, eye and cloth shading), with Potato at about 4 thousand triangles. After the first graphics
+  pass (LOOK-1) a second pass (LOOK-2, "Max unleashed") raises every effect on Max to its best form: full-resolution
+  shadowed volumetric light, the best reflections a browser can do, soft shadows from many lights, ambient light
+  bounce, anti-aliasing over time, depth of field and motion blur where they help, micro-detail on every surface.
+- Told the player plainly: it runs in a web browser, so Max will use everything a browser can do; a few things that
+  only native PC games have (hardware ray tracing) are outside what a browser offers.
