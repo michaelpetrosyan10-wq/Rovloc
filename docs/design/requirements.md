@@ -466,3 +466,12 @@ Decisions (lead):
   and whole figure for the modellers.
 - The opening's script keeps its beats; where it says the doll face becomes the mask, the mask grows into this long
   face as he changes (story editor to adjust the wording of the change's last stage).
+
+### Nov 17 ~11:50 UTC, the player, after listening to the first voice page (verbatim)
+"okay keep going send pics when ready the voices sound a little robotic"
+Decisions (lead):
+- The first voices are not good enough. Round 2: no vocoder pitch or formant shifting and no time-stretching (the
+  likely causes), characters told apart by their reference voice only, lines acted with the engine's own controls,
+  one more engine tried; plus a few lines voiced through Higgsfield's stock voices (cap 1.0 credit) to compare; the
+  monster's voice eerier but still a human voice saying words. A second audition page follows.
+- Pictures are sent as each set is ready.
