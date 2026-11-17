@@ -505,3 +505,16 @@ Decisions (lead):
 - THE MONSTER'S VOICE IS DEEPER: three deeper versions (slowed-tape drop, a deeper drop with an octave layer, a deep
   second voice in Danny's rhythm), none through a vocoder; he picks one, then the monster's lines are rendered.
 - Screenshots and the beta are sent as soon as they are ready.
+
+### Nov 17 ~22:30 UTC, the player (verbatim): THE VOICES ARE CHOSEN
+"Do voice 3 for all and do the whispering one for the monster. Continue work hard send beta make sure its perfect no
+errors exsclty as beautiful as I want. Eta for beta?"
+Decisions (lead):
+- HUMAN VOICES: Danny 3 and Kayla 3 (the full speech model with the second reference voice). The page had no
+  Marcus 3: Marcus 2 is used (the same model as the 3s), and a Marcus 3 in the same style is added if he asks.
+- THE MONSTER: the whispering version, Monster 5 (a close dry whisper with a breath before it), for all his lines
+  and the name bank. (The deeper versions 7-9 stay on file.)
+- Every line is rendered with these voices next (the opening's 18 kid lines again, the monster's 63 lines, the
+  names), ahead of the engine-built opening v3 and the talking monster.
+- THE BETA BAR, in his words: "perfect no errors exactly as beautiful as I want": nothing ships until its
+  pictures stand up to fresh eyes and the full test run is clean.
