@@ -1,0 +1,215 @@
+STAY BEHIND - FEASIBILITY REVIEW (can this be built, and what is it hiding)
+Reviewer lens: one Windows PC, UE 5.8.4, an AI builder working by command line and scripts, free/CC0 assets,
+MetaHuman + Megascans, no mocap, no artists, usage limits. Fifteen findings, worst first.
+
+VERDICT: The production draft is careful about process, tools and licences, but it sizes the game as if the
+hard part were code. The hidden costs are art and animation: seven more creature bodies with no source, an
+alien ship with no asset source, a city seen from the air, too many people, and a hunter whose movement nobody
+here can hand-animate. It is also written for a PC it calls "unknown", but that PC has already been read
+(RTX 5070 12 GB, 16 GB RAM, 611 GB). Fix 1-6 before the owner approves. The first slice is mostly the right
+one, but it must also measure what one extra creature costs.
+
+RELATIVE BUILD EFFORT (reviewer's estimate, Chapter 2 = 1.0):
+Prologue 1.0 | Ch1 basement 1.8 (all core systems, the 8-person room) | Ch2 1.0 | Ch3 1.2 (theatre, fly tower)
+| Ch4 1.0 | Ch5 1.5 (Swarm, roof, helicopter, fall) | Ch6 city 2.5 | Ch7 flight 1.2 | Ch8 mothership 3.5
+| Epilogue 0.5. The draft's schedule rates the city at about 1.5x a floor and the mothership at about 2x.
+
+1. [BLOCKER] 6-production s2 (Step 0 table), s4 (quality ladder), s10 (drivers 2) - The plan says "Unknown: the graphics
+card, the memory and the disk". requirements.md s9 says the machine has been read: an RTX 5070 with 12 GB, 16 GB of RAM,
+611 GB free. By the draft's own table, that means "High at 1440p with upscaling" and "may run out of memory", and the
+disk is below its own 1 TB "comfortable" figure, while the plan needs about 500 GB. Epic's City Sample docs list 64 GB
+of RAM (checked), and a 5.8 forum report shows MetaHuman skin-cache VRAM overflowing on 8 GB with only a few NPCs.
+FIX: Rewrite s2, s4 and s10 for this machine:
+- the look is judged on High at 1080p native or 1440p with DLSS; Ultra is for pictures only;
+- the RAM upgrade (32 GB, 64 GB for the city) becomes decision 0, taken before the slice;
+- the second drive becomes required (keep at most two packaged builds, and put the DDC and backups on it);
+- City Sample is never opened whole: the spike extracts only the buildings it needs into a small new level and
+  records the editor's peak memory on 16 GB;
+- if the RAM stays at 16 GB, the high end of every range becomes the base estimate.
+
+2. [BLOCKER] 2-creatures s2, s3 and s5; 6-production s3 and s9 - Seven creature kinds, five more "natural forms" on the
+mothership, and eight different graphic mauls (fingers over the face, the fan closing over the head, the front opening,
+and so on). Only the hunter has a model pipeline. 6-production s5 says Higgsfield is weak for 3D creatures, and the
+plan has no line for creature art or animation anywhere. FIX: Add a creature production table to 6-production, giving
+each kind a mesh source, a rig and a cost in weeks:
+- Listeners, Mimics, Patrol and Brute: UE mannequin family, with walking retargeted from the Game Animation Sample;
+- Still Ones: about 25 static poses and no walking;
+- Dark Dwellers: a procedural Control Rig sheet;
+- Swarm: Niagara with a few lead actors, and no Mass.
+The mothership forms become material and scale variants of the same meshes, with no new rigs. Every maul becomes one
+first-person template: a 1 to 2 s creature-specific close camera move, contact, blood on the screen and decals, cut to
+black, and the sound carries the gore. The owner signs off each creature's look as a gate.
+
+3. [BLOCKER] 6-production s4 ("Where realism will be strongest") and s10 M8; 4-puzzles-world s6 - Every realism promise
+rests on Megascans and City Sample, which are Earth surfaces. The two-hour mothership has none of its own: hangar,
+underdeck, garden deck, three holds, nest, Spine, core, pod bay, trophy hall. It is the largest chapter, rated 10 to 18
+weeks against 8 to 14 for the city. FIX:
+- Choose an alien art language that can be built from what exists: an organic ship made from Megascans organic scans
+  (bone, rock, wet membrane), Geometry Script/PCG modules and emissive glyph decals.
+- Build one modular hall/corridor kit and reuse it, with four distinct deck looks: Hangar; Underdeck+Garden; Holds+Nest;
+  Spine+Core.
+- Run a two-week alien-kit spike alongside M1, with a photo spot the owner judges.
+- Re-size M8 to 14 to 24 weeks.
+
+4. [MAJOR] 3-systems s13 (segments: off the street, tower canyon, under the bridge, the city burning below); 1-story
+Ch7.1 ("lift-off between towers"); 6-production s10 M7 (3-6 wks) - This is a city seen from the air at flying speed:
+World Partition streaming far beyond "a few dense blocks", on 16 GB. FIX: The ship lifts off from the Ch6 landing pad
+and climbs straight above the roofline. The city below is a far field: City Sample HLOD proxies or a backdrop card with
+light points, under cloud and darkness. The segments become rooftops (the Ch6 block), the cloud layer, the alien craft
+pack, the outer fins and the hangar mouth. Cut the canyon and the bridge. Keep the owner's 15 to 20 minutes through the
+course's length and its encounters, not through new environments.
+
+5. [MAJOR] 6-production s9 and s10 - Chapters go one after another all the way to Final, so the city, flight and
+mothership are first met 12 to 20 months in. M2 to M4 are sized the same (the theatre floor is not). Nothing states how
+many builder hours a week the estimate assumes, or how much the usage limits will cost. FIX: After the slice and M1,
+add M1.5, "the whole game in grey": every chapter blocked out, every creature as a grey stand-in with its real rule,
+every puzzle working, cutscenes as animatics. The owner plays all nine hours grey, then the cuts are made. Re-state the
+schedule in measured builder-days per effort unit (table above), with an explicit 25 to 35% loss to usage limits.
+
+6. [MAJOR] 6-production s6 ("add its own crawl, fold and stoop by hand") and s3 ("three heights"); 2-creatures s1.2 and
+s1.9 - The hunter must fold a 3 m body through 70x70 cm, hang head-down, climb lockers and rails, pass doors hand first,
+lift ceiling tiles with its fingers, gallop over city roofs at 6 m/s and haul itself through low gravity. An AI agent
+cannot hand-key that to the owner's "scary before odd". A navmesh agent also has one height, so "three navigation
+heights" is not native. FIX: Give each seen move a method:
+- stoop and upright walk: retargeted motion matching plus spine and neck offsets in Control Rig, driven by a ceiling
+  trace;
+- crawl: a procedural leg solver;
+- the fold: never seen in play (it enters ducts out of sight, heard only), with one authored cutscene shot;
+- the locker lean (the favourite picture's pose): a few authored poses blended in place;
+- the city: rooftop silhouettes on splines instead of a gallop.
+Use one navmesh at crawl height, with nav areas tagged by ceiling height choosing the pose, plus the authored duct graph.
+Gate in the slice: three 10 s clips (corridor stoop, door pass, locker lean) that the owner judges.
+
+7. [MAJOR] All drafts - Contradictions the builder would have to encode in Data/:
+- three different noise tables (hunter threshold 25 / 28 / 30 dB; walk 45 / 42; a closed door 15 / 12 and a wall 30 / 20),
+  and each calls itself "the one table";
+- Danny's speeds: crawl 1.2 m/s (creatures) against 0.5 m/s (systems). With 0.5, the hunter's 1.1 m/s duct crawl
+  outpaces him and breaks the "always stay ahead in a duct" rule;
+- Marcus: one of the six survivors (systems) or taken at halftime (story);
+- the breach: after Ch3 through the boiler wall (systems), Ch5 by the Mark (story), Ch5 by a drained generator (creatures);
+- the event: a dance (balloons, glitter, glow sticks) or a basketball game;
+- phones: story kills every lithium battery, which also kills the camcorder, flash camera and thermal camera, while
+  audio has phones that buzz and Song 1 playing from one;
+- Listeners click (audio) or do not (creatures);
+- low gravity: 10 or 20 minutes;
+- the library on F2 or F3;
+- on the Mimic floor, Kayla on the radio (audio D4) or in person (story);
+- the hunter's first whisper voices.
+FIX: Before the map goes to the owner, write one canon sheet with a single owner for each number and fact: audio owns
+the noise table, creatures own the thresholds, systems own Danny's speeds (with crawl at 1.2 m/s or faster), story owns
+cast and timing. Every draft cites the sheet and keeps no copy of its own.
+
+8. [MAJOR] 1-story s7 against 6-production s4 ("no crowds moving, no fights, no hugs, no handing things over") - Four
+cutscenes break that rule:
+- 8, boarding: a hovering helicopter, wind, crew, survivors climbing in, Gus stepping back;
+- 9: Kayla clips the chute onto Danny and shoves him out of a spinning cabin;
+- 3: the hunter's crawl and unfold, hand-keyed;
+- 4: all eight people for 120 s.
+FIX:
+- 8: the helicopter is set down with its rotors turning; faces in close-up from inside the cabin, the boarders off frame,
+  and Gus stepping back seen through the door;
+- 9: played in first person (her hands on the harness, her face, the shove as the camera is thrown), which is the draft's
+  own rule for "moments that would expose us";
+- 3: in rain and floodlight, hands and silhouette, the unfold covered by a cut;
+- 4: a seated circle cut by face, one speaker at a time.
+Then re-rate the difficulty of every scene.
+
+9. [MAJOR] 6-production s5 ("the taken in the holding halls (5.8 Collections)"); 1-story s3 and Ch8; 4-puzzles s8.3 - The
+cast has 15 to 18 people with faces: the eight in the shelter, Marcus, Caleb, Owen's sister, the laundromat boy, the
+library student, the IT technician, the crew and the crowd at the gate. On top of that come rows of sleepers. MetaHuman
+Collections is Experimental in 5.8 (checked), and the VRAM report in finding 1 applies. FIX: Cap the cast at 10 speaking
+MetaHumans with faces (Danny, Kayla, the six, Caleb, Marcus). Everyone else is heard and not seen, seen from behind or far
+off, or under frosted lids (two posed static bodies, instanced with material variation). The rescue crew share one
+helmeted body. Collections are used only after a spike passes on the 5070.
+
+10. [MAJOR] 6-production s10, cut order and "Never cut"
+Three steps cut things the owner set himself:
+- step 7 merges Ch3 and Ch4, against his four floors with four monsters;
+- step 3 (flight to 10 min) and step 6 (mothership to 90 min) go below his own 15-20 min and 2 h.
+The "Never cut" list also leaves out most of what he asked for by name.
+What should go first is not owner-named:
+- the mothership "natural forms";
+- the seven-habit learning ledger;
+- the NG+ endings, including the drive-thru;
+- Easter egg 7, a playable copy of the scrapped web game, which needs a browser runtime inside UE;
+- photo mode;
+- the Low and Medium quality tiers;
+- the dumbwaiter;
+- extra side places.
+FIX: Re-order s10 with the items above first, and steps 3 and 6 last. Delete step 7. Write a Never-cut list from
+docs/design/unreal/owner-checklist.md:
+- first-person play with third-person cutscenes;
+- the seven kinds he picked, plus "the others return";
+- the whisper in the voices of the taken;
+- heavy steps heard from far off;
+- it follows through vents;
+- 5 to 8 survivors;
+- the parachute;
+- the knock-out, the gun and the ship;
+- a flight he steers (steer, dodge, boost, shoot);
+- the holding halls and low gravity;
+- the self-destruct and the pod;
+- the epilogue as Kayla;
+- the symbol language, with the self-destruct as its final exam;
+- the puzzle setting and the reshuffle;
+- manual saves plus a chapter autosave;
+- graphic gore;
+- two or three original songs;
+- Easter eggs and the stuff on the floor;
+- "not too hard".
+
+11. [MAJOR] 6-production s3 ("SBRules depends on nothing but the engine core... tests run in seconds without a level");
+2-creatures s4.4 (200 seeded runs per stretch, 10 profiles) - The creature rules depend on path distance through doors,
+occlusion, light volumes, the "watched" test (on screen and lit) and the navmesh. None of these exists without a level,
+so the headless simulation as written cannot run. FIX: Each Layout JSON also exports a room-portal graph: path distances,
+occlusion per portal, light volumes and hide spots. SBRules simulates on that graph. Real-navmesh and rendered "watched"
+checks are a few seeded functional routes per creature, run overnight. The graph's numbers are re-checked in the engine
+at each milestone.
+
+12. [MAJOR] 4-puzzles-world s1 to s2 and s9; 6-production s5 ("Other free Fab listings: props as needed") - The school is
+112 x 81 m over six levels (about 54,000 m2), with a 500-seat theatre, a fly tower, bleachers and a library. About 40
+puzzles need readable props whose values change with the seed: the drill log, invoices, contact sheets, the patch
+diagram, the cue list, the programme. Megascans covers debris, not school furniture, and no prop source has been
+checked. Every Fab addition needs the owner's own login. FIX: Before approval, write an asset census per chapter that
+names a source for each hero prop: a checked free Fab listing, a Blender script, or Megascans. A puzzle whose props have
+no source is simplified. Build one runtime "printed paper" system (text templates from Data/ rendered to textures), so
+seeded values never need hand-made textures. Dress only the rooms on the route; the rest stay lockdown-locked. The
+owner gets Fab additions as one batched list a week.
+
+13. [MAJOR] 6-production s8 (the first slice) - The core is right: the hunter, the look, the safe room, one puzzle.
+But:
+- it measures only the hunter, which has its own pipeline, so the cost of one more creature (the number the schedule
+  most depends on) stays unknown;
+- no maul is tested, though the owner asked for graphic gore;
+- "done when he says it looks and feels right" has no time box;
+- the four-tier quality ladder can wait.
+FIX: Add one Dark Dweller with its light-volume rule and its maul, and time it on its own. Keep only High and the
+path-traced reference. Set an 8-week box: if the slice has not passed by then, review the options (a simpler look target,
+hardware, scope). Log builder-days per item; that is the schedule's measuring stick.
+
+14. [MAJOR] 5-audio s7.2 (about 3,100 lines, 2,200 Danny takes, 2 to 2.5 h of speech); 6-production s4 (phone face
+capture for 30 to 40 lines) - Recording teenage friends under parents' releases at that volume is a schedule risk that
+s10 does not price. The whisper bank and the Mimic calls also wait on these lines. FIX: Cap the script at about 1,200
+lines:
+- radio barks are systemic lines, not takes per state;
+- state variants only for Danny's top 150 lines;
+- the pinned AI voices are the shipping fallback for every line;
+- real recordings only for cutscenes, Kayla's key radio lines and the lines the whispers are cut from, recorded in two
+  batches after the script is locked at the end of the grey pass.
+
+15. [MINOR] 6-production s2, s4, s5 and s7 - Claims checked by web search:
+- confirmed: MegaLights is production-ready and Lumen Lite exists in 5.8; Megascans has been free on Fab since 5 Nov 2026
+  (but listing licence text was reported as not yet updated, so keep the per-listing check); the Unreal MCP server is
+  Experimental, with reports of dropped connections, so the plan is right to treat it as an extra;
+- needs labelling: one-camera body capture is Experimental, with a GPU crash report on 5.8.2 and depth errors off-axis;
+  MetaHuman Collections are Experimental;
+- missing: Git LFS on the free plan also has a 10 GiB monthly bandwidth limit, and a clone on a new PC counts against it;
+- Higgsfield: the owner asked for it by name, but the account holds 1.57 credits, its terms are unread, and the plan
+  ships posters, notes, graffiti and sky cards from it.
+FIX: Mark Collections and the body capture as Experimental in s4 and s5, each with its fallback. Add LFS bandwidth to s7.
+Add a decision for a Higgsfield credit budget, and read the terms before the first picture that ships. Pin 5.8.x for the
+whole project: 5.8 is the last planned UE5 release (checked).
+
+Sources: dev.epicgames.com City Sample docs and the 5.8 and MetaHuman 5.8 release notes; dev.epicgames.com Unreal MCP
+docs; forums.unrealengine.com threads 2728166 (skin cache) and 2729488 (MCP); cgchannel.com and 80.lv on Megascans;
+docs.github.com Git LFS billing.

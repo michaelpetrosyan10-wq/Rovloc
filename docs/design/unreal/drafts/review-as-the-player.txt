@@ -1,0 +1,240 @@
+STAY BEHIND: REVIEW AS THE PLAYER (the owner's own eyes), drafts 1 to 6, 21 Nov 2026
+
+VERDICT
+The six drafts make a strong, coherent horror game. The hunter design, the four school creatures, the power system,
+the radio and the "Go. I'm right behind you" ending are real strengths. Seen through his eyes it falls short in five
+ways. (1) His favourite monster gives the softest death in the game, and the gore he asked for is nearly absent for
+five hours. (2) The drafts contradict each other in ways that break play: with the systems draft's speeds the hunter
+outruns a sprinting Danny and catches him in every duct. (3) A death can cost 25 minutes. (4) The four school floors
+are one loop played four times, and their big puzzles are building maintenance. (5) The ending leaves the hunter
+waiting passively at the climax.
+Weakest chapter: Chapter 6, the city (80 minutes of standard stealth guards, a dead radio, paperwork puzzles, and
+the "instantly spotted" moment reduced to one line).
+Scary 7/10: the hunter and the floor creatures are frightening, but the drafts promise so much fairness that the
+hunter can be read like a timer by Chapter 3, and its catch fades to black.
+Sad 8/10: the callbacks, the stolen voices, the names on the wall and Kayla alone at the gate land. The passive
+button-hold and the thin time in the shelter weaken it.
+Fun 6/10: each creature changes play (except the Mimics), but the repeated floor formula, the paper-code puzzles and
+the cost of dying pull it down.
+Crazy 6/10: the helicopter, the parachute, the flight and low gravity are big, but the school chapters lack showpiece
+moments, and the two moments that should be the wildest (the hunter's catch and the final hold) are the tamest.
+
+FINDINGS, WORST FIRST
+
+1. [BLOCKER] The hunter's catch has no death scene, and graphic horror is nearly absent in the school
+Where: 2-creatures 1.8 and its Decisions 1; 3-systems 9 ("Who does what"); 5-audio 4 (hunter catch); 6-production 3, item 9.
+Problem: He answered "graphic creature horror (Dead Space-level gore for the aliens and Danny's own death scenes)".
+The drafts make the hunter's catch a 5-second drag and a cut to black, "never gore". The hunter is active about 45% of
+the game, so it is the creature he will be caught by most, and his favourite monster gives the weakest death in the
+game. Nothing dies in the school, and a careful player is caught about once a chapter, so a good player may see
+almost no gore in the first five hours.
+Fix: Keep "it takes alive", but make the hunter's take the signature body-horror scene of the game, in first person:
+its long fingers go into Danny's mouth and throat to pull his voice out (jaw forced open, the scream cut off
+mid-breath, the pinpricks narrowing), then the drag into the dark. On the next attempt it whispers that scream back to
+him, once. About 6 seconds, skippable after the first time, covered by the existing "cut away" option. Also add one
+authored gore tableau per chapter that is never a student: a Listener the hunter swatted, split open against the
+lockers; a Dweller burst by a flare; a Patrol soldier mauled by strays in the city; a carcass the Brute has torn
+apart on the ship.
+
+2. [BLOCKER] The drafts contradict each other in ways that break play and would confuse him
+Where: 3-systems 2.1 against 2-creatures "Units" and 1.2 (speeds); 3-systems 3.4, 2-creatures 1.3 and 2.2, and 5-audio 3
+(three noise tables, each claiming to be the only one); 3-systems 7.1 and 5-audio 7.2 against 1-story 2 (Marcus);
+3-systems 7.3 against 1-story Ch5 and 2-creatures 1.9 (the breach); 2-creatures 2.2 and 3-systems 3.2, 5 and 14 against
+1-story D6 (a "dance"); 2-creatures 2.2 against 5-audio 1 and 4 (Listener clicks); 1-story 3, 3-systems 3.3 and 5-audio 6
+(three phone rules), and 5-audio 9 (Song 1 played from a phone); 1-story Ch3 and Ch4 against 4-puzzles 1.3 (floors);
+3-systems 7.1 against the 1-story table (survivors' needs); 1-story 9 against 5-audio 9 (Song 3); 6-production 4 ("no
+hugs, no handing things over") against 1-story cutscene 9 (Kayla clips the chute onto Danny).
+Problem: With the systems draft's speeds the hunter outruns a sprinting Danny (chase 4.7 m/s against sprint 4.5;
+walk 2.4 against 1.5) and catches him in every duct (crawl 1.1 against 0.5), so every chase ends in a death. That
+breaks the creature draft's promise that "in a duct he can always stay ahead". The hunter's hearing threshold is 25,
+28 or 30 dB depending on the draft. Marcus is both taken at halftime and one of the six survivors. The breach falls
+after Chapter 3 in one draft and in Chapter 5 in two others. The event is a basketball game, yet the floors are
+littered with "dance" leftovers. The Listeners "do not click" in one draft and click in another. Song 1 plays from a
+phone the prologue destroyed.
+Fix: Before the map goes to him, publish one canon sheet:
+ - One movement and noise table: the audio draft's L values and thresholds, and the creature draft's speeds, with the
+   hunter's chase speed below Danny's sprint and its duct crawl below his crawl.
+ - Marcus is taken at halftime.
+ - The breach is in Chapter 5, through the Mark; delete systems 7.3's after-Chapter-3 breach through the wall.
+ - "Dance" leftovers become the halftime confetti-and-balloon routine (as 4-puzzles 1.1 already has it).
+ - Listeners hum and never click.
+ - One phone rule (the story's lithium pulse). The camcorder, flash camera and thermal camera become non-lithium
+   devices, as 4-puzzles suggests. Song 1 is sung by Owen or the score, never played from a phone.
+ - The library is on F3 and science on F4.
+ - The survivors' needs come from the story table.
+ - The production draft's "no handing things over" rule gets a written exception for the chute scene.
+
+3. [MAJOR] Dying costs too much for "i also dont want the game to be too hard"
+Where: 3-systems 9 ("What dying costs"), 10 (save points 15 to 25 minutes apart) and 11 (a death every 20 to 30
+minutes); 3-systems 3.1 (6 minutes of torch per battery pair); against 2-creatures Decisions 4 and the "checkpoint at
+the library door" in 4-puzzles 4.2.
+Problem: The recommended setting aims for a death every 20 to 30 minutes, and each death sends him back to the last
+lantern, up to 25 minutes earlier. One wrong Mimic guess in the Reading Room, or a last Swarm sting, can cost 20
+minutes of solved puzzle. On top of that, the torch lasts 6 minutes per pair while the Still Ones and the Dwellers
+both need light, and a catch is final unless a tool sits in the pocket. Together this is the "too hard" he said he
+does not want.
+Fix: On Story and Survivor, add invisible retry checkpoints at the entrance of every encounter space, at every stage
+of a large puzzle and after every solved puzzle step, and keep the puzzle's state on retry. Lantern saves stay, for
+quitting and for Stay Behind. Raise the torch to 12 to 15 minutes per pair on Survivor. On Survivor, make the first
+hunter catch in each chapter a struggle he can win even with an empty pocket.
+
+4. [MAJOR] The hunter is built to be read like a radar for nine hours
+Where: 1-story 6 (rules); 2-creatures 1.4 (rules 1, 3 and 6) and 1.5 ("Hiding pays"); 3-systems 2.4 ("Rule the player
+learns once"); 5-audio 4 (whisper chain, rule 5).
+Problem: Every rule that keeps it fair is also handed to the player as a promise: always heard before it arrives,
+the whisper always comes from where it is, it never looks into a hiding place it did not see him enter, it searches
+20 to 40 seconds after a noise. By Chapter 3 the player hears Mari's stolen voice and thinks "good, now I know where it
+is", then hides on the clock. That is about 4 hours of active hunter (45% of 9 hours, a beat every 30 seconds while
+walking), so the familiarity Alien: Isolation was criticised for in its middle hours arrives early.
+Fix: Keep the guarantees as hidden tuning only: never state them in dialogue, notes, captions or "the rule the
+player learns" lines. Let it whisper only within about 10 m of walked path, so a whisper always means "it is right
+here", never "it is over there". Once per chapter, let a learned habit break the pattern in plain view (for example,
+it waits in silence at the locker row he has hidden in twice). In Chapters 2 to 4, cut its active share to about 30%
+and spend what is saved on two or three authored stalking sequences per chapter.
+
+5. [MAJOR] The heavy, far-heard footsteps he asked for are missing from most of the game, and from the first slice
+Where: 2-creatures 1.2 (heavy steps only when upright in tall spaces; a soft patter when crawling); 4-puzzles 1.2
+(tunnels 2.2 m, "it goes on its hands"; corridors 2.7 m, stooped); 5-audio 4 (the hunter's far tell); 6-production 8,
+item 3 (the slice is a tunnel with "heavy far-heard steps").
+Problem: His wish was "His footsteps are heavy and heard from far away, so you know he is around". In the drafts it
+holds only in tall rooms. Chapter 1 and the first slice are in 2.2 m tunnels, where by the drafts' own heights the
+hunter crawls with a soft patter. So the first thing he judges the hunter on cannot have the steps he asked for.
+Fix: Make the steam tunnels 2.8 to 3.0 m high, so it walks stooped there. Give the stooped walk the full heavy
+footfalls (about 65 dB, heard through two walls), with the ceiling-tile rattle on top. Keep the crawl and the patter
+for ducts and crawlways under 1 m only.
+
+6. [MAJOR] The four school floors repeat one loop, and the big puzzles are building maintenance
+Where: 3-systems 1 ("the same five beats" in every school chapter); 4-puzzles 1.2 (the lockdown rule: every floor is
+entered another way, its closet powered and its stair released); the large puzzles 1.4, 2.3, 3.3, 4.4 and 5.2
+(breakers, PA zones, stage fuses and lighting cues, a 48-port network patch panel, heating valves).
+Problem: Chapters 2 to 5 are four 55-minute repeats of the same steps: the briefing, the climb, learning the rule,
+finding the electrical closet, powering it, releasing the stair door, going home. Every centrepiece is a
+facilities job; the Mimic floor's big puzzle is patching network cables. The creature changes but the job does not,
+across three to four hours in the middle of the game. That is the "boring" risk.
+Fix: Only two floors use the closet-and-release pattern; every other floor gets a different goal.
+ - Chapter 3 ends without a calm return: the Mark falls, Danny wakes hurt on the floor and must get home with the
+   floor still live.
+ - Chapter 4's centrepiece becomes a people puzzle, "Roll Call". The counselling suite's sign-in sheet and the
+   darkroom's contact prints show who is really still hiding on F3, and the real IT technician, alive among the
+   Mimics, has the badge. The patch panel shrinks to a two-link step.
+ - Chapter 5 is reversed: the breach brings the group up to him, and the floor is crossed escorting no one, against
+   the clock of the helicopter.
+
+7. [MAJOR] The small puzzles are homework, and his five games are not visible as their sources
+Where: 4-puzzles 1.1, 1.2, 2.1, 2.2, 3.4, 4.1, 5.1 and 6.1, and its "Rules for every puzzle"; the pattern sources named
+(Chants of Sennaar, Obra Dinn) in 4-puzzles 4.
+Problem: Eight small puzzles are the same thing: find a number or a word on paper and enter it (a relay part number,
+an invoice code, an MMDD drill date, a student ID, the musical keys of three scores, a key hidden in a contact sheet,
+a balance mass, a traffic manual's table). Puzzle 3.4 needs the player to read the key off a page of sheet music,
+which most players cannot do. He asked for puzzles that are "well thought out and complex", taken from the Silent
+Hill 2 remake, the Dead Space remake, Alien: Isolation, Outlast 2 and Amnesia: The Bunker. The drafts cite other
+games and rarely say which of his five a mechanic comes from.
+Fix: At most one paper-code lock per chapter. Turn the rest into puzzles played against the floor's creature. 2.1,
+dialled only during the heating knocks, already does this and stays. 3.4 becomes matching the colours of the three
+choir folders to the set on stage while the Still Ones close in under the light. Give each floor one Silent Hill
+2-style centrepiece object with a short story riddle, on the Hard tier. Add a "seen in:" line naming one of his five
+games to every puzzle and small mechanic, so he can see his references were used.
+
+8. [MAJOR] Chapter 6, the city, is the weakest chapter
+Where: 1-story Ch6; 2-creatures 2.6; 4-puzzles 5 (6.1 and 6.2) and 7 (80 minutes); 3-systems 12.
+Problem: At 80 minutes it is the longest chapter after the mothership, and the flattest.
+ - The Patrol is the one creature with no horror twist: guards with lamp cones and a scanner.
+ - The radio is dead, so Danny is alone and silent for 100 minutes (the city and the flight).
+ - The gun arrives only at the end, in 6.3, so most of the city is the same hiding as before.
+ - Its puzzles are a traffic-signal manual and counting spray marks.
+ - His "instantly get spotted" is one line: "Run, drop, hide."
+Fix: Open with a 3-minute scripted chase from the landing: a Patrol craft's searchlight, rooftops, a fire-escape
+drop, ending in the first hide. Give the Patrol one horror rule: they take people in front of him (the collar of
+light, the person lifted into the craft, still calling out), and for one street they lead a stray on a leash (a
+Listener used as a hound). Get the gun at the midpoint, so the second half is "hunted, with six shots". Make talking
+to the dead radio a mechanic (press to talk, 30 dB), so his voice and jokes carry the chapter. Cut it to 60 to 65
+minutes.
+
+9. [MAJOR] The Mimics do not change how he moves
+Where: 2-creatures 2.4 and 4.4 (the simulated players); 4-puzzles 4.2; 5-audio 4 (Mimics: "The test is the radio").
+Problem: He said each floor's creature makes you "hide and move in different ways". The Mimics stand still facing
+away and strike only within 3 m. The answer is to ask "What time?", and the simulation guarantees that a player who
+asks is never caught. After the first figure the floor is a checklist of questions, and nothing changes how he
+moves. The audio draft's "the radio proves who is alive" contradicts the code word.
+Fix: Make speaking the cost. The code word must be said aloud (50 dB spoken, 30 dB whispered within 2 m), and Mimics
+walk to any voice they hear, his and the radio's included. The floor's rule becomes "go silent": radio off, no
+questions unless he must, and thrown objects for the silent flinch test. They move only while out of his torch and
+always end up facing away, in his route, so he routes around figures rather than through them. Delete the radio
+test from the audio draft.
+
+10. [MAJOR] The ending is passive at the climax and drops the run to the pods he asked for
+Where: 1-story Ch8, beats 7 to 10; 4-puzzles 6 (self-destruct stages 3 to 6); his answer in requirements 8 ("the run
+to the pods as the ship comes apart").
+Problem: The climax for his favourite monster is the hunter crouching beside Danny and waiting. The player's last act
+is holding a button with no cost ("if you let go, nothing is punished"), which can feel cheap and borrowed. Kayla's
+pod leaves before the ship comes apart, so his run to the pods becomes a lone run to the core.
+Fix: Reorder the last minutes.
+ - The final exam at the core comes first ("ship all end"), and the ship starts to die.
+ - Then the run with Kayla and the woken to the pod bay through collapsing decks: his set piece.
+ - "Go. I'm right behind you." Danny turns back.
+ - The hold becomes a fight. One input holds the lock. The other spends what is left in his pockets (the last flare,
+   the last cell, the extinguisher) to keep the hunter's hand off him, and each pod launch shows the face of the
+   person inside.
+ - When his pockets are empty, the hunter's hand closes over his mouth for his voice. He gets the last line to Kayla
+   out first, in his own voice: the one thing it never takes. Then white.
+
+11. [MAJOR] Too little time in the shelter for "Red Dead depth"
+Where: 4-puzzles 7 (30 minutes in the safe room out of 555); 1-story "The shelter on each return" (chores reward
+"only a line or a look"); 3-systems 7.2 (two or three night talks per survivor).
+Problem: He chose "Red Dead depth": a group you live with and lose. Thirty minutes of shelter across nine hours, over
+four returns, with chores that give one line, is too little time to love six people before they are lost. Mari, the
+fixed loss, gets one song scene and one floor walk.
+Fix: Give the shelter 60 to 75 minutes across the game. On each return, one playable activity with a survivor:
+ - Ray's card game on the water drum;
+ - Mari teaching Danny the camp song's three chords, which Owen later plays badly;
+ - Gus's tunnel walk with his Walter Hale stories;
+ - Priya's symbol board;
+ - Owen's lamp walk.
+Also give each survivor one personal errand on a floor that ends in a scene of its own (Ray's jacket for Caleb
+already exists; add one for each of the others).
+
+12. [MAJOR] The best-loved tool of one of his five games is missing (Outlast 2's camcorder)
+Where: 2-creatures 2.3 and 4-puzzles 3.1 (the camcorder only on a tripod); 3-systems 5 (item list).
+Problem: He named Outlast 2, but its signature carried tool appears only as a tripod prop for one floor. A held
+camcorder is the kind of mechanic that makes people say "crazy".
+Fix: From Chapter 3, Danny carries the AV room's tape camcorder (non-lithium, so it survived the pulse). It has a
+night-vision viewfinder that drains AA pairs, so it competes with the torch. Its red recording light holds a Still
+One while he films it. Its microphone brings far sounds closer. The short clips he records for Kayla become the tapes
+she plays in the epilogue, and they count toward STAYED ON THE LINE.
+
+13. [MAJOR] The prologue's "sneakily" is a guided run, and Chapter 1 starts slowly
+Where: 1-story Prologue step 9 ("Play, guided"); 2-creatures 1.9, prologue ("Scripted only ... No failure"); 1-story
+Ch1 with 4-puzzles 1.1 to 1.4; 2-creatures 1.9, Ch1 (the first 20 minutes heard only).
+Problem: His brief says "so you sneakily go hide back into the school". The drafts make it a guided run past a hunter
+seen once through glass. Chapter 1 then opens with four paper puzzles in a row (part numbers, an invoice code,
+counting chairs, 1962 breaker names), and the first real threat comes about 45 minutes after the prologue. That is
+a boredom risk in the first hour.
+Fix: Make the way back into the school a 3 to 4 minute playable sneak with Kayla, along the parked cars and the
+bleachers, while the hunter unfolds on the field and turns its head. It is his first lesson in crouching and
+sight lines, with a near miss and no failure on the first try. In Chapter 1, put a hunter near miss in the first 15
+minutes: Ray hammers at the door, and the hunter's hand is on the wired glass behind him as Gus opens it. Fold 1.3
+into Flare Road's path, and keep the 1962 renaming layer for Hard only.
+
+14. [MINOR] The hidden ledger can punish careful play
+Where: 1-story 5 (STAYED ON THE LINE = "seconds of radio kept on in risky places"; moments 2 and 5); 3-systems 8 (the
+volume knob).
+Problem: On the Listener floor the careful move is to turn the radio low or off. If seconds of radio in risky places
+feed the best ending, a cautious player gets "The recording" without knowing why, and would feel cheated when he
+learns it.
+Fix: Count "not switched off" at any volume (low and the earpiece included), calls answered in calm moments and the
+climb monologue. Never count volume level or seconds under threat.
+
+15. [MINOR] Forty-eight owner decisions, several duplicated or already answered
+Where: "Decisions for the owner" at the end of all six drafts.
+Problem: There are 48 questions. Several are duplicated:
+ - how a catch works (creatures 1, systems 2);
+ - where he restarts (creatures 4, systems 2 and 4);
+ - what the gun does (creatures 6, systems 5);
+ - the noise ring (systems 8, audio 8);
+ - Kayla's voice (creatures 2, audio 4).
+Some he has already answered: audio 5 against his "whisper in the voices of people it took" and "says your name
+sometimes and mocks you"; story 7 against "not all of them make it". A 48-question quiz is homework and could stall
+his approval.
+Fix: Put one merged list of at most 12 questions in the game map, each in his own words and with a picture where it
+is visual. Merge the duplicates, mark the answered ones as settled, and let everything else go ahead on the
+recommendation unless he objects.

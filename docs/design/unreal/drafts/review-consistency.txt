@@ -1,0 +1,110 @@
+STAY BEHIND: consistency, owner's answers and originality review of the six drafts (21 Nov 2026)
+Worst first. Each finding: severity, where, the problem, the fix.
+
+1. [BLOCKER] Two different survivor casts
+WHERE: 3-systems.md 7.1 (and 7.3, 7.4); 5-audio.md 7.2; against 1-story.md section 2.
+PROBLEM: The story's six are Kessler (52, chemistry), Gus (58), Priya (17), Mari (15), Owen (14) and Ray (44). Systems builds a different six. It has Marcus as a living survivor who "goes out alone, and that is how he is lost", but in the story Marcus is taken at halftime and is the hunter's first take (story D4). Systems also gives the teacher heart pills, Gus reading glasses (the story gives him hearing-aid batteries), the inhaler to the youngest (in the story it is Mari's) and has no Ray. Audio still budgets "Marcus, if one of the six". Ray, a parent, is also outside the owner's own list ("students, a teacher, the janitor").
+FIX: Rewrite systems 7.1 from the story's table: each person's need and payback, with the Ray role ("goes out alone") staying with Ray. Delete Marcus from systems 7.1 and from audio 7.2. Make the reading-glasses and heart-pill needs the story's items (hearing-aid cells, inhaler, glasses, painkillers, a light, proof of Caleb). Either make Ray a teacher or coach who came for his son, or put "one parent among the survivors" to the owner as a one-line yes or no.
+
+2. [BLOCKER] Three different safe-room breaches
+WHERE: 3-systems.md 7.3; 2-creatures.md 1.9 (Chapter 5 row); 1-story.md Ch5.2.
+PROBLEM: Story: in Chapter 5 the hunter follows the Mark into the shelter and the group flees to the roof. Creatures: in Chapter 5 something drains the generator so the light fails first (to keep hunter rule 2). Systems: after the Chapter 3 return the hunter breaks in through the boiler-room wall, the ledger picks who is lost, and the steel door is then welded shut. A welded door makes the story's Chapter 4 scene (Ray knocking, Kessler refusing to open) impossible. It also clashes with the story's fixed losses (Mari in Chapter 3; Owen, Ray and Gus through LEFT moments).
+FIX: One breach, in Chapter 5, as the story has it. The hunter follows the Mark, cuts the generator so the room goes dark (creatures' mechanism, rule 2 kept), and the group escapes up the service stair. Delete the systems 7.3 timing, the boiler-wall entry and the welding. Who is lost at that point comes only from the story's ledger table (Owen on the stairs and the rest), not from a new "least helped" rule.
+
+3. [MAJOR] The hunter's door counts make most of the taken unsaveable, against his answer
+WHERE: 4-puzzles-world.md 1.3 (puzzle 1.3), section 4 pages 1 and 2, decision D4 (gym door "618"), 8.4 (the Nest wall); against 1-story.md section 3 and its decision 8.
+PROBLEM: The world draft has the hunter scratch a count of its takes on every room, 618 on the gym door. The story (its decision 8, recommended) says the hunter keeps whatever it takes with its own hands, in its nest, where they are lost within a day; only the Patrol's catches can be woken. Together the two drafts mean 618 or more people are beyond saving. That turns the owner's "most are TAKEN alive (not killed)" into the opposite. It also clashes with the story's own line that Marcus is the hunter's first take.
+FIX: Make the room counts the Patrol's collection tally (sprayed, as the world draft already has the Patrol do in the city, 6.2). Pair each count with the glyphs for "taken" and "alive", which keeps them as number lessons. The hunter scratches counts only on its Nest wall, where they are few (Marcus, Mari, whoever the LEFT list adds, Kayla last). Change "the hunter has scratched" to "the Patrol has marked" in world 1.3, page 1, page 2 and D4.
+
+4. [MAJOR] The floors' departments, and so where the Mark happens, disagree
+WHERE: 1-story.md Ch3.1, Ch4.1, cutscene table row 6 ("library floor"); against 4-puzzles-world.md 1.3 and 2-creatures.md 2.4 and 2.5.
+PROBLEM: The story puts the art rooms and the library on F2 (the Still Ones) and the science labs on F3 (the Mimics). The world and creature drafts put the theatre, arts and music on F2, the library and yearbook on F3 ("the dark library", "figures in the stacks"), and science on F4, where the Swarm's cold and heat tools are. The world draft itself says this needs reconciling. The Mark's place differs too: the story says the library, the world says the theatre (3.3).
+FIX: Adopt the world draft's floors. Edit story Ch3.1 to "the theatre, art studios and music suite", Ch4.1 to "the library, yearbook room and classrooms", and Ch5.1 to "the science floor". Set cutscene 6's place to "theatre fly gallery". Kessler's prep room stays on F4 (world 5.1).
+
+5. [MAJOR] Three different rules for why phones fail, and devices that break each one
+WHERE: 1-story.md section 3 "Phones (P4)" (a pulse that cooks lithium batteries); 3-systems.md 3.3 and decision 1 ("if it could call someone, it's dead"); 5-audio.md section 6 "Phones" (phones get no signal and buzz), 4 (voicemails on dropped phones as whisper sources) and 9 (Song 1 plays from a survivor's phone); 4-puzzles-world.md "Depends on other drafts".
+PROBLEM: Systems' rule kills two-way radios, yet the walkie-talkies and the shortwave are the spine of the game. The story's rule also kills the coach's digital stopwatch (a lithium coin cell), car-alarm fobs (coin cells), modern camcorders and thermal cameras (lithium packs), and the story's own prologue has "car alarms choke off". Yet the city uses car alarms and a fob as lures (systems 12, world 6.1 and 6.3, creatures 2.6). Audio needs live phones for voicemails and for Song 1.
+FIX: Use the story's lithium pulse as the one rule; it is the designers' call, so drop systems decision 1. Then make the devices fit it:
+- a wind-up mechanical stopwatch;
+- an AA-powered tape camcorder;
+- an AA flash camera;
+- a thermal camera with a NiMH pack charged by the crank (already in world 5.3);
+- older cars whose lead-acid alarms still work, with keyed alarm switches instead of fobs.
+Delete audio's phone section and the voicemail whisper source, and take Song 1 from the story (the score, or Owen humming).
+
+6. [MAJOR] The Mimics' one fair tell is contradicted five ways, and the radio leaks the code word
+WHERE: 2-creatures.md 2.4 (rule, counters, set piece 3, difficulty); 1-story.md Ch4.3; 4-puzzles-world.md 4.2; 5-audio.md section 4 (Mimics); 3-systems.md section 8.
+PROBLEM:
+- The rule says they "never answer you", and the story's Mimic does not answer "What time?".
+- Creatures and world say Mimics say the code word back; creatures set piece 3 has one repeat it "perfectly"; Stay Behind repeats it with a delay.
+- Audio says "the test is the radio: Kayla can say who is really alive"; systems says she never answers a Mimic's question for him.
+- The hole: Mimics learn lines heard over Danny's radio on this floor, and on Story Kayla "repeats the code word on request". She says "Four" over the radio, the Mimics learn it, and the only face-to-face test breaks.
+FIX: One rule. A Mimic echoes the question ("What time?") in the voice it wears and never gives the answer "Four". Kayla never says "Four" on the radio: on Story the code word is written on a card in the binder instead. Delete audio's "the test is the radio" line, and rewrite creatures set piece 3 as "a voice behind the door asks the question back".
+
+7. [MAJOR] Three noise tables and two sets of speeds; the hunter outruns Danny under systems' numbers
+WHERE: 2-creatures.md "Units", 1.2 speeds, 1.3 senses, 2.2 thresholds; 3-systems.md 2.1, 3.4, 9, 11; 5-audio.md section 3 ("there are no other hearing values").
+PROBLEM:
+- Hunter threshold: 25 (creatures), 28 (systems), 30 (audio). Listeners: 15, 20, 18. Patrol: 25, 32, 36. Brute: 35, 40, 44. Walls occlude 30 or 20 dB, doors 15 or 12.
+- Danny walks 2.0 or 1.5 m/s, sprints 5.2 or 4.5 m/s, crawls 1.2 or 0.5 m/s. With systems' speeds the hunter's chase (4.7) beats his sprint and its crawl (1.1) beats his crawl, which breaks creatures' "chase under Danny's sprint" and "in a duct he can always stay ahead".
+- Also different: torch beam seen at 50 m or 20 m; blood followed for 90 s or 30 s; cadence fixed across difficulty (creatures 1.5) or scaled per preset (systems 11); Stay Behind unlocked after finishing (creatures 2) or open from the start (systems 11).
+FIX: Audio section 3 is the one noise table, systems 2.1 holds the speeds, and creatures 1.3 and 2.1 to 2.7 restate their distances from those two. Set the hunter's chase to 4.2 m/s and its crawl to 0.45 m/s in creatures 1.2. Pick one value for each of the other pairs: beam 20 m, blood 30 s, the cadence the same on every difficulty (the owner's numbers), and Stay Behind open from the start.
+
+8. [MAJOR] Three creatures are other works' content under a new coat
+WHERE: 2-creatures.md 2.3 (Still Ones' look), 2.2 (Listeners' head and catch), 2.7 (Brute's body and charge); 5-audio.md section 1 item 5 and section 4 (Listeners).
+PROBLEM:
+- Still Ones: "faces hidden in their own long hands; each time Danny looks back the hands are a little more open", together with "move only when not looked at". That is Doctor Who's Weeping Angels ("Blink", 2007) in look as well as rule.
+- Listeners: a head made of folded membranes that spread open toward a sound is A Quiet Place's creature, and "the fan closes over Danny's head" adds the Stranger Things Demogorgon's petal head.
+- Audio gives the Listeners a sweeping tongue click and a double click. That is The Last of Us's Clickers, which the creature draft itself rules out.
+- Brute: armour plating grown into its flesh, a straight-line charge and slow turning (the counter is to loop it) is the Dead Space Brute. The name was the owner's pick; the body and mechanic are not.
+FIX:
+- Still Ones: show the faces but turned to the wall or ceiling; the tell when one has moved is which way it faces now.
+- Listeners: a smooth eyeless head, with hearing through skin that ripples toward a sound; the catch is a pin to the floor and a held breath on Danny's neck. Audio uses creatures' hum and hum-stop, with no clicks anywhere.
+- Brute: drop the straight-line charge and slow turn. It is too big for school-size doorways, so loops go through narrow doors; keep "tears soft hiding open" and its tap-and-sniff window.
+
+9. [MAJOR] The evening event is still an open decision, yet two drafts built a dance and one a basketball game
+WHERE: 2-creatures.md 2.2 (counters "the dance's cups, balloons, glitter"; set piece 2 "the dance floor"); 3-systems.md section 5 (glow sticks "dance-night leftovers", the party-popper tripwire "from dance leftovers"), section 14 item 8 ("a balloon from the dance"); against 1-story.md decision 6 and 4-puzzles-world.md 1.1 (basketball with a halftime routine).
+PROBLEM: Story decision 6 asks the owner whether it is a basketball game or a dance. Meanwhile creatures and systems fill the gym with dance leftovers, and world and systems also use "the evening game", the scoreboard and the air horn from a sports-fan bag.
+FIX: Until he answers, write the leftovers so they fit both (the halftime show and the cheer team's balloons, glow sticks and poppers, as world 1.1 does). Replace "dance" with "halftime show" in creatures 2.2 and systems 5 and 14, and add one line to story decision 6 listing what each option changes.
+
+10. [MAJOR] Kayla's fate and her stolen voice are settled in one draft and asked in two others
+WHERE: 1-story.md Ch5.8, section 6 (Kayla whispered once in Ch6, "the one that hurts most"), decision 8; 2-creatures.md decisions 2 and 3; 5-audio.md section 4 item 6 ("Kayla from Chapter 6") and decision 4 (may a Mimic use Kayla's voice).
+PROBLEM: The story writes the hunter lifting Kayla from the wreck, and its whisper of her voice, as fact. Creatures asks the owner who takes her and whether it ever whispers her. Audio both settles her whisper and asks whether a Mimic may use her voice, though story Ch4.3 and creatures' "Two Kaylas" already use it. The Patrol's speech also contradicts the story's recommended aliens: creatures 2.6 and audio 4 and 7.2 have soldiers talking in syllables, while story version B says these aliens have no voices.
+FIX: Put two questions to the owner, once each, both offering the story's version as option (a): "Who takes Kayla?" and "Whose voices may use Kayla's: the hunter after she is taken, the Mimics on the third floor, both, neither?" Delete creatures decisions 2 and 3 and audio decision 4. Have the Patrol's calls come from their scanners and armour as tones, which fits all three versions of why they came.
+
+11. [MAJOR] The time of day does not hold together
+WHERE: 1-story.md section 4 opening ("Friday night to Monday night"), Ch3.5 ("helicopter at dawn on Monday"), Ch4.5 ("first light"), Ch6 ("the dark city", lamps, street fires), Ch6.7 ("leaves... at the next dawn"), Ch8.11 (dawn), decision 8 ("lost within a day").
+PROBLEM: If the helicopter lifts at Monday dawn, the 80-minute city chapter is played in daylight while it is written and lit as night (the Patrol's lamps, torches, street fires). The mothership then leaves at Tuesday dawn, not "Monday night". And Kayla lies in the nest for about 24 hours, the exact limit after which the story says the hunter's catches cannot be woken.
+FIX: The pilot comes at last light on Monday (Kessler: "We go to the roof at last light"), so the city and the flight are at night and the mothership leaves at Tuesday dawn. Change the timeline line to "Friday night to Tuesday dawn", and change the nest rule to "about two days" so Kayla's waking is urgent but sound.
+
+12. [MAJOR] Systems' school loop contradicts world's lockdown, and the roof timer can dead-end
+WHERE: 3-systems.md section 1, beat 2 ("up the service stair... the hunter can be on any stair") and beat 4 ("the return route is never the way he came"); 3-systems.md 6.3 ("whatever is left in the reserve is the time he has") together with 6.3 ("nothing in Chapters 2 to 5 fails because of fuel") and 11 (on Stay Behind the generator also runs in the safe room); 4-puzzles-world.md 1.2 (the lockdown rule) and 5.4.
+PROBLEM: In the world draft every stair door is locked from the stair side until Danny powers and releases that floor, after which the stair becomes his safe way home. Systems' loop has him walk up the stair and never return the way he came. Separately, the helipad's timed stretch runs on the reserve, which neglect or the Stay Behind preset can empty. That is a critical-path puzzle that can be entered with no time at all.
+FIX: Rewrite systems beat 2 as "into the floor by its own way in (freight lift, bleachers, fly gallery, fire escape)" and beat 4 as "home by the stair he just released". For the roof, the floodlights get a guaranteed sealed fuel can in the roof penthouse (or their own battery pack), and the reserve only adds time on top. Fix 6.3's text to match.
+
+13. [MINOR] Where the songs go, and what the hold sounds like, disagree
+WHERE: 5-audio.md 9 (Song 1 from a survivor's phone; Song 3 starts as Danny holds the self-destruct and carries the pod down) and 2.3 (the hold is a "sacred silence"); against 1-story.md sections 4 (Ch8.10 and 8.11) and 9 (Song 1 is the score or Owen humming; Song 3 is the epilogue and the credits).
+PROBLEM: Audio's Song 3 plays over the hold, which audio itself lists as a silence no music may cover. It would also run over Kayla's radio talk and Danny's last line, which the story puts there.
+FIX: Follow the story. The hold has only breath, the pods, the hunter's whisper and the radio. Song 3 begins on the white or the epilogue's gate. Song 1 is the score's voice, or Owen humming if he boarded. Remove "plays from a survivor's phone".
+
+14. [MAJOR] 48 decisions for the owner, with duplicates, designers' jobs and one that goes against his answer
+WHERE: The "Decisions for the owner" of all six drafts (8 each); 6-production.md decision 1(c) and section 10 cut 7; 3-systems.md 9 and 10; 4-puzzles-world.md 4.2.
+PROBLEM:
+- Duplicates: how catches work (creatures 1 and systems 2); what the gun does (creatures 6 and systems 5); the restart rule (creatures 4, systems 2 and 4); the noise ring (systems 8, and audio 8, which cites an "Assist preset" that does not exist).
+- Designers' jobs that would only tire him: systems 6 (changing puzzle difficulty mid-game), 7 (does the pack pause the game) and 8 (the noise ring); world D3 (loud ways round locks) and D5 (base-ten numbers); audio 6 (air in low gravity); production 5 (where the repository lives).
+- Production decision 1(c) "no co-op ever" goes against his settled "single-player first, co-op later".
+- Several new checkpoints quietly widen his "save by hand in safe rooms, plus an autosave at each chapter" without one clear question: systems' "restart from the last doorway", world's checkpoint at the library door, and creatures' retry points.
+FIX:
+- Merge everything into one list of at most 12 for the game map: why they came; the Mark; Danny's past; Marcus; language; the event; a fixed loss; Kayla's taking and voice (finding 10); catch and death, with one restart rule that names every checkpoint; the gun; voices; whether it will ever be sold.
+- The designers settle the rest and the map states them.
+- Rewrite production decision 1 as "how co-op comes later", and drop (c).
+
+15. [MINOR] Smaller holes, rule breaks and stale facts
+WHERE / PROBLEM / FIX:
+a) 4-puzzles-world.md secret 9: an answering machine, played backwards, "says a survivor's name hours before it happens". That breaks the whisper rule (only words the taken really said, always from where the hunter is), and a ledger-driven fate cannot be known hours ahead. Fix: cut it, or have it play the hunter's whisper of the announcer's real words.
+b) 1-story.md Epilogue 5: "Danny's last recording on the walkie". A walkie-talkie records nothing. Fix: give the shelter's shortwave base a 1962 reel or cassette logger that records the channel, set up in Chapter 1 by Priya.
+c) 3-systems.md section 5, the hand mirror (a unique Ch3 item that "lets him watch behind"): creatures 2.3 and world 3.1 say mirrors do not hold the Still Ones, so the item has no use. Fix: cut it, or make it the way to see a Mimic's front around a corner on F3 without turning it.
+d) 1-story.md Ch2.5 and world section 4 page 3: CCTV footage of the Patrol carrying sleeping people out. He said what happened to the other students stays off screen. Fix: the footage shows only closed, frosted cradles being carried out, with breath fog on the lids ("They're breathing" still works).
+e) City length: story, systems and world all give 80 minutes where he answered "about an hour and a half". Fix: 90 minutes in the pacing table (the total becomes 9 h 25), or say plainly in the map that it is 80.
+f) 6-production.md section 2 says the graphics card, memory and disk are "unknown". requirements.md section 9 records them: RTX 5070 12 GB, 16 GB of memory, 611 GB free. Fix: state them, set High at 1440p with upscaling as the target, and say that 16 GB is below the plan's own "32 GB real minimum".
+g) 6-production.md section 4 ("no handing things over") against story cutscene 9 (Kayla clips the chute onto Danny) and cutscene 5 (guitar hands). Fix: list those two as the exceptions, staged in close-up cuts, or move cutscene 9 into first person.
+h) His answer that "codes, key places and some item places change each playthrough": the drafts fix every key except the yearbook cabinet key (the riser key, the stage manager's lanyard, the IT badge). Fix: give the riser key and the IT badge three authored spots each.
