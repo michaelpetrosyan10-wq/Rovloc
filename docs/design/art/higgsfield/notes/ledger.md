@@ -140,3 +140,21 @@ Balance before (mcp balance, 18 Nov ~19:20 UTC): 2.05, free plan. Stop line: 1.5
 | p4 | 19:25 | soul_cinematic 16:9 2k (no ref) | 0.12 | d4877399-8fec-4e4f-bd99-8db602a7df7e | R3 title, judge's T2 redo (T3: figure leans out from behind the lockers, gripping hand, 'real person in prosthetic makeup ... not CG, not a puppet') (FAIL: the figure is a small floating white sheet-ghost with a plague-doctor beak and two glowing yellow eyes, no legs; the 'hand' is a lumpy clay mitten gripping a near door on the right; embossed letter-like shapes on the top-left lockers; very dark. Worse than t2; not used) | higg/dl/R3-title/R3-title-p2-v1.png |
 Balance after p4 (mcp balance, 18 Nov ~19:26 UTC): 1.57 = 2.05 - 4 x 0.12. Reconciled exactly. SECOND PASS TOTAL: 4 pictures = 0.48 credits (cap 0.48). Nothing failed or refused; generation STOPPED.
 Note: on p1 only, use_unlim:false was passed by mistake (selects credits, the same as omitting it); omitted on p2-p4.
+
+## Round 4: idea pictures for a cooler hunter (the session on the owner's PC, 21 Nov 2026)
+
+The owner's words: "make the hunter look cooler take reference from the other games". His go for the spend: "Yes, up to
+0.72" (six pictures at 0.12). Balance before (mcp balance): 1.57, free plan. Preflight estimate soul_cinematic 2:3 2k
+count 1: credits_exact 0.12. Text only, no reference image. The free plan runs one job at a time: two of the first
+three submissions were refused for that reason and cost nothing.
+
+| # | Time (UTC) | Model | Credits | Job | What | File |
+|---|---|---|---|---|---|---|
+| c1 | 14:03 | soul_cinematic 2:3 2k (no ref) | 0.12 | a5199684-cb00-4599-b686-6d78d8caf6bf | the lean over the lockers, hood and body as its own dark hide (HELD: the hide hood and body read well, but the face became a needle beak with drawn lines and a red mark, one pinprick only, yellow claws) | docs/design/art/higgsfield/hunter-cooler/C1-lean.png |
+| c2 | 14:04 | soul_cinematic 2:3 2k (no ref) | 0.12 | 9e5afb54-353b-4511-b08e-eeef65da0c47 | the same, face and hand wording corrected (HELD: closest to B3's framing, both pinpricks, hump of hide over a hanging face; but the face ends in a broad snout with a muzzle, no streaks, long pointed nails) | docs/design/art/higgsfield/hunter-cooler/C2-lean.png |
+| c3 | 14:05 | soul_cinematic 2:3 2k (no ref) | 0.12 | 6a391735-3e92-4dcc-9d2a-de9a1d27c4da | the same, with the face wording of round 3's F2 (HELD: a rigid pointed beak again, small eye holes, a hemmed leather cowl, claws: the plague-doctor look the notes forbid) | docs/design/art/higgsfield/hunter-cooler/C3-lean.png |
+
+Spent: 3 x 0.12 = 0.36 of the 0.72 he allowed. Stopped at three tries, as the design judges advised. Nothing bought, no
+use_unlim, no use_free_gens. None of the three is shown to him as the hunter. Lesson: in a scene, this model pulls the
+long face to a beak or a snout and gives the hand claws, whatever the prompt forbids; B3's face has to be judged on
+our own model, not on generated scenes.
