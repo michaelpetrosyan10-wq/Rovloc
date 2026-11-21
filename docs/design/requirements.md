@@ -724,3 +724,13 @@ game"). His typed answers are quoted exactly; a plain label means he picked that
   the reviewers and restated for his larger plan, is about 15 to 25 months, to be rewritten from measured speeds
   after the first slice. He found that long ("Wow thats alot are u sure?"); the ways to have something finished
   sooner are in the map (a polished Chapter 1 first, the school as Part One, the whole game in grey early).
+
+### Nov 21, later: the voices (verbatim)
+"thhe voices gotta be really realisitc tell it to reallyt work on thaht"
+- This is now one of the firmest wishes in the project, on top of "make their voices sound human I want them to
+  actually talk", "all the speech is real voices for the humans" and "the voices sound a little robotic".
+- Done about it: a standing rule in `CLAUDE.md` for every session; a voice plan (`docs/design/unreal/voices.md`)
+  that sets the bar, the routes to it on his PC (real recordings, the best engines its graphics card can run, a
+  paid service only with his yes), the checks a builder who cannot hear can still run, and the points where his own
+  ear decides.
+

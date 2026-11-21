@@ -27,6 +27,10 @@
   recorded (page, author, licence, sha256). Never clone a real person's voice.
 - **Horror:** graphic for the aliens and for Danny's own death scenes; what happened to the other students stays off
   screen.
+- **Voices must sound like real people.** His words: "thhe voices gotta be really realisitc tell it to reallyt work
+  on thaht". He already found one set of voices "a little robotic". No voice goes into the game until it passes the
+  voice plan's checks and, for every main character, his own ear (`docs/design/unreal/voices.md` once it is written;
+  until then `docs/design/voices/` and the audio design).
 - **Honest reporting.** Look at a picture before sending it to him. Say plainly what failed or was not checked. No
   placeholders in anything called finished. Write to him in plain words.
 - **Git:** work on the branch `claude/coop-horror-game-arch-i9b7ko` unless told otherwise, and open a pull request
