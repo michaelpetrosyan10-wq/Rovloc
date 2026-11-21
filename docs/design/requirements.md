@@ -699,3 +699,28 @@ game"). His typed answers are quoted exactly; a plain label means he picked that
 - His PC as read by the session on it: an RTX 5070 with 12 GB, 16 GB of memory, 611 GB free; Unreal Engine 5.8.4.
   The memory is half of what Epic recommends for the editor; he was told an upgrade to 32 GB is the most useful
   hardware change and that it is his decision.
+
+## 10. The game map, his decisions and the cutscenes (Nov 21)
+
+### The player's words (verbatim, in order)
+- "can u give an estimate of how long the game will take to fully finish i have the ultra plan now"
+- "Wow thats alot are u sure?"
+- "Okayt so if i send this map to the other session it will make it all? Can u just make the cutscences be cool and
+  stuff just explain thhem figure it out based on thhe context"
+- "use recomended"
+
+### What they settle
+- THE GAME MAP (`docs/design/unreal/game-map.md`, also sent to him as a document) was put to him with twelve
+  decisions. His answer to all twelve: "use recomended". So: the aliens are the Voice Collectors; a death restarts
+  Danny close by with puzzle progress kept (Story and Survivor); the hunter takes Kayla and her voice is used twice,
+  never on the radio; the Mark exists; Marcus is taken at halftime; Danny walked away from his father; the order of
+  work is the slice, Chapter 1 polished, the whole game in grey, then finishing chapter by chapter; real recordings
+  by him and people he knows for the main cast, the earlier voices until then; language real but rationed; maybe
+  sold later, nothing bought without his yes each time; 32 GB of memory and a backup drive recommended and his to
+  buy, work starting on 16 GB; single-player now, co-op later as its own mode.
+- THE CUTSCENES are delegated: "figure it out based on thhe context". They are designed without further questions
+  and explained to him in the map.
+- THE ESTIMATE he was given: about one to two years for the whole game as mapped; the map's own schedule, sized by
+  the reviewers and restated for his larger plan, is about 15 to 25 months, to be rewritten from measured speeds
+  after the first slice. He found that long ("Wow thats alot are u sure?"); the ways to have something finished
+  sooner are in the map (a polished Chapter 1 first, the school as Part One, the whole game in grey early).

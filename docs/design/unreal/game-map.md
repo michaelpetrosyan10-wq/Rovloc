@@ -2,7 +2,7 @@
 
 **SPOILERS. This map tells the whole story, the ending included.**
 
-This is the document you approve before anything is built. Six designers wrote drafts and three reviewers attacked them; every fix is already in here. Nothing you settled on 21 November has changed. Part 10 holds the twelve questions only you can answer; everything else goes ahead as written unless you say no. The map was checked line by line against the list of every wish you have stated (152 of them, in `owner-checklist.md`); part 11 shows where the small ones went.
+This is the document you approve before anything is built. **Status: decisions answered on 21 November 2026; the cutscenes (part 12) are being written.** Six designers wrote drafts and three reviewers attacked them; every fix is already in here. Nothing you settled on 21 November has changed. Part 10 holds the twelve questions that were yours to answer; on 21 November you chose the recommended option for each. The map was checked line by line against the list of every wish you have stated (152 of them, in `owner-checklist.md`); part 11 shows where the small ones went.
 
 ---
 
@@ -284,9 +284,9 @@ These ranges assume your new, larger plan, so little time is lost to usage limit
 
 ---
 
-## 10. Decisions I need from you
+## 10. Your decisions (answered 21 November)
 
-Most important first. Anything not listed goes ahead as recommended unless you object. Settled by your own answers: one survivor is always lost (Mari), since "not all of them make it"; the hunter says your name and mocks you using the stolen voices. Taken as read unless you object: the evening event is the first home basketball game (you picked "a big game or dance"), whose announcer's halftime words become the first whispers; and Ray, the sixth survivor, is an assistant coach.
+You chose the recommended option for all twelve. They stay here as the record. Settled by your own answers: one survivor is always lost (Mari), since "not all of them make it"; the hunter says your name and mocks you using the stolen voices. Taken as read unless you object: the evening event is the first home basketball game (you picked "a big game or dance"), whose announcer's halftime words become the first whispers; and Ray, the sixth survivor, is an assistant coach.
 
 1. **Why did the aliens come?** (a) The Harvest, people as cargo. (b) The Voice Collectors, who keep the living asleep for their voices. (c) The Return, something left under the school long ago. **Recommended: (b).** It ties the whispers, the symbol tones, the Mark and the hand-held self-destruct into one idea.
 2. **When Danny dies, where does he start again?** (a) At the start of that encounter or puzzle step, progress kept, on Story and Survivor; only your saves on Stay Behind. (b) Always your last save or chapter autosave. (c) Close by on Story only. **Recommended: (a).** Losing 20 minutes to one death is what makes horror "too hard", and these restart points are not saves.
@@ -300,6 +300,11 @@ Most important first. Anything not listed goes ahead as recommended unless you o
 10. **Will it ever be sold, and may anything be spent (Higgsfield credits included)?** (a) Free forever, nothing bought. (b) Maybe sold later; small spending only with your yes each time. (c) Made to be sold. **Recommended: (b).** Every tool and asset is then picked with terms that allow a sale.
 11. **Your PC's memory and backups.** (a) Upgrade to 32 GB and add a backup drive before the slice. (b) Keep 16 GB, add the drive. (c) Change nothing now. **Recommended: (a).** It most shortens the schedule, and the drive protects the work.
 12. **How co-op comes later.** (a) Build every system ready for co-op now, about a quarter more time. (b) Single-player now, built tidy, co-op later as its own mode, such as nights in the school. **Recommended: (b).** It protects the story you asked for first and keeps the door open.
+
+**Three of these need something from you, whenever you are ready:**
+- **Real voices (8):** they happen when you and the people you ask want to record. The voices you chose before are used until then.
+- **Spending (10):** nothing is ever bought without your yes, each time.
+- **Memory and a backup drive (11):** yours to buy. Work starts on 16 GB meanwhile.
 
 ---
 
