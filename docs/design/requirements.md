@@ -587,3 +587,89 @@ already said"
 - OPEN, TO BE ASKED: what it is played on (an Unreal game does not run on a school Chromebook), where Unreal runs
   while it is built (rented machine or his own PC), solo or co-op, what becomes of the website and the Roblox
   version, and then the whole map of the game.
+
+## 8. THE MAP OF THE NEW GAME: questions asked and the player's answers (Nov 21)
+
+Asked in nine short rounds, as he ordered ("before starting everything ask me questions so we can map out the whole
+game"). His typed answers are quoted exactly; a plain label means he picked that option.
+
+### Set-up
+- Played on: a gaming PC.
+- Where Unreal runs while it is built: his own gaming PC (free), not a rented Higgsfield machine. Nothing is rented.
+- On that PC now: the Epic Games Launcher and an Epic account; Unreal Engine itself is not installed yet.
+- How we work: "PC does the work, I chat from anywhere" (the Claude desktop app on the gaming PC shares the game's
+  folder). PC time: "Ill keep it on all day".
+- Players: single-player first, co-op later.
+- The old website and the Roblox version: stop work, leave them as they are (nothing taken down, nothing deleted).
+
+### Shape
+- Camera: "I want it to be first person in some parts and third person in like cutscenes ect. I told u i want it to be
+  crazy goodf something like red dead redemtpion 4 for the story aspect but the rest of tehe games referecne for the
+  horror aspoect" -> first-person play, third-person cutscenes; Red Dead Redemption 2 is the model for the STORY, the
+  five horror games for the HORROR.
+- Length: "However long it takes to make the story engaging and fun. I want there to be an actual good story and
+  engaging. Maybe something like red dead redemtpion size for the story?" -> told plainly that Red Dead 2's size
+  (50+ hours, well over a thousand people, about eight years) is out of reach; he then chose "Red Dead depth, 8-10
+  hours": chapters, a group of characters you live with and lose, third-person cutscenes for the big moments, an
+  epilogue.
+- Fighting: hide first, gun later. In the school nothing can be killed (hide, distract, scare off with things found
+  or built); from the city on, the alien gun with very little energy.
+- How graphic: graphic creature horror (Dead Space-level gore for the aliens and Danny's own death scenes). What
+  happened to the other students stays off screen. THIS REPLACES the old "no blood, no gore" rule for this game.
+
+### Story
+- Hero: Danny (16). The friend: Kayla.
+- A survivor group in a safe room in the school's basement: 5 to 8 people (students, a teacher, the janitor); you
+  bring back medicine, food and power; they give help, stories and jobs; not all of them make it.
+- What happens to people: most are TAKEN alive up to the mothership (not killed).
+- The opening: an evening event at the school (a big game or dance); it is dark and the building is full; Danny and
+  Kayla are leaving early when they see the mothership; the small ship lands; the thing crawls out; they hide in the
+  basement.
+- Kayla: on the radio from the survivors' room, with Danny in person for key scenes, TAKEN when the helicopter goes
+  down; getting her back is why Danny flies up.
+- The ending: DANNY STAYS BEHIND. He gets Kayla and as many of the taken as he can into pods, then sets off the
+  self-destruct by hand. The epilogue is played as Kayla, later.
+- Choices: yes, quietly: no meter; the game remembers who you helped, what you shared and who you left, and the last
+  chapter and ending change with it.
+- The hunter (his favourite monster, the tall thin hooded one that crawls out of the small ship): hunts you all game,
+  on any floor, in the city and on the mothership.
+- Its voice: "It should whisper in the voices of people it took but it should be like an eerie creepy version".
+- Alien writing: yes: a small symbol language learned piece by piece, used in puzzles; the self-destruct is the
+  final exam.
+
+### Creatures (each area has its own kind with its own rule, on top of the hunter)
+- Picked: the Listeners (blind, hunt by sound), the Still Ones (move only when not looked at), the Dark Dwellers
+  (live only in darkness; the generator and the lights keep them off), the Mimics (look like a person from behind,
+  call in a known voice), the Swarm (small things in vents and ceilings drawn to warmth and movement), the Patrol
+  (alien soldiers searching room by room), the Brute (huge, slow, tears hiding places open).
+  Not picked: the one in the water.
+- Placement: spread across the game. School: the basement with the safe room and generator (Dark Dwellers when the
+  power fails), four floors (Listeners, Still Ones, Mimics, Swarm), the roof. City: the Patrol. Mothership: the
+  Brute, and the others return.
+
+### Survival, saving, puzzles
+- Survival weight: medium (a small backpack; batteries, generator fuel, medicine and parts for distractions are
+  scarce; the survivors sometimes need food or medicine; no hunger meter for Danny).
+- Saving: by hand in safe rooms, plus an autosave at the start of each chapter.
+- Puzzles: their own difficulty setting, separate from creature difficulty; codes, key places and some item places
+  change each playthrough. (Still standing from before: "i also dont want the game to be too hard".)
+
+### Escape, city, flight, mothership
+- Leaving the school: a rescue helicopter lifts some survivors from the roof and is shot down over the city; Danny
+  parachutes and lands alone.
+- The city: a few dense blocks, one route with side places (about an hour and a half); the Patrol; Danny knocks out
+  an alien and takes its gun and its ship.
+- The flight: he flies it himself on a set course (steer, dodge, boost, shoot), about 15 to 20 minutes.
+- The mothership: a full chapter of about two hours: alien decks, the halls where the taken are held, a low-gravity
+  stretch, the self-destruct as the last big puzzle in several steps, the run to the pods as the ship comes apart.
+
+### Sound and name
+- Music: a quiet, eerie score plus two or three original songs with vocals at the biggest moments, as Red Dead 2
+  uses them. No real artists' songs.
+- Title: he asked for suggestions and picked STAY BEHIND (to be checked against existing games before it is locked).
+
+### Still open (to be put to him in the written game map, not guessed)
+- Who voices the people (the chosen web voices, better voices, or real recordings), and how strong the language is.
+- Why the aliens came (the story treatment will offer versions).
+- His PC's graphics card, memory and disk (read from the PC once it is connected).
+- How co-op would work later.
