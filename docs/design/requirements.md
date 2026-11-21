@@ -734,3 +734,81 @@ game"). His typed answers are quoted exactly; a plain label means he picked that
   paid service only with his yes), the checks a builder who cannot hear can still run, and the points where his own
   ear decides.
 
+
+## 11. Story notes for when the game itself is built (Nov 21, to the session on his PC)
+
+### The player's words (verbatim, in order)
+First message, six numbered notes and a closing paragraph:
+
+> 1. make danny’s sacrifice unmistakably his choice. the mark means he cannot safely escape, while the mechanism
+> physically requires someone to stay. together, those risk making his ending feel compulsory. give him a credible
+> escape that would abandon the remaining captives, and let him choose to finish releasing them.
+> 2. make the hunter less predictable. something happening every 15–60 seconds could become a routine players
+> recognise. use those numbers as testing baselines, with longer quiet stretches and occasional concentrated
+> encounters. players should sometimes wonder where it went.
+> 3. protect the horror during the final third. rooftop chases, a stolen gun, an 18-minute flying battle, low
+> gravity, and a two-hour mothership section could feel like a different game. keep danny vulnerable, shorten the
+> flight unless testing proves it earns its length, and make the ship feel like entering the source of the horror.
+> 4. give survivors useful actions beyond errands. priya could decipher a route while you protect her; owen could
+> remember a hiding place; ray could draw a patrol away. let relationships change playable situations. that makes
+> losing someone hurt beyond an empty chair.
+> 5. make consequences understandable without displaying a morality score. gus dying because you missed hearing-aid
+> batteries could feel arbitrary unless you clearly establish the danger and give a reasonable opportunity to
+> respond. choices can have surprising consequences, but players should understand the connection afterward.
+> 6. leave more room for ordinary dialogue. “stay behind,” “stay on the line,” “we waited,” and “right behind you”
+> are strong callbacks, but using them too deliberately could make everyone sound written around the ending. keep
+> the best ones and add conversations that reveal who these people are outside the tragedy.
+>
+> These are some little changes. that would improve the game story. If tyhey are stupid leave them and dont do or
+> just improve the idea but i want the story of the game to not be bnoring like actually engaging exicting eerie and
+> there to be a good full idea story behind it no bad parts everything is well thought out
+
+Second message, a few minutes later:
+
+> Those are not for now for when you start the actual game
+
+Third message:
+
+> the last point comes from execution: controls that feel right, scares that stay effective, puzzles that feel fair,
+> and relationships that make the ending hurt. you only learn that by building and playtesting
+>
+> Make sure the puzzles are well thought out asnd not just simple like puzzles stuff that is like if you heard of
+> ythe puzzle you would be like wow, thats such a creative and smart idea. It should use like cool mechanics and
+> other stuff you saw in the game
+
+### What they settle
+- WHEN: not now. They apply when the game's own story, creatures and puzzles are built ("for when you start the
+  actual game"). The hunter's first slice goes on as planned; nothing in it is held up by them.
+- HE LEFT ROOM TO JUDGE each note: "If tyhey are stupid leave them and dont do or just improve the idea". So each one
+  is to be weighed, improved where it can be, and a note that is dropped is reported to him with the reason.
+- THE BAR for the whole story: "not be bnoring", "actually engaging exicting eerie", "a good full idea story behind
+  it no bad parts everything is well thought out".
+- PUZZLES: on top of his earlier wishes (owner-checklist lines 98 and 99), each puzzle should be an idea that makes
+  someone who only hears it described say "wow, thats such a creative and smart idea", and it should be built from
+  the game's own mechanics and from things the player has already seen in the game.
+- HOW THE LAST OF IT IS LEARNED: by building and playtesting (controls, scares that stay effective, puzzles that feel
+  fair, relationships that make the ending hurt).
+
+### Still to do with them (nothing in the design documents has been changed yet)
+- Take them into `owner-checklist.md` (added there as lines 153 to 161, from this section) and check the game map and
+  the detailed design against those lines.
+- Revise the documents they touch before that part of the game is built: the ending (`1-story.md`, `cutscenes.md`,
+  canon), the hunter's rhythm (canon 8, `2-creatures.md`, the clock's values), the final third (`1-story.md`,
+  `3-systems.md`, the flight's length in canon), the survivors (`1-story.md`, `3-systems.md`), consequences
+  (`1-story.md`, `3-systems.md`), the dialogue and its callbacks (`1-story.md`, `5-audio.md`), the puzzles
+  (`4-puzzles-world.md`).
+
+### The builder's first reading (the builder's view, not his words; for the session that revises the story)
+1. The choice. Agreed, and it is the most important of the six. The escape has to work and be open at the moment
+   he decides, with the cost in plain sight and hearing (who is still held), and the player should carry the choice
+   out with his own hands, not pick it from a menu. The Mark then becomes a price of leaving, not a wall.
+2. The hunter. Agreed. The 15 to 60 seconds become baselines for testing; the clock gets long silences and
+   clusters, and no period a player can learn. It must stay seeded and testable: the simulated players can measure
+   whether a routine can be learned.
+3. The final third. Agreed. Keep the grammar of the first two thirds (the torch, hiding, listening); the gun
+   scarce, loud by the noise table and little use against the hunter; the flight short unless playtests earn more.
+4. The survivors. Agreed, with a caution on cost: each survivor action is a small system. A few strong ones that
+   recur are better than one for everybody.
+5. Consequences. Agreed. A workable rule: the danger is shown in ordinary play first, the player gets one clear
+   chance to act, and afterwards somebody says what the link was.
+6. Dialogue. Agreed. Each callback line earns one echo at most; the rest of the talk is about their lives.
