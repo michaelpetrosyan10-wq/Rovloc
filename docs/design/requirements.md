@@ -846,3 +846,13 @@ everything is perfect remake it iff you have too. I need the storyu and everythi
 Made a standing rule in `CLAUDE.md` and passed to every session working on the game. What it changes: the old game's
 layout, sounds, behaviour numbers and scripts are references at most; each is kept only where it already meets what he
 wants now and is changed to fit; and where a design document's choice and his own words differ, his words win.
+
+### Nov 21, evening: nine rules questions (to the session on his PC)
+Checking the slice's rules against his words raised nine questions; each went to him with a recommendation and he
+answered "Yes, use them": the hunter's steps beat any sound Danny makes; the generator's hum hides a walk on every
+floor and preset; saving by hand in safe rooms plus a chapter-start autosave, and a one-use "quit and keep my place";
+the puzzle setting can be lowered any time; a death restarts close by with puzzle progress kept, plus one winnable
+struggle a chapter (no per-floor healing, counted respawns or syringe); Stay Behind has only the player's own saves;
+the backpack stays small (8 slots) all game; only the open beam and real lights keep a Dark Dweller off; lures are
+scarce. The full list is in the game repository's `Docs/feedback/2026-11-21.md`. Still to do by the design session:
+canon 7, 10 and 11, `3-systems.md` and `game-map.md` where they say otherwise.
