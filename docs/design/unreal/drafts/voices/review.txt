@@ -1,0 +1,207 @@
+STAY BEHIND: THE VOICE PLAN, SCEPTICAL LISTENER'S REVIEW            21 November 2026
+Reviewed: VOICES.md, all of it. Nothing was changed. Searches used: 19 of 25.
+Marks: [checked: url] = read today through search results (huggingface.co itself could not be opened from here);
+[from memory] = not re-checked today.
+
+VERDICT
+The plan is honest about what machines cannot do yet (part 1's table is right), its rules against the old causes of
+"robotic" are sound, and it sends nothing to a paid route without his yes. It is NOT ready to run. Three things would
+let robotic or mismatched voices through while every check says "pass": (1) one character made by two or three
+routes or engines with nothing checking they sound like one person; (2) a ranking score that rewards the flat,
+over-clear read he already rejected; (3) a blind listening test that is not blind. The first proof is also too big,
+and it puts the deciding question last.
+
+FINDINGS, WORST FIRST
+
+1. BLOCKER. One character, two or three different-sounding people.
+Where: part 2 "The recommended mix"; 4.2 (8 takes from 2 engines); 4.4 rungs 4 to 6; part 9 "change route".
+Problem: Danny's ordinary lines come from text-to-speech, his crying and shouting lines later from a real person
+(route A) or a converted performance (route B), and lines that fail on one engine are made on "another engine". A
+listener hears the change of person at once; it is the most obvious machine tell there is. The only guard is a
+speaker-match score of 0.75 against one calm anchor clip, and two voices from different engines can pass that and
+still sound like different people to a person. Nothing in part 8 asks the owner whether two lines are the same
+person.
+Fix: Add rule 5 to part 5: "In the finished game every character's lines come from ONE route and ONE engine. A
+character moves route all at once (e.g. Danny goes fully real), never line by line." Backup engine and rung 4 are
+allowed only in the working build, and only if the take is then converted to the character's anchor voice and passes
+the identity gate. Add to part 8 a "same person?" check: 6 pairs per character (one calm line beside one hard line,
+one main-engine beside one backup), buttons "same person / different person"; pass 6 of 6. Mixed-route Danny is
+allowed only if this passes.
+
+2. BLOCKER. The ranking score picks the robotic take.
+Where: 4.3, the score line ("30 % recogniser confidence ... 15 % detector 'human' score ... 10 % UTMOSv2"), the
+identity gate, the pitch gates; 9 step 2.
+Problem: (a) A speech recogniser is most confident on clear, fully pronounced, evenly paced words: the "reading
+voice" the plan itself lists as a machine tell. Crying, whispering, swallowed "gonna" and a thrown-away "...Yeah."
+all lower its confidence. Giving it 30 % of the score selects the flattest take. (b) The identity gate compares every
+take with ONE calm anchor; emotional speech is known to move speaker-match scores away from the same person's calm
+speech [checked: isca-archive.org/interspeech_2025/goebiowska25_interspeech.pdf], so good frightened and crying
+takes fail and calm-sounding ones pass. (c) Pitch-movement and pitch-wobble gates mean nothing on a whisper (no pitch)
+and were set from Danny/Kayla/Marcus only; a calm, slow 58-year-old (Gus "quieter, not louder") may fail them for
+being in character. The talk gate (4.5 semitones) sits inside the measured flat range (3.6 to 4.7), so some flat
+reads pass. (d) The synthetic-speech detectors were built on older machine voices; 2026 papers report they miss
+modern voice engines, Maya1 and Dia2 included [checked: arxiv.org/html/2601.20510; arxiv.org/pdf/2607.11706].
+UTMOSv2 was built to score clean read speech [checked: huggingface.co/sarulab-speech/UTMOSv2, arxiv.org/abs/2409.09305].
+(e) "Calibrate on round 1 vs round 2/3" is circular: the gates were made from exactly those files
+(out2/A1_causes.txt), so they will separate them and prove nothing about a new engine's faults.
+Fix: Use the recognisers only as a pass/fail gate (right words), never in the ranking. Make one anchor clip per
+character PER KIND (calm, frightened, whisper, shout, crying) and compare each take with the anchor of its own kind.
+Skip pitch gates on whisper lines; set every character's pitch thresholds from that character's own acted anchors;
+raise the starting talk gate to 5.0. Remove the detector from the ranking entirely (keep it only as an experiment
+logged beside the owner's answers). New ranking: 35 % pitch movement and wobble, 25 % loudness movement and pause
+pattern against the direction, 25 % emotion fit, 15 % UTMOSv2. Calibrate every gate on the owner's answers from the
+new blind test (finding 3), not on the old rounds: a gate stays only if the takes he called "machine" fail it more
+often than the ones he called "real".
+
+3. BLOCKER. The blind test is not blind and cannot fail clearly.
+Where: part 8 item 1; 9 step 8.
+Problem: The 4 real clips are "lines he and anyone who agrees record on a phone": he will know his own voice and
+whoever he asked, so he is not guessing. Phone clips in a bedroom sound different from clean machine files (room,
+noise, phone microphone), so he can tell them apart by the recording, not the voice. 4 real against 12 machine is too
+few, and "about as often" has no number, so any result can be read as a pass.
+Fix: 24 clips, 12 pairs: the SAME line once real, once machine. Real clips from consenting people other than the
+listener (release signed; parent too if under 18). Every clip goes through the same finishing: same loudness, same
+room tone, the game's room reverb, same file format. Clips cover the hard kinds (whisper, frightened, shout, crying,
+joke), not just ordinary talk. Pass rule: he gets 16 or fewer of 24 right (17 or more right by guessing alone has
+about a 3 % chance, so 17+ means he can hear the difference). Report the result per kind; a kind he gets right
+every time goes to real recording. About 4 minutes.
+
+4. MAJOR. The first proof is too big and the deciding question comes last.
+Where: part 9.
+Problem: 60 lines × 8 takes, 4 characters × 4 candidates, breaths, radio chain, three Danny states and faces is weeks
+of work; the one result that decides the route (can a machine make whisper, fear, shout and crying pass his ear?) is
+step 8. Owen (14), the hardest age for every route, is not in it at all; nor are the lines the story rests on.
+Fix: Add a "proof zero" before part 9, about two days: 12 lines only. Danny: 1 joke, 1 thrown-away ("...Yeah."),
+1 whisper, 1 shout, his crying last line, and the Kessler impression "Miss Brooks. Is something funny?".
+Kayla: 1 radio, 1 frightened ("It's in. It's inside, Danny."), her laugh-while-crying. Owen: 1 whisper, 1 question,
+1 scared. Best machine take of each from the best engine (the old Danny 1 / Kayla 1 included where they exist), plus a
+real recording of the same 12 by consenting people: these are the 12 pairs of the blind test in finding 3.
+Decide each kind's route from that, THEN run part 9 only for the kinds that machines passed.
+
+5. MAJOR. The hardest lines are sent to the route that is weakest at them, and it breaks the plan's own rule.
+Where: part 2 route B and the mix table ("Crying, screaming, strain, real laughs -> A or B"); part 5 rule 1; 4.4 rung 6.
+Problem: Route B (converting a performance into a designed voice) is a resynthesis through a neural vocoder, which
+part 5 rule 1 forbids for every human line; the plan's own route B section says it is weak on whispers, screams and
+big age or sex jumps, i.e. exactly the lines sent to it. Separately, REAL-ONLY lines keep their failed machine take
+"with a red debug tag" in the working build: he plays those builds and will judge the crying scenes by them.
+Fix: In part 5 rule 1 write the exception plainly: "Route B is allowed only if the converted line passes the same
+buzz and wobble gates as the performer's original (wobble loss 15 % or less, buzz change 1.5 dB or less) and the
+same-person check of finding 1." Send whispers, screams and crying to route A only. Cast real performers first for the
+characters with the most hard lines (Danny, Kayla), so finding 1 does not force a mix. In builds he plays, a
+REAL-ONLY line shows "[temporary voice]" in its subtitle so he knows it is not the finished sound.
+
+6. MAJOR. The main engine may not take emotion directions the way the plan uses it.
+Where: part 2 route C (Qwen3-TTS row); 4.2 ("Qwen instruct 'frightened, whispering'"); 3 "three designed reference clips".
+Problem: Qwen3-TTS comes as three models: VoiceDesign (voice from a description), Base (copies a reference clip) and
+CustomVoice (its own preset speakers with instructions) [checked: raw.githubusercontent.com/QwenLM/Qwen3-TTS/HEAD/README.md
+via search]. As far as I know, the designed-then-copied voice runs on Base, which takes no emotion instruction; its
+emotion comes only from the reference clip [from memory: verify in the README before relying on it]. The plan makes
+only three references per voice (calm, frightened, whispered), so shouted, crying, laughing, joking and winded lines
+have no reference to copy from and will come out calm or "fast talking" (part 1's own warning).
+Fix: Before the proof, the builder runs the README's design-then-clone example once with an instruction and writes
+down whether the instruction changes the output. Make one designed reference per kind (calm, joking, frightened,
+whisper, shout, crying, winded), each from the same description plus the emotion, each passing the identity check
+against the calm one. The script sheet's State/Fear/Loudness columns pick the reference. Move the Qwen "instruct"
+takes to the VoiceDesign model only, and identity-check them.
+
+7. MAJOR. Kinds of voice the story needs that the plan never routes.
+Where: part 1 table, part 3 voice sheets, part 9 slice; game map parts 2 and 8, audio draft 5 sections 4 and 8.
+Problem: (a) Danny's Kessler impression (his voice doing another voice) is the last line of the game; an identity gate
+will reject it whichever voice it sounds like. (b) Humming and whistling: Mari hums between lines, the teacher hums
+her tag, the janitor whistles his, the hunter hums a taken person's tag wrongly; text-to-speech engines cannot hum or
+whistle. (c) Kayla "laughs, crying". (d) Danny's scream cut off mid-breath, which the hunter whispers back. (e) Small
+speaking parts named in the map: the halftime announcer (whose words are the first whispers), the IT technician, the
+laundromat boy; none has a voice sheet.
+Fix: Add rows to part 1 and to the mix table: impression lines, humming, whistling, laugh-while-crying, cut-off
+screams = REAL-ONLY from the start (the person playing that character performs them; the impression and the scream
+are in Danny's performer's session list). For the impression on the machine track, make it a separate
+"Danny doing Kessler" anchor and identity-check it against Danny's anchor only loosely, with the owner's ear deciding.
+Add voice sheets for the announcer, technician and laundromat boy, and for any soldier calls.
+
+8. MAJOR. Tools whose licence or fit on his PC is not settled are used as main candidates.
+Where: part 2 route C table and "Usable only with conditions"; 4.3 table; part 11.
+Problem: (a) Maya1 is listed as Apache-2.0, but whether its 3B model started from Meta's Llama weights (whose licence
+would then apply) is still not answered [checked: marktechpost.com/2025/11/11/maya1..., osai-index.eu/model/maya:
+"Llama-style backbone", base not stated]; it is nonetheless a main audition candidate in part 9 step 3.
+(b) emotion2vec+ is under "license: other", FunASR's own model licence, which has not been read [checked:
+huggingface.co/emotion2vec/emotion2vec_plus_large card via search]. (c) Parakeet runs through NVIDIA NeMo, which is
+hard to install on Windows; there is an ONNX route (onnx-asr package, word timestamps) [checked: pypi.org/project/onnx-asr].
+(d) "Chatterbox archived August 2026" could not be confirmed today; a mirror says archived 5 January 2026 and
+Resemble says the models stay open and free but are no longer sold [checked: gitverse.ru/muravjov/chatterbox;
+resemble.ai/chatterbox]. Qwen3-TTS, Dia2 (Apache-2.0, English only), Seed-VC (GPL-3.0, changed from MIT), Step-Audio-EditX
+(Apache-2.0) and UTMOSv2 (MIT) do exist under the licences the plan states [checked: search results for each].
+Fix: Maya1 stays OUT of every audition until a runnable check is done: open its config.json and tokenizer files; if
+it uses the Llama 3 tokenizer or names a Llama base, treat it as under Meta's Llama licence (record the text) or drop
+it; replacement candidate: a second Qwen3 VoiceDesign description. Read FunASR's MODEL_LICENSE file into LICENCES4
+before using emotion2vec+, or drop the emotion score (its 25 % then goes to pitch). Use onnx-asr for Parakeet on
+Windows. Record Chatterbox's archive state from the GitHub page itself, with the date.
+
+9. MAJOR. Step-Audio-EditX will probably not fit as described.
+Where: part 2 route C (Step-Audio-EditX row), 9 step 1.
+Problem: Its makers say 12 GB of video memory is "a critical value", 16 GB safer, tested on Linux only [checked:
+github.com/stepfun-ai/Step-Audio-EditX]. The plan runs it in WSL2, which by default gets only half of the PC's memory,
+about 8 GB of the 16 GB [checked: dev.classmethod.jp/articles/learn_wsl2_wslconfig; docs.nvidia.com/nim/wsl2/latest/troubleshooting.html];
+a third-party guide asks for 32 GB of system memory [checked: adg.csdn.net/695248195b9f5f31781b5a07.html].
+Fix: Try the 4-bit checkpoint the README lists (Step-Audio-EditX-AWQ-4bit) first; set .wslconfig memory to 12 GB
+with 16 GB swap; log peak memory. Treat rung 5 of the ladder as absent until this test passes, and do not let any
+plan figure depend on it.
+
+10. MAJOR. Nothing checks that the hunter sounds eerie, and his earlier pick is dropped.
+Where: part 7, part 8 item 3.
+Problem: He asked for "an eerie creepy version" of the stolen voices. The only listening check is "who is it?", which
+tests that the voice is recognisable, not that it is creepy. His earlier choice (the Monster 5 close dry whisper with
+a breath before it, audio draft 5 section 4) is not the starting point or the yardstick; the plan's chain is new and
+puts the inhale "where no one would breathe" instead.
+Fix: Start the chain from the Monster 5 process. In the "who is it?" session add one question per clip, "creepy
+enough?" (yes / more / too much), and one short side-by-side: Monster 5's process against the new chain on the same
+two lines; he picks. Pass: 5 of 6 named right AND most answers "yes".
+
+11. MAJOR. Names and short thrown-away lines slip through the checks.
+Where: 4.3 "names right", length and pacing gates; part 3 pronunciation list.
+Problem: A recogniser writes "Reyes" when it guesses the word, not when it was said "RAY-ess"; a spelling check is not a
+pronunciation check. One- and two-word lines ("...Yeah.", "Four.", "...oh.") are where engines are least natural and
+recognisers most often invent words, and the words-per-second, pitch-spread and pause-spread gates mean nothing on
+them, yet these lines are the "thrown away casually" moments the story leans on.
+Fix: Check names with a phoneme recogniser against the expected sounds (e.g. Meta's wav2vec2 espeak phoneme model,
+licence to be read and recorded [from memory: Apache-2.0]); never give the recogniser the names as a hint. For lines
+under four words, make them inside the line before them as context and cut the short line out at the silence (a trim,
+which part 5 allows), skip the rhythm gates, and send every short line in a scene to the owner's chapter sample.
+
+12. MINOR. People talking over each other will sound staged.
+Where: part 6 "Overlaps"; route C Dia2 row.
+Problem: Engines finish a written cut-off ("I was gonna—") with a falling, completed tune, so the interruption sounds
+rehearsed. Dia2 makes both speakers in one mixed track [checked: raw.githubusercontent.com/nari-labs/dia/HEAD/README.md
+via search: voices vary unless given a prefix clip], so it cannot drive two faces or be mixed per speaker.
+Fix: Make the interrupted line WITH its continuation ("I was gonna say we should") and cut it mid-word, with a 5 to 10 ms
+fade, exactly where the other speaker starts. Use Dia2 only to find natural overlap timing, never for shipped lines.
+
+13. MINOR. Consent steps missing for some uses.
+Where: part 2 route A release; part 6 breaths; part 8 blind test; route D Voice Changer.
+Problem: The release does not name: breaths placed under a DIFFERENT character's machine voice; clips used in the
+listening tests; uploading a person's recordings to an outside company (ElevenLabs' Voice Changer) if that route is
+ever chosen. Breaths "from a consenting person of similar age" means teenagers for most of the cast, so a parent or
+guardian must sign for those too. Withdrawal before release must also remove that person from the hunter's bank.
+Fix: Add those four items to the release text, with "parent or guardian also signs for anyone under 18" next to each;
+make the build refuse any breath or test clip without a release number in vo_manifest.json; on withdrawal, rebuild
+the hunter's bank without that person.
+
+14. MINOR. Paid-route facts are out of date; a store rule is missing.
+Where: part 2 route D, part 10, part 11.
+Problem: What part 11 calls unverified is now answered: content made while on a paid ElevenLabs plan keeps a commercial
+licence after the plan ends; content made on the free plan never has one [checked:
+elevenlabs.io/docs/help-center/account/general/what-happens-to-my-content-after-my-subscription-ends]. Eleven v4
+launched 28 September 2026; standard API price $80 per million characters [checked: techcrunch.com/2026/09/28/elevenlabs-new-v4-speech-model...].
+The cost assumes 1,200 lines; audio draft 5 counts about 3,100, which multiplies every figure by about 2.6. Nothing
+here is presented as agreed (good). Steam asks games to state AI-made voices (audio draft 5, 7.1) and the plan does
+not say so.
+Fix: Update part 10 with both counts (1,200 and 3,100 lines) and the $80 per million API price; move the
+after-subscription answer out of part 11; keep "nothing is bought without his yes". Add one line: "If the game goes on
+a store, its AI-voice notice lists which characters are machine-voiced."
+
+15. MINOR. He cannot read most of it.
+Where: whole document, especially 4.3 and part 6.
+Problem: Words like spectral flux, aperiodicity, CV, LUFS, dBTP, ECAPA, Elo, bf16, WSOLA, zero-shot, fine-tune and seed
+are never explained; what he must do and decide is spread across parts 3, 8, 9 and 10.
+Fix: Put a half-page "For you" box at the top: what you will listen to, how long, when (proof zero blind test,
+auditions, hunter test, cutscene checks, chapter samples), and the decisions that are yours (recording, any paid plan).
+Mark parts 4 to 6 "for the builder" and add a ten-word glossary at the end.

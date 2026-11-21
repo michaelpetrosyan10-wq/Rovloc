@@ -29,8 +29,8 @@
   screen.
 - **Voices must sound like real people.** His words: "thhe voices gotta be really realisitc tell it to reallyt work
   on thaht". He already found one set of voices "a little robotic". No voice goes into the game until it passes the
-  voice plan's checks and, for every main character, his own ear (`docs/design/unreal/voices.md` once it is written;
-  until then `docs/design/voices/` and the audio design).
+  voice plan's checks and, for every main character, his own ear. The plan is `docs/design/unreal/voices.md`: read
+  its short version before touching any voice.
 - **Honest reporting.** Look at a picture before sending it to him. Say plainly what failed or was not checked. No
   placeholders in anything called finished. Write to him in plain words.
 - **Git:** work on the branch `claude/coop-horror-game-arch-i9b7ko` unless told otherwise, and open a pull request
@@ -46,6 +46,8 @@
 | `docs/design/project-summary.md` | One page: how the project began, which of his ideas carry over, and the new game as decided. |
 | `docs/design/lessons-from-rovloc.md` | What he rejected and accepted in the first game and why, and how work was checked without eyes or ears. |
 | `docs/design/unreal/owner-checklist.md` | Every wish he has stated, small ones included, numbered, each with a check. The game map and every build are checked against it. |
+| `docs/design/unreal/voices.md` | The voice plan: the bar, the routes on his PC, the checks, where his ear decides, and the first proof. It wins on anything about voices. |
+| `docs/design/unreal/cutscenes.md` | The twelve cutscenes shot by shot, how each is staged to look real, and the build order. It wins on anything about cutscenes. |
 | `docs/design/unreal/game-map.md` | THE GAME MAP: story, creatures, play, puzzles, build plan and the twelve decisions put to him. Not approved until he says so; it wins over the drafts beside it. |
 | `docs/design/unreal/` | The research reports, the design drafts behind the map, and the readings from his PC (`pc.md`). |
 | `docs/design/art/higgsfield/` | His favourite monster picture (`picks/monster-favourite-B3.png`), the other design pictures, the art pack and the credit ledger. |
