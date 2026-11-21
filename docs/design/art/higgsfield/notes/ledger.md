@@ -158,3 +158,23 @@ Spent: 3 x 0.12 = 0.36 of the 0.72 he allowed. Stopped at three tries, as the de
 use_unlim, no use_free_gens. None of the three is shown to him as the hunter. Lesson: in a scene, this model pulls the
 long face to a beak or a snout and gives the hand claws, whatever the prompt forbids; B3's face has to be judged on
 our own model, not on generated scenes.
+
+## Round 5: idea pictures for a new alien hunter (the session on the owner's PC, 21 Nov 2026)
+
+The owner's words: "bro but can u make it something like this yk how it has like a human build ion want that it has to
+be like creepy gross look at like alien space monsters and this ss." Asked, he chose: an upright alien (two legs, extra
+joints, spine and ribs pushing out, wet grey skin), a new alien head, a hood of its own flesh, wet slimy skin and open
+flesh. Spend: the rest of his "Yes, up to 0.72" for hunter option pictures (0.36 left after round 4). Balance before
+(mcp balance): 1.21, free plan. Preflight estimate soul_cinematic 2:3 2k count 1: credits_exact 0.12. Text only, no
+reference image, no other game named in any prompt. One job at a time; nothing refused.
+
+| # | Time (UTC) | Model | Credits | Job | What | File |
+|---|---|---|---|---|---|---|
+| a1 | 22:17 | soul_cinematic 2:3 2k (no ref) | 0.12 | 49dce971-7a33-42e9-9170-d07d9f70e7f2 | the new body, head long and eyeless with a parted vertical seam under a hood of its own flesh (SHOWN: wet, bony, too-long limbs that reach the floor, knobbed joints, a red-brown hood of skin over the whole head; the head reads as a split sac, no face) | hunter-alien/A1-eyeless.png |
+| a2 | 22:18 | soul_cinematic 2:3 2k (no ref) | 0.12 | 38dd0b64-b138-420b-bebe-8f21ca0299be | the same body, head wide and flat with a cluster of small black eyes over a lipless mouth of thin teeth (SHOWN: stilt legs, a cape of skin over the shoulders, raw open flesh at the knees and shoulders, long clawed fingers) | hunter-alien/A2-many-eyes.png |
+| a3 | 22:18 | soul_cinematic 2:3 2k (no ref) | 0.12 | d3873b42-4d61-4ca3-8b37-d9a1642b36e4 | the same body, head narrow and skull-like with two hollow black eyes each with a pinprick of light and a vertical slit mouth (SHOWN: pale wet hunched body, open wounds at the shoulders, extra-jointed limbs; the long face again pulls toward a beak) | hunter-alien/A3-hollow-eyes.png |
+
+Balance after (mcp balance): 0.85 = 1.21 - 3 x 0.12. Reconciled exactly. Spent: the whole 0.72 he allowed for hunter
+option pictures (6 pictures). No use_unlim, no use_free_gens. More pictures need his yes. These are idea pictures for
+choosing a direction, not assets: they go into no game file, and their terms for a game that may be sold are still
+unread.
