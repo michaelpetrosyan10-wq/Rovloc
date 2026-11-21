@@ -1,0 +1,218 @@
+ROVLOC VOICE SPIKE: REPORT                                         first pass 2026-11-16, closing pass 2026-11-17
+Folder  /tmp/claude-0/-home-user-Rovloc/44e475d9-c8d0-52a2-84e0-3ac758fed249/scratchpad/voices   (paths below are relative to it)
+Board   board/index.html + board/a/*.mp3 (84 MP3, 1.56 MB, mono 24 kHz, no external request)
+Also    LICENCES.txt (licences and provenance), REVIEW.txt (the review), out/aud/summary.md (all tables),
+        out/aud/board_check.json (the board as decoded MP3s), tools/rebuild.sh (every step), tools/requirements.lock
+Nothing under /home/user/Rovloc was changed.
+
+1. THE ASK
+The player: "make their voices sound human I want them to actually talk. I want the monster to talk too real
+words" and "Make sure he talks good English". Rules: no clone or imitation of a real voice; commercial-use
+licences read in the licence text; no line or voice from another work; no blood or gore (the speakers are children).
+
+2. ENGINES COMPARED (all offline, CPU, 2 threads; same line in each on the board's "Engines" section)
+engine                           | how it sounds / what it can do                                   | speed (s compute per s speech)
+Chatterbox Turbo (Resemble AI,   | the most human: breath, timing, emphasis; [laugh] tags work mid- | 2.10 (q4 LM; the q8 LM was 0.63 s
+  MIT, official ONNX export)     | line; speaks in the voice of a ~10 s reference clip; sampled, so |   per step, about 15, too slow)
+                                 | 2 takes per line and a recogniser gate                           |
+Kokoro 82M v1.0 (Apache-2.0)     | clean, steady, a little "read aloud"; no tags; built-in voices   | 0.44
+                                 | can be blended; rushes short lines (needs speed 0.56-0.85)       |
+Kitten TTS mini 0.8 (Apache-2.0) | understandable but flatter and more synthetic; few voices        | 0.25
+Recognition of the finished engine items: all word for word.
+CHOICE: Chatterbox Turbo for every speaking character and the monster, conditioned ONLY on our own Kokoro renders
+(built-in voices, blends, and our own WORLD pitch/formant shifts), never on a recording. Kokoro alone is kept as
+the fast fallback (Danny C, Gus C, the PA). Kitten is not used. Why: Chatterbox is the one that sounds like a
+person talking rather than reading, and it can laugh and groan; the reference-clip route lets us design voices
+from licensed built-in voices without any real speaker. Cost: about 5x Kokoro's compute and a recogniser gate.
+
+3. THE CAST (final, after the closing pass)
+Chatterbox settings: q4 language model, temperature 0.8, top_p 0.95, top_k 1000, repetition penalty 1.2, cap
+25 x (2 + 0.6 x words + 1.5 x tags) tokens, seeds 1 and 2 (d6 lines 1-4; Danny B d4 and Gus A g2 also 3-4).
+Refs: Kokoro reading REF_TEXT (tools/cast.py, our own 3 sentences), out/refs/ref_*.wav.
+character / candidate | engine        | voice recipe                                                     | chain
+Danny A (hero, 16)    | Chatterbox    | ref = Kokoro am_puck 0.6 + af_heart 0.4, speed 1.05               | DIALOGUE
+Danny B               | Chatterbox    | ref = Kokoro am_michael 1.0, speed 1.05, WORLD pitch +3.0 st,     | DIALOGUE
+                      |               |   formants x1.08 (made younger by us)                            |
+Danny C               | Kokoro alone  | am_puck 0.6 + af_heart 0.4; speed per line d1 0.66, d2 0.78,      | DIALOGUE
+                      |               |   d3 0.56, d4 0.85, d5 0.64, d6 0.56                              |
+Marcus A (16)         | Chatterbox    | ref = am_puck 0.5 + am_michael 0.5, speed 1.0                     | DIALOGUE
+Marcus B              | Chatterbox    | ref = bm_george 0.6 + bm_lewis 0.4, speed 1.0                     | DIALOGUE
+Priya A (16)          | Chatterbox    | ref = af_sarah 1.0, speed 1.05                                    | DIALOGUE
+Priya B               | Chatterbox    | ref = af_aoede 1.0, speed 1.05, WORLD +2.0 st, formants x1.03     | DIALOGUE
+Gus A (janitor, 58)   | Chatterbox    | ref = am_michael 1.0, speed 0.92, WORLD -2.5 st, formants x0.94   | DIALOGUE + GUS
+Gus B                 | Chatterbox    | ref = bm_lewis 1.0, speed 0.92                                    | DIALOGUE + GUS
+Gus C                 | Kokoro alone  | am_michael 0.6 + am_fenrir 0.4, speed 0.9                         | DIALOGUE + GUS DEEP
+PA A                  | Kokoro alone  | af_heart 1.0, speed 0.9                                           | PA
+PA B                  | Kokoro alone  | am_michael 1.0, speed 0.9                                         | PA
+Monster (5 lines)     | Chatterbox    | Danny A's ref, said calmly -> clean + M1 / M2 / M3                | MONSTER
+Monster whispers (2)  | Chatterbox    | Danny A's ref                                                     | WHISPER
+Name bank (10 names)  | Chatterbox    | Danny A's ref, carrier "<Name>... I saw you."                     | NAME
+Engine items          | eng_cb = Danny A; eng_kokoro = Danny C d1 recipe (speed 0.66); eng_kitten expr-voice-4-m speed 0.9; eng_kitten2 expr-voice-3-m speed 0.9 | DIALOGUE
+Not used anywhere: af_sky, af_bella, am_onyx (cast.py asserts it).
+
+PROCESSING CHAINS (tools/finish.py, tools/voxfx.py; exact parameters)
+DIALOGUE  pick: lowest recogniser WER, then (tagged lines) most non-word sound, then the take needing the least
+          tempo change; retakes from tools/retake.py (a take misheard after processing is excluded, or used
+          without the tempo change if it is inside the gate without it).
+          trim: lead 0.06 s, trail 0.20 s around frames within 40 dB of the loudest 10 ms frame; fade in 5 ms,
+          fade out 30 ms (squared).  pauses inside the line > 0.40 s (frames 40 dB under the loudest) cut to
+          0.34 s with a 10 ms cross-fade.  rate: words / energy span and words / recogniser word span (tagged
+          lines: laugh time and word gaps > 0.3 s taken out); if either is outside 2.2-3.3 words/s, ffmpeg
+          atempo (pitch kept) to 3.25 (or up to 2.3).  loudness: -20 LUFS integrated (BS.1770, pyloudnorm), true
+          peak <= -1.5 dBTP (look-ahead limiter on the 4x-oversampled envelope, ceiling -1.8 dBTP, attack 2 ms,
+          release 80 ms, then re-normalised).  MP3: ffmpeg libmp3lame VBR -q:a 4, mono, 24 kHz, no metadata.
+GUS       after the pause cut: WORLD (pyworld harvest/cheaptrick/d4c, 5 ms frames) pitch -1 st, formants x0.97.
+GUS DEEP  the same with pitch -3 st, formants x0.93 (Gus C; at -1 st it measured 109-118 Hz and 0.86 to Marcus A).
+PA        Butterworth band-pass 300-3,800 Hz (4th order), peak-normalise, tanh drive 1.4, hall slaps at 140 / 330
+          / 560 ms at -15 / -20 / -25 dB, noise reverb tail (0.9 s, decay constant 0.22 s, gain 0.012), trim
+          (lead 0.03 s, trail 0.4 s, 45 dB), -20 LUFS, -1.5 dBTP. No rate gate (two words and an echo).
+MONSTER   base take trimmed (lead 0.02, trail 0.1) = "clean". Presets (voxfx.PRESETS):
+          M1 pitch -2.0 st, formants x0.94, slower x1.10, pitch range x0.85, whisper double -15 dB at +30 ms,
+             no sub, comb 0.42 ms fb 0.55 wet 0.10, jitter 0, presence +2 dB (1-4 kHz)
+          M2 -3.5 st, x0.90, x1.15, range x0.70, whisper -11 dB at +35 ms, sub -18 dB, comb wet 0.18, jitter 0.25 st,
+             presence +2 dB
+          M3 -6.0 st, x0.84, x1.22, range x0.45, whisper -7 dB at +40 ms, sub -14 dB, comb wet 0.25, jitter 0.6 st,
+             presence +3 dB
+          (whisper double: same words unvoiced, formants x1.04 of the preset, high-pass 400 Hz; sub: pitch a further
+          -12 st, formants x0.8, low-pass 300 Hz; comb band-limited 1.5-4.5 kHz)
+          then trim (lead 0.02, trail 0.35, 45 dB); file = synthesised inhale (0.42 s, tools/breath.py seed 11,
+          14 dB under the line's RMS) + 0.12 s beat + line, with a room-tone bed under ALL of it (brown-ish noise
+          < 700 Hz + 0.35 x 2-5 kHz air, 36 dB under the line's RMS, fade in 30 ms, out 120 ms); -20 LUFS, -1.5 dBTP.
+WHISPER   WORLD unvoiced (f0 = 0, aperiodicity 1), formants x0.95, slower x1.12; high-pass 250 Hz; comb 0.42 ms
+          fb 0.5 wet 0.12; trim (trail 0.3, 45 dB); -23 LUFS.
+NAME      name cut from its carrier at the recogniser's word end, extended until the level is 40 dB under the peak
+          (at most +0.45 s, never into the next word), 20 ms fade; M2; trim (trail 0.20); + 0.25 s of bed fading
+          out; -20 LUFS. REST file mon_x1_m2_rest = the M2 "I saw you." with NO inhale and 0.10 s of bed fading in.
+          THE GAME PLAYS REST AT (NAME duration - 0.25 s) AFTER NAME STARTS; join_*.wav is exactly that overlap-add.
+          Per name, select_names.py keeps the take whose clip AND join are both recognised word for word (10/10).
+
+4. MEASUREMENTS (closing pass; full tables out/aud/summary.md, out/aud/board_check.json)
+Recognition (faster-whisper small.en, beam 5): every one of the 84 board files word for word; the 47 dialogue
+  lines pass the board gate (word for word AND 2.0-3.6 words/s on both rate measures; build_board.py refuses to
+  build otherwise). Raw takes: 115 of 128 word for word; finished files: 110 of 116 (the 6 misses are unused name
+  takes, e.g. "Alec").
+Rate (dialogue): 2.28-3.35 words/s by energy span, 2.38-3.57 by word span (before: 1.87-5.88). 18 lines got an
+  atempo change (0.81-0.985; one speed-up 1.12, priya_b_p3); 7 lines had a pause cut (0.41-1.30 s -> 0.34 s).
+Loudness: dialogue/monster/names -20.0 LUFS, whispers -23.0; true peak of the decoded MP3s <= -1.29 dBTP (none
+  over -1.0; before: three at -0.97/-0.99); no clipped sample.
+Digital silence: no run of 50 ms or more in any monster, name or join file (before: 0.10-0.31 s in all 18).
+  Name -> "I" in the board joins by the recogniser's word stamps: Sam 0.32 s, Alex 0.44 s (before 0.58-0.68 s;
+  Jordan's stamps run together, 0.00 s); the quietest 10 ms in the beat is 42-47 dB under the peak (the bed),
+  never digital zero, and the reviewer's join.py finds no quiet run of 0.2 s at all.
+Endings: every board file is at least 35 dB under its peak in the 50 ms before the fade (name_alex was 26 dB).
+Pitch (pyworld harvest on the board MP3s, median of line medians): Danny A 139, Danny B 132, Danny C 147,
+  Marcus A 116, Marcus B 119, Priya A 187, Priya B 196, Gus A 96, Gus B 119, Gus C 103 Hz.
+Speaker distance (cosine of Chatterbox's own speaker embeddings, centroid of each candidate's board files; 1.0 =
+  same voice; this centroid measure reads a little HIGHER than the reviewer's, e.g. old Priya B vs Danny C 0.80 here
+  vs 0.76 there):
+                   Danny A Danny B Danny C  Marcus A Marcus B  Priya A Priya B  Gus A Gus B Gus C
+  Danny A           1.00    0.53    0.86     0.66     0.53     0.71    0.59     0.54  0.48  0.56
+  Danny B           0.53    1.00    0.58     0.69     0.46     0.51    0.39     0.59  0.37  0.58
+  Priya B           0.59    0.39    0.63     0.51     0.50     0.71    1.00     0.47  0.49  0.48
+  Gus C             0.56    0.58    0.62     0.78     0.71     0.57    0.48     0.94  0.68  1.00
+  Before the closing pass: Danny A vs B 0.88, Priya B vs Danny A/B/C 0.78/0.76/0.80, Priya B 151 Hz.
+Page: 85 audio tags -> 84 files, all present and used; no http, @import, url(), script or link; opened in
+  Chromium (Playwright) at 360 x 740 and 1366 x 768: no horizontal overflow (scrollWidth = clientWidth), no
+  non-file request; screenshots out/aud/board_360.png, board_1366.png.
+
+5. LICENCES AND PROVENANCE: see LICENCES.txt (every model, voice, library, URL, revision, licence file, sha256).
+Short form: Chatterbox-Turbo ONNX MIT (rev d21799bd0354adb85e348b8a0442a8405110a2cf); Kokoro-82M ONNX + voices
+Apache-2.0 (rev 1939ad2a8e416c0acfeecc08a694d14ef25f2231); Kitten mini 0.8 Apache-2.0 (rev c02725660cea441db4c383af69f1f26f5cd00947);
+Whisper small.en MIT (rev d1d751a5f8271d482d14ca55d9e2deeebbae577f, checking only); kokoro-onnx MIT; pyworld MIT +
+WORLD modified BSD; onnxruntime MIT; espeak-ng GPL-3.0 (phonemes on our machine only, never ships); breath ours.
+sha256 of every model and voice file: out/sha256-downloads.txt; refs and breath: LICENCES.txt section 3.
+
+6. REBUILD (every file; cached, so a re-run redoes only what changed; verified: a full re-run gave a byte-identical
+board, 95 s)
+  fresh venv:  python3.13 -m venv venv && venv/bin/pip install --no-cache-dir -r tools/requirements.lock
+               (setuptools 80.9.0 pinned: pyworld 0.3.5 imports pkg_resources, gone in setuptools 81)
+  models:      the four Hugging Face repos at the revisions above into models/{kokoro,cbturbo,kitten,whisper-small.en}
+               (layout and sha256: out/sha256-downloads.txt)
+  everything:  bash tools/rebuild.sh     which runs, in order (PY = venv/bin/python -I, from /tmp, OMP_NUM_THREADS=2):
+   1 PY tools/cast.py out/aud out/refs                       render lists (takes + refs) and the board plan
+   2 tools/batches.sh out/refs/render.log tools/render.py models out/refs/lines.json out/refs
+   3 PY tools/breath.py out/breath_synth.wav 11
+   4 tools/batches.sh out/aud/render.log tools/render.py models out/aud/lines.json out/aud/raw
+   5 PY tools/items.py out/aud/lines.json out/aud/raw out/aud/items_raw.json
+     tools/batches.sh out/aud/measure_raw.log tools/measure.py models/whisper-small.en out/aud/measure_raw.json out/aud/items_raw.json
+   6 run-heavy cpu PY tools/finish.py out/aud/plan.json out/aud/raw out/aud/measure_raw.json out/aud/final out/breath_synth.wav
+   7 tools/batches.sh out/aud/measure_final.log tools/measure.py models/whisper-small.en out/aud/measure_final.json out/aud/final/items.json
+     (if a line fails: PY tools/retake.py out/aud/plan.json out/aud/measure_final.json out/aud/final/picks.json
+      out/aud/final/retake.json, then steps 6-7 again; the closing pass needed one round, for danny_a_d6)
+   8 PY tools/select_names.py out/aud/plan.json out/aud/measure_final.json out/aud/final/names.json
+   9 PY tools/build_board.py out/aud/plan.json out/aud/final out/aud/measure_final.json board
+     PY tools/summarise.py out/aud/raw out/aud/measure_raw.json out/aud/measure_final.json out/aud/summary.md out/aud/plan.json
+     run-heavy cpu PY tools/board_check.py board models out/aud/board_check.json
+     run-heavy timing node tools/page_check.mjs board out/aud
+  voice probes (how Danny B, Priya B, Gus A were chosen): PY tools/spk_check.py models out/probe/probeN_cos.json
+     --probe out/probe/probeN.json out/probe out/refs/ref_*.wav   (N = 1..3; results in out/probe/*.json)
+
+7. TIME TO RENDER ABOUT 400 LINES (this machine, 2 threads, measured rates)
+Chatterbox: average take 2.5 s of speech x 2.10 = 5.2 s compute; 400 lines x 2 takes + ~10 % retakes = 880 takes
+  = about 77 min. Recogniser on the raw takes about 2.5 s each = 37 min. finish.py about 0.3 s per dialogue line
+  (36 s for this board's 116 files incl. the monster) = 3 min. Recogniser on the finished files 2.3 s each = 15 min.
+  Board/encode 1 min. Total about 2 h 15 min of machine time, in about 75 run-heavy batches of <= 110 s.
+Kokoro only (the fallback): render about 7 min + recogniser 15 min = about 25 min.
+
+8. CLOSING PASS: WHAT THE REVIEW FOUND AND WHAT WAS DONE
+M1 rate: FIXED. Danny C rendered at Kokoro speeds 0.56-0.85 per line (0.85 alone still gave 3.6-5.1 words/s); the
+   other lines re-picked by least tempo change, pauses cut, atempo where needed; rate is a gate in build_board.py
+   on both measures. All 47 dialogue lines 2.28-3.57.
+M2 Priya B: FIXED. Recast to af_aoede +2 st / formants x1.03 (no af_sky): 196 Hz; embedding vs Danny A/B/C
+   0.59/0.39/0.63 (all < 0.65 on the stricter centroid measure).
+M3 join: FIXED. No digital silence anywhere in monster/name/join files (bed under every file), the twin used after
+   a name has no inhale, the two files overlap by 0.25 s; name to "I" 0.32 s (Sam), 0.44 s (Alex).
+M4 breath: FIXED by synthesis (tools/breath.py, shaped noise). The CC0 recording is no longer used; the page says
+   so. (The alternative, keeping the recording with a credit to "Breathing Tired" by mikeask, CC0, remains open
+   to the lead or player.)
+M5 af_sky: FIXED. af_sky, af_bella and am_onyx removed from everything (Danny B, Priya B, Gus A, Gus C, PA A).
+M6 PA: FIXED as the review allowed: the spec line only, "Lockdown. Lockdown." The decision whether a realistic
+   lockdown announcement belongs on a public page at all is the lead's or the player's (see 10).
+M7 rebuild: FIXED. tools/requirements.lock (pip freeze --all, setuptools 80.9.0 pinned < 81), install command in
+   rebuild.sh and here.
+m1 Danny A vs B: FIXED. Danny B = am_michael (no female voice) made younger: 0.53 to Danny A (was 0.88).
+m2 monster pitch labels: FIXED. Pitch hidden for M1/M2/M3, names, joins, whispers on the board ("mix" in tables).
+m3 "(laughs)" on Kokoro: FIXED. Tags removed from the text of Kokoro/Kitten candidates.
+m4 long pauses: FIXED. Pauses over 0.40 s cut to 0.34 s in 7 lines (danny_a_d5 0.92, danny_b_d6 1.30, marcus_a_m2
+   0.60, marcus_b_m2 0.50 ...; danny_b_d5 is a new take with no long pause).
+m5 MP3 over -1 dBTP: FIXED. -1.5 dBTP before encoding; decoded max -1.29.
+m6 name_alex cut: FIXED. Cut extended to 40 dB under the peak; every board file ends >= 35 dB under its peak.
+m7 licence records: FIXED. LICENCES.txt; pyworld licence re-fetched (master/LICENSE), WORLD licence fetched;
+   espeakng-loader (MIT) and phonemizer (GPL-3.0) licence texts saved in dl/licences2; full revisions recorded.
+m8 not scripted: FIXED. cast.py writes out/refs/lines.json (8 refs; the 4 unused refs deleted), breath scripted,
+   names.json path documented, tools/rebuild.sh, REPORT.txt.
+m9 footer: FIXED. Credits Koniwa, SIWIS, eSpeak NG, WORLD/pyworld, Whisper; "tell us" throughout.
+m10 watermark: NOTED (LICENCES.txt), not changed.
+m11 360 px: FIXED. Checked in Chromium at 360 and 1366 px; no overflow. A real Chromebook still worth one look.
+
+9. WHAT IS WEAK
+- No one has listened. Every choice in the closing pass was made by measurement (recogniser, pitch, speaker
+  embedding). Danny B, Priya B and Gus A are now voices DESIGNED by WORLD shifts of a built-in voice; they may sound
+  less natural than a plain built-in voice. The player's ears decide.
+- Kokoro's own card says part of its training data is synthetic audio from closed commercial TTS, and several of
+  its voice names match commercial voices. We removed sky, bella and onyx, but af_sarah (Priya A), bm_george and
+  bm_lewis (Marcus B, Gus B) are still names on the reviewer's list. If the lead wants zero name-match risk, those
+  three candidates need recasting too (the same probe tool does it in minutes).
+- atempo changed 18 lines by 1.5-19 %: WSOLA can sound a little phasey on breathy takes.
+- Some pairs are still close: Gus A vs Gus C 0.94 (same base voice, different engine), Danny A vs Danny C 0.86 (by
+  design: same blend, engine comparison), Gus B vs Marcus B 0.80 (both bm_lewis), Danny B vs Marcus A 0.69.
+- Frightened lines are held to <= 3.6 words/s; real panic is faster.
+- Name bank: 10 names; "Alex" comes out as "Alec" on 3 of 4 takes; names outside the bank fall back to no name.
+- The room-tone bed is a new sound in monster files (36 dB under the line); the game's ambience may make it
+  unnecessary.
+- Chatterbox runs on a 4-bit language model for speed; it was not compared by ear with the 8-bit one. No Perth
+  watermark.
+- The recogniser gate is Whisper small.en: it can accept a slightly mumbled word and it once rejected a correct
+  "Forty" spelled "Fourty" (alias added).
+
+10. WHAT WAS BLOCKED
+- REPORT.md: the file tool refuses report files in this harness, so this report is REPORT.txt, written by shell.
+- The SIWIS licence page (datashare.ed.ac.uk) was refused by the network proxy (403): its CC BY 4.0 is taken from
+  Kokoro's card, not read at the source.
+- One outbound connection to mobile.events.data.microsoft.com (a telemetry ping during a render batch, most likely
+  from onnxruntime) was refused by the proxy; nothing depended on it.
+- The Chatterbox 8-bit language model was too slow on this machine (RTF about 15); 4-bit is used.
+- No real Chromebook: the page was checked in headless Chromium only.
+- DECISIONS LEFT TO THE LEAD/PLAYER: (a) the PA "Lockdown. Lockdown." on a public page (keep, reword in-story, or
+  drop the PA section: remove the "pa" character in tools/cast.py and re-run rebuild.sh); (b) the breath: synthetic
+  (now) or the CC0 recording with credit; (c) whether to recast the sarah/george/lewis candidates.

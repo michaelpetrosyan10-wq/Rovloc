@@ -1,0 +1,25 @@
+aa77d92 2026-11-21 Work in progress when the usage limit stopped the job (unverified)
+5fcd0d0 2026-11-18 Creature pipeline README: the staged lean beside a locker, the hood's dark edge
+4911af4 2026-11-18 Creature body: the hood's edge and the cloth just inside it fall into shadow round the face (no pale worn hem lit as a ring round it), rebuilt maps; proof sheet labels for the lean beside a locker and the catch's hands
+b7b6078 2026-11-18 Creature body: the hands in the catch's close-up drawn in beside the hanging face (fingers rising past the cheeks, backs to the victim, opened and spread; drawing only), the body's anchors and catch framing re-applied when a tier change loads another body; picture tool: hand framing report, the lean staged beside a corridor locker with one hand gripping its side
+b86830c 2026-11-18 Creature body: Potato's pinpricks greyed with the flesh (its warm post had turned them orange-pink)
+f70be95 2026-11-18 Creature pipeline README: the hood's head share at export
+8f22f11 2026-11-18 Creature picture tool: the lean's camera is the catch's own framing pulled back (out along the live face, sunk under it), the torch on where the face comes to rest, the right hand the Lunge's own beside the face and the left reaching under it
+7396497 2026-11-18 Creature body: the hood's hump rides the head over and behind the skull (in the Lunge's bow it swung over the face as a dark dome); the hood's and hair's head share set at export from head.hood_head_share
+a33d9b4 2026-11-18 Creature body: the hood's cloth lies on the sloping forehead up to the crown (no dark ledge over the brow from under the bowed face), the hair over the forehead tucked under it; the lean's torch aimed where the bowed face comes to rest (picture tool only)
+6ed33a3 2026-11-18 Creature body: the face as old skin (blotched grey-beige, age spots, pores, broad uneven tone, lumps, sags, creases and the ridge's swell in the master's geometry), flatter across its lower half; the hair's locks only beside the face, a thin band under the brim over the forehead; browner hands; the lean's hand on the counter, the other hanging out of the picture (picture tool only)
+6fd97f1 2026-11-18 Creature body: soft-walled seam, frown and creases (no sparkling grooves), normal maps flat at UV island borders, hair kept off the middle of the brow, dull yellowed nails; the lean's hand found on the wall at its own height with its fingers spread and bent (picture tool only)
+5738fa0 2026-11-18 Creature body: the face grey-beige old skin darker to its edges and point, measured lower face, huge slanted almond eyes with a pale lower lid, the hood grey-green with rolls over the brow, brown hair beside it, darker hands; the lid no longer drawn along each eye's axis past its corner (the pale lines down the face), maps read safely across UV seams
+de8451f 2026-11-18 Creature pipeline: head and README describe the hood, hair and measured face
+288baf9 2026-11-18 Creature body: Potato's flesh greyed fully and leaned against its post's pink, so its face is the same ivory-grey as Max's
+b59cc2f 2026-11-18 Creature body: the hood's brim close over the forehead (the face shows from just above the eye holes), brown-grey hands that catch the light, the catch's camera looking up into the bowed face so the eye holes stay in view under the hood
+da598e9 2026-11-17 Creature body: the face's outline measured off the favourite (pinched under the eye holes, a long taper to a soft point), rounder across, deeper hollows, flatter almond holes, the furrows in the normal map, short streaks, matte eye holes, the hands catching the light, the lean's hand nearer the camera
+4ed6094 2026-11-17 Creature body: the hood up over a hunched back (no neck seen), long dark hair round the face, a fuller lower face with lips, flatter almond eye holes without a glint, long near-black hoodie and black jeans, the body falling into the dark, one straight streak under each eye, Potato kept ivory
+bd1ee80 2026-11-17 Creature pipeline: README and export notes name the five levels, the 4096 maps and the proof pictures script
+e15b0ef 2026-11-17 Creature shots: the lean seen nearly head-on, the pinpricks in view
+a299b17 2026-11-17 Creature body: veins as meandering lines of even width (no scale-like cells), a smoother neck, greyer faded jeans; the reach stage's camera after its teleport
+fce5821 2026-11-17 Creature body: darker old skin, mottled and veined hands, leathery face, finer wavier brow furrows (maps and levels rebuilt)
+680af91 2026-11-17 Creature body: glassy eye bores with the glint on their rims only, the lean stage from the bow, the proof pictures script
+3c104f4 2026-11-17 Creature body: 4096 maps, darker skin and deeper face creases, the lean stage after the favourite picture
+b28a2b8 2026-11-17 Creature body: five levels from one modelled master, rich and plain shading per tier, thinness and micro-relief maps, hair strands
+807eac9 2026-11-17 Creature body: asset pipeline scripts and the website's skinned-body loader (first pass)

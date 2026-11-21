@@ -1,0 +1,201 @@
+MONBODY progress (the monster's new skinned body)
+== 12:15 started. Read: B3, ROUND2-NOTES, sheet, MONSTER-LOOK.md, DATA.md Creature, rig.js, look.js, view.js, engine materials (NODES).
+Plan: website mesh = node-batched world material + SKIN splice (4 node matrices blended from the creature NodeTable; `node` attr = dominant bone for shadow depth passes).
+Asset: tools/art/creature/ (Blender scripts): MPFB base mesh retargeted to rig joints via per-bone LBS warp + lofted head; cloth shells; bake; LODs; export.
+== 12:50 written (uncommitted): tools/art/creature/{run.sh,rigdata.py,common.py,body.py,head.py,cloth.py,assemble.py,texture.py,export.py,preview.py,bake_util.py}
+   web: src/creature/flesh.js (loader+shader splices), look.js (Flesh kind, attach), view.js (_useFlesh anchors/shards/jumpscare offset), jumpscareView.js (faceOffsetY),
+   tools/assets.mjs (creatureAssets, manifest.creature), build.mjs (lite: lod2+512; --out: --creature-sizes/--no-creature), creature-shot(-entry) (ready(), doorway/catch/crawl2 stages, --no-build)
+   Commands: $S/monbody/art.sh <script.py> args   (wraps run-heavy cpu + run.sh with ROVLOC_ART_SRC=$S/src ROVLOC_ART_LIB=$S/pylib)
+   pylib: PyMCubes + scipy pip --target $S/pylib.  work dir: $S/monbody/work (body.npz head.npz hi.npz lod*.npz maps.npz)
+   Pipeline order: body.py --out W; head.py --out W; assemble.py --work W; texture.py --work W; export.py --work W [--glb dir]
+   body: MH macros old skinny male, per-bone LBS warp onto rig joints (piecewise stretch), fingers 0.7 of rig's, knuckles spread 1.3
+   head: SDF + marching cubes 0.0055 grid (~3 min), ~390k tris
+   NOTE: always wrap heavy jobs (others' timing jobs run on this machine).
+== 13:01 BEFORE perf (block body; creature-shot --perf --no-creature --width 320 --height 180, 4x throttle, mean of 150 frames, stalking in 20 studs):
+   Potato frame 10.0 ms, rig 3.12 ms (median 3.0), 74 draws | Low 13.5 / 2.63 | Medium 10.6 / 1.94 (log: monbody/perf-before.log)
+   before pictures: monbody/before/max (idle far hunched crawl reachin mask jumpscare2 reveal)
+== 13:45 (run 2, resumed) committed run 1's work (807eac9). First in-game test (1024 maps, old 3 lods): the skinned body LOADS and draws (idle, catch OK);
+   doorway stage camera looks at the door leaf (broken); crawl2 stands (needs contract poseMode Quadruped); body far too bright/pale.
+   head.py: face capped at y 0.3 (was an open column), skull rounder/smaller, neck = smooth swept tubes (KD-tree), ridge+hollows, ears flatter, eyes bigger/slanted (EYE.skew)
+   assemble.py: 5 levels (max/high/medium/low/potato) from ONE master: pieces unwrapped at mid res -> subsurf 2 -> head shrinkwrapped onto MC surface
+     -> displaced by texture.Surface macro relief (h - hm) -> decimated to BUDGET[...][0]; other levels decimated from it.
+   texture.py: maps from the master: albedo RGBA (A = thinness from a Cycles inside-AO bake), normal (vs smoothed normals: lower tiers), normalfine (vs master normals: Max), banded
+   export.py: levels max..potato, sizes 4096..512, normalFine at 4096
+   full pipeline: $S/monbody/full.sh (SIZE=2048 BAKE AOS NOHEAD env), log full1.log
+== 14:05 commit b28a2b8: five levels from one master (max 424.8k tris incl. 16.8k strand tris, high 60k, medium 20k, low 8k, potato 4k), maps 2048 (4096 pending), shading tiers rich/mapped/plain.
+   Fixes after first look: albedo alpha = 1 - 0.7*thin (alpha 0 lost the colour), furrows irregular, hairline back at the sides, export cleanup order.
+   check.mjs: Potato light-assets check counts the creature's files apart (<=512 colour map, no creature normal map).
+   Shots: shot2/{max,potato} (far,doorway,hunched,crawl2,reachin,catch). Turntable: turn/strip.jpg
+== 14:26 commit 3c104f4: 4096 maps, darker skin, deeper creases, lean stage (shots shot4/{max,potato})
+== 17:04 run 3 resumed. Seen: shot4 lean = camera on a window/door (broken); catch shows head OK-ish but extra white bits beside head, many streaks; turn/strip is head/body/hand not a turntable.
+== 17:45 run 3: lean stage rebuilt from the Lunge's bow (10 frames, before the shards) -> reads like the favourite; eye bores smooth (no pore sparkle), glint on rims only.
+   texture.py: darker skin (SKIN .53 HAND .40 FACE .70), age spots, darker veins on hands, face leather creases x2, hollows greyer, brow furrows finer/wavier.
+   commit 680af91 (web+tools). Running full4 (NOHEAD=1 SIZE=4096 BAKE=2048 AOS=12 full.sh > full4.log). Then: shots.sh (new: tools/art/creature/shots.sh), perf after, tests, site size, notes.
+== 18:15 commit fce5821 (assets with darker skin). Proof run 1: shots.sh -> $S/monbody/proof1, sheets send/monster-model-{1,2,3}.jpg (made).
+   Command: ROVLOC_ART_SRC=$S/src ROVLOC_ART_LIB=$S/pylib run-heavy cpu tools/art/creature/shots.sh --out $S/monbody/proof1 --work $S/monbody/work --favourite $S/higg/dl/M-B3/M-B3-v1.png --sheets $S/send/monster-model  (~25 min)
+   Seen: veins/neck read as reptile scales (worley cells) -> contour_line veins (gradient-normalised), neck crackle 0.15; jeans greyer; reachin stage camera read the eye before the teleport (fixed: settle first).
+   Running full5 (NOHEAD). Next: proof2, perf after (creature-shot --perf, timing), tests, site size, notes.
+== 19:30 commit a299b17. proof2 done (send/monster-model-1..3.jpg rebuilt). PERF AFTER (run-heavy timing creature-shot --perf --width 320 --height 180):
+   Potato frame 8.6 ms, rig 2.45 ms (median 2.3), 73 draws | Low 11.9/2.18 | Medium 9.7/1.69 | High rig 2.29 | Max rig 1.53 (perf-after.log)
+== 19:55 commit e15b0ef (lean head-on). Tests: creature-collision pass, creature-sim all passed, story-test --only solo 36/36.
+   Site size: site 68.25 MB (--no-creature) -> 95.77 MB; lite 19.23 -> 19.65 MB. game-smoke running (smoke.log). Then MODEL-NOTES + handback.
+== 20:20 game-smoke all checks passed. Commit bd1ee80 (docs). MODEL-NOTES.txt written. DONE: handback to the lead.
+== run 4 (second pass after MODEL-VERDICT: same 5 / scary 4 / realistic 2). Plan: hood up + cowl hides the neck, long dark
+   hair framing, face blended (no rim) with fuller lower face + lips, darker bony limbs, long dark hoodie + black jeans,
+   body ambient down, fewer deeper furrows, flatter almond eyes no rim glint, two straight streaks, Potato tint.
+   18:5x head.py now also builds hood.npz + hair.npz (--part hood|all); work dir for run 4: $S/monbody/work2 (body.npz copied)
+   cmd: cd $S/monbody && ./art.sh head.py --out work2 ; preview: ./art.sh preview.py --in work2/{body,head,hood,hair}.npz --out prev3 --views face,side
+   edits so far (uncommitted): head.py (hood/cowl/hair, fuller lower face, lips, almond eyes), cloth.py (long dark hoodie, no splits),
+   assemble.py (hood=Extras, hair from head.py, no cap/strands), texture.py (dark limbs/cloth, furrows, streaks, hands net),
+   flesh.js (no glint, body ambient, FLESH_IVORY potato, race shortened), look.js, creature-shot-entry.js (lean in a dim spot)
+== 22:05 run 5 resumed (run 4 interrupted after head3: hood was a narrow tube on the neck = still a trunk/giraffe).
+   Plan: head.py hood becomes a wide hunched mass (hump of cloth from the shoulders up behind the skull), face fuller
+   lower half (outline from B3 measurements: mid 0.13, -0.5 0.087), deeper lower face (no beak wedge), nose bulb above
+   the slit, bigger lips, flatter more slanted eyes; hood/hair weights by face frame; then full pipeline in work2, shots.
+== 22:40 head.py: HUMP (hood's cloth over a bowed upper back, top level with the skull's back) -> preview prev6/strip.jpg:
+   no neck visible from front/side; face fuller (OUTLINE/DEPTH from B3 measurements), BULB above slit, lips bigger, eyes
+   x .108 a .09 b .043 tilt .5. hood/hair weights: head.hood_head_share (skull cover + face edge ride Head, hunch rides UpperTorso).
+   Running: W=work2 NOHEAD=1 SIZE=4096 BAKE=2048 AOS=12 full.sh > full6.log (full.sh now takes W from env).
+   creature-shot-entry.js lean: finds the wall at the camera's left, shifts the spot so it is 1.75 studs from him,
+   and the picture tool IKs his right hand flat on the wall (staged, labelled; animator untouched).
+   cmds: preview: ./art.sh preview.py --in $W/body.npz,$W/head.npz,$W/hood.npz,$W/hair.npz --out $PWD/prevN --views face,faceside,three,side --size 520 --samples 12 (ABSOLUTE paths)
+== 22:35 run 6 resumed. full6 had finished (ALL DONE 881s; max 466.0k tris). q1 (Max lean/catch/hunched, --no-build) shot OK on retry.
+   Seen q1: no neck, body black, hood up = big. Still weak: brow top ribbed in silhouette (furrows in geometry, on the dome),
+   lower face ~25% wider than the favourite (measured row by row: half-width -0.17:.13 -0.29:.11 -0.41:.075 -0.55:.05),
+   streaks run 2/3 down the face (favourite: to y -0.2), eye hole glossy, hand invisible (black), hood a smooth egg.
+   commit 4ed6094 (run 4/5 work + full6 assets).
+== 22:50 edits: head.py OUTLINE/CROSS/DEPTH from the measurements, EYE b .036 tilt .42 depth .07, SLIT half .03, hollows
+   deeper/closer, hood cut down over the forehead (face shows to y .24 under a fringe), hood folds 0.05;
+   texture.py furrows y .04-.26 mostly normal map (hm), eye holes matte (rough .85), streaks end at y -.215;
+   flesh.js/look.js hands take 0.75 of the room's light (fHandS from rest pos below the wrist).
+   Running: head.py -> work2, preview -> prev7 (head7.log, prev7.log)
+== 23:05 full7 done (735s; max 466.0k). q2 (Max lean, catch): streaks short now, holes matte, outline narrower; still the
+   forehead shows to y .33 (hood cut behind it) and the hand is near-black (SKIN_HAND .30 sRGB = 0.06 linear, 7x darker than the face).
+   commit da598e9 (web + assets of full7; tools edits go in with the next commit).
+   Now: HOOD_CUT brim in front of the forehead down to y ~.24, SKIN_HAND .47/.40/.335; running head.py --part hood + full8
+   (W=work2 NOHEAD=1 SIZE=4096 BAKE=2048 AOS=12 full.sh > full8.log). Then q3 Max lean/catch, then shots.sh proof3 + sheets,
+   perf (creature-shot --perf via run-heavy timing), tests (creature-collision, creature-sim, story-test --only solo, game-smoke).
+== 23:50 full8 done (1707 s: machine shared). q3 Max: the hand shows (veined, long fingers, lit) under the face; forehead
+   shorter under the brim. BUT the catch (camera level, face bowed ~70 deg) lost the eye holes behind the brim, which
+   stood 0.13 in front of the forehead. Fix: hood_envelope clipped over the brow to the face's front - 0.085 (y .12-.40),
+   checked with a probe (hood front vs head front per y) and prev9 (no face poking through). Lean hand target back to
+   along -1.2, y 6.9. Running full9 (> full9.log). Next: q4 Max lean/catch, commit, shots.sh proof3, perf, tests, notes.
+== 00:20 full9 done (989 s). q4 catch still hid the eye holes (a level camera sees the bowed face from above, past any brim).
+   jumpscareView.faceLock/cameraCFrame take `lookUp` (a sine, default 0: the block rig unchanged); view.js sets
+   js.faceLookUp = 0.45 with the skinned body: the catch's camera sinks below the hanging face and looks up into it (as
+   the favourite). q5: face hangs out of the black hood, both holes + pinpricks, two short streaks, furrows. commit b59cc2f.
+   Running: shots.sh -> proof3 + send/monster-model-{1,2,3}.jpg (proof3.log). Next: perf, tests, notes.
+== 01:40 proof3 + sheets rebuilt (send/monster-model-1..3.jpg). Potato tint: FLESH_IVORY full grey * (0.72,1.11,0.85);
+   catch face Potato 125/112/105 vs Max 126/120/106 (commit 288baf9). Perf (paired, timing): block 6.8/6.7 ms, skinned
+   8.7/7.3 ms Potato frame (budget 16.7). Checks: collision rc0, sim all passed, story 36/36, smoke all passed.
+   commit de8451f (docs). MODEL-NOTES.txt: SECOND PASS section. DONE: handback.
+== run 7 (THIRD PASS, lead: face white smooth beak + small round eyes, hood black blob, hands barely show). Work dir: work2.
+   Measured off the favourite (orig px, ~765 px/stud, origin (688,782)): each eye from the outer corner (544,752) at the
+   face's edge to the inner point (672,812), so a ~0.092, tilt 25 deg (0.44), the upper lid arching 0.057 over the axis,
+   the lower 0.02; gap at the bridge 0.024; pinpricks at (+-0.105, +0.02). Colours (sRGB): lit brow 163/149/137, lower
+   face 60/50/41, tip 21/16/10, hood 37/41/37 (grey-green), hair 83/73/63, hand back 29/24/20, finger lit 60/41/30.
+   Plan: head.py eyes (up/low lids, flatter eye band, deeper bore), keel V in the lower face, bulb, dent, bags, asymmetry;
+   hood rolls bunched over the brow + bigger drape folds + hem; hair out beside the brow; texture.py face grey-beige darker
+   to edges/tip, fine brow wrinkles, long creases, sheen; hood grey-green; hair brown; hands darker brown-grey;
+   flesh.js lid rim, glossy hole, pinprick up, hood/hair light share; lean wall-hand placed in frame by projection.
+== 03:25 run 8 (third pass resumed after a machine restart; full11's texture step was killed by it). Uncommitted edits of
+   run 7 kept (head.py eyes/keel/bags/dent/rolls/hair, texture.py face colour, hood, hands, flesh.js lid/gloss/hood light,
+   creature-shot-entry lean hand by projection). Measured head.npz in the face frame ($S/monbody/measure.py, plain python):
+   the lower face's mesh was ~0.019 narrower than OUTLINE (back rounding + smoothing) -> 20-35 % narrower than the
+   favourite below y -0.2 = the "cone/beak". OUTLINE lower rows += 0.019 (now within 0.005 of the favourite's half-widths:
+   -0.29 .104/.108, -0.41 .075/.077, -0.55 .046/.050, -0.61 .035/.040), CROSS exponents 1.5-1.7 (softer keel).
+   Running: head.py --part head (head10.log), then W=work2 NOHEAD=1 SIZE=4096 BAKE=2048 AOS=12 full.sh > full13.log.
+   No animator pose fits the lean (no peek/lean in web/src/creature): the lean stays the picture tool's staged pose.
+== 04:06 run 9 resumed. full13 done (ALL DONE 1438s, max 516.0k tris). q6 (Max lean/catch/hunched) shot; t13 previews (face, facethree, hand). Uncommitted: full13 assets + run 7/8 edits. Next: LOOK at q6, commit, iterate.
+== 05:05 the white dashed V down the face (in game, Max AND High) = the shader's pale lower lid along each almond's AXIS
+   EXTENDED past the inner corner (the almond closes to a line there: q jumps, fwidth(q) explodes, the smoothstep band
+   swallowed it). Fixed: lid only between the corners (|rt|<1), fwidth capped 0.03 (flesh.js fAlmond out rt); texture.py
+   rim/lid the same (almond_q returns along). Also seen: sharp geometric edges down the centre = the seam's hard groove
+   (binary mask, h only) and the frown's narrow groove -> soft-walled, normal map mostly; creases wider (0.05).
+   texture.py: seam_weight() normal maps fade to flat over 3 texels at island borders + skewed UV triangles; HOOD
+   .31/.335/.29, HAIR .22/.185/.152, face darker to edges (.4) and point (.55), creases stronger.
+   flesh.js: textureGrad at UV-seam quads (kept; harmless). Next: q9 (Max mask, lean) -> full pipeline NOHEAD (full14).
+== 05:55 V lines confirmed GONE (q9 mask). Lean hand: the IK hand had gone INTO the wall (the wall probe was from the
+   old spot at height 7; the wall at the hand is nearer) -> hand target re-probed at the hand's height/depth (q14: hand
+   visible on the wall, but edge-on like a paddle). Now: grip the top edge of the counter beside him (scan left of the
+   face for a top within 2.6 below), palm down, fingers forward over the edge (gripTurn = Rz(90) Rx(90-14)), else the
+   wall (wallTurn). leanside stage (tools: the lean seen from across the corridor). checkpoint commit 5738fa0.
+   Next: full14 (NOHEAD: assemble+texture+export with the softened seam/frown/creases, seam-safe normals, colours).
+== 05:56 full14 done (hood+hair rebuilt: hair off the mid-brow; seam/frown/creases soft; seam-safe normals 15.7% texels faded, 1958 islands; nails dull; max 516.0k). Next: q16 Max lean/catch/mask.
+== 06:16 (real clock; the "05:05/05:55" stamps above were guesses, ~25 min early) commit 6fd97f1 (full14 assets).
+   q16: mask = grey-green hood with folds round the face, good; lean hand on the wall shows (a mitten: fingers into the
+   wall) -> curl 0.12 spread 0.8; catch LOST the eye holes: the lean moves `spot` against the wall and the catch ran
+   there (proof3 had WALL_GAP 1.75, run 8 1.2) -> catch stage now useSpot('dim') (q17: face frontal, holes back).
+   q17 catch: a black W-shaped visor over the brow = the hair out past the brim at mid-brow, seen from under the bowed
+   face -> head.py hair tucked at mid-brow (HAIR_OUT x clip(|x|/.16,.2,1)); lidRim .6 -> .45.
+   Running full15 (head --part hood + NOHEAD full). Then: q18 check, commit, shots.sh proof4 + sheets, perf3/run.sh,
+   tests, notes.
+== 08:04 run 10 resumed (machine restarted again: full15 stopped after assemble, 06:35). Uncommitted: head.py hair tuck,
+   look.js lidRim .45, shot-entry curl/spread + catch in 'dim'. Running full16 = W=work2 NOHEAD=1 NOASM=1 SIZE=4096 BAKE=2048 AOS=12 full.sh (texture+export).
+== 08:20 texture.py: face flesh (FACE .525/.47/.415, blotches, age spots, grey patches, pores, lumps/ridge swell/hollows/side sags/creases into the master's geometry), hands browner .39/.315/.252. Running full17 (NOHEAD, assemble+texture+export).
+   08:35 shot-entry lean: the right hand flat on the wall read as a dead leaf stuck to the wall (q16/q17, its arm lost in
+   the dark) -> unless it grips an edge, the right hand hangs at his side out of the picture; the LEFT hand on the
+   counter (otherAt) is the one hand beside the face, its fingers spread and bent over the edge; look re-aimed so face
+   and hand sit near the middle. Waiting on full17; then q18 (Max lean, catch, mask).
+== 09:20 full17 done (934 s; max 516.0k). q18 (Max lean/catch/mask): face darker, blotchier; catch STILL a black crown
+   over the brow = hair locks (end line: at x .1 the locks fell to y ~0, over the forehead's sides) -> head.py locks only
+   past |x| .12 (a thin band under the brim over the forehead). Lean: re-aimed look put the face out of the torch and the
+   left-finger override made a claw -> look back to q17's, left fingers the animator's; right hand hangs (no leaf).
+   Running full18: head.py --part hood, then NOHEAD full.
+   + head.py CROSS flatter across the lower face (K .085, exp 2.0-2.2: the lit strip read as a beak); texture FACE .54/.47/.40, broad tone patches. full18 = full head (head+hood) + assemble + texture + export.
+== 09:15 (real clock) full18 done (1726 s), commit 6ed33a3. q19: catch STILL had the black crown: the band of hair in
+   the GAP between the brim (0.085 in front of the brow) and the forehead, seen from under the bowed face -> brim 0.05
+   in front, hair over the forehead ends at y .38 (under the cloth), locks past |x| .12 only. Lean face dark (25-40
+   sRGB): torch aimed at the spot, not the face -> picture tool keeps the player's look (torch) on the face each step.
+   Jumpscare3 (frame 29): hood fills the frame as a grey blur; no hands in the catch. Running full19 = hoodfull.sh.
+== 10:40 full19 done (2339 s). q20: crown still there. DIAGNOSED with a region-colour build (qdiag: hair blue, hood
+   green, head yellow): the crown is the HOOD's front, a ledge standing ~0.15 out over the sloping forehead (y .32-.45;
+   the brow clip stopped at y .40), whose shaded underside the catch's camera (under the bowed face) sees over the brow.
+   -> head.py: the clip runs on to y .66 (cloth lies on the forehead to the crown; rolls stay). Lean: setLook in the step
+   broke the camera (q20) -> removed; instead a dry run of the bow finds where the face rests and the torch is aimed
+   there. preview.py: faceunder, faceunder2 views. Running full20 = hoodfull.sh.
+== 13:10 run 11 resumed (machine restarted during full20's export: texture done 11:27, web/art/creature emptied by the
+   export's cleanup). Running export.py alone on work2 (> export20.log). Next: q21 (Max catch/lean/mask), LOOK, commit.
+== 13:25 export20 done (max 516.0k, 8244 KB). q21 Max catch: the black crown is GONE (brow, furrows, big almond holes with
+   pinpricks, grey-beige skin, two streaks; grey-green hood folds round it). commit a33d9b4.
+   q21/q22 lean: a dark dome over the face. Diagnosed (q23-q26, Potato for speed; leanside): in the Lunge's bow at frame
+   10 he is folded right over, the face hangs pointing DOWN and forward under the hood's hump (faceWorld's lookVector
+   stays near level, so a camera put along it sees the crown). The dry-run step was NOT the cause; removed anyway.
+   Lean now: camera BELOW the hanging face (player eye -1.1 along, +0.5 right, -1.3 up) looking up into it, as the
+   catch does; right hand on the highest top (counter) left of the face (topTurn palm down, fingers curled 0.5), else
+   the wall (wallTurn). Running q27 (Potato lean, leanside).
+== 15:55 ROOT CAUSE of the lean's dark dome: the hood's HUMP rode UpperTorso only; in the Lunge's bow (torso folded ~90
+   deg, head turned back up to the victim) it swung forward over the head, in front of the face. head.hood_head_share
+   now adds `top` (hump over/behind the skull rides Head: y > -0.15 full, fades to -0.6; z < 1.3 full, fades to 2.0);
+   export.py hood_weights() sets the hood/hair Head|UpperTorso split from it at each level (no re-bake needed).
+   export21 done; q31 Potato lean: the face looks straight out of the hood, both holes + pinpricks. commit 7396497.
+   Lean camera now = the catch's faceLock (live face, lookUp .45) at 2.7 studs, +0.6 right. Wall hand still a "leaf";
+   the counter is not found by world.raycast (probing heights: q32).
+== 15:45 (real clock; the "15:55" above was ~14:40) q33 Max: the catch now very close to the favourite (hood with folds
+   framing the hanging face, big slanted holes + pinpricks, wrinkled brow, two streaks); the lean's face looks out of the
+   hood. A hand ON a surface in the lean: NOT achieved: the counter beside the face is not a collider (all probes hit
+   the floor 4.4-4.5 below the face), a hand flat on the side wall reads as a leaf (q28, q30, q33, q34: arm hidden
+   behind the hand, hand edge-on). Final lean: camera = faceLock(live face, 2.7, lookUp .45) + 0.6 right; right hand
+   the Lunge's own, left reaching under the face (IK). commit 8f22f11. Disk: deleted q6..q32, shot2/4.
+   Running: shots.sh -> proof4 + send/monster-model-{1,2,3}.jpg (proof4.log). Next: perf3/run.sh (A=de8451f vs HEAD),
+   tests (creature-collision, creature-sim, story-test --only solo, game-smoke), MODEL-NOTES THIRD PASS.
+== 18:10 run 12 resumed (machine restarted ~18:05). State: clean tree at b86830c; proof4 sheets (16:02) predate b86830c;
+   perf3 ran under load 5 (A 9.5/12.5, B 13.8/12.1 Potato frame ms: too noisy, redo).
+   Seen in proof4: catch has NO hands (framing report: wrists at NDC x +-1.0, fingers off the bottom: the Lunge puts the
+   hands a stud out beside the block mask's wide outline); lean hand = a paddle, the pale hood lining rims the face.
+   view.js _catchHands (drawing only; nothing reads the view's animator): through the Lunge, with the skinned body, each
+   wrist drawn in beside the face (de-rolled face frame x .85 y -.5, just behind it), fingers rising past the cheeks,
+   back of the hand to the victim, fingers opened and spread. creature-shot-entry: framing() info (NDC of face, wrists,
+   fingertips) on catch/jumpscare stages; lean rebuilt beside a corridor LOCKER (world.json Locker: 2.7 wide, front 1.03,
+   7.65 tall; L1_Locker_04 in L1_Corridor_West), the near arm gripping the locker's side facing the camera (back of the
+   hand to the camera, fingers down toward the front edge), wrapping view._catchHands (picture tool only).
+   Potato r5: right-hand-side hand reads (spread fingers rising). Running r6 (Max catch, lean).
+== 19:30 commits b7b6078 (catch hands in view.js, body re-hook on tier change, lean beside a locker in the tool) and
+   4911af4 (hood edge dark round the face: texture.py hem darkened 0.6 within 0.14 of the cut, half over the brow;
+   full21 texture+export 788 s). r9 Max: catch = face framed by both big veined hands, no pale ring; lean = face out
+   beside L1_Locker_04's edge, a hand on the locker's side at the left, lit.
+   Running chain5.sh (proof5 + sheets -> perf4/run.sh (A de8451f vs B HEAD, 3 pairs, run-heavy timing) -> collision,
+   sim, story --only solo, smoke), log chain5.log.
+== 21:35 chain5 done: proof5 + sheets rebuilt (send/monster-model-1..3.jpg, 20:11); perf4 pairs Potato frame A/B 15.1/15.3,
+   17.0/12.4, 9.4/9.8 ms (load ~5; no difference); checks: collision rc0, sim all passed, story 36/36, smoke all passed.
+   README commit. MODEL-NOTES.txt THIRD PASS section written. DONE: handback.

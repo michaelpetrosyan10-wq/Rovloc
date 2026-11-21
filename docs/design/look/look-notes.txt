@@ -1,0 +1,404 @@
+LOOK-1 NOTES (graphics pass toward the player's underwater reference)
+Worktree /home/user/Rovloc/.claude/worktrees/look1, branch look1, 6 local commits b4db4ac..1ac660e (not pushed).
+Pictures: look1/before, look1/after (Max, Potato; 1280x720 viewport), look1/tiers (High, Medium, Low), sheets in
+scratchpad/send/look-1-<view>.jpg (before left, after right; top row Max, bottom row Potato).
+
+WHAT WAS BUILT, AND HOW
+Tool: web/tools/look-shots.mjs (+ look-shots-entry.js). Six fixed views (floor, root, direction, torch, clock moment,
+the Creature placed by the scripted handle), shot at any tier; --visibility measures how much the Creature changes its
+screen bounds; --perf is the gate's frame-time method (check.mjs section 3: sandbox site, 320x180, CPU 4x throttle,
+the gate's four places, torch on, 60 frames, median + p95); --gate prints the look gate's numbers; --site serves an
+older build for A/B. Views: lockers = a locker in its alcove (the school has no locker rows: one locker per alcove);
+windows = the Main Office's boarded windows (the only 4 windows in the school, all on L1).
+
+1 Camera (renderer.js, budget.film: Max, High, Medium)
+  - Half-float frame. Materials still write display values (so the Creature's and every other shader stays valid), but
+    the world material adds what lies far past white (exposed linear > 1.8) above 1.0: tubes, bulbs, the torch's
+    hotspot, their reflections. Bloom reads that headroom, so truly bright things bloom hardest.
+  - Film shoulder in the post: above 0.8 the brightest channel rolls off with its hue held; headroom bleaches to white
+    (a bulb's white core inside a coloured glow). Below 0.8 nothing changes: darks and mids stay exactly as on Potato.
+  - Eyes: a 1x1 ping-pong pass keeps the frame's log key and a slowly following "used to" key (up 1.6/s, down 0.45/s);
+    exposure = (now/used)^0.6, clamped 0.4..2.4. At rest it is exactly 1 (tier parity); a change of light dazzles or
+    blinds for a moment. Measured (monster view, Max): torch off 22.9 -> 12.3 -> 10.7 at 0.3 s (blind) -> 12.3 at 8 s;
+    torch on -> 25.0 at 0.3 s (glare) -> 21.4 at 3 s.
+  - Colour script per floor (atmosphere.js LOOK_SCRIPT): split-toning shadows cold / lights warm with unit-luminance
+    tints (hue only): Basement sodium vs cold blue, Hallways sick green vs moonlight, Auditorium emergency red vs deep
+    blue, outdoors sodium vs storm blue. Finer two-layer grain on the clock, heavier in shadows. Lens fringe and
+    vignette were already there.
+  Low / Potato: none of it is compiled (post shader identical); they keep their 8-bit frame.
+2 Air (renderer.js VOL pass; Max 28 steps / 70 studs, High 14 / 55, Medium 8 / 40; half resolution)
+  - One march per pixel: the torch's two cones (cut by its shadow map), the nearest burning fixtures (Max 4, High 3,
+    Medium 2, at their live flicker), and on Max/High the windows' moonlight: each window near the camera renders an
+    orthographic depth tile along the moon's direction (boards, frames, the Creature cut the shafts), with swaying
+    branch shadows from noise. Density drifts (two octaves of 3D value noise on the clock) plus the level's floor mist
+    (Basement). Henyey-Greenstein forward scattering (g 0.5): beams glow seen from the side or looking into them and
+    lay almost no veil when looking down your own torch (this is what keeps the monster readable). Jitter changes per
+    frame and blends 55 % with the last frame; a tent filter upsamples.
+  - Haze colour from the nearest lights (atmosphere.js, every tier, a uniform: free on Potato): the fog keeps the
+    film's luminance and leans toward the hue of the fixtures within 38 studs (scan at 3 Hz, camera level only).
+  - ONE haze fall-off for every tier (lighting.js HAZE_CLOSE 160 studs, exp^2, darkened as before). Before, the haze
+    closed at the tier's view distance (Potato 120, Max infinite): Potato players saw the monster less. Now identical;
+    each tier's draw distance (Potato 192) ends where the haze is already 98.7 % closed.
+  - The torch's old additive haze ribbons are gone (Medium now marches instead; the switch would have been dead).
+  - Dust: the motes are lit by the marched fixtures too and show twice as bright on the film tiers; the shaft dust
+    seeds are now seeded, not Math.random (pictures repeat exactly).
+3 Surfaces (materials.js LOOK = budget.detail: Max 3, High 2, Medium 1; Low/Potato compile none)
+  - 3D value noise of world position: albedo and shine vary, grime low on walls (toward the camera level's floor),
+    fine bump by surface gradient (Max/High; fades past 14-40 studs), Schlick rim on the torch's specular (bright
+    glint where it grazes tile and metal).
+  - Wet floors per level (Basement 0.62, outdoors 0.9, Hallways 0.28...): darker, glossier, puddles where noise pools,
+    mirror-flat, with expanding rings (rain outdoors, drips in the Basement). Mirror share goes out in the alpha.
+  - Screen-space reflections (Max full res 30 steps, High half res 20; Medium none): wet floors mirror the corridor,
+    lamps, the dumpster, the Creature.
+4 Shadows: the torch already threw real shadows from all opaque world geometry, teammates and the Creature (Max..Low)
+  and fixtures shadow the Creature (Max/High/Medium). New: the moon tiles cut the moonlight shafts. Nothing more.
+5 Small life (particles.js, on the loop's clock): moths circling the marched lamps (Max 9 / High 7 / Medium 5 per
+  lamp, gone when the lamp fails), dust sparkling in every marched beam, puddle rings, branch shadows in the moon
+  shafts, the eyes make lightning pop. Steam, drips, sparks, grit were already there.
+6 Back Lot: rain streaks round the camera (film tiers, outdoors), lit by the torch, the sky and lightning; wet
+  asphalt mirroring the dumpster with rain rings.
+
+NUMBERS
+Frame time, gate method (check.mjs section 3), least median of the runs, ms (machine shared, noise about +-2 ms):
+  first runs: before (3 runs)  Potato L1 3.60 L0 3.20 L2 2.50 Lobby 2.15 | Low L1 4.20 L0 5.00 L2 3.95 Lobby 3.15
+              after  (3 runs)  Potato L1 4.75 L0 4.45 L2 4.15 Lobby 5.20 | Low L1 6.75 L0 5.70 L2 3.90 Lobby 4.40
+  these two were taken an hour apart under different load (single runs swung 4.75..15.7 ms), so I rebuilt the old
+  engine (look-perf-before) and alternated old/new in the same session (look1/tools/ab-perf.sh):
+  A/B round 1 (3+3 runs, least / middle):
+    Potato L1 4.65/5.75 -> 4.35/4.55   L0 4.35/4.65 -> 3.95/6.40   L2 3.90/5.05 -> 4.55/4.80   Lobby 4.05/4.40 -> 4.25/4.45
+    Low    L1 5.45/5.75 -> 7.05/8.00   L0 4.50/5.10 -> 6.85/6.85   L2 4.40/5.55 -> 4.45/4.75   Lobby 4.40/4.40 -> 3.80/4.00
+  A/B round 2, Low only (4+4 runs): L1 6.65/9.40 -> 7.95/9.20  L0 5.65/9.90 -> 5.05/7.15  L2 5.10/9.85 -> 5.65/7.60
+    Lobby 4.50/6.00 -> 4.75/5.20
+  Draw calls and triangles identical before/after on both tiers (Potato 69/67/49/43 calls, Low 136/124/89/68).
+  Reading: no change I can separate from the machine's noise; every Potato/Low shader is byte-for-byte the same math;
+  the only new per-frame work on them is Atmosphere (a few uniform writes; a 3 Hz scan of the camera level's
+  fixtures) and on Low the motes' 4 lamp lookups (zero lamps). All far under the 16.7 ms budget. The lead's quiet
+  gate run is the judge.
+Monster visibility (the Creature's mean change of its screen bounds / the background there = contrast):
+  before Max 7.47/67.6 = 0.111, Potato 3.36/30.7 = 0.109
+  after  Max 7.49/58.3 = 0.129, High 0.127, Medium 0.116, Low 0.190, Potato 4.12/31.3 = 0.132
+  (Low is higher because it has the torch's shadow and no air: it was already so in kind before.)
+Look gate (check.mjs lookGate: saturation >= 0.18 everywhere, Basement copper <= 0.85): passes on all five tiers.
+  Basement copper share after: Max 0.759 (was 0.722), High 0.779, Medium 0.734, Low 0.817, Potato 0.815.
+  Lowest saturation: Medium l2-west 0.187. Max mean luminance rose on lit views (l0-boiler 38.4 -> 50.5, l1-gallery
+  71 -> 77) from the glow in the air; dark gaps stay dark.
+Code: web/src grew 43.9 KB (2,537,350 -> 2,581,298 bytes). No new files except engine/atmosphere.js; no downloads,
+  no images, no models.
+
+STILL WEAK, PER VIEW (honest)
+- basement: the improvement is real but modest: warm air, wet floor mirroring the corridor. The floor mist reads
+  only faintly; no lamp sways; the corridor's own bulbs are small and their air glow is short.
+- windows: the strongest picture (blue shafts through the boards, swaying branch shadows). The shafts are a little
+  soft (one march step is ~1 stud; the board gaps are finer). Only 4 windows exist in the whole school.
+- lockers: the least changed. Grime and shine variation are subtle at this distance; the torch hotspot still a flat
+  yellow disc on the wall; the locker's paint is not worn off at its edges (no edge detection from noise alone).
+- failing: dust motes under the dying bulb and slightly glossier tiles; the dying bulb does not relight the room with
+  moving shadows of its own (only the Creature gets fixture shadows).
+- backlot: rain and the mirrored dumpster are new; the yard lamp is not in frame; the sky is unchanged; no splashes.
+- monster: unchanged in character (the same silhouette in the far haze, now a touch more readable on Max, equal to
+  Potato); the floor mirrors him faintly.
+- Potato everywhere: only the haze (closes at 160 not 120 studs: a bit more visible far away) and the haze hue.
+- Not built: swaying hanging lamps that carry their light (the lamps are baked into static chunks), loose cables,
+  papers in a draught, steam lit by the air, lit splashes, paint worn off edges, a dying bulb re-shadowing a room.
+
+NEXT
+1. A per-material "edge wear" from the mesh (bake a curvature or edge-distance attribute in tools/bake), so lockers,
+   doors and frames lose paint at their edges; then a stronger per-material detail table (metal flakes, tile grout).
+2. Swaying hanging bulbs: move the bulb entity and a dynamic point light together, fade its baked share (a dynamic
+   twin of the baked light); give the dying bulbs a fixture shadow of the static world (one cube tile when in view).
+3. Air: march at quarter res with more steps and a depth-aware upsample; per-floor dust colour; steam that the air
+   lights. 4. Temporal AA (the film tiers' jitter is already per frame) to quiet the fine bump and SSR edges.
+5. A wider wet set: drips from the DripPipe emitters into the puddles (rings at the drip points, not random).
+
+ROBLOX
+The port can map nearly every idea to built-in features. The film camera is Lighting.Technology = Future with a
+script easing ExposureCompensation for the eyes (rest value from LightingMood, transient only), a BloomEffect whose
+Threshold sits near white so only Neon, light parts and the torch bloom, and a ColorCorrectionEffect per floor (the
+colour script's average tint; Roblox has no split-toning, so warm and cold come from the lights themselves). The air
+is Atmosphere (Density, Haze, and Color/Decay set per zone from the nearest lights' hue, the same fall-off on every
+quality level, as here), plus Beam shafts under fixtures and window Beams aimed along the moon direction with a
+scrolling branch texture (ParticleEmitters with LightInfluence for the dust and the moths, which then light from the
+real lamps). Surfaces are SurfaceAppearance / MaterialVariant PBR sets (normal, roughness, metalness) with
+Reflectance on wet floors; Future lighting gives real specular, and Roblox's own screen-space reflections are not
+exposed, so puddles would be glossy material, not mirrors. Shadows are free in Future (SpotLight torch and every
+fixture with Shadows = true), which covers the dying bulb's moving shadows the web lacks. Small life is TweenService
+on hanging lamps with their PointLight parented (they carry their light), ParticleEmitters for rain (attached to a
+part following the camera), splashes and steam, and Lighting flashes for lightning; rain rings need a flipbook
+texture, which is an image file and so outside this pass's rules.
+
+
+==================================================================================================================
+PASS 2a: MATERIALS, DEPTH AND HANDS (17 Nov; worktree look1, commits 7940733..e06de9e, local only)
+Pictures: look1/after2a: the six views on Max at 1920x1080 (TAA, 12 frames drawn per still) and Potato (asked at
+1920x1080; Potato draws at its own render scale, so its PNGs are 896x504). Steps: s1b (scans), s2a/dbg2 (edges), hand1
+(hand), s4a (TAA / Max+). Monster readability: Max 7.18/58.55 (contrast 0.123), Potato 4.54/31.33 (0.145).
+
+WHAT WAS ADDED
+1 Photographed surfaces (9cf429b, e09246a; tools/scans.py + scans.json, `npm run scans`). Nine CC0 Poly Haven scans
+  stand behind palette keys on the film tiers: Max 4096, High 2048, Medium 1024 px (colour WebP q92, OpenGL normal and
+  AO/rough/height packed as 4:4:4 JPEG q95). Real-world sizes (1 stud = 0.28 m: tiles 1.5 m per repeat, brick and
+  plaster 3 m, damaged concrete 5 m). Organic surfaces are hex-tiled with random offsets (and rotations where they
+  allow it), so no repeat lines up; tiles, planks and brick are sampled once on a grid with parallax occlusion from
+  the height map (Max 48 steps, High/Medium 16). Each scan's colour is scaled so the surface keeps exactly the mean
+  albedo the generated texture (or the bare part colour) gave it: the photograph adds stains, chips and grain, never
+  brightness, so the place and the Creature in it read as bright as on Low and Potato. Our own noise (LOOK detail)
+  still runs on top. Low and Potato keep the generated 512 and 256 sets byte for byte.
+2 Edges and wear (d541a70). A screen-space pass on Max ('Full', 12 taps) and High ('Lite', 8): from the depth buffer
+  every pixel compares a ring of neighbours a bevel's width (0.06 studs on the surface) away with its own plane, giving
+  a bevel highlight on every convex edge, paint worn through along it (broken by world-space noise: chips and runs),
+  and grime in every inside corner (floor meets wall, frames, skirtings); silhouettes never glow. In the materials:
+  dents and scratches in metal (lockers, doors, pipes), leak rings on ceilings, rust runs and a damp ring under the
+  nearest dripping or steaming pipes (atmosphere._scanStains, film tiers only).
+3 Hands and torch (a51fb7c, 84c347d; tools/art/hands). hand.py drives Blender (bpy) with the MakeHuman CC0 base mesh
+  through MPFB2 (pinned commit, hashed files: tools/art/hands/sources.json): the right hand's four fingers closed in a
+  power grip fitted by least squares round a 5 cm D-cell barrel, the thumb searched onto the barrel, the wrist bent,
+  cut at the forearm, subdivided twice, vertex-coloured (skin variation, nails, ray-traced occlusion against hand and
+  barrel). web/art/hands/hand-right.bin.gz: 26,569 vertices, 53,056 triangles, 734 KB, fetched by Max and High only
+  (manifest.hands; budget.handModel). The torch is shaped to the grip (knurled barrel, bezel, lens), lit by the scene
+  like the world plus the torch's own spill on the fingers, with the existing breathing sway and turn lag. Medium,
+  Low and Potato keep the hand shaped in code and never fetch the model.
+4 Sharp pictures (7bf5780). Temporal anti-aliasing on Max and High: Halton(2,3) sub-pixel jitter over 16 frames, the
+  history reprojected through last frame's camera and read with a 5-tap Catmull-Rom, held to the current pixel's
+  YCoCg variance box, Karis-weighted; the hands drawn after it unjittered. Max+ (the Supersample setting) is now 200 %.
+  The picture tool draws 12 frames per still on TAA tiers; --supersample shoots Max+ (24 min per 1080p view in
+  software, so the finals are Max with TAA, not Max+).
+5 Download (e06de9e, after the finals). The film tiers' set listings (1024/2048/4096: maps, scans, keys) moved out of
+  the page into assets/textures-<size>.json, fetched only with that set; the engine's GLSL is compacted at bundle time
+  (tools/glsl-compact.mjs: comments, indentation, spare spaces; every build checks each compacted shader token for
+  token against the original and stops on any difference). Verified: windows + lockers at all five tiers from an
+  uncompacted --no-minify build and the compacted build are byte-identical PNGs (look1/eq). The gate (check.mjs) now
+  counts those listings' maps and manifest.hands among the site's assets (the hand asset would have shown as unused).
+  Also 4be1a97: textures.py never treats a scan's maps as a generated set's cache.
+
+SIZES PER TIER (texture sets in the site; Low and Potato unchanged)
+  Max 4096: 191.08 MB   High 2048: 64.36 MB (was 41.30)   Medium 1024: 17.51 MB (was 12.03)   Low 512: 0.60 MB   Potato 256: 0.17 MB
+  Hand model (Max/High only): 0.73 MB. Raw scans kept in build/scans (4k sources, untrusted, decoded under python -I).
+  Per scan (4096 / 2048 / 1024 MB): PaintedPlaster 22.6/6.7/1.8, VinylTile 18.6/4.1/0.8, StainedConcrete 20.7/5.1/1.1,
+  RustedMetal 6.2/1.6/0.4, WornWood 20.9/5.3/1.3, StainedBrick 19.5/6.2/1.9, ScanAsphalt 40.5/11.4/2.9,
+  ScanCorroded 19.6/6.0/1.7, ScanSteel 6.2/1.6/0.4.
+
+POTATO / LOW DOWNLOAD (the real game site, build.mjs default entry; Potato and Low fetch the same page and bundle,
+  plus their own unchanged sets): index.html + bundle before pass 2a (7940733) 2,114,572 bytes raw / 629,070 gzip;
+  now 2,108,434 / 627,792 (-6.1 KB raw, -1.3 KB gzip). index.html 24,428 -> 20,318; bundle 2,090,144 -> 2,088,116.
+  "Potato boots on 11.55 MB" before and after; Low = that + its 0.60 MB set, unchanged.
+
+POTATO / LOW FRAME TIME (the gate's method: look-shots --perf = check.mjs section 3, sandbox site, 320x180, CPU 4x
+  throttle, torch on, 60 frames; ms, least / middle median over the runs, sites alternated in one session:
+  look1/perf-ab3.txt (3 rounds, three sites) + perf-ab4.txt (4 rounds, order swapped); tools/ab3-perf.sh, ab3-sum.py)
+                  before pass 2a (7 runs)   now (7 runs)        before LOOK-1 (3 runs)
+  Potato L1       4.95 / 5.70               4.50 / 5.20         4.60 / 4.80
+  Potato L0       3.75 / 4.20               3.85 / 4.10         4.40 / 4.60
+  Potato L2       3.10 / 4.40               3.55 / 4.10         5.20 / 5.60
+  Potato Lobby    3.30 / 3.70               3.40 / 3.75         3.50 / 4.80
+  Low    L1       4.75 / 6.25               5.30 / 5.70         6.70 / 8.10
+  Low    L0       4.80 / 5.55               4.60 / 4.95         5.20 / 5.50
+  Low    L2       4.60 / 4.95               3.90 / 4.50         5.90 / 6.05
+  Low    Lobby    3.45 / 4.10               3.25 / 4.90         2.95 / 4.00
+  Draw calls and triangles identical before/after pass 2a (Potato 58 calls / 279k tris at L1, Low 125 / 549k). No
+  difference beyond the machine's noise (single runs swing 3-16 ms); Potato and Low compile and run the same shaders
+  as before (only uniforms added; the scan, edge, TAA and hand paths are compiled out), with no new per-frame work.
+  All far under the 16.7 ms budget.
+
+SOURCES OF EVERY SCANNED MATERIAL (all CC0 1.0, https://polyhaven.com/license; files from dl.polyhaven.org, 4k;
+  hashes checked on every fetch; the same table lives in web/tools/scans.json)
+  PaintedPlaster  <- concrete_wall_003 (https://polyhaven.com/a/concrete_wall_003; Dimitrios Savva (photography), Rico Cilliers (processing); CC0 1.0; 3.0 m per repeat, hex; palette keys: Plaster)
+      concrete_wall_003_diff_4k.jpg  sha256 8efd212c9cc62a3ae1dd47cbc76953fd1ae56d78c9ccd4898ab7f9b81e2a8502
+      concrete_wall_003_nor_gl_4k.jpg  sha256 9e27f9a179200c3cf65eecfe7c78281c9b0a775bcae540efd014fe71c24adeb3
+      concrete_wall_003_rough_4k.jpg  sha256 fa8666f56aa7d2164b81461754b305b13d42c309b5cda539fab75b3f585775c2
+      concrete_wall_003_ao_4k.jpg  sha256 51b6311386e767ccdaf98b1120bd4feed830b95c9368688688b5cb39f5340964
+  VinylTile       <- floor_tiles_08 (https://polyhaven.com/a/floor_tiles_08; Rob Tuytel; CC0 1.0; 1.5 m per repeat, grid; palette keys: CeramicTiles)
+      floor_tiles_08_diff_4k.jpg  sha256 ded7a20196b837cf744715ffd5108c3705b69cd955e56c97bd9099ec696aa58c
+      floor_tiles_08_nor_gl_4k.jpg  sha256 bb37170cb52175883a399619c8a7492c438a308adc5e4cade8afc4c659b302a3
+      floor_tiles_08_rough_4k.jpg  sha256 4c28baec90712b17090e697538c80530315fcc16728db277b742c2a8a8ce08e3
+      floor_tiles_08_ao_4k.jpg  sha256 935a25690748d26e8a21badaba422f56e23b459438ab93938f64961b0bb506aa
+      floor_tiles_08_disp_4k.png  sha256 7c2626ef22749ab795b32c2ebad22550e93c2588cf9b80ffa4907d52e058b5ce
+  StainedConcrete <- concrete_floor_damaged_01 (https://polyhaven.com/a/concrete_floor_damaged_01; Rob Tuytel; CC0 1.0; 5.0 m per repeat, hex; palette keys: Concrete, Pavement)
+      concrete_floor_damaged_01_diff_4k.jpg  sha256 de359550fa5193d0be4e7d33f7ebb897bc72bb0d96c41816185d0207abe70bc3
+      concrete_floor_damaged_01_nor_gl_4k.jpg  sha256 405b28737ced1b1bb1dd733a9e6a0aaf472c8a249847d049e9240bdd496b8f4a
+      concrete_floor_damaged_01_rough_4k.jpg  sha256 500bdfe3c9befb9aafb0f8bb7c157816ec2baf05dceeab85ac70efcdf43c8264
+      concrete_floor_damaged_01_ao_4k.jpg  sha256 5d32fe212e83b27811e81725ced2d93db85079082b3bff5800f7e6e453711b25
+  RustedMetal     <- blue_metal_plate (https://polyhaven.com/a/blue_metal_plate; Rob Tuytel; CC0 1.0; 2.5 m per repeat, hex; palette keys: -)
+      blue_metal_plate_diff_4k.jpg  sha256 297bf7902e3b808bfa75629066cd7010a54e0c5c8f8389e1c2cf3b61444d8e76
+      blue_metal_plate_nor_gl_4k.jpg  sha256 8fc214ed6506e46ed797bd1bd9ec4a3640697a0f0aa91de25185085f2b899777
+      blue_metal_plate_rough_4k.jpg  sha256 668f46c12a5ff663f2e7c96d909e1c5664f2fab53c24544ac512600b16ad650e
+      blue_metal_plate_ao_4k.jpg  sha256 318c238a5c33fb28abbc10e3a8c5eb1b65cde5efd61ed8eb7cac5661c44daae1
+  WornWood        <- dark_wooden_planks (https://polyhaven.com/a/dark_wooden_planks; Amal Kumar; CC0 1.0; 2.0 m per repeat, grid; palette keys: Wood, WoodPlanks)
+      dark_wooden_planks_diff_4k.jpg  sha256 bb5352923d3a7ccf47f0b48b10e29c86b1d3cdc22cdd57cd2f7610103c493778
+      dark_wooden_planks_nor_gl_4k.jpg  sha256 f406821b159608e04e0cfe933a909a1f7e9713e6eb0106c0c7cb6bb1666134fa
+      dark_wooden_planks_rough_4k.jpg  sha256 5236fd9dca0cd729d9f1fb071f7a1ee562dae148c27ef6c121dbd84d8d42ee5a
+      dark_wooden_planks_ao_4k.jpg  sha256 e97c02470d055a938b0d11df94e51cced57c25f41c03a791204293117f12051d
+      dark_wooden_planks_disp_4k.png  sha256 629daa623600d2bf9734311d0023627ce0028336728773657922b0f233e8ed25
+  StainedBrick    <- brick_wall_006 (https://polyhaven.com/a/brick_wall_006; Jan Burghardt; CC0 1.0; 3.0 m per repeat, grid; palette keys: -)
+      brick_wall_006_diff_4k.jpg  sha256 488b07eb697cdce97d3d43106e2b9f92fe208f818138284180de94e111323680
+      brick_wall_006_nor_gl_4k.jpg  sha256 8a85391f5396cd8a58d18cae75a8e4820b5476ab3f3a334eacaede1262381568
+      brick_wall_006_rough_4k.jpg  sha256 188927990b1aa4c00e4ff73ff746910a7fa972688cf382281d44d8f9557eb8e1
+      brick_wall_006_ao_4k.jpg  sha256 b7d20e1af98de640440139556816fea443706cd88606d9dabd30182ca5bb962a
+      brick_wall_006_disp_4k.png  sha256 2a7715df4e3c15e77ebc059bb3793fe1158608217cc8629be7c98ef141eacac4
+  ScanAsphalt     <- asphalt_02 (https://polyhaven.com/a/asphalt_02; Rob Tuytel; CC0 1.0; 3.0 m per repeat, hex; palette keys: Asphalt)
+      asphalt_02_diff_4k.jpg  sha256 d1601354507b6c4a46aa741b9134f9f23f738596a2bdcd20792e50ca554018e0
+      asphalt_02_nor_gl_4k.jpg  sha256 7b62b8f4eb9b365e403a06152e4fadaabf51b584b0a3bf9dbae28632edee5791
+      asphalt_02_rough_4k.jpg  sha256 62e0461c25fe1cb411abf8ef3afaf080e16bf96ef7fd2acd180e9867ce95aabd
+      asphalt_02_ao_4k.jpg  sha256 aed3afe9e5fb7c7689cb262fd13a7d6e19352cd903b6bdd3699ca04fea6cccae
+  ScanCorroded    <- rusty_metal_04 (https://polyhaven.com/a/rusty_metal_04; Amal Kumar; CC0 1.0; 2.0 m per repeat, hex; palette keys: CorrodedMetal)
+      rusty_metal_04_diff_4k.jpg  sha256 e6ae313a5ba2b7348c0156a3470ac2816b495af6b595a3c696c4d4e20294cbe5
+      rusty_metal_04_nor_gl_4k.jpg  sha256 e2822e560933bfba9584fd80de64155796f0de5bbe2eff4c05c92fd97144f551
+      rusty_metal_04_rough_4k.jpg  sha256 4d19126fd8f291a176153b15269836602a5b125c7926eb39615d22806e7ad431
+      rusty_metal_04_ao_4k.jpg  sha256 7b1dc7aa64b46e1b251e73f416134a9ecd812c261c4b014bb27d055d775aefa0
+  ScanSteel       <- blue_metal_plate (https://polyhaven.com/a/blue_metal_plate; Rob Tuytel; CC0 1.0; 2.5 m per repeat, hex; palette keys: Metal, DiamondPlate)
+      (same files as above)
+
+WHAT IS WEAK (honest)
+- Coverage: no scan yet for ceiling tiles, painted block walls, painted locker steel (GalvanizedMetal is still the
+  generated map, now with dents, scratches and worn edges), the bathroom wall tiles (PoolMosaic: a dirty_tiles try
+  turned the walls to mud and lost the grid; rejected), linoleum and glass. Those surfaces still look generated.
+- The world is still big boxes: the edge pass gives bevels and wear from depth, but silhouettes stay straight and
+  the edge pass sees only what is on screen (and fades past 40-70 studs and on edges thinner than a pixel).
+- Hand: a real modelled hand round a real torch, lit by the room, but skin is vertex colour (no pores, no subsurface
+  scattering), the sleeve barely shows in frame, only the right hand is modelled, and fingers do not move.
+- TAA is judged on stills (12 frames drawn); in motion, fast turns may smear thin bright lines (not measured here).
+  Max+ (200 %) exists but a 1080p still takes 24 min in software, so no Max+ finals.
+- Backlot stays the weakest view: asphalt scan barely reads in the dark, the fence and buildings are flat.
+- The hands asset and the Max 4096 set make Max's download ~190 MB more: allowed (no budget on Max), but a first
+  Max load on a slow line streams for minutes (Max shows the 256 set, then the 4096 set swaps in).
+
+==================================================================================================================
+PASS 2b: LIGHT AND LIFE (worktree look1, commits 4fd22fe, f8005fb, 5136d75 on top of pass 2c's 81d32e8)
+==================================================================================================================
+Pictures: look1/after2 (six views, Max 1920x1080 + Potato); sheets send/look-2-<view>.jpg (ORIGINAL before left,
+Max now right, Potato now below); Max alone full size send/look-2-max-<view>.jpg.
+
+WHAT EACH TIER GOT (Low and Potato: nothing; they load nothing new and draw nothing new)
+1 Bounce light: a baked two-bounce gather per static vertex (tools/bounce.mjs + tools/bake/bounce.mjs, 96 cosine rays,
+  1,266,783 vertices, 277 s on 4 threads; build/bounce.bin 3.80 MB, 1.11 MB gzipped, an asset only Max/High/Medium
+  fetch; npm run bounce is part of npm run data). The torch's own bounce: rays over its cone find where the beam lands
+  and each patch relights the room faintly (Max 8 patches, High 4, Medium 1). The game's darkness data is untouched.
+2 Shadows: the torch on Max with a widening penumbra (PCSS, lens 0.1); room tiles: the nearest lamps the camera sees
+  throw the shadows of the set dressing and the Creature (Max 4 tiles, PCSS; High 2; Medium 1), a dying bulb's tile
+  darkens and returns with it; 772 of 788 bulbs hang on their flex and sway on the game clock with their light,
+  shadows, air and moths (Max/High/Medium); seen lamps' light resolved per pixel (pools under lamps, highlights on wet
+  floors); the torch cookie (rings, hot core, uneven rim) from pass 2c.
+3 Air: Max marches at full resolution, 64 steps, windows 128 steps; lamps in the air are cut by what stands under them
+  (Max/High); low mist round the feet (Basement 1, Hallways .35, Stairwells .25, Lobby .15) rolling on the clock.
+4 Reflections: a reflection probe cube where screen-space fails (Max 256, High 128, one face a frame), screen-edge
+  blend; drip pools with rings under the pipes that drip.
+5 Life: thousands of motes (Max 60,000 / High 30,000 / Medium 12,000 in pass 2c), moths 40 per lamp, ash flakes 2400;
+  this pass: branch shadows sway through the windows' moonlight; NEW the Back Lot's lamps (they had never been among
+  the outdoor fixtures, so outdoors there was no lamp air, no moths, no lamp-lit rain: atmosphere._fixturesOn) and a
+  cone of lit rain under each lamp out in the open (900 streaks a lamp, Max/High, Medium 70 %).
+6 Back Lot: a moving warped cloud deck with the moon's disc and halo, sodium glow under it, a deeper skyline in four
+  rows with lit windows and TV flicker sinking into a haze band over the horizon, the yard lamp's rain cone and glow.
+
+NUMBERS
+- Monster visibility (look-shots --visibility, monster view, 1920x1080 Max / Potato's own 896x504):
+  Max: the Creature changes its bounds by 8.22 of 255 (background 66.11, contrast 0.124);
+  Potato: 4.16 of 255 (background 31.37, contrast 0.132). Contrast within 0.01: as visible on Potato as on Max.
+- Potato / Low frame cost, the gate's method (look-shots --perf = check.mjs section 3: 320x180, CPU throttled 4x, the
+  four gate places, torch on, 60 frames, median), before = e06de9e (before passes 2c and 2b), 2 runs x 4 rounds
+  alternated (perf-ab2b.txt, perf-ab2b-2.txt), least of 8:
+    Potato L1 4.85 -> 4.70   L0 3.70 -> 4.05   L2 3.30 -> 3.85   Lobby 3.55 -> 3.30  (all far under 16.7)
+    Low    L1 5.45 -> 5.85   L0 4.85 -> 6.10   L2 3.90 -> 4.05   Lobby 3.40 -> 3.65
+  The machine ran at load 4-5 on 4 CPUs (other jobs), so single medians swung 4-12 ms; a third run against pre-2a
+  (perf-ab2b-3.txt) and an interleaved Low L0 run (10 rounds, both sites in one browser) gave NOW least 4.55 vs 3.90.
+  Deterministic check instead (look1/tools/abl.mjs COUNT): draw calls and triangles identical on every place; GL calls
+  per frame Potato 387/372/288/272 vs 391/370/285/271 before, Low 581/571/457/371 vs 582/565/452/369 (+-6 calls: two
+  more useProgram, four more matrix uploads, ten fewer uniform1f); a CPU profile of 400 Low L0 frames shows only GL
+  calls, no new JS. Low L0's rise in the timed runs is therefore load noise, not new work; the lead's gate run on a
+  quiet machine is the measure to trust.
+- Frame cost of a 1080p Max still in software: 12-22 min each (basement 1315 s, failing 1120 s).
+
+WHAT IS WEAK (honest)
+- The Back Lot is better (rain you see in the lamp's cone, moths and glow at the lamp, sky, skyline) but the ground
+  under the lamp stays dark: the game's own yard lamp is dim (brightness 0.9, range 30, 14 studs up), and brightening
+  it on the film tiers alone would make the monster easier to see there on Max than on Potato. The dumpster still
+  reads as a box; the wet asphalt's puddles show only faint sky.
+- windows: a wall clock's face at the right edge is blown out by the depth of field into a pale disc.
+- Still no bounce for moving lights other than the torch (no screen-space GI); the bake's bounce is per vertex, so big
+  flat walls carry it smoothly, not in detail.
+- Fixed views only; motion (TAA smear, mote flicker) is not judged on stills.
+
+==================================================================================================================
+PASS 2c-II: THE JUDGE'S NINE (worktree look1, commits e0184ee, 0cd411e on top of pass 2b's 5136d75)
+==================================================================================================================
+Pictures: look1/after3 (six views, Max 1920x1080 + Potato); sheets send/look-2-<view>.jpg (ORIGINAL before left,
+Max now right, Potato now below) and Max alone full size send/look-2-max-<view>.jpg (same names, overwritten).
+Working pictures of the pass: look1/d3/s1..s11 (640x360). Scratch diagnosis tools: look1/tools/try2.mjs (runtime
+variants of a view in one page), probe.mjs + pick.js (what lies under a screen point: mesh, material, uv).
+
+WHAT CHANGED, IN THE JUDGE'S ORDER (Low and Potato: nothing; they build, load and draw nothing new)
+1 Dust and life. A speck is lit only by the light where it floats: the torch through its cookie, the marched lamps
+  through their cones (a lamp with no cone lights only the air below its own height), the moon tiles; no ambient.
+  The forward-scatter boost is capped (2.5) and a speck in a far lamp's dim light is no brighter than the wall behind
+  it (the "snow" under the windows-room ceiling was FilmMotes lit by the ceiling tube as a point light over the whole
+  room: found with try2 variants d3/s9). Most specks tiny and faint, a few heavy ones glitter; draughts per level,
+  eddies, clumps, 1/24 s motion streaks; moths are dark rimmed silhouettes round each lamp and keep out of the rain;
+  cockroaches cross the torch's floor spot (Max 24 / High 16 / Medium 8); steam and drips glint in the marched lamps.
+2 Torch: the viewmodel's BEAM_GLOW frustum (the "paper cone") is gone; the air's beam starts 0.9 studs past the lens,
+  fills over 3.2, soft-edged cone, air near the eye thinned. Hotspot roll-off (TORCH_KNEE 2).
+3 Geometry. NEW lockers.js: every hideable locker (33) modelled over its box on Max/High/Medium: six louvres pressed
+  out over a dark vent (hiding the flat bars), rolled edges round the door and the vent, the lower panel a dented
+  skin (kick, fist, crease, a bow; shaded from the full dent), three hinge knuckles with leaves, a chrome pocket round
+  the handle, a hasp with an open brass padlock, two rows of pressed vent slots high on each side; all on the
+  lockers' own node table (it swings, is torn off and hides with the door), lit from the locker's own baked vertices
+  (nearest facing the same way), 2 draw calls per level. NEW door casings (dressing.js _casings): every doorway the
+  skirting walk finds (a gap of 3-14 studs in one wall under a lintel) gets a painted moulded frame on each side:
+  jambs and head with a bead and a chamfered step, a steel threshold. Pass 2c's outside.js (sky, moon, far roofs, a
+  streetlight, trees in parallax behind the board gaps) and skyline.js (roof clutter, setbacks, beacons; masts now
+  stand on a base, their crossbars read as birds).
+4 Back Lot: the reflection gather on Max is 17 taps each jittered (it was 7 fixed taps: a lit edge drawn as a stack of
+  copies, the "stairs" under the dumpster), blur by roughness and the ray's length, rain rings; ragged puddles (2
+  octaves); no moths in the rain (they were the light dots floating over the fence).
+5 Monster: Max marches 8 lamps in the air (was 4) and reaches 70 studs when it marches more than 4, so the lamps far
+  down the corridor glow in the haze behind the Creature; contrast numbers below. The Creature's own shading is not
+  this pass's (src/creature belongs to another engineer).
+6 Picture: contrast-adaptive sharpening after the temporal resolve (luma), a film toe (real blacks), the global cast
+  pulled back, wet floors and bare metal with hotter highlights (spec x(1+1.8 glint)), lens fringe Max 0.15 High 0.12.
+7 Small bright things: papers' albedo x0.62; rubber mats drawn as moulded rubber with drain holes on the film tiers
+  (RUBBER_MAT, the generated sponge texture is Potato's); the "yellow cubes" in failing are wall lamps (fixtures,
+  their glow is the game's light).
+8 Lockers: the kit; hotspot roll-off; fringe down. The alcove's flat green light is the game's own lamp: crushing it
+  on Max alone would make the monster harder to see there on Max than on Potato (rule 1), so it stays.
+9 The "cog" is a wall clock (a Decal/0 face on a SmoothPlastic disc at 162.8, 26, 0.8, found with pick.js) cut by the
+  frame's edge: game content, left. The torch: pale scratches, a knurled grip and tail ring, and the black anodising worn through
+  to bare aluminium on its edges only (the fins' crests, the head's shoulder, the tail's rim) with a few pin-head
+  flecks on the head (4fff260; 0cd411e's noise chips were blotches all over it at 1080p). Potato's shaped hand holds
+  the torch overhand like the modelled one (rolled -1.25).
+
+THE PICTURES (look1/after3, all at 0cd411e + 4fff260; sheets send/look-2-<view>.jpg, Max alone send/look-2-max-<view>.jpg)
+  Max 1920x1080 time and mean luminance: basement 1609 s 27.3, windows 1471 s 17.7, lockers 1540 s 51.8,
+  failing 1742 s 24.4, backlot 1028 s 32.4, monster 1007 s 24.3. Potato 896x504 (its own scale): 1-5 s each, means
+  basement 24.3, windows 15.1, lockers 55.2, failing 20.0, backlot 26.6, monster 21.4 (unchanged from 0cd411e). The 0cd411e Max finals are kept in
+  look1/after3-0cd411e for comparison (their torch has the blotched chips).
+
+NUMBERS
+- Monster visibility (look-shots --visibility, monster view, 1920x1080 Max / Potato 896x504): Max the Creature changes
+  its bounds by 9.13 of 255 (background 62.13, contrast 0.147; pass 2b 0.124); Potato 4.33 of 255 (background 31.27,
+  contrast 0.138; pass 2b 0.132). Within 0.01 of each other: as visible on Max as on Potato.
+- Potato / Low frame cost, the gate's method (look-shots --perf = check.mjs section 3: 320x180, CPU throttled 4x, the
+  four gate places, torch on, 60 frames by hand, median), before = e06de9e (before passes 2c and 2b, site
+  build/cache/look-perf-2c-before), now = 4fff260; 3 rounds alternated (look1/perf-ab2c3.txt; an earlier 4-round run at
+  0cd411e is look1/perf-ab2c2.txt), least of the rounds, ms:
+    Potato L1 8.35 -> 4.95   L0 5.40 -> 4.25   L2 4.30 -> 4.45   Lobby 3.95 -> 4.00   (all far under 16.7)
+    Low    L1 7.05 -> 7.40   L0 5.20 -> 5.60   L2 4.70 -> 6.80   Lobby 3.65 -> 4.30
+  The machine ran at load 4-6 on 4 CPUs (other engineers' jobs), so these swing both ways from run to run (perf-ab2c2:
+  Low L2 2.70 -> 4.35 there, Potato L1 5.60 -> 4.90). The deterministic measure (look1/tools/abl.mjs COUNT,
+  look1/count-2c3.txt): draw calls and triangles identical at all four places on both tiers (Potato 58/56/38/32 calls,
+  Low 125/113/78/57); GL calls per frame Potato 387/372/288/272 vs 391/370/285/271 before, Low 581/571/457/371 vs
+  582/565/452/369: exactly pass 2b's counts, so pass 2c added no GL work on Potato or Low (the +-6 are two more
+  useProgram, more matrix uploads, fewer uniform1f, from pass 2a/2b, analysed there). Nothing of pass 2c is built,
+  loaded or drawn on Low or Potato (dressing, lockers kit, outside, skyline, critters: budgets 0 there; film motes,
+  CAS, glint, SSR taps: film tiers' passes only). Download: Potato boots on 11.06 MB, as before.
+- Gameplay untouched: the lockers kit rides the locker's own nodes (no collision, no hiding data), the casings and
+  dressing are drawn only (no physics), the creature, its senses, the darkness and hiding data are not read or written.
+
+WHAT IS WEAK (honest)
+- The monster is still a thin pale figure in the corridor haze on Max (its body belongs to monster pass 3 in another
+  worktree). The far lamps now glow behind it (contrast 0.147 vs 0.124), but it is not yet the dark cut-out with a rim.
+- Back Lot: the dumpster's reflection is softer (17 jittered taps) but still shows a few horizontal bands; the far
+  towers in the rain haze read as pale boxes with roof clutter, not as a real skyline; the yard lamp's pool stays dim
+  because it is the game's own light (brightening it on Max only would make the monster easier to see there than on
+  Potato).
+- Lockers: the alcove's green light is the game's own lamp, kept for the same reason (rule 1): even, and not scary.
+- windows: the wall clock at the right edge still reads as a pale cog (game content, cut by the frame).
+- Doors themselves are still flat planes (only their casings are modelled); walls are block-painted slabs, no seams.
+- Motion is judged on stills only: streaks and swaying cables show as blur, not as the reference's flowing life.
+- A 1080p Max still takes 17-29 min in software here; every iteration was at 640x360 or 960x540.

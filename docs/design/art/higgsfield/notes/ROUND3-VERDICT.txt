@@ -1,0 +1,91 @@
+ROVLOC - ROUND 3 VERDICT (judge, fresh eyes), 18 Nov 2026
+Nothing generated, nothing spent. Checks I made are in higg/judge3/ (script higg/tools/j3_check.py):
+landmarks drawn back (*-lm.jpg), 3x3 tile previews (*-3x3.jpg), seam zooms, stains over 4 wall colours + alpha
+(stain-*-over.jpg), skyline wrap tiled twice (skyline-wrap-2x.jpg, skyline-wrap-seam.jpg), window and title zooms.
+
+SUMMARY: 8 of 22 files usable (score 6 or more, no rule broken). No lettering, watermark, logo, gore or real likeness
+in any file (the title's wall board and frames are blank). The backdrops and the cloth are fine. The MONSTER pictures,
+which are what the player asked about, do not yet match his favourite (B3): the face is a carved mask with
+small, wide-set eyes; the palm is ruined; the skin tile reads as paper; the title figure is a stiff puppet.
+The hand back is the best monster picture and is usable. The alternative hand (alt/hand-back-alt.png) is CLOSER to
+B3 (long knotted fingers) and also usable, but it has no landmarks yet.
+
+WHY THE HANDS LOOK WORSE (confirmed by looking): B3's hand is a photo of a real old hand (long fingers, dark knotted
+veins over the knuckles, grey-brown skin, low side light). The game's hand has none of that detail. hand-back.png
+supplies real skin, but its fingers are normal length and its veins are blue ink-like smudges; alt/hand-back-alt.png
+has B3's long knotted fingers.
+
+SCORES (0-10 for the file's purpose)
+face-front.png            5  NO   Mask, not skin. Size ratio 1897/731 = 2.6 (at eye level 2.85): about right. Eye holes
+                                  0.23 of face width each, 0.30 apart at the bridge (B3: about 0.39 each, nearly
+                                  touching). Streaks run as pencil lines all the way to the mouth (B3: thick, short,
+                                  about 1/4 of the face). Brow: 4-5 thick carved wavy ridges (B3: many fine wrinkles). Mouth at 0.71 of
+                                  the length (B3: about 0.9, near the point). Highlight on the crown, darker top band
+                                  (luminance 100 top vs 156 mid-face), a cut line beside each outer eye corner.
+                                  Symmetric (mirror diff 13), sharp, nothing cropped, black ground. Landmarks drawn back:
+                                  correct. A script could enlarge the eye holes, but the carved look stays.
+alt/face-front-alt.png    4  NO   The eye size and slant are closest to B3, but there are wide grey smudges instead of streaks,
+                                  no brow wrinkles, skin visibly mirrored down the centre, a smirk mouth.
+hand-back.png             6  YES  Real old hand, flat light, sharp, five fingers, nothing cropped except the wrist (OK).
+                                  Faults: fingers normal length (B3 much longer); knuckles are odd whorled spirals;
+                                  veins look like blue ink smudges; a lump between index and middle knuckles; warm
+                                  yellow. Landmarks: all within tolerance EXCEPT mcp_knuckles.index [625,965]: on the
+                                  finger axis it should be about [560,900] (off by ~90 px, outside the stated +-40).
+alt/hand-back-alt.png     6  YES  Closest to B3: long thin knotted fingers, real skin, tendons. Side light bakes in some
+                                  shading and the edges are darker; one crooked index joint (fits the character). Needs its own landmarks.
+                                  Recommend it as the main hand-back if the modeller can live with mild shading.
+hand-palm.png             3  NO   The ghost of the painted-out heart is plainly visible, plus a horizontal bar and smeared
+                                  fill patches on the palm and wrist. The skin looks like cream plaster. The palm lines are lost.
+skin-tile-seamless.png    4  NO   Seamless (wrap diff 3.5-3.8, no seam). But up close it reads as paper/marble with
+                                  white fibres, not skin; very low contrast; the 3x3 shows a clearly repeating vein cluster.
+skin-tile.png             3  NO   The source of the above. It does not tile (grid seams in 3x3), and has the same look.
+cloth-tile-seamless.png   6  YES  Even (quadrants 77.3-77.4), seamless (wrap 18 vs neighbour 18), real knit. Faults: too
+                                  fine and clean for a worn hood, flat green; faint repeating lint dots in a 3x3.
+cloth-tile.png            4  NO   Source only: wrap diff 27 vs neighbour 18, so it shows seams when tiled.
+window-night.jpg (+1k)    6  YES  Believable photo, level, no text/people. Faults: twig tips left at the top edge (x
+                                  40-620) from the branch paint-out; the kerb line jumps at x~1240 (patch); the moon is a
+                                  hazy smudge low in the trees; very dark.
+skyline.jpg (+1k)         6  YES  Believable hazy night city, level horizon, no text. It looks like a megacity (supertall twin
+                                  spires), not a small town. Two small bright rectangles on towers are not legible.
+skyline-wrap.jpg (+1k)    6  YES  Wraps: edge diff 0.8, no seam visible in the 2x tiling. The repeat shows clearly through
+                                  the spires; a faint ghost of the cross-fade at the left.
+sky.jpg (+1k)             7  YES  Real moonlit cloud, no ground or objects, believable. Not seamless; right half very dark.
+stain-water.png (+1k)     5  NO   The alpha border is clean (0 on all edges), with no rectangle. But the photo's MORTAR JOINT
+                                  LINES survive at low alpha as a grid across the whole decal (visible over pale walls),
+                                  and they will not line up with the game's blocks. The stain only fills the top third.
+                                  Quick script fix: zero the alpha below y = 0.40 and kill thin straight lines.
+stain-mould.png (+1k)     4  NO   Alpha clean, no rectangle edge. But the core is script-made cloud noise (looks fake),
+                                  and the 22 % top/left fade means the mould does NOT reach the corner it should grow
+                                  from (it floats). The yellow rim looks painted.
+title.jpg (+1k)           3  NO   No text (the wall board is blank). But the figure is a stiff CG puppet pasted on: a pot
+                                  belly, mitten-like hands, flat grey body, tiny face; not frightening, not B3. The
+                                  corridor itself is good.
+landmarks.json            6  YES  The face and palm points draw back correctly. Fix hand-back mcp index to about [560,900] and
+                                  add the alt hand. "width_at_eye_level_y620" is an x-pair, not a point (it is documented only by its key name).
+
+REDO PROMPTS (soul_cinematic 2k, text only, as in round 3)
+face-front: keep F2, and change the eye and streak sentences to: "Two HUGE black slanted almond-shaped eye holes
+  high on the face, outer corners sweeping up, each almost half the face width, nearly meeting over a thin
+  bridge between them, pure matte black. Directly under the inner corner of each eye hole a short thick dark
+  grey-brown streak, like a dried tear track, running a quarter of the way down the face. Many fine shallow horizontal
+  wrinkles across the brow like old skin, not carved ridges. The tiny slit mouth sits near the very point." Add:
+  "living skin with pores and creases, soft and slightly translucent, not wood, not ivory, not carved, no edges or
+  seams, no shine". Remove "faint thin ridge down the middle".
+hand-palm: H4 with "palmistry" removed, and: "Medical reference photograph of the inside of a very old man's open right
+  hand pressed flat against a sheet of glass, palm towards the lens ... clean bare skin, nothing drawn, written or
+  painted on the hand, no ink, no marks". If it still draws ink, crop or reject; never paint it out.
+skin-tile: S1 plus "deep criss-cross wrinkles like crepe paper, clearly visible at arm's length, strong but even
+  texture, grey-beige with faint mottling, like the skin of a 95-year-old's forearm photographed under a copy stand;
+  not paper, not marble, not leather, no fibres, no hairs".
+title: T2 with the figure sentence replaced by "a very tall, starved, hunched figure in a torn grey hood leans out
+  from behind the lockers into the light, one huge old veined human hand with long knotted fingers gripping the locker
+  edge, its long narrow pale face tapering to a point with two huge black slanted eye holes, dark streaks under the
+  eyes; real person in prosthetic makeup photographed on film, natural pose, not CG, not a puppet, not a doll"; keep
+  "no text, no signs, no posters".
+stain-water: A1 plus "smooth painted plaster wall with no blocks and no mortar lines; the damp stain and drips spread
+  over the upper two thirds". Or rebuild the alpha with no area below y = 0.40.
+stain-mould: B1 plus "black mould growing out of the very corner where the wall meets the ceiling, fine speckled spots
+  everywhere, densest in the corner, thinning to isolated dots"; in the alpha, do not fade the top/left edges that sit
+  on the corner.
+skin-tile / cloth-tile (non-seamless): sources only; no reshoot needed for cloth. If wanted: C1 plus "thick coarse
+  hand-knit wool, heavily pilled and worn, grey-green-brown".

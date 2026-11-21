@@ -1,0 +1,149 @@
+ROVLOC - ROUND 3, THE MONSTER'S SKIN (texture photographer), 18 Nov 2026
+Higgsfield soul_cinematic 2k, text only (no reference image: the round-2 notes show a reference remixes its scene and framing).
+Balance before: 4.21 (free plan). After: 3.13. Spent 9 pictures x 0.12 = 1.08 credits (the cap). Nothing failed, nothing refused,
+no nsfw / ip flags. Nothing bought, no use_unlim / use_free_gens, no video / 3D / audio / upscale.
+Raw downloads: higg/dl/R3-face, R3-hand, R3-skin, R3-cloth. Prompts: higg/prompts3/*.txt. Scripts: higg/tools/r3_*.py.
+Working/check images: higg/work3/ (grids, *-check.jpg with the landmarks drawn back, 2x2 tile previews).
+Sheet: send/art-monster-skin.jpg (the favourite B3, face, back, palm, the two tiles).
+
+WHY THE HANDS LOOKED WORSE THAN IN B3 (for the lead): B3's hand is a photograph of a real old hand (veins, knotted
+knuckles, plain nails); the game's hands are modelled and coloured flat. This round gives the modeller real photographed
+hands, back and palm, flat-lit and straight-on, to project and bake onto the hand mesh, with knuckle and fingertip points.
+
+GAME-READY FILES (higg/pack3/)
+1. face-front.png  784 x 1947   job 3abfe455-397c-4659-837a-538f3b6fd4ea (raw dl/R3-face/R3-face-v2.png)
+   For: projected from the front onto the head mesh, baked to the face UVs.
+   Good: B3's shape - small round cranium, very long narrow face tapering to a blunt point, slanted almond eye holes
+   (pure black, no pinpricks: the game adds its own), wavy horizontal brow wrinkles, two thin dark streaks from the inner
+   corners of the holes to the mouth corners, small slit mouth, faint centre ridge; perfectly symmetrical; black ground.
+   Weak: it reads as a carved ivory MASK more than skin (smooth, few pores, a shine on the crown); eye holes smaller than
+   B3's; streaks pencil-thin; the mouth sits about 70 % down the face, not near the point; light has a little falloff at
+   the silhouette edge. Overlay skin-tile detail (or a micro-wrinkle normal map) on top of the projection.
+   Alternate: alt/face-front-alt.png (job efe8e96e-b1ad-46e2-adaa-0cc8d0a18c76): holes at B3's size, more creased skin,
+   but wide grey smudges for streaks, almost no brow wrinkles, a skin pattern visibly mirrored down the centre line.
+2. hand-back.png  1348 x 2022   job ab60bad4-dbe6-4909-863e-9bf9fa0118c9 (raw dl/R3-hand/R3-hand-v1.png)
+   For: the back (dorsal side) of BOTH hands (mirror it for the left), projected from above.
+   Good: a real old right hand, flat even light, sharp, five fingers, thumb on the image left, swollen wrinkled knuckles,
+   blue-grey veins, plain worn nails, fine hairs on the wrist. The best picture of this round.
+   Weak: fingers only normal-long (B3's are longer: stretch the finger UVs/mesh); skin a little warmer and yellower than
+   B3; the wrist runs off the bottom edge.
+   Alternate: alt/hand-back-alt.png (job df2bf6fc-ccc1-4796-8398-41a1c52f1480, a LEFT hand back mirrored to a right):
+   longer, more knotted fingers, closer to B3, but side-lit (darker edges).
+3. hand-palm.png  1440 x 2000   job e4090528-76fa-464a-b499-c3226ddde490 (raw dl/R3-hand/R3-palm-v3.png)
+   For: the palm side of both hands.
+   Good: a true palm (the only one of three tries): right hand, thumb on the image right, fingerprint whorls, joint
+   creases, flat light, black ground.
+   Weak: the model drew ink on the palm (a heart, lines, scribbled pseudo-letters on the wrist); I painted it out by
+   script (tools/r3_pack.py step palm: dark/bluish strokes masked, coarse-to-fine fill + borrowed skin detail). A faint
+   ghost of the heart outline and a horizontal line remain visible up close, and the palm's own lines are lost in those
+   places; skin creamy yellow (tint it greyer to match the back); fingers normal-long, little knotting.
+   Do NOT use the raw download (it has the ink and the letters).
+4. skin-tile.png / skin-tile-seamless.png  2048 x 2048   job 529bac4b-71d2-4be5-909c-0d8a6ea59f04 (raw dl/R3-skin/R3-skin-v1.png)
+   For: arms, neck, legs, chest (tiled), and as a detail overlay on the face.
+   Good: no features, pale grey-beige, faint blue-grey veins, a few age spots. The raw had a light gradient (corner
+   160 -> centre 183 luminance); flattened by dividing by a very wide blur: corners and centre now 182-183.
+   Seamless: offset-and-blend; wrap difference 3.5 (normal neighbour difference 3.7); 2x2 preview shows no seams.
+   Weak: low contrast, reads a little like pale suede/leather (fine white scratch-like creases, faint pores); vein
+   clusters repeat visibly when tiled - tile it large and break it with the face/hand projections.
+5. cloth-tile.png / cloth-tile-seamless.png  2048 x 2048   job 13381f73-f8b8-487f-af21-78a93439ef3b (raw dl/R3-cloth/R3-cloth-v1.png)
+   For: the hood and the worn clothes (tint as needed).
+   Good: perfectly even, flat, real woven cloth with lint and a few loose fibres; seamless (wrap difference 17.9 vs
+   normal 17.0, no seam in the 2x2 preview).
+   Weak: the weave is fine and tight like cotton twill or a knit, not coarse wool; little pilling; greener than
+   grey-green; in the blend bands the weave is slightly softened (two weave phases mixed). Tile it large (few repeats).
+6. landmarks.json: pixel points in the files above. Face: crown, brow centre, both eye holes (centre, outer, inner, top,
+   bottom), streak tops and lower ends, mouth slit, chin tip, widest points (cranium, y 381) and the width at eye level.
+   Hands: wrist centre, fingertips, thumb tip, PIP/IP joints, MCP knuckles (back: approx +-40 px) / finger-base creases
+   (palm). Eye holes and silhouette measured by script (tools/r3_face_auto.py); the rest read off labelled grids and
+   checked by drawing them back (work3/face-front-check.jpg, hand-back-check.jpg, hand-palm-check.jpg).
+
+ALL 9 JOBS (ledger rows t1-t9)
+t1 e2ea6818-be82-456f-a8b0-37db8f3f76e2 face v1 WEAK (wide grey-alien head, topknot, lips)
+t2 3abfe455-397c-4659-837a-538f3b6fd4ea face v2 KEEP -> face-front.png
+t3 efe8e96e-b1ad-46e2-adaa-0cc8d0a18c76 face v3 WEAK -> alt/face-front-alt.png
+t4 ab60bad4-dbe6-4909-863e-9bf9fa0118c9 hand back KEEP -> hand-back.png
+t5 df2bf6fc-ccc1-4796-8398-41a1c52f1480 'palm' v1 FAIL as palm (drew a left-hand back) -> alt/hand-back-alt.png
+t6 0fb4e252-baed-4050-89d6-a0126c4397cf 'palm' v2 FAIL (back of a hand with smudges for nails)
+t7 e4090528-76fa-464a-b499-c3226ddde490 palm v3 KEEP after painting out ink -> hand-palm.png
+t8 529bac4b-71d2-4be5-909c-0d8a6ea59f04 skin KEEP -> skin-tile(-seamless).png
+t9 13381f73-f8b8-487f-af21-78a93439ef3b cloth KEEP -> cloth-tile(-seamless).png
+
+LESSONS (soul_cinematic, flat texture photos)
+- "9:16, straight-on studio photograph of a real living head ... three times as long as it is wide ... like a long narrow
+  upside-down teardrop" gives B3's shape; "creature ... head and neck" in 2:3 gives a wide grey-alien head.
+- "living skin, not carved, like the back of a very old person's hand" adds creases but loses the brow wrinkles and
+  turns thin streaks into smudges; and the model mirrors the texture across the centre line.
+- "palm up", "inside of the hand", "rests on its back" all still give the BACK of a hand. "Palmistry photograph ... palm
+  towards the lens" gives a real palm, but palmistry makes it draw ink and letters on it. Next time: "palmistry" plus
+  "clean bare skin, nothing drawn or written on the hand" (untested).
+- "copy-stand light / flatbed scan / texture-library sample" gives genuinely flat, even light.
+
+THE PROMPTS THAT WORKED (exact)
+--- F2 (face, 9:16)
+Straight-on studio photograph of a real living head, seen exactly from the front, perfectly symmetrical, upright and centred, the whole head from the crown to the tip of the face filling the tall frame, a little neck below, nothing cropped. Plain flat pure black background. Flat, even, shadowless light from the front like a museum copy photograph, the same brightness all over, no shadows, no rim light, no vignette, sharp everywhere, deep focus. The head is extremely long and narrow, three times as long as it is wide, no wider than a man's hand: a small narrow round cranium at the top, and below it a very long, very narrow face that tapers evenly down like a long narrow upside-down teardrop to a blunt point far below where a chin would be. A tiny closed slit of a mouth just above the point, no lips. Two big black slanted almond-shaped eye holes high on the face, outer corners up, each as long as one third of the face width, close to the edges of the face, empty and matte black, no eyeballs, no light. Two thin dark grey-brown lines running straight down the long face from the lower corner of each eye hole to halfway to the point. Deep horizontal wrinkles across the brow. A faint thin ridge down the middle of the face, no nose, no nostrils. Old pale grey-beige human skin, thin and dry, pores, fine creases, faint blotches and age spots, leathery. Thin flat dark hair only at the very back of the cranium, nothing on top. Expressionless and still. Real skin, 100mm lens, f/16, no retouching. Not a grey alien, not a big bald dome, not a mask, not a puppet, not a beak, not a bird. No text, no letters, no watermark, no hat, no hair bun, no blood.
+--- H1 (hand back, 3:4)
+Studio photograph taken from straight above: the back of one real old man's right hand lying flat on plain matte pure black velvet, palm down, fingers straight and slightly spread, the thumb relaxed out to the left, the wrist at the bottom edge of the frame and the fingertips near the top, the whole hand inside the frame, nothing cropped off. Flat, even, shadowless copy-stand light, the same brightness all over the hand, no shadows, no highlights, no rim light, no vignette, sharp everywhere from wrist to fingertips, deep focus. It is a real human hand, but big and far too long: very long thin fingers with thick swollen knotted knuckles, the fingers about as long as the back of the hand; thin, dry, wrinkled pale grey-beige skin, deeply creased over every knuckle; raised blue-grey veins and ropy tendons standing out on the back of the hand and the wrist; age spots and faint blotches; a few fine dark hairs; short plain worn human fingernails, slightly yellowed, trimmed. Exactly five fingers, one normal thumb. 100mm lens, f/16, real skin with pores and fine lines, no retouching, natural colour. No claws, no pointed nails, no bones showing, not CG, not a glove, not a prop, no jewellery, no sleeve. No text, no watermark, no blood, no wounds.
+--- H4 (palm, 3:4)
+Palmistry photograph: a very old man's open right hand held up flat facing the camera, palm towards the lens, seen straight on, so we see the palm with its deep heart line, head line and life line, the fleshy mound at the base of the thumb, the creases across the inside of every finger joint, the fingerprint whorls on the fingertips and the creased inside of the wrist. Fingers straight and slightly spread, the wrist at the bottom edge of the frame, the fingertips near the top, the whole hand inside the frame, nothing cropped off. Plain flat pure black background. Flat, even, shadowless studio light, the same brightness all over, no shadows, no rim light, no vignette, sharp everywhere, deep focus. A real human hand, but big and long: long thin fingers with swollen knotted joints; thin, dry, wrinkled pale grey-beige old skin covered in fine criss-cross creases; faint blue veins at the inner wrist. Exactly five fingers, one thumb. 100mm lens, f/16, real skin, no retouching, natural colour. The fingernails are on the far side and cannot be seen. No claws, not CG, no jewellery, no sleeve, no face, no body. No text, no ink, no drawing on the hand, no watermark, no blood, no wounds.
+--- S1 (skin, 1:1)
+Flat macro texture photograph of a patch of very old, thin, pale grey-beige human skin filling the whole square frame from edge to edge, shot straight-on, like a flatbed scan or a texture-library sample. Flat, even, shadowless light, exactly the same brightness and colour in every corner and at the centre, no gradient, no vignette, no highlights, no shine, sharp everywhere, deep focus. The skin is dry and matte, with fine pores everywhere, a fine criss-cross web of shallow creases running in all directions, a few faint blue-grey veins under the surface, faint pale blotches and a few small light-brown age spots spread evenly. Only skin: no edges, no background, no body shape, no folds, no hair, no nipple, no navel, no scar, no mole in the centre, no tattoo. Real photograph, 100mm macro lens, f/16, no retouching, natural colour. No text, no letters, no watermark, no blood, no wounds.
+--- C1 (cloth, 1:1)
+Flat texture photograph of coarse, worn, grey-green woven wool cloth laid perfectly flat, filling the whole square frame from edge to edge, shot straight-on from above like a flatbed scan or a texture-library sample. Flat, even, shadowless light, exactly the same brightness and colour in every corner and at the centre, no gradient, no vignette, no highlights, sharp everywhere, deep focus. A visible plain coarse weave of thick muted grey-green woollen threads, a little uneven, with small bobbles of pilling, worn thin patches, fuzz, and a few pulled and loose threads, spread evenly over the whole cloth. No folds, no creases, no wrinkles, no seams, no edges of the cloth, no holes, no stains in the centre, no pattern, no stripes, no labels. Real photograph, 100mm macro lens, f/16, no retouching, natural colour. No text, no letters, no logo, no watermark.
+
+SECOND PASS (artist, after the judge's ROUND3-VERDICT.txt), 18 Nov 2026
+Spent 4 pictures x 0.12 = 0.48 credits (the cap). Balance 2.05 -> 1.57 (mcp balance, reconciled). soul_cinematic 2k, text only.
+Nothing failed or refused. On p1 only use_unlim:false was passed by mistake (= credits, the same as omitting it).
+Prompts: higg/prompts3p2/F2b.txt, F2c.txt, H4b.txt, T3.txt. Scripts: tools/p2_pack.py, p2_holes.py, p2_landmarks.py,
+p2_stains.py, p2_sheet.py, p2_wsheet.py. Checks: higg/work3p2/ (*-lm.jpg landmark draw-backs, skin 3x3, stain checks).
+Replaced round-3 copies: higg/work3p2/r3-replaced/ (skin tiles, sheet) and work3p2/stain-water-r3.png; the old face-front,
+face-front-alt and hand-palm were overwritten - rebuild them from the raw downloads with tools/r3_pack.py face|palm if ever needed.
+
+JOBS
+p1 7edb613b-a8d8-405e-9c75-4043c29ea831  face, judge's F2 redo (F2b)        WEAK - not used: a carved mask with cut edges and side grooves, too wide
+p2 b95ce3bf-1777-4d7c-a1c5-23ac7d37dfe5  palm, H4 without 'palmistry' (H4b) KEEP -> hand-palm.png
+p3 6988465c-1664-4e7d-8d52-caeb1be96983  face in a hood, 'living flesh' (F2c) KEEP -> face-front.png + alt/face-front-alt.png
+p4 d4877399-8fec-4e4f-bd99-8db602a7df7e  title redo (T3)                   FAIL - not used: floating sheet-ghost with a beak and glowing eyes
+
+WHAT CHANGED IN pack3/
+- face-front.png  736 x 2023  NEW (p3). The face sits in a worn grey hood like B3. Matte skin, no shine, many fine brow
+  wrinkles (not carved ridges), B3's HUGE slanted eye holes nearly meeting over a thin bridge (each about 0.46 of the face
+  width, 0.08 apart), SHORT THICK tear streaks under the inner corners (0.16 of the face length), slit mouth near the point
+  (0.87 of the length). The raw was too wide (length/width 1.9), so the file is squeezed to 0.75 width -> about 2.6 like B3.
+  Faults: the crown is under the hood (only the brow shows); the hole edges are crisp like cut paper (B3's are too); a faint
+  lip at the mouth slit; thin faint lines run on from the streaks toward the mouth. It still reads a little mask-like at the
+  hole edges; overlay the skin tile / a micro-wrinkle normal map.
+- alt/face-front-alt.png  982 x 2023  REPLACED: the same p3 picture unsqueezed (the old t3 alternate is gone).
+- hand-palm.png  1536 x 2021  NEW (p2). A true right palm, thumb on the image right, long thin fingers, deep heart/head/life
+  lines, joint creases, fingerprint whorls, crepey wrist, grey-beige skin that matches the backs, flat light, black ground.
+  NO ink and nothing painted out. Faults: grey grime on the fingertip pads (reads as dirt); a faint blue vein at the inner
+  wrist; the joints are only a little knotted.
+- hand-back.png  unchanged (judge: usable). Landmark mcp_knuckles.index fixed to [560, 900].
+- alt/hand-back-alt.png  unchanged (judge: usable, closest to B3). Landmarks ADDED (fingertips, dip, pip, mcp, thumb, wrist).
+  RECOMMENDED as the main hand-back: long thin fingers with knotted joints, real tendons and veins (mild side shading).
+- landmarks.json  rewritten for face-front (new picture: eye holes by script, streaks traced, the rest from grids),
+  hand-palm (new), hand-back (index mcp), alt/hand-back-alt (new); the old 'width_at_eye_level' key is now
+  face_edge_at_eye_level_x_pair, two points. All drawn back: work3p2/face-front-lm.jpg, hand-palm-lm.jpg, hand-back-lm.jpg,
+  alt_hand-back-alt-lm.jpg - every point on its feature.
+- skin-tile-seamless.png  MENDED by script (no new picture: the credits went to the face and the palm). The fine creases
+  were LIGHT fibres (paper look); their polarity is flipped to DARK creases, strengthened, a second coarser crease layer
+  added (the same detail at twice the size), the mid-scale vein cluster damped to 0.55 so the repeat shows less, then
+  made seamless again (wrap 9.8 vs neighbour 9.2). Contrast std 13 (was about 6). It now reads as fine-grained old
+  skin/leather rather than paper; the 3x3 (work3p2/skin-tile-seamless-3x3.jpg) shows only a faint repeat. Still not
+  the deep crepe the judge asked for: if more credits come, reshoot with the judge's S1 + crepe sentence.
+- skin-tile.png and cloth-tile.png (the non-seamless sources the judge marked 'source only') MOVED to
+  pack3/src/skin-tile-source.png and pack3/src/cloth-tile-source.png so only game-ready tiles stay at the top level.
+  Use cloth-tile-seamless.png (unchanged, judged usable).
+- Sheet send/art-monster-skin.jpg rebuilt: B3, the new face, both hand backs, the new palm, the two tiles.
+
+WHY THE HANDS LOOKED WORSE (short, for the lead): the game hand had no real skin on it; B3's is a photo of a long, old,
+knotted, veined hand. The pack now has three real photographed hand sides to project: hand-back (or better the longer,
+knottier alt) and a clean palm, with landmarks to stretch the mesh fingers to B3's length.
+
+LESSONS (second pass)
+- 'museum copy photograph' of a head on black gives a carved MASK (it photographs an object). 'Close-up front portrait of
+  a living creature ... head inside a worn grey hood ... real living flesh, the skin running smoothly into the hood' gives
+  matte skin and B3's eyes and streaks, but a wider face (squeeze it).
+- For a palm: 'medical reference photograph ... pressed flat against a sheet of clear glass, palm towards the lens ...
+  clean bare skin, nothing drawn, written or painted' gives a true palm with NO ink. Do not use 'palmistry'.
+- A title figure 'leaning out from behind the lockers' + 'prosthetic makeup' gave a floating sheet ghost with a beak and
+  glowing eyes: the model does not do this creature small in a dark scene. Put the game's own model on an empty plate.

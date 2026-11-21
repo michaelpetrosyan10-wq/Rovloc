@@ -518,3 +518,72 @@ Decisions (lead):
   names), ahead of the engine-built opening v3 and the talking monster.
 - THE BETA BAR, in his words: "perfect no errors exactly as beautiful as I want": nothing ships until its
   pictures stand up to fresh eyes and the full test run is clean.
+
+### Nov 18 ~18:25 UTC, the player, with the monster model sheet (verbatim)
+"Whys the hand look worse  in these photos? Make sure your using higgsfield for all the graphics"
+Decisions (lead):
+- Higgsfield pictures become ingredients of the game itself, not only design references: the monster's face and old
+  hands (projection sources), skin and cloth close-ups, night backdrops, a menu picture (art pack 3, kept in
+  docs/design/art/higgsfield/pack3). 22 pictures, 2.64 credits; 1.57 credits left; nothing bought.
+
+### Nov 18 ~18:45 UTC, the player (verbatim)
+"Eta for beta and what u have to finish before then"
+
+## 7. THE NEW DIRECTION (Nov 19 to 20): this replaces the game flow of sections 3 to 6 wherever they differ
+
+### The player's words (verbatim, three messages, in order)
+"Okay so ive been looking at some inspo and i wanna sorta change the game. Im looking at stuff like silent hill 2
+remake, dead space remake, alien: isolation, outlast 2, amnesia: the bunker, and other games. Those are all horror
+games but they all have some sort of survival aspect in them its not always just a run and chase. I wanna make it like
+this so its like a longer playthrough more survival and horror mixed together. So keep like the school thing and the
+city thing, and make there be much more mechanics for all the puzzles i want the puzzles to actually be well thought
+out and complex use reference from the games i stated to make ideas. And lets actually make the story line a little
+bit better. BASICALLY the monster u can keep the look comes from an alien and while you and your frieend are leaving
+school you see the mothership hovering over your city. One small ship comes and lands and someone crawls out, so you
+sneakily go hide back into the school and go into the basement. Then they go and kill everyone ect, and thhen you go
+solve theh puzzles and try to escape while having the monster walking around the tunnels. Each floor will have a
+different type of monster so you will ahve to hide and mover in different ways. Then once you escape, ytou parachut
+eoff into the city, but instatnly get spotted by one of the aliens, so you have to go toa ship knock out an alien take
+their gun and ship , then you fly avoiding everyone following you, and you make your way onto the mothership. The goal
+here is to self destruct and then launch yourself in an escape pod. make the playthrough similar to the games i
+stated, so for this the graphcis have to be crazy. Also lets FULLY SCRAP the web version. I want you to use higgsfield
+and unreal engine to make this a beast of a game, make it an insane and amazing game with crazy graphcis now u have
+unreal editor. REMEBER if you are tricky on anything ask me about it dont make guesses."
+
+"If u can recover work you have already done and implement it into this new version do so, but i want this version to
+have the most insane graphics like the graphics to be as realistic as gta six, an insane, sad, story line, amazing
+audio with the right tracks and audio for everything, eerie sort of game yk"
+
+"Also for like all the puzzles ideas, Easter eggs, little small but cool important mechanics, reference the games I
+stated before. For the little details liek the stuff on the floor ect, and before starting everything ask me questions
+so we can map out the whole game. It needs to be quality graphics amazing literally gta 6 graphics, best sounds ect. I
+already said"
+
+### What this changes (lead, Nov 21)
+- THE WEB VERSION IS SCRAPPED as the game going forward: no further web betas. The unfinished web work of Nov 16 to 18
+  (graphics passes, monster model, monster behaviour v3, stage maps, the people spike, the video player) is kept in
+  archive/wip-2026-11 as restorable bundles; its notes are in docs/design/monster, docs/design/look,
+  docs/design/voices and docs/design/art. Nothing was deleted and the live website was not touched: taking it down is
+  the player's decision.
+- THE ENGINE IS UNREAL ENGINE 5, with Higgsfield for pictures and other generated media. "Now u have unreal editor":
+  Higgsfield offers Unreal Editor 5.9 on a rented GPU machine (71 credits an hour for the cheapest suitable card,
+  98 for the faster one, billed by the second); the account holds 1.57 credits, and renting needs the player's
+  explicit yes on the hourly price and his own Epic Games account. Nothing is rented or bought without his word.
+- THE GAME: survival horror in the manner of the five named games (longer, with survival systems, real puzzles, small
+  mechanics and details), not a run-and-chase. THE STORY: an alien mothership over the city; a small ship lands and
+  something crawls out as the hero and a friend leave school; they hide in the basement; the school falls; the hero
+  works upward through floors that each hold a DIFFERENT kind of creature (different rules for hiding and moving);
+  escape by parachute into the city; spotted; knock out an alien, take its gun and its ship; fly through pursuit to
+  the mothership; start the self-destruct; leave in an escape pod. The monster's look (the favourite picture) stays.
+  The story is to be sad and far better written; the audio and music the best possible; the graphics as real as can
+  be made.
+- HIS STANDING ORDER FOR THIS VERSION: ask before guessing ("if you are tricky on anything ask me about it dont make
+  guesses"; "before starting everything ask me questions so we can map out the whole game"). Nothing is built until
+  the game is mapped out with him.
+- CARRIED OVER where it fits: the monster's design and model pipeline, the creature-presence design and its numbers,
+  the school's layout as a blockout, the recorded CC0 sound library, the chosen voices and the voice pipeline, the
+  Higgsfield design pictures, the research (monster logic, sound). NOT carried over: the browser renderer, the
+  Chromebook budget and graphics tiers, the Supabase co-op layer.
+- OPEN, TO BE ASKED: what it is played on (an Unreal game does not run on a school Chromebook), where Unreal runs
+  while it is built (rented machine or his own PC), solo or co-op, what becomes of the website and the Roblox
+  version, and then the whole map of the game.

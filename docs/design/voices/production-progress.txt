@@ -1,0 +1,33 @@
+ROUND 4 PROGRESS (voice engineer, production 2)          started 2026-11-18 03:10 UTC
+V=/tmp/claude-0/-home-user-Rovloc/44e475d9-c8d0-52a2-84e0-3ac758fed249/scratchpad/voices
+HEAVY=/tmp/claude-0/-home-user-Rovloc/44e475d9-c8d0-52a2-84e0-3ac758fed249/scratchpad/tools/run-heavy
+Python: cd /tmp; OMP_NUM_THREADS=2 $V/venv/bin/python -I -W ignore $V/tools4/<x>.py ...  (long: tools2/loop.sh LOG cmd)
+Player chose: "Do voice 3 for all and do the whispering one for the monster."
+ -> Danny 3 = cbfull + out2/refs/danny2_g2.wav ; Kayla 3 = cbfull + kayla2_g2 ; Marcus 2 = cbfull + marcus1_g2
+ -> monster = Monster 5 (tools2/monster2.py close(): LPC whisper of Danny's calm take + synthetic breath, dry)
+    base = Danny 3's calm take (cbfull exag 0.25, ref danny2_g2) since Danny is now Danny 3.
+Outputs: prod2/ ; work: out4/ ; tools: tools4/
+DONE
+- dirs prod2, out4, tools4
+NEXT
+- speed test; teach2 ref; plan lists (kids, monster, names); render; whisper; ASR; pick; finish; manifest; README
+- 03:25 machine load ~8: takes 25-37 s each. Monster split: out4/mon/lines_mon.json = seed 1 only (in chain1);
+  seed 2 in out4/mon/lines_mon_s2.json, to render AFTER chain1 (names first). Names list ordered "Name." then "Name?".
+- tools written: tools4/common4.py (strict word check norm4, name sound keys, room tone bed, write_pair),
+  tools4/whisper4.py (Monster 5 builder), tools4/asr4.py (recogniser, time-boxed), tools4/kids4.py (items|pick),
+  tools4/mon4.py (cands|pick|retake|finals), tools4/bank4.py (cands|pick|retake|finals)
+- 03:22 chain1 stopped (it was in the kids); chain2 runs EVERYTHING in order, resumable:
+    nohup tools4/chain2.sh > out4/chain2.log 2>&1 &      (re-run the same to resume)
+  kids render -> kids ASR (tools2/analyze.py) -> kids4 pick -> prod2/kids ; extra4 plan (teach47 x3, socute x2)
+  -> render nv, extra, mon s1 -> nv pick -> extra cands/ASR/pick -> mon cands/ASR -> retakes s3,s4 -> pick
+  -> names d, names q -> names cands/ASR -> retakes s2,s3 -> pick.   NOT in chain2: mon s2 (out4/mon/lines_mon_s2.json),
+  kids retakes if kids pick shows problems, finals (mon4 finals, bank4 finals), joins4, final ASR, manifest4, README.
+- 03:2x MACHINE REBOOTED (chain2 dead at kids 22/76). Restarted.
+- 03:3x names now rendered 4 to a call: tools4/namebatch4.py (one Chatterbox call "A. B. C. D." / "A? B? C? D?", same
+  voice/settings/seed, cut at its pauses; ~6.5-10 s a name instead of ~18 s; groups that do not split -> batch_unsplit.json
+  -> tools4/namefall4.py -> one by one with render2). Test out4/test/nb: 8/8 names heard exactly after the whisper.
+- chain2 REPLACED by chain3 (same steps up to the monster pick, names via namebatch4, then monster seed 2 + re-pick):
+    nohup tools4/chain3.sh >> out4/chain3.log 2>&1 &     (re-run the same to resume; logs per dir in out4/*/)
+  AFTER chain3: check out4/kids/pick.log (kids retakes if problems), out4/nv/pick.log, out4/extra/pick.log,
+  out4/mon/pick.log, out4/names/pick.log; then mon4 finals -> prod2/monster, bank4 finals -> prod2/names, joins4,
+  final ASR on finals, manifest4, README.

@@ -1,0 +1,309 @@
+THE MONSTER'S NEW BODY (worktree monbody, branch monbody)  --  notes for the lead
+(SECOND PASS after MODEL-VERDICT.txt and THIRD PASS after the lead's look: see those sections at the end; the later one overrides what it contradicts above)
+=====================================================================================
+
+WHAT WAS BUILT
+--------------
+One skinned character for the website, made entirely by scripts in tools/art/creature/ (README.md there), in the
+rig's own rest pose and measures. Its skeleton IS the rig: 41 bones named and placed exactly as CreatureRigBuilder's
+parts (HumanoidRootPart, LowerTorso, UpperTorso, Head, Jaw, Hair1_1..Hair7_2, Left/Right UpperArm, LowerArm, Hand,
+Index, Middle, Ring, Pinky, Thumb, UpperLeg, LowerLeg, Foot), pivots and rest frames read from web/build/world.json
+(the rig's export). The animator (profile.js on animator.js) that drives the block rig drives this mesh unchanged:
+finger curls move the finger bones, the head turns on the Neck joint at the skull's base, the Jaw moves the face's
+point below the slit and parts it a little. Nothing gameplay reads was touched (height 11 / 9 hunched, hitboxes, eye
+heights, reach, speeds, senses, the Luau rig, its config and tests): the website only DRAWS differently.
+
+Pipeline (Blender as a Python module, the scratchpad's bpyenv; tools/art/creature/run.sh runs each step):
+  body.py      MakeHuman base mesh (MPFB2, CC0) with macros for an old, very thin man and its game_engine skin
+               weights; every MakeHuman bone mapped onto a segment of the rig at rest and the mesh warped onto it by
+               linear blend skinning (stretched along the rig's segments, thinned across): arms to below the knees,
+               long legs, bare feet; fingers 0.7 of the rig's 1.3-stud finger length with the knuckles spread (a big
+               old hand, about 1.45 studs wrist to fingertip, longer than the head); head and neck cut away.
+  head.py      the head and neck as an implicit surface in the rig's face frame, lofted from outline / profile /
+               depth / cross-section tables read off the favourite picture (B3): the long narrow face tapering to a
+               point far below a chin (0.38 wide at the eye holes, about 2.7 x as long as wide), the almond eye holes
+               slanted and bored in, the furrowed brow, the faint ridge where a nose would be with hollows beside it,
+               the small slit near the point, a small skull narrowing behind, small flat ears low and far back, the
+               long thin neck swept up into the skull from below and behind; marching cubes (PyMCubes), smoothed.
+  assemble.py  + cloth.py: the remains of a grey hoodie (split seams, sleeves torn at the elbows, hem above the ribs,
+               collar, drawstrings, the torn hood hanging behind the neck, never on the head) and faded jeans to a
+               frayed mid-shin, burst at the left thigh, as separate skinned shells; the thin matted hair cap and
+               strands; skin weights; regions; one UV atlas (face 2.6x texel density, hands 1.7x). The MASTER: every
+               piece subdivided twice and displaced by the modelled relief (ribs, collarbones, spine knobs, hip
+               points, forearm tendons, knuckles and their creases, nails, veins, brow furrows, cloth folds), then
+               decimated to the Max budget; High, Medium, Low and Potato are decimated from that same master (same
+               silhouette, same atlas).
+  texture.py   the maps from the master, procedural and ours: albedo (Cycles-baked ambient occlusion in it; alpha =
+               how thin the flesh is, from a Cycles inside bake, for light bleeding through ears and fingers), normal
+               + roughness (vs the smoothed normals, the lower levels) and normalFine (vs the master's own normals,
+               Max). Skin: grey-ivory, mottled, age spots, veins as meandering lines of even width (most on hands,
+               forearms, neck), pores and fine creases; the face old ivory gone leathery (fine crackle, hollows
+               greyer), the fine wavy brow furrows, the crease between the brows, the seam down the ridge, the two dark
+               dry streaks from the eye holes, the glossy black eye holes, the slit; hair strands; cotton knit, denim
+               twill, dirt, fray.
+  export.py    web/art/creature: creature-{max,high,medium,low,potato}.bin.gz (packed skinned geometry), the maps as
+               webp at 4096/2048/1024/512 (normalFine 4096), creature.json (bones, levels, maps, face features,
+               fingertip smoke anchors). --glb <dir> also writes glTF binaries on an armature of the rig's parts.
+  turntable.py, preview.py, sheet.py, shots.sh   the proof pictures (below).
+Full rebuild: tools/art/creature/fetch.sh once, then tools/art/creature/build.sh (body -> head -> assemble ->
+texture -> export). On this machine: assemble ~2.5 min, head ~3 min, texture (4096) ~13-15 min.
+
+SOURCES AND LICENCES (tools/art/creature/sources.json, hash-pinned, fetched by fetch.sh)
+  - MakeHuman base mesh hm08, its macro targets and game_engine weights, via MPFB2 commit 9de0707f (Joel Palmius and
+    the MakeHuman community): assets CC0 1.0; the MPFB code (GPL) is only run as a tool, never shipped.
+  - Tools only, never shipped: bpy 5.3 (GPL), numpy, pillow, PyMCubes 0.1.6 (BSD-3), scipy (BSD-3).
+  - Everything else (head, neck, hair, clothes, every texture, the levels of detail) is generated by our scripts.
+  - The design pictures (B3, the sheets) were only looked at; nothing of them is in any asset.
+
+LEVELS OF DETAIL AND MAPS PER TIER (web/src/creature/flesh.js FleshTiers; same silhouette on every tier)
+  tier    level    triangles   file (gz)   maps    shading
+  Max     max        424,799    7.04 MB    4096 (+ normalFine 4096)  rich: the master itself, every wrinkle, tendon,
+                                                    knuckle, rib, nail and fold modelled; its own micro-relief map
+  High    high        59,996    1.05 MB    2048    rich
+  Medium  medium      19,999    0.37 MB    1024    mapped (normal map, plain lighting)
+  Low     low          7,996    0.16 MB     512    plain lit (no normal map)
+  Potato  potato       3,996    0.09 MB     512    plain lit (no normal map)
+  Map files: albedo 3.06 / 1.21 / 0.42 / 0.14 MB, normal 6.60 / 1.56 / 0.39 / 0.10 MB (4096/2048/1024/512),
+  normalFine 6.66 MB. "rich" (Max, High): skin that lets light through where thin (ears, fingers, the face's edges)
+  in warm ivory (never red), a softened terminator, a second tight sheen broken up by the roughness map (pores, an
+  uneven sheen), eye holes followed into their depth with the pinprick far inside on the bore's back wall and a wet
+  glint only on their rims (the bore itself glassy smooth), cloth fuzz at grazing angles, a strand highlight on the
+  hair. Low and Potato: the baked albedo under plain light, the pinprick on the hole's floor.
+  The lite single file embeds only the potato level and the 512 maps.
+
+POTATO'S FRAME COST (the check.mjs method: 4x CPU throttle, 320x180 canvas so the software rasteriser cannot stall
+it, main-thread time per frame, mean of 150 frames, the Creature stalking toward the camera within 20 studs;
+web/tools/creature-shot.mjs --perf, run through run-heavy timing)
+  before (block body, --no-creature): Potato frame 10.0 ms, rig 3.12 ms/frame (median 3.0), 74 draw calls
+  after  (skinned body, potato level): Potato frame  8.6 ms, rig 2.45 ms/frame (median 2.3), 73 draw calls
+  (Low 13.5 -> 11.9 ms, Medium 10.6 -> 9.7 ms.) The skinning runs in the vertex shader from the node table the block
+  rig already fed, so the main thread does no more work; the difference is within run-to-run noise on this shared
+  machine. Potato stays far inside 16.7 ms (60 fps).
+
+SITE SIZE (node tools/build.mjs --site / --lite, with and without --no-creature)
+  site (what Vercel serves): 68.25 MB -> 95.77 MB (+27.5 MB: every level and map size; a page downloads only its
+  tier's: Potato 0.09 MB of mesh + 0.14 MB albedo (plain shading fetches no normal map), Max 7.04 + 3.06 + 6.66 =
+  16.8 MB (mesh, albedo, normalFine)). The 4096 'normal' map (6.6 MB) is shipped but no tier samples it (Max takes
+  normalFine at 4096, High the 2048 normal): dropping it from export.py would trim the site by 6.6 MB.
+  lite single file: 19.23 MB -> 19.65 MB (+0.42 MB)
+
+CHECKS (each through run-heavy)
+  creature-collision: pass (exit 0; it rewrites src/creature/passthroughData.js identically)
+  creature-sim: all passed (determinism 464/464, never faster than 19 outside Scripted (max 18.5), 42 teleports 0 bad,
+    25 catches 0 through a wall, no NaN)
+  story-test --only solo: 36 / 36
+  game-smoke: all checks passed (exit 0)
+  Not run here: the GLB export for Roblox (export.py --glb) was not exercised in this session.
+
+PROOF PICTURES (tools/art/creature/shots.sh; the real game's dark Level 1 corridor with the torch)
+  /tmp/claude-0/-home-user-Rovloc/44e475d9-c8d0-52a2-84e0-3ac758fed249/scratchpad/send/monster-model-1.jpg
+      the favourite beside (b) the lean and (f) the catch's close-up, Max
+  /tmp/claude-0/-home-user-Rovloc/44e475d9-c8d0-52a2-84e0-3ac758fed249/scratchpad/send/monster-model-2.jpg
+      every stage at Max and Potato: (a) far, (b) lean, (c) hunch, (d) vent crawl, (e) reach, (f) catch
+  /tmp/claude-0/-home-user-Rovloc/44e475d9-c8d0-52a2-84e0-3ac758fed249/scratchpad/send/monster-model-3.jpg
+      turntable on plain grey (front, three-quarter, side, back; Cycles, the Max master), the head close, the hand,
+      beside the favourite
+  The single frames are in scratchpad/monbody/proof2/{max,potato,turn}.
+
+WHAT IS WEAK, PICTURE BY PICTURE (honest)
+  (a) far: reads as a tall pale thin figure at the end of the corridor; at that distance the face is a pale wedge and
+      the hoodie / jeans read as blocks of grey and blue. Fine for its job, nothing to admire.
+  (b) lean: the strongest pose we have that is like the favourite, but it is the Lunge's bow (the catch's pose
+      without its camera), not the favourite's own moment: in the picture he hangs head-down out of the dark from
+      above with ONE hand on the lockers; the animator has no "lean round a door frame, hand on the frame" pose, and
+      ReachIn turns the head to the hand's target, so a hand on the frame turned the face away. The corridor stays
+      fairly lit round him (the stage's lit probe point), so he does not come "out of the dark" as in the picture.
+      His bare pale chest under the hoodie's high hem shows as a pale mass behind the head. The arm veins read a
+      little like painted squiggles at this distance.
+  (c) hunch and (e) reach: small in frame (the shot tool's standard camera); the body reads, the detail does not.
+  (d) vent crawl: the limbs splay up like a spider's; that is the rig's pose; the skin of the long arms is smooth
+      tubes between the joints at this distance.
+  (f) catch: the closest to the favourite: the face, the eye holes with the pinprick deep in each, the furrows, the
+      streaks, the seam, the point. Weaker than the picture: the skin is cleaner and more evenly lit (no leathery
+      sheen breaking up in the torch), the furrows are more regular than the picture's, and the face reads a shade
+      too white and plastic in the torch's full light.
+  Turntable: the neck is very long and thick as the rig dictates (the favourite never shows it); the head is small on
+      it; the jeans read clean. Hands are the best part of the body (knuckles, nails, veins, age spots).
+  Potato: same silhouette and pose in every stage; flat-lit, the face's detail only in the albedo, the hands paddle-
+      like at 4k triangles.
+
+EVERY PLACE THAT STILL DRAWS THE OLD MASK (web/src/creature/mask.js)
+  1. game/story/actors.js: the opening's small mask crawler (Crawler: the mask's sculpt on eight legs, maskSpec +
+     sculptGrid) - kept as it was.
+  2. creature/look.js: the block body's mask sculpt (sculptFor / buildMaskSculpt) - drawn only while the skinned body
+     has not loaded, on a page built without it (--no-creature, the "before" of a measurement), or if its load fails
+     (it warns and keeps the block body).
+  3. creature/view.js imports maskFx (the catch's effect timings: race, tear, strands, dilate) - not a drawing of the
+     mask: those values now drive the marks on the NEW face (the creases, the slit tearing into the maw, the right
+     pinprick dilating).
+  The jumpscare, the reveal's phantom (upper body only), the dissolve, the smoke (its fingertip anchors moved to the
+  body's own fingertips), the rim and the shards (breaking from round the new slit) all use the skinned body.
+
+WHAT THE ROBLOX PORT WILL NEED
+  - export.py --glb <dir>: each level as a glTF binary on an armature whose bones are the rig's parts (bone heads at
+    the Motor6D pivots, the rig's axes), weights up to four bones per vertex. Import as a MeshPart with Bones named
+    after the rig's parts, posed from the same Motor6D transforms each frame (Bone.Transform = the Motor6D's
+    Transform), or as an R15-style skinned mesh driven by the existing Motor6Ds.
+  - Roblox's mesh import caps a mesh at about 20k triangles and SurfaceAppearance maps at 1024: the medium (20k)
+    level is the most Roblox can take, low/potato for weaker devices; ColorMap / NormalMap / RoughnessMap at 1024
+    from the same atlas (our normal map's blue channel is roughness: split it into the two maps; the alpha in our albedo is thinness, not opacity: strip it or route it to a separate
+    map; Roblox would read it as transparency).
+  - The eye holes' pinpricks and depth, the light through thin flesh, the catch's marks and the dissolve are shader
+    work on the website; on Roblox: a small Neon part or Attachment light in each eye hole, a decal swap for the
+    catch's creases, and the per-part dissolve already described in docs/MONSTER-LOOK.md.
+  - Keep the hitboxes and the Luau rig as they are: the mesh rides them, it never replaces them.
+
+
+SECOND PASS (after the judge's verdict 5 / 4 / 2; commits 4ed6094, da598e9, b59cc2f, 288baf9, de8451f)
+=====================================================================================================
+Defects, in the judge's order:
+ 1. Giraffe neck: FIXED. The torn hood is UP (head.py build_hood -> hood.npz): its cloth slumps over a hunched back (a
+    hump from the shoulders to the back of the skull), its brim lies close over the forehead (clipped to 0.085 in front
+    of the brow), long dark matted hair lines it and falls beside the face (hair.npz). The neck is short and thick and
+    never shows from the front, side or the catch; the face hangs out of a dark hole. Hood and hair ride Head near the
+    face and UpperTorso on the hump (head.hood_head_share).
+ 2. Mask / beak: MOSTLY FIXED. No black rim (the face's colour runs on round its sides into greyer skull skin and the
+    hair). The outline is measured off the favourite row by row (wide over the eyes, pinched under them, the cheeks'
+    soft swell, a long taper to a small rounded fleshy point; it was ~25 % too wide in the lower half), rounder across
+    so the torch rolls off its sides, deeper hollows beside the ridge, a bulb over the slit, a visible small slit with
+    lips. Still: in the torch the lower half reads as a smooth tapering cone more than the favourite's soft swollen
+    flesh; the leathery skin shows at Max close up, less at a distance.
+ 3. Pool-noodle limbs, rubber-glove hands: PARTLY FIXED. Bony forearms (tendons, wrist and elbow knobs, wasted lumps in
+    the relief), dark limbs; the hands brown-grey, veined, with a dark net of cracks on their backs, and they take 0.75
+    of the room's light (flesh.js fHandS) so they come out of the dark with the face. In the lean a long veined hand
+    reaches out under the face in the torch. The hand flat on a locker at the picture's left is staged by the picture
+    tool but lands outside the frame; the catch's hands beside the camera are still big pale-grey shapes.
+ 4. Too much light: FIXED. Body, cloth and hair take 0.3 of the room's light (Look.fleshBodyAmbient); only the face and
+    the hands catch the torch. In every stage he is a black mass with the pale face.
+ 5. NPC clothes: FIXED. Near-black long hoodie with the hood up, black jeans with no blue, belly and ribs covered.
+ 6. Painted stripe furrows: FIXED. Five or six irregular, broken furrows over the strip of forehead under the brim,
+    fading at the sides, mostly in the normal map (the brow's outline stays smooth), the frown crease between the holes.
+ 7. Eye holes: FIXED. Flatter (half-height 0.036), more slanted almonds with the inner corner drawn down; matte (no wet
+    rim glint), only the tiny pinprick deep in each.
+ 8. Streaks: FIXED. Exactly one thin dark dry streak straight down from under each hole (two in all), ending a quarter
+    of the way to the point as in the favourite; Max and Potato both show two.
+ Potato: the pink cast is countered in the flesh shader (FLESH_IVORY greys fully and leans against Potato's warm post:
+    catch face sRGB Max 126/120/106, Potato 136/109/105 before, 125/112/105 now); two streaks; same eye holes (the
+    512 map and 4k mesh make them a little softer and rounder).
+
+THE CATCH'S CAMERA (web/src/creature/jumpscareView.js, view.js; presentation only)
+  With the hood up, a level camera over the bowed face saw only the hood's crown. faceLock/cameraCFrame take `lookUp`
+  (default 0: the block body unchanged); with the skinned body view.js sets faceLookUp = 0.45, so the catch's camera
+  sinks below the hanging face and looks up into it, as in the favourite. Nothing the game reads changes.
+
+NUMBERS (second pass)
+  Levels: max 465,999 triangles (7.42 MB gz; the hood and hair add 40k each to the master), high 62,197 (1.06 MB),
+  medium 20,499 (0.37 MB), low 8,218 (0.16 MB), potato 4,107 (0.085 MB). Maps 4096: albedo 2.2 MB, normal 6.4 MB,
+  normalFine 6.4 MB; 512: albedo 116 KB.
+  Potato frame cost (creature-shot --perf, check.mjs method, run-heavy timing; machine shared, load ~5 on 4 CPUs, so
+  before/after were run back to back twice): block body 6.8 / 6.7 ms, skinned body 8.7 / 7.3 ms (rig 2.2 / 1.8 ms);
+  budget 16.7 ms. (One run under heavier contention read 15.0 ms; the paired runs are the honest numbers.)
+  Checks: creature-collision rc 0 (rewrites passthroughData.js identically), creature-sim all passed, story-test --only
+  solo 36/36, game-smoke all checks passed.
+  Pictures: scratchpad/send/monster-model-1.jpg (favourite beside the lean and the catch, Max), -2.jpg (every stage
+  Max and Potato), -3.jpg (turntable, head, hand); frames in scratchpad/monbody/proof3/{max,potato,turn}.
+
+STILL WEAK (honest)
+  - The lower face is a clean tapering cone under the torch; the favourite's has a soft swollen fleshy middle with the
+    ridge standing out and the seam: ours shows them only faintly. A sculpted lower face (more relief, a sag) is next.
+  - The lean is still the Lunge's bow, not the favourite's head-down hang with one hand on the lockers; the wall hand
+    is out of frame.
+  - The hood is a big smooth dark dome in silhouette (fold noise 0.05 helps little at a distance); the turntable shows
+    the hoodie ending at the hips.
+  - The catch's hands beside the camera read as big grey shapes, not hands.
+  - Potato's face is a little pinker than Max's still (R-G 13 vs 6) and its holes a little bigger.
+
+
+THIRD PASS (after the lead's look: "a white smooth beak with small round eyes, the hood a black blob, the hands barely
+show"; commits 5738fa0, 6fd97f1, 6ed33a3, a33d9b4, 7396497, 8f22f11, f70be95, b86830c, b7b6078, 4911af4 and the
+notes' own commit)
+=====================================================================================================================
+Measured off the favourite first (original pixels, ~765 px per stud, origin between the eye holes): each eye hole runs
+from its outer corner at the face's edge up and out to the inner point down by the bridge, about 0.19 long, tilted 25
+deg, the upper lid arching 0.057 over the axis, the lower 0.02, 0.024 apart at the bridge, the pinpricks at (+-0.105,
++0.02). Colours (sRGB): lit brow 163/149/137, lower face 60/50/41, tip 21/16/10, hood 37/41/37 (grey-green), hair
+83/73/63, back of the hand 29/24/20, lit finger 60/41/30. The lower face's half-widths row by row (-0.29: .108, -0.41:
+.077, -0.55: .050, -0.61: .040): our mesh had come out 20-35 % narrower than that below y -0.2 (the back's rounding and
+the smoothing ate ~0.019 off each side): that was the "beak". OUTLINE now carries that back; the mesh is within 0.005.
+
+ 1. FACE AS FLESH: DONE. head.py: a soft keel down the lower face, flatter across (no lit strip), bags under the eye
+    holes, the ridge swelling a little before the soft rounded point, one dent, slight asymmetry; texture.py models
+    lumps, side sags, hollows, the long creases and the ridge's swell INTO the master's geometry (sag and swell, not a
+    cone) and paints the face grey-beige old skin (.54/.47/.40 linear base), darker toward its edges (x .4) and its point
+    (x .55), blotches, broad uneven tone patches, age spots, grey patches, pores; fine irregular wavy furrows over the
+    whole brow (mostly in the normal map, so the brow's outline stays smooth), the frown, the seam soft-walled; an uneven
+    dry sheen (duller and greasier patches, brow crests and the point shinier). Seen: q21/q33/proof4 catch: skin, not
+    porcelain. (A bug found on the way: the shader's pale lower lid ran on along each almond's axis past the inner corner
+    = two pale dashed lines down the face on Max and High; the lid is now drawn only between the corners.)
+ 2. EYES: DONE. Huge slanted almonds fitted to the measurements above, nearly meeting at the bridge, the inner corner
+    drawn down, bored in; glossy black inside (the torch's small hard highlight on the wet dark), one small pale
+    pinprick deep in each, a thin pale lower rim (lidRim .45).
+ 3. HOOD AND HAIR: DONE. The hood is grey-green cloth (.31/.335/.29) with heavy rolls bunched above the brow, deep drape
+    folds and a hem, lying close on the sloping forehead up to the crown (a brim standing out made a black crown over
+    the eye holes from under the bowed face: gone), taking a share of the light so its shape reads; dark brown hair
+    (.22/.185/.152) falls beside the face from under it (a thin band under the brim over the forehead, locks only past
+    the face's edge).
+    ROOT CAUSE FOUND for "the hood is a black blob" in the lean: the hood's hump (the cloth over the bowed back) rode
+    UpperTorso only; in the Lunge's bow (torso folded ~90 deg, the head turned back up to the victim) it swung forward
+    over the head and hung in front of the face as a dark dome. head.hood_head_share now lets the hump's top (over and
+    behind the skull) ride the Head; export.py sets the hood's and hair's Head/UpperTorso split at every level from that
+    function. In the game this shows in every Lunge and catch, not only in the picture.
+ 4. HANDS: DONE. The hands are browner and older (.39/.315/.252 base, a darker net of cracks on the backs, veins,
+    dull yellowed nails, 0.75 of the room's light). THE CATCH HAD NO HANDS: a framing report added to the picture tool
+    (NDC of the face, wrists and fingertips) showed the Lunge puts the wrists a stud out beside the old block mask's
+    wide outline, so in the catch's close-up (1.35 studs off the narrow skinned face) they sat at the picture's edges
+    (x +-1.0) with the fingers off the bottom. view.js _catchHands (drawing only: nothing in the game reads the view's
+    animator; the skinned body only, so every tier; not in a duct's bore): through the Lunge each wrist is drawn in
+    to beside the hanging face (de-rolled face frame x .85, y -.5, just behind it), the hand turned with its back to
+    the victim and its long fingers opened, spread and rising past the cheeks toward the brow. Max catch now: wrists
+    at NDC (-.54,-.24) and (.69,-.04), fingertips (-.44,.55) and (.55,.76): two big veined hands framing the face.
+    (Found on the way: a tier change loads a new body on a new look.ready promise; view.js had hooked _useFlesh on the
+    first only, so after a switch to a tier whose body was not the first loaded, the catch lost its look-up framing.
+    view.js now re-applies _useFlesh whenever look.flesh changes.)
+ 5. THE LEAN: the animator has no peek or lean pose, so THE PICTURE TOOL stages it (web/tools/creature-shot-entry.js,
+    stage lean; nothing the game reads): beside a corridor locker (the first world.json Locker in a Level 1/2 corridor
+    with clear corridor off one side: L1_Locker_04 in L1_Corridor_West; a locker is 2.7 wide, its front 1.03 before
+    its pivot, 7.65 tall), he stands just clear of its front a little behind its near side and bows in (the Lunge's
+    bow, before its tear) so the face comes out past the locker's corner; his near hand is set by two-bone IK on the
+    locker's side that faces the player, a little above the face, back of the hand to the camera, the fingers spread
+    down toward the front edge; the camera is the catch's own framing (faceLock on the live face, lookUp 0.45) at 2.1
+    studs. The other hand stays the Lunge's own. (The earlier counter beside the dim spot is not a collider and a
+    hand flat on the corridor wall read as a leaf: the locker's side faces the camera at a slant instead.)
+ 6. HOOD EDGE: the worn hem of the hood was painted paler and the torch lit it as a pale ring round the face (a
+    wimple; seen in proof4's catch). texture.py now darkens the edge and the cloth within 0.14 of the opening (by 0.6,
+    half that over the brow where the rolls bunch and catch the light): the face hangs out of a dark hole as in the
+    favourite.
+ 7. Potato: the pinpricks were added after Potato's ivory correction, so its warm post turned them orange-pink (catch
+    sRGB 200/170/144 against Max's 201/196/174): now greyed with the flesh (flesh.js FLESH_IVORY).
+
+NUMBERS (third pass)
+  Levels (one master, export of full21): max 515,999 triangles (8.28 MB), high 62,197 (1.07 MB), medium 20,499
+  (0.38 MB), low 8,219 (0.16 MB), potato 4,108 (0.086 MB). Maps 4096: albedo 2.2 MB, normal 4.3 MB, normalFine
+  4.2 MB; 512 (Potato): albedo 112 KB, normal 43 KB. Texture bake + export 788 s on the shared machine.
+  Potato frame cost, second pass (A: de8451f's flesh.js, look.js, view.js and assets) against third pass (B: HEAD),
+  creature-shot --perf --tier Potato --width 320 --height 180 (the check.mjs method), alternating A/B three times
+  through run-heavy timing (scratchpad/monbody/perf4/run.sh, run.log); the machine was shared (load ~5 on 4 CPUs) so
+  the pairs, not the absolute numbers, are what to read:
+     pair 1: A 15.1 ms, B 15.3 ms    pair 2: A 17.0, B 12.4    pair 3 (quietest): A 9.4, B 9.8   (73 draw calls both)
+     rig (the Creature's own work per frame): A 3.7 / 4.6 / 2.5 ms, B 4.1 / 3.7 / 2.7 ms.
+  No difference beyond the noise: the third pass adds nothing per frame on Potato outside the catch (the hands' pass
+  runs only through the Lunge: two IK solves; the body re-hook is one comparison). Budget 16.7 ms; the quiet pair is
+  well inside it, the loaded pairs are the machine, A and B alike.
+  Pictures: scratchpad/send/monster-model-1.jpg (the favourite beside the lean and the catch, Max), -2.jpg (every
+  stage, Max and Potato), -3.jpg (turntable, the head, the hand); frames in scratchpad/monbody/proof5/{max,potato,turn}.
+
+STILL WEAK (honest, third pass)
+  - The face still reads a little like a pale beak from a level camera and on the turntable: the favourite's lower face
+    is darker and its tip almost black; ours is lit evenly by the torch down to the point. More darkening toward the
+    point in the maps (or a falloff in the shader) is the next step.
+  - The brow's furrows read as regular stacked ridges in the close-up (the favourite's are finer, wavier, broken).
+  - The lean's gripping hand on the locker is in frame, lit and on a surface, but it is pale and flat against the
+    side (the IK puts the palm flat: no knuckles standing up) and the other arm's upper arm crosses the top right as
+    a dark bar. It is staged by the picture tool: the game has no lean pose.
+  - The catch's hands are huge in the close-up (they are 1.3 studs from the camera, the size an 11-stud body's hands
+    are); they read as hands, veined and wrinkled, but they are not the favourite's single hand on a locker.
+  - The hood in the lean (a bowed body seen from in front) is still mostly a dark mass; its folds show in the catch.
+  Checks (third pass, HEAD 4911af4 + README): creature-collision rc 0 (passthroughData.js rewritten identically),
+  creature-sim all passed, story-test --only solo 36/36, game-smoke all checks passed (logs scratchpad/monbody/t5-*.log).
+  Nothing gameplay reads changed: no edit to service.js, states, pacing, config, the rig, the Luau side or the engine;
+  the changes are view.js (drawing), the shot tool, texture.py and the maps.

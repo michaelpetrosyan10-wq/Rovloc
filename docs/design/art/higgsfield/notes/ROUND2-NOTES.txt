@@ -1,0 +1,80 @@
+ROVLOC - the monster (Danny, "the Tall Man"), round 2 notes for the people who build the 3D model
+Art director, round 2, 17 Nov 2026. Source pictures: higg/dl/R-*/ (2k PNG), previews higg/view/R-*.jpg, sheets in send/.
+THE AUTHORITY IS B3 (higg/dl/M-B3/M-B3-v1.png, the player's pick: "this image is my favorite"). Wherever any round-2
+picture disagrees with B3, B3 wins. Then the player's words: "the face is supposed to be slim like body",
+"look like human yk then its scary".
+
+WHICH PICTURE TO USE FOR WHAT
+- Face shape, eye holes, streaks, taper, ear, hair cap, neck entry ....... send/art-monster-sheet.jpg HEAD (R-S1-v1), checked against B3
+- Hand ....................................................................... HAND (R-S2-v2) + B3's hand (B3 is the better one: older, darker, more veined)
+- Body proportions, back and side ........................................... BODY (R-S3-v2) - BUT its face is a wrong human face: ignore it
+- Clothes ...................................................................... BODY v1 (R-S3-v1), P1 and P2 (both read the clothes too tidily: see below)
+- Mood / lighting / how he is shown in play ................................ P4 (best), P1, P3, B3
+
+PROPORTIONS (target, in head-heights; "head" = crown to the tip of the face)
+The pictures all draw the head TOO BIG (S3 v2 reads 6.3 heads tall; P1/P2 about 4.5-5.5 because the long face
+counts). Do not copy that: the player's rule is a small narrow head high on a long neck, about 1/12 of his height.
+- Total height 11 studs (rig) = 12 heads; one head = 0.92 studs (about 33 cm at 4 m).
+- Face width at the eye holes = 0.36 head (the face is about 2.7 times as long as it is wide, as in B3).
+- Skull: small, round and narrow at the back; the cranium is only the top 0.4 of the head; the face hangs 0.6 below it.
+- Neck: 0.8-1.0 head long, as thick as 0.25 head (a wrist), tendons and the trachea showing; it enters the skull
+  from below and BEHIND (HEAD profile), so the face juts forward-down like a prow ahead of the throat.
+- Shoulders at about 9.7 heads from the floor (0.81 of height); shoulder width only 2.3 heads (narrow, bony knobs).
+- Crotch at 6 heads (legs = half his height). Knees at about 3.2 heads (2.98 studs on the rig).
+- Arms hanging: fingertips at about 2.4 heads from the floor (2.2 studs on the rig), i.e. below the knees.
+- Hand (wrist to middle fingertip) = 1.4 heads: the hand is LONGER than the whole head (B3 shows it; keep it).
+  Fingers are about 60 % of the hand; each finger has knotted, swollen knuckles; five fingers, a long thin thumb.
+- Ribcage about 2.5 heads long; sunken belly; sharp hip bones; spine knobs and shoulder blades show on the back (BODY back view).
+
+MATERIALS
+- Face: old ivory gone leathery - pale warm ivory (about RGB 205,194,166 is right), finely wrinkled all over like dry
+  skin, NOT glossy glaze; a deeply furrowed brow (horizontal wrinkles, B3); a faint ridge down the middle where a nose
+  would be, no nostrils (the HEAD front view shows a nostril mark: leave it out). Roughness high (0.7-0.8), a little
+  subsurface, a soft sheen only on the brow and the point. Micro-wrinkle normal map.
+- Eye holes: huge, slanted (outer corner up), almond, set high and wide; pure glossy black depth (they read as holes
+  in the face, not eyeballs); ONE tiny pale pinprick of light deep in each (the rig's Neon pupils: keep them tiny;
+  the right one slightly larger is fine). P3 shows what happens if they are too big or bright: it becomes a cartoon.
+- Two dark streaks: thin, straight, from the inner/lower lid of each eye hole down the face, like dried run marks,
+  darker grey-brown, not red, never wet.
+- Mouth: a small closed slit near the tip of the face, no lips, no teeth showing.
+- Hair: thin, flat, dark, matted, only on the back/top of the small skull (a cap seen in profile); small flat human
+  ears set low and far back, half in the hair. No hat ever.
+- Skin of the body: pale grey-ivory, thin, dry, tight over bone; blue-grey veins on the chest, belly, forearms and
+  backs of the hands; tendons in the neck and forearms; pores and fine hairs. Living skin over bone - never bare bone
+  (S2 v1 and the round-1 skeleton test are what to avoid).
+- Hands: old, leathery, veined, deep creases on the palm, short plain yellowish human nails - NO claws, no talons.
+- Cloth: what is left of Danny's own clothes - a grey cotton hoodie with white drawstrings split along the shoulder,
+  side and back seams, the sleeves stopped at the elbows, the hem above the ribs, the hood torn and hanging behind the
+  neck (never over the head: it hides the face, see P4 v1); faded blue jeans ending at mid-shin, burst along the side
+  seams, frayed; bare feet. Cotton with weave and stress folds, denim with fading at the knees. The round-2 sheets
+  tidy this into a vest and shorts - keep it torn.
+
+WHAT MUST NOT BE LOST FROM B3
+1. The long narrow face that tapers to a point far below where a chin would be (the scariest single thing).
+2. Huge black slanted eye holes with only a pinprick of light: a blank starved face that looks at you.
+3. The two dark streaks and the wrinkled brow (they make it old and sad, not alien).
+4. The big old human hand, longer than the face, reaching into frame first.
+5. The way he is shown: out of the dark, from above, leaning in, lit from behind or by the torch only, too still.
+Things to keep OUT: a beak or plague-doctor look (P1 v1, P4 v2 drift toward it: keep the face flat-fronted and
+leathery, not a hard horn), a big round or egg head, a "grey alien" (no huge bulbous cranium: HEAD's crown is already
+a little too wide), glowing eyes, bare bones, a stick-pole neck (P1 v2), anything red near the face.
+
+IS IT THE SAME BEING FROM PICTURE TO PICTURE?
+Yes for the face in P1 v3, P2 v2, P4 v2 and the HEAD sheet (long tapering pale face, black slanted holes, streaks,
+small slit mouth). P3 is a cousin (the face reads like draped cloth with two bright eyes). The BODY sheet v2 has
+the right body and the wrong face. Generated pictures cannot hold the identity by themselves - the model must.
+
+DANNY (as he was) AND THE THING
+- Danny sheet (R-D-v2): front A-pose is good for clothes and build; the "side" view is the front body with the head
+  turned - not a true profile; and the face/hair are not D2's. Use D2 (round 1, higg/dl/D/D2-v1.png) for his face:
+  short dark wavy hair under the red beanie, wide crooked grin. Clothes: mid-grey pullover hoodie a size too big,
+  white drawstrings; dark blue-grey straight jeans; white low-top sneakers; black backpack; red knitted beanie.
+  These are the same hoodie and jeans the monster wears torn.
+- The thing (R-T-v1): a true side view of the finger-legs (eight long pale fingers bent at the knuckles like a
+  spider's legs, under a round ball of cream down). Its face there is far too big (a half-shell, half the body) -
+  use T1's face: a small porcelain face no wider than a jam-jar lid on the front of the ball, glossy old-ivory glaze,
+  two dark oval eyes, thin nose ridge, tiny painted smile with the right corner up. Size: a curled-up kitten.
+
+SPEND
+Round 2: 16 pictures x 0.12 = 1.92 credits (cap 2.0), soul_cinematic 2k. Balance 6.88 before, 4.21 after
+(0.75 more than this run's 16 jobs; not explained by this run - see ledger.md).

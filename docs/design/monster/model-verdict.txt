@@ -1,0 +1,59 @@
+MODEL VERDICT -- the 3D monster vs the favourite picture (M-B3-v1), judged as the player
+==========================================================================================
+Looked at: M-B3-v1.png, monster-model-1/2/3.jpg, proof2/max/creature-catch.png, proof2/potato/creature-catch.png.
+
+SCORES (out of 10)
+  same monster  5   the face has the right parts but it reads as a white plague-doctor beak, not his face
+  scary         4   the eye holes with the pinpricks still work; everything else kills it
+  realistic     2   a smooth game model: pool-noodle arms, a bird head on a stick, NPC jeans and crop top
+
+WHAT THE PLAYER WOULD SAY
+  "bro why is it a bird. it looks like a plague doctor mask on a giraffe neck. the arms are like pool noodles.
+   the face in my picture looked like real skin, this looks like a toy. not scary."
+
+IS IT THE SAME MONSTER?
+  Kept: narrow pale face tapering to a point, black slanted eye holes with one pinprick each, two dark streaks,
+  furrowed brow, ivory colour. Lost: in the favourite the face is LEATHERY SKIN with a soft face-like nose ridge,
+  framed by dark hair and the hood, hanging out of the dark with NO neck visible. The model's face is a hard
+  separate shell with a black rim round it (looks like a mask strapped on), the lower half is a straight bird
+  beak with no mouth slit to see, and it sits on a very long thin bent neck -- the outline is a heron/ostrich.
+  The big old veined hand of the favourite is nowhere in the in-game shots; what you see is smooth white tubes.
+
+DEFECTS, WORST FIRST (each with what to do)
+  1. The giraffe/heron neck. The single biggest "bird" signal: a thin bent stalk with a small head on top
+     (turntable, lean, catch). The favourite shows NO neck; the head comes out from under the hood/hair.
+     -> Cut the neck to a short thick human neck, mostly hidden: put the torn hood UP over the back of the
+     skull (or the hair long and dark around it) so the face hangs out of a dark hole. The face's height comes
+     from the face, not from the neck.
+  2. Face reads as a mask/beak, not flesh. Hard black rim line round the face outline, the lower half a smooth
+     straight cone, cheeks flat. -> Kill the black rim; let the face blend into hair and skull with skin
+     continuing round the sides. Give the lower face the favourite's soft swell: the hollows beside the nose
+     ridge, the slightly bulging middle, a visible slit mouth with lips near the tip, the seam line. Make the
+     point soft and fleshy, not a beak tip.
+  3. Brow wrinkles are even printed stripes (like a corrugated shell / tiger stripes). -> Fewer, irregular,
+     deeper furrows that fade at the sides, plus the vertical crease between the eye holes as in the picture;
+     shade them with the normal map, not dark painted lines.
+  4. The arms and legs are smooth tubes (pool noodles), huge in frame, lit flat white. The hands in close-ups
+     look like rubber gloves. -> Bony knobbly forearms with tendons and the dark veined, leathery back of hand
+     from the favourite (darker, more brown-grey than the face); darken limbs so they stay in shadow; show the
+     hand gripping something (locker edge / door frame) near the camera -- that hand is half the fear in the picture.
+  5. Clothes look like a game NPC: blue jeans + grey crop top + bare ribcage = zombie-from-a-store-asset. The
+     favourite has a big dark heavy hoodie and almost no body. -> Make the hoodie long and dark, swallowing the
+     torso; jeans near-black; no bright blue anywhere; cover the pale bare belly/ribs that show as a white mass
+     behind the head in (b).
+  6. Too much light on him. He is lit evenly grey-white in the corridor; the favourite is pitch black with the
+     face as the only pale thing. -> Body and limbs fall to black; only the face (and the hand) catch the torch.
+  7. Eye holes: good, keep. Slightly too round/bulgy in the catch, and the wet rim highlight looks like goggles.
+     -> More slanted almond, flatter, no rim glint; pinprick tiny and white.
+  8. Streaks: right idea, but in Max they branch like cracks and in Potato they multiply into 3-4 stripes.
+     -> Exactly two thin dark dry streaks straight down from the inner bottom of each eye hole.
+
+POTATO
+  Same outline and same being, yes (same pose, same head shape, same eye holes). But: a pink/lilac colour cast on
+  the face and limbs (looks like a different, rubbery creature), streaks multiply into several stripes, eye holes
+  become bigger blobs. -> Keep Potato's face ivory-grey (fix the tint/tonemap), bake exactly two streaks into
+  the 512 albedo, keep the eye-hole size. Fixes 1-6 are shape/colour/lighting, so Potato inherits them for free.
+
+BOTTOM LINE
+  Not yet the monster in the favourite picture. The eyes are right; the bird neck, the mask rim, the beak and
+  the noodle limbs make him a toy. Fix 1, 2, 4 and 6 first.

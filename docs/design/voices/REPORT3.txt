@@ -1,0 +1,25 @@
+ROVLOC VOICES ROUND 3: REPORT                                                          2026-11-17
+Player: "Voices good just make the monsters deeper" -> Danny 1, Kayla 1, Marcus 1 chosen; Monster 7, 8, 9 made deeper.
+Page: board3/index.html + board3/a/*.mp3 (60 MP3, mono 24 kHz, 992 KB). Monster numbers: out3/monster_table.txt.
+Production: prod/opening/*.wav|.mp3 + manifest.json; table out3/prod_table.txt. Provenance: LICENCES3.txt.
+Tools: tools3/ (plan3, chain1-3.sh, monster3, prod3, plan_board3, build_board3, page_check3.mjs). Log: PROGRESS3.txt.
+MONSTER (all: Danny 1's calm take of the line = Chatterbox full, exag 0.25, ref danny1_g2; no vocoder, no stretch)
+ M7 slowed tape 4.0 st (resample_poly by 2^(4/12), same sample rate: pitch, throat and tempo drop together) +
+    Monster 4's whisper (LPC whisper of the slowed take, -8 dB, 0.24 s late) + M4's small room (-16 dB).
+ M8 slowed tape 5.5 st + an octave-below layer (each word, cut at the recogniser's word times, resampled a further
+    octave, started on its own word, cut at the next word + 0.12 s, low-passed 320 Hz, -12 dB) + our synthetic
+    inhale slowed 5.5 st, 0.22 s before + a small dark room (RT60 0.45 s, -13 dB).
+ M9 deep stock blend Kokoro am_michael .6 + am_echo .4 (speed 0.86) -> Chatterbox-full gen-2 ref -> calm takes;
+    Danny 1's own calm take of the same words 14 dB under, 0.09 s late; M4's small room. Deep take chosen per line:
+    heard word for word, rhythm (word onsets) within 80 ms of the best match to Danny's take, then the deepest.
+ Main-layer median f0: M7 94.6 Hz, M8 88.6 Hz, M9 94.8 Hz; Danny 1 158.5 Hz; Monster 4's main layer ~117 Hz.
+ -> M7 8.9 st, M8 10.1 st, M9 8.9 st under Danny 1; ~3.6 / ~4.8 / ~3.6 st under Monster 4.
+ Aperiodicity 1-4 kHz: -11.9 to -16.9 dB (yardstick: acted -13.4, plain refs -16/-17, WORLD buzz -19.4): no buzz.
+ 15/15 board MP3s heard word for word. Level -20 LUFS (M8 f/c/d -20.9 to -21.25: peak held at -1.5 dBFS). No clipping.
+ Fixes on the way: M7 "So cute." from M4's base was heard "So come here." -> base 2; M7 "Is it still on me?" MP3
+ heard "on on" (whisper double) -> base 3; Monster 9 f/c re-taken (seeds 4-7) to get deeper takes.
+PRODUCTION: 18/18 kid lines (Danny 12, Kayla 3, Marcus 3) word for word and inside their slots on the finished files.
+ 3 takes each (54); 6 lines failed first time and got 3 retakes each (18): L2, L9, L11, L15 over the slot (pauses at
+ full stops; retakes with a comma, same words), L4 "Reyes" heard Raze/Ries/Reis (retaken with "mister ray-ess" as
+ opening-v3 asks), L8 "Sales at 4" (retaken as "Sal's at four!"). Finish: trim (20 ms lead/80 ms tail) + gain only.
+WEAK / OPEN: see the hand-back.

@@ -1,0 +1,91 @@
+LOOK-2 (pass 2b) VERDICT (judged as the player: a blunt teenager who sent the underwater "crazy looking" reference)
+Replaces the 2a verdict that was in this file (that one scored 5.5 / 5 / 7).
+Looked at: the reference; send/look-2-<view>.jpg (all six sheets); send/look-2-max-<view>.jpg (all six, 1920x1080);
+the Potato pictures in look1/after2/ (windows, backlot, monster in full, the rest on the sheets); crops of the Max PNGs
+(monster, hand, backlot reflection, window shaft). Formed this view first, then read LOOK-VERDICT.txt, the 2a verdict,
+PROGRESS2b.txt and the head of LOOK-NOTES.txt. Nothing in them changed the scores.
+
+SCORES (reference = 9 for crazy looking; a photograph = 10 for realistic)
+  Crazy looking: 6   / 10   (LOOK-1 4.5, 2a 5.5)
+  Realistic:     5   / 10   (LOOK-1 4,   2a 5)
+  Eerie:         7   / 10   (LOOK-1 6.5, 2a 7)
+  Gate "7+ before landing": NOT MET on crazy looking or realistic. Eerie holds at 7.
+
+WHAT HE WOULD SAY
+  "ok the rain one is actually fire now, the street light with the rain coming down looks like a real game. the
+  basement is still the best one. hands are real now finally. but bro the dust looks like SNOW, its just white dots
+  everywhere even where its pitch black, the window room looks like outer space. and theres like a paper triangle
+  coming out of my flashlight in every picture. the monster looks like a coat hanger with ladder legs lol. the locker
+  one looks the same as last time. and the buildings outside are still just black boxes with windows on them. its
+  getting there but its not crazy looking like the video, nothing is actually moving like fish do"
+
+BEST VIEW:  basement (Max): warm haze down a long corridor, hanging bulbs receding, pipes and cables, wet floor, embers.
+            Still the most "real horror game" picture. Biggest jump this pass: backlot (Max), whose top half (rain
+            streaks lit under the yard lamp, cloud deck, distant lit windows) is the first shot with the reference's
+            "the air is full of moving stuff" feeling.
+WORST VIEW: lockers (Max): nearly the same picture as last pass and as before the look work: an evenly lit bright green
+            room, a clean box locker, a blown-out white-green hotspot, a rainbow lens fringe on the poster frame at right.
+            Not scary, not crazy. Runner-up: windows (Max), see defect 1.
+
+DEFECTS, WORST FIRST, WITH THE FIX
+ 1. The motes read as snow / a starfield, not dust in light, and there is still no organic motion. There are now a
+    few hundred per view (up from 30), but they are equal-size, equal-brightness white dots spread evenly, including
+    in pitch-black corners and in front of black walls (windows view looks like outer space; failing's right wall
+    and the lockers walls too). The moths read as pairs of white "oo" sprites (monster view), like butterflies or
+    floating eyes. The reference's life is many tiny things moving together, lit by where they are.
+    Fix: mote brightness = the marched in-scatter at its own position (invisible in the dark, glittering only inside
+    the torch cone, shafts and lamp glow); a size/brightness spread with most of them tiny and faint; short motion
+    streaks; cluster them by drafts (curl noise with a flow direction per room, eddies at doors). Moths as small dark
+    flutter silhouettes that catch light, swarming the lamp. Add life that is not dust: water dripping from pipes,
+    swaying cables and pendants (they exist, make them visibly move in stills: frame-to-frame blur), paper sliding in
+    a draught, cockroaches/rats crossing the torch spot, steam from basement vents.
+ 2. Hard-edged light wedge from the torch head in basement, monster, lockers and backlot: a flat triangle of light
+    from the lens to the floor/wall, like a paper cone stuck on the torch. It is right in the middle of every shot.
+    The torch beam itself is still not visible as a soft cone in the air.
+    Fix: start the torch's air march a short distance past the lens, soften the cone edge (penumbra + cookie with
+    rings and a darker core), cap the air density near the camera, check the torch's own shadow/near plane.
+ 3. The world is still boxes. Walls are flat slabs, doors flat planes, the locker a clean box with painted louvres,
+    the window board gaps are flat glowing stripes with nothing outside them, the skyline is black boxes with a
+    window-grid texture (some float with no base). Textures are better; shapes are not.
+    Fix: geometry detail where the camera looks: bevelled door frames and trims, panel seams, a modelled locker
+    (dented door, real louvres, hinge, padlock), outside visible through the board gaps (night sky, tree branches,
+    a far streetlight), skyline silhouettes with roof stuff (water tanks, antennas with red lights, setbacks) and bases
+    behind the fence.
+ 4. Backlot bottom half: the dumpster's reflection is still a sharp striped ghost copy that reads as stairs going into
+    the ground; the rest of the asphalt is flat dark with stamped round puddle discs; little floating light dots above
+    the fence line (lamps with no poles); the dumpster is lit only on its front face with a hard top edge.
+    Fix: blur the reflection by roughness and contact distance and break it with rain-ring normals; irregular puddle
+    masks with a wet sheen everywhere; splashes where rain hits; poles under the far lights; a soft yard-lamp pool on
+    the ground and the dumpster's lid/side.
+ 5. The monster is a thin stick figure with ladder-like limbs: from the corridor it reads as a coat hanger or a stick
+    insect, not as a person-shaped thing that is wrong. On Max it is a pale grey shape in pale grey haze; on Potato it is
+    black against light and actually reads better.
+    Fix: monster pass 3 (task 46) plus backlighting: let the corridor's far lamp air sit behind it so it is a dark
+    silhouette cut out of the haze with a thin rim, and give it a floor shadow/reflection.
+ 6. The whole picture is soft and milky: TAA smear, lifted blacks, an even sepia/green wash. It looks like a filter on
+    a game, not a camera. Fix: contrast-adaptive sharpening after TAA, real blacks with small bright highlights,
+    stronger specular glints on wet floors and metal, less global tint.
+ 7. Overbright small things: floor papers in the basement glow like lamps (the brightest thing in the shot); the
+    yellow cubes on the failing wall glow; the failing bath mats are pink noise sponges that look low-res.
+    Fix: clamp paper albedo / exposure, check emissive on the dispensers, a real rubber-mat material.
+ 8. Lockers lighting (see worst view): crush the ambient so only the torch reads, cap the hotspot, cut the lens fringe.
+ 9. Small oddities: a white cog/gear blob on the right edge of the windows view (and its Potato twin); dead-black
+    strips at the left/right of failing and windows still read as missing walls; the torch body is a smooth black tube
+    (needs knurling, scratches, a lit lens and reflector).
+
+WHAT GOT BETTER (so the lead knows what to keep)
+  Real hand on every tier (Max: nails, knuckles, scene-lit). Rain + yard lamp + cloud sky on the backlot. Hanging
+  bulbs receding in the basement. Wet tile reflections in failing. Window shaft is softer and has dust in it. Many
+  more motes than before (the count is no longer the problem; how they are lit is).
+
+POTATO
+  Yes. Every view is clearly the same place: same framing, colours, objects; the monster reads (contrast 0.132, better
+  than Max's 0.124). It looks like an older game: blocky textures, no air, no rain, no shafts (windows-Potato shows
+  flat stripes behind the boards), backlot is a dark empty yard under a lamp. The Potato hand is in a different, odd
+  pose (fingers laid flat across the top of the torch, like a claw) and looks waxy: give it the Max pose. Nothing
+  broken; acceptable for a school Chromebook.
+
+BOTTOM LINE
+  Up half a point on crazy looking: the backlot rain is the first real "wow" outside the windows room, and the hand
+  problem is solved. But the dust looks like snow in the dark, a hard light wedge sits in the middle of most shots,
+  shapes are still boxes and the monster looks like a coat hanger. Fix 1-3 before telling him it looks like the video.

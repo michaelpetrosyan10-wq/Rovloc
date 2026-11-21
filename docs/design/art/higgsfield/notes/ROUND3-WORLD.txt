@@ -1,0 +1,135 @@
+ROVLOC - ROUND 3, THE WORLD PAINTINGS (matte painter), 18 Nov 2026
+Higgsfield soul_cinematic, quality 2k, text only (no reference: round 2 showed a reference re-makes its own scene, so the
+favourite B3 was NOT used as a reference for the title). 16:9 for backdrops and title (the widest ratio the notes show
+working), 1:1 for the wall stains.
+Balance before: 3.13 (free plan). After: 2.05. Spent 9 pictures x 0.12 = 1.08 credits (the cap). Nothing failed, nothing
+refused, no nsfw / ip flags. Nothing bought, no video / 3D / audio / upscale, no use_free_gens. One slip: on the first job
+(w1) I passed use_unlim:false (= pay from credits, which is what happens anyway on this account); omitted on the other 8.
+Raw downloads: higg/dl/R3-window, R3-skyline, R3-sky, R3-wall, R3-title. Prompts: higg/prompts3w/*.txt.
+Scripts: higg/tools/w_common.py, w_pack.py (python -I w_pack.py all rebuilds everything), w_sheet.py.
+Checks: higg/work3w/ (skyline-wrap-tiled.jpg, skyline-wrap-seam.jpg, stain-*-check.jpg = over mid-grey | over pale green | alpha).
+Sheet: send/art-world-paintings.jpg (185 KB).
+All colours below are sRGB 0-255 as stored in the JPEGs. Every picture is upright as delivered (top of file = up).
+
+GAME-READY FILES (higg/pack3/)
+1. window-night.jpg 2048x1152 (+ window-night-1k.jpg 1024x576)   job 617e5d16-1f92-4658-bcd4-28cfcde8169a (raw dl/R3-window/R3-window-v1.png)
+   For: the view through the classroom / corridor windows on the upper floors. One flat plane far outside each window wall,
+   or one big plane per facade side (it is a level, straight-on view; the same picture can serve every window on a side).
+   Contents: dark sky with low cloud, a pale moon glowing through cloud right of centre, a line of bare trees, a row of
+   big dark old houses (unlit windows) across a wide dark lawn, two sodium lamps (left and right), a third unlit pole in
+   the middle, the kerb and wet street along the bottom.
+   Placement: tree tops at 0.30-0.35 of the height (from the top); house roof ridges (the horizon to line up with eye
+   level from the 3rd floor) at 0.47; house bases at about 0.66; kerb at 0.93; street 0.93-1.00. Lamps at x 0.08 and 0.95,
+   y 0.72. Put the plane so that 0.47 sits at or a little below the player's eye height for upper floors.
+   Colours: sky near the treeline 66,70,63; mist at the house line (0.45-0.55) 13,18,17 - use about 12,16,15 for the
+   fog colour behind the windows; street 20,23,20.
+   Done to it: a bare branch at the top-left, a power wire and a dark roof corner at the bottom-right were painted out by
+   script; graded colder (saturation 0.3, a green-grey tint, the sodium lamps kept warm).
+   Weak: the light rain is not visible (add game rain in front); the street is only a thin band; the moon sits low among
+   the trees, not high; the houses are big colonial blocks rather than small homes; it is very dark - the game may lift it
+   (exposure x1.3-1.6) for the Max tier and keep it as is for Potato. The other try (w2, e933cdfd-87e0-4cc8-83ec-0821e33fde23)
+   has the better rain mood and a wet street with reflections, but big near branches across the top-left: not usable.
+
+2. skyline.jpg 2048x1152 (+ -1k 1024x576)   job 20f32f8f-7f28-4f2a-82ce-8f8723add11b (raw dl/R3-skyline/R3-skyline-v2.png)
+   skyline-wrap.jpg 1884x1152 (+ -1k 1024x626)  the same, with the left and right 8 % (164 px of 2048) cross-faded so the
+   right edge runs into the left edge; checked by tiling two copies side by side (work3w/skyline-wrap-tiled.jpg): no seam
+   line, sky brightness continuous. A faint ghost of two small towers sits in the cross-faded strip at the left end (x 0-0.08).
+   For: the back lot's distant city. Use skyline-wrap.jpg on a cylinder (or a ring of planes) around the lot, two repeats
+   around 360 degrees at most (the twin spires make a repeat recognisable; one repeat per 180 degrees reads fine at night).
+   Placement: up = top. Tallest spire top at 0.40, most tower tops 0.47-0.55, tower bases / horizon at 0.62, dark ground
+   band 0.62-0.70, pure black 0.70-1.00 (faded by script over the bottom 10 %, so the lot's own fence and roofs can stand
+   in front). Put 0.62 at the player's eye level, a little below it if the lot is raised.
+   Colours: sky glow just above the towers (0.40-0.50) 78,95,91; HAZE AT THE TOWER BASES (0.55-0.62) 35,55,58 = the fog
+   colour to match (#23373A); upper sky 25-34,40,45.
+   Weak: two supertall spires near the middle make it read like a big megacity, not a plain American town; few lit windows
+   and only 2-3 tiny red beacons (add blinking red point sprites on the tallest roofs in-game); the towers stand in the middle
+   60 % of the frame and the ends are low (good for wrapping, but the city looks smaller). The other try (k1,
+   fa6a56da-788c-431f-a2db-1e9a8073669c) has more lit windows and many red beacons but blocky short towers, a flat olive-brown
+   sky and a tower cut by the right edge.
+
+3. sky.jpg 2048x1152 (+ -1k)   job b17a2584-220e-4435-9439-e1cf6c96147e (raw dl/R3-sky/R3-sky-v1.png)
+   For: the sky dome / far sky above the back lot and roof (and above the skyline). Whole frame is sky, no ground.
+   Placement: up = top; the brightest part (moon glow behind cloud, lit silver cloud edges) is low-left (x 0.15-0.35,
+   y 0.55-0.80): face it toward the direction the moon should be. Map it onto the upper half of a dome or a big tilted
+   plane; it does not wrap (put the skyline cylinder in front of its lower edge).
+   Colours: mean 41,47,50; lower edge 46,52,55; upper 32-37.
+   Weak: the moon disc is fully hidden (only its glow shows); faint rainbow corona fringes on the lit cloud edges were
+   reduced by desaturating to 0.4; the right half is very dark; not seamless.
+
+4. stain-water.png 2048x2048 RGBA (+ stain-water-1k.png)   job a84d2969-b139-4615-8a4d-41c3ff48f335 (raw dl/R3-wall/R3-wall-water-v1.png)
+   For: a damp / water-run decal on painted block walls, placed with its top edge at the ceiling line.
+   Contents: a brown-grey damp band along the top with peeling flakes and drip streaks running down about a third of
+   the height, one strong drip on the left.
+   Alpha: darkness of each pixel against the wall's own colour (median of the clean lower half, 142,148,128), above a floor
+   set by the mortar joints (98.5 % quantile), thin isolated lines (mortar joints) suppressed, x2.6; colour un-mixed from the
+   wall colour so it reproduces the photo over its own wall. Faded to 0 at all four borders (top 4 %, bottom 12 %, sides 10 %);
+   border alpha max = 0. Checked over mid-grey and over pale green (work3w/stain-water-check.jpg).
+   Weak: the stain is small for the frame (it covers the top ~35 %; crop the decal's UVs to the top half if you want it
+   bigger); the peeled flakes come out as pale spots (they are lighter than the wall: they read as bare plaster); a faint
+   trace of two mortar lines remains at low opacity.
+
+5. stain-mould.png 2048x2048 RGBA (+ stain-mould-1k.png)   job 331e67c4-2936-463c-ba3b-29af70f3b38d (raw dl/R3-wall/R3-wall-mould-v1.png)
+   For: black mould spreading from a wall-ceiling corner (place the decal's top-left at the corner; mirror it for the
+   other side). Contents: velvety black-green mould with a yellow-brown damp halo and two hairline cracks.
+   Alpha: same method (wall colour 217,223,217, floor 0.04, x1.6), faded to 0 at all four borders (top/left 22 %, bottom/
+   right 12 %). The photo's core was a solid black quarter-disc that read as a hole, so the script breaks it up with
+   multi-scale blotches (alpha 0.55-1.0), softens it toward the very corner and tints it dark green-black (13,17,9).
+   Checked over mid-grey and pale green (work3w/stain-mould-check.jpg).
+   Weak: the blotchy core is made by the script, not photographed: it is softer and more regular than the real speckle at
+   the edge of the bloom; seen up close the two textures differ. Best on ceilings/corners at a distance.
+
+6. title.jpg 2048x1152 (+ title-1k.jpg)   job e65f0800-ad68-4827-969b-fc3345db0bd1 (raw dl/R3-title/R3-title-v2.png)
+   For: the title / menu screen behind the game's own title text (no text in the picture).
+   Contents: a dark school corridor at eye level, lockers on the left, open doors on the right, one ceiling light, a wet
+   floor with a puddle, and the monster standing still in the middle, looking at you: very tall and starved, a hood, B3's
+   long pale face tapering to a point with black eye holes, long arms, big pale hands, stick legs.
+   Placement: up = top; the figure stands at x 0.45-0.56, head at y 0.27, feet at y 0.87; the dark empty areas for title
+   text are the top-left (x 0.05-0.40, y 0.05-0.25) and the bottom band (y 0.85-1.00). A gentle vignette was added by script.
+   Colours: mean of the middle 12,16,14 (very dark green-grey).
+   Weak: the figure stands mid-distance (head to feet about 0.6 of the frame height), not small and far as asked; it is lit from the front
+   and reads a little like a stiff puppet; the light is a square ceiling lamp, not a failing tube; there is a dark board on
+   the top-right wall and two tiny frames on the left wall (no legible text found when zoomed). The first try (t1,
+   2e50e7c9-40b7-4f6a-b7dc-e6640c042537) was weaker: a stiff pale robed column with a bird-beak mask (the look the notes forbid).
+
+THE PROMPTS THAT WORKED (exact text in higg/prompts3w/): W1.txt (window, kept), K2.txt (skyline, kept), S1.txt (sky),
+A1.txt (water stain), B1.txt (mould), T2.txt (title, kept). Lessons:
+- "Nothing in the foreground at all" plus "no window frame, no glass" kept frames out, but a near branch still came in
+  both window tries ("no branches crossing the top of the frame" did not stop it in W2): paint it out afterwards.
+- For a wide skyline that wraps: "spread evenly ... no single tower in the centre" + "the far left and far right ends darker
+  and emptier" worked; "300mm telephoto" gave the haze.
+- "Flat straight-on texture photograph ... like a flatbed scan, no perspective, no corners, the same brightness in every
+  corner" gives truly flat wall patches at 1:1.
+- For the monster at a distance: "starved man-shaped figure ... torn grey hooded sweatshirt ... not a beak, not a mask,
+  not a robe, not a ghost" fixed T1's robed beak-mask; but "very far away ... small in the frame" was ignored both times.
+
+JOB LIST (all soul_cinematic 2k, 0.12 each)
+w1 617e5d16-1f92-4658-bcd4-28cfcde8169a window v1 KEEP | w2 e933cdfd-87e0-4cc8-83ec-0821e33fde23 window v2 WEAK
+k1 fa6a56da-788c-431f-a2db-1e9a8073669c skyline v1 spare | k2 20f32f8f-7f28-4f2a-82ce-8f8723add11b skyline v2 KEEP
+s1 b17a2584-220e-4435-9439-e1cf6c96147e sky KEEP | a1 a84d2969-b139-4615-8a4d-41c3ff48f335 water stain KEEP w/ faults
+b1 331e67c4-2936-463c-ba3b-29af70f3b38d mould KEEP w/ faults | t1 2e50e7c9-40b7-4f6a-b7dc-e6640c042537 title v1 WEAK
+t2 e65f0800-ad68-4827-969b-fc3345db0bd1 title v2 KEEP w/ faults
+BALANCE: before 3.13, after 2.05 (mcp balance), exactly 9 x 0.12.
+
+SECOND PASS (artist, after the judge's ROUND3-VERDICT.txt), 18 Nov 2026
+One picture went to the world files: p4 d4877399-8fec-4e4f-bd99-8db602a7df7e title redo (prompts3p2/T3.txt) - FAIL
+(a small floating sheet-ghost with a beak and two glowing yellow eyes, a clay-mitten hand on a near door, letter-like
+embossing on the top-left lockers). Not used. Everything else below is a script mend (tools/p2_pack.py, p2_stains.py).
+Replaced round-3 files are kept in higg/work3p2/r3-replaced/ and work3p2/stain-water-r3.png.
+- title.jpg / title-1k.jpg  MENDED: t2's corridor with the puppet figure removed (the dark far corridor mirrored about its
+  vanishing line x=1030 over the box x 826-1030, y 286-995, 5 px feather; same grade and vignette). It is now an EMPTY
+  corridor plate - lockers left, open door right, one ceiling lamp, wet floor, no text. The title screen should put the
+  game's own monster model (or a later picture) into it. Zoom check: work3p2/title-fix-zoom.jpg, no ghost left.
+- stain-water.png / -1k  MENDED: horizontal mortar joints found as narrow ridges in the row profile and interpolated out
+  of colour and alpha; vertical joints inside the damp band removed the same way; the band's thick lower joint smoothed;
+  nothing below y=0.25 of the source; the stain band then stretched down so the damp and drips cover the top 0.62 of the
+  decal. No grid left over pale walls (check: work3p2/stain-water-check.jpg over grey, pale green, cream + alpha).
+  Alpha is 0 on all four borders.
+- stain-mould.png / -1k  REBUILT from the raw: NO fade on the top and left edges (the decal sits in the wall/ceiling
+  corner and the mould now grows out of it; alpha up to 0.97 on those edges, 0 on bottom and right). The photo's core was
+  pure black with no detail, so it is filled with the photo's OWN fine grain (high-pass patches from its speckled rim,
+  48 px, no visible squares) over a dark green-black that gets darker toward the very corner; the yellow rim's saturation
+  halved. The speckled edge thinning into the wall is the photo itself. Fault: the core reads as a velvety mass, not
+  separate spots; isolated dots only in the outer rim.
+- window-night, skyline, skyline-wrap, sky: unchanged (all judged usable); their small faults (twig tips at the window
+  top, a kerb jump at x~1240, a megacity look) are left for a later pass.
+- Sheet send/art-world-paintings.jpg rebuilt with the new title plate and stains.

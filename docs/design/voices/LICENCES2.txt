@@ -1,0 +1,27 @@
+ROVLOC VOICES ROUND 2: LICENCES AND PROVENANCE (board2)                                  2026-11-17
+Round-1 records still apply (LICENCES.txt) for Chatterbox Turbo ONNX (MIT, rev d21799bd), Kokoro-82M ONNX + voices
+(Apache-2.0, rev 1939ad2a), kokoro-onnx (MIT), espeak-ng (GPL-3.0, our machine only, nothing of it in the files),
+onnxruntime (MIT), Whisper small.en / faster-whisper (MIT, checking only), ffmpeg/libmp3lame (encoder only).
+NEW IN ROUND 2
+- Chatterbox (full, 0.5B) ONNX: https://huggingface.co/onnx-community/chatterbox-ONNX rev 3cab09af388d3f02bba43443fce88c1f4525ac43
+  card "license: mit" (dl/readmes2/cbfull_README.md); MIT text (c) 2025 Resemble AI: dl/readmes2/chatterbox_github_LICENSE
+  (github.com/resemble-ai/chatterbox), base card ResembleAI/chatterbox "license: mit" (dl/readmes2/resembleai_chatterbox_README.md).
+  Files: models/cbfull (q4 language model, fp32 speech encoder / embed / decoder, tokenizer), 1.5 GB; sha256 out2/sha256-cbfull.txt.
+  The repo's default_voice.wav (a recording of a person) was downloaded with the set and DELETED unused.
+  Our loop: tools2/cbfull_engine.py (follows the card; adds sampling). Commercial use: yes (MIT).
+- Higgsfield text-to-speech (model text2speech_v2, variant elevenlabs), STOCK preset voices Kevin, Leo, Sloane, Marcus,
+  generated on the player's own account (ledger: higg/ledger.md rows v3-v7; files dl/higg/h1..h5, sha256 dl/higg/sha256.txt).
+  Commercial-use terms of Higgsfield output on the FREE plan were NOT read (the voice preview and site hosts are refused
+  by this machine's proxy); the lead should confirm Higgsfield's terms before shipping H voices in the game.
+NO REAL VOICE
+- Every local take is conditioned on out2/refs/<id>_g2.wav, which is a Chatterbox-full take of OUR OWN text spoken from
+  out2/refs/<id>_g1.wav, which is a Kokoro render of built-in voices only (no WORLD shift in round 2):
+    danny1 = am_eric .5 + am_liam .5 (speed 1.1)   danny2 = am_puck .6 + am_eric .4 (1.1)
+    teach1 = am_eric .35 + am_liam .35 + am_adam .3 (0.82, Danny's teacher impression)
+    kayla1 = af_river .6 + af_jessica .4 (1.0)      kayla2 = af_kore .5 + af_jessica .5 (1.0)
+    marcus1 = am_fenrir .6 + am_echo .4 (1.08)
+  Not used anywhere: af_sky, af_bella, am_onyx, af_sarah, bm_george, bm_lewis (tools2/cast2.py asserts it).
+- No voice-cloning or create-voice tool was called on Higgsfield; only stock presets.
+- Monster: Danny 1's own takes + our DSP (LPC whisper of the same take, our synthetic breath tools/breath.py, our
+  synthetic corridor impulse response). No recording of anything.
+LINES: only the 10 audition lines and 4 monster lines given by the lead; no blood or gore; no lockdown/PA line on board2.

@@ -1,0 +1,17 @@
+ROUND 3 PROVENANCE                                                                   2026-11-17
+Nothing new was downloaded. Engines and models as in LICENCES2.txt: Chatterbox full + Chatterbox Turbo (Resemble AI,
+MIT; onnx-community exports), Kokoro 82M v1.0 (hexgrad, Apache-2.0) via kokoro-onnx 0.6.1 (MIT), faster-whisper
+small.en (MIT) as the recogniser, pyworld (analysis only: f0 and aperiodicity measures; NO resynthesis anywhere).
+No paid tool and no Higgsfield call in round 3. No voice-cloning or create-voice tool. No recording of any person.
+VOICES
+- Danny 1 / Kayla 1 / Marcus 1 (chosen) = out2/refs/{danny1,kayla1,marcus1}_g2.wav, Danny's teacher impression =
+  out2/refs/teach1_g2.wav: Chatterbox-full re-speakings of Kokoro built-in blends (LICENCES2.txt).
+- Monster 7/8: Danny 1's calm takes (cbfull exag 0.25, ref danny1_g2) + our DSP only: plain resampling (scipy
+  resample_poly), our LPC whisper of the same take (tools2/monster2.py), our synthetic inhale (out/breath_synth.wav,
+  tools/breath.py), our synthetic room impulse responses.
+- Monster 9 deep voice: NEW blend of Kokoro built-ins am_michael 0.6 + am_echo 0.4 (speed 0.86) -> gen-1 reference
+  out3/deep/deep_g1.wav -> Chatterbox-full re-speaking (exag 0.4, seed 1) out3/deep/deep_g2.wav -> calm takes
+  (exag 0.25). Our own reference text. Still not used anywhere: af_sky, af_bella, am_onyx, af_sarah, bm_george,
+  bm_lewis (and am_santa) -- tools3/plan3.py asserts it.
+LINES: the 5 monster lines given by the lead and the 18 kid lines of opening-v3.md / monster-lines.md 6. No blood or
+gore; no lockdown/PA line rendered or on board3.

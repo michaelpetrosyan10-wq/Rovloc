@@ -1,0 +1,15 @@
+ROVLOC VOICES ROUND 2: REPORT                                                          2026-11-17
+Page: board2/index.html + board2/a/*.mp3 (45 MP3, mono, 828 KB). Causes: out2/A1_causes.txt. Provenance: LICENCES2.txt.
+Tools: tools2/ (cast2, render2, loop.sh, cbfull_engine, analyze, choose, finish2, monster2, monspec, plan2, build_board2,
+page_check2.mjs, stages). Numbers: out2/takes/measure.json, out2/takes_summary.txt, out2/board2_check.json, out2/board2_table.txt.
+REBUILD (cd /tmp; PY="venv/bin/python -I -W ignore"; paths relative to the voices folder):
+  PY tools2/cast2.py refs out2/refs; PY tools2/render2.py models out2/refs/lines_refs.json out2/refs
+  PY tools2/cast2.py refs2 out2/refs (seed 1 only kept); tools2/loop.sh LOG PY tools2/render2.py models out2/refs/lines_refs2.json out2/refs
+  cp out2/refs/X_g2s1.wav out2/refs/X_g2.wav; PY tools2/cast2.py takes out2/takes 2  (then the seed-3 trim noted in PROGRESS2.txt)
+  tools2/loop.sh LOG PY tools2/render2.py models out2/takes/lines_takes.json out2/takes
+  BATCH_SECONDS=100 tools2/loop.sh LOG PY tools2/analyze.py out2/takes/measure.json --asr out2/takes/items.json
+  python3 tools2/choose.py out2/takes/lines_takes.json out2/takes out2/takes/measure.json out2/picks.json (+2 manual swaps in picks.json)
+  monster: out2/mon/lines_mon.json -> render2 -> analyze -> PY tools2/monspec.py out2/mon (+3 tuned items in out2/mon/spec.json)
+           -> PY tools2/monster2.py out2/mon/spec.json out2/mon/fx
+  PY tools2/plan2.py out2/picks.json out2; PY tools2/finish2.py out2/finish_list.json out2/final; PY tools2/build_board2.py out2/plan2.json board2
+  checks: analyze.py over out2/board2_items.json (45/45 word for word); run-heavy timing node tools2/page_check2.mjs board2 out2
