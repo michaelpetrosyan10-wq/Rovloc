@@ -812,3 +812,19 @@ Third message:
 5. Consequences. Agreed. A workable rule: the danger is shown in ordinary play first, the player gets one clear
    chance to act, and afterwards somebody says what the link was.
 6. Dialogue. Agreed. Each callback line earns one echo at most; the rest of the talk is about their lives.
+
+### Nov 21, evening: a new alien hunter (to the session on his PC)
+He sent a screenshot of a picture search for "monsters in horror games" and wrote: "bro but can u make it something
+like this yk how it has like a human build ion want that it has to be like creepy gross look at like alien space
+monsters and this ss." Asked, he chose an upright alien (two legs; not a human build), a new alien head in place of the
+favourite picture's face, a hood of its own flesh, wet slimy skin and open flesh. Three idea pictures were made to
+those answers (`art/higgsfield/hunter-alien/`, ledger round 5); he picked **"2: Cluster of eyes"**, now
+`art/higgsfield/picks/monster-favourite-A2.png`: a flat head covered in small black eyes over a lipless mouth of thin
+teeth, a cape of its own skin over the shoulders, stilt legs, long clawed fingers, raw open flesh at the knees and
+shoulders, wet grey-violet skin.
+
+What it settles: **A2 replaces B3 as the target for the hunter's look** (face, body, hands). B3's long pale face, the
+two eye holes with their pinpricks and the slit mouth are retired for the hunter. Still to do: canon 8 and
+`2-creatures.md` describe the old look and must be revised by the design session (the catch's long fingers and the
+whisper still work with the new head; its eyes no longer carry a point of light each). Other games are models, never
+sources: no creature of another game is copied.
