@@ -838,3 +838,11 @@ Asked "Build the better generator puzzle, "Gus's Ears", instead of the one as wr
 Ears"**. Still to do by the design session: revise `4-puzzles-world.md` 1.1, `3-systems.md` 6.1 (one pull once she is
 ready), `2-creatures.md` Chapter 1's row (the hunter heard only, answering each pull; at worst one near miss, no
 chase), `1-story.md` Gus's row (his hearing shown here), and the four failure sounds for audio.
+
+### Nov 21, evening: the bar for everything (to the session on his PC)
+"Also try not to use stuff from the old game and if you do make it to how i want right now. Remember, i want the
+graphics sound everything top tier, comparable and even better then the games i listed, dont be lazy and make sure
+everything is perfect remake it iff you have too. I need the storyu and everything to match exactly as how i said."
+Made a standing rule in `CLAUDE.md` and passed to every session working on the game. What it changes: the old game's
+layout, sounds, behaviour numbers and scripts are references at most; each is kept only where it already meets what he
+wants now and is changed to fit; and where a design document's choice and his own words differ, his words win.

@@ -29,6 +29,14 @@
   character, creature, name, line, puzzle solution, layout, music or image from another game).
 - **Assets** come from our own scripts or from sources whose licence allows a commercial game, with the origin
   recorded (page, author, licence, sha256). Never clone a real person's voice.
+- **Top tier, his words first, the old game only remade.** His words (21 November): "Also try not to use stuff from
+  the old game and if you do make it to how i want right now. Remember, i want the graphics sound everything top
+  tier, comparable and even better then the games i listed, dont be lazy and make sure everything is perfect remake
+  it iff you have too. I need the storyu and everything to match exactly as how i said." The bar is the games he
+  named (Silent Hill 2 and Dead Space remakes, Alien: Isolation, Outlast 2, Amnesia: The Bunker; Red Dead Redemption
+  2 for story; Counter-Strike 2 and GTA 6 for graphics): judge work against them and remake what falls short. Nothing
+  from the old game goes in as it was. Where a design document and his own words differ, his words win; when unclear,
+  ask him.
 - **Horror:** graphic for the aliens and for Danny's own death scenes; what happened to the other students stays off
   screen.
 - **Voices must sound like real people.** His words: "thhe voices gotta be really realisitc tell it to reallyt work
