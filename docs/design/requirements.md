@@ -674,3 +674,28 @@ game"). His typed answers are quoted exactly; a plain label means he picked that
 - Why the aliens came (the story treatment will offer versions).
 - His PC's graphics card, memory and disk (read from the PC once it is connected).
 - How co-op would work later.
+
+## 9. After the map was agreed (Nov 21, later the same day)
+
+### The player's words (verbatim, in order)
+- "okay send the game map when its ready and can u just like summarize everythhing that happened before like the
+  beginning and my key ideas and theh stuff we were talking about today so i can send it all to him like all my
+  idfeas and the improvments"
+- "okay send the game map when its ready and tell me if this is good and if im missing anything that you know that
+  would be crucial to make the game better even if its a small details i want everything i stated even the small
+  things. what else do i add or do i let it go"
+- "okay send the game map when its ready and make sure it contains every small thing i stated even if it was like
+  something really small before if its important include it"
+- "and these will have everything the ai needs to work well? everything you know? literally everything"
+
+### What was done about it
+- The building happens in a session that runs on his PC (sharing the PC's folder with the planning session was not
+  available). The repository is the shared memory between the two: `CLAUDE.md`, `docs/design/project-summary.md`
+  (how it began, his ideas that carry over, the new game), `docs/design/lessons-from-rovloc.md` (what he rejected
+  and accepted, how work was checked), the six research reports, and this file.
+- EVERY WISH HE HAS STATED, small ones included, is now one numbered list with a check for each:
+  `docs/design/unreal/owner-checklist.md` (152 lines, audited against this file by a second reader). The game map
+  and every build are checked against it line by line.
+- His PC as read by the session on it: an RTX 5070 with 12 GB, 16 GB of memory, 611 GB free; Unreal Engine 5.8.4.
+  The memory is half of what Epic recommends for the editor; he was told an upgrade to 32 GB is the most useful
+  hardware change and that it is his decision.

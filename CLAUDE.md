@@ -41,6 +41,7 @@
 | `docs/design/requirements.md` | The owner's words and decisions, oldest to newest. Sections 7 and 8 are the new game. |
 | `docs/design/project-summary.md` | One page: how the project began, which of his ideas carry over, and the new game as decided. |
 | `docs/design/lessons-from-rovloc.md` | What he rejected and accepted in the first game and why, and how work was checked without eyes or ears. |
+| `docs/design/unreal/owner-checklist.md` | Every wish he has stated, small ones included, numbered, each with a check. The game map and every build are checked against it. |
 | `docs/design/unreal/` | The new game's research, and the game map once it is written. |
 | `docs/design/art/higgsfield/` | His favourite monster picture (`picks/monster-favourite-B3.png`), the other design pictures, the art pack and the credit ledger. |
 | `docs/design/monster/` | The hunter's earlier behaviour design with its measured numbers, and notes on its model. |
