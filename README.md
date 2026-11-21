@@ -1,5 +1,10 @@
 # Rovloc
 
+> **This project has moved on.** From 19 November 2026 the game is being rebuilt as **Stay Behind** (working title),
+> a single-player survival horror game in Unreal Engine 5.8. The browser and Roblox versions described below are
+> frozen as they are. Start with [`CLAUDE.md`](CLAUDE.md) and sections 7 and 8 of
+> [`docs/design/requirements.md`](docs/design/requirements.md).
+
 A first-person survival horror game for 1–4 players in a pitch-black, post-apocalyptic school. It ships natively on
 two platforms, the same game with every feature on both:
 
