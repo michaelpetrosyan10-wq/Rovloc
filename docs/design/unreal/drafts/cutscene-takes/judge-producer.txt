@@ -1,0 +1,274 @@
+STAY BEHIND: THE TWELVE CUTSCENES, JUDGED BY THE PRODUCER WHO HAS TO GET THEM MADE
+
+The test for every scene: will it look real on one gaming PC with 16 GB of memory, with no motion-capture
+stage and no animator? People are MetaHumans (teenage faces are the known risk), bodies come from library
+animation and phone acting, faces are driven by the recorded voice or a phone video, no more than ten
+speaking faces, and the hunter's hard movement stays off camera.
+
+OVERALL
+- The three directors did not pick the same twelve moments. Eleven moments are in at least two takes:
+  the halftime walk, the sky, the skateboard, the first count, the camp song, "they're breathing",
+  "where's Mari", Ray at the door, Gus on the roof, the talk with Kayla in the ship, and Kayla's pod.
+  The twelfth is the dawn after the hold. The spectacle take calls it "Seeds". The dread take plays it
+  as twenty seconds in first person. It is also the story draft's twelfth scene. Those are the twelve
+  judged here.
+- Dread is the most buildable take. It hides the most: held poses between blackouts, nobody moving, the
+  door doing the acting. Spectacle is best wherever there are no people or the people are far away:
+  the skateboard, the floating cradles, the helicopter as light and rain, the pods at dawn. Heart is best
+  where a face has to carry the scene and needs objects and glass to protect it: the camp song, the pod,
+  and keeping every line spoken while standing still.
+- Final set: dread wins 5 scenes, spectacle 4, heart 3. That comes to about 17 minutes (1,030 seconds), inside
+  the 14 to 18 minute target.
+- Speaking faces in this set: Danny, Kayla, Marcus, Gus, Kessler, Priya, Owen and Ray, with Mari humming
+  side-on. That is nine of the ten allowed. Six of them are teenagers. Only Danny and Kayla get long,
+  well-lit close-ups. Marcus, Priya, Owen and Mari are always half-lit, side-on or brief.
+- Moments the three takes made cutscenes that this set plays in first person instead:
+    Waking with the Mark ("Frost", dread): first person, as heart and spectacle both say. The player looks
+      at his own arm, then looks up at the Still Ones, which are closer. Keep dread's hair clip on the boards.
+    The lift ("The Lift", spectacle): first person in the cabin, looking around only, with Song 1. Out the
+      window, the one lit basement window is Gus keeping the lights on (a graft that costs nothing).
+      The missile cuts the song mid-line.
+    The ship's belly ("The Belly", spectacle): the cloud clearing is played in the flight. The crash is a
+      cut to black with sound.
+    The wreck ("It's Me. Again.", heart): first person. Press talk and hear your own voice come out of
+      Kayla's walkie on the wet seat. This is the best idea in the city chapter, and it costs nothing in
+      first person.
+    The nest and the drumstick ("Got Your Stick", heart): first person, as the map has it. The player's own
+      hand puts the stick in Marcus's hand.
+    The gate in June ("We Waited", heart): first person as Kayla. Up to seven people standing in daylight is
+      the most exposed shot anyone proposed. Keep "We waited" and her camera flash as played moments.
+      Song 3 starts at the gate as the map says.
+
+------------------------------------------------------------------------------------------------------
+1. THE HALFTIME WALK ("We move in June", prologue, about 100 s)
+Winner: HEART. Score 6/10.
+Why: every line is spoken standing still, one face at a time. Danny's walk is seen far off or from behind.
+  Marcus runs back toward the gym seen through wired glass, which hides a library run. Dread has the pair
+  walk toward the camera and Marcus walk backwards spinning a drumstick. Spectacle has Kayla in close-up
+  while walking. A walking close-up is where a library walk shows. It still only scores 6, because three
+  teenage faces in the first two minutes is the game's biggest art risk, and the player judges everything
+  that follows by it.
+Graft: dread's half-dead tubes, so the faces sit in the warm light of the trophy cases instead of flat
+  fluorescent light. Dread's gym door closing on its slow closer, so the bar of light on the floor narrows
+  to a line. Spectacle's four stadium light banks seen far off through the back doors as the first wide
+  shot, which is cheap and sets up scene 2.
+Fix: no drumstick spin in close-up. In close shots the stick is held still; it spins only in the wide or
+  through the wire mesh. Kayla's film-camera hands are one hand-keyed close-up each, at most three seconds.
+  Marcus speaks only while standing in the doorway. If the teen-face test fails, use heart's fallback:
+  first person, with the camera pointed at the player, keeping only the shot of Marcus through the glass.
+If the owner chose otherwise: with Marcus as a survivor (5b), shots 7 to 9 go.
+
+2. THE SKY ("Lights Out": the mothership and the small ship, prologue, about 85 s)
+Winner: DREAD. Score 8/10.
+Why: the hunter appears only as held poses lit by a landing light flashing on and off: a hand flat on the
+  turf, then standing with its back to us, then its face turned to the gym. Every change happens in the
+  dark between flashes, so the crawl and the unfolding are never animated. The humans are backs and
+  silhouettes against the sky, so there is no lip-sync. The strobe makes three still poses look frightening
+  instead of stiff. Spectacle's version is good too, but it runs 120 s and adds a speaking face in white
+  light. Heart's version leaves the hunter standing up and turning for live gameplay to show.
+Graft: spectacle's stadium light banks dying one at a time with a heavy clunk. It is the best picture of
+  scale in any take, it is four lights switching off, and the fourth one holding and buzzing should be
+  kept. Add no more than 10 s for it.
+Fix: dread's hand-back says that in play the hunter "is already standing up". It must already be standing
+  when play starts, and in play it only turns its long face (allowed movement). Keep the mothership inside
+  the cloud as slow lights; never a clear, sharp silhouette. Before lighting, check each held pose against
+  the favourite picture: the stoop, the hood, the big veined hand.
+
+3. THE SKATEBOARD (end of the prologue and the title, about 50 s)
+Winner: SPECTACLE. Score 9/10.
+Why: no faces at all. Gus's hands drop the bar, the corridor tubes die one by one from the far end, and a
+  skateboard rolls into the last light and stops. The wheels click over the tile joints, further and
+  further apart. Then the broken whisper "...remain... in your... seats" from just behind the door, and
+  the title. One physics object, a timed row of lights and two hands. Dread's version adds Danny's and
+  Kayla's teenage faces pressed to the window, which costs risk and adds nothing.
+Graft: dread's shot of Gus's key ring trembling while nothing else of him moves (one close-up of a hand).
+Fix: make the roll slow down like a real board on a real floor (record a real board's wheels) so it does
+  not look pushed by a script. If it still looks scripted, use spectacle's fallback: hear it roll in the
+  dark and show it already stopped. Pick one sound to remember: the wheel clicks. The whisper is the line,
+  so leave out dread's extra heavy step.
+If the owner chose otherwise: with Marcus a survivor (5b), the scene goes.
+
+4. THE HAND ON THE GLASS AND THE FIRST COUNT (Chapter 1, about 110 s)
+Winner: DREAD. Score 8/10.
+Why: the hunter is only a hand mesh pressed flat on the wired glass behind Gus's head, with one slow slide
+  down. Gus is an adult face, the safest kind we have. Ray falls through the door across a cut. In the
+  count afterwards, only Kessler's face is shown; everyone else is hands, shoes and a red beanie. That
+  keeps the heaviest people scene in the game cheap on 16 GB and hides five teenage faces. Heart's and
+  spectacle's counts both open on a wide shot of all eight people in light.
+Graft: the Kessler impression from heart ("Mr. Reyes. Is something funny?" / Danny in her voice / Owen's
+  real laugh / "...The chin's too low."). It sets up Danny's last words at the hold, so the player must
+  have heard it. Stage it as two close faces only (Kessler, then Danny). Owen's laugh is heard, or he is
+  seen from behind with a hand to his mouth.
+Fix: shoot the hand close to the glass and slightly soft, lit from the corridor, so it does not look like a
+  sticker. Check its scale next to Gus's forearm in the first slice. If it fails in close-up, play shots 1
+  to 8 in first person (heart's and spectacle's way: the bulb aimed so the window is where the eye goes)
+  and keep the count as the cutscene.
+
+5. THE CAMP SONG AND THE PROMISE (Chapter 1, first night, about 95 s)
+Winner: HEART. Score 6/10.
+Why: nobody stands. Only Mari's strumming hand is seen, played by a real player filmed on a phone; her
+  fretting hand stays in shadow. She is side-on and dark, humming more than singing, so there is no
+  singing lip-sync to fake. The promise is one phone-filmed close-up with real pauses. Dread shows Mari's
+  singing face and a hand-keyed loop of chords. Spectacle folds the song and the promise into a 120 s
+  scene with all eight people. Fingers drifting out of time with the audio look fake fastest of
+  anything here, so this still only scores 6.
+Graft: dread's last shot. The camera drifts up to an air grille and holds on it while the promise hangs in
+  the room: dust shivering in the slats, nothing else. It needs no person and pays off at the hold.
+Fix: the guitar audio comes from the same phone take as the hand, never matched by hand afterwards. If the
+  strum does not sync, put the guitar out of focus and let the song be heard over faces listening. Hold
+  Danny's promise still; do not cut away during "But."
+If the owner chose otherwise: with the basketball team (6b) as what Danny walked away from, Kayla's look
+  means something else; nothing has to be reshot.
+
+6. "THEY'RE BREATHING" (Chapter 2, the turn, about 75 s)
+Winner: SPECTACLE. Score 8/10.
+Why: the soldiers and cradles exist only on a grainy, jerky security feed, and the frosted cradles float
+  out on a ribbon of light, so nobody lifts or carries anything. That fixes the one thing in the map's
+  line ("loading frosted cradles") that a library could not animate. The faces in front are lit only by
+  the screen. Dread and heart have soldiers sliding or loading the cradles.
+Graft: dread's ending. A soldier on the feed turns its lamp straight into the lens, the picture whites out
+  and feed four dies, leaving faces lit only by static. It costs nothing and is the scene's best sound cue.
+  Heart's insert of Ray's big scraped hand flat on the monitor glass is also safe (a hand on an object,
+  posed by hand).
+Fix: Ray does not stand up. Spectacle has him "getting up from the dark"; instead his voice comes from the
+  dark behind them, as in dread. The fogging lid has to read within two seconds even on the grainy feed,
+  so test the feed's grain level first. If the feed looks too clean, lower its frame rate.
+
+7. "WHERE'S MARI" (Chapter 3, the safe room, about 60 s)
+Winner: DREAD. Score 7/10.
+Why: Danny is a silhouette against the red exit sign, sits on a water drum outside the lamp light, and
+  objects carry the grief: her cot, the guitar on its nail, the strings sticking out of his pack, his
+  sleeve pulled over the black lines. It follows the map (the strings are still in your pack). It also
+  has a fallback that keeps the scene working with no face at all: Danny stays a silhouette in the
+  doorway. Heart has Danny set the strings on her blanket, which changes the map's beat into a small new
+  choice.
+Graft: heart's guitar on the nail ringing faintly by itself when the steel door slams. It is a free sound
+  and the one the player will remember. Heart's floor-level wide shot for the sit-down, with the cut
+  coming as he bends.
+Fix: the failing grin is the hardest bit of face acting in the game. Film it on a phone, keep it to about
+  two seconds, and half-light it. If it reads as acting, use the silhouette fallback. Owen's "Where's
+  Mari?" is spoken from a dim cot, half his face lit.
+
+8. THE KNOCK (Chapter 4, Ray at the door, about 90 s)
+Winner: DREAD. Score 9/10.
+Why: Ray is never on screen. Nobody moves. A still wide shot of the steel door does the acting: the same
+  three knocks twice with exactly the same timing (which is what a Mimic does), then one tired, uneven
+  knock low on the door and "...Please." Real knuckles on real steel. Heart is almost as safe. Spectacle
+  puts Ray's face behind wired glass, which is one more face and one more risk.
+Graft: from heart, a close-up of Kessler's thumb on the roll book over the name Dobbs (a hand, cheap), and
+  her last line to the door: "I count my kids, Mr. Reyes. I can't count him." It stops her from playing as
+  a villain.
+Fix: none needed beyond a phone-filmed Kessler close-up in torchlight. Kessler "steps between" Gus and the
+  door across a cut, not on camera.
+
+9. "SOMEBODY KEEPS THE LIGHTS ON" (Chapter 5, the roof and the helicopter, about 105 s)
+Winner: SPECTACLE. Score 5/10.
+Why: it hides the most of the hardest scene. The helicopter is a searchlight, rotor wind on puddles and a
+  dark shape above the glare, never a detailed hovering model. Boarding is silhouettes stepping into the
+  white, one per cut, so there is no moving group. The hunter is one still pose at the edge of the beam,
+  and its fast exit is hidden by the beam flaring into the lens, then "one heavy step on metal". Dread
+  and heart stage the same goodbye but with more close-ups in rain and, in heart's case, Kayla pulling
+  Danny by the hood (two bodies touching with force). It is still the riskiest scene in the set: rain
+  and wind on MetaHuman hair, a hovering aircraft, several bodies and variants for who boards.
+Graft: heart's sound. The rotors drop out for Gus's lines and his keys jingle under them, then the
+  flare strikes and the rotors come back like a wave. Heart's picture of Gus walking away from camera
+  toward the stair hut with a red flare held up, which is a library walk from behind. One small ear touch
+  if Danny brought the hearing-aid batteries (from heart), instead of dread's second alternate ending shot.
+Fix: Gus wears his cap and Kessler her hood, so there is no loose wet hair in close-up. Kessler reading
+  the list becomes an insert of her hands and the soaked roll book, with her voice. Gus's two close-ups are
+  the only faces in rain. Cut Danny "reaching" for the hand out of the light: end on his eye-line into the
+  white, then hard cut to first person. If rain on faces fails, Gus speaks as a silhouette against the
+  searchlight (spectacle's fallback). Whether Gus lives is told only in June, so the hunter is never shown
+  reaching him.
+
+10. "WHAT TIME?" (Chapter 8, waking Kayla in the nest, about 90 s)
+Winner: DREAD. Score 7/10.
+Why: Kayla lies still. Her eyes open, her breath fogs the inside of the lid, and she says four words. The
+  lid opens by itself. Danny kneels the whole time, and the only touch is his palm on the glass. Marcus
+  and Mari are out-of-focus held poses whose lips move with the murmur, so the taken show nothing
+  graphic. The murmur stopping all at once is a free sound. Spectacle's "The Talk" has two kids sitting
+  on the floor, which is also easy, but it is 90 s of face-heavy dialogue with three versions of three
+  shots, and a hall of thousands of cradles to fill on 16 GB.
+Graft: spectacle's variant line for the Mark. If she has seen it: "It's higher." If not, a silence, then
+  "How long?" This replaces dread's silent look.
+Fix: Kayla's face is very close, the second most important face in the game. Keep it behind the frosted
+  lid until her eyes open, and keep the frost on the glass's edges for the whole scene (dread's fallback,
+  half used from the start). One phone-filmed take for "What time?" and "...Danny." The map puts "If I get
+  in one" after the others are woken. It works here, but if the owner wants the map's order, move that one
+  line into play.
+If the owner chose otherwise: under the Harvest (1a), the lips do not move and the stopping murmur is lost.
+  With no Mark (4b), the line becomes "Someone has to hold it."
+
+11. KAYLA'S POD ("You Have a Thing", Chapter 8, about 100 s)
+Winner: HEART. Score 7/10.
+Why: Kayla is already strapped in when the scene opens, so nobody climbs in. Spectacle has her swing her
+  bad leg in, which is a body move. Two still faces with curved glass between them, so reflections,
+  condensation and sparks soften every edge. Her hand flat on the inside and his on the outside is a
+  touch through glass, not a touch. Her voice moves from muffled behind the sealed glass to clear on
+  the radio on his chest. That is a sound beat that costs no animation. It ends on the release panel
+  with the glyph HOLD, which leads straight into the first-person hold where the map puts it.
+Graft: spectacle's shot from inside the pod, of Danny's hand flat on the frosted glass and the handprint
+  staying a moment, then filling in. No face is needed, and it is the safety shot if the faces fail.
+Fix: she must already be holding a walkie when the scene opens (it got to her in play, off camera),
+  because nobody hands anything over on camera. Spend the best phone-filmed takes of the whole game here.
+  The four ending versions change mostly the audio: record all four lines, but animate only two face
+  versions (awake and asleep). Keep the ship's destruction to sparks at the edges of the frame. If the
+  faces are not ready, play it in first person through the glass, with Kayla's face in the window.
+If the owner chose otherwise: if the soldiers took Kayla (3c), nothing here changes.
+
+12. SEEDS (after the hold, the dawn, about 70 s, then June)
+Winner: SPECTACLE. Score 8/10.
+Why: no person moves. Pods are small lit objects on set paths, falling in a slow arc like seeds, and how
+  many there are is the ending you earned. The mothership breaks far away and small, then the sound
+  arrives late like distant thunder. Kayla's face is still and half-lit through frost, and the walkie's
+  hiss stops. It completes the scale that scene 2 opened. It is also the story draft's twelfth scene,
+  and dread wants the same moment in first person.
+Graft: dread's idea as the cheap fallback. Twenty seconds from Kayla's pod window in first person, with
+  the ship coming apart in silence and the radio hissing.
+Fix: no physics simulation of the break-up. Pre-bake a few large pieces with light running through the
+  hull, seen only from far off (spectacle's own fallback is a flare of light where the ship was). Reuse the
+  prologue's far mothership model, and load the city only as lights under cloud, to stay inside 16 GB.
+  For the four endings only the pod count and whether her eyes are open change.
+If the owner chose otherwise: under the Harvest (1a), nothing in this scene changes.
+
+------------------------------------------------------------------------------------------------------
+THE THREE SCENES MOST LIKELY TO LOOK FAKE, AND WHAT EACH SHOULD BECOME
+
+1. Scene 9, the roof. Rain and wind on MetaHuman hair, a hovering helicopter, a group boarding, the hunter
+   and several ending versions, all in one scene. It should become two cutscene pieces with first person
+   between them. First, a far wide shot: the searchlight column in the rain and the hunter's still
+   silhouette in the beam, flaring away. Then the player boards in first person into the white. Then a
+   short cutscene of Gus's goodbye only: two close-ups under his cap, then his back walking away with
+   the flare. The helicopter is never seen as more than light and a dark shape.
+2. Scene 1, the halftime walk. Three teenage faces in the first two minutes, under the least forgiving
+   light, plus a running Marcus and a spinning drumstick. It should become: every line spoken standing
+   still in trophy-case light, Marcus through wired glass, no walking close-ups. If Danny and Kayla read
+   as over twenty in the first-slice test, play it in first person with the camera aimed at the player.
+3. Scene 5, the camp song. Fingers on strings out of time with the music. It should become: one
+   phone-filmed strumming hand, the fretting hand in shadow, Mari side-on in the dark, and the guitar out
+   of focus if the sync fails. The scene is really about Danny's promise, which is one still close-up.
+(Next after these: scene 11, the pod. It is less likely to look fake because of the glass, but it matters
+ most, so it is tested early.)
+
+------------------------------------------------------------------------------------------------------
+BUILD ORDER: RISKY ONES TESTED FIRST
+
+0. First day, before any scene: the hand-back. A matched cut from Danny's eye-line to first person, with
+   control back within two seconds and sound carrying over the cut. The camera blend is reported broken
+   in UE 5.8, so do not rely on it.
+1. Scene 5, the camp song. It sits inside the first slice's safe room and tests at once a phone-filmed
+   Danny face, the guitar hand, three or four MetaHumans in lamp light on 16 GB, and the hand-back.
+2. Scene 11, the pod. It tests Danny's and Kayla's faces held close for a minute, which is the teen-face
+   question the first slice must answer, plus the glass and frost material. A grey-box pod is enough.
+3. Scene 9, the roof, in grey. It tests rain on hair, the searchlight in volumetric rain, a hovering
+   light and the hunter's still pose. Decide early whether boarding goes to first person.
+4. Scene 1, the walk. Three teenage faces, Marcus included, and the corridor lighting.
+5. Scene 2, the sky. The mothership in volumetric cloud and the hunter's held poses under the strobe; a
+   memory test on 16 GB.
+6. Scene 12, Seeds. The far break-up, the pods on their paths and the reused mothership; memory again.
+7. Scene 10, "What Time?". Kayla's face waking close behind frost.
+8. Scene 4, the hand and the count. Hand scale beside Gus, and eight people at low detail in the shelter.
+9. Scene 7, "Where's Mari". The failing grin; the silhouette fallback is ready if it fails.
+10. Scene 6, "They're breathing". The security-feed look.
+11. Scene 8, the knock. Almost no risk: a door, sound and two faces in torchlight.
+12. Scene 3, the skateboard. Almost free; build it whenever the corridor exists.

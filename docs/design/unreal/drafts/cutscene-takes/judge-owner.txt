@@ -1,0 +1,196 @@
+STAY BEHIND: THE CUTSCENES, JUDGED AS THE OWNER WOULD
+(judge: "would he say that was cool?"; files judged: take-dread.md, take-heart.md, take-spectacle.md)
+
+OVERALL
+No one director wins the set. Dread wins the scares (the scenes where a horror player's skin crawls),
+Heart wins the people (the scenes that make the ending hurt the way Red Dead 2 does), and Spectacle wins
+the big pictures and has the best idea for the ending. Tally in the final twelve: heart 5, spectacle 4,
+dread 3. The three agree on the right things: every catch, the Mark, the breach, the parachute, the nest
+and the hold stay in first person; the hunter's unfolding is never shown; every scene ends on Danny's own
+view so control is back in under two seconds. The set below runs about 1,030 seconds (17 minutes).
+
+Recommended twelve, in story order, about 17 min in all:
+ 1  Halftime ................ heart      100 s   score 7
+ 2  Last Lights ............. spectacle  110 s   score 9
+ 3  The Board (title) ....... spectacle   50 s   score 9
+ 4  First Night ............. spectacle  120 s   score 7
+ 5  Where's Mari ............ heart       70 s   score 8
+ 6  Knock ................... dread       85 s   score 8
+ 7  Somebody Keeps the Lights On  dread  110 s   score 9
+ 8  It's Me. Again. (Ch 6) .. heart       65 s   score 8
+ 9  What Time? (Kayla wakes)  dread       95 s   score 9
+10  Right Behind You (pod) .. heart      100 s   score 9
+11  Seeds (dawn, after white) spectacle   45 s   score 8
+12  We Waited (the gate) .... heart       80 s   score 8
+
+-----------------------------------------------------------------------------------------------
+1. HALFTIME ("We move in June" / "We'll be at the gate")   WINNER: heart   SCORE: 7
+Why: Heart's version is built on objects that pay off nine hours later: the film camera's flash (whose
+last frame Kayla develops in June), the thumb stopping on the wind-on lever, "Swear on the hat" / "On the
+hat", and Marcus seen running back through the wired glass of the closing door. It is the right opening,
+but it is a talk scene with three teen faces close up, so a bored player rates it a 7, not a 9.
+Graft: from dread, the PA line "That's the half, folks. Please remain in your seats" over the opening
+(the hunter whispers it in scene 3, so the player must hear it clean here). From spectacle, the shot of
+the two from behind walking to the glass doors with the stadium's four light banks burning in the cold:
+those four lights die in scene 2. Put Marcus's skateboard (with one loud sticker) leaning on the trophy
+case in the over-the-shoulder shot so scene 3's board is recognised at once.
+Fix: keep faces in the trophy cases' warm light with half the tubes dead (dread's fallback), never flat
+fluorescent light. Cut dread's long hold on the empty corridor; it drags in minute six of the game.
+
+2. LAST LIGHTS (the mothership and the small ship)   WINNER: spectacle   SCORE: 9
+Why: The stadium's four light banks dying one at a time with a heavy clunk under a ship the size of a
+district is the poster of the game, and the joints opening "like a ladder pulled to full height", heard
+over two faces, hides the hardest animation in the game.
+Graft: from dread, the landing light strobing in the steam (on: a hand flat on the turf; off; on: the
+hand gone; off; on: it stands, hooded, back to us). It is the scariest way to reveal a monster without
+animating it. From heart, the crowd inside the gym going silent all at once behind the wall, Kayla's
+fingers closing on Danny's sleeve, and Danny's one line, "Okay. That's... a lot of ceiling." (the one
+quotable line; Kayla's whispered "Danny." stays).
+Fix: trim to about 110 s. End with it standing, back turned: the map gives the face turning toward the
+school to the playable sneak, so do not use dread's last strobe frame of the face turned.
+
+3. THE BOARD (the steel door, the title)   WINNER: spectacle   SCORE: 9
+Why: Tubes dying from the far end of the corridor toward the door, a skateboard rolling into the last
+light on its own and clicking to a stop, then, from right behind the steel door, the announcer's words
+broken: "...remain... in your... seats." It teaches the whisper rule (a whisper means it is right here)
+in the first ten minutes, with no faces and almost no animation.
+Graft: from dread, one wheel still turning after the board stops; Gus's key ring trembling on the bar;
+Kayla's face beside Danny's at the glass as she recognises the sticker (no words).
+Fix: the whisper must sound like the PA voice torn up, not a monster voice; let a beat of black pass
+between the last tube and the whisper so the player has time to think the scene is over.
+
+4. FIRST NIGHT (the count, the camp song, the promise)   WINNER: spectacle   SCORE: 7
+Why: Heart wrote the better material in two scenes (95 s and 100 s), but two seated safe-room cutscenes in
+Chapter 1 is where this owner gets bored. Spectacle's merge does the count, the Kessler impression ("Mr.
+Reyes. Is something funny?" / "Is something funny?" / "...The chin's too low."), the song and the
+promise in one 120 s scene, and opens on the best picture of home: eight small people in one caged
+bulb's light under the 1962 signs.
+Graft: from heart, Danny humming one bar along wrong and Mari laughing without stopping (it is why her
+loss hurts in Chapter 3), and Kayla looking down at "Which, historically, from me, means nothing", the
+only one who knows it is about his father. From dread, the ending: after "But.", the camera drifts up to
+an air grille and holds while dust shivers in the slats (three seconds, not "far too long"). The player
+understands it when the hunter says the promise back at the hold.
+Fix: cut spectacle's slow move along faces (shot 8) and the "later" cut; the promise is said at the
+generator straight after the song. Owen's laugh must be a real recorded laugh. Hold it to 120 s.
+
+5. WHERE'S MARI (home after the Mark)   WINNER: heart   SCORE: 8
+Why: A joke that dies halfway ("So. Good news and bad—"), Owen's "Where's Mari?", "...Yeah.", Danny
+sitting down on her cot, and the guitar on the nail ringing an out-of-tune chord by itself when the steel
+door slams. Nobody says a sad word and it hurts; the guitar ring is the sound he will remember.
+Graft: from dread, Danny's entrance as a silhouette in the doorway against the tunnel's red exit sign,
+and the generator's hum stuttering once (plants the breach). Heart's Kayla noticing the pulled-down
+sleeve stays, because it sets up the Mark choice.
+Fix: the map says Mari's strings are "still in your pack": do not decide that in the cutscene. He takes
+the packet out, looks, and the choice to leave or keep it is the player's in first person. "...Yeah." must
+be flat, not sad (heart's own warning).
+
+6. KNOCK (Ray at the steel door)   WINNER: dread   SCORE: 8
+Why: The same three knocks arrive twice with the same spacing while the camera does not move, and the
+player has just learned on the Mimic floor that the same timing means a Mimic; then one tired, uneven
+knock low on the door, "...Please." It is horror that uses the game's own rules, and Ray is never shown.
+Graft: from heart, Kessler's line, very quietly, to the door: "I count my kids, Mr. Reyes. I can't count
+him." (keeps her frightened, not a villain), and her thumb on DOBBS on the sign-in sheet. From spectacle,
+Gus saying nothing and tilting his torch so the beam lands on the tunnel hatch, then looking at Danny.
+Fix: do NOT use spectacle's Ray face at the window: seeing his face would answer the question the player
+is supposed to test through the hatch. Cut dread's "Kessler sits and opens her roll book" to make room
+for the grafted line.
+
+7. SOMEBODY KEEPS THE LIGHTS ON (the roof, Gus)   WINNER: dread   SCORE: 9
+Why: It makes a packet of hearing-aid batteries from Chapter 2 pay off with no meter: helped, Gus tips
+his head, hears it, clicks off his torch and is gone into the stair hut; not helped, he waves his torch
+up at them while the long pale face waits stooped at the stair door behind him, and he never turns.
+That second frame is what a horror player screenshots.
+Graft: from spectacle, the opening: the hunter standing at full height inside the searchlight's rain
+column at the end of the chase, the beam flaring white into the lens, the parapet empty, one heavy step
+on metal below the edge. From heart, the rotors dropping under Gus's lines so his keys jingle, Gus
+striking a red flare before he goes (helped version), and the twelve frames of the long face turning
+into the light with two pins in its black eyes, the only cutscene look at the favourite face.
+Fix: Kessler's list is one shot, not three; boarding is silhouettes stepping into white between cuts.
+Hold 110 s. Song 1 starts only once they are in the air, in first person.
+
+8. IT'S ME. AGAIN. (the wreck, Chapter 6)   WINNER: heart   SCORE: 8
+Why: After twenty minutes of talking into a dead radio, Danny presses talk at the wreck and his own voice
+comes back out of the cabin: Kayla's walkie, blinking red in rainwater beside her film camera. It is
+exactly the map's wreck, honest to "nothing fakes Kayla", and it is the city's one look at his face.
+Graft: none needed; spectacle and dread have no Chapter 6 scene.
+Fix: "...Cool. So I've been talking to a seat." must be thrown away, not pitied. He switches her walkie
+off and keeps it: then the pod scene must show it clipped in her harness already (see scene 10), since
+nothing can be handed over on camera.
+
+9. WHAT TIME? (Kayla wakes in the nest)   WINNER: dread   SCORE: 9
+Why: The code word that tested Mimics is turned round: Kayla, who has slept among the hunter's voices,
+wakes and tests HIM. "What time?" "Four." Her breath fogging under his hand print on the lid, then Marcus's
+and Mari's moving lips stopping at the same moment behind them: when the whispering stops, it has noticed
+you. Two still faces and a lid, so it is nearly safe to stage.
+Graft: from spectacle's "The Talk", Kayla's answer to "They follow you": "You're not your dad, Danny."
+It is the only place the father (decision 6) is said on camera. From heart, the frost in Marcus's
+eyebrows and his headphones still round his neck: calm and whole, never dead-looking.
+Fix: the map places "If I get in one, they follow it" after the others are woken; keep it here only if
+the waking of the others is played straight after (it is). Under the Harvest instead of the Voice
+Collectors, the moving lips and their stopping go. The drumstick stays first person, before this scene.
+
+10. RIGHT BEHIND YOU (Kayla's pod)   WINNER: heart   SCORE: 9
+Why: The four lines ("You're lying. You do the thing with your mouth." / "I don't have a thing." / "You
+have a thing, Danny."), then the lid seals and her voice is cut off mid-breath, and a click later the
+same voice is clear in his ear on the radio: "Stay on the line, okay?" That move from glass to radio is
+the best sound idea in all three takes, and the owner asked first for good talking.
+Graft: from dread, the two palms on either side of the glass not lined up, frost closing in from the edges
+until her face is gone, and one heavy step through the floor, then another nearer. From spectacle, the
+reverse from inside the pod: his hand flat on the frost, the black lines on his wrist, his print filling in.
+Fix: give her a radio: her walkie (from scene 8) already clipped to her harness. The hand-back goes to
+the pod release for the hold (heart is right; the map puts the core's final exam before the pods, so
+dread's and spectacle's turn "toward the core" is out of order). Four ending variants, as heart lists.
+
+11. SEEDS (after the white)   WINNER: spectacle   SCORE: 8
+Why: The ending turns a number into a picture: pods leaving the dying ship like seeds at dawn, as many as
+the people Danny freed, then the silent break along its spine, the thunder arriving seconds late, and
+the walkie in Kayla's hand going from hiss to nothing. No actor needed.
+Graft: from dread, start it as the white thinning into the view from Kayla's pod window (dread's
+"twenty seconds as her"), so the shot of her face through frost is the anchor.
+Fix: cut from 70 s to about 45 s: straight after the hold, the player is spent and must reach June fast.
+No music; Song 3 waits for the gate.
+
+12. WE WAITED (the gate, June)   WINNER: heart   SCORE: 8
+Why: "You guys'll wait, right?" is the guilt the whole game runs on, and here, at the same gate, whoever
+lived says "We waited." Kayla laughs crying and lifts the film camera: the same click and flash that
+opened the game. Song 3 starts on one chord of Mari's old guitar. In "Only her" she photographs the empty
+gate anyway.
+Graft: none; spectacle hands back to play at the fence, and dread ends at the white.
+Fix: "We waited" said flat and tired, never acted. Up to seven people standing still in daylight is the
+most exposed shot in the game: shoot the group from far off, faces small, and give the close-up only to
+the speaker and Kayla.
+
+-----------------------------------------------------------------------------------------------
+SHOULD NOT BE CUTSCENES (play them in first person instead)
+- They're Breathing (Chapter 2). All three wrote it well and all three fallbacks say it works at the
+  monitor desk. Play it first person with dread's beats: Priya's "They're bodies", the frost clearing on
+  the lid, "They're breathing" / "Say that again" / "They're breathing", and the soldier turning its lamp
+  straight into the lens until the feed whites out: in first person it looks at YOU. Add heart's Ray
+  hand flat on the monitor and spectacle's cradles floating on a ribbon of light (nobody carries).
+- The hand on the glass (Chapter 1). Dread made it a cutscene; heart and spectacle are right that it is
+  scarier in first person: aim the one bulb at the door, the hand arrives behind Ray as the door opens,
+  nobody turns the player's head. Keep dread's squeak of the palm sliding down the glass.
+- Frost (dread, waking with the Mark). The Still Ones only move when unwatched, so waking must be the
+  player's own look round. Keep dread's pictures in first person: the frost-lines growing, the wing
+  figure a step nearer, Mari's hair clip at the edge of the light.
+- The nest with the drumstick (heart). The player must place it himself; nothing happens; that is the scene.
+- The Lift (spectacle). Straight after the 110 s roof scene it makes over three minutes without control.
+  Play it first person in the cabin; keep spectacle's lit basement window (Gus keeping the lights on) as
+  something the player can look down at, and Danny's "Kayla—" cut off by the missile.
+- The Belly (spectacle, Chapter 7). The flight's own view out of the cloud can show the ship filling the
+  sky; keep its murmur of thousands of sleeping voices. A 25 s outside shot only if time allows.
+
+DRAGS
+- Back-to-back cutscenes: the roof plus the lift (190 s) and dread's two Chapter 1 scenes; heart's two
+  Chapter 1 safe-room scenes (195 s). Fixed above by merging the first night and playing the lift.
+- Every "hold a beat too long" in dread: allow one per scene, three seconds at most.
+- Last Lights at 120 s and Seeds at 70 s: trim to 110 and 45.
+
+MISSING
+- The father is never on camera in any take: fixed by grafting "You're not your dad, Danny" into scene 9.
+  His mother's note in Chapter 6 stays first person; consider an old photo of his dad on the fridge there.
+- Kayla's radio in the pod: no take shows how she has one. Fixed by the walkie from scene 8, shown clipped.
+- The favourite face is never held in a cutscene, which is right (it lives in the first-person Mark and
+  hold, both staged from the favourite picture's angle: face coming down out of the dark into one light,
+  the big veined hand gripping beside it). Scene 7's twelve frames are the one cutscene glimpse.
+- Nothing else in the map needs a cutscene it does not have.

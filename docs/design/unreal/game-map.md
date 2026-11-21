@@ -2,7 +2,7 @@
 
 **SPOILERS. This map tells the whole story, the ending included.**
 
-This is the document you approve before anything is built. **Status: decisions answered on 21 November 2026; the cutscenes (part 12) are being written.** Six designers wrote drafts and three reviewers attacked them; every fix is already in here. Nothing you settled on 21 November has changed. Part 10 holds the twelve questions that were yours to answer; on 21 November you chose the recommended option for each. The map was checked line by line against the list of every wish you have stated (152 of them, in `owner-checklist.md`); part 11 shows where the small ones went.
+This is the document you approve before anything is built. **Status: decisions answered on 21 November 2026.** Six designers wrote drafts and three reviewers attacked them; every fix is already in here. Nothing you settled on 21 November has changed. Part 10 holds the twelve questions that were yours to answer; on 21 November you chose the recommended option for each. The map was checked line by line against the list of every wish you have stated (152 of them, in `owner-checklist.md`); part 11 shows where the small ones went, and part 12 describes the twelve cutscenes.
 
 ---
 
@@ -32,22 +32,22 @@ Time runs from Friday night to Tuesday dawn. Lengths are for a first play on the
 ### Prologue: "Halftime" (about 22 minutes)
 - **What happens:** Kayla photographs Danny with her grandfather's film camera. Marcus, his other best friend, spins a drumstick. Walking out, Kayla says her family moves in June. Danny jokes ("So I'm the one who stays behind. Cool. Love that for me.") and leaves. Marcus runs back for his skateboard: "You guys'll wait, right?" "We'll be at the gate." They don't wait.
 - **What you do:** walk, look, joke with Kayla in the parking lot. Then the pulse: phones go hot and die, the streetlights go out street by street, the mothership settles silently, the small ship drops onto the field.
-- **New:** a 3 to 4 minute sneak back into the school with Kayla, along the parked cars and under the bleachers, while the hunter unfolds on the field and turns its long face. Your first lesson in crouching and sight lines, with a near miss; it cannot fail the first time.
-- **Remembered:** Gus bars the steel door. Through its window the corridor light dies, and in the last of it a skateboard rolls across the floor on its own and stops. Title.
+- **New:** a 3 to 4 minute sneak back into the school with Kayla, along the parked cars and under the bleachers, while the hunter, already standing on the field, turns its long face toward the school. Your first lesson in crouching and sight lines, with a near miss; it cannot fail the first time.
+- **Remembered:** Gus bars the steel door. Through its window the corridor light dies, and in the last of it a skateboard rolls across the floor on its own and stops. Then, from right behind the door, the announcer's words come back in pieces: "...remain... in your... seats." Title.
 
 ### Chapter 1: "The Shelter" (basement, Dark Dwellers, about 75 minutes)
 - **What happens:** survivors arrive one by one. Early on Ray hammers at the door, and as Gus opens it the hunter's hand is flat on the wired glass behind him. Ms. Kessler: "We stay behind this door until help comes."
 - **What you do:** start the dead generator with Gus (the right part, bleed, prime, pull: loud enough for the whole basement); fetch food through tunnels where the hunter is heard in the pipes. Then the power fails.
 - **New:** the Dark Dwellers. The torch, crank torch, wind-up stopwatch, flares, glow sticks. Big puzzle: **Flare Road**, a fuel run through dark tunnels, choosing which three circuits to light and bridging the gaps with flares.
 - **Remembered:** the first outage inside the shelter, everyone counting aloud in the dark while Gus works; four flares for a route that needs five. Gore: a Dweller caught by the light, burst open on the tunnel floor.
-- **Safe room (first night):** the first count. Mari plays the camp song. Owen asks to be walked past the dark tunnel. Danny's promise: "I'm getting everyone out. All of you. Which, historically, from me, means nothing. But." The hunter will say it back at the end.
+- **Safe room (first night):** the first count and Danny's Kessler impression. Mari plays the camp song, and Danny makes his promise: "I'm getting everyone out. All of you. Which, historically, from me, means nothing. But." The hunter will say it back at the end. Then Owen asks to be walked past the dark tunnel.
 
 ### Chapter 2: "Halftime Draw" (first floor, Listeners, about 60 minutes)
 - **What happens:** the gym abandoned mid-game: coats on the bleachers, the scoreboard frozen at HALF, HOME 31 GUEST 34, the cheer team's confetti and balloons everywhere. Kayla is wrong once, sending you into the nest: "I'm sorry. I saw it wrong."
 - **What you do:** the nurse's office (Gus's hearing-aid cells, Mari's inhaler, Ray's painkillers), Priya's glasses, the office safe, dialled one number per knock of the heating pipes. Big puzzle: **Halftime Draw** (part 6).
 - **New:** the Listeners; the kitchen-timer rattle, the air horn, the first electrical closet.
 - **Remembered:** the hunter walks onto the floor. Its heavy steps make you want to run, which the Listeners would hear; instead they rush the hunter, and it swats one into the lockers, split open. You use its walk as cover.
-- **The turn:** on a camera Priya sees soldiers loading frosted cradles into a small ship. Breath fogs a lid. "They're breathing."
+- **The turn:** on a camera Priya sees frosted cradles floating out to a small ship on a ribbon of light, a soldier walking beside each. Breath fogs a lid. "They're breathing."
 - **Safe room:** Mari teaches Danny the camp song's three chords. Kessler starts deciding who "needs" medicine.
 
 ### Chapter 3: "Still Life" (second floor, Still Ones, about 60 minutes)
@@ -72,7 +72,7 @@ Time runs from Friday night to Tuesday dawn. Lengths are for a first play on the
 
 ### Chapter 6: "The City Alone" (about 85 minutes)
 - **What happens:** Monday night. Danny lands on a rooftop and a Patrol searchlight finds him in seconds: your "instantly spotted". Three minutes of chase over roofs and down a fire escape to the first hide.
-- **What you do:** one route through a few dense blocks. The radio is dead, but you can press to talk, quietly, so his voice and jokes carry the chapter and nobody answers. Side places: Sal's Pizza; his own building, where he writes under his mother's note; a laundromat boy hiding from a sweep (a choice). At the wreck, Kayla's film camera and her walkie. At the midpoint **Takedown** (part 6) gets you the gun; the second half is hunted, with six shots.
+- **What you do:** one route through a few dense blocks. The radio is dead, but you can press to talk, quietly, so his voice and jokes carry the chapter and nobody answers. Side places: Sal's Pizza; his own building, where he writes under his mother's note; a laundromat boy hiding from a sweep (a choice). At the wreck, Kayla's film camera and her walkie: when he presses talk, his own voice comes out of it. He keeps both. At the midpoint **Takedown** (part 6) gets you the gun; the second half is hunted, with six shots.
 - **New:** the Patrol, who take people in front of you (a collar of light, a person lifted away, still calling out) and for one street lead a stray Listener on a leash. The gun and the scanner.
 - **Remembered:** from a rooftop the hunter whispers Kayla's "stay... on the... line" while the radio on Danny's chest stays dead. Gore: a soldier mauled by strays. In the stolen ship he reads that the mothership leaves at dawn.
 
@@ -81,11 +81,11 @@ Lift off straight up from the landing pad. The hunter's hand is on the canopy fo
 
 ### Chapter 8: "Stay Behind" (the mothership, about 120 minutes)
 - **The first hour:** decks around a central shaft. The Brute is new; the others return in their natural roles (Listeners guarding the taken, the Swarm drifting in low gravity). Rows of frosted cradles murmur. The low-gravity Spine (about 15 minutes). The Nest: Marcus and Mari, lips moving with its whispers; Danny puts the drumstick in Marcus's hand.
-- **The last hour:** wake Kayla, then everyone you can; the woken walk to the pod bay on their own. "If I get in one, they follow it." The self-destruct (part 6). The run to the pods as the ship comes apart, catching Kayla's hand as a deck tilts. Her pod: "Go. I'm right behind you." What she answers depends on what you shared.
+- **The last hour:** wake Kayla (she tests him: "What time?"; he tells her: "If I get in one, they follow it."), then everyone you can; the woken walk to the pod bay on their own. The self-destruct (part 6). The run to the pods as the ship comes apart, catching Kayla's hand as a deck tilts. Her pod: "Go. I'm right behind you." What she answers depends on what you shared.
 - **Remembered: the hold.** One hand holds the pod release; pods launch one by one, a face at each window. The hunter comes with every habit it learned and whispers Danny's own promise back. "Yeah. That one I'm keeping." Your other hand spends your last flare, cell and extinguisher keeping its hand off you. When the pockets are empty its hand closes over his mouth for his voice, but his last words are already out: the Kessler voice, "Miss Brooks. Is something funny?" She laughs, crying. Then, in his own voice, the true thing he never said. White.
 
 ### Epilogue: "June" (about 15 minutes, as Kayla)
-The city is mending. Gus meets her at the basement door if he lived; if not, his keys hang tagged "for Kayla". She adds Danny's name to the shelter wall and does small chores, as grief. Her film is developed: the last frame is Danny pulling a face. She plays his camcorder clips and the radio tape of his last words, longer the more he stayed on the line. Then the gate. Whoever lived is waiting; with few, she waits alone. Song 3 begins.
+The city is mending. Gus meets her at the basement door if he lived; if not, his keys hang tagged "for Kayla". She adds Danny's name to the shelter wall and does small chores, as grief. Her film is developed: the last frame is Danny pulling a face. She plays his camcorder clips and the radio tape of his last words, longer the more he stayed on the line. Then the gate. Whoever lived is waiting, and the first of them says "We waited."; she takes their picture. With no one there, she photographs the empty gate anyway. Song 3 begins.
 
 ### How your choices shape the ending
 The game quietly counts whom you **helped**, what you **shared** (supplies, and three truths: the seats, the Mark, the notebook), whom you **left**, and whether you **stayed on the line** (calls answered in calm moments, night talks, clips you film for her, the climb; switching the radio off never counts against you).
@@ -342,3 +342,37 @@ Every line of your checklist was traced. These are the small ones that are easie
 **Two wishes from the old game that I adapted. Say if you want them back as they were:**
 - **The radar** that batteries recharged. In the school Kayla does that job from the cameras, and from the city on you carry the soldiers' scanner, which costs a recharge and can be heard. There is no free locator and no separate handheld radar.
 - **Second chances** (a heal when you are down, one respawn, an extra one with the syringe). Now: the first catch by the hunter in each chapter is a struggle you can win, and dying restarts you close by with your progress kept (decision 2).
+
+---
+
+## 12. The cutscenes
+
+There are twelve, about 17 minutes in all. They look real because of what we show and what we hide. You see faces up close and only for a moment, hands, objects, and big things far away in the dark and the rain. You never see a crowd moving, a fight, anyone climbing or running in full light, or the hunter unfolding: those happen in a cut, a blackout or a flash of light, and the sound tells you what happened. Every line of talking is clear over everything else. Every scene ends on what Danny is looking at, so you are back in control within two seconds.
+
+**1. On the Hat (the prologue, 95 seconds).** Kayla's flash goes off in your face and the camera pulls out of Danny's head. Over the PA: "Please remain in your seats." Kayla tells him she moves in June, he jokes ("So I'm the one who stays behind. Cool. Love that for me.") and walks out. Marcus catches them at the door, swears them to wait "on the hat", and runs back for his skateboard. You watch him go through the wired glass of the closing door, the last time anyone sees him awake. Then you are in the parking lot with Kayla.
+
+**2. Last Lights (the prologue, 110 seconds).** From behind the two of them you see a ship the size of a district slide through the clouds, and the stadium's four floodlights die one by one with a heavy clunk. The packed gym behind them goes silent all at once, and Kayla's hand closes on his sleeve. "Okay. That's... a lot of ceiling." A small ship slams onto the field, and its landing light flashes on and off in the steam. On, a long hand flat on the turf. Off. On, it is standing there, three metres tall, back turned. You drop behind a car, and the sneak is yours.
+
+**3. The Board (the title, 50 seconds).** Gus bars the steel door. Through its little window the corridor lights die toward you, and in the last one Marcus's skateboard rolls in on its own and stops, one wheel still turning. Black. Then, from right behind the door, the announcer's voice in broken pieces: "...remain... in your... seats." STAY BEHIND. You are standing at the black window when Gus says "Away from the glass."
+
+**4. First Night (Chapter 1, 120 seconds).** Eight people in one bulb's light in a 1962 shelter: the game's picture of home. Ms. Kessler counts everyone, Danny does her voice back at her ("Is something funny?"), and Owen laughs for the first time since the field. Mari plays the camp song on a cheap guitar, Danny hums along wrong, and then he makes his promise: "I'm getting everyone out. All of you. Which, historically, from me, means nothing. But." Kayla looks down, because she is the only one who knows he means his dad. The camera drifts up to an air grille where dust is shaking; you will understand why at the very end.
+
+**5. Where's Mari (Chapter 3, 70 seconds).** Danny comes home hurt, a silhouette against the red exit sign, and starts a joke he can't finish. Owen asks "Where's Mari?" and Danny just says "...Yeah." and sits down on her empty cot. When the steel door slams, her guitar on the nail rings an out-of-tune chord nobody played. You get control sitting on her cot, his sleeve pulled over the black marks.
+
+**6. Knock (Chapter 4, 85 seconds).** Ray is outside the steel door after dark, and you never see him. Three knocks. Then the same three knocks, with exactly the same timing, which on the floor you just survived means a Mimic. Then one tired knock, low on the door, and "...Please." Kessler won't open it ("I count my kids, Mr. Reyes. I can't count him."), and Gus silently shines his torch on the tunnel hatch. Going round to check is up to you.
+
+**7. Somebody Keeps the Lights On (Chapter 5, 110 seconds).** On the roof the hunter stands at full height in the helicopter's searchlight, and for half a second its long face turns into the light before the beam flares and it's gone. The others run into the white one by one. Gus stays: "Somebody keeps the lights on, son. Go on." If you brought him his hearing-aid batteries back in Chapter 2, he hears it coming, strikes a red flare and walks off into the rain. If you didn't, he waves his torch up at you while the long pale face waits behind him at the stair door, and he never turns around. You get control at the helicopter door as the roof drops away.
+
+**8. It's Me. Again. (Chapter 6, 55 seconds).** All night you have been talking into a dead radio. At the crashed helicopter you press talk one more time, and your own voice comes out of the wreck, from Kayla's walkie lying in rainwater, blinking red next to her film camera. "...Cool. So I've been talking to a seat." You keep both and walk on.
+
+**9. What Time? (Chapter 8, 95 seconds).** You wipe the frost off Kayla's cradle and her breath fogs the glass. Her eyes open, and the first thing she says is the test you used on the Mimics: "What time?" "Four." She sees how far the Mark has spread, he tells her the pods would follow him, and she says the only line in the game about his father: "You're not your dad, Danny." Behind them, Marcus's and Mari's lips stop moving at the same moment, which means it has noticed you. You get control kneeling there, with the others still to wake.
+
+**10. Right Behind You (Chapter 8, 100 seconds).** Kayla is strapped in her pod and Danny says the lie she once told him: "Go. I'm right behind you." "You're lying. You do the thing with your mouth." "I don't have a thing." "You have a thing, Danny." Their hands go flat on either side of the glass and don't line up. The lid seals and cuts her voice off, frost covers her face, and a click later the same voice is clear in your ear on the radio: "Stay on the line, okay?" Heavy steps come up through the floor, and your hand goes to the release: the hold is yours.
+
+**11. Seeds (after the hold, 45 seconds).** The white thins into the view from Kayla's pod at dawn. Pods drift out of the dying ship like seeds off a dandelion, one for every person you freed. The ship breaks in total silence, the thunder arrives seconds later, and the walkie in Kayla's hand stops hissing. The sky turns to June and you are Kayla.
+
+**12. We Waited (the epilogue, 75 seconds).** Kayla walks to the gate where they promised to wait. Whoever lived is standing on the other side, and the first of them says, tired and flat, "We waited." She laughs and cries at once, raises her film camera and the flash goes off, the same click that started the game. Song 3 begins on one chord of Mari's old guitar, and you walk through the gate as the credits roll. If no one is there, she takes a picture of the empty gate anyway.
+
+**What stays in your own eyes.** The scariest moments are never cutscenes, because fear only works in your own hands: the hunter's hand on the shelter window, "They're breathing" on the security camera, the Mark, the Mimic in Kayla's jacket, the breach, the lift and the missile, Kayla clipping the parachute to you, the drumstick in Marcus's hand, and the hold. Light and sound pull your eyes to the right place, but nobody ever turns your head for you.
+
+The shot-by-shot version for the builder is `cutscenes.md`.
