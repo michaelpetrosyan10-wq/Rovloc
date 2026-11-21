@@ -1,0 +1,239 @@
+STAY BEHIND: consistency check of the second editions (canon.md and documents 1 to 6)
+Auditor's report, 21 November 2026. Nothing was changed. 25 findings, worst first.
+Read: game-map.md, CHANGES-NEEDED.md, requirements.md sections 7 to 10, owner-checklist.md (the lines cited),
+canon.md, all six documents in full, the six first drafts (headings and section lengths compared), and cutscenes.md
+(it exists now and is the authority on cutscenes).
+
+Clean areas: every value in the canon sheet's noise, speed, threshold, rhythm, preset, generator, gun, flight, timeline,
+seats and fates tables matches wherever the documents restate it. No item on the canon sheet's RETIRED list is
+alive, apart from the "click" wording in finding 23. No other game's creature, puzzle, scene, line or name was found
+under a new coat. No real dangerous recipe was found. No statement about the owner as a person was found. Nothing
+graphic happens on screen to a student or to anyone taken. Lost detail: every section that shrank from first draft
+to second edition (systems 3, story 7, production 12) shrank because a ruling removed something (the noise table,
+the old cutscene list, "no co-op ever"). No detail was lost without a ruling.
+
+---------------------------------------------------------------------------------------------------------------
+1. [blocker] 1-story.md, section 7 (the cutscene table) and every "cutscene N" reference in section 4
+Problem: the story's numbering and contents are the first draft's old list. They contradict the map (part 12) and
+cutscenes.md in nearly every row. Story: "1 'We move in June' | 2 The mothership | 3 The small ship | 4 The first
+count | 5 The camp song | 6 Waking with the Mark | 7 The door | 8 Boarding | 10 The talk | 11 Kayla's pod | 12 The
+ship comes apart". Map part 12: "1. On the Hat, 2. Last Lights, 3. The Board, 4. First Night, 5. Where's Mari,
+6. Knock, 7. Somebody Keeps the Lights On, 8. It's Me. Again., 9. What Time?, 10. Right Behind You, 11. Seeds,
+12. We Waited." Wrong references in the text: Ch1.3 "Cutscene 4: the first count"; Ch1.7 "Mari plays the camp song
+(cutscene 5)"; Ch3.6 "Danny wakes on the stage, hurt (cutscene 6)" (the map and cutscenes.md part 3 play the
+waking in first person); Ch4.6 "Cutscene 7: Kessler will not open the door" (it is 6, Knock); Ch5.7 "Cutscene 8,
+boarding" (it is 7); Ch8.3 "(cutscene 10, in its variant), in a holding hall"; Ch8.8 "(cutscene 11)"; Ch8.10
+"(cutscene 12)". The list has no The Board, no Where's Mari, no It's Me. Again. and no We Waited.
+Fix: replace the table with the map's twelve rows (number, title, chapter) and the line "cutscenes.md is the
+authority and wins". Renumber the text: Prologue 3 to "cutscene 1, On the Hat", 7 and 8 to "cutscene 2, Last
+Lights", 12 to "cutscene 3, The Board"; Ch1 to "cutscene 4, First Night"; Ch3.6 to "played in first person
+(cutscenes.md part 3)", and add "cutscene 5, Where's Mari" to Ch3.8; Ch4.6 to "cutscene 6, Knock"; Ch5.7 to
+"cutscene 7"; Ch6.5 to "cutscene 8"; Ch8 to 9 (in the Nest), 10 (the pod) and 11 (Seeds); Epilogue 7 to
+"cutscene 12, We Waited". Delete "(Scene 9, the hit and the chute, is now played in first person.)". Add to "Told in
+first person instead": the hand on the glass, "They're breathing", waking with the Mark, the lift, the drumstick.
+
+2. [blocker] 1-story.md Ch8 "The last hour" steps 1 and 3; 4-puzzles-world.md section 6 ("The last hour, in order")
+Problem: both put "the talk" as a separate beat after the Holds. Story: "3. The talk (cutscene 10, in its variant),
+in a holding hall. He shows her the Mark, or she already knows." World: "Kayla (8.3), the Holds (8.4), the talk
+(story; cutscenes.md), then the self-destruct." The map puts it at her waking: "wake Kayla (she tests him: 'What
+time?'; he tells her: 'If I get in one, they follow it.'), then everyone you can", and cutscene 9 stages it in the
+Nest, ending "with the others still to wake". The story also never has her "What time?" test or her one line about
+his father, "You're not your dad, Danny."
+Fix: delete story step 3 and world's "the talk"; in story step 1 write: "Kayla wakes in the Nest (cutscene 9, What
+Time?): she tests him, 'What time?', 'Four.'; she sees the Mark ('It's higher' if he showed her in Ch3, else 'How
+long?'); 'If I get in one, they follow it. They follow you.'; 'You're not your dad, Danny.' Then the Holds." World
+order becomes: Kayla and the talk (8.3, scene 9), the Holds (8.4), the self-destruct.
+
+3. [major] 1-story.md Ch8 step 8; 4-puzzles-world.md self-destruct step 5; canon.md section 10 (Kayla's walkie row)
+Problem: story: "Kayla's pod (cutscene 11). He gives her back her walkie, so she can talk from her pod, and the
+camcorder with his tapes." World: "He gives her back her walkie". cutscenes.md rule 5: "Nobody hands anything to
+anybody on camera; objects reach people in play"; scene 9: Danny sets "Kayla's walkie and film camera down on the
+rim of her cradle"; "her hand finds her walkie on the rim"; scene 10: "her walkie clipped to the harness". The
+camcorder, which the epilogue needs, has no way to reach her.
+Fix: story and world: "Before waking her, Danny sets her walkie and film camera on the rim of her cradle (she takes
+them herself). In play at the pod bay he puts the camcorder with his tapes into her pod before cutscene 10." Canon 10
+row: "Danny returns the walkie in Ch8 (set on her cradle's rim before she wakes)".
+
+4. [major] canon.md section 1 (the taken table and "Marcus ... the hunter's first take"); 1-story.md section 2
+(the same table) and section 6
+Problem: the whisper rule (canon 8, story 6, creatures 1.6) says it uses "only pieces of words people it took
+really said", and story 3 says the hunter whispers in the voices of those it keeps. Yet the announcer and "the
+prologue's strangers (a mother calling from the stands)" are its first whispers and appear in no taken table:
+"Caleb, Owen's sister, most of the crowd | Friday night | the Patrol"; "Marcus | Friday about 8:05 pm | the hunter".
+As written the hunter whispers people it never took. Marcus is also called its "first take", so they must come
+after him.
+Fix: add a row to both tables: "the announcer, and two or three people heard in the prologue (a mother calling from
+the stands) | Friday, 8:05 to 8:06, just after Marcus | the hunter | the Nest (too far gone in Ch8)". Story section 2
+"The announcer" line: "taken by the hunter just after Marcus; his halftime words are its first whispers".
+
+5. [major] canon.md section 8 ("never in a cutscene, grief scene, the shelter or the epilogue" and "Order: Ch1, the
+announcer"); 2-creatures.md 1.6; 5-audio.md section 4 (whisper rule 5) and section 11 test 1; 1-story.md section 6
+Problem: the map's prologue and cutscene 3 (The Board) have the whisper inside a cutscene: "Then, from right behind
+the door, the announcer's words come back in pieces: '...remain... in your... seats.' Title." All four documents
+forbid any whisper in a cutscene and start the order in Ch1. Audio's automated test would fail the title scene.
+Fix: add to each rule: "except once, in cutscene 3 (The Board), where the announcer's words through the steel door
+are its first whisper". Change the order to "prologue end (cutscene 3), the announcer; then in Ch1 the announcer
+and the prologue's strangers". Audio 11 test: "never in a cutscene except scene 3".
+
+6. [major] canon.md section 9 (Mimics: T 34, "walk to any voice") with section 7 ("Danny whispers / speaks /
+shouts | 30 / 50 / 75"); 1-story.md Ch4.4; 2-creatures.md 2.4 set piece 1; 4-puzzles-world.md section 2 hint
+ladder ("Kayla ... gives them in a whisper, which the Mimics cannot hear (canon 7)")
+Problem: by canon 7's formula a whisper (30) never reaches a Mimic's threshold (34), even at 1 m. But in the map's
+Two Kaylas "He whispers 'What time?' It asks 'What time?' back, in her voice", so the Mimic must hear the whisper. The
+rule and the scene the map approved cannot both hold, and world relies on the rule to keep Kayla's whispered hints
+safe.
+Fix: canon 9 Mimics, add: "They hear any voice within 3 m (their strike range), a whisper included; beyond 3 m
+canon 7 applies." World hint ladder: "in a whisper, kept more than 3 m from any figure". Creatures 2.4 senses:
+repeat the 3 m rule.
+
+7. [major] canon.md section 8 (whisper "from where it really is, within about 10 m of walked path"); 1-story.md
+Ch6.6; 2-creatures.md 1.9 Ch6 row; game-map Ch6 ("from a rooftop the hunter whispers Kayla's 'stay... on the...
+line'")
+Problem: on the street, a hunter on a rooftop is far more than 10 m away by walked path, so the one Kayla whisper,
+the moment the story calls "the one that hurts most", is forbidden by the rule it must obey. No document says where
+Danny stands.
+Fix: story Ch6.6 and creatures Ch6 row: "authored where Danny is himself on a roof or fire escape (the Tannery
+Building's fire escape or a low roof on Tannery Street), with the hunter on the next roof within 10 m walked path".
+
+8. [major] 1-story.md Prologue steps 2, 9, 11 and 12; 2-creatures.md 1.9 Prologue row
+Problem: story step 9: "while out on the field the hunter unfolds to its full height and turns its long pale face";
+creatures: "Seen far, crawling out of the small ship ..., then unfolding and turning its long face. Meanwhile ... the
+playable sneak". Map (the lead's edit): "while the hunter, already standing on the field, turns its long face toward
+the school"; production 4 and cutscenes.md rule 6: it unfolds only behind a cut. Creatures adds "Once in the
+stairwell down, its hand curls round the door frame above Danny", while story step 11 has it "seen once at the end
+of a hall through wired glass": two different beats. Story step 12 ends "Cut to black, then the title" without the
+map's announcer whisper from behind the door, and step 2 has the flash in play while cutscene 1 opens on it.
+Fix: story 9 and creatures: "the hunter, already standing (it unfolded in the dark of cutscene 2), turns its long
+face toward the school"; keep one post-sneak beat (story's, far, through wired glass) and delete creatures' "hand
+curls round the door frame above Danny"; story 12: add "Then, from right behind the door, the announcer's words in
+pieces: '...remain... in your... seats.' Title."; story 2: "the flash opens cutscene 1".
+
+9. [major] 1-story.md Chapter 1 steps 3, 7 and 8; "The shelter on each return" (Night 1)
+Problem: story step 3 places "Cutscene 4: the first count" while survivors are still arriving and before the
+generator (step 4), step 7 has the camp song as its own scene, and step 8 places the promise "at the generator, to
+the group" as the chapter's turn. Map Ch1 safe room: "the first count and Danny's Kessler impression. Mari plays the
+camp song, and Danny makes his promise ... Then Owen asks to be walked past the dark tunnel"; cutscene 4: one scene,
+"Eight people in one bulb's light", with Kayla looking down at the promise.
+Fix: delete "Cutscene 4: the first count" from step 3 (keep Kessler's "We stay behind this door until help comes"
+at the barring); in step 7 write "First Night (cutscene 4): the count, the impression, Mari's camp song, the
+promise; then Owen's walk past the dark tunnel; Ray's cards"; delete step 8 or make it "the promise (in cutscene 4)".
+
+10. [major] 1-story.md Chapter 2 step 7
+Problem: "on a camera Priya sees soldiers loading closed, frosted cradles into a small ship." Map Ch2 (lead's edit):
+"frosted cradles floating out to a small ship on a ribbon of light, a soldier walking beside each"; cutscenes.md
+part 3: "nobody carries anything".
+Fix: replace with the map's sentence, then "Breath fogs a lid. 'They're breathing.'" (played at the monitor desk,
+cutscenes.md part 3).
+
+11. [major] 1-story.md Chapter 6 step 5
+Problem: "The wreck, in Courthouse Plaza: empty seats, and in the wreck Kayla's film camera and her walkie. He
+keeps both." Map Ch6 (lead's edit): "At the wreck, Kayla's film camera and her walkie: when he presses talk, his
+own voice comes out of it. He keeps both." Cutscene 8 is built on that beat; systems 8 and audio 6 already have it.
+Fix: add "He presses talk one more time and his own voice comes out of her walkie in the rainwater (cutscene 8,
+It's Me. Again.): '...Cool. So I've been talking to a seat.'"
+
+12. [major] 1-story.md Epilogue step 7
+Problem: "Whoever lived is waiting there. With few, there is no one, and she waits a while alone. Song 3 begins at
+the gate". Map epilogue (lead's edit): "Whoever lived is waiting, and the first of them says 'We waited.'; she takes
+their picture. With no one there, she photographs the empty gate anyway." "With few, there is no one" also
+contradicts "The line ... one or two at the gate" in story 5.
+Fix: "The gate (cutscene 12, We Waited). Whoever lived stands there; the first of them says 'We waited.' She laughs,
+crying, and takes their picture with the film camera. With no one there ('Only her'), she photographs the empty gate
+anyway. Song 3 begins."
+
+13. [major] 4-puzzles-world.md Chapter 5, the opening paragraph
+Problem: "Danny goes up first to clear the route, by the fire escape into the chemistry window (story); the group
+will follow this way to the roof". 5.5, the map and the story: the group "flees up the stair in the dark" and Danny
+must "release its stair door before they reach it". The fire escape also runs F3 to F4 only (1.2), so the group in
+the basement cannot reach it.
+Fix: "...the group will come up the stair to F4 (5.5) and through the science corridor and the mechanical room to
+the roof."
+
+14. [major] 4-puzzles-world.md section 7 (pacing table) against section 2's puzzle minutes; 3-systems.md section 1
+(Chapter 1 table)
+Problem: the listed puzzle lengths do not fit the table's puzzle plus stealth minutes. Ch1: Dead Start 7 + Pantry 7
++ Flare Road 28 = 42 against 22 + 15 = 37. Ch2: 8+6+20+5 = 39 against 32. Ch3: 7+5+7+22 = 41 against 33. Ch4:
+6+8+7+22+6 = 49 against 32. Ch5: 7+22+5+8+8 = 50 against 45. About 40 minutes over in the school, so "about 9 h
+40" is understated or the puzzles are too long. Systems gives Flare Road "15 min" and the generator start "15 min";
+world gives 28 and 7.
+Fix: world either trims the school puzzles to fit (Flare Road 20, as the map's big puzzles are about 20; Roll Call
+18; Reading Room 6; Proof Sheets 4), or states that each puzzle's minutes include its stealth and rebalances the
+table with the total kept at 580. Systems Ch1 table: cite world's minutes ("Flare Road: world 1.3"), not its own.
+
+15. [major] canon.md section 1 ("The ten speaking faces ... Caleb (Caleb is CK; cutscenes.md may swap him)");
+6-production.md section 5 (MetaHuman row: "The ten speaking faces (canon 1)") and section 4 ("canon 1 names them")
+Problem: cutscenes.md, now written and the authority, uses nine and "The tenth slot is held in reserve. Never given
+a speaking face: ... Caleb". Canon and production still build ten, with Caleb.
+Fix: canon 1: "The speaking faces (at most ten; cutscenes.md uses nine): Danny, Kayla, Marcus, Kessler, Gus, Priya,
+Mari, Owen, Ray; the tenth is held in reserve. Caleb is never a speaking face." Production: "the nine speaking faces
+and one in reserve (canon 1)".
+
+16. [major] canon.md section 6 (the generator, and "Roof floodlights | 2, on their own sealed can"); 3-systems.md
+"Depends on other documents" (World bullet)
+Problem: world 5.5 and section 3 settle what feeds closet 4 after the breach: "put the riser on the penthouse can's
+feed"; "the roof floodlights' own sealed can in the penthouse, which in Chapter 5 also feeds closet 4 after the
+breach". Systems still says it is unsettled: "what feeds electrical closet 4 after the breach ... (canon 4 and 6 do
+not yet say)". Canon 6 does not carry world's answer.
+Fix: canon 6: "After the breach, closet 4 takes the penthouse can's feed (world 5.5)"; systems: delete the open item
+and cite canon 6; systems 6.3 F4 stair-door row: "fed from the penthouse can after the breach".
+
+17. [major] canon.md section 9 (Still Ones: "watched = ... unhidden and lit, or in a recording camera's cone")
+Problem: creatures 2.3 ("a camera Kayla is watching holds the Still Ones in its view") and world 3.3 ("Kayla holds
+the room's three Still Ones on the floor's cameras") make a school camera Kayla watches count as watching. Canon's
+definition names only "a recording camera's cone". The school cameras record nothing (the tape logger records only
+the radio), so as written Kayla's cameras do not hold them and the set piece "Kayla's eyes" fails.
+Fix: canon 9: "... or in a recording camera's cone, or in the view of a working school camera while Kayla is watching
+its monitor (lit areas only)".
+
+18. [minor] 4-puzzles-world.md 4.2 Reading Room ("L: two figures, and she answers 'Four'.")
+Problem: "Four" is Danny and Kayla's private code (story 2: "It comes from their standing plan, Sal's at four, and
+they set it at the end of Chapter 1"). A frightened student on F3 cannot know it.
+Fix: "L: two figures, and she answers him (any frightened human reply, with breath: 'I don't know, it's dark'). A
+Mimic only asks the question back." Keep "S: ... she does not answer".
+
+19. [minor] 3-systems.md section 5 (Radio earpiece row: "Priya, at the Ch4 return (if helped)") and section 8
+("Priya's earpiece (the Ch4 return, if she was helped)")
+Problem: canon 10 ("comes with the Ch4 return"), story 2, creatures 2.4 and audio 6 make it unconditional. The story
+owns paybacks.
+Fix: delete "(if helped)" and "if she was helped" in systems; or, if story wants it earned, add the condition (for
+example "if her glasses came back in Ch2") to story 2 and canon 10 in the same change.
+
+20. [minor] 1-story.md "Open, to be put to him later" (the hunter on the flight and in the epilogue) against
+2-creatures.md "Decided" ("Settled by the designers: ... the hunter has one beat in the flight")
+Problem: one document calls it open, the other settled. The map approved the canopy hand, CHANGES-NEEDED settled it
+("7 (the hunter on the flight: yes) ... settled by the designers"), and owner-checklist line 24 still marks flight and
+epilogue "(to confirm with him)".
+Fix: both documents say the same thing: "Decided by the map and the designers (the Ch7 canopy hand; absent from the
+epilogue); checklist line 24 marks it to confirm, so he confirms it when he plays the grey game." Put it in both
+Decided lists with that note, or in both Open lists.
+
+21. [minor] 2-creatures.md 1.8, gore tableau table, Chapter 5 row
+Problem: "5 | not yet named by the map: set in the grey pass on the Swarm floor". The ruling (CHANGES-NEEDED,
+2-creatures 1.8) asks for "one authored gore tableau per chapter, never a student"; Ch5 has none written.
+Fix: name it from this document's own set piece 3: "the duct fight: Swarm bodies the hunter tore apart, fallen
+through the split ceiling tiles onto a lab bench".
+
+22. [minor] 1-story.md Ch8 step 8 ("in the others she believes him, or she is too dazed to know")
+Problem: story 5 says that in "Only her" she "sleeps through the launch", and cutscenes.md scene 10 says "Only her: she
+is asleep". "Too dazed" belongs to "The recording".
+Fix: "What she says depends on the ending: she knows it is a lie and says 'Stay on the line, okay?' (Everyone he could,
+The line); she is dazed and believes him (The recording); she is asleep (Only her)."
+
+23. [minor] canon.md section 7 (action table "Torch click | 20" and the note "From 'torch click' on"); 5-audio.md
+section 1 item 1 ("a fluorescent buzz, a ballast tick")
+Problem: the owner's no-clicks rule (owner-checklist line 48; canon 16 RETIRED "Clicks") and audio 3, which names the
+same action "Torch switched on or off 20". The canon label and "tick" invite exactly the sound he rejected.
+Fix: canon 7: "Torch switched on or off | 20" and the note "From 'torch switched on or off' on". Audio 1: "a low
+steady hum, a fluorescent buzz" (drop "a ballast tick").
+
+24. [minor] 2-creatures.md 1.8 (Ch1 tableau "a Dark Dweller caught by the light, burst open") and 2.1; owner's
+answer in requirements.md section 8 ("In the school nothing can be killed")
+Problem: 2.1 says light makes Dwellers "blister, smoke and shrink back into cracks", but the tableau says light burst
+one. A builder could read it as the player's light killing a Dweller, which the owner ruled out for the school.
+Fix: creatures 1.8 row 1 and 2.1: "found, not caused: one the generator's corridor lights came on over before Danny
+arrived. Danny's own light never kills one; it only drives them back."
+
+25. [minor] 6-production.md section 2 ("About 600 GB free on NVMe" row: "1 TB free is comfortable, so space is
+watched at every milestone")
+Problem: the same row and canon 15 say about 600 GB free; "1 TB free" reads as a measured fact.
+Fix: "1 TB free would be comfortable; with about 600 GB, space is watched at every milestone."

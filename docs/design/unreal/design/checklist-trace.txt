@@ -1,0 +1,172 @@
+STAY BEHIND: checklist trace (owner's advocate)
+Every line of docs/design/unreal/owner-checklist.md against the game map (MAP) and the second editions in this folder
+(canon, 1-story, 2-creatures, 3-systems, 4-puzzles-world, 5-audio, 6-production). Section numbers are each file's own.
+ANSWERED = a place that would pass the line's "Done when" check. WEAK = answered only in passing, or in a way that
+would not pass the check. MISSING = nowhere. OLD GAME lines are listed and not traced.
+Counts over the 136 APPLIES and ADAPTED lines: answered 113, weak 19, missing 4.
+
+THE LOOK
+1   realistic as can be made, gap told plainly | WEAK | 6-production 4 ("GTA six" said plainly), 8 (stills scored 8/10, but against path-traced references only, never beside stills of the most realistic games; scored by an agent, not fresh viewers)
+2   top setting holds nothing back, characters never less real | WEAK | 6-production 4: Ultra lists "high shadows and fog" and strand hair "in cutscenes" only; risk table puts card hair and capped detail on groups; no line says every scalability group at its maximum
+3   people look like real humans | ANSWERED | 6-production 4 (teen faces plan), Open (faces judged as real people); MAP 9
+4   cutscenes as real as live play (7/10) | WEAK | MAP 12, 6-production 4 (real-time, same grade); no score gate on cutscene shots anywhere; cutscenes.md wins but has none either
+5   eerie feel everywhere | ANSWERED | MAP 7; 6-production 4 (fog, manual exposure, grade per area); 4-puzzles-world 9
+6   surroundings scary without a creature | ANSWERED | 4-puzzles-world 9 (three beats per room, streets, alien interiors, traces); MAP 7
+7   same dark theme on every level | ANSWERED | MAP 7 ("one dark look from the school through the city to the ship"); 6-production 4 (camera and grade row)
+8   dark gray-leaning, real faded colour | ANSWERED | MAP 7; 6-production 4 (camera and grade row)
+9   basement not orange-washed (stricter copper rule only once he confirms) | WEAK | MAP 7 and 6-production 4 ban "orange or copper wash" outright; the "to confirm with him" on copper is in no Open list
+10  no black-and-white floor tiles | ANSWERED | MAP 7; 6-production 4
+11  school after hours, dark and ruined | WEAK | MAP 7; but canon 3 puts Ch2 to Ch5 on Saturday morning to Monday afternoon and no document says why the school is dark by day
+12  light visible in the air, moving shadows | ANSWERED | 6-production 4 (volumetric fog, MegaLights, torch IES); MAP 7
+13  CS2 and realistic survival games as references | MISSING | no document names CS2 or any realistic survival game as a look reference
+14  Dead Space-level gore on aliens and Danny; no student death | ANSWERED | 2-creatures 1.8 and 2 (mauls, tableau table); canon 9; 4-puzzles-world 9; MAP 4 (Ch5 tableau still to be set in grey)
+15  original look, scarier | ANSWERED | via line 8: MAP 7; 6-production 4
+16  uncapped top mode, lower modes for weaker gaming PCs | ANSWERED | 6-production 4 (quality menu); canon 15; MAP 9
+17  [OLD GAME] Potato on a Chromebook | not traced
+THE HUNTER
+18  keeps the B3 look, hooded | ANSWERED | 2-creatures 1.2; 6-production 6 (B3 file, Blender bundle)
+19  slim face like the body | ANSWERED | 2-creatures 1.2; canon 8; MAP 4
+20  body scary by itself | ANSWERED | 2-creatures 1.2; 6-production 6 (animation plan, three clips gate)
+21  hands as good in 3D as in the pictures | WEAK | MAP 11 promises them "shown beside your favourite"; 6-production 6 and 8 carry no hand close-up render as a gate
+22  model made, rigged, animated | ANSWERED | 6-production 5 (creature table), 6 (pipeline, animation plan)
+23  comes from the aliens, crawls out of the small ship | WEAK | 2-creatures 1.9 says "seen crawling out"; cutscenes.md (rule 6, scene 2) never shows the crawl, only a hand on the turf and then standing
+24  hunts all game, every floor, tunnels, city, ship | ANSWERED | 2-creatures 1.9; canon 8 (flight one beat; epilogue absent, CK)
+25  seen often, not only by teleport (every 60-90 s on any floor) | WEAK | 2-creatures 1.5 and 4.4 guarantee 60-90 s only "while active", and 1.9 / canon 8 set it active about 30% of Ch2-4 and 35-40% of the game
+26  no cheap teleports | ANSWERED | 2-creatures 1.2, 1.4 (rules 1, 8); canon 8
+27  stays within a radius | ANSWERED | 2-creatures 1.5 (leash); canon 8
+28  better detection | ANSWERED | 2-creatures 1.3; canon 7, 8; 6-production 1 (functional test map per kind)
+29  crawls through small holes | ANSWERED | 2-creatures 1.2 (fold, duct crawl 0.45), 4.4 (Sprinter gains in a duct); canon 4, 8
+30  rhythm 15-20 / 30 / 60 s | ANSWERED | 2-creatures 1.5, 4.4; canon 8; floor creatures counting is in 2-creatures Open
+31  most interactions not attacks, none within 60-90 s | ANSWERED | 2-creatures 1.5 (tokens, 90 s rule); canon 8
+32  appears as often as Threshold's entity | MISSING | Threshold is cited in no document; nothing says the rhythm was tuned against it
+33  copies the logic of popular well-made games, named | WEAK | 2-creatures names Alien: Isolation (habits) and Dead Space (graded beats) in passing and an unnamed "rat swarm" game; no list of games studied and what each gave
+THE OTHER CREATURES
+34  each floor a different way to hide and move | ANSWERED | 2-creatures 2; canon 9; MAP 4
+35  Listeners | ANSWERED | 2-creatures 2.2; canon 9
+36  Still Ones | ANSWERED | 2-creatures 2.3; canon 9
+37  Dark Dwellers, basement when the power fails | ANSWERED | 2-creatures 2.1; 3-systems 6.1
+38  Mimics | ANSWERED | 2-creatures 2.4
+39  Swarm | ANSWERED | 2-creatures 2.5
+40  Patrol, room by room | ANSWERED | 2-creatures 2.6
+41  Brute tears hiding places | ANSWERED | 2-creatures 2.7
+42  the others return on the ship | ANSWERED | 2-creatures 3; MAP 2 Ch8
+43  no water creature | ANSWERED | 2-creatures 2 (no kind hunts in water; the flooded stretch holds none)
+SOUND
+44  actually scary, no thin high tones | ANSWERED | 5-audio intro, 11.2 (spectrum check), sound board
+45  hunter's footsteps louder, heard before he is seen | WEAK | 2-creatures 1.2 and 5-audio 4: 65 dB at 1 m "louder than any sound Danny makes on foot", but canon 7 gives Danny's sprint on glass 72 and on a metal stair 67
+46  monster sounds and steps scary | ANSWERED | 5-audio 4, 11 (sound board: footsteps, breath, cries)
+47  every sound scary, glass included | ANSWERED | 5-audio 1, 11 (sound board); MAP 8
+48  no wooden knocks or clicks | WEAK | the rule is stated (5-audio intro, canon 16), but 5-audio 1 gives the generator "a ballast tick", 3-systems 5 the timer rattle "ticks", 2-creatures 2.7 the Brute "taps", with no rule for how they avoid a click character
+49  scary sounds modelled on popular horror games | ANSWERED | 5-audio 10 ("Studied, never copied"), 11 (sound board beside reference clips)
+50  all sounds real recordings | ANSWERED | 5-audio 10; 6-production 5 (manifest)
+51  audio for everything | ANSWERED | 5-audio 1; MAP 8; 3-systems "Depends" lists the missing levels for audio to add
+VOICES AND MUSIC
+52  humans actually talk, real voices | ANSWERED | 5-audio 7.1; voices.md; 6-production 1 (voice gates)
+53  not robotic | ANSWERED | 5-audio 11 (listening sessions ask "fake or robotic"); voices.md
+54  the voices he chose; he picks the cast | ANSWERED | 5-audio 7.1 (working track Danny 3, Kayla 3), 11 (session 2 auditions); MAP 10 decision 8
+55  monster talks in real words | ANSWERED | 2-creatures 1.6; canon 8
+56  says your name, mocks, not overdone | ANSWERED | 2-creatures 1.6 (name once a chapter, one per 2-3 min); canon 8
+57  speaks as if right behind you, and while chasing | WEAK | behind: 2-creatures 1.6; chasing: silent once it notices (MAP 4, canon 8); only an Open note in 2-creatures and 5-audio, never a rule
+58  talks good English | ANSWERED | 5-audio 11.3 (whispers under 10% word error); 2-creatures 1.6
+59  monster voice eerier than the humans' | ANSWERED | 5-audio 11 (session 2, "is it creepy?"); voices.md
+60  whispers in the voices of the taken, eerie | ANSWERED | 2-creatures 1.6; canon 8; 5-audio 7.1
+61  cutscene sound and talking good | ANSWERED | MAP 12; 5-audio 11.2 (dialogue 14-18 dB over beds in cutscenes); cutscenes.md
+62  eerie score, 2-3 original vocal songs, no artists' songs | ANSWERED | 5-audio 8, 9; MAP 8
+63  [OLD GAME] deeper voice | not traced
+THE STORY
+64  lore in the game | ANSWERED | 4-puzzles-world 8 (overdue book, answering machine, soldier's diary), 9 (traces), 4 (lore glyph page)
+65  better, engaging story | ANSWERED | 1-story 1, 4; MAP 2
+66  sad story | ANSWERED | 1-story 4, 5 (Mari always lost, Kayla taken, Danny stays); MAP 2
+67  Red Dead Redemption 2 model | ANSWERED | 1-story 1 (pattern notes), 5; chapters, group, cutscenes, epilogue in MAP 2
+68  makes sense as a whole | ANSWERED | canon 1 to 3 (one time line, fates, taken table); 1-story 4
+69  Danny 16, Kayla | ANSWERED | canon 1; 1-story 2
+70  evening event, early exit, mothership | ANSWERED | MAP 2 prologue; 1-story 4; canon 3
+71  walk out talking, joking | ANSWERED | 1-story 4 prologue; MAP 2
+72  small ship lands, someone crawls out | WEAK | as line 23: the crawl is never seen in cutscenes.md scene 2
+73  sneak back, hide in the basement | ANSWERED | MAP 2 prologue; 2-creatures 1.9
+74  people taken, found on the mothership | ANSWERED | canon 1, 2; 2-creatures 2.6; MAP 2 Ch8
+75  5-8 survivors, requests change something, not all make it | ANSWERED | 3-systems 7; canon 1; 1-story 2
+76  Kayla on the radio, taken at the crash, the reason to fly up | ANSWERED | 3-systems 8; canon 1; 1-story 4
+77  Danny stays behind, epilogue as Kayla | ANSWERED | 1-story 4 Ch8 and epilogue; canon 13
+78  quiet choices, no meter, ending changes | ANSWERED | 1-story 5; 3-systems 7.3; MAP 2 endings table
+79  title STAY BEHIND | ANSWERED | MAP 12 scene 3; 1-story 1
+80  [OLD GAME] trash-bin face jump | not traced
+81  [OLD GAME] "this is so cute" | not traced
+82  [OLD GAME] hiding in bins | not traced
+83  [OLD GAME] gun on the roof ending | not traced
+84  [OLD GAME] mask on the janitor | not traced
+HOW IT PLAYS
+85  survival and horror mixed, not always a chase | ANSWERED | 3-systems 1; 4-puzzles-world 7 (pacing table)
+86  8 to 10 hours | ANSWERED | canon 3 (9 h 40; 8 h 45 on Light)
+87  playthrough like the five games | ANSWERED | MAP 5 (twenty mechanics table); 3-systems section titles and 14
+88  first person play, third person cutscenes | ANSWERED | MAP 1; 6-production 4
+89  hide first, gun later; a built distraction | ANSWERED | 3-systems rules, 5 (kitchen-timer rattle, party-popper tripwire), 12 (gun from the midpoint)
+90  fun and scary, two moments a chapter | ANSWERED | MAP 2 ("New" and "Remembered" per chapter); 2-creatures set pieces
+91  not one-sided: school, city, flight, ship | ANSWERED | canon 3
+92  single-player first, co-op later | ANSWERED | 6-production 12; 3-systems 15
+93  final roof chase like door 100 | ANSWERED | 4-puzzles-world 1.3 (roof); 2-creatures 1.9; MAP 11
+94  control back quickly after cutscenes | ANSWERED | canon 15 (2 s); 6-production 3 item 10
+95  [OLD GAME] remake floor 4 | not traced
+96  [OLD GAME] Basement, Hallways, Auditorium | not traced
+97  [OLD GAME] scrap floors | not traced
+PUZZLES, SECRETS, DETAIL
+98  more mechanics, complex puzzles | ANSWERED | 4-puzzles-world 2, 3, 6
+99  puzzle ideas from his games | ANSWERED | 4-puzzles-world intro (every puzzle has a "Seen in" line)
+100 Easter eggs referencing his games, one a chapter | WEAK | 4-puzzles-world 8: the heron gives one a chapter (Dead Space remake), but 8 of the 15 secrets say "Seen in: ours", failing "each listed with the game from his list"
+101 small cool mechanics, each naming a game from his list | WEAK | MAP 5 (18 of 20 named, 2 "ours"); 3-systems 14 (29 of 40 "ours")
+102 the stuff on the floor | ANSWERED | 4-puzzles-world 9; 6-production 3 (_Dress sublevels, PCG debris)
+103 alien writing, final exam | ANSWERED | 4-puzzles-world 4; canon 12
+104 codes and places change each run | ANSWERED | 4-puzzles-world 2 (reshuffle); canon 10, 11
+SURVIVAL AND SAVING
+105 medium survival, no hunger meter | ANSWERED | 3-systems 4, 5, 7; canon 5; "no hunger meter" stated only in 6-production 10
+106 save by hand in safe rooms, chapter autosave | ANSWERED | 3-systems 10; canon 11 (lantern reading in 3-systems Open)
+107 no free or cooldown-only locator | WEAK | MAP 11; 3-systems 8, 12: Kayla's camera warnings and time-laddered hints are free, the "what now" call is free, and the scanner ping costs only a 20 s recharge and a chirp: a cooldown, not a found resource
+108 [OLD GAME] more batteries | not traced
+CITY, FLIGHT, MOTHERSHIP
+109 keep the city part | ANSWERED | canon 3, 4; 4-puzzles-world 5
+110 helicopter, crash, parachute alone | ANSWERED | 1-story 4 Ch5; 6-production 9 (M5, parachute in first person)
+111 instantly spotted | ANSWERED | 2-creatures 2.6 (teach); canon 4
+112 a few dense blocks, one route, about 90 min | ANSWERED | canon 3 (85 min), 4 (route); 4-puzzles-world 5
+113 knock out an alien, take gun and ship | ANSWERED | 4-puzzles-world 5 (Takedown); 3-systems 12; canon 4
+114 flight he steers, 15-20 min | ANSWERED | 3-systems 13; canon 13
+115 onto the mothership | ANSWERED | 3-systems 13 (hangar mouth); 1-story 4 Ch7
+116 two-hour mothership: decks, halls of the taken, low gravity | ANSWERED | 4-puzzles-world 6; canon 3, 4, 13
+117 self-destruct, several steps | ANSWERED | 4-puzzles-world 6; canon 13; MAP 6
+118 run to the pods as the ship breaks up | ANSWERED | canon 13; MAP 2 Ch8
+119 rooftop parkour in the city | ANSWERED | canon 4 (3-minute chase over roofs); MAP 11 (asks him)
+120 sneak and hide in the city too | ANSWERED | 3-systems 12; 2-creatures 2.6
+121 [OLD GAME] airport, Bahamas | not traced
+122 [OLD GAME] plane takeoff chase | not traced
+123 [OLD GAME] janitor-monster in the city | not traced
+DIFFICULTY
+124 not too hard | ANSWERED | 2-creatures 4.3; 3-systems 11; canon 11
+125 second chances (heal, respawn, syringe) | ANSWERED | adapted and put to him: MAP 11; 3-systems 9 and Open
+126 puzzle difficulty apart from creatures | ANSWERED | 3-systems 11; canon 11; 4-puzzles-world 2
+HOW HE WANTS THE WORK DONE
+127 tricky points asked, not guessed | WEAK | each document's Open list; but checklist line 9 (copper) and line 24 (hunter in the flight and the epilogue), both marked "to confirm with him", were settled in MAP 7 and canon 8 (CK) without a question
+128 the whole game mapped before building | ANSWERED | MAP (approved 21 Nov); 6-production intro
+129 everything he stated goes in | ANSWERED | MAP 11; this trace
+130 fully scrap the web version | ANSWERED | 6-production 6 ("Not carried over"), 7 (new private repository)
+131 old website and Roblox left untouched; no Roblox without his word | MISSING | no document states it
+132 Unreal Engine | ANSWERED | 6-production 2; canon 15
+133 built on his PC, nothing rented | ANSWERED | 6-production 1, 2, 5 ("nothing bought, rented or subscribed to without his word")
+134 Higgsfield for every asset it can make | ANSWERED | 6-production 5; MAP 9
+135 nothing waits for Higgsfield | WEAK | 6-production 5: every creature, person and place waits on a Higgsfield design picture he approves, with 1.57 credits and the terms unread; no fallback so modelling never stalls
+136 recover earlier work | ANSWERED | 6-production 6 (table); MAP 9
+137 rework for the look, a before/after list | MISSING | no document keeps a list of systems reworked for the look with before/after stills
+138 study other horror games by topic | ANSWERED | 6-production 6 (research and lessons read first); research reports 01 to 06
+139 recreate it all, techniques in named places | ANSWERED | 6-production 4 (graphics stack by place); 5-audio 10; 4-puzzles-world (walls and dressing)
+140 perfect, no errors, signed-off look | ANSWERED | 6-production 9 (Final: no known bugs, he signs it off), 1 (only he judges look)
+141 final phase on the strongest model, maximum effort, multi-agent | WEAK | 6-production 9 M10 and MAP 9 keep "maximum effort" but drop "the strongest model" and "multi-agent workflows"
+142 a cheaper model may be used | ANSWERED | a work note with no check (checklist says so)
+WHAT HE RECEIVES
+145 the game map when ready | ANSWERED | MAP status line (delivered, answered 21 Nov)
+146 an honest verdict on the plan | ANSWERED (OUTSIDE) | the lead's reply with the map; not in the design documents
+147 what he is missing, add or let go | ANSWERED (OUTSIDE) | the lead's reply with the map; MAP 11 carries only the two adapted wishes
+148 pictures the day they are ready | ANSWERED | 6-production 1; MAP 9
+149 builds as soon as they pass | ANSWERED | 6-production 1 (loop step 4), 9
+150 ETA and what is left | ANSWERED | 6-production 1 ("What every update tells him"); MAP 9
+151 told when it is all done | ANSWERED | 6-production 9 M10; MAP 9
+152 follow from any device | ANSWERED | 6-production 1 (readable on a phone)
+143 [OLD GAME] website then Roblox port | not traced
+144 [OLD GAME] Unreal look for web and Roblox | not traced

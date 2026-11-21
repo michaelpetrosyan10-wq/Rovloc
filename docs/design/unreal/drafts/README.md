@@ -1,10 +1,12 @@
-# Design drafts behind the game map
+# History: first drafts, reviews and takes
 
-The six numbered files are the designers' first drafts (story, creatures, systems, puzzles and world, audio,
-production). The three `review-` files are what the reviewers found in them. `../game-map.md` was written after the
-reviews and **wins wherever a draft differs from it**: the drafts have not yet been corrected to match.
+Nothing here is built from. These files are kept to show how the design was reached.
 
-They are kept because they hold far more detail than the map (every puzzle step, every item, each creature's
-numbers, the cutscene list, the build plan). After the owner has approved the map and answered its decisions, the
-drafts are corrected to match and one sheet of shared numbers is written; until then, read a draft only together
-with the map.
+- `1-story.md` to `6-production.md`: the designers' first drafts, written before the reviews and the game map.
+- `review-*.txt`: what the three reviewers found in them.
+- `CHANGES-NEEDED.md`: the map editor's rulings draft by draft, and the owner's twelve decisions.
+- `cutscene-takes/`: the three directors' versions of the twelve cutscenes and the two judges' verdicts.
+- `voices/`: the first version of the voice plan and the sceptical listener's review.
+
+The documents to build from are `../game-map.md`, `../design/` (second editions and the canon sheet),
+`../cutscenes.md` and `../voices.md`.

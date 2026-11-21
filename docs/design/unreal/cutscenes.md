@@ -47,7 +47,7 @@ The rhythm is deliberate: long, long, short (the prologue's three), long, short,
 - **Three warm colours that mean people:** Danny's red beanie, Kayla's yellow rain jacket, and small red lights that mean someone is still there (the walkie's blink, Gus's flare). The hunter is always pale against black, lit by one hard light from above or from the side, the way the favourite picture shows it.
 - **Lenses:** 35 to 85 mm on faces; a long lens (one that flattens distance, so far things look huge behind near ones) for scale: the stadium, the field, the roof.
 - **Camera:** slow pushes and drifts, never shaky. Each scene opens by pulling back out of Danny's head and closes by pushing into his eye-line (exactly where he is looking).
-- **Faces:** strands hair only in close-ups, cards everywhere else; groups at capped detail, so the shelter's eight fit in 16 GB.
+- **Faces:** on High and below, strands hair only in close-ups, cards everywhere else, and groups at capped detail, so the shelter's eight fit in 16 GB; on Ultra, strands and top detail on every speaking face.
 
 ### Sound first
 
@@ -172,8 +172,8 @@ Words used: a **wide** shows the whole place; a **close-up** fills the frame wit
 7. Wide on the stadium: the ship's shadow crosses the field and the light banks die one at a time, each with a heavy clunk. The fourth holds, buzzing.
 8. Hold on the fourth bank. Off screen, Kayla, hardly a sound: "Danny." It dies. One full second of black.
 9. A point of light falls from the belly and becomes a small ship slamming onto the 50-yard line. The turf jumps; steam rolls out, lit from inside by a landing light that ticks on and off.
-10. Long lens through the chain-link. On: steam. Off. On: a hand, far too long, flat on the turf at the steam's edge, black veins over the knuckles. Off.
-11. In the dark, a run of joints opening one after another, like a ladder pulled to full height. On: the hand is gone. Off.
+10. Long lens through the chain-link. On: steam. Off. On: it is half out of the open hatch, a held pose: hood and shoulders out, both long veined hands flat on the turf at the steam's edge, legs still inside. Off. (This is the owner's "someone crawls out": the crawl is shown as this one held pose, the rest in the dark.)
+11. In the dark, a run of joints opening one after another, like a ladder pulled to full height. On: the hatch is empty. Off.
 12. On: it stands in the thinning steam, three metres tall, stooped, hooded, its back to us. Off. On: still there, the same pose.
 13. Danny drops behind a car; the cut comes as he starts to drop.
 

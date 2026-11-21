@@ -6,11 +6,15 @@
   a new game, built in **Unreal Engine 5.8** on his own Windows gaming PC. The web and Roblox versions are frozen:
   no more work on them, nothing deleted, the website stays online. `web/`, `src/`, `site/` and `tests/` are that old
   game.
-- The new game is mapped with the owner. Before anything else read `docs/design/requirements.md` **sections 7 and
-  8**: section 7 is his brief in his own words, section 8 is every question he was asked and his answer.
-- Order of work: research (`docs/design/unreal/research/`) → a written game map he approves → setting up his PC →
-  one finished slice (a basement safe room, a stretch of tunnel, the hunter, one puzzle) → the chapters.
-- **Nothing is built in Unreal until he has approved the written game map.**
+- The new game is mapped with the owner. His words are in `docs/design/requirements.md` **sections 7 to 10**:
+  section 7 is his brief, section 8 every question he was asked and his answer, sections 9 and 10 what he said
+  after the map (the voices, the cutscenes, his decisions).
+- Order of work: research → the written game map → setting up his PC → one finished slice (the shelter, a stretch of
+  tunnel, the hunter, the generator puzzle, one Dark Dweller) → Chapter 1 polished → the whole game playable in grey →
+  finishing chapter by chapter.
+- **Where it stands (21 November 2026):** the game map is written and he has answered its twelve decisions (the
+  recommended option for each; `docs/design/requirements.md` section 10). The detailed design agrees with it. The
+  session on his PC starts the first slice when he tells it to; nothing else in Unreal is built before the slice.
 
 ## The owner's standing rules
 
@@ -49,7 +53,8 @@
 | `docs/design/unreal/voices.md` | The voice plan: the bar, the routes on his PC, the checks, where his ear decides, and the first proof. It wins on anything about voices. |
 | `docs/design/unreal/cutscenes.md` | The twelve cutscenes shot by shot, how each is staged to look real, and the build order. It wins on anything about cutscenes. |
 | `docs/design/unreal/game-map.md` | THE GAME MAP: story, creatures, play, puzzles, build plan and the twelve decisions put to him. Not approved until he says so; it wins over the drafts beside it. |
-| `docs/design/unreal/` | The research reports, the design drafts behind the map, and the readings from his PC (`pc.md`). |
+| `docs/design/unreal/design/` | THE DETAILED DESIGN, second edition: `canon.md` (one owner for every shared name and number: read it first), then `1-story`, `2-creatures`, `3-systems`, `4-puzzles-world`, `5-audio`, `6-production` (set-up, the first slice, milestones). `checklist-trace.txt` shows where each of his wishes is answered. |
+| `docs/design/unreal/` | Also here: the research reports, the readings from his PC (`pc.md`), and `drafts/` (first drafts, reviews and the directors' cutscene takes, kept as history: never build from them). |
 | `docs/design/art/higgsfield/` | His favourite monster picture (`picks/monster-favourite-B3.png`), the other design pictures, the art pack and the credit ledger. |
 | `docs/design/monster/` | The hunter's earlier behaviour design with its measured numbers, and notes on its model. |
 | `docs/design/voices/`, `tools/voices/` | The voice pipeline and the voices he chose (Danny 3, Kayla 3, a close dry whisper for the monster). |
