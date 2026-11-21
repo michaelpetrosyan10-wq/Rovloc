@@ -90,7 +90,7 @@ How claims are marked: [checked: url] means a search result confirmed it. [from 
 - AB: problems have physical answers (bricks, explosives, fire, gas), and the noise each one makes is its price. Two cloths make a bandage. [checked: tvtropes link ; sirusgaming link]
 
 **For Stay Behind: the rule first**
-- Crafting uses **game logic only**: named school objects snap together on a simple bench (tape + kitchen timer + biscuit tin = "rattle"). **Never show real chemistry steps or real recipes for fire or blasts.** The player is a teenager, and the game must not work as a how-to. The chemistry lab gives finished things (glow sticks, a cooler of dry ice from a demo, safety goggles), not formulas.
+- Crafting uses **game logic only**: named school objects snap together on a simple bench (tape + kitchen timer + biscuit tin = "rattle"). **Never show real chemistry steps or real recipes for fire or blasts.** The game must not work as a how-to. The chemistry lab gives finished things (glow sticks, a cooler of dry ice from a demo, safety goggles), not formulas.
 - Recipes come from **found sources inside the school**: a shop teacher's project sheet, a stagehand's checklist, a student's science-fair poster. Each is our own content and doubles as story.
 
 **What a 16-year-old could plausibly find or build** (none can kill; per the map, all distract, light, hide or scare off)
