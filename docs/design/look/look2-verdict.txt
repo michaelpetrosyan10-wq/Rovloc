@@ -1,4 +1,4 @@
-LOOK-2 (pass 2b) VERDICT (judged as the player: a blunt teenager who sent the underwater "crazy looking" reference)
+LOOK-2 (pass 2b) VERDICT (judged as the player: a blunt player who sent the underwater "crazy looking" reference)
 Replaces the 2a verdict that was in this file (that one scored 5.5 / 5 / 7).
 Looked at: the reference; send/look-2-<view>.jpg (all six sheets); send/look-2-max-<view>.jpg (all six, 1920x1080);
 the Potato pictures in look1/after2/ (windows, backlot, monster in full, the rest on the sheets); crops of the Max PNGs

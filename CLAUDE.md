@@ -28,7 +28,7 @@
 - **Horror:** graphic for the aliens and for Danny's own death scenes; what happened to the other students stays off
   screen.
 - **Honest reporting.** Look at a picture before sending it to him. Say plainly what failed or was not checked. No
-  placeholders in anything called finished. He is a teenager: write to him in plain words.
+  placeholders in anything called finished. Write to him in plain words.
 - **Git:** work on the branch `claude/coop-horror-game-arch-i9b7ko` unless told otherwise, and open a pull request
   only if he asks. No model names in commits or code.
 - **Usage limits:** his plan has five-hour and weekly limits, and heavy multi-agent runs have used them up before.
@@ -49,8 +49,7 @@
 
 ## His PC
 
-- Unreal Engine 5.8.4 is installed through the Epic Games Launcher. The Claude desktop app shares the folder
-  `C:\StayBehind` (Remote Control, "Let your phone and claude.ai start sessions here" is on).
+- Unreal Engine 5.8.4 is installed through the Epic Games Launcher, and the game's folder is `C:\StayBehind`.
 - A session that runs on that PC should: clone this repository into that folder, read the graphics card, memory and
   free disk, and install what Unreal C++ projects need (the list is in the Unreal production report under
   `docs/design/unreal/research/`), each with his OK. Then stop until the game map is approved.

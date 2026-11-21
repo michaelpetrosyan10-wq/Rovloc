@@ -596,9 +596,8 @@ game"). His typed answers are quoted exactly; a plain label means he picked that
 ### Set-up
 - Played on: a gaming PC.
 - Where Unreal runs while it is built: his own gaming PC (free), not a rented Higgsfield machine. Nothing is rented.
-- On that PC now: the Epic Games Launcher and an Epic account; Unreal Engine itself is not installed yet.
-- How we work: "PC does the work, I chat from anywhere" (the Claude desktop app on the gaming PC shares the game's
-  folder). PC time: "Ill keep it on all day".
+- On that PC: Unreal Engine 5.8.4, installed 21 November. The building happens there; he talks to the work from
+  any device.
 - Players: single-player first, co-op later.
 - The old website and the Roblox version: stop work, leave them as they are (nothing taken down, nothing deleted).
 
