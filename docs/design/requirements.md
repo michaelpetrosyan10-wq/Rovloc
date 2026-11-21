@@ -569,6 +569,8 @@ already said"
   Higgsfield offers Unreal Editor 5.9 on a rented GPU machine (71 credits an hour for the cheapest suitable card,
   98 for the faster one, billed by the second); the account holds 1.57 credits, and renting needs the player's
   explicit yes on the hourly price and his own Epic Games account. Nothing is rented or bought without his word.
+  (Higgsfield's page names version 5.9; on his own PC the engine is 5.8.4, the newest full release, and that is
+  the version the game is built on.)
 - THE GAME: survival horror in the manner of the five named games (longer, with survival systems, real puzzles, small
   mechanics and details), not a run-and-chase. THE STORY: an alien mothership over the city; a small ship lands and
   something crawls out as the hero and a friend leave school; they hide in the basement; the school falls; the hero
