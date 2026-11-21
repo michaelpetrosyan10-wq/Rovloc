@@ -828,3 +828,13 @@ two eye holes with their pinpricks and the slit mouth are retired for the hunter
 `2-creatures.md` describe the old look and must be revised by the design session (the catch's long fingers and the
 whisper still work with the new head; its eyes no longer carry a point of light each). Other games are models, never
 sources: no creature of another game is copied.
+
+### Nov 21, evening: the generator puzzle becomes "Gus's Ears" (to the session on his PC)
+The session building the slice's rules judged Dead Start (`unreal/design/4-puzzles-world.md` 1.1) against his puzzle
+bar (owner-checklist line 161) and proposed "Gus's Ears" (in the game repository, `Docs/proposals/dead-start.md`):
+every pull of the starter is loud and the hunter answers with steps in the pipes, a little nearer each time; Gus knows
+what is wrong from how she fails, but his hearing aid is dying, so Danny is his ears; once she runs, her hum hides him.
+Asked "Build the better generator puzzle, "Gus's Ears", instead of the one as written?", he answered: **"Yes, Gus's
+Ears"**. Still to do by the design session: revise `4-puzzles-world.md` 1.1, `3-systems.md` 6.1 (one pull once she is
+ready), `2-creatures.md` Chapter 1's row (the hunter heard only, answering each pull; at worst one near miss, no
+chase), `1-story.md` Gus's row (his hearing shown here), and the four failure sounds for audio.
