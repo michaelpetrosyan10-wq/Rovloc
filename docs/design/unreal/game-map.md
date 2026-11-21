@@ -243,7 +243,7 @@ The game is mostly quiet. You should remember the **generator's hum** (home; whe
 
 **The way of working.** A Claude Code session on your PC (the builder) writes the code, builds and tests; every task leaves a note in the repository, so nothing is lost when a session ends. A second reviewer judges pictures before you see them. About once a week you get a build and three questions. Only you can mark fear, fun or feel as done.
 
-**Your PC:** an RTX 5070 with 12 GB, 16 GB of memory, 611 GB free. The look is designed and judged on High, at 1080p or at 1440p with the card's upscaler (DLSS), 60 frames a second; Ultra is for pictures. 16 GB is half what Epic recommends (decision 11).
+**Your PC:** an RTX 5070 with 12 GB, a Ryzen 5 7500X3D, 16 GB of memory (one stick, three slots free) and about 600 GB free. The look is designed and judged on High, at 1080p or at 1440p with the card's upscaler (DLSS), 60 frames a second; Ultra is for pictures. 16 GB is half what Epic recommends (decision 11).
 
 **The first slice** (6 to 8 weeks): the safe room with Danny, Kayla and two survivors (do the faces read as sixteen?), the generator and its puzzle, a stretch of tunnel, the hunter with its heavy steps, whisper and catch, and one Dark Dweller, timed on its own to learn what each extra creature costs. Three 10-second clips of the hunter moving go to you first. It is done when you say it looks and feels right.
 
