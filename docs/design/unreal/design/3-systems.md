@@ -798,6 +798,13 @@ The game map's own list of twenty (part 5) names the same sources for the mechan
 - **Where Danny starts again** (his answer, decision 2, which also took in this draft's old decisions on catches and on
   saving): close by, progress kept, on Story and Survivor; only the saves on Stay Behind; the first hunter catch each
   chapter on Survivor is a struggle he can win with an empty pocket (sections 9, 10, 11).
+- **Nine rules** (his "Yes, use them", 21 November; the game repository's `Docs/feedback/2026-11-21.md`): the
+  hunter's steps beat any sound Danny makes; the generator's hum hides a walk on every floor and preset; saving by hand
+  in safe rooms, a chapter-start autosave and a one-use "quit and keep my place"; the puzzle tier lowered at any time
+  and raised only at a chapter start; a death restarts Danny close by with puzzle progress kept, plus one winnable
+  struggle a chapter, with no healing each floor, no counted respawns and no syringe (this settles the second chances,
+  checklist line 125); Stay Behind has only the player's own saves; the backpack stays at 8 slots all game; only the
+  open beam and real lights keep a Dark Dweller off; lures are scarce (sections 3 to 6 and 9 to 11).
 - **Kayla** (his answer): the hunter takes her from the wreck; the radio is always really her, and static after the
   crash (section 8).
 - **The Mark** (his answer): it is how the hunter finds the shelter, so the one breach is in Chapter 5 (sections 1, 7).
@@ -816,10 +823,9 @@ The game map's own list of twenty (part 5) names the same sources for the mechan
 
 - **The lantern rooms as his "safe rooms":** he asked to save "by hand in safe rooms"; reading the shelter's logbook and
   the lantern rooms that way is a designer reading he can reject (section 10).
-- **The radar and the second chances** (checklist lines 107 and 125, marked to confirm): the map tells him the radar is
-  now Kayla's cameras and the soldiers' scanner, and the second chances are the winnable struggle and the restart points;
-  he has been asked to say if he wants either back as it was (sections 8, 9, 12). Put to him with this as the
-  recommendation: every locator costs a found resource (Kayla's help draws on the generator reserve; each scanner ping
+- **The radar** (checklist line 107, marked to confirm): the map tells him the radar is now Kayla's cameras and the
+  soldiers' scanner; he has been asked to say if he wants it back as it was (sections 8, 12). Put to him with this as
+  the recommendation: every locator costs a found resource (Kayla's help draws on the generator reserve; each scanner ping
   spends a gun cell).
 - **Whether it is "too hard":** Survivor is tuned to his "I also don't want the game to be too hard"; he judges it when
   he plays the first slice and then the whole game in grey, and only then are the presets' numbers settled.

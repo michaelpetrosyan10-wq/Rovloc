@@ -670,8 +670,8 @@ looks (production):
 - **The Core**, at the foot of the Well.
 **Low gravity** (canon 13: about 15 minutes in all) is met on the way in, with the Swarm cloud, and again in the
 self-destruct's three Spine locks: push off, drift, grab, and the gun as a thruster; down changes once, not more. The
-Brute is heavy and slow to push off; the Swarm cloud drifts toward Danny's warmth. Every self-destruct stage has a
-checkpoint on every preset (canon 11).
+Brute is heavy and slow to push off; the Swarm cloud drifts toward Danny's warmth. On Story and Survivor every self-destruct stage has
+a checkpoint; Stay Behind has only the player's own saves (canon 11).
 
 **The first hour:** the Hangar, 8.1, 8.2, the Holds seen from their galleries, the Spine on the way in, and the Nest,
 where Danny puts the drumstick in Marcus's hand and finds Kayla, the newest (story). **The last hour, in order:**
@@ -719,7 +719,7 @@ remake (scarce power spent where you choose).
 2. **Route the pods:** the pod-bay board shows each pod's seats in glyphs; the woken board on their own legs. *Seen in:* ours.
 3. **The final exam, at the core:** read the core's panel and compose **"ship all end"**. Each right glyph sounds its
    tone, and the phrase resolves into the Danny-and-Kayla melody. The countdown runs in alien numerals; wrong glyphs
-   cost countdown time, never the game (if it reaches zero, Danny is back at the exam's checkpoint). The panel answers
+   cost countdown time, never the game (if it reaches zero, Danny is back at the exam's checkpoint; on Stay Behind, at his own last save: canon 11). The panel answers
    with one more glyph the player now knows: **hold**. The ship starts to die. Light adds an overlay and time. *Seen in:* ours (the
    language's own final exam).
 4. **The run to the pod bay** as the ship comes apart (lights failing, a deck tilting, catching Kayla's hand as it

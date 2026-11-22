@@ -306,8 +306,8 @@ side, so Danny enters each floor its own way and props its stair door from insid
 - **The low-gravity Spine of the ship** (its length: canon 13).
 - **The Nest,** off the Holds: Marcus and Mari, still and silent, their lips moving with its whispers. Danny cannot wake them. He puts the drumstick in Marcus's hand. Its counts are scratched on the Nest wall. Newest of all, still warm, is Kayla: the last hour begins here.
 
-**The last hour, in order** (the self-destruct's stages and their timing are the world document's, canon 13; every
-stage has a checkpoint):
+**The last hour, in order** (the self-destruct's stages and their timing are the world document's, canon 13; on Story and
+Survivor every stage has a checkpoint, on Stay Behind only the player's own saves: canon 11):
 1. **Kayla, in the Nest: "What Time?" (cutscene 9).** She is the newest there. In play, Danny sets her walkie and film camera on her cradle's rim to work her seal's symbols with both hands (a short waking step). In the cutscene he wipes the frost and her breath fogs the glass; her eyes open, and she tests him: "What time?" "Four." She takes her walkie from the rim herself. She sees the Mark: "It's higher" (if he showed her in Chapter 3) or "How long?" (if not). Danny: "If I get in one, they follow it. They follow you." Kayla: "You're not your dad, Danny." Behind them, Marcus's and Mari's lips stop moving at once: it has noticed them. Back in play she takes her camera from the rim herself. What she can do next depends on the ledger (section 5). If the hunter took Ray, Owen or Gus, he is in the Nest too, less than two days, and each is a short waking step of his own.
 2. **The Holds.** Danny wakes those he can. The ones who trust him help: Priya reads panels if she has seen the notebook, Ray finds Caleb, Owen keeps watch. The woken walk to the pod bay on their own legs. The player is never asked to escort them.
 3. **The self-destruct, part one:** three symbol locks across the low-gravity Spine, with the Brute in pursuit.

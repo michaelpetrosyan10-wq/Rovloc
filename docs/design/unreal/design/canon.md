@@ -291,7 +291,8 @@ Bleeding: 30 s.
 **The rhythm** (the owner's numbers, the same on every preset): a mean gap between interactions of **14 s sprinting**
 (measures 15 to 20 with breath limits), **30 walking**, 40 working or in a duct, **60 crouching**, 75 still or hiding;
 drawn between 0.6 and 1.4 of the mean, with a lull (gap doubled) every 5 to 7. **Seen or heard at least every 60 to
-120 s**, the longest stretch drawn afresh each time (the owner's "Yes, up to 2 min", 22 November, for players who
+120 s outside its quiet spells** (about once every 15 to 20 minutes of hunting it goes silent for 2 to 5
+minutes: the owner's "Let it go quiet sometimes", 21 November; checklist line 25), the longest stretch drawn afresh each time (the owner's "Yes, up to 2 min", 22 November, for players who
 crouch or hide well; it was 60 to 90), on every school floor, in the tunnels, the city and the ship, outside the shelter, grief scenes and cutscenes;
 when it is not simulated near him, a far heard beat from its real off-stage position keeps that rate, never closer
 than 25 m walked and never an attack (creatures 1.5). **Leash** 12 to 30 m walked (Story 18 to 40, Stay Behind 10 to 25), never nearer than 5 m outside a
@@ -573,7 +574,8 @@ extra creature forms on the ship, fewer cutscenes. Never anything he asked for b
   Dweller killed by Danny's own light.
 - "ID shard"; a playable copy of the earlier game (a CRT shows its title screen); an answering machine that foretells
   a name; merging Ch3 and Ch4 as a cut; "no co-op ever" (co-op comes later as its own mode).
-- Retired by the owner's words of 21 and 22 November: the hunter upright or stooping, 3 m tall, 40 cm at the
+- Retired by the owner's words of 21 and 22 November: the hunter walking upright or stooping as its normal gait (it
+  walks on all fours and only sometimes rises onto its hind legs: section 8), 3 m tall, 40 cm at the
   shoulders, B3's long pale face (almond eye holes, pinpricks, seam, slit mouth), big veined hands and cloth-like
   hood, its unseen fold, the ceiling-tile rattle of its fingers; A2's cluster of eyes and needle teeth; ducts and
   crawlways of 70 x 70 or 80 x 80 cm; "seen or heard at least every 60 to 90 s"; its steps at 85 dB (80 stooped); the

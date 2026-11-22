@@ -212,7 +212,7 @@ milestone. A floor is not finished until its graph is exported and matches what 
 **Systems, in build order:**
 1. Seeded random numbers and the save format (versioned; it stores the chapter, the place, the backpack, the
    survivors, the choices ledger, the symbols learned, the hunter's learned habits, the puzzle seed and the puzzle
-   tier, which only drops, at a chapter start; canon 11).
+   tier (lowered at any time, raised only at a chapter start; canon 11).
 2. The player: movement, the body and breath, the first-person arms (UE's first-person rendering), interaction,
    Enhanced Input (canon 5).
 3. Light and noise, the two currencies: the torch and its battery (canon 6); one noise table that sets both the
@@ -255,11 +255,11 @@ Scattered debris uses PCG with a fixed seed, so it is reproducible text plus a s
 placements. Hero props are placed by hand in `_Dress`.
 
 **Size rules the level script enforces:**
-- the hunter's body and how it passes rooms are canon 8 (about 3 m; it stoops under low ceilings and passes doors
-  hand first); each room's ceiling height is in the layout data, and the heights are canon 4 (the tunnels 2.8 to
-  3.0 m, so it walks them stooped);
-- **one navmesh at crawl height**, with nav areas tagged by ceiling height; the tag chooses the hunter's pose
-  (upright, stooped, crawling), and the level script fails a layout the hunter cannot pass;
+- the hunter's body and how it passes rooms are canon 8 (on all fours, about 1.6 m to the top of its back's spikes
+  and about 2.5 m when it rises onto its hind legs; it squeezes through doors front limbs first); each room's ceiling
+  height is in the layout data, and the heights are canon 4 (the tunnels 2.8 to 3.0 m);
+- **one navmesh at crawl height**, with nav areas tagged by ceiling height; the tag says where the hunter can rise
+  onto its hind legs and where it squeezes through a crawlway, and the level script fails a layout the hunter cannot pass;
 - every duct and crawlway used by a creature meets canon 4;
 - the Brute uses a navigation filter that leaves out narrow doors, so every Brute space has a loop through them
   (`2-creatures.md` 2.7);
@@ -371,8 +371,8 @@ could not change with the quiet choices.
    (`cutscenes.md`).
 
 ### What "as realistic as GTA six" can and cannot mean here
-- **It can mean:** a frame of a dark corridor under the torch, a wet basement floor, the hunter stooping through a
-  doorway, the mothership filling the sky. These can stand next to the best-looking games of today in light, surfaces
+- **It can mean:** a frame of a dark corridor under the torch, a wet basement floor, the hunter squeezing through a
+  doorway on all fours, the mothership filling the sky. These can stand next to the best-looking games of today in light, surfaces
   and air. We will show him exactly such frames, judged against path-traced references.
 - **It cannot mean:** GTA's scale. That is a city with thousands of animated people and cars, built from years of
   motion capture and facial capture by a very large studio. Our city is a few dense blocks at night, and our people
@@ -421,7 +421,7 @@ alone in the slice is the first real measure, and the table is rewritten from it
 
 | Kind | Mesh source | Rig and movement | Catch | Cost |
 |---|---|---|---|---|
-| **The hunter** | the carried-over Blender model (section 6) | its own skeleton (3 m, long arms, hinged ribs, extra spine); the animation plan in section 6 | its own template (section 3) | 6 to 10 weeks, across the slice and Chapter 1 |
+| **The hunter** | the model on all fours he approved on 22 November (section 6) | its own skeleton (on all fours, a second pair of arms, the spikes along its back: canon 8); the animation plan in section 6 | its own template (section 3) | 6 to 10 weeks, across the slice and Chapter 1 |
 | **Dark Dwellers** | procedural | a procedural Control Rig sheet on the surface graph | the maul template | 2 to 3 weeks (one is in the slice) |
 | **Listeners** | the engine's mannequin family, our own surface (the smooth eyeless head) | walking retargeted from the Game Animation Sample with Motion Matching | the maul template | 2 to 3 weeks |
 | **Still Ones** | the mannequin family | about 25 static poses and a catch; never seen moving | the maul template | 1 to 2 weeks |
@@ -477,7 +477,7 @@ nothing on a new PC.
 
 | What | Where it is | How it comes over |
 |---|---|---|
-| **The hunter's look** | `docs/design/art/higgsfield/picks/monster-favourite-B3.png`; the Blender pipeline in `archive/wip-2026-11/monster-model.bundle` (five levels of detail, skin, hood, hands) | 1. Restore the bundle on its own branch. 2. Export FBX with one root bone, Z up, centimetres. The old 11 studs is about 3.1 m, which matches canon 8. 3. Import by script, flip the normal map's green channel, move the old flesh-thickness channel to a subsurface mask. 4. Animate by the plan below. **The body, side view, hands and movement get as much care as the face**, the first game's lesson and the owner's (checklist lines 18 to 21) |
+| **The hunter's look** | picture A2 (`docs/design/art/higgsfield/picks/monster-favourite-A2.png`) for the body, the cape of skin, the limbs and the hands, with the new face and the body on all fours (canon 8); the model made on his PC with the local picture and 3D tools (the game repository's `Docs/hunter-look/hunter-quadruped-2026-11-22.md`), which he saw moving in Unreal and approved on 22 November ("This is good") | It is already in the game's Unreal project; its size and speeds are canon 8. B3 and the old game's Blender model (`archive/wip-2026-11/monster-model.bundle`) are no longer its source. Animate by the plan below. **The body, side view, hands and movement get as much care as the face**, the first game's lesson and the owner's (checklist lines 18 to 21) |
 | **The hunter's rules** | `monster-behaviour-v3.bundle` (the clock, strain, backstage, chase tokens, near misses, the presence simulator); the numbers in `docs/design/monster` | Ported to `SBRules` as pure seeded C++. The values go into `Data/Creatures/Hunter.json` from canon 8. The old simulator becomes a test that must reproduce the old measured results before anything new is added |
 | **The school's layout** | `web/build/world.json` (rooms, doors, stairs, vents, 955 lights, zones, patrol loops) | `Scripts/import_layout.py` cuts it into `Layouts/*.json` per floor, converts studs to centimetres at the world document's scale and builds a grey blockout. Expect heavy changes: it was built for a chase game, and slow survival play needs denser, looping spaces; `4-puzzles-world.md` 1.2 decides |
 | **Recorded sounds** | 325 WAVs under `web/sounds/sources/` with `SOURCES.json` provenance (about 45 MB) | Batch import by script; the provenance becomes manifest rows; a CSV sets each sound's class, attenuation and concurrency |
@@ -489,23 +489,20 @@ nothing on a new PC.
 builders (the roof and city stage maps are layout references only), and the MakeHuman people (replaced by MetaHuman).
 
 ### The hunter's animation plan
-An AI builder cannot hand-key a 3 m body to the owner's "the body is not scary tho" bar, so each move it is seen
-making has a method (`2-creatures.md` 5.1 agrees):
-- **stoop and upright walk:** Motion Matching on retargeted walking, with spine and neck offsets in Control Rig
-  driven by a ceiling trace, so it bends to fit each ceiling; the nav area's ceiling tag chooses the pose (section 3);
-- **passing a door hand first,** and its fingers lifting the ceiling tiles as it passes: Control Rig reaches on the
-  same trace;
+An AI builder cannot hand-key a body on all fours with a second pair of arms to the owner's "the body is not scary
+tho" bar, so each move it is seen making has a method (`2-creatures.md` 5.1 agrees):
+- **its walk on all fours, its rise onto its hind legs and its squeeze through doors and crawlways:** moves made for
+  its own body, never retargeted human walking; the nav area's ceiling tag says where it can rise (section 3);
 - **the crawl** (ducts and crawlways): a procedural leg solver;
-- **the fold** into a duct: **never seen in play**; it happens out of sight and is heard (canon 8), and in cutscenes
-  only behind a cut (`cutscenes.md`);
 - **climbing and hanging head-down:** the surface crawler rig on the authored surface graph;
-- **the locker lean** (the favourite picture's pose): a few authored poses blended in place;
-- **the city rooftops:** silhouettes moving on splines, not a gallop;
+- **the locker lean:** a few authored poses blended in place;
+- **the city rooftops:** silhouettes moving on splines;
 - **its catch and the struggle:** authored first-person sequences in its catch template (section 3).
 
-**Gate in the first slice:** three 10-second clips of it moving (a corridor stoop, a door pass, a locker lean) go to
-the owner first, and with them a close-up render of the hunter's hand beside B3's hand (veins, wrinkles, finger
-length; owner-checklist line 21). The hunter is not built further until he has judged them.
+**Gate in the first slice:** three 10-second clips of it moving (on all fours down a corridor, a door squeeze, a
+locker lean) go to the owner first, and with them a close-up render of the hunter's hand beside A2's hand (the long
+clawed fingers; owner-checklist line 21). The hunter is not built further until he has judged them. On 22 November he
+saw five clips of the model on all fours at canon 8's speeds and said "This is good continue".
 
 ---
 
@@ -565,18 +562,16 @@ schedule's measuring stick.
    Danny and Kayla plus two survivors, to test the faces and the cost of people. A manual save at the logbook.
 2. **60 to 80 m of tunnel, 2.8 to 3.0 m high** (canon 4), with two hiding places, one vent and one loop.
 3. **The hunter:**
-   - imported at its canon 8 size, stooping under the tunnel ceiling and passing one doorway hand first (the fold is
-     never seen in play);
+   - imported at its canon 8 size, on all fours in the tunnel and squeezing through one doorway front limbs first;
    - the carried-over clock and senses, with canon 8's values;
    - a patrol, an investigation and one chase;
-   - its heavy steps, heard through two walls in the stooped walk as well as upright, and the whisper made from
-     working-voice lines;
+   - its heavy steps, heard through two walls, and the whisper made from working-voice lines;
    - its catch (canon 8: the voice-pulling scene, about 6 s, skippable after the first) with the Survivor struggle,
      and the scream whispered back on the next attempt.
 4. **One Dark Dweller,** with its light rule (canon 9) and its death scene (the maul template), **timed on its own**,
    to learn what each extra creature costs: the number the schedule most depends on.
-5. **One real puzzle:** starting the dead generator, `4-puzzles-world.md`'s Dead Start (the right relay, bleed, prime,
-   choke, pull; canon 6), seeded, with its 1,000-seed solver test and hints on each tier.
+5. **One real puzzle:** starting the dead generator, `4-puzzles-world.md`'s Gus's Ears (1.1, the owner's choice of 21
+   November: the right relay, bleed, prime, choke, then the loud pulls the hunter answers; canon 6), seeded, with its 1,000-seed solver test and hints on each tier.
 6. **The look:** Megascans dressing, the torch and its battery, MegaLights flicker, fog, manual exposure. **Only High
    and the path-traced reference**; the other settings wait.
 7. **Sound:** footsteps on four surfaces with debris, the noise table (canon 7) driving the hunter's hearing, sound
@@ -586,7 +581,7 @@ schedule's measuring stick.
    camera blend back to play is broken [checked: research 04], so the matched cut is the method, tested in the first
    week.
 
-**The gate:** the three 10-second clips of the hunter moving and the close-up of its hand beside B3's hand (section
+**The gate:** the three 10-second clips of the hunter moving and the close-up of its hand beside A2's hand (section
 6) go to him first. The slice is not shown until he has judged them.
 
 **How it is judged:**
@@ -595,7 +590,7 @@ schedule's measuring stick.
   simulated players hit canon 8's rhythm on the room-portal graph. The puzzle solves at every seed. A clean rebuild of
   the slice from git (plus downloaded packs) works.
 - **By pictures.** Ten photo spots plus three short clips, scored by the fresh-eyes reviewer against path-traced
-  references and his favourite hunter picture; nothing under 8 of 10 is sent. Each photo spot is also scored beside a
+  references and his hunter picture A2 (with its new face: canon 8); nothing under 8 of 10 is sent. Each photo spot is also scored beside a
   reference board of stills from the most realistic games (Counter-Strike 2, the five horror games and his "GTA six"
   bar) by fresh viewers (the reviewer and at least one person new to the game). 7 of 10 or better counts as
   photographic (owner-checklist line 1), and any remaining gap is told to him plainly in the build note.
@@ -745,7 +740,7 @@ The range is wide because of what drives it:
 **Never cut: anything he asked for by name.** From `owner-checklist.md`, line by line:
 - first-person play with third-person cutscenes (88), and control back within 2 s of every cutscene (94);
 - the look: as realistic as can be made, an uncapped top setting, the look rules (1 to 12, 16);
-- the hunter's look from his favourite picture, the slim face, the frightening body and the hands (18 to 22); the
+- the hunter's look from picture A2 with its new face (a huge open mouth), the frightening body on all fours and the hands (18 to 22); the
   hunter all game, on every floor, in the tunnels, the city and the mothership (24); seen and heard often, within a
   radius, never teleporting (25 to 27); his rhythm, with few attacks (30, 31); it follows through vents (29); its
   heavy steps heard from far off (45);
@@ -785,7 +780,7 @@ The range is wide because of what drives it:
 | **Cutscene bodies look stiff** | Twelve scenes staged by `cutscenes.md`'s rules; one-camera capture (Experimental) with library and hand-posed animation as the fallback for every scene; first person wherever a body would show the seams |
 | **Seven more creature bodies with no source** | The creature production table (section 5): shared mannequin family, static poses, a procedural sheet, Niagara; ship forms as variants; one maul template; each look a gate he signs |
 | **The mothership has no ready-made assets** | One alien kit with four deck looks, proven in a two-week spike alongside Chapter 1 |
-| **The hunter's movement cannot be hand-keyed** | The animation plan (section 6): each seen move has a method, the fold is never seen; the three 10-second clips are a gate |
+| **The hunter's movement cannot be hand-keyed** | The animation plan (section 6): each seen move has a method; the three 10-second clips are a gate |
 | **Puzzle props with no source** | The asset census at the start of the grey pass; the printed-paper system for every seeded value; a puzzle without props is simplified |
 | **Scope against "Red Dead depth" and "GTA six graphics"** | Said plainly now (section 4); depth through the people and the shelter, not volume; the whole game in grey early; the cut order ready |
 | **Usage limits break sessions** | STATE.md and commits after every task; background jobs with logs; work sized to the window |
@@ -849,7 +844,7 @@ How co-op would work is still his to say (below).
 - **Systems (`3-systems.md`):** what the save format stores, the restart points, the presets (canon 11); the
   printed-paper system it asks for; the struggle.
 - **World (`4-puzzles-world.md`):** every Layout JSON and the room-portal graph it exports; the puzzles, their value
-  sets and their props for the asset census; Dead Start for the slice; the glyph decals in the alien kit.
+  sets and their props for the asset census; Gus's Ears for the slice; the glyph decals in the alien kit.
 - **Audio (`5-audio.md`):** the noise table (canon 7) the hearing subsystem reads; the listening sessions held on the
   builds; the overnight engine checks of the noise table.
 - **Voices (`voices.md`):** how every voice is made, checked and judged; it wins on voices.

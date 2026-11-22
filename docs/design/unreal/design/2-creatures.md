@@ -161,9 +161,9 @@ so it never feels like a timer; Danny's own loud noises add a lump to the clock 
 generator start 0.5); the first heard beat no sooner than 20 s and the first seen beat no sooner than 40 s after a
 stretch starts.
 
-**Seen or heard at least every 60 to 120 s, everywhere it hunts** (owner-checklist line 25: "i never really see the
+**Seen or heard at least every 60 to 120 s, everywhere it hunts, outside its quiet spells** (owner-checklist line 25: "i never really see the
 monster", "make the monster appear more"). On every school floor, in the tunnels, the city and the ship, outside the
-shelter, grief scenes and cutscenes, Danny sees or hears the hunter at least every 60 to 120 s, the longest stretch
+shelter, grief scenes, cutscenes and its quiet spells (canon 8), Danny sees or hears the hunter at least every 60 to 120 s, the longest stretch
 drawn afresh each time, so a careful player can no longer count on "about a minute" (the owner's "Yes, up to 2 min", 22 November;
 it was 60 to 90 s). When it is not
 simulated near him, the director plays a heard beat from its real off-stage position at that rate (H1 far heavy steps
@@ -665,7 +665,7 @@ graph's numbers are re-checked in the engine at each milestone. Over 200 seeded 
 | Creature | Must hold on Survivor |
 |---|---|
 | All | 100% of catches had a tell in the previous 2 s (hunter 5 s); 0 catches while hidden in a place it did not see Danny enter; Careful caught at most 1 per chapter on average |
-| Hunter | measured gaps 15 to 20 s (Sprinter), 27 to 33 s (Walker), 54 to 66 s (Croucher); seen or heard at least every 60 to 120 s on every floor outside the shelter, grief scenes and cutscenes (far heard beats included, 1.5); at most one whisper per chase; at most one chase per 6 minutes of active play; no chase or near miss within 90 s of another; every whisper within about 10 m of walked path; no catch from a sniff not led by Danny; never seen to teleport (no move with a line to Danny that is not walked); a Sprinter always gains on it in a duct |
+| Hunter | measured gaps 15 to 20 s (Sprinter), 27 to 33 s (Walker), 54 to 66 s (Croucher); seen or heard at least every 60 to 120 s on every floor outside the shelter, grief scenes, cutscenes and its quiet spells (far heard beats included, 1.5); at most one whisper per chase; at most one chase per 6 minutes of active play; no chase or near miss within 90 s of another; every whisper within about 10 m of walked path; no catch from a sniff not led by Danny; never seen to teleport (no move with a line to Danny that is not walked); a Sprinter always gains on it in a duct |
 | Dark Dwellers | Careful with fuel never caught while in a lit volume; a fuel run done with half its flares succeeds 80% of the time |
 | Listeners | Careful (carpet, masks) caught under 10% per corridor; Walker caught 40 to 70%; Sprinter over 90%; every catch preceded by a hum-stop at least 1.5 s before |
 | Still Ones | Backpedaller cannot clear the strobe corridor without the camcorder or a door (proves the exploit is closed); every kill preceded by a creak within 3 s; no kill while 25% of the body is on screen and lit |
