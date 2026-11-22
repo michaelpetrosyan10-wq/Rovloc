@@ -856,3 +856,14 @@ struggle a chapter (no per-floor healing, counted respawns or syringe); Stay Beh
 the backpack stays small (8 slots) all game; only the open beam and real lights keep a Dark Dweller off; lures are
 scarce. The full list is in the game repository's `Docs/feedback/2026-11-21.md`. Still to do by the design session:
 canon 7, 10 and 11, `3-systems.md` and `game-map.md` where they say otherwise.
+
+### Nov 22: the hunter's longest quiet stretch (to the session on his PC)
+The session building the hunter's brain measured what a careful player could still learn from its clock (game
+repository, `Docs/hunter-brain.md`). One rule was left: outside its quiet spells, something of the hunter always comes
+within 60 to 90 s, close to a crouching player's usual gap of about a minute, so "it is due" stays learnable. Asked
+"Let the hunter's longest quiet stretch go up to 2 minutes, not 1.5?", he answered **"Yes, up to 2 min"**. So outside
+the quiet spells the hunter is seen or heard within 60 to 120 s, drawn afresh each time, in place of 60 to 90 s; the
+quiet spells he chose earlier the same day ("Let it go quiet sometimes": about once every 15 to 20 minutes of hunting,
+2 to 5 minutes of silence), the 8 s after each moment and the 90 s between chases stay as they were. Owner-checklist
+line 25 now says so. Still to do: the hunter's-brain session applies it after the weekly usage reset on 24 November;
+the design session revises canon 8's "seen or heard at least every 60 to 90 s" and `2-creatures.md` 1.5.
