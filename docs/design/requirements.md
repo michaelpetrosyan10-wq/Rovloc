@@ -867,3 +867,10 @@ quiet spells he chose earlier the same day ("Let it go quiet sometimes": about o
 2 to 5 minutes of silence), the 8 s after each moment and the 90 s between chases stay as they were. Owner-checklist
 line 25 now says so. Still to do: the hunter's-brain session applies it after the weekly usage reset on 24 November;
 the design session revises canon 8's "seen or heard at least every 60 to 90 s" and `2-creatures.md` 1.5.
+
+### Nov 22: the alien hunter is too skinny (to the session on his PC)
+Shown the second round of the alien hunter beside A2, he wrote **"Irs too skinny"**. Asked how thick it should be ("Like
+picture 2", "A bit thicker than 2" or "Much bulkier"), he chose **"A bit thicker than 2"**: still tall and thin, with
+more meat on the limbs and body than A2. The model's girths grow by about 1.5 to 1.9 times (thighs, shins, forearms,
+upper arms and trunk), a little past A2; the long thin fingers stay. Still to do by the design session: canon 8 and
+`2-creatures.md` describe the hunter's build and must follow A2 as he now wants it.
