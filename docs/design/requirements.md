@@ -874,3 +874,14 @@ picture 2", "A bit thicker than 2" or "Much bulkier"), he chose **"A bit thicker
 more meat on the limbs and body than A2. The model's girths grow by about 1.5 to 1.9 times (thighs, shins, forearms,
 upper arms and trunk), a little past A2; the long thin fingers stay. Still to do by the design session: canon 8 and
 `2-creatures.md` describe the hunter's build and must follow A2 as he now wants it.
+
+### Nov 22: a new face for the hunter, alien feet, and the 3D tool (to the session on his PC)
+He said yes to testing a free image-to-3D tool on A2 (downloaded with his yes: ComfyUI with Pixal3D and TRELLIS.2, MIT
+licence), asked for the feet to look like the alien monsters of his references ("just make it look as much as the
+references i gavbe u like alien space"), and said yes to restarting the paused sessions by themselves when the weekly
+limit resets. Then: **"bro the face isnt scary tho look at the screenshot i sent u look at theh monster there the big fat
+one i want a fasce like that"**. Shown three big monsters from his screenshot of 21 November, he chose **"1: Huge open
+mouth"** and **"New face entirely"**: the hunter's face becomes our own huge gaping mouth with torn lips and teeth (the
+pattern of that monster, not a copy of it), and A2's cluster of eyes is retired. A2 stays the target for the body, the
+cape of skin, the limbs and the hands. Still to do by the design session: canon 8 and `2-creatures.md` (the hunter's
+face, and anything that relied on its eyes), with `cutscenes.md` where the face is seen.
