@@ -895,3 +895,12 @@ upright humanoid: it walks on all fours on long thin limbs and has a second pair
 in a hood of its own skin; its quality and patterns are judged against the games he named, never copying their
 creatures. Still to do by the design session: canon 8, `2-creatures.md` and `cutscenes.md` (its body, how it moves, how
 it stoops through doors and corridors, the catch and the struggle, the crawl out of the small ship).
+
+### Nov 22: its real speeds, and sometimes standing on two legs (to the session on his PC)
+Shown the hunter on all fours moving in Unreal, he wrote "Okay this is alright. Continue working on the hunter ... dont
+rush make it amazing quality", then on its prowl **"its alright but a little too slow no? is this the final speed?"**
+(it was its slowest stalk; canon 8's creep 1.4, walk 2.4 and chase 4.2 m/s were then applied to every move). Shown five
+clips at those speeds, with independent reviewers' view that the model's mouth, arms and spine fall short, he wrote:
+**"This is good continue and make it so sometimes the hunter can stand up on two legs."** So the model stays as it is,
+and the hunter, which walks on all fours, can sometimes rise onto its hind legs. Still to decide with him and the
+hunter's behaviour: when it stands (to look or smell over something, to tower over the player, when it loses him).
