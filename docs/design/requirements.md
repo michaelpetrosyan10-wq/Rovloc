@@ -885,3 +885,13 @@ mouth"** and **"New face entirely"**: the hunter's face becomes our own huge gap
 pattern of that monster, not a copy of it), and A2's cluster of eyes is retired. A2 stays the target for the body, the
 cape of skin, the limbs and the hands. Still to do by the design session: canon 8 and `2-creatures.md` (the hunter's
 face, and anything that relied on its eyes), with `cutscenes.md` where the face is seen.
+
+### Nov 22: the hunter walks on all fours, with extra arms (to the session on his PC)
+On the hunter remade with the local picture tool he wrote "It looks klinda babyish and cartoonish no? Make it better",
+asked for the small eyes to go ("Remove them"), then: **"All of them are bad i dont want theh monstere to hahve a
+humaniod body make it a little weird"**. Asked what kind of weird, he chose **"Extra arms"** and **"Walks on all
+fours"**, with **"dont make it look dumb. reference the games bro referecne the games"**. So the hunter is no longer an
+upright humanoid: it walks on all fours on long thin limbs and has a second pair of arms, with the eyeless all-mouth head
+in a hood of its own skin; its quality and patterns are judged against the games he named, never copying their
+creatures. Still to do by the design session: canon 8, `2-creatures.md` and `cutscenes.md` (its body, how it moves, how
+it stoops through doors and corridors, the catch and the struggle, the crawl out of the small ship).
