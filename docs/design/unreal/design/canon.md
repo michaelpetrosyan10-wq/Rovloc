@@ -20,7 +20,7 @@ this sheet. **`cutscenes.md` is the authority on cutscenes**; this sheet only po
 | **Kayla Brooks** | 16 | best friend since second grade; yearbook photographer with her grandfather's film camera; "Stay on the line, okay?"; sprains her ankle on the basement stairs in the prologue |
 | **Marcus Bell** | 15 | Danny's other best friend, a drummer; "You guys'll wait, right?"; the hunter's first take |
 | **Ms. Ruth Kessler** | 52 | chemistry teacher; leads the shelter; counts "my kids" |
-| **Gus Pruitt** | 58 | night janitor: keys, generator, tunnels; trained by **Walter Hale**, the 1962 night watchman |
+| **Gus Pruitt** | 58 | night janitor: keys, generator, tunnels; trained by **Walter Hale**, the 1962 night watchman (an old-game name: he gets a new name the owner picks, still to come; his story stays) |
 | **Priya Nair** | 17 | AV club; ran the scoreboard desk; radio base and cameras with Kayla |
 | **Mari Vega** | 15 | pep band trumpet, guitar; the camp song |
 | **Owen Tate** | 14 | came with his older sister, who was taken |
@@ -114,7 +114,9 @@ torch, the exit signs, the circuits Danny powers and gray slits at the window ed
 
 ## 4. Places (owner: world)
 
-**Rovloc High School**, built 1962, renovated 1998; 112 x 81 m; basement, four floors, flat roof. The city is
+**Rovloc High School** (an old-game name: the school gets a new name the owner picks, still to come; until then the
+announcer says "our pep band"), built 1962, renovated 1998; 112 x 81 m; basement, four
+floors, flat roof. The city is
 **Calloway** (a working name, CK; the owner may rename it).
 
 | Level | Key rooms | Way in | Lantern room |
@@ -127,7 +129,8 @@ torch, the exit signs, the circuits Danny powers and gray slits at the window ed
 | Roof | gravel, air units, skylights (do not hold weight), parapet 1.1 m; chained door (bolt cutters); floodlights on their own sealed can in the penthouse | F4 mechanical room | none |
 
 **Heights:** corridors 2.7 m; classrooms 3.0; doors 2.1 x 0.9; gym 9; stage 16 to the grid; stairwells 20;
-**tunnels 2.8 to 3.0**; **ducts and crawlways at least 70 x 70 cm** (built at 80).
+**tunnels 2.8 to 3.0**; **ducts and crawlways about 110 cm wide and 120 cm high**, so the hunter on all fours can follow
+Danny through them (the owner's "Bigger crawlways", 22 November; measured on its model: the spikes along its back).
 **Stairs:** the West and East stairs run basement to F4. At 8:03 every stair door locked **on its stair side**: from a
 floor Danny can always push out; from a stair he cannot get on. He enters each floor its own way, then props its
 stair door from inside: that is his way home. Only **F1** (the PA) and **F4** (stair doors held by powered locks he
@@ -170,7 +173,7 @@ Story, Hurt heals itself after 60 s. **Carrying:** an **8-slot** backpack (the w
 pockets** (a light; one thing to throw or scare with); walkie and stopwatch on the strap; **the binder** (no slot):
 Gus's key ring, notes, floor maps, symbol pages, chalk, Danny's notebook, the self-marking map with Kayla's notes in
 blue ink. Stacks: battery pairs 4, glow sticks 3, bandages 2, tins 2; a fuel can takes 2 slots; the sledgehammer
-takes both hands. The F3 hiker's bag (12 slots) is kept as the one upgrade (CK).
+takes both hands. The backpack stays at 8 slots all game: no bigger bag (the owner's rule of 21 November).
 
 ---
 
@@ -185,7 +188,8 @@ feeds. The rescue comes from outside the city. Alien technology is untouched.
 
 | Light | Power | Life and effect |
 |---|---|---|
-| Torch (Gus's, Ch1) | 2 AA | **12 to 15 min a pair** (same life on every preset; presets change how many are found, CK); yellows under 25%; shake for 5 s; **cupped red beam** at half drain, unseen beyond 4 m; holds Dwellers back in a 9 m, 30-degree cone; seen by the hunter at **20 m**, the Patrol at 30 m |
+| Torch (Gus's, Ch1) | 2 AA | **12 to 15 min a pair** (same life on every preset; presets change how many are found, CK); yellows under 25%; shake for 5 s; **cupped red beam** at half drain, unseen beyond 4 m, no use against Dwellers (the owner's rule: only the open beam and
+real lights keep them off); the open beam holds Dwellers back in a 9 m, 30-degree cone; seen by the hunter at **20 m**, the Patrol at 30 m |
 | Crank torch (Ch1) | crank | 3 cranks = 20 s of weaker light, 40 dB |
 | Glow stick (Ch1) | chemical | a 2.5 m pool that holds Dwellers off **90 s**, then a dim marker to 10 min (CK) |
 | Road flare (Ch1) | | 60 s, 6 m; drives the hunter off 45 s |
@@ -252,21 +256,34 @@ wall 20, floor or ceiling 25**, Danny in a locker or under a desk 8.
 | Still Ones | none | | |
 
 **Masks** raise thresholds while they last (CK, one rule): F1 heating knocks +20 for 4 s every 40 to 70 s; waves of
-rain on the gym roof; the nurse's white-noise machine +20 within 3 m; the running generator +15 in the basement. The
+rain on the gym roof; the nurse's white-noise machine +20 within 3 m; the running generator **+28** in the basement
+(the owner's rule of 21 November: her hum hides a walk on every floor and every preset; he was told "about +20", and 28
+is the smallest raise that hides the loudest walk, 42 + 9 + 2 = 53 on a metal stair with a full pack, on Stay Behind,
+30 - 4 + 28 = 54). The
 noise ring is optional: on by default on Story only. The real microphone is never used.
 
 ---
 
 ## 8. The hunter (owner: creatures)
 
-**Body:** about **3 m**, **40 cm** at the shoulders; face about 55 x 18 cm, slim like the body, rigid; a hood of its
-own hide; big veined hands, fingers about 22 cm. Upright only in tall spaces; elsewhere it stoops (head at about
-2.2 m) and passes doors hand first (about 1.5 s). It folds through 70 x 70 cm openings (2 s), always out of sight,
-heard as joint creak and cloth, never clicks. It climbs and hangs head-down; it never walks on ceilings.
-**Speeds:** creep 1.4, walk 2.4, **chase 4.2** (under Danny's 4.5), **duct crawl 0.45** (Danny 1.0); faster only on
+**Body** (the owner's words of 21 and 22 November; creatures 1.2): picture A2
+(`art/higgsfield/picks/monster-favourite-A2.png`) is the target for the body, the cape of skin, the limbs and the
+hands; B3's look is retired.
+**It walks on all fours** on long thin limbs and has **a second pair of arms** ("Extra arms", "Walks on all fours":
+not a humanoid body). Long and thin, but **a bit thicker than A2** ("A bit thicker than 2"); wet grey-violet skin with
+raw open flesh; **alien feet**, not a man's; A2's long thin clawed fingers, about 22 cm. **Its face is a huge open
+mouth with torn lips and teeth, and no eyes** ("New face entirely": A2's cluster of eyes and needle teeth are retired),
+in a hood of its own skin. **Sometimes it rises onto its hind legs** ("make it so sometimes the hunter can stand up on
+two legs"); **open, for him:** when it stands (to look or smell over something, to tower over the player, when it
+loses him). The model he approved on 22 November ("This is good") is about 2.1 m long and 1.6 m to the top of the
+spikes along its back; standing, its head is about 2.5 m up. It squeezes through 0.9 m doorways, front limbs first
+(about 1.5 s), and follows Danny into crawlways built for it (section 4): a tight squeeze, slower than him and always
+heard, joint creak and its hide scraping, never clicks. It climbs and hangs head-down; it never walks on ceilings.
+**Speeds:** creep 1.4, walk 2.4, **chase 4.2**, a gallop (under Danny's 4.5), **duct crawl 0.45** (Danny 1.0); faster only on
 city roofs (6.0 on all fours) and in the ship's wall channels (1.8). The same on every preset (CK: the preset speed
 dial moves only the other kinds).
-**Senses:** hearing T 30. Sight in a 60-degree cone: a beam or a lit Danny at **20 m**, an unlit moving Danny at 10 m,
+**Senses:** hearing T 30. Sight (the rules stand though it has no eyes; how its head shows that it sees is open) in a
+60-degree cone: a beam or a lit Danny at **20 m**, an unlit moving Danny at 10 m,
 an unlit still Danny at 6 m (CK, from the 20 m beam and systems' dark-corner rule); side vision 150 degrees, motion
 only, 10 m; breath fog in cold rooms at 3 m (CK). It never sees into a hiding place it did not watch him enter.
 Bleeding: 30 s.
@@ -274,7 +291,8 @@ Bleeding: 30 s.
 **The rhythm** (the owner's numbers, the same on every preset): a mean gap between interactions of **14 s sprinting**
 (measures 15 to 20 with breath limits), **30 walking**, 40 working or in a duct, **60 crouching**, 75 still or hiding;
 drawn between 0.6 and 1.4 of the mean, with a lull (gap doubled) every 5 to 7. **Seen or heard at least every 60 to
-90 s** on every school floor, in the tunnels, the city and the ship, outside the shelter, grief scenes and cutscenes;
+120 s**, the longest stretch drawn afresh each time (the owner's "Yes, up to 2 min", 22 November, for players who
+crouch or hide well; it was 60 to 90), on every school floor, in the tunnels, the city and the ship, outside the shelter, grief scenes and cutscenes;
 when it is not simulated near him, a far heard beat from its real off-stage position keeps that rate, never closer
 than 25 m walked and never an attack (creatures 1.5). **Leash** 12 to 30 m walked (Story 18 to 40, Stay Behind 10 to 25), never nearer than 5 m outside a
 close beat or chase. **Strain** 0 to 1 sends it backstage for 25 to 40 s at 0.8 (creatures keeps the rates).
@@ -285,10 +303,12 @@ without sight; every chase route has an exit it did not watch; it catches only w
 authored (about 90 s).
 
 **Where it is** (share of a chapter's play): prologue scripted only (no failure on the first try); Ch1 about 40%
-(the pipes only for 20 min; absent while the Dwellers are taught); **Ch2 to 4 about 30% plus 2 to 3 authored stalking
+(the pipes only for 20 min, where in Gus's Ears it answers each loud pull of the generator and **on the 4th loud pull
+comes right up to the boiler-room door: a near miss, no chase**, the owner's choice of 22 November; absent while the
+Dwellers are taught); **Ch2 to 4 about 30% plus 2 to 3 authored stalking
 sequences each**; Ch5 about 55%; Ch6 about 25% (rooftops; three close beats); Ch7 one beat (its hand on the canopy
 about a minute); Ch8 about 60%, every habit active. **Absent** (not simulated near him; on the floors, in the
-tunnels, the city and the ship its far heard beats still keep the 60 to 90 s rate): the shelter (8 min or more with no tell), teach
+tunnels, the city and the ship its far heard beats still keep the 60 to 120 s rate): the shelter (8 min or more with no tell), teach
 phases, grief scenes, rooms Danny has sealed, cutscenes, the epilogue (CK; checklist line 24 marks the flight and
 the epilogue "to confirm with him", so both are put to him with this as the recommendation).
 **Rules (never told to the player):** a tell at least 5 s before any catch; it never enters a lit, barred shelter
@@ -347,19 +367,19 @@ or bandages, the next two containers lean toward the need (never shown).
 | Name | What it does | First |
 |---|---|---|
 | backpack; binder; Danny's notebook | section 5; the symbol notebook | prologue |
-| torch, AA batteries (a pair), crank torch, road flare, glow stick | section 6 | Ch1 |
+| torch, AA batteries (a pair), crank torch, road flare, glow stick | section 6; glow sticks are **common**, a light found in plenty, not a scarce lure (the owner's choice of 22 November) | Ch1 |
 | **wind-up stopwatch** (the coach's) | set to the gauge; rings at 60 s left (45 dB) unless silenced | Ch1 |
 | **walkie-talkie** (the school's analogue sets, PE office) | the link to Kayla; knob off, 1, 2, 3 | Ch1 |
 | fuel can; food tins | 2 ticks, 2 slots, sloshes 30 dB unless full; the shelter's food | Ch1 |
 | bandage, first-aid kit; painkillers | section 5 | Ch1; Ch2 |
-| bottle, can, tin; pots and pans | lures; banged in place | Ch1 |
+| bottle, can, tin; pots and pans | lures, **scarce** like every part for a distraction (the owner's rule); banged in place | Ch1 |
 | Gus's key ring; chalk; screwdriver; pry bar; sledgehammer | keys; marks; quiet vent opening; loud ways | Ch1 |
 | riser key; bolt cutters; lighter; candle | section 4; chains; section 6 | Ch2 |
 | **kitchen-timer rattle** (timer, biscuit tin, tape) | wound 5 to 30 s (a soft whirr in its tin, never a click), then rings 4 s | Ch2 |
 | **air horn** | Listeners flinch and flee 15 s; every creature hears it | Ch2 |
 | Marcus's drumstick | band room floor; put in Marcus's hand in the Nest | Ch2 |
 | camcorder; fog canister (theatre haze: breaks sight 40 s, frees Still Ones) | section 6 | Ch3 |
-| flash camera; **hand mirror** (the yearbook room's picture-day kit, CK); hiker's bag | section 6; a Mimic's front round a corner; 12 slots | Ch4 |
+| flash camera; **hand mirror** (the yearbook room's picture-day kit, CK) | section 6; a Mimic's front round a corner | Ch4 |
 | **the extinguisher** (CO2) | one blast: the hunter backs off 45 s, a Swarm cloud scatters; then empty | **Ch5** (map; fire points below F4 are empty, so world drops F1's "extinguisher on the glass", CK) |
 | thermal camera; dry-ice cooler; cold pack | section 6; a 3-min cold patch; masks warmth 60 s | Ch5 |
 | the gun; energy cartridge; the scanner; **key shard** (never "ID shard"); lure beacon; mend gel | section 13; 2 cells; opens Patrol doors and the ship's hatch; draws soldiers 20 s | Ch6 |
@@ -379,11 +399,13 @@ Roll Call's sheet (the library's).
 
 - **By hand:** the shelter's logbook (3 s; one diary line, read back on the load screen) and **one lantern room per
   area** (one per school floor, two in the city, three on the ship; Story one more per area); never within 25 m of a
-  searching creature. **Chapter autosave** at each chapter start. **Quit and keep my place** anywhere (deleted on
-  load). Three slots. Codes never re-roll; the seed is fixed at New Game.
+  searching creature. **Chapter autosave** at each chapter start. **Quit and keep my place** anywhere, used once and
+  deleted on load. Three slots. Codes never re-roll; the seed is fixed at New Game.
 - **Restart points** (the owner's decision 2): on Story and Survivor a death restarts Danny at the start of that
-  encounter, large-puzzle stage or solved step, progress kept, in under 5 s; they are not saves. Stay Behind uses only
-  the saves. Every preset has a checkpoint at each flight segment and self-destruct stage (map).
+  encounter, large-puzzle stage or solved step, progress kept, in under 5 s; they are not saves. Story and Survivor
+  also have a checkpoint at each flight segment and self-destruct stage (map). **Stay Behind has only the player's own
+  saves** (the owner's rule of 21 November): no restart points and no checkpoints, the flight and the self-destruct
+  included.
 
 | | Story | Survivor (recommended) | Stay Behind (open from the start) |
 |---|---|---|---|
@@ -406,8 +428,9 @@ Roll Call's sheet (the library's).
 | **Standard** | in another room | 4 / 8 / 12 min | |
 | **Hard** | oblique or with a decoy; one story riddle object per floor | 6 / 12 min | no overlays; Flare Road's 1962 breaker names |
 
-Creature and survival settings change any time; the puzzle tier only drops, at a chapter start, re-rolling that
-chapter. A value is never spoken: it goes onto the map in Kayla's blue ink (Gus hints in Ch1; after Kayla is taken,
+Creature and survival settings change any time. The puzzle tier can be lowered at any time (a puzzle under way and not
+yet solved rolls new values) and raised only at a chapter start, re-rolling that chapter (the owner's rule of 21
+November). A value is never spoken: it goes onto the map in Kayla's blue ink (Gus hints in Ch1; after Kayla is taken,
 Danny's notebook, "what would K say"). At most one paper-code lock a chapter; every school lock has a loud way except
 the closets and story items.
 
@@ -447,7 +470,7 @@ all end"**; the countdown is in alien numerals; a wrong glyph costs time, never 
   cells** (a cartridge refills two), then 20 s before the next; a 40 dB chirp the Patrol hears; reads glyph locks
   (free); maps a deck once linked at a node. There is no other locator, and nothing locates for free or on a cooldown
   alone (checklist line 107; whether he wants a locator at all is put to him, systems Open).
-- **The flight** (18 min, six segments, a checkpoint each; CK split): lift-off and the hunter's hand (2), the
+- **The flight** (18 min, six segments, a checkpoint each except on Stay Behind (section 11); CK split): lift-off and the hunter's hand (2), the
   rooftops (3), the pack and three danger-lane forks (4), the cloud with Song 2 and the talk button (3), the fins (4),
   the hangar mouth and the crash (2). No canyon, no bridge; the city a far field. Corridor about 80 x 40 m. Dodge 0.4 s
   (1.2 s cooldown); boost 3 s, refills in 6; shooting overheats after 3 s, cools in 2; a lock tone 1.5 s before a
@@ -479,9 +502,10 @@ radio lines, the whisper sources).
 camera name; wrong once (Ch2). Working cameras: basement 6, F1 4, F2 3, F3 none in Ch4 (Roll Call's patch restores
 the antenna and F4's one camera; CK), F4 1. Her cameras, warnings, hints and the "what now" call work only while the
 radio base draws its unit from the generator reserve (fuel Danny brought home; canon 6). After she is taken, static
-only. **The hunter's steps:** about **85 dB at 1 m** on hard floors (80 stooped), above Danny's loudest possible step (a
-sprint over broken glass on a metal stair with a full pack: 58 + 9 + 14 + 2 = 83, sections 5 and 7), heard through two
-walls (the owner's "louder so people know when hes around"). **Stayed on the line** counts calls
+only. **The hunter's steps:** **louder than any sound Danny can make**, in every gait (the owner's rule of 21 November,
+then put as "stooped or upright"): above his loudest step (a drop landing on a metal stair onto a popped balloon with a
+full pack: 62 + 9 + 30 + 2 = 103, sections 5 and 7) and the air horn (100); the slice's rules use **109 dB at 1 m** on
+hard floors. Heard through two walls (the owner's "louder so people know when hes around"). **Stayed on the line** counts calls
 answered in calm moments, night talks, clips filmed for her and the climb monologue; switching off never counts
 against it.
 
@@ -549,3 +573,10 @@ extra creature forms on the ship, fewer cutscenes. Never anything he asked for b
   Dweller killed by Danny's own light.
 - "ID shard"; a playable copy of the earlier game (a CRT shows its title screen); an answering machine that foretells
   a name; merging Ch3 and Ch4 as a cut; "no co-op ever" (co-op comes later as its own mode).
+- Retired by the owner's words of 21 and 22 November: the hunter upright or stooping, 3 m tall, 40 cm at the
+  shoulders, B3's long pale face (almond eye holes, pinpricks, seam, slit mouth), big veined hands and cloth-like
+  hood, its unseen fold, the ceiling-tile rattle of its fingers; A2's cluster of eyes and needle teeth; ducts and
+  crawlways of 70 x 70 or 80 x 80 cm; "seen or heard at least every 60 to 90 s"; its steps at 85 dB (80 stooped); the
+  generator's +15; the hiker's bag; a puzzle tier that only drops; checkpoints on Stay Behind; Dead Start as written
+  ("one to three" pulls, "none hunting"); Kayla's "Stay on the line" in her first call; the stranger's "...tell her...
+  I said hi...".

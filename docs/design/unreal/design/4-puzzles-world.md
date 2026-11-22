@@ -46,13 +46,12 @@ document says otherwise.
 - **Every Layout JSON also exports a room-portal graph**: path distances, the occlusion of each portal, the light
   volumes and the hide spots. The headless rules tests (creatures and production) run on it, so a floor is not
   finished until its graph is exported and matches what is built.
-- **Heights** (canon 4), set for the hunter's body (canon 8): corridors 2.7 m to the ceiling tiles (it stoops, and
-  the tiles rattle as its fingers pass, a tell heard before it is seen); classrooms 3.0 m; doors 2.1 by 0.9 m (it
-  passes them hand first); the lobby 7.5 m; the gym 9 m clear (F1 to F2); the library 5 m; the theatre stage 16 m to
-  the grid (F2 to the roof); the stair wells 20 m open (it can stand at full height and look down the well); **tunnels
-  2.8 to 3.0 m**, so it walks them, stooped (the owner's "monster walking around the tunnels"); ducts and crawlways at
-  least 70 by 70 cm, built at 80 (it folds through them out of sight and follows slower than Danny: canon 5 and 8;
-  nothing is out of its reach).
+- **Heights** (canon 4), set for the hunter's body (canon 8: on all fours): corridors 2.7 m to the ceiling tiles;
+  classrooms 3.0 m; doors 2.1 by 0.9 m (it squeezes through, front limbs first); the lobby 7.5 m; the gym 9 m clear
+  (F1 to F2); the library 5 m; the theatre stage 16 m to the grid (F2 to the roof); the stair wells 20 m open (it can
+  look down the well); **tunnels 2.8 to 3.0 m**, so it walks them (the owner's "monster walking around the tunnels");
+  **ducts and crawlways about 110 cm wide and 120 cm high** (the owner's "Bigger crawlways", 22 November: it follows
+  Danny through them, a tight squeeze, slower than him and always heard: canon 5 and 8; nothing is out of its reach).
 - **Ways between floors:** the West and East stairs (basement to F4); the roof only by the penthouse stair in the F4
   mechanical room (canon 4); the lobby's grand stair (F1 to F2 only; its fire shutter dropped at the lockdown); the
   kitchen **freight lift** (basement to F1 only; its load: canon 6); the **dumbwaiter** (one-way down to the shelter
@@ -115,7 +114,7 @@ floor.
 **Third floor: the people (Chapter 4, Mimics).** Hub: the **humanities hall**. North: the **library** (reading room
 under its broken clerestory, stacks, the card catalogue, the circulation desk with the late-room sign-in sheet). West:
 the **yearbook room** and darkroom, the **language lab**. South: the **counselling suite**, the **lost-and-found**
-closet (Gus's key after Chapter 3, loud: bolt cutters; the hiker's bag, canon 5), and the windows onto the exterior
+closet (Gus's key after Chapter 3, loud: bolt cutters), and the windows onto the exterior
 fire escape. East: classrooms with lockdown locks (a closed door locks itself), Danny's locker. Core: electrical closet
 3, the **server room** and IT office (badge reader on its own lead-acid backup, loud: the pry bar on the strike), the
 **IT storeroom** (secret 7), the staff lounge. Way in: the theatre's fly gallery door. Way up: the fire escape.
@@ -159,10 +158,11 @@ Each chapter starts with a short re-crossing of the floor below, 3 to 5 minutes,
   minutes, then the answer if asked again (about a third less puzzle time). **Standard** puts the clue in another
   room, two steps away; rungs at 4, 8 and 12 minutes. **Hard** makes the clue oblique or adds a decoy, adds one story
   riddle object per school floor (below), shows no glyph overlays, uses Flare Road's 1962 breaker names, and gives
-  only two rungs, at 6 and 12 minutes. The tier can be lowered at a chapter start, never raised; lowering re-rolls
-  that chapter's values only.
+  only two rungs, at 6 and 12 minutes. The tier can be lowered at any time (a puzzle under way and not yet solved
+  rolls new values) and raised only at a chapter start (the owner's rule of 21 November: canon 11).
 - **Reshuffle:** one seed rolled at New Game and kept through every save (canon 11). Clue carriers never move; their
-  values change. Item spots come from 3 to 5 hand-placed spots; story items never move (canon 10). **No voice line
+  values change. Item spots come from 3 to 5 hand-placed spots; story items never move (canon 10). Glow sticks are
+  common, a light found in plenty; lures (bottles, cans) are scarce (the owner's choices: canon 10). **No voice line
   ever says a value.**
 - **The hint ladder:** only in a quiet moment, Kayla on the radio gives H1 (where to look), H2 (what kind of thing),
   H3 (the action), at the rungs of the tier. An H3 or an answer that would need a value is **written into the binder
@@ -191,16 +191,34 @@ lifts it off its hooks and it becomes his first map. Teaches: maps come off wall
 Silent Hill 2 remake (maps found in the world, which mark themselves as you learn).
 
 ### Chapter 1: "The Shelter" (basement, Dark Dwellers)
-**1.1 Dead Start (7 min).** *Situation:* the generator never took over at the pulse; Gus pulled its start relay on
-Tuesday to replace it. *Pieces:* the generator's nameplate (relay part number, 12 V); six similar relays in the
-labelled bins of Gus's workshop; the start card on the wall (prime, choke, pull) and Gus's logbook, which adds the
-one fact the card lacks ("bleed the filter screw first or she dies on you"). *Steps:* match the part number, fit the
-relay, open the tagged supply valve, bleed, prime until the sight glass fills, choke, pull (one to three pulls, each
-heard through the whole basement: canon 6 and 7). *Creature:* none hunting; Gus is beside him. *Hints (Gus):* "the
-plate tells you what she eats"; "my bins say it the same way"; he points. *L:* one relay fits, the card is whole.
+**1.1 Gus's Ears (7 min).** The owner chose it over Dead Start as written: "Yes, Gus's Ears" (21 November).
+*Situation:* the generator never took over at the pulse; Gus pulled its start relay on Tuesday to replace it. His
+hearing aid is nearly flat (its cells are his Chapter 2 errand), so he cannot hear her, or anything a few metres away:
+he works with a hand flat on the engine and asks Danny what she sounded like. *Pieces:* the generator's nameplate
+(relay part number, 12 V); six similar relays in the labelled bins of Gus's workshop; the start card on the wall
+(prime, choke, pull) and Gus's logbook, which adds the one fact the card lacks ("bleed the filter screw first or she
+dies on you"). *Steps:* the quiet work first: match the part number, fit the relay, open the tagged supply valve,
+bleed, prime until the sight glass fills, choke. Then pull: once she is ready she catches on the first pull (systems
+6.1). Every pull is 80 on the noise table, heard through the whole basement (canon 7), and a few seconds later heavy
+steps answer in the pipes, a little nearer each time. Gus does not hear them; Danny does. **Every failed pull is a
+clue** in the way she fails: she does not turn at all (the wrong relay, the one failure that is not loud); she turns
+over and never fires (no fuel reaches her: the valve, or the glass is not full); she fires and dies (air in her: the
+bleed screw); she fires and will not hold (the choke). Between pulls, a choice: pull again now, or kill the light and
+wait for the steps to go back down the pipes (waiting costs time, and battery if the torch stays on). Gus shows the
+cupped beam here ("cup it"): its red glow reads the glass and the log (systems 3.1). When she catches, the lights come
+up, her hum hides Danny from everything down there (canon 7) and the answering steps stop. **What Danny tells Gus**
+(the owner's choice, 22 November): on Standard and Hard the player listens and picks what Danny tells Gus, and every
+failure sound is also written in the captions; on Light, Danny says it himself. *Creature:* the hunter, heard only,
+answering each loud pull in the pipes (creatures 1.9). **On the 4th loud pull it comes right up to the boiler-room
+door: a near miss, no chase** (it sniffs at the door and goes; the owner's choice, 22 November). The pipes going
+quiet is its tell; Gus, who cannot hear it, reads Danny's face. *Hints (Gus):* for the relay, "the plate tells you
+what she eats"; "my bins say it the same way"; he points. For the failures: first, that she will say what is wrong and
+he cannot hear her any more; then what kind of sound means what ("if she fires and dies, she's got air in her"); last,
+he points at the thing to fix. No number is ever spoken. *L:* one relay fits; the card is whole, the bleed included.
 *S:* as above. *H:* two relays share the number, one is 24 V; Gus's log is in his shorthand. *Moves:* the part number,
-the bin, the prime count (shown by the glass). *Seen in:* Amnesia: The Bunker (a generator started by hand, whose fuel
-then runs the lights).
+the bin, the prime count (shown by the glass). *Seen in:* Amnesia: The Bunker (noise as the dial for how often it
+comes; a generator started by hand, whose fuel then runs the lights) and Alien: Isolation (every loud thing you do
+draws it to you).
 
 **1.2 The Pantry (7 min).** *Situation:* food for eight is in the undercroft dry store, through the near tunnels,
 where the hunter is heard in the pipes only. *Pieces:* a three-number padlock; the kitchen manager's delivery
@@ -870,7 +888,7 @@ stairs (the crush), better in rooms people never reached.
   Roll Call; the set pieces placed here (Kayla's eyes in 3.3, Two Kaylas on the way into Roll Call, the leash street
   in the city); the gore tableau of each chapter; the ship forms per deck.
 - **Systems:** closet 4 taking the penthouse can's feed after the breach (5.5); a battery pair in reach of every
-  puzzle that needs one (2.2, 3.1); the hiker's bag in the lost-and-found (1.3); restart points at every solved step
+  puzzle that needs one (2.2, 3.1); restart points at every solved step
   with puzzle state kept; the circuits named here against canon 6's table.
 - **Audio:** levels to add to canon 7 for the safe dial and handle, the bins, wading, the bleacher motor and the
   scoreboard horn; the PA chime; the heating-knock and rain-wave timing; every puzzle's confirming sound, none of it a

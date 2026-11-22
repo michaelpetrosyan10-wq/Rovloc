@@ -96,6 +96,12 @@ silences, which no stinger may cover:
   Dwellers' tell, canon 9). The player hears the fuel level across the basement and needs no gauge.
 - It carries 40 m into the tunnels through the pipes, so in Chapter 1 the hum fading behind you means leaving safety.
   While it runs it masks the basement (canon 7); when it stops, Danny's steps suddenly carry.
+- **Its start, Gus's Ears** (world 1.1, the owner's choice). A pull is 80 (canon 7) and the hunter answers it in the
+  pipes. Each way she fails is **a sound of its own**, because the player tells them apart for Gus: she does not turn
+  at all (the wrong relay, the one failure that is not loud); she turns over and never fires (no fuel reaches her); she
+  fires and dies (air in her); she fires and will not hold (the choke). Designed from real recordings of a diesel
+  starter, never a click. Every failure sound is also written in the captions (the owner's choice, 22 November: on
+  Standard and Hard the player listens and picks what Danny tells Gus).
 - It sits faintly behind Kayla on the radio. When the hunter cuts it at the Chapter 5 breach, her background winds down
   under her words.
 - Each lantern room has one friendly sound of its own (canon 14): a wind-up clock, a vending machine's compressor, an
@@ -188,16 +194,15 @@ shared between kinds, all designed fresh from real recordings. Rules, numbers an
 creature document's; this section is how each one sounds.
 
 **The hunter (everywhere).**
-- *Far:* **heavy, slow steps in both walks**, upright in tall spaces and stooped under ceilings, as the owner asked
-  ("I also want his footsteps to be louder so people know when hes around"): about 85 dB at 1 m on hard floors (80
-  stooped), heard through two walls, above Danny's loudest possible step (83: canon 14; creatures 1.2; owner-checklist
-  line 45). Stooped, the steps
-  stay, and on top of them come a line of ceiling tiles lifting and dropping back at walking pace, long joints
-  creaking, its fingers brushing the grid and cloth dragging on the tiles. The tunnels are tall enough for it to walk (canon 4), so
-  in Chapter 1 it is heard walking in the pipes and tunnels.
-- *The fold* through a 70 x 70 cm opening happens out of sight: heard as joint creak and cloth, never clicks.
-- *In ducts and crawlways only* (under 1 m): a soft many-point patter and flexing sheet metal, never footsteps. The
-  patter is heard nowhere else.
+- *Far:* **heavy, slow steps**, on all fours or standing on its hind legs, as the owner asked ("I also want his
+  footsteps to be louder so people know when hes around"): **louder than any sound Danny can make** (his rule of 21
+  November; the level: canon 14; creatures 1.2; owner-checklist line 45), heard through two walls, with long joints
+  creaking. The tunnels are tall enough for it to walk (canon 4), so in Chapter 1 it is heard walking in the pipes and
+  tunnels.
+- *The squeeze* into a crawlway (about 110 x 120 cm, canon 4): always heard, as joint creak and its hide scraping,
+  never clicks.
+- *In ducts and crawlways only:* a soft many-point patter and flexing sheet metal, never footsteps. The patter is
+  heard nowhere else.
 - *Near:* a slow breath in through something narrow; the whisper, every word clear.
 - *Alert:* the whisper stops mid-word; two seconds of nothing; then its steps turn toward you.
 - *Catch* (it takes, canon 8; the voice-pulling scene, about 6 s, skippable after the first): no stinger. One long

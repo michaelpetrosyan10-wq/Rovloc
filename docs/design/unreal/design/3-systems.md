@@ -81,7 +81,7 @@ with its own rule.
 | Part | About | What it teaches |
 |---|---|---|
 | The shelter forms, guided; within the first 15 minutes Ray at the door, the hunter's hand on the wired glass behind him | 10 min | the steel door, the barred shelter, the hunter's first near miss |
-| Start the generator with Gus; learn the gauge, the wind-up stopwatch and the circuits | 7 min (world 1.1, Dead Start) | the live clock (section 6) |
+| Start the generator with Gus; learn the gauge, the wind-up stopwatch and the circuits | 7 min (world 1.1, Gus's Ears) | the live clock (section 6) |
 | The steam tunnels to the kitchen undercroft for food, the hunter heard in the pipes; Gus's workshop for tools | 7 min (world 1.2, The Pantry) | the tunnels, the loud and the quiet way |
 | The first power failure, scripted, inside the shelter (everyone counting aloud in the dark), which brings the Dark Dwellers | 5 min | the Dwellers' rule, taught while the hunter is away |
 | **Flare Road**, the fuel run from the far fuel store: which three circuits to light, the gaps bridged with flares (the steps are the world document's) | 20 min (world 1.3) | light as a currency |
@@ -100,7 +100,7 @@ The shelter parts make about 20 minutes (canon 3). The generator is a live clock
 |---|---|---|
 | Walk | 1.5 | Default. Hunter rhythm about every 30 s (canon 8) |
 | Crouch | 0.9 | Toggle or hold (option). Hunter rhythm about every 60 s. Fits under desks and through low gaps |
-| Crawl | 1.0 | From crouch. Under the stage, ducts and crawlways (at least 70 x 70 cm, canon 4), collapsed ceilings. The torch must be in the mouth or off (see 2.5). Faster than the hunter in a duct (its duct crawl: canon 8) |
+| Crawl | 1.0 | From crouch. Under the stage, ducts and crawlways (about 110 cm wide and 120 cm high, so the hunter can follow: canon 4), collapsed ceilings. The torch must be in the mouth or off (see 2.5). Faster than the hunter in a duct (its duct crawl: canon 8) |
 | Sprint | 4.5 | About 6 s of breath, 8 s to recover. Hunter rhythm every 15 to 20 s. After a sprint his breathing is loud for 6 s. A little faster than the hunter's chase (canon 8) |
 | Limp (Badly hurt) | 1.1 | No sprint (section 9) |
 | Lean | n/a | Q / E, about 30 cm. Silent. Works standing and crouched, and from inside a locker by its slats |
@@ -189,7 +189,8 @@ force locks and lure; every creature but the Still Ones can hear it (the Dark Dw
   found: canon 6 and 11). Off costs nothing, so switching it on and off is the skill. Below 25% the beam yellows and
   narrows; below 10% it flickers. A shake brings 5 s of brightness back (a rattle).
 - **Cupped beam** (hold the light button): his fingers cover the lens, a dim red glow, enough to read a note or find
-  a step at 1 m, at half the drain, and not seen beyond 4 m. Small, cheap, and the move players remember.
+  a step at 1 m, at half the drain, and not seen beyond 4 m. Small, cheap, and the move players remember. It does not
+  keep a Dark Dweller off: only the open beam and real lights do (the owner's rule of 21 November).
 - Changing batteries: 2 s, both hands; the old pair goes into the pack, and it can be thrown as a lure (canon 7).
 - **The free fallback: the crank torch** (a camping torch from Gus's workshop, Chapter 1). Three cranks give 20 s of
   weaker light, and the crank is heard (40 dB, canon 6 and 7). He is never stuck in the dark, only made louder.
@@ -269,8 +270,8 @@ documents", for audio to add.
 - **What takes space:** battery pairs stack 4 to a slot; glow sticks 3; bandages 2; parts (tape, wire) 5; food tins
   2; a fuel can takes 2 slots and sloshes when he runs, silent when full; tools 1 or 2; the sledgehammer and the
   extinguisher are carried in both hands, never in the pack (he cannot hold a light, and dropping them is loud).
-- **One upgrade only:** the hiker's bag in the F3 lost-and-found (Chapter 4) raises the pack to 12. Medium weight
-  stays medium.
+- **No upgrade:** the backpack stays small, 8 slots, all game; there is no bigger bag in Chapter 4 (the owner's rule
+  of 21 November).
 - **The binder** (never costs a slot): Gus's key ring (every key he earns), notes and letters, the floor maps (each
   floor's fire-evacuation plan, taken off the wall), the symbol pages, the chalk, and Danny's own pocket notebook. The
   map marks itself in his pencil (an X on a locked door, a circle on a puzzle). Kayla's notes come in blue ink, added
@@ -298,7 +299,7 @@ proposal; where each item lies is the world document's, and its places win.
 | Janitor's torch | Given by Gus | Main light, 2 AA, 12 to 15 min per pair (section 3.1) | Unique | Ch1 |
 | AA battery pair | Desks, drawers, smoke alarms, remotes | Feeds the torch, the camcorder and the flash camera; a spent pair is a lure | Common to scarce (scarcer each floor) | Ch1 |
 | Crank torch | Gus's workshop | Free light: 3 cranks = 20 s, heard while cranking | Unique | Ch1 |
-| Glow sticks | The cheer team's halftime leftovers | Quiet light, route marker; holds Dwellers off 90 s in a 2.5 m pool | Common in Ch1 to 2, then scarce | Ch1 |
+| Glow sticks | The cheer team's halftime leftovers | Quiet light, route marker; holds Dwellers off 90 s in a 2.5 m pool | Common: a light found in plenty, not a scarce lure (the owner's choice, 22 November) | Ch1 |
 | Lighter | Staff-room jacket | Small endless flame; warmth draws the Swarm | Unique | Ch2 |
 | Candle | Staff room, music suite | Placed light for 20 min | Scarce | Ch2 |
 | Fuel can | Bus garage, mower shed, fuel store | Two ticks of generator fuel; 2 slots; sloshes unless full | Scarce | Ch1 |
@@ -311,7 +312,7 @@ proposal; where each item lies is the world document's, and its places win.
 | Painkillers | Nurse, staff bags | 3 min without the limp: he can sprint again; heals nothing. Also Ray's need (section 7) | Scarce | Ch2 |
 | Cold pack | Nurse, kitchen freezer | Squeezed: masks his warmth from the Swarm for 60 s | Scarce | Ch5 |
 | **Distraction** (all nothing more than noise) | | | | |
-| Bottle, can, tin | Everywhere | Thrown lure, heard where it lands (canon 7) | Common | Ch1 |
+| Bottle, can, tin | Everywhere | Thrown lure, heard where it lands (canon 7) | Scarce, like every part for a distraction (the owner's rule) | Ch1 |
 | Kitchen-timer rattle | Built: kitchen timer + biscuit tin + tape | Wind it 5 to 30 s; it runs with a soft whirr muffled in its tin (never a click: 5-audio 1), then rings 4 s. Best against Listeners | Built, 1 per timer found (scarce) | Ch2 |
 | Wind-up toy | The theatre's props, the lost-and-found | A chattering lure that walks in a line for 15 s: noise that moves | Rare | Ch3 |
 | Cassette player | Band room | Plays a tape for 2 min on one battery pair; a long, placed lure | Unique | Ch2 |
@@ -340,7 +341,6 @@ proposal; where each item lies is the world document's, and its places win.
 | Food tins | Kitchens, vending machines, lockers | The shelter's food; shown on the shelf | Scarce | Ch1 |
 | Marcus's drumstick | Band room floor | Danny puts it in Marcus's hand in the Nest | Unique | Ch2 |
 | Radio earpiece | Priya, at the Ch4 return | Keeps Kayla silent to creatures (section 8) | Unique | Ch4 |
-| Hiker's bag | F3 lost-and-found | The pack's one upgrade, 12 slots | Unique | Ch4 |
 | Kayla's film camera and walkie | The wreck in Courthouse Plaza | Kept; Danny gives the walkie back in Ch8 so she can talk from her pod | Unique | Ch6 |
 | The gold heron | Hidden once per chapter | All nine hang from Kayla's bag in June | Unique each | Prologue |
 | **Alien (from the city's midpoint on)** | | | | |
@@ -361,8 +361,10 @@ proposal; where each item lies is the world document's, and its places win.
   workshop behind a steel door).
 - **The gauge** is a needle over 8 ticks. A fuel can adds 2. Refuelling just before the needle crosses a tick saves
   a little (Gus's note hints at it).
-- **Starting it** is physical: the right relay, bleed, prime, choke, pull. One to three pulls, each 80 dB (canon 7),
-  loud enough for the whole basement. A start in the dark with something near is the scene players remember.
+- **Starting it** is physical: the right relay, bleed, prime, choke, pull. Once she is ready she catches on the first
+  pull. Each pull is 80 dB (canon 7), loud enough for the whole basement, and the hunter answers it in the pipes; a
+  failed pull says by its sound what is wrong (Gus's Ears, the owner's choice: world 1.1). Gus teaches the cupped beam
+  here (3.1). A start in the dark with something near is the scene players remember.
 - **Burn:** 0.25 ticks a minute at idle plus 0.1 for each power unit in use. **Capacity is 6 units at once**; switch on
   more and the breaker trips with a bang and a 5-second blackout (it teaches the limit once).
 
@@ -546,7 +548,9 @@ Whoever the hunter takes becomes a voice in its whisper from then on (canon 8).
   Danny close by, at the start of that encounter, that large-puzzle stage or that solved step, with puzzle progress
   kept, in under 5 s. There is a restart point at every encounter's entrance, every large-puzzle stage and every solved
   step. Restart points are not saves: they hold nothing across a quit. On Stay Behind a death goes back to the last
-  save (section 10). On every preset the flight has a checkpoint at each segment and the self-destruct one at each stage.
+  save (section 10). On Story and Survivor the flight has a checkpoint at each segment and the self-destruct one at
+  each stage; Stay Behind has only the player's own saves, with no checkpoints at all (the owner's rule of 21
+  November).
   The world keeps the same codes after a death (the seed is fixed at New Game).
 
 ## 10. Saving (canon 11; lantern rooms: canon 4)
@@ -600,8 +604,9 @@ and speeds are the same on every preset** (the owner asked for that rhythm by na
 | **Standard** | in another room | 4 / 8 / 12 min | |
 | **Hard** | oblique or with a decoy; one story riddle object per floor | 6 / 12 min | no overlays; Flare Road's 1962 breaker names |
 
-- **When they can change:** creature and survival settings at any time from the pause menu. The puzzle tier can only be
-  **lowered, at the start of a chapter**, never raised mid-game; that chapter's codes are rolled again for the new tier.
+- **When they can change:** creature and survival settings at any time from the pause menu. The puzzle tier can be
+  **lowered at any time** (a puzzle under way and not yet solved rolls new values) and **raised only at the start of a
+  chapter**, whose codes are then rolled again for the new tier (the owner's rule of 21 November).
 - At most one paper-code lock a chapter; every school lock has a loud way round except the electrical closets and story
   items (world).
 
@@ -650,7 +655,8 @@ of reach of any surface. (Seen in: the Dead Space remake.)
 
 ## 13. The flight (Chapter 7, about 18 minutes; canon 13)
 
-- **A set course in six segments**, a checkpoint at each, lifting straight off the Chapter 6 landing pad:
+- **A set course in six segments**, a checkpoint at each (not on Stay Behind: section 9), lifting straight off the
+  Chapter 6 landing pad:
 
 | Segment | About | What happens |
 |---|---|---|
@@ -668,7 +674,7 @@ of reach of any surface. (Seen in: the Dead Space remake.)
   3 s of fire and cools in 2 s).
 - **Fair:** every missile sounds a lock tone 1.5 s before it fires (2.5 s on Story); scraping scenery costs a hit, never
   a death; the hull shows damage as cracks across the canopy glass and an alarm (4 hits, 6 on Story); a checkpoint at
-  each segment; aim assist on by default.
+  each segment (not on Stay Behind); aim assist on by default.
 - **Exciting:** speed and space change every segment (the close rooftops, the open cloud, a vast fin), pursuers grow
   from two to a pack, one quiet segment in the middle (the cloud: no enemies, the city a field of lights below).
 - **The talk button:** in the cloud, if he holds the radio's talk button, Danny tells Kayla, who cannot hear, what he
@@ -802,8 +808,8 @@ The game map's own list of twenty (part 5) names the same sources for the mechan
 - **Why phones fail:** the lithium pulse (canon 6) replaced this draft's own proposal, so its decision 1 is dropped
   (section 3.3).
 - **Settled by the designers as recommended:** the generator is a live clock only in the basement, then the shelter's
-  reserve (section 6); the gun kills soldiers, drives the hunter off and never kills it (section 12); the puzzle tier is
-  only lowered, at a chapter start (section 11); the pack never pauses the world, except as an option on Story (section
+  reserve (section 6); the gun kills soldiers, drives the hunter off and never kills it (section 12); the pack never
+  pauses the world, except as an option on Story (section
   4); the noise ring is on by default on Story only (section 3.5).
 
 ## Open, to be put to him later

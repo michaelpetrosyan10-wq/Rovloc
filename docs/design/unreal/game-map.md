@@ -32,7 +32,7 @@ Time runs from Friday night to Tuesday dawn. Lengths are for a first play on the
 ### Prologue: "Halftime" (about 22 minutes)
 - **What happens:** Kayla photographs Danny with her grandfather's film camera. Marcus, his other best friend, spins a drumstick. Walking out, Kayla says her family moves in June. Danny jokes ("So I'm the one who stays behind. Cool. Love that for me.") and leaves. Marcus runs back for his skateboard: "You guys'll wait, right?" "We'll be at the gate." They don't wait.
 - **What you do:** walk, look, joke with Kayla in the parking lot. Then the pulse: phones go hot and die, the streetlights go out street by street, the mothership settles silently, the small ship drops onto the field.
-- **New:** a 3 to 4 minute sneak back into the school with Kayla, along the parked cars and under the bleachers, while the hunter, already standing on the field, turns its long face toward the school. Your first lesson in crouching and sight lines, with a near miss; it cannot fail the first time.
+- **New:** a 3 to 4 minute sneak back into the school with Kayla, along the parked cars and under the bleachers, while the hunter, already standing on the field, turns its head toward the school. Your first lesson in crouching and sight lines, with a near miss; it cannot fail the first time.
 - **Remembered:** Gus bars the steel door. Through its window the corridor light dies, and in the last of it a skateboard rolls across the floor on its own and stops. Then, from right behind the door, the announcer's words come back in pieces: "...remain... in your... seats." Title.
 
 ### Chapter 1: "The Shelter" (basement, Dark Dwellers, about 75 minutes)
@@ -129,10 +129,10 @@ In every version the soldiers are the aliens, the hunter is their collector, and
 ## 4. The creatures
 
 ### The hunter (everywhere)
-About 3 m tall and 40 cm across the shoulders: the long pale face from your favourite picture, as slim as the body, the hood, the big old veined hands. The body has to frighten before you ever see the face: the height, the stoop, the hands. It stoops under ceilings and folds through doors hand first; the tunnels are 2.8 to 3 m high so it walks there too.
+As you chose on 21 and 22 November: it walks on all fours on long thin limbs, with a second pair of arms; a bit thicker than picture 2, with its cape of skin and long clawed fingers; alien feet; its face a huge open mouth with torn lips and teeth, no eyes, in a hood of its own skin; sometimes it rises onto its hind legs (when is still to be settled with you). The body has to frighten before you ever see the face. It squeezes through doors and follows you into crawlways built big enough for it; the tunnels are 2.8 to 3 m high so it walks there too.
 - **Rule:** it hunts you everywhere by sound, light and sight, and takes whoever it catches. It stays within a radius of you instead of wandering off, so you hear or glimpse it often.
 - **Surviving it:** move quietly, break its line of sight, hide where it didn't see you go in, scare it off with fire, noise or cold. It is a little slower than your sprint and slower than you in ducts. It never teleports and can never be killed. Something happens about every 15 to 20 seconds when you sprint, 30 when you walk, 60 when you crouch, and it rarely attacks.
-- **Sound:** heavy steps heard from far off, through two walls, whenever it walks; ceiling tiles rattling as its fingers pass; a soft patter only in ducts. Its whisper uses real words of people it took, sometimes your name, sometimes mocking, often from right behind you, and always close: a whisper means it is right here. It is rare (well under one line a minute) and every word stays clear enough to understand. Outside a chase, when it stops whispering, it has noticed you; in a chase it whispers once, right behind you, as it closes.
+- **Sound:** heavy steps heard from far off, through two walls, whenever it walks, louder than any sound you can make; a soft patter only in ducts. Its whisper uses real words of people it took, sometimes your name, sometimes mocking, often from right behind you, and always close: a whisper means it is right here. It is rare (well under one line a minute) and every word stays clear enough to understand. Outside a chase, when it stops whispering, it has noticed you; in a chase it whispers once, right behind you, as it closes.
 - **If it gets you:** its fingers go into Danny's mouth and throat to pull his voice out, the scream cut off mid-breath, then the drag into the dark (about 6 seconds, skippable after the first). Next try, it whispers that scream back once.
 - **It learns:** hide in lockers too often and it opens lockers; overuse a duct and it waits at the far end. Once a chapter a habit breaks the pattern in plain view. The rules that keep it fair are never told to you.
 
@@ -164,7 +164,7 @@ The animals' catches are short, graphic first-person deaths, with a cut-away opt
 - **Saving** by hand in the shelter's logbook and one small lantern room per area, never with a creature near, plus a chapter autosave. "Quit and keep my place" works anywhere.
 - **Difficulty:** Story, Survivor (recommended), Stay Behind (open from the start), with puzzles set apart: Light, Standard, Hard. The hunter's rhythm never changes, only its danger.
 - **The gun** (from the city's midpoint): six cells, with a whine that tells you how many are left. A quick shot staggers a soldier or drives the hunter back; a charged one kills a soldier. Every shot is heard a block away. It never kills the hunter.
-- **The flight:** a set course; you steer, dodge, boost and shoot. Missiles sound a lock tone first, scraping costs a hit, never a death, and every segment has a checkpoint.
+- **The flight:** a set course; you steer, dodge, boost and shoot. Missiles sound a lock tone first, scraping costs a hit, never a death, and every segment has a checkpoint (except on Stay Behind, which has only your own saves).
 
 **Twenty small mechanics, and where each was seen:**
 
@@ -201,7 +201,7 @@ The animals' catches are short, graphic first-person deaths, with a cut-away opt
 
 **From the city: Takedown (Chapter 6, about 20 minutes).** One soldier guards the small ship; the squad's sprayed sweep counts tell you how long the others are away. Throw the lever in a substation kiosk and the power line hums, blinding the guard's heat scanner for 30 seconds. Set off an old pickup's alarm with a thrown brick to turn him. Close in along cars and steel planters that hide your heat, then the struggle from behind, in first person, in your own hands. Take the gun, the scanner and its key shard. The loud way is the alarm right beside the ship: the squad runs back, and it still works.
 
-**The self-destruct (Chapter 8, about 40 minutes, a checkpoint at every stage).**
+**The self-destruct (Chapter 8, about 40 minutes, a checkpoint at every stage except on Stay Behind).**
 1. **Three locks across the low-gravity Spine**, the Brute after you: a power board where joining a conduit cuts it (keep the pod bay's line; lose either the gravity or the lights, Chapter 1's choice backwards); three clamps pulled in the order a glyph sentence gives; a lock closed by pushing a drifting pod into its clamp.
 2. **Route the pods** by the seat counts on their board, in glyphs.
 3. **The final exam at the core:** compose "ship all end". Each right symbol sounds its tone, and the phrase resolves into the Danny-and-Kayla melody. The countdown is in alien numbers; wrong symbols cost time, never the game. The panel answers with one glyph you now know: **hold**.
@@ -273,7 +273,7 @@ These ranges assume your new, larger plan, so little time is lost to usage limit
 - **Teenage faces:** Epic's free MetaHuman tool builds adults. Danny and Kayla are tested first; at most ten people have speaking faces, and everyone else is heard, seen from behind or far off.
 - **People moving in cutscenes:** twelve scenes staged simply (seated talk, close-ups, darkness), acted with friends on a phone where possible; the risky moments are played in first person.
 - **The mothership:** no ready-made alien assets exist, so one alien kit of scanned bone, rock and wet membrane with four deck looks, tried early.
-- **The hunter's movement:** library walking bent to fit the ceilings; its folding into ducts happens out of sight, heard but never seen.
+- **The hunter's movement:** it walks on all fours, so its moves are made for its own body rather than taken from human walking; its squeeze into crawlways is always heard.
 - **The city on 16 GB:** only the blocks you walk are loaded; in the flight the city is a dark field of lights under cloud.
 
 **What you do yourself:** approve installers; log in to Epic and Fab for a weekly list of free packs; keep the PC awake for long jobs; play each build and record a clip; answer the decisions; collect signed releases if friends take part (a parent signs for anyone under 18); write the song lyrics if you want them truly yours.
@@ -314,9 +314,9 @@ Every line of your checklist was traced. These are the small ones that are easie
 
 | You said | Where it is |
 |---|---|
-| "the face is supposed to be slim like body" | The hunter's build (part 4); checked on every model and picture |
+| "the face is supposed to be slim like body" | The hunter's build (part 4); checked on every model and picture. Your newer words replaced it on 22 November: "New face entirely", a huge open mouth |
 | "the body is not scary tho" | The hunter's body frightens by itself; the three movement clips come to you first |
-| "Whys the hand look worse" | The big veined hands are modelled from the Higgsfield hand pictures and shown beside your favourite |
+| "Whys the hand look worse" | The hands (now picture 2's long clawed fingers) are modelled from the Higgsfield hand pictures and shown beside your favourite |
 | "i never really see the monster unless he like tp's behind me" | It never teleports, stays within a radius of you, and is heard and glimpsed often |
 | "one every 20 sec or 15 if sprinting and 30 sec if walking and like 1 min if crouching" | The hunter's rhythm (part 4), your numbers as the starting values |
 | "I dont want the monster coming every minute" | Many moments, few attacks |
@@ -351,7 +351,7 @@ There are twelve, about 17 minutes in all. They look real because of what we sho
 
 **1. On the Hat (the prologue, 95 seconds).** Kayla's flash goes off in your face and the camera pulls out of Danny's head. Over the PA: "Please remain in your seats." Kayla tells him she moves in June, he jokes ("So I'm the one who stays behind. Cool. Love that for me.") and walks out. Marcus catches them at the door, swears them to wait "on the hat", and runs back for his skateboard. You watch him go through the wired glass of the closing door, the last time anyone sees him awake. Then you are in the parking lot with Kayla.
 
-**2. Last Lights (the prologue, 110 seconds).** From behind the two of them you see a ship the size of a district slide through the clouds, and the stadium's four floodlights die one by one with a heavy clunk. The packed gym behind them goes silent all at once, and Kayla's hand closes on his sleeve. "Okay. That's... a lot of ceiling." A small ship slams onto the field, and its landing light flashes on and off in the steam. On, it is half out of the open hatch, hood and shoulders out, both long hands flat on the turf. Off. On, it is standing there, three metres tall, back turned. You drop behind a car, and the sneak is yours.
+**2. Last Lights (the prologue, 110 seconds).** From behind the two of them you see a ship the size of a district slide through the clouds, and the stadium's four floodlights die one by one with a heavy clunk. The packed gym behind them goes silent all at once, and Kayla's hand closes on his sleeve. "Okay. That's... a lot of ceiling." A small ship slams onto the field, and its landing light flashes on and off in the steam. On, it is half out of the open hatch, hood and shoulders out, both long hands flat on the turf. Off. On, it is standing there, back turned. You drop behind a car, and the sneak is yours.
 
 **3. The Board (the title, 50 seconds).** Gus bars the steel door. Through its little window the corridor lights die toward you, and in the last one Marcus's skateboard rolls in on its own and stops, one wheel still turning. Black. Then, from right behind the door, the announcer's voice in broken pieces: "...remain... in your... seats." STAY BEHIND. You are standing at the black window when Gus says "Away from the glass."
 
@@ -361,7 +361,7 @@ There are twelve, about 17 minutes in all. They look real because of what we sho
 
 **6. Knock (Chapter 4, 85 seconds).** Ray is outside the steel door after dark, and you never see him. Three knocks. Then the same three knocks, with exactly the same timing, which on the floor you just survived means a Mimic. Then one tired knock, low on the door, and "...Please." Kessler won't open it ("I count my kids, Mr. Reyes. I can't count him."), and Gus silently shines his torch on the tunnel hatch. Going round to check is up to you.
 
-**7. Somebody Keeps the Lights On (Chapter 5, 110 seconds).** On the roof the hunter stands at full height in the helicopter's searchlight, and for half a second its long face turns into the light before the beam flares and it's gone. The others run into the white one by one. Gus stays: "Somebody keeps the lights on, son. Go on." If you brought him his hearing-aid batteries back in Chapter 2, he hears it coming, strikes a red flare and walks off into the rain. If you didn't, he waves his torch up at you while the long pale face waits behind him at the stair door, and he never turns around. You get control at the helicopter door as the roof drops away.
+**7. Somebody Keeps the Lights On (Chapter 5, 110 seconds).** On the roof the hunter stands in the helicopter's searchlight, and for half a second its face, the huge open mouth, turns into the light before the beam flares and it's gone. The others run into the white one by one. Gus stays: "Somebody keeps the lights on, son. Go on." If you brought him his hearing-aid batteries back in Chapter 2, he hears it coming, strikes a red flare and walks off into the rain. If you didn't, he waves his torch up at you while the long pale face waits behind him at the stair door, and he never turns around. You get control at the helicopter door as the roof drops away.
 
 **8. It's Me. Again. (Chapter 6, 55 seconds).** All night you have been talking into a dead radio. At the crashed helicopter you press talk one more time, and your own voice comes out of the wreck, from Kayla's walkie lying in rainwater, blinking red next to her film camera. "...Cool. So I've been talking to a seat." You keep both and walk on.
 

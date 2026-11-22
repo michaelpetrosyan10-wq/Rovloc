@@ -51,47 +51,48 @@ mothership (owner-checklist line 24), and has one beat in the flight (map).
 is how it finds him, why it breaks into the shelter in Chapter 5 (1.9), and why he cannot ride a pod. Black frost-lines
 on his forearm, cold, spreading. The story owns what the Mark means; this document owns only the hunter's part in it.
 
-### 1.2 The body, from the favourite picture
-The picture (test picture B3) shows it leaning over a locker row from above, head hanging down, one hand gripping the
-locker edge. That pose is its signature and its most-used "seen" beat. The design stays exactly; this turns it into a
-real-scale body (canon 8). The body has to frighten before the face is ever seen: the height, the stoop, the hands
-(owner-checklist lines 19 to 21).
+### 1.2 The body (the owner's words of 21 and 22 November)
+His words, oldest first: picture A2 replaced B3 as the target ("2: Cluster of eyes"); "Irs too skinny", then "A bit
+thicker than 2"; alien feet ("just make it look as much as the references i gavbe u like alien space"); a new face
+("bro the face isnt scary tho", then "1: Huge open mouth" and "New face entirely"); then "i dont want theh monstere to
+hahve a humaniod body make it a little weird", choosing "Extra arms" and "Walks on all fours", with "dont make it look
+dumb. reference the games bro referecne the games"; and on the model moving in Unreal, "This is good continue and make
+it so sometimes the hunter can stand up on two legs." The games he named judge its quality and patterns; no creature of
+theirs is copied. The body has to frighten before the face is ever seen (owner-checklist lines 19 to 21). Numbers:
+canon 8.
 
-- **Height about 3.0 m upright**, only in tall spaces (the gym, stairwells, the lobby, the boiler room, the stage,
-  outdoors, the mothership). Shoulders only 40 cm wide; chest deep and narrow; legs long and thin, knees high.
-- **Face:** about 55 cm long and 18 cm wide at the brow, slim like the body, tapering to a point; pale, slightly
-  translucent skin; a deep wrinkled brow; huge black slanted almond eye holes, each with one pinprick of light; two
-  dark streaks running down from the eyes; a fine vertical seam from the brow ridge to the tip; a small horizontal
-  slit near the tip (the mouth, used only to whisper). The face is rigid like a mask of bone under skin: it never makes
-  expressions. Only the tilt of the head and the pinpricks (which narrow when it focuses) show what it is doing.
-- **Hood:** reads as heavy grey worn cloth; up close it is a loose fold of its own felted hide. It sits low over the
-  brow. In bright light the hood draws forward.
-- **Hands:** the picture's hands exactly: big, old, veined, a black web of veins over the back, very long fingers (the
-  middle finger about 22 cm). The arms reach below the knees. The hands are its most animated part: they touch
-  everything (door frames, locker edges, ceiling grids) before the body follows.
-- **The fold.** Its ribs are hinged and its shoulders unlock. It can fold to pass a 70 x 70 cm opening, the size of
-  every crawlway and maintenance duct in the school (canon 4). Folding takes 2 s each way, so it is never instant. It
-  always happens out of sight: it is heard, as joint creak and cloth, and never seen in play.
+- **On all fours**, on long thin limbs, with **a second pair of arms**: not a humanoid body. Long and thin, but a bit
+  thicker than A2, with more meat on the limbs and body. The model he approved on 22 November is about 2.1 m long and
+  1.6 m to the top of the spikes along its back.
+- **Standing:** sometimes it rises onto its hind legs (its head about 2.5 m up on the model), stands, and drops back
+  down. **Open, for him:** when it stands (to look or smell over something, to tower over the player, when it loses
+  him).
+- **Face:** a huge open mouth with torn lips and teeth, and no eyes: our own, a pattern taken from a monster in his
+  reference picture, no shape, colour or detail copied. B3's long pale face (its eye holes, pinpricks, seam and slit)
+  and A2's cluster of eyes and needle teeth are retired. It whispers through that mouth (1.6). Its sight rules (1.3)
+  stand; **open:** how an eyeless head shows that it sees.
+- **Hood and skin:** a hood of its own skin over the head, A2's cape of skin over the shoulders; wet, slimy grey-violet
+  alien skin with raw open flesh in places (his "Wet, slimy skin" and "Open flesh").
+- **Hands:** A2's long thin clawed fingers (about 22 cm). The hands are its most animated part: they touch everything
+  (door frames, locker edges) before the body follows.
+- **Feet:** an alien's, like the alien monsters of his references, not a man's.
+- **Crawlways.** Every crawlway and duct it must follow Danny through is built about 110 cm wide and 120 cm high for it
+  (canon 4, the owner's "Bigger crawlways"): a tight squeeze, slower than him and always heard, as joint creak and its
+  hide scraping, never clicks.
 
 **Moving through a school built for people.** Ceiling and door heights: canon 4.
-- **Stoop walk** (corridors, classrooms, the tunnels): bent at the hips, neck forward, head carried at about 2.2 m,
-  hands sometimes sliding along the ceiling grid. The tunnels are 2.8 to 3.0 m high (canon 4), tall enough for it to
-  walk there, never crawl ("the monster walking around the tunnels", owner-checklist line 24). Ceiling tiles lift and
-  drop back as its fingers pass: a line of tiles rattling at walking pace is a hunter tell (the Swarm's tile tell on
-  F4 is different: bulging and dust, with chitter).
-- **Doors:** hand first on the frame, head turned sideways under the lintel, then the body. About 1.5 s; it cannot do
-  this silently.
-- **Upright walk** (tall spaces): slow, long strides.
-- **Its footsteps are heavy and heard from far away, in both walks**, upright and stooped, as the owner asked ("I also
-  want his footsteps to be louder so people know when hes around"): about 85 dB at 1 m on hard floors (80 stooped),
-  above Danny's loudest possible step (a sprint over broken glass on a metal stair with a full pack, 83: canon 7 and
-  14), heard through two walls. The stooped walk adds the ceiling-tile rattle on top of the
-  steps; it never replaces them.
-- **Crawl** (only where the space is under 1 m high: ducts, crawlways, under the stage; on the ship, its wall
-  channels): all four limbs, a soft multi-point patter, never footsteps. The patter is heard nowhere else.
+- **Walk, on all fours** (corridors, classrooms, the tunnels, tall spaces): the tunnels are 2.8 to 3.0 m high (canon
+  4), so it walks there ("the monster walking around the tunnels", owner-checklist line 24). Its moves are made for its
+  own body, never human walking fitted to it.
+- **Doors:** it squeezes through a 0.9 m doorway, front limbs first. About 1.5 s; it cannot do this silently.
+- **Its footsteps are heavy and heard from far away**, on all fours or standing, as the owner asked ("I also want his
+  footsteps to be louder so people know when hes around"): louder than any sound Danny can make (his rule of 21
+  November; the level: canon 14), heard through two walls.
+- **Crawl** (ducts, crawlways, under the stage; on the ship, its wall channels): body low, a soft multi-point patter,
+  never footsteps. The patter is heard nowhere else.
 - **Climb and hang:** it climbs lockers, shelving, pipes and stair rails, and hangs head-down from above. It does not
   walk on ceilings (the Dark Dwellers do; that keeps the two apart).
-- **Speeds** (canon 8, the same on every preset): creep 1.4 m/s, walk 2.4, **chase 4.2**, a little under Danny's
+- **Speeds** (canon 8, the same on every preset): creep 1.4 m/s, walk 2.4, **chase 4.2** (a gallop), a little under Danny's
   sprint (canon 5) and over his walk; **duct crawl 0.45**, well under Danny's crawl (canon 5): in a duct he always
   stays ahead if he keeps moving ("why cant he go thru the small little holes": it follows, slower than him and always
   heard). It is faster only on city roofs (6.0 m/s on all fours) and in the ship's wall channels (1.8 m/s).
@@ -107,7 +108,7 @@ real-scale body (canon 8). The body has to frighten before the face is ever seen
 | Hidden Danny | never seen inside a hiding place it did not watch him enter |
 | Hearing | threshold 30 (canon 7): a walk on a hard floor is heard at about 4 m, a sprint at about 25 m (canon 7); a crouch on carpet not at all |
 | Blood | follows the drips of a badly hurt Danny for 30 s (canon 5) |
-| Light | it does not fear light; light draws its eyes (the beam at 20 m). A lit room protects only against the Dark Dwellers, and a lit, barred shelter (1.4) |
+| Light | it does not fear light; light draws it (the beam at 20 m). A lit room protects only against the Dark Dwellers, and a lit, barred shelter (1.4) |
 
 Continuous noise does not pull it straight to Danny. The interaction clock (1.5) is its answer to how loudly he
 moves; only a single loud noise above the threshold earns a direct "reply" (a few heavy steps toward the sound), and
@@ -160,9 +161,11 @@ so it never feels like a timer; Danny's own loud noises add a lump to the clock 
 generator start 0.5); the first heard beat no sooner than 20 s and the first seen beat no sooner than 40 s after a
 stretch starts.
 
-**Seen or heard at least every 60 to 90 s, everywhere it hunts** (owner-checklist line 25: "i never really see the
+**Seen or heard at least every 60 to 120 s, everywhere it hunts** (owner-checklist line 25: "i never really see the
 monster", "make the monster appear more"). On every school floor, in the tunnels, the city and the ship, outside the
-shelter, grief scenes and cutscenes, Danny sees or hears the hunter at least every 60 to 90 s. When it is not
+shelter, grief scenes and cutscenes, Danny sees or hears the hunter at least every 60 to 120 s, the longest stretch
+drawn afresh each time, so a careful player can no longer count on "about a minute" (the owner's "Yes, up to 2 min", 22 November;
+it was 60 to 90 s). When it is not
 simulated near him, the director plays a heard beat from its real off-stage position at that rate (H1 far heavy steps
 through two walls, H3 in the pipes, H4 a breath through a wall). It is never closer than 25 m walked and never an
 attack. Teach phases keep these far beats only, so the local kind's rule is still learned alone.
@@ -173,9 +176,9 @@ attack. Teach phases keep these far beats only, so the local kind's rule is stil
 is 0.35 or less.
 
 **The catalogue, as beats in a 3D school** (tier 0 heard, 1 seen, 2 close):
-H1 heavy steps somewhere near (upright or stooped); H1b running steps; H2 a door or locker it touches in the next room;
+H1 heavy steps somewhere near (on all fours or standing); H1b running steps; H2 a door or locker it touches in the next room;
 H3 in the ducts or pipes; H4 a slow breath through a wall; H5 the whisper (1.6: at most one every 2 to 3 minutes); S1
-it crosses ahead at a corridor end; S2 it leans out of a doorway or over a locker row (the picture's pose); S3 it stands
+it crosses ahead at a corridor end; S2 it leans out of a doorway or over a locker row; S3 it stands
 watching at the dark end of a corridor; S4 its face at a vent grate; C1 it walks past close while Danny keeps still;
 C2 it passes his hiding place; C3 a warned arrival; C4 it sniffs at his hiding place and leaves; F a sound the building
 makes that only might be it; Reply; NearMiss.
@@ -245,8 +248,8 @@ the final exam.
 
 ### 1.8 A catch by the hunter (taken), and the gore of each chapter
 **The catch** (canon 8; map part 4): the game's signature body-horror scene, in first person, on Danny only. The long
-hand comes over his shoulder or from above; the view is lifted off the floor; the face fills the screen with the two
-pinpricks narrowing; its long fingers go into his mouth and throat to pull his voice out, the jaw forced open, **the
+hand comes over his shoulder or from above; the view is lifted off the floor; the face fills the screen, the huge open
+mouth with its torn lips and teeth; its long fingers go into his mouth and throat to pull his voice out, the jaw forced open, **the
 scream cut off mid-breath**; then he is dragged backwards into the dark, his fingers scraping the floor in view; the
 picture cuts to black while the drag sound continues for one second, then silence. **About 6 s, skippable after the
 first time**, covered by the cut-away option in the settings. **On the next attempt it whispers that scream back to
@@ -275,19 +278,19 @@ line 14; the taken stay off screen):
 ### 1.9 Chapter by chapter
 Active share is the part of the chapter's play time it is simulated near Danny (canon 8). It is absent in the shelter
 (8 minutes or more with no tell), in teach phases, grief scenes, rooms Danny has sealed, cutscenes and the epilogue. Where it is absent on a floor, in the tunnels, the city or the ship (teach phases, sealed rooms), its far heard
-beats still keep the 60 to 90 s rate (1.5).
+beats still keep the 60 to 120 s rate (1.5).
 Chapter places and minutes: canon 3 and 4. Where a row names a cutscene, `cutscenes.md` wins.
 
 | Chapter | Active | Its configuration |
 |---|---|---|
-| Prologue, the basketball game | scripted only | In cutscene 2 (Last Lights) it is seen far, in the landing light's flashes: half out of the open hatch as a held pose (hood and shoulders out, both long veined hands flat on the turf: the change asked of `cutscenes.md` scene 2, owner-checklist line 23), then standing, back turned; it unfolds in the dark between flashes. In play it is **already standing** and only turns its long face toward the school while Danny and Kayla make the **playable sneak** back in (3 to 4 minutes, along the parked cars and under the bleachers): the first lesson in crouching and sight lines, with one near miss; it cannot fail the first time. Inside, it is seen once at the end of a hall through wired glass, stooped under the ceiling, passing a doorway hand first (story). |
-| 1, the basement | about 40% | First 20 minutes heard only (H1, H3 in the pipes, H5 once), with one authored exception early on: **the near miss at the shelter door**, inside the first 15 minutes (Ray hammers at the door; as Gus opens it, the hunter's hand is flat on the wired glass behind him). **Absent** while the Dark Dwellers are taught. Returns for the tunnel and fuel runs of Flare Road: it walks the tunnels; seen beats, its first simulated near miss, one chase in the tunnels at the chapter's end. The Dwellers go silent and pull into the cracks when it comes: a cross-tell. Gore: 1.8. |
+| Prologue, the basketball game | scripted only | In cutscene 2 (Last Lights) it is seen far, in the landing light's flashes: half out of the open hatch as a held pose (hood and shoulders out, its long clawed hands flat on the turf: the change asked of `cutscenes.md` scene 2, owner-checklist line 23), then standing, back turned; it unfolds in the dark between flashes. In play it is **already standing** and only turns its head toward the school while Danny and Kayla make the **playable sneak** back in (3 to 4 minutes, along the parked cars and under the bleachers): the first lesson in crouching and sight lines, with one near miss; it cannot fail the first time. Inside, it is seen once at the end of a hall through wired glass, squeezing through a doorway front limbs first (story). |
+| 1, the basement | about 40% | First 20 minutes heard only (H1, H3 in the pipes, H5 once), with one authored exception early on (below). **In Gus's Ears** (world 1.1, the generator) it answers each loud pull of the starter with a few heavy steps in the pipes, a little nearer each time; **on the 4th loud pull it comes right up to the boiler-room door: a near miss, no chase** (it sniffs at the door and goes; the owner's choice, 22 November). Once she runs, her hum hides Danny from it (canon 7). The exception: **the near miss at the shelter door**, inside the first 15 minutes (Ray hammers at the door; as Gus opens it, the hunter's hand is flat on the wired glass behind him). **Absent** while the Dark Dwellers are taught. Returns for the tunnel and fuel runs of Flare Road: it walks the tunnels; seen beats, its first simulated near miss, one chase in the tunnels at the chapter's end. The Dwellers go silent and pull into the cracks when it comes: a cross-tell. Gore: 1.8. |
 | Between chapters, the shelter | 0 | Off stage, at least 8 minutes with no tell of any kind. The pipes stop knocking; Kayla's radio is clear. The player feels "gone for now". One authored exception (map): after Chapter 4, something tests the steel door, slowly. It never enters (1.4, rule 2). |
 | 2, first floor, Listeners | about 30%, plus 2 to 3 authored stalking sequences | Absent in TEACH. In TEST heard and seen. In TWIST it walks onto the Listener floor: its heavy steps make Danny want to run, and running is what the Listeners hear. Instead the Listeners hear its steps and rush it; it swats one into the lockers, split open (the chapter's gore). Danny can use its walk as cover. |
 | 3, second floor, Still Ones | about 30%, plus 2 to 3 authored stalking sequences | Absent in TEACH. In TWIST its whisper behind Danny makes him turn his head, used twice at most: the floor's trap. Watching the Still Ones never slows it. **The Mark**, on the theatre stage: it lifts him, presses one long finger to his forearm and puts him down; it takes Mari instead, and he hears her call his name once, far off (cutscenes.md stages it). He wakes hurt, the frost-lines on his arm, and must get home across a live floor in failing light: there is no calm return. Gore: a Still One it tore apart in the wings. |
 | 4, third floor, Mimics | about 30%, plus 2 to 3 authored stalking sequences | Quieter on purpose: only heard beats near the Mimics, so its whisper and their voices are never in the same minute. Hearing both on one floor, never in the same minute (its broken whisper from where it really is; their whole, clean lines from a body pretending to be someone it is not), is how the floor teaches the difference. |
 | 5, fourth floor, Swarm, then the roof | about 55% | TEST: hiding stops it, but the Swarm finds a still, warm body. Set piece: the Swarm covers it in a duct; Danny hears the fight. Then **the breach, the only one in the game**: while Danny is on F4 clearing the route, the hunter follows the Mark to the shelter and cuts the generator; the shelter goes dark and the bar no longer protects it (rule 2 kept: the light failed first). "It's in. It's inside, Danny." The group flees up the stair in the dark, and the chapter runs backwards: Danny powers F4 and releases its stair door before they reach it. **The roof:** its one long chase (about 90 s, authored, no token needed), a built obstacle run over ducts and skylights into the helicopter's light ("one final chase like door 100"). After the missile, falling under the only parachute, Danny sees it on the wreck lift someone in a yellow jacket: it takes Kayla (canon 1). |
-| 6, the city | about 25% | Outdoors it stands its full 3 m and runs on all fours across roofs and awnings (6.0 m/s, so in the city Danny never outruns it in the open; he breaks line of sight). Mostly a silhouette on the rooftops; three close beats in the whole chapter. **Kayla's whisper**, once, from a rooftop, while the radio on his chest stays dead (1.6): authored where Danny is himself up high, on the bus roof on Tannery Street (world 6, route step 2), with the hunter crouched on the low shop roof beside it, within 10 m of walked path. The Patrol owns the streets. It reaches the landing pad as Danny takes the ship. |
+| 6, the city | about 25% | Outdoors it runs across roofs and awnings (6.0 m/s, so in the city Danny never outruns it in the open; he breaks line of sight). Mostly a silhouette on the rooftops; three close beats in the whole chapter. **Kayla's whisper**, once, from a rooftop, while the radio on his chest stays dead (1.6): authored where Danny is himself up high, on the bus roof on Tannery Street (world 6, route step 2), with the hunter crouched on the low shop roof beside it, within 10 m of walked path. The Patrol owns the streets. It reaches the landing pad as Danny takes the ship. |
 | 7, the flight | 1 beat | Its hand on the canopy for a long minute after lift-off, until Danny scrapes it off against a mast. |
 | 8, the mothership | about 60% | **Full return with every learned habit** (up to four). The ship is built for its body: its own channels in the walls (1.8 m/s inside them, faster than Danny), membrane doors that open for it and not for him; in low gravity it is at home, pulling itself along surfaces while the Brute flounders. **The hold** (`cutscenes.md` and the story own its staging and words): it no longer waits passively. It comes through the pod bay with every habit it learned and whispers Danny's own promise back; with one hand on the pod release, Danny's other hand spends his last flare, cell and extinguisher keeping its hand off him; when the pockets are empty its hand closes over his mouth for his voice, after his last words are already out. |
 | Epilogue, as Kayla | 0 | Absent. Never seen and never heard. |
@@ -328,10 +331,13 @@ summary of each kind (rule, senses, tells, counters, tool, catch) is canon 9; th
 ### 2.1 The Dark Dwellers (basement, Chapter 1, when the power fails)
 - **Rule:** "They live only in darkness and cannot enter light." In play: keep the generator fed, and when it dies,
   stay in torch, flare, glow-stick or exit-sign light.
-- **Look and sound:** flat grey bodies like wet leather sheets about 1.6 m long, hanging in ceiling corners and over
-  pipes, edged with 12 to 16 thin finger-limbs; the only face is a vertical slit of small teeth. In light they blister,
-  smoke and shrink back into cracks. Danny's own light never kills one; it only drives them back. The one burst open
-  in the tunnel (1.8) is found, not caused: the generator's corridor lights came on over it before he arrived (in the
+- **Look and sound** (the owner's choices of 22 November, all as recommended: "Same world", "1.6 m sheet", "Slit of
+  teeth", "Very gross"): from the same alien world as the hunter, its wet alien hide with raw red patches where it
+  folds, and no eyes; told apart from the hunter by its shape, a flat sheet about 1.6 m long, hanging from ceilings and
+  over pipes, edged with 12 to 16 thin finger-limbs; one long slit of small teeth down the middle of the sheet, which
+  opens wide when it lunges. In light its skin blisters and splits, wet red flesh shows underneath and smokes, and it
+  shrinks back into the cracks. Danny's own light never kills one; it only drives them back. The dead one on the
+  tunnel floor (1.8) lies split open with its insides out, found, not caused: the generator's corridor lights came on over it before he arrived (in the
   school nothing can be killed, requirements 8). Far: a wet rustle and a scrape on concrete; near: the rustle quickens and a chorus
   of slow breaths. Caught in a beam they fall silent: **silence in your beam means one is right there.** They never
   click.
@@ -659,7 +665,7 @@ graph's numbers are re-checked in the engine at each milestone. Over 200 seeded 
 | Creature | Must hold on Survivor |
 |---|---|
 | All | 100% of catches had a tell in the previous 2 s (hunter 5 s); 0 catches while hidden in a place it did not see Danny enter; Careful caught at most 1 per chapter on average |
-| Hunter | measured gaps 15 to 20 s (Sprinter), 27 to 33 s (Walker), 54 to 66 s (Croucher); seen or heard at least every 60 to 90 s on every floor outside the shelter, grief scenes and cutscenes (far heard beats included, 1.5); at most one whisper per chase; at most one chase per 6 minutes of active play; no chase or near miss within 90 s of another; every whisper within about 10 m of walked path; no catch from a sniff not led by Danny; never seen to teleport (no move with a line to Danny that is not walked); a Sprinter always gains on it in a duct |
+| Hunter | measured gaps 15 to 20 s (Sprinter), 27 to 33 s (Walker), 54 to 66 s (Croucher); seen or heard at least every 60 to 120 s on every floor outside the shelter, grief scenes and cutscenes (far heard beats included, 1.5); at most one whisper per chase; at most one chase per 6 minutes of active play; no chase or near miss within 90 s of another; every whisper within about 10 m of walked path; no catch from a sniff not led by Danny; never seen to teleport (no move with a line to Danny that is not walked); a Sprinter always gains on it in a duct |
 | Dark Dwellers | Careful with fuel never caught while in a lit volume; a fuel run done with half its flares succeeds 80% of the time |
 | Listeners | Careful (carpet, masks) caught under 10% per corridor; Walker caught 40 to 70%; Sprinter over 90%; every catch preceded by a hum-stop at least 1.5 s before |
 | Still Ones | Backpedaller cannot clear the strobe corridor without the camcorder or a door (proves the exploit is closed); every kill preceded by a creak within 3 s; no kill while 25% of the body is on screen and lit |
@@ -682,7 +688,7 @@ in `6-production.md`; this section is the creature side of the same plan and agr
 |---|---|---|
 | **The engine's mannequin family** (standard mannequin bones plus extra neck, finger and spine bones), walking retargeted from the Game Animation Sample with the IK retargeter and Motion Matching | Listeners, Mimics, Patrol, Brute | Mimics must read as a person from behind, so they need human walking; the Brute is the same family at its own scale |
 | **Static poses** on the same family | Still Ones | about 25 poses and a catch, no walking: they are never seen moving |
-| **The hunter's own skeleton** (3 m, long arms, hinged ribs, extra spine) | the hunter only | the largest custom set in the game: it is the star. Stoop and upright walk: retargeted Motion Matching plus spine and neck offsets in Control Rig, driven by a ceiling trace; the crawl: a procedural leg solver; the fold: never seen in play (heard only); the locker lean (the favourite picture's pose): a few authored poses blended in place; the city rooftops: silhouettes on splines |
+| **The hunter's own skeleton** (on all fours, a second pair of arms, the spikes along its back: 1.2) | the hunter only | the largest custom set in the game: it is the star. Its walk on all fours, its rise onto its hind legs and its squeeze into crawlways: moves made for its own body, never retargeted human walking; the crawl: a procedural leg solver; the locker lean: a few authored poses blended in place; the city rooftops: silhouettes on splines |
 | **Surface crawler rig** (Control Rig procedural legs on any surface) | Dark Dwellers (a procedural sheet); the hunter's climbing and hanging | one authored surface graph for vents, ceilings and pipes, also used by the Swarm's routes |
 | **Niagara with a few lead actors** | the Swarm | no skeleton and no Mass; the lead bodies are simple actors |
 | **Senses kit** (reading canon 7's noise table, the "watched" query, light and heat volumes, scent trails) | all | one C++ module; each kind reads only what its rule needs |
@@ -707,7 +713,7 @@ then finishing chapter by chapter (canon 15). In the whole game in grey every ki
 real rule before its body is made.
 1. **The hunter** with the senses kit, the director and the clock. It is in the first slice (canon 15: the shelter, the
    generator and its puzzle, a tunnel 2.8 to 3.0 m high, the hunter with its heavy steps, whisper and catch). Prove the
-   old cadence numbers in the new engine first. The three 10-second hunter clips (corridor stoop, door pass, locker
+   old cadence numbers in the new engine first. The three 10-second hunter clips (corridor, door pass, locker
    lean) go to the owner first, as a gate.
 2. **Dark Dwellers.** One Dweller, with its light rule and its death scene, is in the first slice, timed on its own to
    measure what one more creature costs; the rest completes Chapter 1 and brings the surface rig.
@@ -727,10 +733,10 @@ real rule before its body is made.
 - **Systems (`3-systems.md`):** Danny's moves and speeds, the backpack, light and power, the items, the presets,
   saving, the restart points and the struggle (canon 5, 6, 10, 11; no saving with a searching creature within 25 m).
 - **Audio (`5-audio.md`):** the noise table and every threshold (canon 7); the Listeners' hum and hum-stop with no
-  clicks anywhere; the hunter's heavy steps in both walks and its patter only in ducts; the Dwellers' wet rustle and
+  clicks anywhere; the hunter's heavy steps and its patter only in ducts; the Dwellers' wet rustle and
   slow breathing; the Patrol's tones; the whisper's sound; real recordings for the whisper sources among the first
   batch (canon 14).
-- **World (`4-puzzles-world.md`):** every crawlway and duct at 70 x 70 cm or more and the tunnels at 2.8 to 3.0 m
+- **World (`4-puzzles-world.md`):** every crawlway and duct about 110 cm wide and 120 cm high and the tunnels at 2.8 to 3.0 m
   (canon 4); light volumes matching what is seen; every Brute space with a loop through narrow doors; the room-portal
   graph exported with each Layout JSON; the big puzzles named above.
 - **Production (`6-production.md`):** the creature production table, the hunter animation plan, the first slice and
@@ -755,11 +761,16 @@ real rule before its body is made.
 - **Maybe sold later:** every creature asset is picked with terms that allow a sale (5.1).
 - **What gets finished first:** the slice, Chapter 1, the whole game in grey, then chapter by chapter (5.3).
 - **Settled by the designers:** the hunter takes and the animals maul (canon 9); breaking free is the struggle of 1.8;
-  the gun drives the hunter off and never kills it (canon 13); it is about 3 m tall.
+  the gun drives the hunter off and never kills it (canon 13).
+- **The hunter's body** (the owner, 21 and 22 November): on all fours with a second pair of arms, a bit thicker than
+  A2, its face a huge open mouth with torn lips and teeth and no eyes, alien feet; sometimes it stands on its hind legs
+  (1.2).
 - **The hunter in the flight and the epilogue:** decided by the map and the designers (the Ch7 canopy hand; absent
   from the epilogue); checklist line 24 marks it to confirm, so he confirms it in the grey game (Open).
 
 ## Open, to be put to him later
+- **When the hunter stands** on its hind legs (to look or smell over something, to tower over the player, when it
+  loses him), and **how its eyeless head shows that it sees** (1.2).
 - **Each creature's look:** its design picture before modelling, and the hunter's three 10-second clips in the first
   slice; he judges whether each frightens.
 - **The whisper in a chase:** put to him with this as the recommendation: one whisper per chase, at the close (1.6).

@@ -35,7 +35,7 @@ The rhythm is deliberate: long, long, short (the prologue's three), long, short,
 3. **Objects carry the feeling.** A film camera, a drumstick, a skateboard, a guitar on a nail, a walkie's red light, a roll book. Objects are cheap to make beautiful.
 4. **At most three people lit in a shot.** A group is one far, dark wide shot at low detail. The crowd at the game is sound through walls, light round doors and nothing else.
 5. **No touching** except a hand on glass, or a hand closing on a sleeve: one hand, in close-up, under three seconds, posed by hand. Nobody hands anything to anybody on camera; objects reach people in play.
-6. **The hunter only stands, stoops, turns its long face, reaches and waits.** It crawls, unfolds and runs only behind a cut, a blackout or a flare. Its whole face is held in a cutscene exactly once (twelve frames, scene 7); the favourite face lives in the first-person Mark and hold.
+6. **The hunter only stands, turns its head, reaches and waits.** It crawls, unfolds and runs only behind a cut, a blackout or a flare. Its whole face is held in a cutscene exactly once (twelve frames, scene 7); the face lives in the first-person Mark and hold. **Its body is the owner's of 22 November** (canon 8): it walks on all fours with a second pair of arms, its face a huge open mouth with torn lips and teeth and no eyes, alien feet, and sometimes it rises onto its hind legs. **Open, for him:** in which scenes it rises (scene 2's shots 11 and 12, scene 7's shot 2 and the wreck seen from the parachute are the candidates).
 7. **Nothing graphic happens to a student or to anyone taken.** The taken look calm and whole: frost, closed eyes, nothing wet. Gore belongs to the creatures and to Danny's own deaths, and all of that is first person, never a cutscene.
 8. **Nothing fakes Kayla on the radio.** Her voice on any radio in any cutscene is her.
 9. **Every light is a real light in the place.** A trophy case, a caged bulb, a torch, a searchlight, a monitor, a pod's glow, the dawn. No invisible film lights on faces.
@@ -172,17 +172,17 @@ Words used: a **wide** shows the whole place; a **close-up** fills the frame wit
 7. Wide on the stadium: the ship's shadow crosses the field and the light banks die one at a time, each with a heavy clunk. The fourth holds, buzzing.
 8. Hold on the fourth bank. Off screen, Kayla, hardly a sound: "Danny." It dies. One full second of black.
 9. A point of light falls from the belly and becomes a small ship slamming onto the 50-yard line. The turf jumps; steam rolls out, lit from inside by a landing light that ticks on and off.
-10. Long lens through the chain-link. On: steam. Off. On: it is half out of the open hatch, a held pose: hood and shoulders out, both long veined hands flat on the turf at the steam's edge, legs still inside. Off. (This is the owner's "someone crawls out": the crawl is shown as this one held pose, the rest in the dark.)
+10. Long lens through the chain-link. On: steam. Off. On: it is half out of the open hatch, a held pose: hood and shoulders out, its long clawed hands flat on the turf at the steam's edge, hind legs still inside. Off. (This is the owner's "someone crawls out": the crawl is shown as this one held pose, the rest in the dark.)
 11. In the dark, a run of joints opening one after another, like a ladder pulled to full height. On: the hatch is empty. Off.
-12. On: it stands in the thinning steam, three metres tall, stooped, hooded, its back to us. Off. On: still there, the same pose.
+12. On: it stands in the thinning steam, hooded, its back to us. Off. On: still there, the same pose.
 13. Danny drops behind a car; the cut comes as he starts to drop.
 
 - **The image:** shot 7, a ship the size of a district putting out a football field's lights one bank at a time. This is the poster.
 - **The sound:** the four clunks, then the mothership's total silence (a pressure in the ears, felt more than heard), then the landing light ticking like a relay. **The line:** "Okay. That's... a lot of ceiling."
 - **Music:** none from shot 9 on (the hunter is here), and none before it either: silence is the score.
-- **The trick:** nobody moves but one hand on a sleeve and one drop hidden by the cut. The ship is one big low-detail model kept inside volumetric cloud as slow lights; the stadium is four lights switching off. The hunter's crawl and unfolding, the hardest animation in the game, are never shown: every change happens in the black between flashes, and each "on" is a held pose checked against the favourite picture (the stoop, the hood, the veined hand). The unfolding is a sound over darkness.
+- **The trick:** nobody moves but one hand on a sleeve and one drop hidden by the cut. The ship is one big low-detail model kept inside volumetric cloud as slow lights; the stadium is four lights switching off. The hunter's crawl and unfolding, the hardest animation in the game, are never shown: every change happens in the black between flashes, and each "on" is a held pose checked against the approved hunter (the hood, the clawed hand; canon 8). The unfolding is a sound over darkness.
 - **Phone-filmed lines:** Danny's "a lot of ceiling".
-- **The hand-back:** shot 13 cuts to first person crouched between two bumpers, Kayla's breath beside him, the field to his left. In play the hunter is already standing and only turns its long face toward the school. Kayla: "Band-room door. Go." The sneak begins.
+- **The hand-back:** shot 13 cuts to first person crouched between two bumpers, Kayla's breath beside him, the field to his left. In play the hunter is already standing and only turns its head toward the school. Kayla: "Band-room door. Go." The sneak begins.
 - **Risk:** the ship reading as a painting; the hand reading as a rubber glove.
 - **Fallback:** keep the ship as lights moving across cloud only; if the hand fails, shot 10 becomes a wet slap on turf heard over black, and the first look is the standing pose.
 - **Calls back to:** scene 1's four light banks and the crowd through the wall.
@@ -324,8 +324,8 @@ Words used: a **wide** shows the whole place; a **close-up** fills the frame wit
 
 **The shots**
 1. Very wide from the next roof: the school black in the rain; the helicopter is only a searchlight whose beam is a solid white column of rain, and a dark mass above the glare.
-2. Long lens across the roof: at the beam's far edge, the hunter stands to its full height. Still.
-3. Closer: the beam crosses it, and for twelve frames the long pale face turns into the light, two pins in two black eyes.
+2. Long lens across the roof: at the beam's far edge, the hunter stands. Still. (Open, rule 6: on all fours, or risen on its hind legs to its full height.)
+3. Closer: the beam crosses it, and for twelve frames its face turns into the light: the huge open mouth, torn lips and teeth, no eyes.
 4. The beam flares white straight into the lens.
 5. The flare clears: the parapet is empty. Below the edge, one heavy step on metal.
 6. Insert: the crew chief's gloved hand in the beam, five fingers spread.
@@ -336,11 +336,11 @@ Words used: a **wide** shows the whole place; a **close-up** fills the frame wit
 11. Danny: "Gus."
 12. Gus: "Somebody keeps the lights on, son. Go on."
 13. **If Danny brought his hearing-aid batteries in Chapter 2:** Gus touches his ear. He has heard it. He strikes a red flare (the rotors come back like a wave) and walks away from us toward the stair hut, the flare held high, keys swinging.
-    **If not:** Gus lifts his torch and waves it up at them. Behind him, at the stair-hut door, at the very edge of the beam, the long pale face, lower than the doorway because it is stooping. Already there. Still. Gus does not turn. The rotors come back.
+    **If not:** Gus lifts his torch and waves it up at them. Behind him, at the stair-hut door, at the very edge of the beam, the open mouth, low in the doorway: it is on all fours. Already there. Still. Gus does not turn. The rotors come back.
 14. Cut on action: Danny is inside the door and the roof is dropping away; the searchlight slides off Gus (a small red flare at the stair hut, or a torch still waving in front of a dark doorway).
 15. Danny's eye-line down at the dark roof.
 
-- **The image:** the second version of shot 13: Gus waving his torch up at the helicopter while the long face waits stooped at the stair door behind him, half in the beam. The first version's picture, a red flare walking away into the rain, is the hopeful twin.
+- **The image:** the second version of shot 13: Gus waving his torch up at the helicopter while the hunter waits low at the stair door behind him, half in the beam. The first version's picture, a red flare walking away into the rain, is the hopeful twin.
 - **The sound:** Gus's keys under his lines, with the rotors dropped out, then returning like a wave on the flare strike or the wave of the torch. One heavy step on metal after the hunter vanishes. **The line:** "Somebody keeps the lights on, son. Go on."
 - **Music:** none: the hunter is on this roof. Song 1 starts only once they are clear, in play.
 - **The trick:** the helicopter is light, rotor wind on puddles and a dark shape above the glare, never a detailed hovering model. Boarding is silhouettes stepping into the white, one per cut, so no group ever moves on screen. Kessler's list is an insert of hands. Gus wears his cap and Kessler her hood, so no loose wet hair is in close-up; Gus's two close-ups are the only faces in rain. The hunter is a still pose; its exit is hidden by the flare; its approach to Gus is never shown. Danny boards across a cut. The twelve frames of the face are the only time the favourite face is held in any cutscene.
@@ -515,7 +515,7 @@ Fear belongs in the player's hands. These are not cutscenes, but each is directe
 
 **Prologue**
 - **The pulse.** Phones go hot in pockets; Kayla throws hers and it hisses on the asphalt; car alarms choke off; the streetlights die street by street toward the player. Hand to scene 2 the moment the dark reaches the school.
-- **The sneak back in.** The hunter is already standing on the field and only turns its long face toward the school, in full view through the bleacher slats. It cannot fail the first time; the near miss is staged with its head turning past the player's hiding place.
+- **The sneak back in.** The hunter is already standing on the field and only turns its head toward the school, in full view through the bleacher slats. It cannot fail the first time; the near miss is staged with its head turning past the player's hiding place.
 
 **Chapter 1**
 - **The hand on the glass.** Ray hammering, Gus at the bar, the player two metres behind. The one bulb is aimed at the door so the wired window is the grey square the eye goes to. As the door opens, the hunter's hand is flat on the glass behind Ray, fingers spread, the face above the light. Gus sees it (his face drops, his torch swings); nobody turns the player's head. The door shuts; the palm slides down the glass with one wet squeak.
@@ -526,7 +526,7 @@ Fear belongs in the player's hands. These are not cutscenes, but each is directe
 - **"They're Breathing"** (the turn), at the monitor desk. A grainy, jerky security feed at a low frame rate: frosted cradles floating out to a small ship on a ribbon of light, a soldier walking beside each; nobody carries anything. Priya, flat: "They're bodies. They're just moving the bodies." Kayla zooms; the picture breaks into blocks; a soft oval clears in a lid's frost, fades, clears again. Priya: "They're breathing." Ray, from the dark behind: "Say that again." Priya: "They're *breathing*." Ray's big scraped hand comes into view and presses flat on the monitor glass over the cradle. Then one soldier on the feed stops and turns its lamp straight up into the lens; the picture whites out and the feed dies. In first person, it looked at you. One bowed-metal note rises on the breath and is cut dead with the feed.
 
 **Chapter 3**
-- **The Mark.** A whisper right behind him (Marcus's broken voice); the player turns, which is the floor's trap. The view rises as his feet leave the boards. The favourite picture at full size: the long face comes down out of the dark into one hard stage light, upside down into the frame, the seam, the black almond eyes with one pin of light each, the dark tear-lines, the slit at the tip, the grey hood hanging like a wet blanket, one big veined hand gripping the proscenium beside it the way it grips the lockers. His own forearm is lifted into view; one long finger is pressed to it; frost crackles. He is put down. Mari calls "Danny" once, far off. Black. No body is ever shown, only face, hand and the rising view.
+- **The Mark.** A whisper right behind him (Marcus's broken voice); the player turns, which is the floor's trap. The view rises as his feet leave the boards. Its face at full size: the huge open mouth comes down out of the dark into one hard stage light, upside down into the frame, torn lips and teeth and no eyes, the hood of its own skin hanging like a wet blanket, one long clawed hand gripping the proscenium beside it the way it grips the lockers. His own forearm is lifted into view; one long finger is pressed to it; frost crackles. He is put down. Mari calls "Danny" once, far off. Black. No body is ever shown, only face, hand and the rising view.
 - **Waking.** The first thing the player is given is his own arm, black frost-lines growing a few millimetres while he looks. Then he must look up: the Still Ones stand round the stage, faces turned away, one a step nearer than it should be. At the edge of the work light, Mari's hair clip on the boards. Getting home across a live floor in failing light is played.
 
 **Chapter 4**
@@ -551,7 +551,7 @@ Fear belongs in the player's hands. These are not cutscenes, but each is directe
 **Chapter 8**
 - **The nest and the drumstick.** Marcus and Mari calm and clean in their cradles, frost in Marcus's eyebrows, headphones round his neck, their lips moving with the whispers. From deep in the nest, Marcus's own cracked voice: "you'll... wait..." The player lays the drumstick in Marcus's open hand with one held button. The fingers do not close. Nothing happens. That is the scene.
 - **Waking the others; the run to the pods.** The woken walk on their own legs; the player is never asked to escort. As a deck tilts, Kayla's hand comes into view and he catches it (one hand, in first person).
-- **The hold.** One button: his hand on the pod release. Pods launch one by one on a strip of lights, a face at each window. The Mark climbs his arm in view. The hunter stoops in over the panel, its long face coming down into his view upside down at the favourite picture's angle (no unfolding on screen: it arrives in the dark beyond his light), and whispers in Danny's own voice: "getting... everyone... out." Danny: "Yeah. That one I'm keeping." His free hand spends the last flare, cell and extinguisher. When the pockets are empty its hand closes over his mouth; the last words are already out on the radio: "Miss Brooks. Is something funny?" Her laugh, crying. Then, in his own voice, the true thing. White. No music: breath, pods, the hunter, the radio. Just before its whisper, one tick of metal in a duct: the sound that sat under scene 4's air grille.
+- **The hold.** One button: his hand on the pod release. Pods launch one by one on a strip of lights, a face at each window. The Mark climbs his arm in view. The hunter leans in over the panel, its open mouth coming down into his view upside down (no unfolding on screen: it arrives in the dark beyond his light), and whispers in Danny's own voice: "getting... everyone... out." Danny: "Yeah. That one I'm keeping." His free hand spends the last flare, cell and extinguisher. When the pockets are empty its hand closes over his mouth; the last words are already out on the radio: "Miss Brooks. Is something funny?" Her laugh, crying. Then, in his own voice, the true thing. White. No music: breath, pods, the hunter, the radio. Just before its whisper, one tick of metal in a duct: the sound that sat under scene 4's air grille.
 
 **Epilogue**
 - **June.** Gus at the basement door, or his keys on a hook tagged "for Kayla". She adds Danny's name to the shelter wall; the chores are grief (the generator log, the cots, the guitar back on its nail). The developed film: the last frame, Danny pulling a face. His tape at his cot, longer the more he stayed on the line. Then scene 12.
