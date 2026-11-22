@@ -921,3 +921,19 @@ License, $0, not made with AI) for the slice's surfaces and props, he answered *
   near miss with no chase**.
 - **Glow sticks** stay **common**: a light, not a scarce lure.
 Still to do by the design session: canon 8 and 4-puzzles-world.md for these.
+
+### Nov 22: the Dark Dweller's look; four questions on the slice's lines (to the session on his PC)
+- **The Dark Dweller's look**, all as recommended: from the **same alien world** as the hunter (its wet hide, raw red
+  patches where it folds, no eyes; told apart by its shape); a **flat sheet about 1.6 m long** with 12 to 16 thin
+  finger-limbs, on ceilings and over pipes; **a slit of small teeth** that opens wide when it lunges; **very gross**
+  when light burns it (the skin blisters and splits, wet red flesh shows and smokes) and when one is found dead in
+  Chapter 1 (split open, insides out).
+- **Old-game names:** Rovloc High and Walter Hale get **new names that he picks** (still to come from him); Walter's
+  new story stays. Until then the announcer says "our pep band".
+- **"Stay on the line":** kept, with one change: in Chapter 1 Kayla says it only the first time Danny goes quiet on
+  her, after the thing has gone; a Chapter 2 line drops it.
+- **The generator's failure sounds:** on Standard and Hard **the player listens and picks** what Danny tells Gus, with
+  every failure sound in the captions; on Light, Danny says it himself.
+- **The stranger's whispers:** **only the first** ("...is your mom... working tonight...") stays.
+Still to do by the design session: 2-creatures.md 2.1 (the Dweller's look), and the story and puzzle documents for the
+lines.
