@@ -913,3 +913,11 @@ player through, slower than him and always heard. Measured on its model, that ne
 (its back's spikes). Still to do by the design session: canon's vent and crawlway sizes, and the places that use them.
 Asked whether to download the twelve free Megascans listings the places session found (all Quixel, Fab Standard
 License, $0, not made with AI) for the slice's surfaces and props, he answered **"Yes, download them"**.
+
+### Nov 22: the hunter's quiet time, Gus's Ears, glow sticks (to the session on his PC)
+- **Quiet time:** canon 8's promise that the hunter is seen or heard at least every 60 to 90 s widens to **60 to 120 s
+  for players who crouch or hide well** (his "Yes, up to 2 min").
+- **Gus's Ears:** the answer to the 4th loud pull of the generator's start handle reaches the boiler-room door as **a
+  near miss with no chase**.
+- **Glow sticks** stay **common**: a light, not a scarce lure.
+Still to do by the design session: canon 8 and 4-puzzles-world.md for these.
