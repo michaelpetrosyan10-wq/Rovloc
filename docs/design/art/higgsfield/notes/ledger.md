@@ -178,3 +178,12 @@ Balance after (mcp balance): 0.85 = 1.21 - 3 x 0.12. Reconciled exactly. Spent: 
 option pictures (6 pictures). No use_unlim, no use_free_gens. More pictures need his yes. These are idea pictures for
 choosing a direction, not assets: they go into no game file, and their terms for a game that may be sold are still
 unread.
+
+Terms read on 22 Nov 2026 (research only, nothing generated or spent): Higgsfield's own pages disagree on the free
+plan. Its Terms of Use (updated 23 Oct 2026, s.4.4) and a help-centre article say it claims no ownership of outputs and
+does not restrict their commercial use, on any plan; its pricing page's comparison table marks "Commercial use" as not
+included on Free. Free-plan files can carry a visible watermark (none is visible in A2's corners), and the Terms forbid
+removing provenance markings. Until this is settled in writing, these pictures stay references: nothing copied from
+their pixels goes into a game file. Preflight prices for turning A2 into a 3D model on Higgsfield (get_cost only): 19
+credits (Hunyuan3D v3), 18 (Tripo H3.1, detailed), 44 (Meshy 7, ultra); the balance is 0.85, so none was considered.
+The full research is in the game repository, `Docs/hunter-look/build-method-research-2026-11-22.json`.
