@@ -904,3 +904,12 @@ clips at those speeds, with independent reviewers' view that the model's mouth, 
 **"This is good continue and make it so sometimes the hunter can stand up on two legs."** So the model stays as it is,
 and the hunter, which walks on all fours, can sometimes rise onto its hind legs. Still to decide with him and the
 hunter's behaviour: when it stands (to look or smell over something, to tower over the player, when it loses him).
+
+### Nov 22: crawlways bigger for the hunter on all fours; the free Megascans packs approved (to the session on his PC)
+The hunter on all fours is too big for canon's 80 x 80 cm vents, and he had asked for it to follow the player into
+vents and crawlways (owner-checklist line 29). Offered bigger crawlways, or it ramming its head and hooks in and
+racing to the far end, or it waiting at the exit, he chose **"Bigger crawlways"**: a tight squeeze it follows the
+player through, slower than him and always heard. Measured on its model, that needs about 110 cm wide and 120 cm high
+(its back's spikes). Still to do by the design session: canon's vent and crawlway sizes, and the places that use them.
+Asked whether to download the twelve free Megascans listings the places session found (all Quixel, Fab Standard
+License, $0, not made with AI) for the slice's surfaces and props, he answered **"Yes, download them"**.
