@@ -129,8 +129,9 @@ floors, flat roof. The city is
 | Roof | gravel, air units, skylights (do not hold weight), parapet 1.1 m; chained door (bolt cutters); floodlights on their own sealed can in the penthouse | F4 mechanical room | none |
 
 **Heights:** corridors 2.7 m; classrooms 3.0; doors 2.1 x 0.9; gym 9; stage 16 to the grid; stairwells 20;
-**tunnels 2.8 to 3.0**; **ducts and crawlways about 110 cm wide and 120 cm high**, so the hunter on all fours can follow
-Danny through them (the owner's "Bigger crawlways", 22 November; measured on its model: the spikes along its back).
+**tunnels 2.8 to 3.0**; **ducts and crawlways the hunter follows Danny through: about 110 cm wide and 120 cm high**, so
+it can follow him on all fours (the owner's "Bigger crawlways", 22 November; measured on its model: the spikes along its
+back). **Open, for him:** every duct and crawlway at that size, or only those it follows him through?
 **Stairs:** the West and East stairs run basement to F4. At 8:03 every stair door locked **on its stair side**: from a
 floor Danny can always push out; from a stair he cannot get on. He enters each floor its own way, then props its
 stair door from inside: that is his way home. Only **F1** (the PA) and **F4** (stair doors held by powered locks he
@@ -271,11 +272,14 @@ noise ring is optional: on by default on Story only. The real microphone is neve
 hands; B3's look is retired.
 **It walks on all fours** on long thin limbs and has **a second pair of arms** ("Extra arms", "Walks on all fours":
 not a humanoid body). Long and thin, but **a bit thicker than A2** ("A bit thicker than 2"); wet grey-violet skin with
-raw open flesh; **alien feet**, not a man's; A2's long thin clawed fingers, about 22 cm. **Its face is a huge open
+raw open flesh; **alien feet**, not a man's; A2's long thin clawed fingers, about 22 cm (CK: B3's old number, not his;
+to be measured on the approved model). **Its face is a huge open
 mouth with torn lips and teeth, and no eyes** ("New face entirely": A2's cluster of eyes and needle teeth are retired),
 in a hood of its own skin. **Sometimes it rises onto its hind legs** ("make it so sometimes the hunter can stand up on
-two legs"); **open, for him:** when it stands (to look or smell over something, to tower over the player, when it
-loses him). The model he approved on 22 November ("This is good") is about 2.1 m long and 1.6 m to the top of the
+two legs"), and when is his choice of 22 November: **"To sniff or look over things"** (while it searches, it rises to
+smell the air or look over a counter, a car or a pile of junk) and **"To tower over you"** (when it is close and has
+found Danny, it rears up over him before it strikes); losing Danny is not a reason (he left out "When it loses you").
+**Open, for him:** in which cutscenes it rises (`cutscenes.md` rule 6). The model he approved on 22 November ("This is good") is about 2.1 m long and 1.6 m to the top of the
 spikes along its back; standing, its head is about 2.5 m up. It squeezes through 0.9 m doorways, front limbs first
 (about 1.5 s), and follows Danny into crawlways built for it (section 4): a tight squeeze, slower than him and always
 heard, joint creak and its hide scraping, never clicks. It climbs and hangs head-down; it never walks on ceilings.
@@ -305,7 +309,8 @@ authored (about 90 s).
 
 **Where it is** (share of a chapter's play): prologue scripted only (no failure on the first try); Ch1 about 40%
 (the pipes only for 20 min, where in Gus's Ears it answers each loud pull of the generator and **on the 4th loud pull
-comes right up to the boiler-room door: a near miss, no chase**, the owner's choice of 22 November; absent while the
+comes right up to the boiler-room door: a near miss, no chase**, the owner's choice of 22 November, **at most one near
+miss in the puzzle** (the proposal he chose on 21 November: "at worst one near miss, no chase"); absent while the
 Dwellers are taught); **Ch2 to 4 about 30% plus 2 to 3 authored stalking
 sequences each**; Ch5 about 55%; Ch6 about 25% (rooftops; three close beats); Ch7 one beat (its hand on the canopy
 about a minute); Ch8 about 60%, every habit active. **Absent** (not simulated near him; on the floors, in the
@@ -522,7 +527,8 @@ against it.
   cutscene.
 - **The first slice** (6 to 8 weeks): the shelter with Danny, Kayla and two survivors; the generator and its puzzle; a
   60 to 80 m tunnel, 2.8 to 3.0 m high; the hunter with heavy steps, whisper and catch; one Dark Dweller, timed on its
-  own. High plus a path-traced reference. Three 10-second hunter clips go to the owner first, as a gate. Done when he
+  own. High plus a path-traced reference. The hunter's movement clips went to the owner first, as a gate, and passed:
+  on 22 November he saw five clips of it at section 8's speeds and said "This is good continue". Done when he
   says it looks and feels right.
 - **Order:** slice > Chapter 1 finished > the whole game in grey (he plays it all; cuts are made then) > finishing
   chapter by chapter.

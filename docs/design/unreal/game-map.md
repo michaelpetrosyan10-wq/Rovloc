@@ -245,7 +245,7 @@ The game is mostly quiet. You should remember the **generator's hum** (home; whe
 
 **Your PC:** an RTX 5070 with 12 GB, a Ryzen 5 7500X3D, 16 GB of memory (one stick, three slots free) and about 600 GB free. The look is designed and judged on High, at 1080p or at 1440p with the card's upscaler (DLSS), 60 frames a second; Ultra is for pictures. 16 GB is half what Epic recommends (decision 11).
 
-**The first slice** (6 to 8 weeks): the safe room with Danny, Kayla and two survivors (do the faces read as sixteen?), the generator and its puzzle, a stretch of tunnel, the hunter with its heavy steps, whisper and catch, and one Dark Dweller, timed on its own to learn what each extra creature costs. Three 10-second clips of the hunter moving go to you first. It is done when you say it looks and feels right.
+**The first slice** (6 to 8 weeks): the safe room with Danny, Kayla and two survivors (do the faces read as sixteen?), the generator and its puzzle, a stretch of tunnel, the hunter with its heavy steps, whisper and catch, and one Dark Dweller, timed on its own to learn what each extra creature costs. Clips of the hunter moving went to you first, as a gate, and passed: on 22 November you saw five at its real speeds and said "This is good continue". It is done when you say it looks and feels right.
 
 **Then the whole game in grey:** every chapter with plain walls, stand-in creatures on their real rules, working puzzles and rough cutscenes. You play all nine hours, and cuts are made then, while changes are cheap.
 
@@ -315,7 +315,7 @@ Every line of your checklist was traced. These are the small ones that are easie
 | You said | Where it is |
 |---|---|
 | "the face is supposed to be slim like body" | The hunter's build (part 4); checked on every model and picture. Your newer words replaced it on 22 November: "New face entirely", a huge open mouth |
-| "the body is not scary tho" | The hunter's body frightens by itself; the three movement clips come to you first |
+| "the body is not scary tho" | The hunter's body frightens by itself; the movement clips came to you first (22 November: "This is good continue") |
 | "Whys the hand look worse" | The hands (now picture 2's long clawed fingers) are shown to you in a close-up of the model beside picture 2's hands |
 | "i never really see the monster unless he like tp's behind me" | It never teleports, stays within a radius of you, and is heard and glimpsed often |
 | "one every 20 sec or 15 if sprinting and 30 sec if walking and like 1 min if crouching" | The hunter's rhythm (part 4), your numbers as the starting values |

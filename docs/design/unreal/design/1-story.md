@@ -21,7 +21,7 @@ named, and nothing of that game's content is taken.
 1. A cold Friday night in late November. Rovloc High is packed for the first home basketball game of the season.
 2. At halftime Kayla tells Danny her family is moving away in June. He makes a joke and walks out, as he always does. She follows him.
 3. In the parking lot every phone dies, the grid fails street by street, and a ship the size of a city district settles over the city.
-4. A small ship lands on the football field. Something very tall crawls out of it and unfolds toward the school.
+4. A small ship lands on the football field. Something very tall crawls out of it and unfolds toward the school (whether it rises onto its hind legs here waits on the owner's answer: cutscenes.md rule 6).
 5. Danny and Kayla sneak back inside and down to the basement, where Gus, the night janitor, bars a steel door. Above them, the full building goes quiet.
 6. Most of those people are not dead. They are taken, alive, up into the ship.
 7. Six survivors hold out in the old fallout shelter under the school. Kayla works the radio. Danny goes up floor by floor for what they need, past a different creature on each floor and the hunter on all of them. Not all of them make it.
@@ -272,7 +272,7 @@ side, so Danny enters each floor its own way and props its stair door from insid
 7. **"Somebody Keeps the Lights On" (cutscene 7), boarding:** the hunter stands at the edge of the helicopter's searchlight, turns its face into the light for half a second, and is gone in the flare. Kessler reads the list (or the group chooses together, if they know about the seats; the rule is section 2). Gus stays: "I don't fly. Somebody keeps the lights on, son."
 8. **The lift:** first person in the cabin, look around only. The city is dark below and the mothership's underside fills the sky. Song 1 plays: the score's voice, or Owen humming if he boarded. Kayla's hand is next to his.
 9. **The hit**, mid-line: the missile cuts the song off. **In first person** (no longer a cutscene): spinning, the crew chief down. Kayla clips the one emergency chute onto Danny, her face in view, only her hands on the harness: "Go. I'm right behind you." She shoves him out.
-10. **First person, the fall:** the canopy opens. Below, the helicopter goes down three blocks away. On the wreck, taller than the Patrol shapes around it, the hunter lifts someone in a yellow jacket.
+10. **First person, the fall:** the canopy opens. Below, the helicopter goes down three blocks away. On the wreck, taller than the Patrol shapes around it, the hunter lifts someone in a yellow jacket (whether it has risen onto its hind legs here waits on the owner's answer: cutscenes.md rule 6).
 
 *How the falling helicopter has a parachute:* it is the crew chief's emergency chute on a rack by the door. Kayla is nearest it. She could take it herself, and she doesn't.
 

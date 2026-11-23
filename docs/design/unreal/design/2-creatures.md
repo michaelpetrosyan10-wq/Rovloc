@@ -65,20 +65,24 @@ canon 8.
   thicker than A2, with more meat on the limbs and body. The model he approved on 22 November is about 2.1 m long and
   1.6 m to the top of the spikes along its back.
 - **Standing:** sometimes it rises onto its hind legs (its head about 2.5 m up on the model), stands, and drops back
-  down. **Open, for him:** when it stands (to look or smell over something, to tower over the player, when it loses
-  him).
+  down. When, he chose on 22 November: **"To sniff or look over things"** (while it searches, it rises to smell the air
+  or look over a counter, a car or a pile of junk) and **"To tower over you"** (when it is close and has found Danny, it
+  rears up over him before it strikes); losing Danny is not a reason (he left out "When it loses you"). **Open, for
+  him:** in which cutscenes it rises (`cutscenes.md` rule 6).
 - **Face:** a huge open mouth with torn lips and teeth, and no eyes: our own, a pattern taken from a monster in his
   reference picture, no shape, colour or detail copied. B3's long pale face (its eye holes, pinpricks, seam and slit)
   and A2's cluster of eyes and needle teeth are retired. It whispers through that mouth (1.6). Its sight rules (1.3)
   stand; **open:** how an eyeless head shows that it sees.
 - **Hood and skin:** a hood of its own skin over the head, A2's cape of skin over the shoulders; wet, slimy grey-violet
   alien skin with raw open flesh in places (his "Wet, slimy skin" and "Open flesh").
-- **Hands:** A2's long thin clawed fingers (about 22 cm). The hands are its most animated part: they touch everything
+- **Hands:** A2's long thin clawed fingers (about 22 cm: the continuity keeper's number, B3's old one, not his; to be
+  measured on the approved model). The hands are its most animated part: they touch everything
   (door frames, locker edges) before the body follows.
 - **Feet:** an alien's, like the alien monsters of his references, not a man's.
 - **Crawlways.** Every crawlway and duct it must follow Danny through is built about 110 cm wide and 120 cm high for it
   (canon 4, the owner's "Bigger crawlways"): a tight squeeze, slower than him and always heard, as joint creak and its
-  hide scraping, never clicks.
+  hide scraping, never clicks. **Open, for him:** every duct and crawlway at that size, or only those it follows him
+  through (canon 4)?
 
 **Moving through a school built for people.** Ceiling and door heights: canon 4.
 - **Walk, on all fours** (corridors, classrooms, the tunnels, tall spaces): the tunnels are 2.8 to 3.0 m high (canon
@@ -284,7 +288,7 @@ Chapter places and minutes: canon 3 and 4. Where a row names a cutscene, `cutsce
 | Chapter | Active | Its configuration |
 |---|---|---|
 | Prologue, the basketball game | scripted only | In cutscene 2 (Last Lights) it is seen far, in the landing light's flashes: half out of the open hatch as a held pose (hood and shoulders out, its long clawed hands flat on the turf: the change asked of `cutscenes.md` scene 2, owner-checklist line 23), then standing, back turned; it unfolds in the dark between flashes. In play it is **already standing** and only turns its head toward the school while Danny and Kayla make the **playable sneak** back in (3 to 4 minutes, along the parked cars and under the bleachers): the first lesson in crouching and sight lines, with one near miss; it cannot fail the first time. Inside, it is seen once at the end of a hall through wired glass, squeezing through a doorway front limbs first (story). |
-| 1, the basement | about 40% | First 20 minutes heard only (H1, H3 in the pipes, H5 once), with one authored exception early on (below). **In Gus's Ears** (world 1.1, the generator) it answers each loud pull of the starter with a few heavy steps in the pipes, a little nearer each time; **on the 4th loud pull it comes right up to the boiler-room door: a near miss, no chase** (it sniffs at the door and goes; the owner's choice, 22 November). Once she runs, her hum hides Danny from it (canon 7). The exception: **the near miss at the shelter door**, inside the first 15 minutes (Ray hammers at the door; as Gus opens it, the hunter's hand is flat on the wired glass behind him). **Absent** while the Dark Dwellers are taught. Returns for the tunnel and fuel runs of Flare Road: it walks the tunnels; seen beats, its first simulated near miss, one chase in the tunnels at the chapter's end. The Dwellers go silent and pull into the cracks when it comes: a cross-tell. Gore: 1.8. |
+| 1, the basement | about 40% | First 20 minutes heard only (H1, H3 in the pipes, H5 once), with one authored exception early on (below). **In Gus's Ears** (world 1.1, the generator) it answers each loud pull of the starter with a few heavy steps in the pipes, a little nearer each time; **on the 4th loud pull it comes right up to the boiler-room door: a near miss, no chase** (it sniffs at the door and goes; the owner's choice, 22 November), **at most one near miss in the puzzle** (the proposal he chose on 21 November: "at worst one near miss, no chase"). Once she runs, her hum hides Danny from it (canon 7). The exception: **the near miss at the shelter door**, inside the first 15 minutes (Ray hammers at the door; as Gus opens it, the hunter's hand is flat on the wired glass behind him). **Absent** while the Dark Dwellers are taught. Returns for the tunnel and fuel runs of Flare Road: it walks the tunnels; seen beats, its first simulated near miss, one chase in the tunnels at the chapter's end. The Dwellers go silent and pull into the cracks when it comes: a cross-tell. Gore: 1.8. |
 | Between chapters, the shelter | 0 | Off stage, at least 8 minutes with no tell of any kind. The pipes stop knocking; Kayla's radio is clear. The player feels "gone for now". One authored exception (map): after Chapter 4, something tests the steel door, slowly. It never enters (1.4, rule 2). |
 | 2, first floor, Listeners | about 30%, plus 2 to 3 authored stalking sequences | Absent in TEACH. In TEST heard and seen. In TWIST it walks onto the Listener floor: its heavy steps make Danny want to run, and running is what the Listeners hear. Instead the Listeners hear its steps and rush it; it swats one into the lockers, split open (the chapter's gore). Danny can use its walk as cover. |
 | 3, second floor, Still Ones | about 30%, plus 2 to 3 authored stalking sequences | Absent in TEACH. In TWIST its whisper behind Danny makes him turn his head, used twice at most: the floor's trap. Watching the Still Ones never slows it. **The Mark**, on the theatre stage: it lifts him, presses one long finger to his forearm and puts him down; it takes Mari instead, and he hears her call his name once, far off (cutscenes.md stages it). He wakes hurt, the frost-lines on his arm, and must get home across a live floor in failing light: there is no calm return. Gore: a Still One it tore apart in the wings. |
@@ -713,8 +717,9 @@ then finishing chapter by chapter (canon 15). In the whole game in grey every ki
 real rule before its body is made.
 1. **The hunter** with the senses kit, the director and the clock. It is in the first slice (canon 15: the shelter, the
    generator and its puzzle, a tunnel 2.8 to 3.0 m high, the hunter with its heavy steps, whisper and catch). Prove the
-   old cadence numbers in the new engine first. The three 10-second hunter clips (corridor, door pass, locker
-   lean) go to the owner first, as a gate.
+   old cadence numbers in the new engine first. The hunter's movement clips went to the owner first, as a gate, and
+   passed: on 22 November he saw five clips of it at canon 8's speeds and said "This is good continue"
+   (`requirements.md`, "its real speeds").
 2. **Dark Dwellers.** One Dweller, with its light rule and its death scene, is in the first slice, timed on its own to
    measure what one more creature costs; the rest completes Chapter 1 and brings the surface rig.
 3. **Still Ones** (cheapest body; proves the "watched" query).
@@ -736,7 +741,8 @@ real rule before its body is made.
   clicks anywhere; the hunter's heavy steps and its patter only in ducts; the Dwellers' wet rustle and
   slow breathing; the Patrol's tones; the whisper's sound; real recordings for the whisper sources among the first
   batch (canon 14).
-- **World (`4-puzzles-world.md`):** every crawlway and duct about 110 cm wide and 120 cm high and the tunnels at 2.8 to 3.0 m
+- **World (`4-puzzles-world.md`):** every crawlway and duct the hunter follows Danny through about 110 cm wide and 120 cm
+  high (whether every one is that size is open: 1.2) and the tunnels at 2.8 to 3.0 m
   (canon 4); light volumes matching what is seen; every Brute space with a loop through narrow doors; the room-portal
   graph exported with each Layout JSON; the big puzzles named above.
 - **Production (`6-production.md`):** the creature production table, the hunter animation plan, the first slice and
@@ -763,16 +769,17 @@ real rule before its body is made.
 - **Settled by the designers:** the hunter takes and the animals maul (canon 9); breaking free is the struggle of 1.8;
   the gun drives the hunter off and never kills it (canon 13).
 - **The hunter's body** (the owner, 21 and 22 November): on all fours with a second pair of arms, a bit thicker than
-  A2, its face a huge open mouth with torn lips and teeth and no eyes, alien feet; sometimes it stands on its hind legs
-  (1.2).
+  A2, its face a huge open mouth with torn lips and teeth and no eyes, alien feet; sometimes it stands on its hind legs,
+  to sniff or look over things and to tower over Danny (the owner, 22 November; 1.2).
 - **The hunter in the flight and the epilogue:** decided by the map and the designers (the Ch7 canopy hand; absent
   from the epilogue); checklist line 24 marks it to confirm, so he confirms it in the grey game (Open).
 
 ## Open, to be put to him later
-- **When the hunter stands** on its hind legs (to look or smell over something, to tower over the player, when it
-  loses him), and **how its eyeless head shows that it sees** (1.2).
-- **Each creature's look:** its design picture before modelling, and the hunter's three 10-second clips in the first
-  slice; he judges whether each frightens.
+- **In which cutscenes the hunter rises** onto its hind legs (`cutscenes.md` rule 6; when it rises in play is decided:
+  1.2), and **how its eyeless head shows that it sees** (1.2).
+- **Every duct and crawlway at about 110 x 120 cm, or only those the hunter follows Danny through** (canon 4, 1.2).
+- **Each creature's look:** its design picture before modelling; he judges whether each frightens. The hunter's
+  movement clips passed on 22 November (5.3).
 - **The whisper in a chase:** put to him with this as the recommendation: one whisper per chase, at the close (1.6).
 - **The hunter in the flight and the epilogue** (checklist line 24): whether it appears in the flight (now one beat,
   its hand on the canopy) and in the Kayla epilogue (now absent): put to him with the current design as the

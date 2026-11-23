@@ -52,6 +52,7 @@ document says otherwise.
   look down the well); **tunnels 2.8 to 3.0 m**, so it walks them (the owner's "monster walking around the tunnels");
   **ducts and crawlways about 110 cm wide and 120 cm high** (the owner's "Bigger crawlways", 22 November: it follows
   Danny through them, a tight squeeze, slower than him and always heard: canon 5 and 8; nothing is out of its reach).
+  **Open, for him:** every duct and crawlway at that size, or only those it follows Danny through (canon 4)?
 - **Ways between floors:** the West and East stairs (basement to F4); the roof only by the penthouse stair in the F4
   mechanical room (canon 4); the lobby's grand stair (F1 to F2 only; its fire shutter dropped at the lockdown); the
   kitchen **freight lift** (basement to F1 only; its load: canon 6); the **dumbwaiter** (one-way down to the shelter
@@ -193,7 +194,7 @@ Silent Hill 2 remake (maps found in the world, which mark themselves as you lear
 ### Chapter 1: "The Shelter" (basement, Dark Dwellers)
 **1.1 Gus's Ears (7 min).** The owner chose it over Dead Start as written: "Yes, Gus's Ears" (21 November).
 *Situation:* the generator never took over at the pulse; Gus pulled its start relay on Tuesday to replace it. His
-hearing aid is nearly flat (its cells are his Chapter 2 errand), so he cannot hear her, or anything a few metres away:
+hearing aid is nearly flat (its cells are his Chapter 2 need), so he cannot hear her, or anything a few metres away:
 he works with a hand flat on the engine and asks Danny what she sounded like. *Pieces:* the generator's nameplate
 (relay part number, 12 V); six similar relays in the labelled bins of Gus's workshop; the start card on the wall
 (prime, choke, pull) and Gus's logbook, which adds the one fact the card lacks ("bleed the filter screw first or she
@@ -210,7 +211,8 @@ up, her hum hides Danny from everything down there (canon 7) and the answering s
 (the owner's choice, 22 November): on Standard and Hard the player listens and picks what Danny tells Gus, and every
 failure sound is also written in the captions; on Light, Danny says it himself. *Creature:* the hunter, heard only,
 answering each loud pull in the pipes (creatures 1.9). **On the 4th loud pull it comes right up to the boiler-room
-door: a near miss, no chase** (it sniffs at the door and goes; the owner's choice, 22 November). The pipes going
+door: a near miss, no chase** (it sniffs at the door and goes; the owner's choice, 22 November), **at most one near
+miss in the puzzle** (the proposal he chose on 21 November: "at worst one near miss, no chase"). The pipes going
 quiet is its tell; Gus, who cannot hear it, reads Danny's face. *Hints (Gus):* for the relay, "the plate tells you
 what she eats"; "my bins say it the same way"; he points. For the failures: first, that she will say what is wrong and
 he cannot hear her any more; then what kind of sound means what ("if she fires and dies, she's got air in her"); last,
