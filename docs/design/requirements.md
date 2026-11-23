@@ -946,3 +946,8 @@ lines.
   it rears up over you before it strikes); not "When it loses you".
 Still to do by the design session: canon 8 and 2-creatures.md 1.2 (when it stands); cutscenes.md rule 6 stays open for
 the cutscenes.
+
+### Nov 22: the hunter's return after a long quiet (to the session on his PC)
+Asked whether, after nearly 2 quiet minutes, the hunter may come back as something you see and not just footsteps, he
+chose **"Yes, sometimes seen"**: the forced return may be a sighting or a close moment, set up early enough that the
+quiet still never passes 2 minutes.
