@@ -292,8 +292,8 @@ Bleeding: 30 s.
 (measures 15 to 20 with breath limits), **30 walking**, 40 working or in a duct, **60 crouching**, 75 still or hiding;
 drawn between 0.6 and 1.4 of the mean, with a lull (gap doubled) every 5 to 7. **Seen or heard at least every 60 to
 120 s outside its quiet spells** (about once every 15 to 20 minutes of hunting it goes silent for 2 to 5
-minutes: the owner's "Let it go quiet sometimes", 21 November; checklist line 25), the longest stretch drawn afresh each time (the owner's "Yes, up to 2 min", 22 November, for players who
-crouch or hide well; it was 60 to 90), on every school floor, in the tunnels, the city and the ship, outside the shelter, grief scenes and cutscenes;
+minutes: the owner's "Let it go quiet sometimes", 21 November; checklist line 25), the longest stretch drawn afresh each time (the owner's "Yes, up to 2 min", 22 November, for every way of
+moving, confirmed the same evening: "Whatever he's doing"; it was 60 to 90), on every school floor, in the tunnels, the city and the ship, outside the shelter, grief scenes and cutscenes;
 when it is not simulated near him, a far heard beat from its real off-stage position keeps that rate, never closer
 than 25 m walked and never an attack (creatures 1.5). **Leash** 12 to 30 m walked (Story 18 to 40, Stay Behind 10 to 25), never nearer than 5 m outside a
 close beat or chase. **Strain** 0 to 1 sends it backstage for 25 to 40 s at 0.8 (creatures keeps the rates).

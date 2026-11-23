@@ -937,3 +937,12 @@ Still to do by the design session: canon 8 and 4-puzzles-world.md for these.
 - **The stranger's whispers:** **only the first** ("...is your mom... working tonight...") stays.
 Still to do by the design session: 2-creatures.md 2.1 (the Dweller's look), and the story and puzzle documents for the
 lines.
+
+### Nov 22: the quiet time is for every player; when the hunter stands (to the session on his PC)
+- **Quiet time:** asked whether the 2 minutes apply whatever Danny is doing or only while he crouches or hides, he
+  chose **"Whatever he's doing"**: up to 2 minutes of quiet for every way of moving.
+- **Standing on its hind legs:** he chose **"To sniff or look over things"** (while it searches, it rises to smell the
+  air or look over a counter, a car or a pile of junk) and **"To tower over you"** (when it is close and has found you,
+  it rears up over you before it strikes); not "When it loses you".
+Still to do by the design session: canon 8 and 2-creatures.md 1.2 (when it stands); cutscenes.md rule 6 stays open for
+the cutscenes.
