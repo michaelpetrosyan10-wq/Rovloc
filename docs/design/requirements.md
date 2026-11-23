@@ -951,3 +951,7 @@ the cutscenes.
 Asked whether, after nearly 2 quiet minutes, the hunter may come back as something you see and not just footsteps, he
 chose **"Yes, sometimes seen"**: the forced return may be a sighting or a close moment, set up early enough that the
 quiet still never passes 2 minutes.
+
+### Nov 22: Gus's Ears, if she starts during the near miss (to the session on his PC)
+Asked whether the hunter should turn back if the generator starts while it walks to the boiler-room door, he chose
+**"Yes, turn back"**.
