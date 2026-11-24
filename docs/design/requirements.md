@@ -967,3 +967,18 @@ Asked whether the hunter should turn back if the generator starts while it walks
 - If Fable's weekly limit runs out before the reset, the sessions go to Opus 5.5 (**"Switch to Opus"**).
 - The week's limit is paced (**"Spread it out"**): the bug hunt and its fixes first, then two or three jobs at a time.
   The same hour he also asked for about ten agents on the first slice; that conflict was put back to him.
+
+### Nov 24, later: "Open 10 now", and eight answers (to the session on his PC)
+- Told the cost, he chose **"Open 10 now"**: nine more sessions on the first slice at once, a tenth when the waiting
+  branches are on main.
+- **The catch:** the hook-arms **"Take his voice"** (the claw pins Danny, the mouth comes down over him, the two hooks
+  go into his mouth and throat and pull his voice out); while it rears up **"He falls back"** (onto his back, seeing it
+  rise over him, lit from below by his own torch).
+- **The hunter's footsteps in the hearing rules: "Carry realistically"** (creep 82 at 1 m, walk 85, gallop up to 91, by
+  how hard each foot lands and the floor), in place of 109 and 104; in the ear its steps stay the loudest thing.
+- **Gus's Ears:** **"Yes, Gus shuts it"** (Gus shuts the boiler-room door before a pull whenever Danny left it open,
+  with a short line, sharper the second time); the answering steps in the pipes **"Turn back too"** when she starts.
+- **After a long quiet** the hunter comes back seen **"About 1 in 3"** times.
+- **The lines:** Kayla's "Stay on the line, okay?" **"only after the scare"**; the whisper "...Danny... Reyes..." in the
+  stranger's voice: **"Keep it"**.
+Still to do by the design session: canon 7, 8 and 14, 2-creatures.md 1.8 and 4-puzzles-world.md 1.1 for these.
