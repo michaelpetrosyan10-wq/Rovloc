@@ -501,8 +501,9 @@ tho" bar, so each move it is seen making has a method (`2-creatures.md` 5.1 agre
 
 **Gate in the first slice:** three 10-second clips of it moving (on all fours down a corridor, a door squeeze, a
 locker lean) go to the owner first, and with them a close-up render of the hunter's hand beside A2's hand (the long
-clawed fingers; owner-checklist line 21). The hunter is not built further until he has judged them. On 22 November he
-saw five clips of the model on all fours at canon 8's speeds and said "This is good continue".
+clawed fingers; owner-checklist line 21). The clips have passed: on 22 November he saw five clips of the model on all
+fours at canon 8's speeds (corridor, door, locker, claw, chase) and said "This is good continue". The hand close-up is
+not recorded as shown to him; it still goes to him before the slice is shown (section 8).
 
 ---
 
@@ -581,8 +582,9 @@ schedule's measuring stick.
    camera blend back to play is broken [checked: research 04], so the matched cut is the method, tested in the first
    week.
 
-**The gate:** the three 10-second clips of the hunter moving and the close-up of its hand beside A2's hand (section
-6) go to him first. The slice is not shown until he has judged them.
+**The gate:** the clips of the hunter moving and the close-up of its hand beside A2's hand (section 6) go to him
+first. The clips passed on 22 November; the close-up is not recorded as shown to him. The slice is not shown until he
+has judged it.
 
 **How it is judged:**
 - **By the numbers.** On High at 1080p native or 1440p with DLSS: 60 frames a second (canon 15). No hitch over
@@ -780,7 +782,7 @@ The range is wide because of what drives it:
 | **Cutscene bodies look stiff** | Twelve scenes staged by `cutscenes.md`'s rules; one-camera capture (Experimental) with library and hand-posed animation as the fallback for every scene; first person wherever a body would show the seams |
 | **Seven more creature bodies with no source** | The creature production table (section 5): shared mannequin family, static poses, a procedural sheet, Niagara; ship forms as variants; one maul template; each look a gate he signs |
 | **The mothership has no ready-made assets** | One alien kit with four deck looks, proven in a two-week spike alongside Chapter 1 |
-| **The hunter's movement cannot be hand-keyed** | The animation plan (section 6): each seen move has a method; the three 10-second clips are a gate |
+| **The hunter's movement cannot be hand-keyed** | The animation plan (section 6): each seen move has a method; its movement clips were a gate, passed on 22 November |
 | **Puzzle props with no source** | The asset census at the start of the grey pass; the printed-paper system for every seeded value; a puzzle without props is simplified |
 | **Scope against "Red Dead depth" and "GTA six graphics"** | Said plainly now (section 4); depth through the people and the shelter, not volume; the whole game in grey early; the cut order ready |
 | **Usage limits break sessions** | STATE.md and commits after every task; background jobs with logs; work sized to the window |
@@ -830,8 +832,8 @@ How co-op would work is still his to say (below).
 6. Voice and act the people with friends when they want to record (his decision 8), and collect their signed
    releases, signed by a parent for anyone under 18. His ear judges the voices (`voices.md` part 9).
 7. If he wants the songs to be truly his, write the lyrics.
-8. Approve the editor connection once; look at the test Danny and Kayla, the hunter's three clips and each creature's
-   look when asked.
+8. Approve the editor connection once; look at the test Danny and Kayla, the close-up of the hunter's hand and each
+   creature's look when asked.
 
 ---
 

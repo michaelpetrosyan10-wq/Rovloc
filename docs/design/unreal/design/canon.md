@@ -279,7 +279,8 @@ in a hood of its own skin. **Sometimes it rises onto its hind legs** ("make it s
 two legs"), and when is his choice of 22 November: **"To sniff or look over things"** (while it searches, it rises to
 smell the air or look over a counter, a car or a pile of junk) and **"To tower over you"** (when it is close and has
 found Danny, it rears up over him before it strikes); losing Danny is not a reason (he left out "When it loses you").
-**Open, for him:** in which cutscenes it rises (`cutscenes.md` rule 6). The model he approved on 22 November ("This is good") is about 2.1 m long and 1.6 m to the top of the
+**Open, for him:** whether it has risen in the scripted scenes (cutscenes 2 and 7 and the wreck seen from the
+parachute: `cutscenes.md` rule 6). The model he approved on 22 November ("This is good") is about 2.1 m long and 1.6 m to the top of the
 spikes along its back; standing, its head is about 2.5 m up. It squeezes through 0.9 m doorways, front limbs first
 (about 1.5 s), and follows Danny into crawlways built for it (section 4): a tight squeeze, slower than him and always
 heard, joint creak and its hide scraping, never clicks. It climbs and hangs head-down; it never walks on ceilings.
@@ -528,8 +529,9 @@ against it.
 - **The first slice** (6 to 8 weeks): the shelter with Danny, Kayla and two survivors; the generator and its puzzle; a
   60 to 80 m tunnel, 2.8 to 3.0 m high; the hunter with heavy steps, whisper and catch; one Dark Dweller, timed on its
   own. High plus a path-traced reference. The hunter's movement clips went to the owner first, as a gate, and passed:
-  on 22 November he saw five clips of it at section 8's speeds and said "This is good continue". Done when he
-  says it looks and feels right.
+  on 22 November he saw five clips of it at section 8's speeds and said "This is good continue". The gate's
+  close-up of its hand beside A2's hand is not recorded as shown to him; the slice is not shown before he has judged
+  it (production 8). Done when he says it looks and feels right.
 - **Order:** slice > Chapter 1 finished > the whole game in grey (he plays it all; cuts are made then) > finishing
   chapter by chapter.
 
@@ -584,7 +586,7 @@ extra creature forms on the ship, fewer cutscenes. Never anything he asked for b
   walks on all fours and only sometimes rises onto its hind legs: section 8), 3 m tall, 40 cm at the
   shoulders, B3's long pale face (almond eye holes, pinpricks, seam, slit mouth), big veined hands and cloth-like
   hood, its unseen fold, the ceiling-tile rattle of its fingers; A2's cluster of eyes and needle teeth; ducts and
-  crawlways of 70 x 70 or 80 x 80 cm; "seen or heard at least every 60 to 90 s"; its steps at 85 dB (80 stooped); the
+  crawlways of 70 x 70 or 80 x 80 cm where the hunter follows Danny (any others: open, section 4); "seen or heard at least every 60 to 90 s"; its steps at 85 dB (80 stooped); the
   generator's +15; the hiker's bag; a puzzle tier that only drops; checkpoints on Stay Behind; Dead Start as written
   ("one to three" pulls, "none hunting"); Kayla's "Stay on the line" in her first call; the stranger's "...tell her...
   I said hi...".

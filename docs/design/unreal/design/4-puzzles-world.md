@@ -50,9 +50,8 @@ document says otherwise.
   classrooms 3.0 m; doors 2.1 by 0.9 m (it squeezes through, front limbs first); the lobby 7.5 m; the gym 9 m clear
   (F1 to F2); the library 5 m; the theatre stage 16 m to the grid (F2 to the roof); the stair wells 20 m open (it can
   look down the well); **tunnels 2.8 to 3.0 m**, so it walks them (the owner's "monster walking around the tunnels");
-  **ducts and crawlways about 110 cm wide and 120 cm high** (the owner's "Bigger crawlways", 22 November: it follows
-  Danny through them, a tight squeeze, slower than him and always heard: canon 5 and 8; nothing is out of its reach).
-  **Open, for him:** every duct and crawlway at that size, or only those it follows Danny through (canon 4)?
+  **ducts and crawlways the hunter follows Danny through: about 110 cm wide and 120 cm high** (the owner's "Bigger
+  crawlways", 22 November: a tight squeeze, slower than him and always heard: canon 5 and 8). **Open, for him:** every duct and crawlway at that size, or only those it follows Danny through (canon 4)?
 - **Ways between floors:** the West and East stairs (basement to F4); the roof only by the penthouse stair in the F4
   mechanical room (canon 4); the lobby's grand stair (F1 to F2 only; its fire shutter dropped at the lockdown); the
   kitchen **freight lift** (basement to F1 only; its load: canon 6); the **dumbwaiter** (one-way down to the shelter
@@ -927,6 +926,8 @@ stairs (the crush), better in rooms people never reached.
 ## Open, to be put to him later
 
 - **The city's name:** Calloway stands until he gives his own (canon 4).
+- **Ducts and crawlways:** every one about 110 cm wide and 120 cm high, or only those the hunter follows Danny through
+  (canon 4, 1.2); either way no hole is a permanent safe zone (owner-checklist line 29).
 - **The New Game Plus endings and the extra secrets:** they stand, first on the cut list, and whether they stay is his
   call when cuts are made with the grey game in front of him (canon 15).
 - **How hard the puzzles feel:** when he plays the grey game, the Light tier and the hint rungs are tuned from his

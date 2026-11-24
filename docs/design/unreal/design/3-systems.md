@@ -100,7 +100,7 @@ The shelter parts make about 20 minutes (canon 3). The generator is a live clock
 |---|---|---|
 | Walk | 1.5 | Default. Hunter rhythm about every 30 s (canon 8) |
 | Crouch | 0.9 | Toggle or hold (option). Hunter rhythm about every 60 s. Fits under desks and through low gaps |
-| Crawl | 1.0 | From crouch. Under the stage, ducts and crawlways (about 110 cm wide and 120 cm high, so the hunter can follow: canon 4), collapsed ceilings. The torch must be in the mouth or off (see 2.5). Faster than the hunter in a duct (its duct crawl: canon 8) |
+| Crawl | 1.0 | From crouch. Under the stage, ducts and crawlways (those the hunter follows him through about 110 cm wide and 120 cm high: canon 4), collapsed ceilings. The torch must be in the mouth or off (see 2.5). Faster than the hunter in a duct (its duct crawl: canon 8) |
 | Sprint | 4.5 | About 6 s of breath, 8 s to recover. Hunter rhythm every 15 to 20 s. After a sprint his breathing is loud for 6 s. A little faster than the hunter's chase (canon 8) |
 | Limp (Badly hurt) | 1.1 | No sprint (section 9) |
 | Lean | n/a | Q / E, about 30 cm. Silent. Works standing and crouched, and from inside a locker by its slats |
