@@ -955,3 +955,15 @@ quiet still never passes 2 minutes.
 ### Nov 22: Gus's Ears, if she starts during the near miss (to the session on his PC)
 Asked whether the hunter should turn back if the generator starts while it walks to the boiler-room door, he chose
 **"Yes, turn back"**.
+
+### Nov 24: every session on Fable 5.2; a bug hunt; merging and pacing (to the session on his PC)
+- His words: **"switch EVERYTHING to fable 5.2 max ultra code"**, and **"Also the lasdt week was mainly opus, so if you
+  find any bugs or anywhere you can improve in physics logic ect go ahead and fix. Make sure verythihng is on fable max
+  ultracode, get to work"**.
+- He signed in to Fab himself for the twelve approved Megascans packs: "i signed in use fab".
+- Finished work from any session goes into the game once it builds and passes all tests, without asking him each time
+  (**"Yes, and keep merging"**). The lighting and Dark Dweller work that went in early that day stays (**"Keep
+  both"**).
+- If Fable's weekly limit runs out before the reset, the sessions go to Opus 5.5 (**"Switch to Opus"**).
+- The week's limit is paced (**"Spread it out"**): the bug hunt and its fixes first, then two or three jobs at a time.
+  The same hour he also asked for about ten agents on the first slice; that conflict was put back to him.
