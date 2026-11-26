@@ -982,3 +982,10 @@ Asked whether the hunter should turn back if the generator starts while it walks
 - **The lines:** Kayla's "Stay on the line, okay?" **"only after the scare"**; the whisper "...Danny... Reyes..." in the
   stranger's voice: **"Keep it"**.
 Still to do by the design session: canon 7, 8 and 14, 2-creatures.md 1.8 and 4-puzzles-world.md 1.1 for these.
+
+### Nov 25: the PC rolled back two days (to the session on his PC)
+- His words: **"So i rebooted my computer to like 2 days ago. Lost a lot of progress. Figure out what i lost and add all
+  the files back to where you left off before. Make sure your not missing anything"**.
+- Every file created after 23 Nov, about 23:22 UTC, was deleted. Rebuilt and proved: main, fifteen worktrees, the
+  slice's lines; player and dressing in part. Lost: eleven sessions' work of 24 Nov and the bug fixes, to redo after the
+  reset. The full account is the game repo's `Docs/recovery-2026-11-25.md`.
